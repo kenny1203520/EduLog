@@ -1,0 +1,20 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.npmrc
+
+# Supabase
+supabase_docker/.env
+supabase_docker/volumes/db/data/
+supabase_docker/volumes/storage/
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
