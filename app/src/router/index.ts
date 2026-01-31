@@ -6,18 +6,24 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: '/',
+      name: 'landing',
+      component: () => import('@/views/LandingView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
       path: '/login',
       name: 'login',
       component: LoginView
     },
     {
-      path: '/',
+      path: '/dashboard',
       component: () => import('@/layouts/MainLayout.vue'),
       meta: { requiresAuth: true },
       children: [
         {
           path: '',
-          name: 'home',
+          name: 'dashboard',
           component: () => import('@/views/HomeView.vue')
         }
       ]
@@ -37,7 +43,7 @@ router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormal
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
   } else if (to.path === '/login' && authStore.isAuthenticated) {
-    next('/')
+    next('/dashboard')
   } else {
     next()
   }

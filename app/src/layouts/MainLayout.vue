@@ -22,7 +22,7 @@ async function handleLogout() {
       
       <nav class="flex-1 p-4 space-y-2">
         <router-link 
-          to="/" 
+          to="/dashboard" 
           class="block px-4 py-2 rounded-md text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
           active-class="bg-emerald-50 text-emerald-700 font-medium"
         >

@@ -17,7 +17,7 @@ async function handleLogin() {
   
   try {
     await authStore.signIn(email.value, password.value)
-    router.push('/')
+    router.push('/dashboard')
   } catch (e: any) {
     errorMsg.value = e.message || 'Login failed'
   } finally {
