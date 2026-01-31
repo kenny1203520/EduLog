@@ -8,12 +8,12 @@ export class StudentService {
   static async getAll(): Promise<Student[]> {
     const { data, error } = await supabase
       .from('students')
-      .select('*')
+      .select('*, student_contacts(*), student_schools(*), student_credentials(*)')
       .order('name')
     
     if (error) throw new Error(error.message)
     
-    return (data as StudentDTO[]).map(dto => new Student(dto))
+    return (data as any[]).map(dto => new Student(dto))
   }
 
   /**
@@ -22,14 +22,14 @@ export class StudentService {
   static async getById(id: string): Promise<Student | null> {
     const { data, error } = await supabase
       .from('students')
-      .select('*')
+      .select('*, student_contacts(*), student_schools(*), student_credentials(*)')
       .eq('id', id)
       .single()
     
     if (error) throw new Error(error.message)
     if (!data) return null
 
-    return new Student(data as StudentDTO)
+    return new Student(data as any)
   }
 
   /**
