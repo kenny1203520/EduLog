@@ -65,4 +65,46 @@ export class StudentService {
 
     return new Student(data as StudentDTO)
   }
+
+  // --- Contacts ---
+  static async addContact(contact: any) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('User not authenticated')
+    const { data, error } = await supabase.from('student_contacts').insert({ ...contact, user_id: user.id }).select().single()
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  static async deleteContact(id: string) {
+    const { error } = await supabase.from('student_contacts').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+  }
+
+  // --- Schools ---
+  static async addSchool(school: any) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('User not authenticated')
+    const { data, error } = await supabase.from('student_schools').insert({ ...school, user_id: user.id }).select().single()
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  static async deleteSchool(id: string) {
+    const { error } = await supabase.from('student_schools').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+  }
+
+  // --- Credentials ---
+  static async addCredential(credential: any) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('User not authenticated')
+    const { data, error } = await supabase.from('student_credentials').insert({ ...credential, user_id: user.id }).select().single()
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  static async deleteCredential(id: string) {
+    const { error } = await supabase.from('student_credentials').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+  }
 }

@@ -50,7 +50,12 @@ async function handleSave() {
       <!-- Toolbar -->
       <header class="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm z-10">
         <div>
-          <h1 class="text-xl font-bold text-gray-800">{{ studentStore.currentStudent.name }}</h1>
+          <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+            {{ studentStore.currentStudent.name }}
+            <router-link :to="`/dashboard/student/${studentId}/profile`" class="text-xs font-normal text-emerald-600 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 transition">
+              Edit Profile
+            </router-link>
+          </h1>
           <p class="text-xs text-gray-500">{{ studentStore.currentStudent.grade }}</p>
         </div>
         <div class="flex items-center space-x-3">

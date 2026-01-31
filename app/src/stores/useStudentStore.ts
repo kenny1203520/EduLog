@@ -48,6 +48,27 @@ export const useStudentStore = defineStore('student', () => {
     }
   }
 
+  async function updateStudent(id: string, updates: any) {
+    loading.value = true
+    try {
+      const updated = await StudentService.update(id, updates)
+      // Update in list
+      const idx = students.value.findIndex(s => s.id === id)
+      if (idx !== -1) students.value[idx] = updated
+      // Update current if matching
+      if (currentStudent.value?.id === id) {
+        // We reload to get relations too, or we could merge manually. 
+        // Reloading is safer for full consistency.
+        await loadStudent(id)
+      }
+    } catch (e: any) {
+      error.value = e.message
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     students,
     currentStudent,
@@ -56,6 +77,7 @@ export const useStudentStore = defineStore('student', () => {
     studentCount,
     fetchAll,
     loadStudent,
-    addStudent
+    addStudent,
+    updateStudent
   }
 })
