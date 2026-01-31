@@ -25,6 +25,11 @@ const router = createRouter({
           path: '',
           name: 'dashboard',
           component: () => import('@/views/HomeView.vue')
+        },
+        {
+          path: 'student/:id',
+          name: 'student-report',
+          component: () => import('@/views/ReportEditorView.vue')
         }
       ]
     }
