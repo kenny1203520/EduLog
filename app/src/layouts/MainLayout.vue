@@ -17,7 +17,21 @@ async function handleLogout() {
     <aside class="w-64 bg-white shadow-md flex flex-col">
       <div class="p-6 border-b">
         <h1 class="text-2xl font-bold text-emerald-600">EduLog</h1>
-        <p class="text-xs text-gray-500 mt-1">Tutor Report System</p>
+        <p class="text-xs text-gray-500 mt-1">{{ $t('nav.subtitle') }}</p>
+        
+        <!-- Language Switcher -->
+        <div class="flex gap-2 mt-4 text-xs font-medium bg-gray-100 rounded p-1 w-fit">
+          <button 
+            @click="$i18n.locale = 'zh-TW'" 
+            :class="{'bg-white shadow text-emerald-600': $i18n.locale === 'zh-TW', 'text-gray-500 hover:text-gray-700': $i18n.locale !== 'zh-TW'}"
+            class="px-2 py-1 rounded transition"
+          >中文</button>
+          <button 
+            @click="$i18n.locale = 'en'" 
+            :class="{'bg-white shadow text-emerald-600': $i18n.locale === 'en', 'text-gray-500 hover:text-gray-700': $i18n.locale !== 'en'}"
+            class="px-2 py-1 rounded transition"
+          >EN</button>
+        </div>
       </div>
       
       <nav class="flex-1 p-4 space-y-2">
@@ -26,7 +40,7 @@ async function handleLogout() {
           class="block px-4 py-2 rounded-md text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
           active-class="bg-emerald-50 text-emerald-700 font-medium"
         >
-          Dashboard
+          {{ $t('nav.dashboard') }}
         </router-link>
         <!-- Future Navigation Items -->
         <!-- <router-link to="/students" ...>Students</router-link> -->
@@ -43,9 +57,9 @@ async function handleLogout() {
         </div>
         <button 
           @click="handleLogout"
-          class="w-full px-4 py-2 text-sm text-red-600 border border-red-200 rounded hover:bg-red-50 transition"
+          class="w-full px-4 py-2 text-sm text-red-600 border border-red-200 rounded hover:bg-red-50 transition cursor-pointer"
         >
-          Sign Out
+          {{ $t('nav.logout') }}
         </button>
       </div>
     </aside>

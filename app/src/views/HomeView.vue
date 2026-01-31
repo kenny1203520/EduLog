@@ -34,7 +34,7 @@ function navigateToStudent(id: string) {
       <h2 class="text-2xl font-bold text-gray-800">{{ $t('dashboard.title') }}</h2>
       <button 
         @click="showCreateModal = true"
-        class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md transition shadow-sm font-medium"
+        class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md transition shadow-sm font-medium cursor-pointer"
       >
         + {{ $t('dashboard.add_student') }}
       </button>

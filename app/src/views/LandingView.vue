@@ -38,7 +38,7 @@ function handleGetStarted() {
       <div class="space-x-4">
         <button 
           @click="handleGetStarted"
-          class="px-8 py-3 bg-emerald-600 text-white font-bold rounded-full shadow-lg hover:bg-emerald-700 hover:shadow-xl transform hover:-translate-y-1 transition duration-200"
+          class="px-8 py-3 bg-emerald-600 text-white font-bold rounded-full shadow-lg hover:bg-emerald-700 hover:shadow-xl transform hover:-translate-y-1 transition duration-200 cursor-pointer"
         >
           {{ $t('nav.get_started') }}
         </button>
