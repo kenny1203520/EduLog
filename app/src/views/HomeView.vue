@@ -31,18 +31,18 @@ function navigateToStudent(id: string) {
 <template>
   <div>
     <div class="flex justify-between items-center mb-6">
-      <h2 class="text-2xl font-bold text-gray-800">My Students</h2>
+      <h2 class="text-2xl font-bold text-gray-800">{{ $t('dashboard.title') }}</h2>
       <button 
         @click="showCreateModal = true"
         class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md transition shadow-sm font-medium"
       >
-        + Add Student
+        + {{ $t('dashboard.add_student') }}
       </button>
     </div>
 
     <!-- Loading State -->
     <div v-if="studentStore.loading" class="text-gray-500 py-8 text-center">
-      Loading students...
+      {{ $t('dashboard.loading') }}
     </div>
 
     <!-- Error State -->
@@ -52,8 +52,8 @@ function navigateToStudent(id: string) {
 
     <!-- Empty State -->
     <div v-if="!studentStore.loading && studentStore.students.length === 0" class="text-center py-12 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-      <p class="text-gray-500 mb-2">No students found.</p>
-      <p class="text-sm text-gray-400">Add your first student to get started!</p>
+      <p class="text-gray-500 mb-2">{{ $t('dashboard.empty') }}</p>
+      <p class="text-sm text-gray-400">{{ $t('dashboard.empty_sub') }}</p>
     </div>
 
     <!-- Student Grid -->
@@ -83,27 +83,27 @@ function navigateToStudent(id: string) {
     <!-- Simple Create Modal -->
     <div v-if="showCreateModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div class="bg-white p-6 rounded-lg w-full max-w-md shadow-xl">
-        <h3 class="text-xl font-bold mb-4">Add New Student</h3>
+        <h3 class="text-xl font-bold mb-4">{{ $t('student.add_title') }}</h3>
         
         <form @submit.prevent="handleCreateStudent">
           <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.name') }}</label>
             <input 
               v-model="newStudentName" 
               type="text" 
               class="w-full border rounded-md px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
               required
-              placeholder="Student Name"
+              :placeholder="$t('student.name')"
             />
           </div>
           
           <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Grade / Class</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.grade') }}</label>
             <input 
               v-model="newStudentGrade" 
               type="text" 
               class="w-full border rounded-md px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
-              placeholder="e.g. Grade 5"
+              :placeholder="$t('student.grade')"
             />
           </div>
 
@@ -113,14 +113,14 @@ function navigateToStudent(id: string) {
               @click="showCreateModal = false"
               class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md transition"
             >
-              Cancel
+              {{ $t('student.cancel') }}
             </button>
             <button 
               type="submit" 
               :disabled="studentStore.loading"
               class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition disabled:opacity-50"
             >
-              Create
+              {{ $t('student.create') }}
             </button>
           </div>
         </form>

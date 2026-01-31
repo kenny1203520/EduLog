@@ -1,0 +1,8 @@
+{
+    "title": "My Students",
+    "add_student": "Add Student",
+    "loading": "Loading students...",
+    "empty": "No students found.",
+    "empty_sub": "Add your first student to get started!",
+    "added": "Added: {date}"
+}

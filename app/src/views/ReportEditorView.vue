@@ -53,7 +53,7 @@ async function handleSave() {
           <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
             {{ studentStore.currentStudent.name }}
             <router-link :to="`/dashboard/student/${studentId}/profile`" class="text-xs font-normal text-emerald-600 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 transition">
-              Edit Profile
+              {{ $t('student.profile_edit') }}
             </router-link>
           </h1>
           <p class="text-xs text-gray-500">{{ studentStore.currentStudent.grade }}</p>
@@ -69,7 +69,7 @@ async function handleSave() {
             :disabled="isSaving || !reportContent.trim()"
             class="bg-emerald-600 text-white px-6 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm font-medium"
           >
-            {{ isSaving ? 'Saving...' : 'Save Report' }}
+            {{ isSaving ? $t('report.saving') : $t('report.save') }}
           </button>
         </div>
       </header>
@@ -80,10 +80,10 @@ async function handleSave() {
           <!-- Left: History (Past Reports) -->
           <template #left>
             <div class="p-6">
-              <h2 class="font-bold text-gray-500 text-xs mb-4 uppercase tracking-wide">History</h2>
+              <h2 class="font-bold text-gray-500 text-xs mb-4 uppercase tracking-wide">{{ $t('report.history') }}</h2>
               
-              <div v-if="reportStore.loading" class="text-sm text-gray-400">Loading history...</div>
-              <div v-else-if="reportStore.reports.length === 0" class="text-sm text-gray-400 italic">No past reports.</div>
+              <div v-if="reportStore.loading" class="text-sm text-gray-400">{{ $t('dashboard.loading') }}</div>
+              <div v-else-if="reportStore.reports.length === 0" class="text-sm text-gray-400 italic">{{ $t('report.no_history') }}</div>
               
               <div class="space-y-4">
                 <article 
@@ -103,7 +103,7 @@ async function handleSave() {
             <div class="h-full flex flex-col bg-white">
               <textarea 
                 v-model="reportContent"
-                placeholder="Write your report here..." 
+                :placeholder="$t('report.placeholder')" 
                 class="flex-1 w-full p-8 resize-none outline-none text-base leading-relaxed text-gray-800 placeholder-gray-300"
               ></textarea>
             </div>

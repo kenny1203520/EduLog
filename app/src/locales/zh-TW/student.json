@@ -1,0 +1,20 @@
+{
+    "add_title": "新增學生",
+    "name": "學生姓名",
+    "grade": "年級 / 班級",
+    "cancel": "取消",
+    "create": "建立",
+    "creating": "建立中...",
+    "profile_edit": "編輯個人資料",
+    "details": "個人詳細資料",
+    "contacts": "聯絡人",
+    "schools": "學校經歷",
+    "credentials": "帳號密碼",
+    "gov_id": "身分證字號",
+    "orange_apple_id": "橘子蘋果學苑 ID",
+    "residence_address": "戶籍地址",
+    "mailing_address": "通訊地址",
+    "notes": "備註",
+    "save_details": "儲存資料",
+    "saving": "儲存中..."
+}

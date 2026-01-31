@@ -29,11 +29,11 @@ async function handleLogin() {
 <template>
   <div class="flex items-center justify-center min-h-screen bg-gray-100">
     <div class="p-8 bg-white rounded-lg shadow-md w-full max-w-md">
-      <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">EduLog Login</h2>
+      <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">{{ $t('auth.login_title') }}</h2>
       
       <form @submit.prevent="handleLogin" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.email') }}</label>
           <input 
             v-model="email"
             type="email" 
@@ -44,7 +44,7 @@ async function handleLogin() {
         </div>
         
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('auth.password') }}</label>
           <input 
             v-model="password"
             type="password" 
@@ -63,7 +63,7 @@ async function handleLogin() {
           :disabled="loading"
           class="w-full py-2 px-4 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 transition"
         >
-          {{ loading ? 'Signing in...' : 'Sign In' }}
+          {{ loading ? $t('auth.loading') : $t('auth.submit') }}
         </button>
       </form>
     </div>

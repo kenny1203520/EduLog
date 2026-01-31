@@ -1,0 +1,20 @@
+{
+    "add_title": "Add New Student",
+    "name": "Student Name",
+    "grade": "Grade / Class",
+    "cancel": "Cancel",
+    "create": "Create",
+    "creating": "Creating...",
+    "profile_edit": "Edit Profile",
+    "details": "Personal Details",
+    "contacts": "Contacts",
+    "schools": "Schools",
+    "credentials": "Credentials",
+    "gov_id": "Gov ID",
+    "orange_apple_id": "Orange Apple ID",
+    "residence_address": "Residence Address",
+    "mailing_address": "Mailing Address",
+    "notes": "Notes",
+    "save_details": "Save Details",
+    "saving": "Saving..."
+}

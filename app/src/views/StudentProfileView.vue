@@ -146,30 +146,30 @@ async function deleteCredential(id: string) {
     <!-- Main Details Form -->
     <section class="bg-white p-6 rounded-lg shadow-sm border border-gray-100">
       <h2 class="text-xl font-bold mb-4 flex items-center gap-2">
-        <span>👤</span> Personal Details
+        <span>👤</span> {{ $t('student.details') }}
       </h2>
       
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="space-y-1">
-          <label class="text-sm font-medium text-gray-700">Full Name</label>
+          <label class="text-sm font-medium text-gray-700">{{ $t('student.name') }}</label>
           <input v-model="form.name" type="text" class="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
         <div class="space-y-1">
-          <label class="text-sm font-medium text-gray-700">Grade / Class</label>
+          <label class="text-sm font-medium text-gray-700">{{ $t('student.grade') }}</label>
           <input v-model="form.grade" type="text" class="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
         
         <div class="space-y-1">
-          <label class="text-sm font-medium text-gray-700">Gov ID (身分證)</label>
+          <label class="text-sm font-medium text-gray-700">{{ $t('student.gov_id') }}</label>
           <input v-model="form.gov_id" type="text" class="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
         <div class="space-y-1">
-          <label class="text-sm font-medium text-gray-700">Orange Apple ID</label>
+          <label class="text-sm font-medium text-gray-700">{{ $t('student.orange_apple_id') }}</label>
           <input v-model="form.orange_apple_id" type="text" class="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
 
         <div class="space-y-1">
-          <label class="text-sm font-medium text-gray-700">Email</label>
+          <label class="text-sm font-medium text-gray-700">{{ $t('auth.email') }}</label>
           <input v-model="form.email" type="email" class="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
         <div class="space-y-1">
@@ -178,16 +178,16 @@ async function deleteCredential(id: string) {
         </div>
 
         <div class="space-y-1 md:col-span-2">
-          <label class="text-sm font-medium text-gray-700">Residence Address (戶籍地址)</label>
+          <label class="text-sm font-medium text-gray-700">{{ $t('student.residence_address') }}</label>
           <input v-model="form.residence_address" type="text" class="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
         <div class="space-y-1 md:col-span-2">
-          <label class="text-sm font-medium text-gray-700">Mailing Address (通訊地址)</label>
+          <label class="text-sm font-medium text-gray-700">{{ $t('student.mailing_address') }}</label>
           <input v-model="form.mailing_address" type="text" class="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500">
         </div>
         
         <div class="space-y-1 md:col-span-2">
-          <label class="text-sm font-medium text-gray-700">Notes</label>
+          <label class="text-sm font-medium text-gray-700">{{ $t('student.notes') }}</label>
           <textarea v-model="form.notes" rows="3" class="w-full border rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"></textarea>
         </div>
       </div>
@@ -198,7 +198,7 @@ async function deleteCredential(id: string) {
           :disabled="isSaving"
           class="bg-emerald-600 text-white px-6 py-2 rounded shadow hover:bg-emerald-700 transition disabled:opacity-50"
         >
-          {{ isSaving ? 'Saving...' : 'Save Details' }}
+          {{ isSaving ? $t('student.saving') : $t('student.save_details') }}
         </button>
       </div>
     </section>
