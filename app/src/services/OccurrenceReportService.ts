@@ -5,6 +5,7 @@ import {
     ReportVersion,
     type SaveReportResult 
 } from '@/models/OccurrenceReport'
+import { EnrollmentProgressService } from './EnrollmentProgressService'
 
 /**
  * OccurrenceReportService handles business logic for occurrence reports.
@@ -61,23 +62,28 @@ export class OccurrenceReportService {
     /**
      * Saves a report with optimistic locking (version check).
      * Returns conflict status if version mismatch detected.
+     * Also handles automatic progress tracking based on lesson completion.
      * 
      * @param reportId - The report ID
      * @param content - New content
      * @param currentVersion - Client's current version
      * @param userId - User making the edit (optional)
+     * @param lessonId - Lesson that was taught (optional)
+     * @param isCompleted - Whether the lesson was completed (optional)
      * @returns Save result with conflict status
      */
     static async saveReport(
         reportId: string,
         content: string,
         currentVersion: number,
-        userId?: string
+        userId?: string,
+        lessonId?: string,
+        isCompleted?: boolean
     ): Promise<SaveReportResult> {
         // Fetch current server version
         const { data: serverReport, error: fetchError } = await supabase
             .from('occurrence_reports')
-            .select('version, content')
+            .select('version, content, enrollment_id, lesson_id')
             .eq('id', reportId)
             .single()
 
@@ -102,14 +108,24 @@ export class OccurrenceReportService {
         // No conflict - proceed with save
         const newVersion = currentVersion + 1
 
+        const updateData: any = {
+            content,
+            version: newVersion,
+            last_edited_by: userId,
+            last_edited_at: new Date().toISOString()
+        }
+
+        // Add lesson tracking if provided
+        if (lessonId !== undefined) {
+            updateData.lesson_id = lessonId
+        }
+        if (isCompleted !== undefined) {
+            updateData.is_completed = isCompleted
+        }
+
         const { data: updated, error: updateError } = await supabase
             .from('occurrence_reports')
-            .update({
-                content,
-                version: newVersion,
-                last_edited_by: userId,
-                last_edited_at: new Date().toISOString()
-            })
+            .update(updateData)
             .eq('id', reportId)
             .eq('version', currentVersion) // Double-check version (race condition protection)
             .select()
@@ -129,6 +145,20 @@ export class OccurrenceReportService {
                 success: false,
                 conflict: false,
                 message: `Failed to save report: ${updateError.message}`
+            }
+        }
+
+        // Auto-update enrollment progress if lesson info provided
+        if (lessonId && isCompleted !== undefined) {
+            try {
+                await this.updateEnrollmentProgressAfterReport(
+                    serverReport.enrollment_id,
+                    lessonId,
+                    isCompleted
+                )
+            } catch (progressError: any) {
+                console.error('Failed to update progress:', progressError)
+                // Don't fail the save if progress update fails
             }
         }
 
@@ -152,6 +182,61 @@ export class OccurrenceReportService {
         if (error) throw new Error(`Failed to fetch versions: ${error.message}`)
 
         return data.map(dto => new ReportVersion(dto))
+    }
+
+    /**
+     * Helper method to update enrollment progress after saving a report
+     * @private
+     */
+    private static async updateEnrollmentProgressAfterReport(
+        enrollmentId: string,
+        lessonId: string,
+        isCompleted: boolean
+    ): Promise<void> {
+        // Get the lesson details to find its sequence
+        const { data: lesson, error: lessonError } = await supabase
+            .from('lessons')
+            .select('sequence, course_id')
+            .eq('id', lessonId)
+            .single()
+
+        if (lessonError || !lesson) {
+            console.error('Failed to fetch lesson:', lessonError)
+            return
+        }
+
+        // Get all lessons in this course
+        const { data: allLessonsData, error: allLessonsError } = await supabase
+            .from('lessons')
+            .select('*')
+            .eq('course_id', lesson.course_id)
+            .order('sequence', { ascending: true })
+
+        if (allLessonsError || !allLessonsData) {
+            console.error('Failed to fetch course lessons:', allLessonsError)
+            return
+        }
+
+        // Convert to Lesson objects
+        const allLessons = allLessonsData.map(l => ({
+            id: l.id,
+            courseId: l.course_id,
+            title: l.title,
+            sequence: l.sequence,
+            created_at: l.created_at,
+            updated_at: l.updated_at
+        }))
+
+        // Calculate new progress
+        const newProgress = await EnrollmentProgressService.calculateNewProgress(
+            enrollmentId,
+            lesson.sequence,
+            isCompleted,
+            allLessons
+        )
+
+        // Update the enrollment
+        await EnrollmentProgressService.updateEnrollmentProgress(enrollmentId, newProgress)
     }
 
     /**

@@ -223,6 +223,46 @@ async function enrollStudent() {
   }
 }
 
+// --- Enrollment Editing ---
+const editingEnrollmentId = ref<string | null>(null)
+const editEnrollmentForm = ref<Partial<EnrollmentDTO>>({})
+
+function startEditEnrollment(enr: Enrollment) {
+  editingEnrollmentId.value = enr.id!
+  editEnrollmentForm.value = {
+    course_id: enr.courseId,
+    classroom_id: enr.classroomId,
+    class_session_id: enr.classSessionId,
+    status: enr.status as any,
+    start_date: enr.startDate,
+    lesson_number: enr.lessonNumber
+  }
+}
+
+function cancelEditEnrollment() {
+  editingEnrollmentId.value = null
+  editEnrollmentForm.value = {}
+}
+
+async function saveEnrollment() {
+  if (!editingEnrollmentId.value) return
+  try {
+    await CourseService.updateEnrollment(editingEnrollmentId.value, editEnrollmentForm.value)
+    await fetchEnrollments()
+    cancelEditEnrollment()
+  } catch (e) {
+    console.error(e)
+    alert('Failed to update enrollment')
+  }
+}
+
+// Filtered sessions for edit form
+const editFilteredSessions = computed(() => {
+  if (!editEnrollmentForm.value.course_id) return []
+  return availableSessions.value.filter(s => s.course_ids?.includes(editEnrollmentForm.value.course_id!))
+})
+
+
 async function removeEnrollment(id: string) {
     if(!confirm(t('common.confirm_delete'))) return
     try {
@@ -876,49 +916,157 @@ function copyToClipboard(text: string) {
                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
              </svg>
            </span>
-           {{ $t('internal_courses.title') }}
+           {{ $t('student.internal_courses.title') }}
         </h2>
 
         <div v-if="enrollments.length === 0" class="text-center py-6 text-gray-400 text-sm italic bg-gray-50 rounded-xl mb-4 border border-dashed border-gray-200">
-           {{ $t('internal_courses.no_enrollments') }}
+           {{ $t('student.internal_courses.no_enrollments') }}
         </div>
 
-        <ul class="space-y-3 mb-6">
-            <li v-for="enr in enrollments" :key="enr.id" class="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
-               <div>
-                   <div class="font-bold text-gray-800">{{ enr.courseSubject }}<span class="text-gray-500 font-normal text-sm">_{{ enr.courseStage }}</span></div>
-                   <div class="text-xs text-gray-500 flex items-center gap-2 mt-1">
-                       <span v-if="enr.classroomName" class="px-2 py-0.5 bg-gray-100 rounded text-gray-600">{{ enr.classroomName }}</span>
-                       <span class="capitalize" :class="{'text-emerald-600': enr.status === 'active', 'text-gray-400': enr.status !== 'active'}">
-                           {{ enr.status }}
-                       </span>
-                   </div>
+        <ul class="space-y-4 mb-6">
+            <li v-for="enr in enrollments" :key="enr.id" class="group bg-white border-2 border-gray-100 rounded-2xl p-5 hover:border-emerald-200 hover:shadow-lg transition-all duration-200">
+               <!-- View Mode -->
+               <div v-if="editingEnrollmentId !== enr.id">
+                  <div class="flex items-start justify-between mb-3">
+                     <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-2">
+                           <h4 class="text-lg font-bold text-gray-900">
+                              {{ enr.courseSubject }}<span class="text-gray-500 font-normal">_{{ enr.courseStage }}</span>
+                           </h4>
+                           <span 
+                              class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide" 
+                              :class="{
+                                 'bg-emerald-100 text-emerald-700': enr.status === 'active',
+                                 'bg-blue-100 text-blue-700': enr.status === 'completed',
+                                 'bg-gray-100 text-gray-500': enr.status === 'dropped'
+                              }"
+                          >
+                              {{ enr.status }}
+                           </span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+                           <span v-if="enr.classroomName" class="flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 rounded-lg border border-gray-200">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              </svg>
+                              {{ enr.classroomName }}
+                           </span>
+                           <span v-if="enr.classSessionName" class="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 rounded-lg border border-purple-200 text-purple-700">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {{ enr.classSessionName }}
+                           </span>
+                           <span v-if="enr.lessonNumber" class="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-200 text-blue-700">
+                              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                              </svg>
+                              課次 {{ enr.lessonNumber }}
+                           </span>
+                        </div>
+                     </div>
+                     <div class="flex items-center gap-2">
+                        <router-link 
+                           :to="{ name: 'lesson-reports', params: { enrollmentId: enr.id } }" 
+                           class="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md"
+                           title="查看報告"
+                        >
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                           </svg>
+                        </router-link>
+                        <button 
+                           @click="startEditEnrollment(enr)" 
+                           class="p-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm hover:shadow-md"
+                           title="編輯課程"
+                        >
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                           </svg>
+                        </button>
+                        <button 
+                           @click="removeEnrollment(enr.id!)" 
+                           class="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm hover:shadow-md"
+                           title="刪除課程"
+                        >
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                           </svg>
+                        </button>
+                     </div>
+                  </div>
                </div>
-               <div class="flex items-center gap-2">
-                   <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: enr.id } }" class="text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded transition text-sm font-medium">
-                        {{ $t('report.list_title') }}
-                   </router-link>
-                   <button @click="removeEnrollment(enr.id!)" class="text-gray-400 hover:text-red-500 transition p-1 rounded hover:bg-red-50">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                        </svg>
-                   </button>
+
+               <!-- Edit Mode -->
+               <div v-else class="bg-gradient-to-br from-blue-50 to-purple-50 rounded-xl p-4 border-2 border-blue-200">
+                  <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                     </svg>
+                     編輯課程註冊
+                  </h4>
+                  <div class="space-y-3">
+                     <div class="grid grid-cols-2 gap-3">
+                        <div>
+                           <label class="text-xs font-semibold text-gray-600 mb-1 block">狀態</label>
+                           <select v-model="editEnrollmentForm.status" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                              <option value="active">進行中</option>
+                              <option value="completed">已完成</option>
+                              <option value="dropped">已退選</option>
+                           </select>
+                        </div>
+                        <div>
+                           <label class="text-xs font-semibold text-gray-600 mb-1 block">進度課次</label>
+                           <input type="number" v-model.number="editEnrollmentForm.lesson_number" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                        </div>
+                     </div>
+                     <div>
+                        <label class="text-xs font-semibold text-gray-600 mb-1 block">班級時段 (選填)</label>
+                        <select v-model="editEnrollmentForm.class_session_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                           <option :value="undefined">-- 無 --</option>
+                           <option v-for="s in editFilteredSessions" :key="s.id" :value="s.id">
+                              {{ s.name }} ({{ s.day_of_week !== undefined ? ['日','一','二','三','四','五','六'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
+                           </option>
+                        </select>
+                     </div>
+                     <div>
+                        <label class="text-xs font-semibold text-gray-600 mb-1 block">教室 (選填)</label>
+                        <select v-model="editEnrollmentForm.classroom_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                           <option :value="undefined">-- 無 --</option>
+                           <option v-for="r in availableClassrooms" :key="r.id" :value="r.id">
+                              {{ r.name }}
+                           </option>
+                        </select>
+                     </div>
+                     <div>
+                        <label class="text-xs font-semibold text-gray-600 mb-1 block">開始日期</label>
+                        <input type="date" v-model="editEnrollmentForm.start_date" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                     </div>
+                     <div class="flex justify-end gap-2 pt-3 border-t border-blue-200">
+                        <button @click="cancelEditEnrollment" class="px-4 py-2 text-gray-600 bg-white hover:bg-gray-100 rounded-lg text-sm font-semibold transition-colors border border-gray-300">
+                           取消
+                        </button>
+                        <button @click="saveEnrollment" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors shadow-sm">
+                           儲存
+                        </button>
+                     </div>
+                  </div>
                </div>
             </li>
         </ul>
 
         <button @click="openEnrollModal" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-bold hover:border-emerald-500 hover:text-emerald-600 transition-colors flex items-center justify-center gap-2">
-            <span>+</span> {{ $t('internal_courses.add_title') }}
+            <span>+</span> {{ $t('student.internal_courses.add_title') }}
         </button>
       </section>
 
       <!-- Enroll Modal -->
       <div v-if="isEnrollModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
         <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl m-4">
-            <h3 class="text-xl font-bold mb-4">{{ $t('internal_courses.add_title') }}</h3>
+            <h3 class="text-xl font-bold mb-4">{{ $t('student.internal_courses.add_title') }}</h3>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.course') }}</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.course') }}</label>
                     <select v-model="newEnrollment.course_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                         <option v-for="c in availableCourses" :key="c.id" :value="c.id">
                             {{ c.subject }}_{{ c.stage }}
@@ -973,7 +1121,7 @@ function copyToClipboard(text: string) {
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.classroom') }}</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.classroom') }}</label>
                     <select v-model="newEnrollment.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                         <option :value="undefined">-- None --</option>
                         <option v-for="r in availableClassrooms" :key="r.id" :value="r.id">
@@ -982,7 +1130,7 @@ function copyToClipboard(text: string) {
                     </select>
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.status') }}</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.status') }}</label>
                     <select v-model="newEnrollment.status" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                         <option value="active">Active</option>
                         <option value="completed">Completed</option>
@@ -992,11 +1140,11 @@ function copyToClipboard(text: string) {
 
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.start_date') }}</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.start_date') }}</label>
                         <input type="date" v-model="newEnrollment.start_date" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.lesson_number') }}</label>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.lesson_number') }}</label>
                         <input type="number" v-model.number="newEnrollment.lesson_number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" placeholder="1">
                     </div>
                 </div>

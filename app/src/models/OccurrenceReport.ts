@@ -7,7 +7,9 @@ export interface OccurrenceReportDTO {
     id?: string
     enrollment_id: string
     class_occurrence_id: string
+    lesson_id?: string  // NEW: Track which lesson was taught
     content: string
+    is_completed?: boolean  // NEW: Whether lesson was completed
     version: number
     last_edited_by?: string
     last_edited_at?: string
@@ -31,7 +33,9 @@ export class OccurrenceReport {
     id?: string
     enrollmentId: string
     classOccurrenceId: string
+    lessonId?: string  // NEW
     content: string
+    isCompleted?: boolean  // NEW
     version: number
     lastEditedBy?: string
     lastEditedAt?: Date
@@ -42,7 +46,9 @@ export class OccurrenceReport {
         this.id = data.id
         this.enrollmentId = data.enrollment_id
         this.classOccurrenceId = data.class_occurrence_id
+        this.lessonId = data.lesson_id  // NEW
         this.content = data.content
+        this.isCompleted = data.is_completed ?? true  // NEW: default to true
         this.version = data.version
         this.lastEditedBy = data.last_edited_by
         this.lastEditedAt = data.last_edited_at ? new Date(data.last_edited_at) : undefined
@@ -58,7 +64,9 @@ export class OccurrenceReport {
             id: this.id,
             enrollment_id: this.enrollmentId,
             class_occurrence_id: this.classOccurrenceId,
+            lesson_id: this.lessonId,  // NEW
             content: this.content,
+            is_completed: this.isCompleted,  // NEW
             version: this.version,
             last_edited_by: this.lastEditedBy,
             last_edited_at: this.lastEditedAt?.toISOString(),
