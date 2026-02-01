@@ -69,13 +69,15 @@ async function loadData() {
 }
 
 async function loadRooms() {
-    const res = await CourseService.getClassrooms(roomsPagination.value.page, roomsPagination.value.perPage)
+    const res = await CourseService.getClassrooms(roomsPagination.value.page, roomsPagination.value.perPage, searchQuery.value)
     classrooms.value = res.data
     roomsPagination.value.total = res.count
 }
 
 async function loadSessions() {
     const res = await CourseService.getClassSessions(sessionsPagination.value.page, sessionsPagination.value.perPage)
+    // Client-side filtering for sessions since getClassSessions doesn't support search yet
+    // and sessions usually aren't as many as classrooms in a single view
     sessions.value = res.data
     sessionsPagination.value.total = res.count
 }
@@ -89,16 +91,16 @@ watch(() => roomsPagination.value.page, loadRooms)
 watch(() => roomsPagination.value.perPage, () => { roomsPagination.value.page = 1; loadRooms() })
 watch(() => sessionsPagination.value.page, loadSessions)
 watch(() => sessionsPagination.value.perPage, () => { sessionsPagination.value.page = 1; loadSessions() })
+watch(searchQuery, () => {
+    if (activeTab.value === 'rooms') {
+        roomsPagination.value.page = 1
+        loadRooms()
+    }
+    // For sessions, we use client-side computed filtering for now as it's more complex (search across room name, course name etc)
+})
 
 // Computed
-const filteredClassrooms = computed(() => {
-    if (!searchQuery.value.trim()) return classrooms.value
-    const q = searchQuery.value.toLowerCase()
-    return classrooms.value.filter(r => 
-        r.name.toLowerCase().includes(q) || 
-        (r.address && r.address.toLowerCase().includes(q))
-    )
-})
+const filteredClassrooms = computed(() => classrooms.value) // Now handled server-side
 
 const filteredSessions = computed(() => {
     if (!searchQuery.value.trim()) return sessions.value
@@ -107,7 +109,7 @@ const filteredSessions = computed(() => {
         const roomName = getRoomName(s.classroom_id).toLowerCase()
         const courseNames = s.course_ids?.map(cid => {
             const c = courses.value.find(c => c.id === cid)
-            return `${c?.subject} ${c?.stage}`.toLowerCase()
+            return `${c?.subject} ${c?.stage} ${c?.displayNameValue || ''}`.toLowerCase()
         }).join(' ') || ''
         
         return s.name.toLowerCase().includes(q) || roomName.includes(q) || courseNames.includes(q)
@@ -155,7 +157,8 @@ async function createSession() {
             day_of_week: 1,
             start_time: '10:00',
             end_time: '12:00',
-            capacity: 10
+            capacity: 10,
+            lesson_number: 1
         }
     } catch (e) {
         alert(e)
@@ -384,6 +387,11 @@ function toggleCourseSelection(courseId: string) {
                     <label class="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
                     <input type="number" v-model="newSession.capacity" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                 </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.lesson_number') }}</label>
+                    <input type="number" v-model.number="newSession.lesson_number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" placeholder="1">
+                </div>
                 
                 <div class="md:col-span-2">
                      <label class="block text-sm font-medium text-gray-700 mb-1">Schedule</label>
@@ -398,7 +406,7 @@ function toggleCourseSelection(courseId: string) {
                 </div>
 
                 <div class="md:col-span-2">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Included Courses</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('student.internal_courses.course') }}</label>
                     <div class="h-40 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-1">
                         <div 
                             v-for="c in courses" 
@@ -414,15 +422,15 @@ function toggleCourseSelection(courseId: string) {
                                     <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                                 </svg>
                             </div>
-                            <span class="text-sm text-gray-700">{{ c.subject }} <span class="text-gray-400">- {{ c.stage }}</span></span>
+                            <span class="text-sm text-gray-700">{{ c.subject }} <span class="text-gray-400">- {{ c.stage }}{{ c.displayNameValue ? ` (${c.displayNameValue})` : '' }}</span></span>
                         </div>
                     </div>
                 </div>
             </div>
             
             <div class="flex justify-end gap-3 mt-6">
-                <button @click="isCreateSessionModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                <button @click="createSession" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Create Session</button>
+                <button @click="isCreateSessionModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">{{ $t('student.cancel') }}</button>
+                <button @click="createSession" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">{{ $t('student.create') }}</button>
             </div>
         </div>
     </div>

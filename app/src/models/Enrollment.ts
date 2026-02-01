@@ -5,6 +5,8 @@ export interface EnrollmentDTO {
     classroom_id?: string
     class_session_id?: string
     status: 'active' | 'completed' | 'dropped'
+    start_date?: string
+    lesson_number?: number
     created_at?: string
     updated_at?: string
     
@@ -12,6 +14,7 @@ export interface EnrollmentDTO {
     courses?: {
         subject: string
         stage: string
+        display_name?: string
     }
     classrooms?: {
         name: string
@@ -28,10 +31,13 @@ export class Enrollment {
     classroomId?: string
     classSessionId?: string
     status: string
+    startDate?: string
+    lessonNumber?: number
     
     // Display helpers
     courseSubject: string = ''
     courseStage: string = ''
+    courseDisplayName?: string
     classroomName: string = ''
     classSessionName: string = ''
 
@@ -42,10 +48,13 @@ export class Enrollment {
         this.classroomId = data.classroom_id
         this.classSessionId = data.class_session_id
         this.status = data.status || 'active'
+        this.startDate = data.start_date
+        this.lessonNumber = data.lesson_number
         
         if (data.courses) {
             this.courseSubject = data.courses.subject
             this.courseStage = data.courses.stage
+            this.courseDisplayName = data.courses.display_name
         }
         if (data.classrooms) {
             this.classroomName = data.classrooms.name
@@ -56,6 +65,12 @@ export class Enrollment {
     }
     
     get displayName(): string {
+        if (this.courseDisplayName) return this.courseDisplayName
         return `${this.courseSubject} - ${this.courseStage}`
+    }
+
+    get formattedStartDate(): string {
+        if (!this.startDate) return '-'
+        return new Date(this.startDate).toLocaleDateString()
     }
 }

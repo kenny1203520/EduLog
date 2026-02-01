@@ -62,6 +62,12 @@
         "classroom": "Classroom",
         "status": "Status",
         "reports": "Reports",
+        "start_date": "Start Date",
+        "lesson_number": "Starting Lesson #",
+        "session_select": "Class Session (Optional)",
+        "session_select_placeholder": "-- Select Session --",
+        "session_hint": "Selecting a session auto-fills the classroom.",
+        "session_details": "Session Details",
         "add_btn": "Enroll",
         "no_enrollments": "No active enrollments"
     },

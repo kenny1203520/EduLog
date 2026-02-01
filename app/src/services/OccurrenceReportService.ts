@@ -1,0 +1,336 @@
+import { supabase } from '@/lib/supabase'
+import { 
+    OccurrenceReport, 
+    type OccurrenceReportDTO, 
+    ReportVersion,
+    type ReportVersionDTO,
+    type SaveReportResult 
+} from '@/models/OccurrenceReport'
+
+/**
+ * OccurrenceReportService handles business logic for occurrence reports.
+ * Implements auto-save functionality and conflict resolution.
+ * 
+ * Following Single Responsibility Principle - only handles report operations.
+ */
+export class OccurrenceReportService {
+    /**
+     * Gets or creates a report for a specific enrollment and occurrence.
+     * This ensures every student-occurrence pair has a report.
+     * 
+     * @param enrollmentId - The enrollment ID
+     * @param occurrenceId - The class occurrence ID
+     * @returns The report (existing or newly created)
+     */
+    static async getOrCreateReport(
+        enrollmentId: string,
+        occurrenceId: string
+    ): Promise<OccurrenceReport> {
+        // Try to fetch existing report
+        const { data: existing, error: fetchError } = await supabase
+            .from('occurrence_reports')
+            .select('*')
+            .eq('enrollment_id', enrollmentId)
+            .eq('class_occurrence_id', occurrenceId)
+            .maybeSingle()
+
+        if (fetchError) throw new Error(`Failed to fetch report: ${fetchError.message}`)
+
+        if (existing) {
+            return new OccurrenceReport(existing)
+        }
+
+        // Create new report if doesn't exist
+        const newReport: Partial<OccurrenceReportDTO> = {
+            enrollment_id: enrollmentId,
+            class_occurrence_id: occurrenceId,
+            content: '',
+            version: 1
+        }
+
+        const { data: created, error: createError } = await supabase
+            .from('occurrence_reports')
+            .insert(newReport)
+            .select()
+            .single()
+
+        if (createError) throw new Error(`Failed to create report: ${createError.message}`)
+
+        return new OccurrenceReport(created)
+    }
+
+    /**
+     * Saves a report with optimistic locking (version check).
+     * Returns conflict status if version mismatch detected.
+     * 
+     * @param reportId - The report ID
+     * @param content - New content
+     * @param currentVersion - Client's current version
+     * @param userId - User making the edit (optional)
+     * @returns Save result with conflict status
+     */
+    static async saveReport(
+        reportId: string,
+        content: string,
+        currentVersion: number,
+        userId?: string
+    ): Promise<SaveReportResult> {
+        // Fetch current server version
+        const { data: serverReport, error: fetchError } = await supabase
+            .from('occurrence_reports')
+            .select('version, content')
+            .eq('id', reportId)
+            .single()
+
+        if (fetchError) {
+            return {
+                success: false,
+                conflict: false,
+                message: `Failed to fetch report: ${fetchError.message}`
+            }
+        }
+
+        // Check for version conflict
+        if (serverReport.version !== currentVersion) {
+            return {
+                success: false,
+                conflict: true,
+                serverContent: serverReport.content,
+                message: 'Conflict detected: Report was modified by another user'
+            }
+        }
+
+        // No conflict - proceed with save
+        const newVersion = currentVersion + 1
+
+        const { data: updated, error: updateError } = await supabase
+            .from('occurrence_reports')
+            .update({
+                content,
+                version: newVersion,
+                last_edited_by: userId,
+                last_edited_at: new Date().toISOString()
+            })
+            .eq('id', reportId)
+            .eq('version', currentVersion) // Double-check version (race condition protection)
+            .select()
+            .single()
+
+        if (updateError) {
+            // Check if it's a concurrent update
+            if (updateError.code === 'PGRST116') {
+                return {
+                    success: false,
+                    conflict: true,
+                    message: 'Conflict detected: Concurrent modification'
+                }
+            }
+
+            return {
+                success: false,
+                conflict: false,
+                message: `Failed to save report: ${updateError.message}`
+            }
+        }
+
+        return {
+            success: true,
+            conflict: false,
+            newVersion: updated.version
+        }
+    }
+
+    /**
+     * Gets all version history for a report
+     */
+    static async getReportVersions(reportId: string): Promise<ReportVersion[]> {
+        const { data, error } = await supabase
+            .from('report_versions')
+            .select('*')
+            .eq('occurrence_report_id', reportId)
+            .order('version', { ascending: false })
+
+        if (error) throw new Error(`Failed to fetch versions: ${error.message}`)
+
+        return data.map(dto => new ReportVersion(dto))
+    }
+
+    /**
+     * Resolves a conflict by forcing an update.
+     * This overwrites the server version with the resolved content.
+     * 
+     * @param reportId - The report ID
+     * @param resolvedContent - The content after manual resolution
+     * @param userId - User resolving the conflict
+     * @returns Updated report
+     */
+    static async resolveConflict(
+        reportId: string,
+        resolvedContent: string,
+        userId?: string
+    ): Promise<OccurrenceReport> {
+        // Fetch current report to get version
+        const { data: current, error: fetchError } = await supabase
+            .from('occurrence_reports')
+            .select('*')
+            .eq('id', reportId)
+            .single()
+
+        if (fetchError) throw new Error(`Failed to fetch report: ${fetchError.message}`)
+
+        // Force update with new version
+        const newVersion = current.version + 1
+
+        const { data: updated, error: updateError } = await supabase
+            .from('occurrence_reports')
+            .update({
+                content: resolvedContent,
+                version: newVersion,
+                last_edited_by: userId,
+                last_edited_at: new Date().toISOString()
+            })
+            .eq('id', reportId)
+            .select()
+            .single()
+
+        if (updateError) throw new Error(`Failed to resolve conflict: ${updateError.message}`)
+
+        return new OccurrenceReport(updated)
+    }
+
+    /**
+     * Gets all reports for an enrollment with pagination
+     */
+    static async getReportsByEnrollment(
+        enrollmentId: string,
+        page: number = 1,
+        perPage: number = 50
+    ): Promise<{ data: OccurrenceReport[], count: number }> {
+        const from = (page - 1) * perPage
+        const to = from + perPage - 1
+
+        const { data, error, count } = await supabase
+            .from('occurrence_reports')
+            .select('*', { count: 'exact' })
+            .eq('enrollment_id', enrollmentId)
+            .order('created_at', { ascending: false })
+            .range(from, to)
+
+        if (error) throw new Error(error.message)
+
+        return {
+            data: data.map(dto => new OccurrenceReport(dto)),
+            count: count || 0
+        }
+    }
+
+    /**
+     * Gets reports for specific occurrences
+     * Useful for showing all student reports for a class
+     */
+    static async getReportsByOccurrence(
+        occurrenceId: string
+    ): Promise<OccurrenceReport[]> {
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select('*')
+            .eq('class_occurrence_id', occurrenceId)
+            .order('created_at', { ascending: false })
+
+        if (error) throw new Error(error.message)
+
+        return data.map(dto => new OccurrenceReport(dto))
+    }
+
+    /**
+     * Gets a single report by ID
+     */
+    static async getReportById(reportId: string): Promise<OccurrenceReport> {
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select('*')
+            .eq('id', reportId)
+            .single()
+
+        if (error) throw new Error(error.message)
+
+        return new OccurrenceReport(data)
+    }
+
+    /**
+     * Deletes a report (use with caution)
+     */
+    static async deleteReport(reportId: string): Promise<void> {
+        const { error } = await supabase
+            .from('occurrence_reports')
+            .delete()
+            .eq('id', reportId)
+
+        if (error) throw new Error(error.message)
+    }
+
+    /**
+     * Bulk creates reports for all enrollments in a session occurrence
+     * Useful when marking attendance or initializing reports
+     */
+    static async createReportsForOccurrence(
+        occurrenceId: string
+    ): Promise<OccurrenceReport[]> {
+        // Get the class session from occurrence
+        const { data: occurrence, error: occError } = await supabase
+            .from('class_occurrences')
+            .select('class_session_id')
+            .eq('id', occurrenceId)
+            .single()
+
+        if (occError) throw new Error(`Failed to fetch occurrence: ${occError.message}`)
+
+        // Get all active enrollments for this session
+        const { data: enrollments, error: enrollError } = await supabase
+            .from('enrollments')
+            .select('id')
+            .eq('class_session_id', occurrence.class_session_id)
+            .eq('status', 'active')
+
+        if (enrollError) throw new Error(`Failed to fetch enrollments: ${enrollError.message}`)
+
+        const reports: OccurrenceReport[] = []
+
+        // Create report for each enrollment
+        for (const enrollment of enrollments) {
+            const report = await this.getOrCreateReport(enrollment.id, occurrenceId)
+            reports.push(report)
+        }
+
+        return reports
+    }
+
+    /**
+     * Gets reports with occurrence and enrollment details
+     * Includes joined data for display purposes
+     */
+    static async getReportsWithDetails(
+        enrollmentId: string
+    ): Promise<any[]> {
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select(`
+                *,
+                class_occurrence:class_occurrences!class_occurrence_id(
+                    occurrence_date,
+                    status,
+                    original_start_time,
+                    class_session:class_sessions!class_session_id(
+                        name,
+                        classroom:classrooms!classroom_id(name)
+                    )
+                )
+            `)
+            .eq('enrollment_id', enrollmentId)
+            .order('class_occurrence(occurrence_date)', { ascending: false })
+
+        if (error) throw new Error(error.message)
+
+        return data
+    }
+}

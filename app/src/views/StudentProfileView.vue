@@ -8,12 +8,14 @@ import { CourseService } from '@/services/CourseService'
 import { Course } from '@/models/Course'
 import { Classroom, type ClassSessionDTO } from '@/models/Classroom'
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
+import { useEmailValidation } from '@/composables/useEmailValidation'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const studentStore = useStudentStore()
 const studentId = computed(() => route.params.id as string)
+const { validateEmail, getEmailError } = useEmailValidation()
 
 // Form State for Main Details
 const form = ref({
@@ -25,6 +27,10 @@ const form = ref({
   mailing_address: '',
   notes: ''
 })
+
+// Email validation state
+const emailTouched = ref(false)
+const emailError = computed(() => emailTouched.value ? getEmailError(form.value.email) : null)
 
 // UI State
 const isSaving = ref(false)
@@ -66,9 +72,17 @@ function populateForm() {
 
 // --- Main Student Update ---
 async function saveMainDetails() {
+  // Validate email if provided
+  if (form.value.email && !validateEmail(form.value.email)) {
+    emailTouched.value = true
+    alert('Please enter a valid email address')
+    return
+  }
+  
   isSaving.value = true
   try {
     await studentStore.updateStudent(studentId.value, form.value)
+    emailTouched.value = false // Reset validation state
     // Success feedback could go here
   } catch (e) {
     console.error(e)
@@ -93,11 +107,23 @@ async function handleDeleteStudent() {
 
 // --- Contacts Management ---
 const newContact = ref({ name: '', relation: '', phone: '', email: '' })
+const contactEmailTouched = ref(false)
+const contactEmailError = computed(() => contactEmailTouched.value ? getEmailError(newContact.value.email) : null)
+
 async function addContact() {
   if (!newContact.value.name) return
+  
+  // Validate email if provided
+  if (newContact.value.email && !validateEmail(newContact.value.email)) {
+    contactEmailTouched.value = true
+    alert('Please enter a valid email address for contact')
+    return
+  }
+  
   try {
     await StudentService.addContact({ ...newContact.value, student_id: studentId.value })
     newContact.value = { name: '', relation: '', phone: '', email: '' } // Reset
+    contactEmailTouched.value = false
     await studentStore.loadStudent(studentId.value) // Refresh
   } catch (e) {
     console.error(e)
@@ -109,19 +135,41 @@ const availableClassrooms = ref<Classroom[]>([])
 const availableSessions = ref<ClassSessionDTO[]>([])
 const isEnrollModalOpen = ref(false)
 const newEnrollment = ref<Partial<EnrollmentDTO>>({ status: 'active' })
+const selectedSessionDetails = ref<any>(null)
 
 const filteredSessions = computed(() => {
     if (!newEnrollment.value.course_id) return []
     return availableSessions.value.filter(s => s.course_ids.includes(newEnrollment.value.course_id!))
 })
 
-// Watch Session Selection to Auto-Set Classroom
-watch(() => newEnrollment.value.class_session_id, (sessionId) => {
-    if (sessionId) {
-        const session = availableSessions.value.find(s => s.id === sessionId)
-        if (session && session.classroom_id) {
-            newEnrollment.value.classroom_id = session.classroom_id
-        }
+const isSessionFull = computed(() => {
+  if (!selectedSessionDetails.value) return false
+  return selectedSessionDetails.value.current_enrollments >= selectedSessionDetails.value.capacity
+})
+
+const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+function getDayLabel(day: number) {
+  return dayLabels[day] || day.toString()
+}
+
+// Watch Session Selection to Fetch Details
+watch(() => newEnrollment.value.class_session_id, async (sessionId) => {
+    if (!sessionId) {
+      selectedSessionDetails.value = null
+      return
+    }
+    
+    try {
+      // Fetch session details including classroom info and enrollment count
+      selectedSessionDetails.value = await CourseService.getSessionDetails(sessionId)
+      
+      // Auto-set classroom from session
+      if (selectedSessionDetails.value.classroom_id) {
+        newEnrollment.value.classroom_id = selectedSessionDetails.value.classroom_id
+      }
+    } catch (e) {
+      console.error('Failed to fetch session details:', e)
+      selectedSessionDetails.value = null
     }
 })
 
@@ -132,17 +180,22 @@ async function fetchEnrollments() {
 
 async function openEnrollModal() {
   isEnrollModalOpen.value = true
-  // Fetch all data needed
-  const [courses, rooms, sessions] = await Promise.all([
-      CourseService.getCourses(),
-      CourseService.getClassrooms(),
-      CourseService.getClassSessions()
+  // Fetch all data needed (with large page size to get all)
+  const [coursesRes, roomsRes, sessionsRes] = await Promise.all([
+      CourseService.getCourses(1, 1000),
+      CourseService.getClassrooms(1, 1000),
+      CourseService.getClassSessions(1, 1000)
   ])
-  availableCourses.value = courses
-  availableClassrooms.value = rooms
-  availableSessions.value = sessions
+  availableCourses.value = coursesRes.data
+  availableClassrooms.value = roomsRes.data
+  availableSessions.value = sessionsRes.data
   
-  newEnrollment.value = { student_id: studentId.value, status: 'active' }
+  newEnrollment.value = { 
+    student_id: studentId.value, 
+    status: 'active',
+    start_date: new Date().toISOString().split('T')[0],
+    lesson_number: 1
+  }
 }
 
 async function enrollStudent() {
@@ -442,8 +495,16 @@ function copyToClipboard(text: string) {
 
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('auth.email') }}</label>
-          <input v-if="isEditingMainDetails" v-model="form.email" type="email" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input 
+            v-if="isEditingMainDetails" 
+            v-model="form.email" 
+            type="email" 
+            @blur="emailTouched = true"
+            class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
+            :class="{ 'border-red-500 focus:ring-red-500': emailError }"
+          >
           <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.email || '-' }}</div>
+          <p v-if="emailError && isEditingMainDetails" class="text-xs text-red-500 mt-1">{{ emailError }}</p>
         </div>
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.contacts.phone') }}</label>
@@ -594,7 +655,17 @@ function copyToClipboard(text: string) {
               <input v-model="newContact.name" :placeholder="$t('student.contacts.name')" class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
               <input v-model="newContact.relation" :placeholder="$t('student.contacts.relation')" class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
               <input v-model="newContact.phone" :placeholder="$t('student.contacts.phone')" class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-              <input v-model="newContact.email" :placeholder="$t('student.contacts.email')" class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+              <div class="relative">
+                <input 
+                  v-model="newContact.email" 
+                  type="email"
+                  @blur="contactEmailTouched = true"
+                  :placeholder="$t('student.contacts.email')" 
+                  class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  :class="{ 'border-red-500 focus:ring-red-500': contactEmailError }"
+                >
+                <p v-if="contactEmailError" class="text-xs text-red-500 mt-1">{{ contactEmailError }}</p>
+              </div>
             </div>
             <button @click="addContact" class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
@@ -852,15 +923,49 @@ function copyToClipboard(text: string) {
                 </div>
                 
                 <div v-if="newEnrollment.course_id">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Class Session (Optional)</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.session_select') }}</label>
                     <select v-model="newEnrollment.class_session_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                        <option :value="undefined">-- Select Session --</option>
+                        <option :value="undefined">{{ $t('student.internal_courses.session_select_placeholder') }}</option>
                         <option v-for="s in filteredSessions" :key="s.id" :value="s.id">
                             {{ s.name }} ({{ s.day_of_week !== undefined ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
                         </option>
                         <option v-if="filteredSessions.length === 0" disabled>No sessions found for this course</option>
                     </select>
-                    <p class="text-xs text-gray-400 mt-1">Selecting a session auto-fills the classroom.</p>
+                    <p class="text-xs text-gray-400 mt-1">{{ $t('student.internal_courses.session_hint') }}</p>
+                    
+                    <!-- Session Details Card -->
+                    <div v-if="selectedSessionDetails" class="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-blue-50 rounded-lg border border-emerald-200">
+                      <h4 class="font-semibold text-sm text-gray-800 mb-3 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-emerald-600">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                        </svg>
+                        {{ $t('student.internal_courses.session_details') }}
+                      </h4>
+                      <div class="space-y-2 text-sm">
+                        <div class="flex justify-between items-start">
+                          <span class="text-gray-600">Classroom:</span>
+                          <span class="font-medium text-gray-900 text-right">{{ selectedSessionDetails.classroom_name }}</span>
+                        </div>
+                        <div v-if="selectedSessionDetails.classroom_address" class="flex justify-between items-start">
+                          <span class="text-gray-600">Address:</span>
+                          <span class="text-gray-700 text-right max-w-[200px]">{{ selectedSessionDetails.classroom_address }}</span>
+                        </div>
+                        <div class="flex justify-between items-start">
+                          <span class="text-gray-600">Schedule:</span>
+                          <span class="text-gray-700">
+                            {{ getDayLabel(selectedSessionDetails.day_of_week) }} 
+                            {{ selectedSessionDetails.start_time?.slice(0,5) }} - {{ selectedSessionDetails.end_time?.slice(0,5) }}
+                          </span>
+                        </div>
+                        <div class="flex justify-between items-start pt-2 border-t border-emerald-200">
+                          <span class="text-gray-600">Capacity:</span>
+                          <span class="font-semibold" :class="isSessionFull ? 'text-red-600' : 'text-emerald-700'">
+                            {{ selectedSessionDetails.current_enrollments }}/{{ selectedSessionDetails.capacity }}
+                            <span v-if="isSessionFull" class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">FULL</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                 </div>
 
                 <div>
@@ -880,11 +985,29 @@ function copyToClipboard(text: string) {
                         <option value="dropped">Dropped</option>
                     </select>
                 </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.start_date') }}</label>
+                        <input type="date" v-model="newEnrollment.start_date" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.lesson_number') }}</label>
+                        <input type="number" v-model.number="newEnrollment.lesson_number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" placeholder="1">
+                    </div>
+                </div>
             </div>
             <div class="flex justify-end gap-3 mt-6">
                 <!-- Hardcoded Cancel translation fallback -->
                 <button @click="isEnrollModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">{{ $t('common.cancel') || $t('student.cancel') }}</button>
-                <button @click="enrollStudent" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">{{ $t('internal_courses.add_btn') }}</button>
+                <button 
+                  @click="enrollStudent" 
+                  :disabled="isSessionFull"
+                  class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
+                  :title="isSessionFull ? 'This session is at full capacity' : ''"
+                >
+                  {{ $t('internal_courses.add_btn') }}
+                </button>
             </div>
         </div>
       </div>

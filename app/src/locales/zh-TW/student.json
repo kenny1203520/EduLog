@@ -62,6 +62,12 @@
         "classroom": "教室",
         "status": "狀態",
         "reports": "課堂報告",
+        "start_date": "開始上課日期",
+        "lesson_number": "進度課次",
+        "session_select": "選擇班級時段 (選填)",
+        "session_select_placeholder": "-- 請選擇時段 --",
+        "session_hint": "選擇班級時段後會自動填寫教室。",
+        "session_details": "班級資訊",
         "add_btn": "確認選課",
         "no_enrollments": "尚未選修任何課程"
     },

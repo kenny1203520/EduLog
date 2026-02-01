@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue' // Added watch
 import { CourseService } from '@/services/CourseService'
-import { Course, Lesson, type CourseDTO, type LessonDTO } from '@/models/Course'
+import { Course, Lesson, type CourseDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/common/Pagination.vue'
 
@@ -15,6 +15,7 @@ const editingCourse = ref<Course | null>(null)
 const courseForm = ref<Partial<CourseDTO>>({
   subject: '',
   stage: '',
+  display_name: '',
   description: ''
 })
 
@@ -67,8 +68,19 @@ watch(() => pagination.value.perPage, () => { pagination.value.page = 1; fetchCo
 // ... (rest of functions)
 
 function openCreateModal() {
-  courseForm.value = { subject: '', stage: '', description: '' }
+  courseForm.value = { subject: '', stage: '', display_name: '', description: '' }
   editingCourse.value = null
+  iscreateModalOpen.value = true
+}
+
+function openEditModal(course: Course) {
+  editingCourse.value = course
+  courseForm.value = {
+    subject: course.subject,
+    stage: course.stage,
+    display_name: course.displayNameValue,
+    description: course.description
+  }
   iscreateModalOpen.value = true
 }
 
@@ -192,11 +204,16 @@ async function deleteLesson(id: string) {
           >
             <!-- Card Header -->
             <div class="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-start">
-                <div>
-                    <h3 class="font-bold text-lg text-gray-800">{{ course.stage }}</h3>
-                    <p class="text-sm text-gray-500">{{ course.description || 'No description' }}</p>
+                <div class="flex-1 min-w-0" @click="openEditModal(course)">
+                    <h3 class="font-bold text-lg text-gray-800 truncate" :title="course.displayName">
+                        {{ course.displayName }}
+                    </h3>
+                    <p v-if="course.displayNameValue" class="text-xs text-gray-400 font-mono truncate">
+                        {{ course.subject }} {{ course.stage }}
+                    </p>
+                    <p class="text-sm text-gray-500 mt-1 line-clamp-2">{{ course.description || 'No description' }}</p>
                 </div>
-                <button @click="deleteCourse(course.id!)" class="text-gray-400 hover:text-red-500 transition">
+                <button @click="deleteCourse(course.id!)" class="text-gray-400 hover:text-red-500 transition ml-2 flex-shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
                     </svg>
@@ -291,17 +308,24 @@ async function deleteLesson(id: string) {
     </div>
 
     <!-- Create/Edit Modal -->
-    <div v-if="iscreateModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
-            <h3 class="text-xl font-bold mb-4">Create Course</h3>
+    <div v-if="iscreateModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold mb-4">{{ editingCourse ? 'Edit Course' : 'Create Course' }}</h3>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                    <input v-model="courseForm.subject" placeholder="e.g. Scratch, Python" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject / Categorization</label>
+                    <input v-model="courseForm.subject" placeholder="e.g. 菁英, 程式, 數學" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Stage / Level</label>
                     <input v-model="courseForm.stage" placeholder="e.g. Level 1, Advanced" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                      Display Name (Optional)
+                      <span class="text-xs text-gray-400 block font-normal mt-0.5">Custom name shown to users instead of subject+stage</span>
+                    </label>
+                    <input v-model="courseForm.display_name" placeholder="e.g. Python 程式進階班" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
@@ -310,7 +334,9 @@ async function deleteLesson(id: string) {
             </div>
             <div class="flex justify-end gap-3 mt-6">
                 <button @click="iscreateModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                <button @click="saveCourse" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Create</button>
+                <button @click="saveCourse" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                    {{ editingCourse ? 'Save Changes' : 'Create' }}
+                </button>
             </div>
         </div>
     </div>

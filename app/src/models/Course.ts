@@ -2,6 +2,7 @@ export interface CourseDTO {
   id?: string
   subject: string
   stage: string
+  display_name?: string
   description?: string
   created_at?: string
   updated_at?: string
@@ -38,6 +39,7 @@ export class Course {
   id?: string
   subject: string
   stage: string
+  displayNameValue?: string
   description?: string
   created_at?: string
   updated_at?: string
@@ -47,13 +49,14 @@ export class Course {
     this.id = data.id
     this.subject = data.subject
     this.stage = data.stage
+    this.displayNameValue = data.display_name
     this.description = data.description
     this.created_at = data.created_at
     this.updated_at = data.updated_at
   }
 
   get displayName(): string {
-    return `${this.subject} ${this.stage}`
+    return this.displayNameValue || `${this.subject} ${this.stage}`
   }
 
   addLesson(lesson: Lesson) {

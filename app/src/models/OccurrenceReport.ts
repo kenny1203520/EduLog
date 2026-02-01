@@ -1,0 +1,167 @@
+/**
+ * OccurrenceReport represents a student's report for a specific class occurrence.
+ * Supports versioning for conflict resolution and auto-save functionality.
+ */
+
+export interface OccurrenceReportDTO {
+    id?: string
+    enrollment_id: string
+    class_occurrence_id: string
+    content: string
+    version: number
+    last_edited_by?: string
+    last_edited_at?: string
+    created_at?: string
+    updated_at?: string
+}
+
+export interface ReportVersionDTO {
+    id?: string
+    occurrence_report_id: string
+    version: number
+    content: string
+    edited_by?: string
+    created_at?: string
+}
+
+/**
+ * OccurrenceReport domain model
+ */
+export class OccurrenceReport {
+    id?: string
+    enrollmentId: string
+    classOccurrenceId: string
+    content: string
+    version: number
+    lastEditedBy?: string
+    lastEditedAt?: Date
+    createdAt?: Date
+    updatedAt?: Date
+
+    constructor(data: OccurrenceReportDTO) {
+        this.id = data.id
+        this.enrollmentId = data.enrollment_id
+        this.classOccurrenceId = data.class_occurrence_id
+        this.content = data.content
+        this.version = data.version
+        this.lastEditedBy = data.last_edited_by
+        this.lastEditedAt = data.last_edited_at ? new Date(data.last_edited_at) : undefined
+        this.createdAt = data.created_at ? new Date(data.created_at) : undefined
+        this.updatedAt = data.updated_at ? new Date(data.updated_at) : undefined
+    }
+
+    /**
+     * Converts domain model to DTO
+     */
+    toDTO(): OccurrenceReportDTO {
+        return {
+            id: this.id,
+            enrollment_id: this.enrollmentId,
+            class_occurrence_id: this.classOccurrenceId,
+            content: this.content,
+            version: this.version,
+            last_edited_by: this.lastEditedBy,
+            last_edited_at: this.lastEditedAt?.toISOString(),
+            created_at: this.createdAt?.toISOString(),
+            updated_at: this.updatedAt?.toISOString()
+        }
+    }
+
+    /**
+     * Check if report is empty
+     */
+    get isEmpty(): boolean {
+        return !this.content || this.content.trim().length === 0
+    }
+
+    /**
+     * Get word count
+     */
+    get wordCount(): number {
+        if (this.isEmpty) return 0
+        return this.content.trim().split(/\s+/).length
+    }
+
+    /**
+     * Get character count
+     */
+    get characterCount(): number {
+        return this.content.length
+    }
+
+    /**
+     * Check if report was recently edited (within last 5 minutes)
+     */
+    get isRecentlyEdited(): boolean {
+        if (!this.lastEditedAt) return false
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000)
+        return this.lastEditedAt > fiveMinutesAgo
+    }
+
+    /**
+     * Increment version (for optimistic locking)
+     */
+    incrementVersion(): void {
+        this.version++
+    }
+
+    /**
+     * Update content and metadata
+     */
+    updateContent(newContent: string, editorId?: string): void {
+        this.content = newContent
+        this.lastEditedBy = editorId
+        this.lastEditedAt = new Date()
+    }
+}
+
+/**
+ * ReportVersion represents a historical version of a report
+ */
+export class ReportVersion {
+    id?: string
+    occurrenceReportId: string
+    version: number
+    content: string
+    editedBy?: string
+    createdAt?: Date
+
+    constructor(data: ReportVersionDTO) {
+        this.id = data.id
+        this.occurrenceReportId = data.occurrence_report_id
+        this.version = data.version
+        this.content = data.content
+        this.editedBy = data.edited_by
+        this.createdAt = data.created_at ? new Date(data.created_at) : undefined
+    }
+
+    toDTO(): ReportVersionDTO {
+        return {
+            id: this.id,
+            occurrence_report_id: this.occurrenceReportId,
+            version: this.version,
+            content: this.content,
+            edited_by: this.editedBy,
+            created_at: this.createdAt?.toISOString()
+        }
+    }
+
+    /**
+     * Get display string for version
+     */
+    get displayString(): string {
+        const timeStr = this.createdAt?.toLocaleString() || 'Unknown time'
+        return `Version ${this.version} - ${timeStr}`
+    }
+}
+
+/**
+ * Result of a save operation
+ */
+export interface SaveReportResult {
+    success: boolean
+    conflict: boolean
+    newVersion?: number
+    serverContent?: string
+    message?: string
+}

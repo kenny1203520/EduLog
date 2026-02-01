@@ -21,6 +21,7 @@ export class CourseService {
       const { data, error, count } = await supabase
         .from('class_sessions')
         .select('*', { count: 'exact' })
+        .order('lesson_number', { ascending: true, nullsFirst: false })
         .range(from, to)
 
       if (error) throw new Error(error.message)
@@ -33,9 +34,45 @@ export class CourseService {
       return data
    }
 
+   static async updateClassSession(id: string, updates: Partial<ClassSessionDTO>): Promise<ClassSessionDTO> {
+      const { data, error } = await supabase.from('class_sessions').update(updates).eq('id', id).select().single()
+      if (error) throw new Error(error.message)
+      return data
+   }
+
    static async deleteClassSession(id: string): Promise<void> {
       const { error } = await supabase.from('class_sessions').delete().eq('id', id)
       if (error) throw new Error(error.message)
+   }
+
+   static async getSessionDetails(sessionId: string) {
+      // Fetch session with classroom info
+      const { data: session, error: sessionError } = await supabase
+        .from('class_sessions')
+        .select(`
+          *,
+          classroom:classrooms!classroom_id(id, name, address)
+        `)
+        .eq('id', sessionId)
+        .single()
+      
+      if (sessionError) throw new Error(sessionError.message)
+      
+      // Count enrollments for this session
+      const { count, error: countError } = await supabase
+        .from('enrollments')
+        .select('*', { count: 'exact', head: true })
+        .eq('class_session_id', sessionId)
+        .eq('status', 'active')
+      
+      if (countError) throw new Error(countError.message)
+      
+      return {
+        ...session,
+        classroom_name: session.classroom?.name || 'Unknown',
+        classroom_address: session.classroom?.address || '',
+        current_enrollments: count || 0
+      }
    }
 
   // --- Lesson Reports ---
@@ -52,12 +89,6 @@ export class CourseService {
   }
 
   static async upsertLessonReport(report: Partial<LessonReportDTO>): Promise<LessonReportDTO> {
-      // We expect enrollment_id and lesson_id to be present.
-      // If id is present, we update. If not, we insert (or upsert on unique constraint).
-      
-      // For conflict resolution, we should ideally check version.
-      // But for simple auto-save, we can use upsert.
-      
       const { data, error } = await supabase
         .from('lesson_reports')
         .upsert(report, { onConflict: 'enrollment_id, lesson_id' })
@@ -74,7 +105,7 @@ export class CourseService {
         .from('enrollments')
         .select(`
             *,
-            courses (subject, stage),
+            courses (subject, stage, display_name),
             classrooms (name),
             class_sessions (name)
         `)
@@ -90,7 +121,7 @@ export class CourseService {
         .from('enrollments')
         .select(`
             *,
-            courses (subject, stage),
+            courses (subject, stage, display_name),
             classrooms (name),
             class_sessions (name)
         `)
@@ -104,6 +135,12 @@ export class CourseService {
 
   static async enrollStudent(enrollment: Partial<EnrollmentDTO>): Promise<Enrollment> {
       const { data, error } = await supabase.from('enrollments').insert(enrollment).select().single()
+      if (error) throw new Error(error.message)
+      return new Enrollment(data)
+  }
+
+  static async updateEnrollment(id: string, updates: Partial<EnrollmentDTO>): Promise<Enrollment> {
+      const { data, error } = await supabase.from('enrollments').update(updates).eq('id', id).select().single()
       if (error) throw new Error(error.message)
       return new Enrollment(data)
   }
@@ -124,6 +161,7 @@ export class CourseService {
         *,
         lessons (*)
       `, { count: 'exact' })
+      .order('display_name', { ascending: true, nullsFirst: false })
       .order('subject', { ascending: true })
       .order('stage', { ascending: true })
       .range(from, to)
@@ -178,13 +216,19 @@ export class CourseService {
   }
 
   // --- Classrooms ---
-  static async getClassrooms(page: number = 1, perPage: number = 100): Promise<{ data: Classroom[], count: number }> {
+  static async getClassrooms(page: number = 1, perPage: number = 100, search?: string): Promise<{ data: Classroom[], count: number }> {
       const from = (page - 1) * perPage
       const to = from + perPage - 1
 
-      const { data, error, count } = await supabase
+      let query = supabase
         .from('classrooms')
         .select(`*, classroom_schedules (*)`, { count: 'exact' })
+      
+      if (search) {
+          query = query.ilike('name', `%${search}%`)
+      }
+
+      const { data, error, count } = await query
         .order('name')
         .range(from, to)
       
