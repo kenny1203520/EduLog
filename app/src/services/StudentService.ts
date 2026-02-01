@@ -68,14 +68,39 @@ export class StudentService {
 
   /**
    * Delete a student
+   * Performs manual cascade delete to ensure all related records are removed.
    */
   static async delete(id: string): Promise<void> {
-    const { error } = await supabase
+    // 1. Delete Contacts
+    const { error: e1 } = await supabase.from('student_contacts').delete().eq('student_id', id)
+    if (e1) throw new Error('Failed to delete contacts: ' + e1.message)
+
+    // 2. Delete Schools
+    const { error: e2 } = await supabase.from('student_schools').delete().eq('student_id', id)
+    if (e2) throw new Error('Failed to delete schools: ' + e2.message)
+
+    // 3. Delete Credentials
+    const { error: e3 } = await supabase.from('student_credentials').delete().eq('student_id', id)
+    if (e3) throw new Error('Failed to delete credentials: ' + e3.message)
+
+    // 4. Delete Reports
+    const { error: e4 } = await supabase.from('reports').delete().eq('student_id', id)
+    if (e4 && e4.code !== '42P01') { 
+        throw new Error('Failed to delete reports: ' + e4.message)
+    }
+
+    // 5. Finally Delete Student
+    const { data, error } = await supabase
       .from('students')
       .delete()
       .eq('id', id)
+      .select()
     
     if (error) throw new Error(error.message)
+    
+    if (data?.length === 0) {
+        throw new Error('Delete failed: No records deleted. This usually means Row Level Security (RLS) policies are blocking the deletion or you do not have permission.')
+    }
   }
 
   // --- Contacts ---

@@ -63,5 +63,7 @@
         "add_btn": "Add Credential",
         "confirm_delete": "Are you sure you want to delete this credential?"
     },
-    "actions": "Actions"
+    "actions": "Actions",
+    "edit": "Edit",
+    "save": "Save"
 }

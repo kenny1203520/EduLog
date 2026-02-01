@@ -25,6 +25,18 @@ const form = ref({
 
 // UI State
 const isSaving = ref(false)
+const isEditingMainDetails = ref(false)
+
+function toggleEditMainDetails() {
+  if (isEditingMainDetails.value) {
+    // Cancel editing: revert form to current student data
+    populateForm()
+    isEditingMainDetails.value = false
+  } else {
+    // Start editing
+    isEditingMainDetails.value = true
+  }
+}
 
 // Load Data
 onMounted(async () => {
@@ -61,6 +73,7 @@ async function saveMainDetails() {
     alert('Failed to save details')
   } finally {
     isSaving.value = false
+    isEditingMainDetails.value = false
   }
 }
 
@@ -72,9 +85,9 @@ async function handleDeleteStudent() {
   try {
     await studentStore.deleteStudent(studentId.value)
     router.push('/dashboard')
-  } catch (e) {
+  } catch (e: any) {
     console.error(e)
-    alert('Failed to delete student')
+    alert('Failed to delete student: ' + (e.message || e))
   }
 }
 
@@ -353,43 +366,52 @@ function copyToClipboard(text: string) {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.name') }}</label>
-          <input v-model="form.name" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input v-if="isEditingMainDetails" v-model="form.name" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.name || '-' }}</div>
         </div>
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.grade') }}</label>
-          <input v-model="form.grade" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input v-if="isEditingMainDetails" v-model="form.grade" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.grade || '-' }}</div>
         </div>
         
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.gov_id') }}</label>
-          <input v-model="form.gov_id" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input v-if="isEditingMainDetails" v-model="form.gov_id" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono">{{ form.gov_id || '-' }}</div>
         </div>
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.orange_apple_id') }}</label>
-          <input v-model="form.orange_apple_id" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input v-if="isEditingMainDetails" v-model="form.orange_apple_id" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono">{{ form.orange_apple_id || '-' }}</div>
         </div>
 
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('auth.email') }}</label>
-          <input v-model="form.email" type="email" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input v-if="isEditingMainDetails" v-model="form.email" type="email" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.email || '-' }}</div>
         </div>
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.contacts.phone') }}</label>
-          <input v-model="form.phone" type="tel" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input v-if="isEditingMainDetails" v-model="form.phone" type="tel" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.phone || '-' }}</div>
         </div>
 
         <div class="space-y-1.5 md:col-span-2">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.residence_address') }}</label>
-          <input v-model="form.residence_address" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input v-if="isEditingMainDetails" v-model="form.residence_address" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.residence_address || '-' }}</div>
         </div>
         <div class="space-y-1.5 md:col-span-2">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.mailing_address') }}</label>
-          <input v-model="form.mailing_address" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <input v-if="isEditingMainDetails" v-model="form.mailing_address" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.mailing_address || '-' }}</div>
         </div>
         
         <div class="space-y-1.5 md:col-span-2">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.notes') }}</label>
-          <textarea v-model="form.notes" rows="3" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
+          <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[86px] whitespace-pre-wrap">{{ form.notes || '-' }}</div>
         </div>
       </div>
 
@@ -404,20 +426,32 @@ function copyToClipboard(text: string) {
           {{ $t('student.delete') }}
         </button>
 
-        <button 
-          @click="saveMainDetails" 
-          :disabled="isSaving"
-          class="bg-emerald-600 text-white px-8 py-2.5 rounded-lg shadow-sm hover:bg-emerald-700 hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2"
-        >
-          <svg v-if="!isSaving" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-          </svg>
-          <svg v-else class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          {{ isSaving ? $t('student.saving') : $t('student.save_details') }}
-        </button>
+        <div class="flex items-center gap-2">
+            <button 
+              v-if="isEditingMainDetails"
+              @click="toggleEditMainDetails" 
+              class="text-gray-500 hover:text-gray-700 font-medium px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+            >
+              {{ $t('student.cancel') }}
+            </button>
+            <button 
+              @click="isEditingMainDetails ? saveMainDetails() : toggleEditMainDetails()" 
+              :disabled="isSaving"
+              class="bg-emerald-600 text-white px-8 py-2.5 rounded-lg shadow-sm hover:bg-emerald-700 hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2 cursor-pointer"
+            >
+              <svg v-if="!isSaving && isEditingMainDetails" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+              </svg>
+              <svg v-else-if="!isSaving" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+              </svg>
+              <svg v-else class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ isSaving ? $t('student.saving') : (isEditingMainDetails ? $t('student.save_details') : $t('student.edit')) }}
+            </button>
+        </div>
       </div>
     </section>
 
