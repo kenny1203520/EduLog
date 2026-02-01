@@ -9,5 +9,7 @@
     "confirm_delete": "確定要刪除嗎？",
     "unknown_room": "未知教室",
     "no_description": "無簡介",
-    "copy_success": "已複製到剪貼簿！"
+    "copy_success": "已複製到剪貼簿！",
+    "back": "返回",
+    "students": "學生"
 }

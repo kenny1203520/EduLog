@@ -15,5 +15,6 @@
     "no_occurrence_selected_desc": "Select a date from the calendar to view or edit student reports for that session.",
     "no_reports_available": "No reports available",
     "no_reports_available_desc": "There are no class records for this session.",
-    "save_success": "Report saved successfully"
+    "save_success": "Report saved successfully",
+    "select_course_to_view": "Select a course to view its learning reports"
 }

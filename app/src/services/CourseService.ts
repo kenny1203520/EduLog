@@ -129,7 +129,8 @@ export class CourseService {
             *,
             courses (subject, stage, display_name),
             classrooms (name),
-            class_sessions (name)
+            class_sessions (name),
+            students (name, email)
         `)
         .eq('id', id)
         .maybeSingle()

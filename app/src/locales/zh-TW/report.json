@@ -15,5 +15,6 @@
     "no_occurrence_selected_desc": "在左側日曆中選擇一個日期，以檢視或編輯該課堂的學生報告。",
     "no_reports_available": "無報告可用",
     "no_reports_available_desc": "此時段尚無任何課堂紀錄。",
-    "save_success": "報告已成功儲存"
+    "save_success": "報告已成功儲存",
+    "select_course_to_view": "選擇一個課程以檢視其學習報告"
 }

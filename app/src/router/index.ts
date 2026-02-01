@@ -52,6 +52,11 @@ const router = createRouter({
           component: () => import('@/views/SessionDetailsView.vue')
         },
         {
+          path: 'student/:id/reports',
+          name: 'student-all-reports',
+          component: () => import('@/views/StudentAllReportsView.vue')
+        },
+        {
           path: 'reports/:enrollmentId',
           name: 'lesson-reports',
           component: () => import('@/views/StudentReportsView.vue')

@@ -1,7 +1,22 @@
 <template>
   <div class="student-reports-view p-6 max-w-7xl mx-auto">
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">{{ $t('report.list_title') }}</h1>
--
+    <!-- Header with Back Button -->
+    <div class="mb-6">
+      <button 
+        @click="router.back()" 
+        class="mb-4 text-gray-600 hover:text-emerald-600 font-medium flex items-center gap-2 transition"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        {{ $t('common.back') }}
+      </button>
+      <h1 class="text-2xl font-bold text-gray-900">
+        <span v-if="enrollmentInfo">{{ enrollmentInfo.studentName }} - {{ enrollmentInfo.courseDisplay }}</span>
+        <span v-else>{{ $t('report.list_title') }}</span>
+      </h1>
+    </div>
+
     <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-gray-500 bg-white rounded-2xl shadow-sm border border-gray-100">
       <svg class="animate-spin h-10 w-10 mb-4 text-emerald-500" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -108,7 +123,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
@@ -119,6 +134,7 @@ import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 
 const route = useRoute()
+const router = useRouter()
 
 const loading = ref(true)
 const occurrences = ref<ClassOccurrence[]>([])
@@ -128,6 +144,7 @@ const showConflictModal = ref(false)
 const conflictServerContent = ref('')
 const conflictLocalContent = ref('')
 const showSuccessToast = ref(false)
+const enrollmentInfo = ref<{ studentName: string, courseDisplay: string } | null>(null)
 
 // Lifecycle
 onMounted(async () => {
@@ -147,6 +164,12 @@ async function loadOccurrences() {
       console.warn('Enrollment not found or no class session assigned')
       loading.value = false
       return
+    }
+
+    // Store enrollment info for display
+    enrollmentInfo.value = {
+      studentName: enrollment.studentName || 'Student',
+      courseDisplay: `${enrollment.courseSubject}_${enrollment.courseStage}`
     }
 
     // Load occurrences: 4 weeks ago to 8 weeks ahead

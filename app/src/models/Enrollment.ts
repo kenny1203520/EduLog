@@ -68,6 +68,10 @@ export class Enrollment {
         if (data.class_sessions) {
             this.classSessionName = data.class_sessions.name
         }
+        if (data.students) {
+            this.studentName = data.students.name
+            this.studentEmail = data.students.email
+        }
     }
     
     get displayName(): string {

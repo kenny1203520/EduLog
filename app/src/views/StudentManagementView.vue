@@ -38,8 +38,7 @@ function navigateToProfile(id: string) {
 }
 
 function navigateToReports(id: string) {
-  // Opening profile is preferred as per user request
-  router.push({ name: 'student-profile', params: { id } })
+  router.push({ name: 'student-all-reports', params: { id } })
 }
 
 const showSuccessToast = ref(false)

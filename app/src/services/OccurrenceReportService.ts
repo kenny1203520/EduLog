@@ -3,7 +3,6 @@ import {
     OccurrenceReport, 
     type OccurrenceReportDTO, 
     ReportVersion,
-    type ReportVersionDTO,
     type SaveReportResult 
 } from '@/models/OccurrenceReport'
 

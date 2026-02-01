@@ -137,6 +137,11 @@ export class OccurrenceService {
 
         return data.map((dto: any) => {
             const occ = new ClassOccurrence(dto)
+            
+            if (dto.class_sessions) {
+                occ.sessionName = dto.class_sessions.name
+            }
+
             if (dto.class_sessions?.classrooms) {
                 occ.classroomName = dto.class_sessions.classrooms.name
             }

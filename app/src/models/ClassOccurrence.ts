@@ -36,6 +36,7 @@ export class ClassOccurrence {
     createdAt?: Date
     updatedAt?: Date
     classroomName?: string
+    sessionName?: string
 
     constructor(data: ClassOccurrenceDTO) {
         this.id = data.id
