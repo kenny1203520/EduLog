@@ -13,13 +13,11 @@ const studentId = computed(() => route.params.id as string)
 // Form State for Main Details
 const form = ref({
   name: '',
-  grade: '',
   gov_id: '',
   email: '',
   phone: '',
   residence_address: '',
   mailing_address: '',
-  orange_apple_id: '',
   notes: ''
 })
 
@@ -51,13 +49,11 @@ function populateForm() {
   if (!s) return
   form.value = {
     name: s.name,
-    grade: s.grade,
     gov_id: s.gov_id,
     email: s.email,
     phone: s.phone,
     residence_address: s.residence_address,
     mailing_address: s.mailing_address,
-    orange_apple_id: s.orange_apple_id,
     notes: s.notes
   }
 }
@@ -112,7 +108,7 @@ async function deleteContact(id: string) {
 
 // --- Schools Management ---
 const schoolStatusOptions = ['enrolled', 'graduated', 'incomplete', 'suspended']
-const newSchool = ref({ name: '', status: '', grade: '', start_date: '', end_date: '', school_student_id: '' })
+const newSchool = ref({ name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' })
 
 async function addSchool() {
   // Name can be empty, but status is strictly required
@@ -142,7 +138,7 @@ async function addSchool() {
   
   try {
     await StudentService.addSchool({ ...newSchool.value, student_id: studentId.value })
-    newSchool.value = { name: '', status: '', grade: '', start_date: '', end_date: '', school_student_id: '' }
+    newSchool.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' }
     await studentStore.loadStudent(studentId.value)
   } catch (e) {
     console.error(e)
@@ -217,7 +213,7 @@ async function saveContact() {
 
 // Schools Editing
 const editingSchoolId = ref<string | null>(null)
-const editSchoolForm = ref({ name: '', status: '', grade: '', start_date: '', end_date: '', school_student_id: '' })
+const editSchoolForm = ref({ name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' })
 
 function startEditSchool(school: any) {
   editingSchoolId.value = school.id
@@ -226,7 +222,7 @@ function startEditSchool(school: any) {
 
 function cancelEditSchool() {
   editingSchoolId.value = null
-  editSchoolForm.value = { name: '', status: '', grade: '', start_date: '', end_date: '', school_student_id: '' }
+  editSchoolForm.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' }
 }
 
 async function saveSchool() {
@@ -340,7 +336,7 @@ function copyToClipboard(text: string) {
     <div class="flex items-center justify-between border-b pb-4">
       <div>
         <h1 class="text-3xl font-bold text-gray-800">{{ studentStore.currentStudent.name }}</h1>
-        <p class="text-gray-500">{{ studentStore.currentStudent.grade }} • {{ studentStore.currentStudent.id }}</p>
+        <p class="text-gray-500">{{ studentStore.currentStudent.displayGrade }} • {{ studentStore.currentStudent.id }}</p>
       </div>
       <div class="space-x-3">
         <router-link 
@@ -369,21 +365,11 @@ function copyToClipboard(text: string) {
           <input v-if="isEditingMainDetails" v-model="form.name" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
           <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.name || '-' }}</div>
         </div>
-        <div class="space-y-1.5">
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.grade') }}</label>
-          <input v-if="isEditingMainDetails" v-model="form.grade" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
-          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">{{ form.grade || '-' }}</div>
-        </div>
         
         <div class="space-y-1.5">
           <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.gov_id') }}</label>
           <input v-if="isEditingMainDetails" v-model="form.gov_id" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
           <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono">{{ form.gov_id || '-' }}</div>
-        </div>
-        <div class="space-y-1.5">
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.orange_apple_id') }}</label>
-          <input v-if="isEditingMainDetails" v-model="form.orange_apple_id" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
-          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono">{{ form.orange_apple_id || '-' }}</div>
         </div>
 
         <div class="space-y-1.5">
@@ -569,20 +555,36 @@ function copyToClipboard(text: string) {
               <div class="space-y-2">
                 <div>
                     <div class="font-bold text-gray-800 text-lg">{{ s.name }}</div>
-                    <div v-if="s.school_student_id" class="flex items-center gap-2 text-sm text-gray-600 mt-1 group">
-                        <span class="font-medium text-gray-400 text-xs uppercase tracking-wide bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">{{ $t('student.schools.school_student_id') }}</span>
-                        <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id }}</span>
-                        <button @click="copyToClipboard(s.school_student_id)" class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-0.5 cursor-pointer" title="Copy">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
-                              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
-                            </svg>
-                        </button>
+                    
+                    <!-- ID, Grade, Class Row -->
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+                        <!-- Student ID -->
+                        <div v-if="s.school_student_id" class="flex items-center gap-2 text-sm text-gray-600 group">
+                            <span class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{ $t('student.schools.school_student_id') }}</span>
+                            <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id }}</span>
+                            <button @click="copyToClipboard(s.school_student_id)" class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-0.5 cursor-pointer" title="Copy">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <!-- Grade -->
+                        <div v-if="s.status === 'enrolled' && s.grade" class="flex items-center gap-2 text-sm text-gray-600">
+                            <span class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{ $t('student.schools.grade') }}</span>
+                            <span class="font-medium text-gray-800">{{ s.grade }}</span>
+                        </div>
+
+                        <!-- Class -->
+                        <div v-if="s.status === 'enrolled' && s.class" class="flex items-center gap-2 text-sm text-gray-600">
+                            <span class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{ $t('student.schools.class') }}</span>
+                            <span class="font-medium text-gray-800">{{ s.class }}</span>
+                        </div>
                     </div>
                 </div>
                 
-                <div class="text-xs text-gray-500 flex flex-wrap items-center gap-2">
+                <div class="text-xs text-gray-500 flex flex-wrap items-center gap-2 mt-2">
                   <span v-if="s.status" class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 font-medium">{{ $t(`student.schools.status_options.${s.status}`) }}</span>
-                  <span v-if="s.status === 'enrolled' && s.grade" class="bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full border border-purple-100 font-medium">{{ s.grade }}</span>
                   <span class="bg-white border border-gray-200 text-gray-500 px-2 py-0.5 rounded-full flex items-center gap-1">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
                       <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
@@ -621,19 +623,26 @@ function copyToClipboard(text: string) {
                 </div>
               </div>
 
-              <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <!-- Student ID Field -->
                  <div class="space-y-1">
                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.schools.school_student_id') }}</label>
                    <input v-model="editSchoolForm.school_student_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                  </div>
 
-                 <div class="space-y-1">
-                   <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.schools.grade') }}</label>
-                   <input v-model="editSchoolForm.grade" :disabled="editSchoolForm.status !== 'enrolled'" :placeholder="editSchoolForm.status !== 'enrolled' ? '-' : ''" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
-                   <p v-if="editSchoolForm.status === 'enrolled'" class="text-[10px] text-red-500 text-right mt-0.5">* {{ $t('student.required') }}</p>
+                 <div class="grid grid-cols-2 gap-4">
+                     <div class="space-y-1">
+                       <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.schools.grade') }}</label>
+                       <input v-model="editSchoolForm.grade" :disabled="editSchoolForm.status !== 'enrolled'" :placeholder="editSchoolForm.status !== 'enrolled' ? '-' : ''" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
+                     </div>
+                     <div class="space-y-1">
+                       <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.schools.class') }}</label>
+                       <input v-model="editSchoolForm.class" :disabled="editSchoolForm.status !== 'enrolled'" :placeholder="editSchoolForm.status !== 'enrolled' ? '-' : ''" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
+                     </div>
                  </div>
-                 
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div class="space-y-1">
                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.schools.start_date') }}</label>
                    <input type="date" v-model="editSchoolForm.start_date" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
@@ -681,10 +690,15 @@ function copyToClipboard(text: string) {
                     <input v-model="newSchool.school_student_id" class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                  </div>
 
-                 <div class="space-y-1">
-                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.schools.grade') }}</label>
-                     <input v-model="newSchool.grade" :disabled="newSchool.status !== 'enrolled'" :placeholder="newSchool.status !== 'enrolled' ? '-' : ''" class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
-                     <p v-if="newSchool.status === 'enrolled'" class="text-[10px] text-red-500 text-right mt-0.5">* {{ $t('student.required') }}</p>
+                 <div class="grid grid-cols-2 gap-4">
+                     <div class="space-y-1">
+                         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.schools.grade') }}</label>
+                         <input v-model="newSchool.grade" :disabled="newSchool.status !== 'enrolled'" :placeholder="newSchool.status !== 'enrolled' ? '-' : ''" class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
+                     </div>
+                     <div class="space-y-1">
+                         <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.schools.class') }}</label>
+                         <input v-model="newSchool.class" :disabled="newSchool.status !== 'enrolled'" :placeholder="newSchool.status !== 'enrolled' ? '-' : ''" class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
+                     </div>
                  </div>
              </div>
 
@@ -738,7 +752,7 @@ function copyToClipboard(text: string) {
                 <tr v-if="editingCredentialId !== cred.id" class="bg-white hover:bg-gray-50 transition-colors">
                   <td class="px-4 py-3 font-medium text-gray-800">
                     <div class="flex items-center gap-2">
-                      <span>{{ cred.platform }}</span>
+                      <span>{{ platforms.includes(cred.platform) ? $t(`student.credentials.platforms.${cred.platform}`) : cred.platform }}</span>
                       <a v-if="cred.url" :href="cred.url" target="_blank" class="text-emerald-600 hover:text-emerald-700" :title="cred.url">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                           <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
@@ -786,7 +800,7 @@ function copyToClipboard(text: string) {
                 <tr v-else class="bg-emerald-50/50">
                   <td class="px-3 py-2 space-y-2">
                     <select v-model="editCredentialForm.platform" class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
-                      <option v-for="p in platforms" :key="p" :value="p">{{ p }}</option>
+                      <option v-for="p in platforms" :key="p" :value="p">{{ $t(`student.credentials.platforms.${p}`) }}</option>
                     </select>
                     <input v-if="editCredentialForm.platform === 'Other'" v-model="editCredentialForm.custom_platform" :placeholder="$t('student.credentials.platform_name')" class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                     <input v-if="editCredentialForm.platform === 'Quiz Platform' || editCredentialForm.platform === 'Other'" v-model="editCredentialForm.url" :placeholder="$t('student.credentials.url')" class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">

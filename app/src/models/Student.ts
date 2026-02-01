@@ -4,6 +4,8 @@ export interface StudentContactDTO {
   relation?: string
   phone?: string
   email?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface StudentSchoolDTO {
@@ -13,7 +15,10 @@ export interface StudentSchoolDTO {
   start_date?: string // YYYY-MM-DD
   end_date?: string // YYYY-MM-DD or empty/null for Present
   grade?: string // e.g. "Year 1" (Required if status is Enrolled)
+  class?: string // e.g. "Class A"
   school_student_id?: string // 学号
+  created_at?: string
+  updated_at?: string
 }
 
 export interface StudentCredentialDTO {
@@ -22,13 +27,15 @@ export interface StudentCredentialDTO {
   username?: string
   password?: string
   url?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface StudentDTO {
   id: string
   created_at: string
+  updated_at?: string
   name: string
-  grade?: string
   notes?: string
   // New Fields
   gov_id?: string
@@ -36,7 +43,6 @@ export interface StudentDTO {
   phone?: string
   residence_address?: string
   mailing_address?: string
-  orange_apple_id?: string
   // Relations
   student_contacts?: StudentContactDTO[]
   student_schools?: StudentSchoolDTO[]
@@ -46,8 +52,8 @@ export interface StudentDTO {
 export class Student {
   public id: string
   public created_at: Date
+  public updated_at?: Date
   public name: string
-  public grade: string
   public notes: string
   
   public gov_id: string
@@ -55,7 +61,6 @@ export class Student {
   public phone: string
   public residence_address: string
   public mailing_address: string
-  public orange_apple_id: string
   
   public contacts: StudentContactDTO[]
   public schools: StudentSchoolDTO[]
@@ -64,8 +69,8 @@ export class Student {
   constructor(dto: StudentDTO) {
     this.id = dto.id
     this.created_at = new Date(dto.created_at)
+    if (dto.updated_at) this.updated_at = new Date(dto.updated_at)
     this.name = dto.name
-    this.grade = dto.grade || ''
     this.notes = dto.notes || ''
     
     this.gov_id = dto.gov_id || ''
@@ -73,7 +78,6 @@ export class Student {
     this.phone = dto.phone || ''
     this.residence_address = dto.residence_address || ''
     this.mailing_address = dto.mailing_address || ''
-    this.orange_apple_id = dto.orange_apple_id || ''
     
     this.contacts = dto.student_contacts || []
     this.schools = dto.student_schools || []
@@ -91,6 +95,29 @@ export class Student {
    * Returns a formatted display name (e.g., "John - Grade 5")
    */
   get displayName(): string {
-    return this.grade ? `${this.name} (${this.grade})` : this.name
+    const g = this.displayGrade
+    return g !== 'No Grade' ? `${this.name} (${g})` : this.name
+  }
+
+  /**
+   * Returns the current school (status 'Enrolled') if any.
+   * If multiple, returns the first one (or logic could be improved).
+   */
+  get currentSchool(): StudentSchoolDTO | undefined {
+    return this.schools.find(s => s.status === 'Enrolled' || s.status === 'enrolled')
+  }
+
+  get displayGrade(): string {
+    const s = this.currentSchool
+    if (!s) return 'No Grade'
+    return s.class ? `${s.grade} - ${s.class}` : (s.grade || 'No Grade')
+  }
+
+  get displaySchoolName(): string {
+    return this.currentSchool?.name || 'No School'
+  }
+
+  get displaySchoolId(): string {
+    return this.currentSchool?.school_student_id || ''
   }
 }

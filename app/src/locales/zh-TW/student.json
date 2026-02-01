@@ -2,6 +2,7 @@
     "add_title": "新增學生",
     "name": "學生姓名",
     "grade": "年級 / 班級",
+    "current_school": "當前學校",
     "cancel": "取消",
     "create": "建立",
     "creating": "建立中...",
@@ -36,6 +37,8 @@
     "schools": {
         "add_title": "新增學校經歷",
         "name": "學校名稱",
+        "grade": "年級",
+        "class": "班級",
         "school_student_id": "學號",
         "status": "狀態",
         "status_options": {
@@ -44,7 +47,6 @@
             "incomplete": "肄業",
             "suspended": "休學"
         },
-        "grade": "年級",
         "grade_required": "若狀態為在學，必須填寫年級",
         "period": "時間區段",
         "start_date": "開始日期",
@@ -61,7 +63,15 @@
         "platform_name": "平台名稱",
         "add_title": "新增帳號",
         "add_btn": "新增帳號",
-        "confirm_delete": "確定要刪除此帳號嗎？"
+        "confirm_delete": "確定要刪除此帳號嗎？",
+        "platforms": {
+            "Orange Apple": "橘子蘋果學苑",
+            "Roblox": "Roblox",
+            "Minecraft": "Minecraft",
+            "Anydesk": "Anydesk",
+            "Quiz Platform": "測驗平台",
+            "Other": "其他"
+        }
     },
     "actions": "操作",
     "edit": "編輯",

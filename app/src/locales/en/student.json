@@ -2,6 +2,7 @@
     "add_title": "Add New Student",
     "name": "Student Name",
     "grade": "Grade / Class",
+    "current_school": "Current School",
     "cancel": "Cancel",
     "create": "Create",
     "creating": "Creating...",
@@ -36,6 +37,8 @@
     "schools": {
         "add_title": "Add School",
         "name": "School Name",
+        "grade": "Grade",
+        "class": "Class",
         "school_student_id": "Student ID",
         "status": "Status",
         "status_options": {
@@ -44,7 +47,6 @@
             "incomplete": "Incomplete",
             "suspended": "Suspended"
         },
-        "grade": "Grade",
         "grade_required": "Grade is required if status is Enrolled",
         "period": "Time Period",
         "start_date": "Start Date",
@@ -61,7 +63,15 @@
         "platform_name": "Platform Name",
         "add_title": "Add Credential",
         "add_btn": "Add Credential",
-        "confirm_delete": "Are you sure you want to delete this credential?"
+        "confirm_delete": "Are you sure you want to delete this credential?",
+        "platforms": {
+            "Orange Apple": "Orange Apple",
+            "Roblox": "Roblox",
+            "Minecraft": "Minecraft",
+            "Anydesk": "Anydesk",
+            "Quiz Platform": "Quiz Platform",
+            "Other": "Other"
+        }
     },
     "actions": "Actions",
     "edit": "Edit",
