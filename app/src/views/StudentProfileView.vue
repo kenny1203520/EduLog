@@ -142,14 +142,27 @@ async function deleteSchool(id: string) {
 }
 
 // --- Credentials Management ---
-const newCredential = ref({ platform: 'Orange Apple', username: '', password: '', url: '' })
+const newCredential = ref({ platform: 'Orange Apple', custom_platform: '', username: '', password: '', url: '' })
 const platforms = ['Orange Apple', 'Roblox', 'Minecraft', 'Anydesk', 'Quiz Platform', 'Other']
 
 async function addCredential() {
   if (!newCredential.value.platform) return
+  
+  let finalPlatform = newCredential.value.platform
+  if (finalPlatform === 'Other' && newCredential.value.custom_platform) {
+      finalPlatform = newCredential.value.custom_platform
+  }
+
+  const payload = {
+    ...newCredential.value,
+    platform: finalPlatform,
+    student_id: studentId.value
+  }
+  delete (payload as any).custom_platform
+
   try {
-    await StudentService.addCredential({ ...newCredential.value, student_id: studentId.value })
-    newCredential.value = { platform: 'Orange Apple', username: '', password: '', url: '' }
+    await StudentService.addCredential(payload)
+    newCredential.value = { platform: 'Orange Apple', custom_platform: '', username: '', password: '', url: '' }
     await studentStore.loadStudent(studentId.value)
   } catch (e) {
     console.error(e)
@@ -239,22 +252,41 @@ async function saveSchool() {
 
 // Credentials Editing
 const editingCredentialId = ref<string | null>(null)
-const editCredentialForm = ref({ platform: '', username: '', password: '', url: '' })
+const editCredentialForm = ref({ platform: '', custom_platform: '', username: '', password: '', url: '' })
 
 function startEditCredential(cred: any) {
   editingCredentialId.value = cred.id
-  editCredentialForm.value = { ...cred }
+  const isStandard = platforms.includes(cred.platform)
+  
+  editCredentialForm.value = { 
+      ...cred,
+      platform: isStandard ? cred.platform : 'Other',
+      custom_platform: isStandard ? '' : cred.platform,
+      url: cred.url || ''
+  }
 }
 
 function cancelEditCredential() {
   editingCredentialId.value = null
-  editCredentialForm.value = { platform: '', username: '', password: '', url: '' }
+  editCredentialForm.value = { platform: '', custom_platform: '', username: '', password: '', url: '' }
 }
 
 async function saveCredential() {
   if (!editingCredentialId.value) return
+
+  let finalPlatform = editCredentialForm.value.platform
+  if (finalPlatform === 'Other' && editCredentialForm.value.custom_platform) {
+      finalPlatform = editCredentialForm.value.custom_platform
+  }
+
+  const payload = {
+    ...editCredentialForm.value,
+    platform: finalPlatform
+  }
+  delete (payload as any).custom_platform
+
   try {
-    await StudentService.updateCredential(editingCredentialId.value, editCredentialForm.value)
+    await StudentService.updateCredential(editingCredentialId.value, payload)
     cancelEditCredential()
     await studentStore.loadStudent(studentId.value)
   } catch (e) {
@@ -411,17 +443,27 @@ function copyToClipboard(text: string) {
                   {{ c.name }} 
                   <span class="text-xs text-gray-500 font-medium bg-white px-2 py-0.5 rounded-full border border-gray-100">{{ c.relation }}</span>
                 </div>
-                <div class="text-sm text-gray-600 mt-1 flex items-center gap-2">
+                <div class="text-sm text-gray-600 mt-1 flex items-center gap-2 group">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
                   </svg>
                   {{ c.phone }}
+                  <button v-if="c.phone" @click="copyToClipboard(c.phone)" class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-1 cursor-pointer" title="Copy">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                    </svg>
+                  </button>
                 </div>
-                <div class="text-sm text-gray-600 flex items-center gap-2">
+                <div class="text-sm text-gray-600 flex items-center gap-2 group">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                   </svg>
                   {{ c.email }}
+                  <button v-if="c.email" @click="copyToClipboard(c.email)" class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-1 cursor-pointer" title="Copy">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <div class="flex space-x-1">
@@ -489,13 +531,22 @@ function copyToClipboard(text: string) {
         
         <ul class="space-y-4 mb-8">
           <li v-for="s in studentStore.currentStudent.schools" :key="s.id" class="bg-gray-50 p-4 rounded-xl border border-transparent hover:border-gray-200 transition-colors">
-            <div v-if="editingSchoolId !== s.id" class="flex justify-between items-center">
-              <div>
-                <div class="font-bold text-gray-800 text-lg mb-1">{{ s.name }}</div>
+            <div v-if="editingSchoolId !== s.id" class="flex justify-between items-start">
+              <div class="space-y-2">
+                <div>
+                    <div class="font-bold text-gray-800 text-lg">{{ s.name }}</div>
+                    <div v-if="s.school_student_id" class="flex items-center gap-2 text-sm text-gray-600 mt-1 group">
+                        <span class="font-medium text-gray-400 text-xs uppercase tracking-wide bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">{{ $t('student.schools.school_student_id') }}</span>
+                        <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id }}</span>
+                        <button @click="copyToClipboard(s.school_student_id)" class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-0.5 cursor-pointer" title="Copy">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                
                 <div class="text-xs text-gray-500 flex flex-wrap items-center gap-2">
-                  <span v-if="s.school_student_id" class="flex items-center gap-1 font-medium bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
-                     {{ $t('student.schools.school_student_id') }}: <span class="font-mono text-gray-800">{{ s.school_student_id }}</span>
-                  </span>
                   <span v-if="s.status" class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 font-medium">{{ $t(`student.schools.status_options.${s.status}`) }}</span>
                   <span v-if="s.status === 'enrolled' && s.grade" class="bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full border border-purple-100 font-medium">{{ s.grade }}</span>
                   <span class="bg-white border border-gray-200 text-gray-500 px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -641,7 +692,7 @@ function copyToClipboard(text: string) {
           <table class="w-full text-sm text-left">
             <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
               <tr>
-                <th class="px-4 py-3 font-semibold">{{ $t('student.credentials.platform') }}</th>
+                <th class="px-4 py-3 font-semibold w-1/3">{{ $t('student.credentials.platform') }}</th>
                 <th class="px-4 py-3 font-semibold">{{ $t('student.credentials.username') }}</th>
                 <th class="px-4 py-3 font-semibold">{{ $t('student.credentials.password') }}</th>
                 <th class="px-4 py-3 font-semibold text-right">{{ $t('student.actions') }}</th>
@@ -651,10 +702,19 @@ function copyToClipboard(text: string) {
               <template v-for="cred in studentStore.currentStudent.credentials" :key="cred.id">
                 <!-- View Mode -->
                 <tr v-if="editingCredentialId !== cred.id" class="bg-white hover:bg-gray-50 transition-colors">
-                  <td class="px-4 py-3 font-medium text-gray-800">{{ cred.platform }}</td>
+                  <td class="px-4 py-3 font-medium text-gray-800">
+                    <div class="flex items-center gap-2">
+                      <span>{{ cred.platform }}</span>
+                      <a v-if="cred.url" :href="cred.url" target="_blank" class="text-emerald-600 hover:text-emerald-700" :title="cred.url">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                        </svg>
+                      </a>
+                    </div>
+                  </td>
                   <td class="px-4 py-3 text-gray-600 font-mono">{{ cred.username }}</td>
                   <td class="px-4 py-3 text-gray-600 font-mono flex items-center gap-2">
-                    <span>
+                    <span class="min-w-[80px]">
                          {{ showPasswordMap[cred.id!] ? cred.password : '••••••••' }}
                     </span>
                     <button @click="togglePasswordVisibility(cred.id!)" class="text-gray-400 hover:text-emerald-600 transition-colors ml-1 cursor-pointer" :title="showPasswordMap[cred.id!] ? 'Hide' : 'Show'">
@@ -690,18 +750,20 @@ function copyToClipboard(text: string) {
 
                 <!-- Edit Mode -->
                 <tr v-else class="bg-emerald-50/50">
-                  <td class="px-3 py-2">
+                  <td class="px-3 py-2 space-y-2">
                     <select v-model="editCredentialForm.platform" class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
                       <option v-for="p in platforms" :key="p" :value="p">{{ p }}</option>
                     </select>
+                    <input v-if="editCredentialForm.platform === 'Other'" v-model="editCredentialForm.custom_platform" :placeholder="$t('student.credentials.platform_name')" class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <input v-if="editCredentialForm.platform === 'Quiz Platform' || editCredentialForm.platform === 'Other'" v-model="editCredentialForm.url" :placeholder="$t('student.credentials.url')" class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                   </td>
-                  <td class="px-3 py-2">
+                  <td class="px-3 py-2 align-top">
                     <input v-model="editCredentialForm.username" class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                   </td>
-                  <td class="px-3 py-2">
+                  <td class="px-3 py-2 align-top">
                     <input v-model="editCredentialForm.password" type="text" class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                   </td>
-                  <td class="px-3 py-2 text-right">
+                  <td class="px-3 py-2 text-right align-top">
                     <div class="flex justify-end gap-2">
                       <button @click="cancelEditCredential" class="text-xs text-gray-500 hover:text-gray-700 bg-white px-2 py-1 rounded border border-gray-200 cursor-pointer">{{ $t('student.cancel') }}</button>
                       <button @click="saveCredential" class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 cursor-pointer">{{ $t('student.save_details') }}</button>
@@ -719,19 +781,25 @@ function copyToClipboard(text: string) {
             {{ $t('student.credentials.add_title') }}
           </h3>
           <div class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-              <select v-model="newCredential.platform" class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3 items-start">
+              <select v-model="newCredential.platform" class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
                 <option v-for="p in platforms" :key="p" :value="p">{{ p }}</option>
               </select>
               <input v-model="newCredential.username" :placeholder="$t('student.credentials.username')" class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
               <input v-model="newCredential.password" :placeholder="$t('student.credentials.password')" type="text" class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+              <button @click="addCredential" class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer h-[38px]">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                {{ $t('student.credentials.add_btn') }}
+              </button>
             </div>
-            <button @click="addCredential" class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              {{ $t('student.credentials.add_btn') }}
-            </button>
+            
+            <!-- Conditional Fields Row -->
+            <div v-if="newCredential.platform === 'Other' || newCredential.platform === 'Quiz Platform'" class="grid grid-cols-1 md:grid-cols-2 gap-3 pb-1">
+                 <input v-if="newCredential.platform === 'Other'" v-model="newCredential.custom_platform" :placeholder="$t('student.credentials.platform_name')" class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                 <input v-if="newCredential.platform === 'Quiz Platform' || newCredential.platform === 'Other'" v-model="newCredential.url" :placeholder="$t('student.credentials.url')" class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" :class="{'md:col-span-2': newCredential.platform === 'Quiz Platform'}">
+            </div>
           </div>
         </div>
       </section>

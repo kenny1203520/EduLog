@@ -58,8 +58,10 @@
         "username": "使用者名稱",
         "password": "密碼",
         "url": "連結 URL",
+        "platform_name": "平台名稱",
         "add_title": "新增帳號",
         "add_btn": "新增帳號",
         "confirm_delete": "確定要刪除此帳號嗎？"
-    }
+    },
+    "actions": "操作"
 }
