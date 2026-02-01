@@ -7,9 +7,19 @@ export interface OccurrenceReportDTO {
     id?: string
     enrollment_id: string
     class_occurrence_id: string
-    lesson_id?: string  // NEW: Track which lesson was taught
+    lesson_id?: string
     content: string
-    is_completed?: boolean  // NEW: Whether lesson was completed
+    is_completed?: boolean
+    
+    // Detailed report fields
+    progress_letter?: string  // A-H when incomplete
+    attendance_status?: 'present' | 'absent'
+    absence_reason?: string
+    class_participation?: string
+    classroom_behavior?: string
+    contact_notes?: string
+    class_notes?: string
+    
     version: number
     last_edited_by?: string
     last_edited_at?: string
@@ -33,9 +43,19 @@ export class OccurrenceReport {
     id?: string
     enrollmentId: string
     classOccurrenceId: string
-    lessonId?: string  // NEW
+    lessonId?: string
     content: string
-    isCompleted?: boolean  // NEW
+    isCompleted?: boolean
+    
+    // Detailed fields
+    progressLetter?: string
+    attendanceStatus?: 'present' | 'absent'
+    absenceReason?: string
+    classParticipation?: string
+    classroomBehavior?: string
+    contactNotes?: string
+    classNotes?: string
+    
     version: number
     lastEditedBy?: string
     lastEditedAt?: Date
@@ -46,9 +66,19 @@ export class OccurrenceReport {
         this.id = data.id
         this.enrollmentId = data.enrollment_id
         this.classOccurrenceId = data.class_occurrence_id
-        this.lessonId = data.lesson_id  // NEW
+        this.lessonId = data.lesson_id
         this.content = data.content
-        this.isCompleted = data.is_completed ?? true  // NEW: default to true
+        this.isCompleted = data.is_completed ?? true
+        
+        // Detailed fields
+        this.progressLetter = data.progress_letter
+        this.attendanceStatus = data.attendance_status || 'present'
+        this.absenceReason = data.absence_reason
+        this.classParticipation = data.class_participation
+        this.classroomBehavior = data.classroom_behavior
+        this.contactNotes = data.contact_notes
+        this.classNotes = data.class_notes
+        
         this.version = data.version
         this.lastEditedBy = data.last_edited_by
         this.lastEditedAt = data.last_edited_at ? new Date(data.last_edited_at) : undefined
@@ -64,9 +94,19 @@ export class OccurrenceReport {
             id: this.id,
             enrollment_id: this.enrollmentId,
             class_occurrence_id: this.classOccurrenceId,
-            lesson_id: this.lessonId,  // NEW
+            lesson_id: this.lessonId,
             content: this.content,
-            is_completed: this.isCompleted,  // NEW
+            is_completed: this.isCompleted,
+            
+            // Detailed fields
+            progress_letter: this.progressLetter,
+            attendance_status: this.attendanceStatus,
+            absence_reason: this.absenceReason,
+            class_participation: this.classParticipation,
+            classroom_behavior: this.classroomBehavior,
+            contact_notes: this.contactNotes,
+            class_notes: this.classNotes,
+            
             version: this.version,
             last_edited_by: this.lastEditedBy,
             last_edited_at: this.lastEditedAt?.toISOString(),

@@ -65,11 +65,10 @@ export class OccurrenceReportService {
      * Also handles automatic progress tracking based on lesson completion.
      * 
      * @param reportId - The report ID
-     * @param content - New content
+     * @param content - Learning report content
      * @param currentVersion - Client's current version
      * @param userId - User making the edit (optional)
-     * @param lessonId - Lesson that was taught (optional)
-     * @param isCompleted - Whether the lesson was completed (optional)
+     * @param detailedData - All detailed report fields
      * @returns Save result with conflict status
      */
     static async saveReport(
@@ -77,8 +76,17 @@ export class OccurrenceReportService {
         content: string,
         currentVersion: number,
         userId?: string,
-        lessonId?: string,
-        isCompleted?: boolean
+        detailedData?: {
+            lessonId?: string
+            isCompleted?: boolean
+            progressLetter?: string
+            attendanceStatus?: 'present' | 'absent'
+            absenceReason?: string
+            classParticipation?: string
+            classroomBehavior?: string
+            contactNotes?: string
+            classNotes?: string
+        }
     ): Promise<SaveReportResult> {
         // Fetch current server version
         const { data: serverReport, error: fetchError } = await supabase
@@ -115,12 +123,49 @@ export class OccurrenceReportService {
             last_edited_at: new Date().toISOString()
         }
 
-        // Add lesson tracking if provided
-        if (lessonId !== undefined) {
-            updateData.lesson_id = lessonId
-        }
-        if (isCompleted !== undefined) {
+        // Add detailed fields if provided
+        if (detailedData) {
+            // Apply business rules
+            let isCompleted = detailedData.isCompleted ?? true
+            let progressLetter = detailedData.progressLetter
+
+            // Rule: Absent → force incomplete
+            if (detailedData.attendanceStatus === 'absent') {
+                isCompleted = false
+            }
+
+            // Rule: Completed → clear progress letter
+            if (isCompleted) {
+                progressLetter = undefined
+            }
+
+            // Add all fields to update data
+            if (detailedData.lessonId !== undefined) {
+                updateData.lesson_id = detailedData.lessonId
+            }
             updateData.is_completed = isCompleted
+            
+            if (progressLetter !== undefined) {
+                updateData.progress_letter = progressLetter
+            }
+            if (detailedData.attendanceStatus !== undefined) {
+                updateData.attendance_status = detailedData.attendanceStatus
+            }
+            if (detailedData.absenceReason !== undefined) {
+                updateData.absence_reason = detailedData.absenceReason
+            }
+            if (detailedData.classParticipation !== undefined) {
+                updateData.class_participation = detailedData.classParticipation
+            }
+            if (detailedData.classroomBehavior !== undefined) {
+                updateData.classroom_behavior = detailedData.classroomBehavior
+            }
+            if (detailedData.contactNotes !== undefined) {
+                updateData.contact_notes = detailedData.contactNotes
+            }
+            if (detailedData.classNotes !== undefined) {
+                updateData.class_notes = detailedData.classNotes
+            }
         }
 
         const { data: updated, error: updateError } = await supabase
@@ -149,12 +194,12 @@ export class OccurrenceReportService {
         }
 
         // Auto-update enrollment progress if lesson info provided
-        if (lessonId && isCompleted !== undefined) {
+        if (detailedData?.lessonId && detailedData?.isCompleted !== undefined) {
             try {
                 await this.updateEnrollmentProgressAfterReport(
                     serverReport.enrollment_id,
-                    lessonId,
-                    isCompleted
+                    detailedData.lessonId,
+                    detailedData.isCompleted
                 )
             } catch (progressError: any) {
                 console.error('Failed to update progress:', progressError)
