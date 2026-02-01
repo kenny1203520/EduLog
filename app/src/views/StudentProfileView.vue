@@ -469,12 +469,7 @@ function copyToClipboard(text: string) {
         <p class="text-gray-500">{{ studentStore.currentStudent.displayGrade }} • {{ studentStore.currentStudent.id }}</p>
       </div>
       <div class="space-x-3">
-        <router-link 
-          :to="`/dashboard/student/${studentId}`"
-          class="text-emerald-600 hover:text-emerald-700 font-medium"
-        >
-          {{ $t('student.view_reports') }}
-        </router-link>
+        <!-- Removed redundant view-reports link as per user request to go to profile first -->
       </div>
     </div>
 
@@ -901,7 +896,7 @@ function copyToClipboard(text: string) {
                </div>
                <div class="flex items-center gap-2">
                    <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: enr.id } }" class="text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded transition text-sm font-medium">
-                        {{ $t('internal_courses.reports') }}
+                        {{ $t('report.list_title') }}
                    </router-link>
                    <button @click="removeEnrollment(enr.id!)" class="text-gray-400 hover:text-red-500 transition p-1 rounded hover:bg-red-50">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">

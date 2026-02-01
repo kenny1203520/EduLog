@@ -28,11 +28,6 @@ const router = createRouter({
         },
         {
           path: 'student/:id',
-          name: 'student-report',
-          component: () => import('@/views/ReportEditorView.vue')
-        },
-        {
-          path: 'student/:id/profile',
           name: 'student-profile',
           component: () => import('@/views/StudentProfileView.vue')
         },
@@ -59,7 +54,7 @@ const router = createRouter({
         {
           path: 'reports/:enrollmentId',
           name: 'lesson-reports',
-          component: () => import('@/views/LessonReportView.vue')
+          component: () => import('@/views/StudentReportsView.vue')
         }
       ]
     },

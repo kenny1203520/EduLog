@@ -5,7 +5,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import Pagination from '@/components/common/Pagination.vue'
 
-const { t } = useI18n()
+useI18n()
 const studentStore = useStudentStore()
 const router = useRouter()
 
@@ -38,8 +38,7 @@ function navigateToProfile(id: string) {
 }
 
 function navigateToReports(id: string) {
-  // We need an enrollment ID for reports, but for now we link to profile
-  // where the user can see enrollments.
+  // Opening profile is preferred as per user request
   router.push({ name: 'student-profile', params: { id } })
 }
 

@@ -73,6 +73,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 interface Props {
   reportId?: string
@@ -101,6 +102,8 @@ const emit = defineEmits<{
   'conflict': [serverContent: string]
 }>()
 
+const authStore = useAuthStore()
+
 // Local state
 const localContent = ref(props.initialContent)
 const version = ref(props.initialVersion)
@@ -125,7 +128,8 @@ const {
       const result = await OccurrenceReportService.saveReport(
         props.reportId,
         content,
-        version.value
+        version.value,
+        authStore.user?.id
       )
 
       if (result.conflict) {

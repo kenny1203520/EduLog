@@ -42,10 +42,10 @@
                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{ $t('report.time') }}</span>
                 <span class="text-gray-800 font-medium">{{ selectedOccurrence.effectiveStartTime }} - {{ selectedOccurrence.effectiveEndTime }}</span>
               </div>
-              <div v-if="selectedReport.updatedAt" class="col-span-2 bg-white/50 p-2 rounded-lg flex items-center justify-between">
+              <div v-if="selectedReport.updatedAt || selectedReport.lastEditedAt" class="col-span-2 bg-white/50 p-2 rounded-lg flex items-center justify-between">
                 <div>
                     <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{ $t('report.last_updated') }}</span>
-                    <span class="text-gray-800 font-medium">{{ selectedReport.updatedAt.toLocaleString() }}</span>
+                    <span class="text-gray-800 font-medium">{{ (selectedReport.updatedAt || selectedReport.lastEditedAt)?.toLocaleString() }}</span>
                 </div>
                 <span v-if="selectedReport.lastEditedBy" class="text-[10px] text-gray-400 font-bold italic">By: {{ selectedReport.lastEditedBy }}</span>
               </div>
