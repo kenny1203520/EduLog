@@ -53,7 +53,12 @@ create table if not exists student_schools (
   student_id uuid references students(id) on delete cascade not null,
   
   name text not null,
-  status text, -- e.g. Graduated, Attending
+  status text, -- e.g. Graduated, Enrolled
+  grade text,  -- e.g. Year 1
+  school_student_id text, -- School ID / 學號
+  
+  start_date text, -- YYYY-MM-DD
+  end_date text,   -- YYYY-MM-DD (Empty = Present)
   
   user_id uuid references auth.users default auth.uid() not null
 );

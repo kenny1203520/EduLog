@@ -7,14 +7,59 @@
     "creating": "建立中...",
     "profile_edit": "編輯個人資料",
     "details": "個人詳細資料",
-    "contacts": "聯絡人",
-    "schools": "學校經歷",
-    "credentials": "帳號密碼",
     "gov_id": "身分證字號",
     "orange_apple_id": "橘子蘋果學苑 ID",
     "residence_address": "戶籍地址",
     "mailing_address": "通訊地址",
     "notes": "備註",
     "save_details": "儲存資料",
-    "saving": "儲存中..."
+    "required": "必填",
+    "delete": "刪除學生",
+    "confirm_delete_student": "確定要刪除這位學生嗎？此動作無法復原！",
+    "saving": "儲存中...",
+    "loading": "載入學生資料中...",
+    "view_reports": "檢視報告列表",
+    "sections": {
+        "contacts": "聯絡人",
+        "schools": "學校經歷",
+        "credentials": "帳號密碼"
+    },
+    "contacts": {
+        "add_title": "新增聯絡人",
+        "name": "姓名",
+        "relation": "關係",
+        "phone": "電話",
+        "email": "Email",
+        "add_btn": "新增聯絡人",
+        "confirm_delete": "確定要刪除此聯絡人嗎？"
+    },
+    "schools": {
+        "add_title": "新增學校經歷",
+        "name": "學校名稱",
+        "school_student_id": "學號",
+        "status": "狀態",
+        "status_options": {
+            "enrolled": "在學",
+            "graduated": "畢業",
+            "incomplete": "肄業",
+            "suspended": "休學"
+        },
+        "grade": "年級",
+        "grade_required": "若狀態為在學，必須填寫年級",
+        "period": "時間區段",
+        "start_date": "開始日期",
+        "end_date": "結束日期",
+        "present": "現在",
+        "add_btn": "新增學校",
+        "confirm_delete": "確定要刪除此學校經歷嗎？"
+    },
+    "credentials": {
+        "platform": "平台",
+        "username": "使用者名稱",
+        "password": "密碼",
+        "url": "連結 URL",
+        "add_title": "新增帳號",
+        "add_btn": "新增帳號",
+        "confirm_delete": "確定要刪除此帳號嗎？"
+    }
 }

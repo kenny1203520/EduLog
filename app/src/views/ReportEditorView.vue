@@ -43,8 +43,8 @@ async function handleSave() {
 
 <template>
   <div class="h-[calc(100vh-64px)] overflow-hidden"> <!-- Subtract Header Height -->
-    <div v-if="studentStore.loading" class="p-8 text-center text-gray-500">Loading...</div>
-    <div v-else-if="!studentStore.currentStudent" class="p-8 text-center text-red-500">Student not found</div>
+    <div v-if="studentStore.loading" class="p-8 text-center text-gray-500">{{ $t('dashboard.loading') }}</div>
+    <div v-else-if="!studentStore.currentStudent" class="p-8 text-center text-red-500">{{ $t('dashboard.student_not_found') }}</div>
     
     <div v-else class="h-full flex flex-col">
       <!-- Toolbar -->
@@ -62,12 +62,12 @@ async function handleSave() {
           <input 
             v-model="reportDate" 
             type="date" 
-            class="border rounded px-2 py-1 text-sm text-gray-600 focus:ring-emerald-500 focus:border-emerald-500"
+            class="border rounded px-2 py-1 text-sm text-gray-600 focus:ring-emerald-500 focus:border-emerald-500 cursor-pointer"
           >
           <button 
             @click="handleSave" 
             :disabled="isSaving || !reportContent.trim()"
-            class="bg-emerald-600 text-white px-6 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm font-medium"
+            class="bg-emerald-600 text-white px-6 py-2 rounded-md hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm font-medium cursor-pointer"
           >
             {{ isSaving ? $t('report.saving') : $t('report.save') }}
           </button>

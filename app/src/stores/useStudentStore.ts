@@ -69,6 +69,22 @@ export const useStudentStore = defineStore('student', () => {
     }
   }
 
+  async function deleteStudent(id: string) {
+    loading.value = true
+    try {
+      await StudentService.delete(id)
+      students.value = students.value.filter(s => s.id !== id)
+      if (currentStudent.value?.id === id) {
+        currentStudent.value = null
+      }
+    } catch (e: any) {
+      error.value = e.message
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     students,
     currentStudent,
@@ -78,6 +94,7 @@ export const useStudentStore = defineStore('student', () => {
     fetchAll,
     loadStudent,
     addStudent,
-    updateStudent
+    updateStudent,
+    deleteStudent
   }
 })

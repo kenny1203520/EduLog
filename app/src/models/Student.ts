@@ -10,6 +10,10 @@ export interface StudentSchoolDTO {
   id?: string
   name: string
   status?: string
+  start_date?: string // YYYY-MM-DD
+  end_date?: string // YYYY-MM-DD or empty/null for Present
+  grade?: string // e.g. "Year 1" (Required if status is Enrolled)
+  school_student_id?: string // 学号
 }
 
 export interface StudentCredentialDTO {

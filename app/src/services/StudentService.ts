@@ -66,6 +66,18 @@ export class StudentService {
     return new Student(data as StudentDTO)
   }
 
+  /**
+   * Delete a student
+   */
+  static async delete(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('students')
+      .delete()
+      .eq('id', id)
+    
+    if (error) throw new Error(error.message)
+  }
+
   // --- Contacts ---
   static async addContact(contact: any) {
     const { data: { user } } = await supabase.auth.getUser()
@@ -106,5 +118,24 @@ export class StudentService {
   static async deleteCredential(id: string) {
     const { error } = await supabase.from('student_credentials').delete().eq('id', id)
     if (error) throw new Error(error.message)
+  }
+
+  // --- Updates ---
+  static async updateContact(id: string, contact: any) {
+    const { data, error } = await supabase.from('student_contacts').update(contact).eq('id', id).select().single()
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  static async updateSchool(id: string, school: any) {
+    const { data, error } = await supabase.from('student_schools').update(school).eq('id', id).select().single()
+    if (error) throw new Error(error.message)
+    return data
+  }
+
+  static async updateCredential(id: string, credential: any) {
+    const { data, error } = await supabase.from('student_credentials').update(credential).eq('id', id).select().single()
+    if (error) throw new Error(error.message)
+    return data
   }
 }
