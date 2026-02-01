@@ -5,6 +5,8 @@ import student from './student.json'
 import report from './report.json'
 import common from './common.json'
 import landing from './landing.json'
+import classroom from './classroom.json'
+import course from './course.json'
 
 export default {
   nav,
@@ -13,5 +15,7 @@ export default {
   student,
   report,
   common,
-  landing
+  landing,
+  classroom,
+  course
 }

@@ -1,0 +1,33 @@
+{
+    "title": "Classroom & Session Management",
+    "rooms_tab": "Rooms",
+    "sessions_tab": "Sessions",
+    "add_room": "Add Room",
+    "add_session": "Add Session",
+    "delete_room": "Delete Room",
+    "delete_session": "Delete Session",
+    "room_name": "Room Name",
+    "address": "Address / Location",
+    "phone": "Phone",
+    "color_label": "Color Label",
+    "session_name": "Session Name",
+    "capacity": "Capacity",
+    "schedule": "Schedule",
+    "courses": "Courses",
+    "no_rooms": "No rooms found",
+    "no_sessions": "No sessions found",
+    "room_placeholder": "e.g. Room 101",
+    "session_placeholder": "e.g. Tuesday Python Lab",
+    "day_of_week": "Day",
+    "start_time": "Start Time",
+    "end_time": "End Time",
+    "days": {
+        "0": "Sun",
+        "1": "Mon",
+        "2": "Tue",
+        "3": "Wed",
+        "4": "Thu",
+        "5": "Fri",
+        "6": "Sat"
+    }
+}

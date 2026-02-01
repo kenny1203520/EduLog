@@ -190,7 +190,13 @@ async function deleteLesson(id: string) {
       </button>
     </div>
 
-    <div v-if="loading" class="text-center text-gray-500 py-10">Loading...</div>
+    <div v-if="loading" class="text-center text-gray-500 py-10">
+        <svg class="animate-spin h-8 w-8 mx-auto mb-3 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        {{ $t('student.loading') }}
+    </div>
 
     <div v-else class="space-y-8">
       <div v-for="(group, subject) in groupedCourses" :key="subject">
@@ -211,7 +217,7 @@ async function deleteLesson(id: string) {
                     <p v-if="course.displayNameValue" class="text-xs text-gray-400 font-mono truncate">
                         {{ course.subject }} {{ course.stage }}
                     </p>
-                    <p class="text-sm text-gray-500 mt-1 line-clamp-2">{{ course.description || 'No description' }}</p>
+                    <p class="text-sm text-gray-500 mt-1 line-clamp-2 italic">{{ course.description || $t('common.no_description', 'No description') }}</p>
                 </div>
                 <button @click="deleteCourse(course.id!)" class="text-gray-400 hover:text-red-500 transition ml-2 flex-shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -223,12 +229,12 @@ async function deleteLesson(id: string) {
             <!-- Lessons List -->
             <div class="p-4 bg-white">
                 <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ course.lessons.length }} Lessons</span>
+                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ $t('course.lessons_count', { count: course.lessons.length }) }}</span>
                     <button 
                         @click="toggleExpand(course.id!)" 
-                        class="text-emerald-600 text-sm hover:underline"
+                        class="text-emerald-600 text-sm font-medium hover:text-emerald-700 transition"
                     >
-                        {{ expandedCourseIds.has(course.id!) ? 'Hide' : 'Show' }}
+                        {{ expandedCourseIds.has(course.id!) ? $t('course.hide_lessons') : $t('course.show_lessons') }}
                     </button>
                 </div>
 
@@ -239,8 +245,8 @@ async function deleteLesson(id: string) {
                             <div v-if="editingLessonId === lesson.id" class="flex-1 flex gap-2 items-center">
                                 <input v-model.number="lessonForm.sequence" type="number" class="w-12 text-center border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs">
                                 <input v-model="lessonForm.title" class="flex-1 border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs" @keyup.enter="saveLesson(course.id!)">
-                                <button @click="saveLesson(course.id!)" class="text-emerald-600 font-bold text-xs">Save</button>
-                                <button @click="cancelLessonEdit" class="text-gray-400 text-xs">Cancel</button>
+                                <button @click="saveLesson(course.id!)" class="text-emerald-600 font-bold text-xs">{{ $t('common.save') }}</button>
+                                <button @click="cancelLessonEdit" class="text-gray-400 text-xs">{{ $t('common.cancel') }}</button>
                             </div>
 
                             <!-- Display Mode -->
@@ -272,19 +278,19 @@ async function deleteLesson(id: string) {
                             >
                             <input 
                                 v-model="lessonForm.title" 
-                                placeholder="Lesson Title" 
+                                :placeholder="$t('course.lesson_title')" 
                                 class="flex-1 text-sm border-gray-300 rounded focus:ring-emerald-500 focus:border-emerald-500 py-1"
                                 @keyup.enter="saveLesson(course.id!)"
                             >
-                            <button @click="saveLesson(course.id!)" class="text-emerald-600 font-bold text-sm">Save</button>
-                            <button @click="cancelLessonEdit" class="text-gray-400 text-sm">Cancel</button>
+                            <button @click="saveLesson(course.id!)" class="text-emerald-600 font-bold text-sm">{{ $t('common.save') }}</button>
+                            <button @click="cancelLessonEdit" class="text-gray-400 text-sm">{{ $t('common.cancel') }}</button>
                         </div>
                         <button 
                             v-else 
                             @click="startAddLesson(course)"
-                            class="w-full py-1.5 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded hover:border-emerald-500 hover:text-emerald-600 transition text-center"
+                            class="w-full py-1.5 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg hover:border-emerald-500 hover:text-emerald-600 transition text-center bg-gray-50/50"
                         >
-                            + Add Lesson
+                            + {{ $t('course.add_lesson') }}
                         </button>
                     </div>
                 </div>
@@ -294,8 +300,13 @@ async function deleteLesson(id: string) {
       </div>
       
       <!-- Empty State -->
-      <div v-if="Object.keys(groupedCourses).length === 0" class="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
-        <p class="text-gray-500">No courses found. Create one to get started.</p>
+      <div v-if="Object.keys(groupedCourses).length === 0" class="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300 shadow-sm flex flex-col items-center">
+        <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+            </svg>
+        </div>
+        <p class="text-gray-500 font-medium pb-2 text-lg">{{ $t('course.no_courses') }}</p>
       </div>
 
       <div v-if="pagination.total > 0" class="mt-8">
@@ -308,34 +319,34 @@ async function deleteLesson(id: string) {
     </div>
 
     <!-- Create/Edit Modal -->
-    <div v-if="iscreateModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 class="text-xl font-bold mb-4">{{ editingCourse ? 'Edit Course' : 'Create Course' }}</h3>
+    <div v-if="iscreateModalOpen" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in duration-200">
+            <h3 class="text-xl font-bold mb-6 text-gray-800">{{ editingCourse ? $t('course.edit_course') : $t('course.add_course') }}</h3>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Subject / Categorization</label>
-                    <input v-model="courseForm.subject" placeholder="e.g. 菁英, 程式, 數學" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.subject') }}</label>
+                    <input v-model="courseForm.subject" placeholder="e.g. 菁英, 程式, 數學" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Stage / Level</label>
-                    <input v-model="courseForm.stage" placeholder="e.g. Level 1, Advanced" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.stage') }}</label>
+                    <input v-model="courseForm.stage" placeholder="e.g. Level 1, Advanced" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">
-                      Display Name (Optional)
-                      <span class="text-xs text-gray-400 block font-normal mt-0.5">Custom name shown to users instead of subject+stage</span>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                      {{ $t('course.display_name') }}
+                      <span class="text-xs text-gray-400 block font-normal mt-0.5">{{ $t('course.display_name_hint') }}</span>
                     </label>
-                    <input v-model="courseForm.display_name" placeholder="e.g. Python 程式進階班" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <input v-model="courseForm.display_name" placeholder="e.g. Python 程式進階班" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                    <textarea v-model="courseForm.description" rows="3" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500"></textarea>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description') }}</label>
+                    <textarea v-model="courseForm.description" rows="3" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"></textarea>
                 </div>
             </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button @click="iscreateModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                <button @click="saveCourse" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-                    {{ editingCourse ? 'Save Changes' : 'Create' }}
+            <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">
+                <button @click="iscreateModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{ $t('common.cancel') }}</button>
+                <button @click="saveCourse" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">
+                    {{ editingCourse ? $t('course.save_changes') : $t('common.add') }}
                 </button>
             </div>
         </div>

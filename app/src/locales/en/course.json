@@ -1,0 +1,21 @@
+{
+    "title": "Course & Lesson Management",
+    "add_course": "Add Course",
+    "edit_course": "Edit Course",
+    "delete_course": "Delete Course",
+    "subject": "Subject / Category",
+    "stage": "Stage / Level",
+    "display_name": "Display Name (Optional)",
+    "display_name_hint": "Custom name shown to users instead of subject+stage",
+    "description": "Description",
+    "lessons_count": "{count} Lessons",
+    "show_lessons": "Show",
+    "hide_lessons": "Hide",
+    "add_lesson": "Add Lesson",
+    "edit_lesson": "Edit Lesson",
+    "delete_lesson": "Delete Lesson",
+    "lesson_title": "Lesson Title",
+    "lesson_sequence": "Sequence",
+    "no_courses": "No courses found. Create one to get started.",
+    "save_changes": "Save Changes"
+}

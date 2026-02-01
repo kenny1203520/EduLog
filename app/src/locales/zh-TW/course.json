@@ -1,0 +1,21 @@
+{
+    "title": "課程與單元管理",
+    "add_course": "新增課程",
+    "edit_course": "編輯課程",
+    "delete_course": "刪除課程",
+    "subject": "科目 / 分類",
+    "stage": "階段 / 層級",
+    "display_name": "顯示名稱 (選填)",
+    "display_name_hint": "自定義顯示名稱，將取代「科目+階段」顯示給用戶",
+    "description": "課程簡介",
+    "lessons_count": "{count} 個單元",
+    "show_lessons": "顯示單元",
+    "hide_lessons": "隱藏單元",
+    "add_lesson": "新增單元",
+    "edit_lesson": "編輯單元",
+    "delete_lesson": "刪除單元",
+    "lesson_title": "單元標題",
+    "lesson_sequence": "排序",
+    "no_courses": "目前沒有任何課程。請點擊上方按鈕建立。",
+    "save_changes": "儲存變更"
+}

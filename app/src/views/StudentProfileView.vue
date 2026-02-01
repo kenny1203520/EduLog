@@ -110,6 +110,17 @@ const newContact = ref({ name: '', relation: '', phone: '', email: '' })
 const contactEmailTouched = ref(false)
 const contactEmailError = computed(() => contactEmailTouched.value ? getEmailError(newContact.value.email) : null)
 
+const showSuccessToast = ref(false)
+const toastMessage = ref('')
+
+function showToast(msg: string) {
+  toastMessage.value = msg
+  showSuccessToast.value = true
+  setTimeout(() => {
+    showSuccessToast.value = false
+  }, 3000)
+}
+
 async function addContact() {
   if (!newContact.value.name) return
   
@@ -435,9 +446,7 @@ function togglePasswordVisibility(id: string) {
 function copyToClipboard(text: string) {
   if (!text) return
   navigator.clipboard.writeText(text).then(() => {
-    // Ideally we would show a toast, but for now we can just show a temporary "Copied!" text or rely on user action.
-    // Let's assume the button icon might briefly change or we just quietly succeed.
-    // For this MVP, we will not block flows.
+    showToast(t('common.copy_success'))
   }).catch(err => {
     console.error('Failed to copy: ', err)
   })
@@ -1141,5 +1150,34 @@ function copyToClipboard(text: string) {
 
     </div>
 
+    <!-- Success Toast -->
+    <div 
+      v-if="showSuccessToast"
+      class="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-toast-up z-[100] border border-emerald-500"
+    >
+      <div class="bg-white/20 p-1 rounded-full">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <span class="font-bold tracking-wide">{{ toastMessage }}</span>
+    </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes toast-up {
+  from {
+    transform: translateY(100%) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-toast-up {
+  animation: toast-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+</style>

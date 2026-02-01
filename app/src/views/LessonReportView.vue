@@ -39,14 +39,15 @@ async function loadData() {
         if (!currentEnrollment.value) throw new Error('Enrollment not found')
         
         // 2. Fetch Course & Lessons
-        const allCourses = await CourseService.getCourses()
+        const res = await CourseService.getCourses()
         const cId = currentEnrollment.value.courseId
         if (!cId) throw new Error('Course ID missing')
         
-        course.value = allCourses.find(c => c.id === cId) || null
+        course.value = res.data.find(c => c.id === cId) || null
         
-        if (course.value && course.value.lessons.length > 0) {
-            selectLesson(course.value!.lessons[0].id!)
+        if (course.value && course.value.lessons && course.value.lessons.length > 0) {
+            const firstLesson = course.value.lessons[0]
+            if (firstLesson && firstLesson.id) selectLesson(firstLesson.id)
         }
     } catch (e) {
         console.error(e)
@@ -108,8 +109,12 @@ watch(reportContent, () => {
 
 <template>
 <div class="h-[calc(100vh-6rem)] flex flex-col">
-    <div v-if="loading" class="flex-1 flex justify-center items-center">
-        Loading...
+    <div v-if="loading" class="flex-1 flex flex-col items-center justify-center text-gray-500 bg-gray-50">
+        <svg class="animate-spin h-10 w-10 mb-4 text-emerald-500" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+        <p class="font-medium">{{ $t('student.loading') }}</p>
     </div>
     
     <div v-else class="flex flex-1 overflow-hidden bg-white rounded-xl shadow-sm border border-gray-200">
@@ -144,34 +149,34 @@ watch(reportContent, () => {
         <main class="flex-1 flex flex-col bg-white min-w-0">
             <header class="h-14 border-b border-gray-100 flex items-center justify-between px-6 bg-white shrink-0">
                 <div class="flex items-center gap-3">
-                    <span v-if="isSaving" class="text-xs text-emerald-600 flex items-center gap-1 animate-pulse">
+                    <span v-if="isSaving" class="text-xs text-emerald-600 flex items-center gap-1.5 animate-pulse bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100">
                         <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Saving...
+                        {{ $t('report.saving') }}
                     </span>
-                    <span v-else-if="reportContent && reportContent === lastSavedContent" class="text-xs text-gray-400 flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <span v-else-if="reportContent && reportContent === lastSavedContent" class="text-xs text-gray-400 flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-full border border-gray-100">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                         </svg>
-                        Saved
+                        {{ $t('report.saved', 'Saved') }}
                     </span>
-                    <span v-if="reportVersion > 1" class="text-[10px] text-gray-300 border border-gray-100 px-1.5 rounded">v{{ reportVersion }}</span>
+                    <span v-if="reportVersion > 1" class="text-[10px] text-gray-300 border border-gray-100 px-1.5 rounded-md font-mono">v{{ reportVersion }}</span>
                 </div>
             </header>
             
             <div class="flex-1 p-6 overflow-y-auto">
                  <div v-if="!selectedLessonId" class="h-full flex flex-col items-center justify-center text-gray-400">
-                    <p>Select a lesson to start writing.</p>
+                    <p>{{ $t('report.no_occurrence_selected_desc', 'Select a lesson to start writing.') }}</p>
                  </div>
                  <div v-else class="max-w-3xl mx-auto h-full flex flex-col">
                     <h1 class="text-2xl font-bold text-gray-800 mb-6">{{ lessons.find(l => l.id === selectedLessonId)?.title }}</h1>
                     
                     <textarea 
                         v-model="reportContent"
-                        class="flex-1 w-full p-4 border-0 focus:ring-0 text-gray-700 text-lg leading-relaxed placeholder-gray-300 resize-none outline-none"
-                        placeholder="Write your lesson report here..."
+                        class="flex-1 w-full p-4 border-0 focus:ring-0 text-gray-700 text-lg leading-relaxed placeholder-gray-300 resize-none outline-none bg-transparent"
+                        :placeholder="$t('report.placeholder')"
                     ></textarea>
                  </div>
             </div>

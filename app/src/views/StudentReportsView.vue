@@ -1,13 +1,13 @@
 <template>
   <div class="student-reports-view p-6 max-w-7xl mx-auto">
-    <h1 class="text-2xl font-bold text-gray-900 mb-6">Class Reports</h1>
-
-    <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-gray-500">
-      <svg class="animate-spin h-10 w-10 mb-4" fill="none" viewBox="0 0 24 24">
+    <h1 class="text-2xl font-bold text-gray-900 mb-6">{{ $t('report.list_title') }}</h1>
+-
+    <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-gray-500 bg-white rounded-2xl shadow-sm border border-gray-100">
+      <svg class="animate-spin h-10 w-10 mb-4 text-emerald-500" fill="none" viewBox="0 0 24 24">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
       </svg>
-      <p>Loading reports and calendar...</p>
+      <p class="font-medium">{{ $t('report.loading_full') }}</p>
     </div>
 
     <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -17,24 +17,31 @@
           :occurrences="occurrences"
           @select-occurrence="selectOccurrence"
         />
-        <div v-if="occurrences.length === 0" class="mt-4 p-4 bg-amber-50 rounded-lg text-amber-700 text-sm border border-amber-200">
-          No occurrences found for this session. Reports cannot be created until occurrences are generated.
+        <div v-if="occurrences.length === 0" class="mt-4 p-4 bg-amber-50 rounded-xl text-amber-700 text-xs border border-amber-200 shadow-sm">
+          {{ $t('report.no_occurrences') }}
         </div>
       </div>
 
       <!-- Editor Section -->
       <div class="lg:col-span-2">
         <div v-if="selectedOccurrence && selectedReport">
-          <!-- Occurrence Info Card ... (existing card) -->
-          <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 mb-4 border border-blue-200">
-            <h2 class="font-semibold text-gray-900 mb-2">
+          <!-- Occurrence Info Card -->
+          <div class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-5 mb-6 border border-emerald-100 shadow-sm">
+            <h2 class="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
               {{ selectedOccurrence.displayString }}
             </h2>
-            <div class="text-sm text-gray-600 space-y-1">
-              <p><strong>Status:</strong> {{ selectedOccurrence.status }}</p>
-              <p v-if="selectedOccurrence.effectiveStartTime">
-                <strong>Time:</strong> {{ selectedOccurrence.effectiveStartTime }} - {{ selectedOccurrence.effectiveEndTime }}
-              </p>
+            <div class="text-sm text-gray-600 grid grid-cols-2 gap-4">
+              <div class="bg-white/50 p-2 rounded-lg">
+                <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{ $t('report.status') }}</span>
+                <span class="text-gray-800 font-medium">{{ selectedOccurrence.status }}</span>
+              </div>
+              <div v-if="selectedOccurrence.effectiveStartTime" class="bg-white/50 p-2 rounded-lg">
+                <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{ $t('report.time') }}</span>
+                <span class="text-gray-800 font-medium">{{ selectedOccurrence.effectiveStartTime }} - {{ selectedOccurrence.effectiveEndTime }}</span>
+              </div>
             </div>
           </div>
 
@@ -52,15 +59,17 @@
         </div>
 
         <!-- Empty State -->
-        <div v-else class="bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 p-12 text-center h-full flex flex-col items-center justify-center">
-          <svg class="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          <h3 class="text-lg font-medium text-gray-900 mb-2">
-            {{ occurrences.length > 0 ? 'No Occurrence Selected' : 'No Reports Available' }}
+        <div v-else class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center h-full flex flex-col items-center justify-center min-h-[400px]">
+          <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm ring-1 ring-gray-100">
+            <svg class="w-10 h-10 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+          </div>
+          <h3 class="text-xl font-bold text-gray-800 mb-3">
+            {{ occurrences.length > 0 ? $t('report.no_occurrence_selected') : $t('report.no_reports_available') }}
           </h3>
-          <p class="text-gray-600">
-            {{ occurrences.length > 0 ? 'Select a class occurrence from the calendar to view or edit its report.' : 'This session has no scheduled occurrences yet.' }}
+          <p class="text-gray-500 max-w-sm mx-auto leading-relaxed">
+            {{ occurrences.length > 0 ? $t('report.no_occurrence_selected_desc') : $t('report.no_reports_available_desc') }}
           </p>
         </div>
       </div>
@@ -78,12 +87,14 @@
     <!-- Success Toast -->
     <div 
       v-if="showSuccessToast"
-      class="fixed bottom-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-slide-up"
+      class="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-slide-up z-[100] border border-emerald-500"
     >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-      </svg>
-      Report saved successfully!
+      <div class="bg-white/20 p-1 rounded-full">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+        </svg>
+      </div>
+      <span class="font-bold tracking-wide">{{ $t('report.save_success') }}</span>
     </div>
   </div>
 </template>

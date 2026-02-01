@@ -185,11 +185,11 @@ async function deleteSession(id: string) {
 
 // Helpers
 function getDayLabel(day: number) {
-    return days.find(d => d.value === day)?.label || day
+    return t(`classroom.days.${day}`) || day
 }
 
 function getRoomName(id?: string) {
-    return allClassrooms.value.find(c => c.id === id)?.name || 'Unknown Room'
+    return allClassrooms.value.find(c => c.id === id)?.name || t('common.unknown_room', 'Unknown Room')
 }
 
 function toggleCourseSelection(courseId: string) {
@@ -205,7 +205,7 @@ function toggleCourseSelection(courseId: string) {
 <template>
 <div class="space-y-6">
     <div class="flex items-center justify-between flex-wrap gap-4">
-        <h1 class="text-2xl font-bold text-gray-800">{{ $t('nav.classrooms') }}</h1>
+        <h1 class="text-2xl font-bold text-gray-800">{{ $t('classroom.title') }}</h1>
         <div class="flex items-center gap-4">
             <input 
                 v-model="searchQuery" 
@@ -219,29 +219,35 @@ function toggleCourseSelection(courseId: string) {
                     class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
                     :class="activeTab === 'rooms' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
                 >
-                    Start Rooms
+                    {{ $t('classroom.rooms_tab') }}
                 </button>
                 <button 
                     @click="activeTab = 'sessions'"
                     class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
                     :class="activeTab === 'sessions' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
                 >
-                    Class Sessions
+                    {{ $t('classroom.sessions_tab') }}
                 </button>
             </div>
         </div>
     </div>
 
-    <div v-if="loading" class="text-center text-gray-500 py-10">Loading...</div>
+    <div v-if="loading" class="text-center text-gray-500 py-10">
+        <svg class="animate-spin h-8 w-8 mx-auto mb-3 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        {{ $t('student.loading') }}
+    </div>
 
     <!-- ROOMS TAB -->
     <div v-else-if="activeTab === 'rooms'">
         <div class="flex justify-end mb-4">
             <button 
                 @click="isCreateRoomModalOpen = true"
-                class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition flex items-center gap-2"
+                class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm font-medium"
             >
-                <span>+</span> Add Room
+                <span>+</span> {{ $t('classroom.add_room') }}
             </button>
         </div>
 
@@ -272,8 +278,8 @@ function toggleCourseSelection(courseId: string) {
                 </div>
             </div>
             
-            <div v-if="filteredClassrooms.length === 0" class="col-span-full text-center py-10 text-gray-400">
-                No rooms found matching "{{ searchQuery }}"
+            <div v-if="filteredClassrooms.length === 0" class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
+                {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">matching "{{ searchQuery }}"</span>
             </div>
         </div>
 
@@ -291,9 +297,9 @@ function toggleCourseSelection(courseId: string) {
         <div class="flex justify-end mb-4">
              <button 
                 @click="isCreateSessionModalOpen = true"
-                class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition flex items-center gap-2"
+                class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm font-medium"
             >
-                <span>+</span> Add Session
+                <span>+</span> {{ $t('classroom.add_session') }}
             </button>
         </div>
 
@@ -344,72 +350,74 @@ function toggleCourseSelection(courseId: string) {
     </div>
 
     <!-- Create Room Modal -->
-    <div v-if="isCreateRoomModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-xl">
-            <h3 class="text-xl font-bold mb-4">Add Classroom</h3>
+    <div v-if="isCreateRoomModalOpen" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in fade-in zoom-in duration-200">
+            <h3 class="text-xl font-bold mb-6 text-gray-800">{{ $t('classroom.add_room') }}</h3>
             <div class="space-y-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                    <input v-model="newClassroom.name" placeholder="e.g. Room 101" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name') }}</label>
+                    <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                    <input v-model="newClassroom.address" placeholder="Location/Address" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address') }}</label>
+                    <input v-model="newClassroom.address" :placeholder="$t('classroom.address')" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                    <input v-model="newClassroom.phone" placeholder="Contact Number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone') }}</label>
+                    <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Color Label</label>
-                    <input type="color" v-model="newClassroom.color" class="w-full h-10 border-gray-300 rounded-lg cursor-pointer">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label') }}</label>
+                    <input type="color" v-model="newClassroom.color" class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                 </div>
             </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button @click="isCreateRoomModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
-                <button @click="createClassroom" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Create</button>
+            <div class="flex justify-end gap-3 mt-8">
+                <button @click="isCreateRoomModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{ $t('common.cancel', 'Cancel') }}</button>
+                <button @click="createClassroom" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">{{ $t('common.add', 'Add') }}</button>
             </div>
         </div>
     </div>
 
     <!-- Create Session Modal -->
-    <div v-if="isCreateSessionModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div class="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl m-4">
-            <h3 class="text-xl font-bold mb-4">New Class Session</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div v-if="isCreateSessionModalOpen" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl m-4 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
+            <h3 class="text-xl font-bold mb-6 text-gray-800">{{ $t('classroom.add_session') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="md:col-span-2">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Session Name</label>
-                    <input v-model="newSession.name" placeholder="e.g. Tuesday Python Lab" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name') }}</label>
+                    <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                 </div>
                 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Classroom</label>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('student.internal_courses.classroom') }}</label>
                     <SearchableSelect
                         v-model="newSession.classroom_id"
                         :options="roomOptions"
-                        placeholder="Select Classroom..."
+                        :placeholder="$t('student.internal_courses.session_select_placeholder')"
                     />
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
-                    <input type="number" v-model="newSession.capacity" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity') }}</label>
+                    <input type="number" v-model="newSession.capacity" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.lesson_number') }}</label>
-                    <input type="number" v-model.number="newSession.lesson_number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" placeholder="1">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('student.internal_courses.lesson_number') }}</label>
+                    <input type="number" v-model.number="newSession.lesson_number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" placeholder="1">
                 </div>
                 
                 <div class="md:col-span-2">
-                     <label class="block text-sm font-medium text-gray-700 mb-1">Schedule</label>
-                     <div class="flex gap-2">
-                        <select v-model="newSession.day_of_week" class="border-gray-300 rounded-lg">
-                            <option v-for="d in days" :key="d.value" :value="d.value">{{ d.label }}</option>
+                     <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule') }}</label>
+                     <div class="flex flex-wrap gap-2">
+                        <select v-model="newSession.day_of_week" class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
+                            <option v-for="d in days" :key="d.value" :value="d.value">{{ $t(`classroom.days.${d.value}`) }}</option>
                         </select>
-                        <input type="time" v-model="newSession.start_time" class="border-gray-300 rounded-lg">
-                        <span class="self-center">-</span>
-                        <input type="time" v-model="newSession.end_time" class="border-gray-300 rounded-lg">
+                        <div class="flex items-center gap-2">
+                            <input type="time" v-model="newSession.start_time" class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            <span class="text-gray-400 font-bold">-</span>
+                            <input type="time" v-model="newSession.end_time" class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
                      </div>
                 </div>
 
@@ -436,9 +444,9 @@ function toggleCourseSelection(courseId: string) {
                 </div>
             </div>
             
-            <div class="flex justify-end gap-3 mt-6">
-                <button @click="isCreateSessionModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">{{ $t('student.cancel') }}</button>
-                <button @click="createSession" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">{{ $t('student.create') }}</button>
+            <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">
+                <button @click="isCreateSessionModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{ $t('common.cancel') }}</button>
+                <button @click="createSession" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">{{ $t('common.add') }}</button>
             </div>
         </div>
     </div>

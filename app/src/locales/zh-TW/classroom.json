@@ -1,0 +1,33 @@
+{
+    "title": "教室與時段管理",
+    "rooms_tab": "教室管理",
+    "sessions_tab": "班級時段",
+    "add_room": "新增教室",
+    "add_session": "新增時段",
+    "delete_room": "刪除教室",
+    "delete_session": "刪除時段",
+    "room_name": "教室名稱",
+    "address": "地址 / 位置",
+    "phone": "聯絡電話",
+    "color_label": "顏色標記",
+    "session_name": "時段名稱",
+    "capacity": "容納人數",
+    "schedule": "上課時間",
+    "courses": "對應課程",
+    "no_rooms": "找不到符合的教室",
+    "no_sessions": "找不到符合的時段",
+    "room_placeholder": "例如：101 教室",
+    "session_placeholder": "例如：週二 Python 進階班",
+    "day_of_week": "星期",
+    "start_time": "開始時間",
+    "end_time": "結束時間",
+    "days": {
+        "0": "週日",
+        "1": "週一",
+        "2": "週二",
+        "3": "週三",
+        "4": "週四",
+        "5": "週五",
+        "6": "週六"
+    }
+}
