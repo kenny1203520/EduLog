@@ -42,9 +42,19 @@ const router = createRouter({
           component: () => import('@/views/CourseManagementView.vue')
         },
         {
+          path: 'students',
+          name: 'students',
+          component: () => import('@/views/StudentManagementView.vue')
+        },
+        {
           path: 'classrooms',
           name: 'classrooms',
           component: () => import('@/views/ClassroomManagementView.vue')
+        },
+        {
+          path: 'classrooms/session/:id',
+          name: 'session-details',
+          component: () => import('@/views/SessionDetailsView.vue')
         },
         {
           path: 'reports/:enrollmentId',

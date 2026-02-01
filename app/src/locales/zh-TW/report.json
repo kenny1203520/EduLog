@@ -1,8 +1,19 @@
 {
     "title": "撰寫報告",
+    "list_title": "課堂報告列表",
     "history": "歷史報告",
     "save": "儲存報告",
     "saving": "儲存中...",
     "placeholder": "請在此撰寫報告內容...",
-    "no_history": "尚無歷史報告"
+    "no_history": "尚無歷史報告",
+    "loading_full": "載入報告中...",
+    "no_occurrences": "目前沒有任何課堂紀錄",
+    "status": "狀態",
+    "time": "時間",
+    "last_updated": "最後更新",
+    "no_occurrence_selected": "請選擇課堂",
+    "no_occurrence_selected_desc": "在左側日曆中選擇一個日期，以檢視或編輯該課堂的學生報告。",
+    "no_reports_available": "無報告可用",
+    "no_reports_available_desc": "此時段尚無任何課堂紀錄。",
+    "save_success": "報告已成功儲存"
 }

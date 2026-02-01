@@ -1,8 +1,19 @@
 {
     "title": "Write Report",
+    "list_title": "Class Reports",
     "history": "History",
     "save": "Save Report",
     "saving": "Saving...",
     "placeholder": "Write your report here...",
-    "no_history": "No past reports."
+    "no_history": "No past reports.",
+    "loading_full": "Loading reports...",
+    "no_occurrences": "No occurrences found.",
+    "status": "Status",
+    "time": "Time",
+    "last_updated": "Last Updated",
+    "no_occurrence_selected": "Select an Occurrence",
+    "no_occurrence_selected_desc": "Select a date from the calendar to view or edit student reports for that session.",
+    "no_reports_available": "No reports available",
+    "no_reports_available_desc": "There are no class records for this session.",
+    "save_success": "Report saved successfully"
 }

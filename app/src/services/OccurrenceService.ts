@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
-import type { ClassSessionDTO } from '@/models/Classroom'
 
 /**
  * OccurrenceService handles business logic for class occurrences.
@@ -32,7 +31,7 @@ export class OccurrenceService {
 
         if (sessionError) throw new Error(`Failed to fetch session: ${sessionError.message}`)
 
-        const dayOfWeek = session.day_of_week
+        const dayOfWeek = (session as any).day_of_week
         const occurrenceDates = this.generateOccurrenceDates(dayOfWeek, startDate, endDate)
 
         // Prepare occurrence records
@@ -40,8 +39,8 @@ export class OccurrenceService {
             class_session_id: sessionId,
             occurrence_date: this.formatDate(date),
             status: 'scheduled',
-            original_start_time: session.start_time,
-            original_end_time: session.end_time
+            original_start_time: (session as any).start_time,
+            original_end_time: (session as any).end_time
         }))
 
         // Bulk insert with conflict handling (upsert)
@@ -52,7 +51,7 @@ export class OccurrenceService {
 
         if (error) throw new Error(`Failed to create occurrences: ${error.message}`)
 
-        return data.map(dto => new ClassOccurrence(dto))
+        return data.map((dto: any) => new ClassOccurrence(dto))
     }
 
     /**
@@ -102,7 +101,7 @@ export class OccurrenceService {
         if (error) throw new Error(error.message)
 
         return {
-            data: data.map(dto => new ClassOccurrence(dto)),
+            data: data.map((dto: any) => new ClassOccurrence(dto)),
             count: count || 0
         }
     }
@@ -117,7 +116,13 @@ export class OccurrenceService {
     ): Promise<ClassOccurrence[]> {
         let query = supabase
             .from('class_occurrences')
-            .select('*')
+            .select(`
+                *,
+                class_sessions (
+                    name,
+                    classrooms (name)
+                )
+            `)
             .gte('occurrence_date', this.formatDate(startDate))
             .lte('occurrence_date', this.formatDate(endDate))
             .order('occurrence_date', { ascending: true })
@@ -130,7 +135,13 @@ export class OccurrenceService {
 
         if (error) throw new Error(error.message)
 
-        return data.map(dto => new ClassOccurrence(dto))
+        return data.map((dto: any) => {
+            const occ = new ClassOccurrence(dto)
+            if (dto.class_sessions?.classrooms) {
+                occ.classroomName = dto.class_sessions.classrooms.name
+            }
+            return occ
+        })
     }
 
     /**
@@ -145,7 +156,7 @@ export class OccurrenceService {
 
         if (error) throw new Error(error.message)
 
-        return new ClassOccurrence(data)
+        return new ClassOccurrence(data as any)
     }
 
     /**
@@ -164,7 +175,7 @@ export class OccurrenceService {
 
         if (error) throw new Error(error.message)
 
-        return new ClassOccurrence(data)
+        return new ClassOccurrence(data as any)
     }
 
     /**
@@ -231,7 +242,7 @@ export class OccurrenceService {
         // Generate for each session
         for (const session of sessions) {
             const occurrences = await this.generateOccurrences(
-                session.id,
+                (session as any).id,
                 startDate,
                 endDate
             )
@@ -245,7 +256,7 @@ export class OccurrenceService {
      * Helper: Format date as YYYY-MM-DD
      */
     private static formatDate(date: Date): string {
-        return date.toISOString().split('T')[0]
+        return date.toISOString().split('T')[0] || ''
     }
 
     /**

@@ -156,6 +156,30 @@ export class CourseService {
       if (error) throw new Error(error.message)
   }
 
+  static async getEnrollmentsBySession(sessionId: string): Promise<{ data: Enrollment[] }> {
+      const { data, error } = await supabase
+        .from('enrollments')
+        .select(`
+            *,
+            students (name, email)
+        `)
+        .eq('class_session_id', sessionId)
+        .eq('status', 'active')
+      
+      if (error) throw new Error(error.message)
+      
+      return { 
+          data: data.map((d: any) => {
+              const enrollment = new Enrollment(d)
+              if (d.students) {
+                  enrollment.studentName = d.students.name
+                  enrollment.studentEmail = d.students.email
+              }
+              return enrollment
+          })
+      }
+  }
+
   // --- Courses ---
   static async getCourses(page: number = 1, perPage: number = 100): Promise<{ data: Course[], count: number }> {
     const from = (page - 1) * perPage

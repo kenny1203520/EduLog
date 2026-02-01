@@ -22,6 +22,10 @@ export interface EnrollmentDTO {
     class_sessions?: {
         name: string
     }
+    students?: {
+        name: string
+        email: string
+    }
 }
 
 export class Enrollment {
@@ -40,6 +44,8 @@ export class Enrollment {
     courseDisplayName?: string
     classroomName: string = ''
     classSessionName: string = ''
+    studentName?: string
+    studentEmail?: string
 
     constructor(data: EnrollmentDTO) {
         this.id = data.id

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { CourseService } from '@/services/CourseService'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
@@ -9,6 +10,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 
 // Data
@@ -29,6 +31,8 @@ const isCreateSessionModalOpen = ref(false)
 
 // Forms
 const newClassroom = ref<Partial<ClassroomDTO>>({ name: '', address: '', phone: '', color: '#10b981' })
+const editingClassroom = ref<Classroom | null>(null)
+
 const newSession = ref<Partial<ClassSessionDTO>>({
     name: '',
     classroom_id: '',
@@ -36,8 +40,10 @@ const newSession = ref<Partial<ClassSessionDTO>>({
     day_of_week: 1,
     start_time: '10:00',
     end_time: '12:00',
-    capacity: 10
+    capacity: 10,
+    lesson_number: 1
 })
+const editingSession = ref<ClassSessionDTO | null>(null)
 
 const days = [
     { value: 0, label: 'Sun' },
@@ -123,16 +129,36 @@ const roomOptions = computed(() => allClassrooms.value.map(c => ({
 })))
 
 // Actions
-async function createClassroom() {
+async function saveClassroom() {
     if (!newClassroom.value.name) return
     try {
-        await CourseService.createClassroom(newClassroom.value)
+        if (editingClassroom.value?.id) {
+            await CourseService.updateClassroom(editingClassroom.value.id, newClassroom.value)
+        } else {
+            await CourseService.createClassroom(newClassroom.value)
+        }
         await Promise.all([loadRooms(), loadAllRooms()])
-        isCreateRoomModalOpen.value = false
-        newClassroom.value = { name: '', address: '', phone: '', color: '#10b981' }
+        closeRoomModal()
     } catch (e) {
         alert(e)
     }
+}
+
+function openEditRoom(room: Classroom) {
+    editingClassroom.value = room
+    newClassroom.value = { 
+        name: room.name, 
+        address: room.address, 
+        phone: room.phone, 
+        color: room.color || '#10b981' 
+    }
+    isCreateRoomModalOpen.value = true
+}
+
+function closeRoomModal() {
+    isCreateRoomModalOpen.value = false
+    editingClassroom.value = null
+    newClassroom.value = { name: '', address: '', phone: '', color: '#10b981' }
 }
 
 async function deleteClassroom(id: string) {
@@ -145,32 +171,50 @@ async function deleteClassroom(id: string) {
     }
 }
 
-async function createSession() {
+async function saveSession() {
     if (!newSession.value.name) return
     try {
-        const session = await CourseService.createClassSession(newSession.value)
-        
-        // Automatically generate occurrences for the next 3 months
-        const startDate = new Date()
-        const endDate = new Date()
-        endDate.setMonth(endDate.getMonth() + 3)
-        await OccurrenceService.generateOccurrences(session.id!, startDate, endDate)
+        if (editingSession.value?.id) {
+            await CourseService.updateClassSession(editingSession.value.id, newSession.value)
+        } else {
+            const session = await CourseService.createClassSession(newSession.value)
+            // Generate occurrences for new sessions
+            const startDate = new Date()
+            const endDate = new Date()
+            endDate.setMonth(endDate.getMonth() + 3)
+            await OccurrenceService.generateOccurrences(session.id!, startDate, endDate)
+        }
         
         await loadSessions()
-        isCreateSessionModalOpen.value = false
-        newSession.value = {
-            name: '',
-            classroom_id: '',
-            course_ids: [],
-            day_of_week: 1,
-            start_time: '10:00',
-            end_time: '12:00',
-            capacity: 10,
-            lesson_number: 1
-        }
+        closeSessionModal()
     } catch (e) {
         alert(e)
     }
+}
+
+function openEditSession(session: ClassSessionDTO) {
+    editingSession.value = session
+    newSession.value = { ...session }
+    isCreateSessionModalOpen.value = true
+}
+
+function closeSessionModal() {
+    isCreateSessionModalOpen.value = false
+    editingSession.value = null
+    newSession.value = {
+        name: '',
+        classroom_id: '',
+        course_ids: [],
+        day_of_week: 1,
+        start_time: '10:00',
+        end_time: '12:00',
+        capacity: 10,
+        lesson_number: 1
+    }
+}
+
+function navigateToSession(id: string) {
+    router.push({ name: 'session-details', params: { id } })
 }
 
 async function deleteSession(id: string) {
@@ -255,11 +299,18 @@ function toggleCourseSelection(courseId: string) {
             <div v-for="room in filteredClassrooms" :key="room.id" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden group hover:shadow-md transition">
                 <div class="p-4 border-b border-gray-100 flex justify-between items-center" :style="{ borderTop: `4px solid ${room.color}` }">
                     <h3 class="font-bold text-lg text-gray-800">{{ room.name }}</h3>
-                    <button @click="deleteClassroom(room.id!)" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
+                    <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                        <button @click="openEditRoom(room)" class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition" :title="$t('common.edit')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                            </svg>
+                        </button>
+                        <button @click="deleteClassroom(room.id!)" class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition" :title="$t('common.delete')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="p-4 text-gray-600 text-sm space-y-2">
                     <div class="flex items-start gap-2" v-if="room.address">
@@ -334,8 +385,24 @@ function toggleCourseSelection(courseId: string) {
                     </div>
                  </div>
 
-                 <div class="mt-4 pt-3 border-t border-gray-50 flex justify-end">
-                     <button @click="deleteSession(session.id!)" class="text-xs text-red-400 hover:text-red-600 hover:underline">Delete</button>
+                 <div class="mt-4 pt-3 border-t border-gray-50 flex justify-between items-center">
+                     <button 
+                        @click="navigateToSession(session.id!)"
+                        class="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 transition-transform hover:translate-x-1"
+                     >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                        {{ $t('classroom.view_students', 'View Students') }}
+                     </button>
+                     <div class="flex items-center gap-2">
+                        <button @click="openEditSession(session)" class="p-1 px-2 text-xs font-medium text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition">
+                            {{ $t('common.edit') }}
+                        </button>
+                        <button @click="deleteSession(session.id!)" class="p-1 px-2 text-xs font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition">
+                            {{ $t('common.delete') }}
+                        </button>
+                     </div>
                  </div>
              </div>
         </div>
@@ -372,8 +439,10 @@ function toggleCourseSelection(courseId: string) {
                 </div>
             </div>
             <div class="flex justify-end gap-3 mt-8">
-                <button @click="isCreateRoomModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{ $t('common.cancel', 'Cancel') }}</button>
-                <button @click="createClassroom" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">{{ $t('common.add', 'Add') }}</button>
+                <button @click="closeRoomModal" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{ $t('common.cancel', 'Cancel') }}</button>
+                <button @click="saveClassroom" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">
+                    {{ editingClassroom ? $t('common.save', 'Save') : $t('common.add', 'Add') }}
+                </button>
             </div>
         </div>
     </div>
@@ -445,8 +514,10 @@ function toggleCourseSelection(courseId: string) {
             </div>
             
             <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">
-                <button @click="isCreateSessionModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{ $t('common.cancel') }}</button>
-                <button @click="createSession" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">{{ $t('common.add') }}</button>
+                <button @click="closeSessionModal" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{ $t('common.cancel') }}</button>
+                <button @click="saveSession" class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">
+                    {{ editingSession ? $t('common.save') : $t('common.add') }}
+                </button>
             </div>
         </div>
     </div>

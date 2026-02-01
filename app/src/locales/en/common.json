@@ -1,8 +1,13 @@
 {
     "add": "Add",
     "search": "Search",
+    "save": "Save",
+    "cancel": "Cancel",
     "delete": "Delete",
     "edit": "Edit",
     "view": "View",
-    "confirm_delete": "Are you sure you want to delete?"
+    "confirm_delete": "Are you sure you want to delete?",
+    "unknown_room": "Unknown Room",
+    "no_description": "No description",
+    "copy_success": "Copied to clipboard!"
 }
