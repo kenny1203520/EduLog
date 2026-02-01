@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { StudentService } from '@/services/StudentService'
+import { CourseService } from '@/services/CourseService'
+import { Course } from '@/models/Course'
+import { Classroom, type ClassSessionDTO } from '@/models/Classroom'
+import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const studentStore = useStudentStore()
 const studentId = computed(() => route.params.id as string)
@@ -41,6 +46,7 @@ onMounted(async () => {
   if (studentId.value) {
     await studentStore.loadStudent(studentId.value)
     populateForm()
+    fetchEnrollments()
   }
 })
 
@@ -73,8 +79,6 @@ async function saveMainDetails() {
   }
 }
 
-const router = useRouter() // Ensure router is available (already imported in line 3 or 4)
-
 async function handleDeleteStudent() {
   if (!confirm(t('student.confirm_delete_student'))) return
   
@@ -87,7 +91,6 @@ async function handleDeleteStudent() {
   }
 }
 
-
 // --- Contacts Management ---
 const newContact = ref({ name: '', relation: '', phone: '', email: '' })
 async function addContact() {
@@ -99,6 +102,71 @@ async function addContact() {
   } catch (e) {
     console.error(e)
   }
+}
+const enrollments = ref<Enrollment[]>([])
+const availableCourses = ref<Course[]>([])
+const availableClassrooms = ref<Classroom[]>([])
+const availableSessions = ref<ClassSessionDTO[]>([])
+const isEnrollModalOpen = ref(false)
+const newEnrollment = ref<Partial<EnrollmentDTO>>({ status: 'active' })
+
+const filteredSessions = computed(() => {
+    if (!newEnrollment.value.course_id) return []
+    return availableSessions.value.filter(s => s.course_ids.includes(newEnrollment.value.course_id!))
+})
+
+// Watch Session Selection to Auto-Set Classroom
+watch(() => newEnrollment.value.class_session_id, (sessionId) => {
+    if (sessionId) {
+        const session = availableSessions.value.find(s => s.id === sessionId)
+        if (session && session.classroom_id) {
+            newEnrollment.value.classroom_id = session.classroom_id
+        }
+    }
+})
+
+async function fetchEnrollments() {
+  if (!studentId.value) return
+  enrollments.value = await CourseService.getStudentEnrollments(studentId.value)
+}
+
+async function openEnrollModal() {
+  isEnrollModalOpen.value = true
+  // Fetch all data needed
+  const [courses, rooms, sessions] = await Promise.all([
+      CourseService.getCourses(),
+      CourseService.getClassrooms(),
+      CourseService.getClassSessions()
+  ])
+  availableCourses.value = courses
+  availableClassrooms.value = rooms
+  availableSessions.value = sessions
+  
+  newEnrollment.value = { student_id: studentId.value, status: 'active' }
+}
+
+async function enrollStudent() {
+  if (!newEnrollment.value.course_id) return
+  try {
+    await CourseService.enrollStudent({
+      ...newEnrollment.value,
+      student_id: studentId.value
+    })
+    await fetchEnrollments()
+    isEnrollModalOpen.value = false
+  } catch (e) {
+    alert(e)
+  }
+}
+
+async function removeEnrollment(id: string) {
+    if(!confirm(t('common.confirm_delete'))) return
+    try {
+        await CourseService.deleteEnrollment(id)
+        await fetchEnrollments()
+    } catch(e) {
+        alert(e)
+    }
 }
 async function deleteContact(id: string) {
   if (!confirm(t('student.contacts.confirm_delete'))) return
@@ -725,6 +793,102 @@ function copyToClipboard(text: string) {
           </div>
         </div>
       </section>
+      <!-- Internal Courses -->
+      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+           <span class="p-1.5 bg-purple-100 text-purple-600 rounded-lg">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+               <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+             </svg>
+           </span>
+           {{ $t('internal_courses.title') }}
+        </h2>
+
+        <div v-if="enrollments.length === 0" class="text-center py-6 text-gray-400 text-sm italic bg-gray-50 rounded-xl mb-4 border border-dashed border-gray-200">
+           {{ $t('internal_courses.no_enrollments') }}
+        </div>
+
+        <ul class="space-y-3 mb-6">
+            <li v-for="enr in enrollments" :key="enr.id" class="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
+               <div>
+                   <div class="font-bold text-gray-800">{{ enr.courseSubject }} <span class="text-gray-500 font-normal text-sm">- {{ enr.courseStage }}</span></div>
+                   <div class="text-xs text-gray-500 flex items-center gap-2 mt-1">
+                       <span v-if="enr.classroomName" class="px-2 py-0.5 bg-gray-100 rounded text-gray-600">{{ enr.classroomName }}</span>
+                       <span class="capitalize" :class="{'text-emerald-600': enr.status === 'active', 'text-gray-400': enr.status !== 'active'}">
+                           {{ enr.status }}
+                       </span>
+                   </div>
+               </div>
+               <div class="flex items-center gap-2">
+                   <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: enr.id } }" class="text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded transition text-sm font-medium">
+                        {{ $t('internal_courses.reports') }}
+                   </router-link>
+                   <button @click="removeEnrollment(enr.id!)" class="text-gray-400 hover:text-red-500 transition p-1 rounded hover:bg-red-50">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                   </button>
+               </div>
+            </li>
+        </ul>
+
+        <button @click="openEnrollModal" class="w-full py-2 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 font-bold hover:border-emerald-500 hover:text-emerald-600 transition-colors flex items-center justify-center gap-2">
+            <span>+</span> {{ $t('internal_courses.add_title') }}
+        </button>
+      </section>
+
+      <!-- Enroll Modal -->
+      <div v-if="isEnrollModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl m-4">
+            <h3 class="text-xl font-bold mb-4">{{ $t('internal_courses.add_title') }}</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.course') }}</label>
+                    <select v-model="newEnrollment.course_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                        <option v-for="c in availableCourses" :key="c.id" :value="c.id">
+                            {{ c.subject }} - {{ c.stage }}
+                        </option>
+                    </select>
+                </div>
+                
+                <div v-if="newEnrollment.course_id">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Class Session (Optional)</label>
+                    <select v-model="newEnrollment.class_session_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                        <option :value="undefined">-- Select Session --</option>
+                        <option v-for="s in filteredSessions" :key="s.id" :value="s.id">
+                            {{ s.name }} ({{ s.day_of_week !== undefined ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
+                        </option>
+                        <option v-if="filteredSessions.length === 0" disabled>No sessions found for this course</option>
+                    </select>
+                    <p class="text-xs text-gray-400 mt-1">Selecting a session auto-fills the classroom.</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.classroom') }}</label>
+                    <select v-model="newEnrollment.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                        <option :value="undefined">-- None --</option>
+                        <option v-for="r in availableClassrooms" :key="r.id" :value="r.id">
+                            {{ r.name }}
+                        </option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.status') }}</label>
+                    <select v-model="newEnrollment.status" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                        <option value="active">Active</option>
+                        <option value="completed">Completed</option>
+                        <option value="dropped">Dropped</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <!-- Hardcoded Cancel translation fallback -->
+                <button @click="isEnrollModalOpen = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">{{ $t('common.cancel') || $t('student.cancel') }}</button>
+                <button @click="enrollStudent" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">{{ $t('internal_courses.add_btn') }}</button>
+            </div>
+        </div>
+      </div>
+
       <!-- Credentials -->
       <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 md:col-span-2 transition-all hover:shadow-md">
         <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">

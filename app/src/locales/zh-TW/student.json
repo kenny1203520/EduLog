@@ -55,6 +55,16 @@
         "add_btn": "新增學校",
         "confirm_delete": "確定要刪除此學校經歷嗎？"
     },
+    "internal_courses": {
+        "title": "校內課程",
+        "add_title": "選修課程",
+        "course": "課程",
+        "classroom": "教室",
+        "status": "狀態",
+        "reports": "課堂報告",
+        "add_btn": "確認選課",
+        "no_enrollments": "尚未選修任何課程"
+    },
     "credentials": {
         "platform": "平台",
         "username": "使用者名稱",

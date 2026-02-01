@@ -42,6 +42,22 @@ async function handleLogout() {
         >
           {{ $t('nav.dashboard') }}
         </router-link>
+        
+        <router-link 
+          to="/dashboard/courses" 
+          class="block px-4 py-2 rounded-md text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
+          active-class="bg-emerald-50 text-emerald-700 font-medium"
+        >
+          {{ $t('nav.courses') }}
+        </router-link>
+
+        <router-link 
+          to="/dashboard/classrooms" 
+          class="block px-4 py-2 rounded-md text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
+          active-class="bg-emerald-50 text-emerald-700 font-medium"
+        >
+          {{ $t('nav.classrooms') }}
+        </router-link>
         <!-- Future Navigation Items -->
         <!-- <router-link to="/students" ...>Students</router-link> -->
       </nav>

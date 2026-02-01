@@ -1,5 +1,7 @@
 {
     "dashboard": "Dashboard",
+    "courses": "Courses",
+    "classrooms": "Classrooms",
     "students": "Students",
     "logout": "Logout",
     "login": "Login",

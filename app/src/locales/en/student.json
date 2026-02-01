@@ -55,6 +55,16 @@
         "add_btn": "Add School",
         "confirm_delete": "Are you sure you want to delete this school?"
     },
+    "internal_courses": {
+        "title": "Internal Courses",
+        "add_title": "Enroll in Course",
+        "course": "Course",
+        "classroom": "Classroom",
+        "status": "Status",
+        "reports": "Reports",
+        "add_btn": "Enroll",
+        "no_enrollments": "No active enrollments"
+    },
     "credentials": {
         "platform": "Platform",
         "username": "Username",
