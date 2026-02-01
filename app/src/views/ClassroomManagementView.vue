@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { CourseService } from '@/services/CourseService'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
+import Pagination from '@/components/common/Pagination.vue'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 const { t } = useI18n()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
@@ -13,13 +15,19 @@ const classrooms = ref<Classroom[]>([])
 const sessions = ref<ClassSessionDTO[]>([])
 const courses = ref<Course[]>([])
 const loading = ref(true)
+const searchQuery = ref('')
+const allClassrooms = ref<Classroom[]>([]) // For Dropdown
+
+// Pagination state
+const roomsPagination = ref({ page: 1, perPage: 10, total: 0 })
+const sessionsPagination = ref({ page: 1, perPage: 10, total: 0 })
 
 // Modals
 const isCreateRoomModalOpen = ref(false)
 const isCreateSessionModalOpen = ref(false)
 
 // Forms
-const newClassroom = ref<Partial<ClassroomDTO>>({ name: '', address: '', color: '#10b981' })
+const newClassroom = ref<Partial<ClassroomDTO>>({ name: '', address: '', phone: '', color: '#10b981' })
 const newSession = ref<Partial<ClassSessionDTO>>({
     name: '',
     classroom_id: '',
@@ -47,14 +55,12 @@ onMounted(async () => {
 async function loadData() {
     try {
         loading.value = true
-        const [roomsData, sessionsData, coursesData] = await Promise.all([
-            CourseService.getClassrooms(),
-            CourseService.getClassSessions(),
-            CourseService.getCourses()
+        await Promise.all([
+            loadRooms(),
+            loadSessions(),
+            loadAllRooms(),
+            CourseService.getCourses().then(res => { courses.value = res.data })
         ])
-        classrooms.value = roomsData
-        sessions.value = sessionsData
-        courses.value = coursesData
     } catch (e) {
         console.error(e)
     } finally {
@@ -62,14 +68,65 @@ async function loadData() {
     }
 }
 
-// --- Classroom Actions ---
+async function loadRooms() {
+    const res = await CourseService.getClassrooms(roomsPagination.value.page, roomsPagination.value.perPage)
+    classrooms.value = res.data
+    roomsPagination.value.total = res.count
+}
+
+async function loadSessions() {
+    const res = await CourseService.getClassSessions(sessionsPagination.value.page, sessionsPagination.value.perPage)
+    sessions.value = res.data
+    sessionsPagination.value.total = res.count
+}
+
+async function loadAllRooms() {
+    const res = await CourseService.getClassrooms(1, 1000)
+    allClassrooms.value = res.data
+}
+
+watch(() => roomsPagination.value.page, loadRooms)
+watch(() => roomsPagination.value.perPage, () => { roomsPagination.value.page = 1; loadRooms() })
+watch(() => sessionsPagination.value.page, loadSessions)
+watch(() => sessionsPagination.value.perPage, () => { sessionsPagination.value.page = 1; loadSessions() })
+
+// Computed
+const filteredClassrooms = computed(() => {
+    if (!searchQuery.value.trim()) return classrooms.value
+    const q = searchQuery.value.toLowerCase()
+    return classrooms.value.filter(r => 
+        r.name.toLowerCase().includes(q) || 
+        (r.address && r.address.toLowerCase().includes(q))
+    )
+})
+
+const filteredSessions = computed(() => {
+    if (!searchQuery.value.trim()) return sessions.value
+    const q = searchQuery.value.toLowerCase()
+    return sessions.value.filter(s => {
+        const roomName = getRoomName(s.classroom_id).toLowerCase()
+        const courseNames = s.course_ids?.map(cid => {
+            const c = courses.value.find(c => c.id === cid)
+            return `${c?.subject} ${c?.stage}`.toLowerCase()
+        }).join(' ') || ''
+        
+        return s.name.toLowerCase().includes(q) || roomName.includes(q) || courseNames.includes(q)
+    })
+})
+
+const roomOptions = computed(() => allClassrooms.value.map(c => ({
+    label: c.name + (c.address ? ` (${c.address})` : ''),
+    value: c.id
+})))
+
+// Actions
 async function createClassroom() {
     if (!newClassroom.value.name) return
     try {
         await CourseService.createClassroom(newClassroom.value)
-        classrooms.value = await CourseService.getClassrooms()
+        await Promise.all([loadRooms(), loadAllRooms()])
         isCreateRoomModalOpen.value = false
-        newClassroom.value = { name: '', address: '', color: '#10b981' }
+        newClassroom.value = { name: '', address: '', phone: '', color: '#10b981' }
     } catch (e) {
         alert(e)
     }
@@ -79,23 +136,21 @@ async function deleteClassroom(id: string) {
     if (!confirm(t('common.confirm_delete'))) return
     try {
         await CourseService.deleteClassroom(id)
-        classrooms.value = await CourseService.getClassrooms()
+        await Promise.all([loadRooms(), loadAllRooms()])
     } catch (e) {
         alert(e)
     }
 }
 
-// --- Session Actions ---
 async function createSession() {
     if (!newSession.value.name) return
     try {
         await CourseService.createClassSession(newSession.value)
-        sessions.value = await CourseService.getClassSessions()
+        await loadSessions()
         isCreateSessionModalOpen.value = false
-        // Reset form
         newSession.value = {
             name: '',
-            classroom_id: classrooms.value.length > 0 ? classrooms.value[0].id : '',
+            classroom_id: '',
             course_ids: [],
             day_of_week: 1,
             start_time: '10:00',
@@ -111,7 +166,7 @@ async function deleteSession(id: string) {
     if (!confirm(t('common.confirm_delete'))) return
     try {
         await CourseService.deleteClassSession(id)
-        sessions.value = await CourseService.getClassSessions()
+        await loadSessions()
     } catch (e) {
         alert(e)
     }
@@ -123,7 +178,7 @@ function getDayLabel(day: number) {
 }
 
 function getRoomName(id?: string) {
-    return classrooms.value.find(c => c.id === id)?.name || 'Unknown Room'
+    return allClassrooms.value.find(c => c.id === id)?.name || 'Unknown Room'
 }
 
 function toggleCourseSelection(courseId: string) {
@@ -138,23 +193,31 @@ function toggleCourseSelection(courseId: string) {
 
 <template>
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between flex-wrap gap-4">
         <h1 class="text-2xl font-bold text-gray-800">{{ $t('nav.classrooms') }}</h1>
-        <div class="flex bg-gray-100 p-1 rounded-lg">
-            <button 
-                @click="activeTab = 'rooms'"
-                class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
-                :class="activeTab === 'rooms' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+        <div class="flex items-center gap-4">
+            <input 
+                v-model="searchQuery" 
+                :placeholder="$t('common.search', 'Search...')"
+                class="border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-emerald-500 w-64"
             >
-                Start Rooms
-            </button>
-            <button 
-                @click="activeTab = 'sessions'"
-                class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
-                :class="activeTab === 'sessions' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
-            >
-                Class Sessions
-            </button>
+            
+            <div class="flex bg-gray-100 p-1 rounded-lg">
+                <button 
+                    @click="activeTab = 'rooms'"
+                    class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
+                    :class="activeTab === 'rooms' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+                >
+                    Start Rooms
+                </button>
+                <button 
+                    @click="activeTab = 'sessions'"
+                    class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
+                    :class="activeTab === 'sessions' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+                >
+                    Class Sessions
+                </button>
+            </div>
         </div>
     </div>
 
@@ -172,7 +235,7 @@ function toggleCourseSelection(courseId: string) {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div v-for="room in classrooms" :key="room.id" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden group hover:shadow-md transition">
+            <div v-for="room in filteredClassrooms" :key="room.id" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden group hover:shadow-md transition">
                 <div class="p-4 border-b border-gray-100 flex justify-between items-center" :style="{ borderTop: `4px solid ${room.color}` }">
                     <h3 class="font-bold text-lg text-gray-800">{{ room.name }}</h3>
                     <button @click="deleteClassroom(room.id!)" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">
@@ -181,16 +244,34 @@ function toggleCourseSelection(courseId: string) {
                         </svg>
                     </button>
                 </div>
-                <div class="p-4 text-gray-600 text-sm">
-                    <div class="flex items-start gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div class="p-4 text-gray-600 text-sm space-y-2">
+                    <div class="flex items-start gap-2" v-if="room.address">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
-                        <span>{{ room.address || 'No address' }}</span>
+                        <span>{{ room.address }}</span>
+                    </div>
+                    <div class="flex items-start gap-2" v-if="room.phone">
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                         </svg>
+                         <span>{{ room.phone }}</span>
                     </div>
                 </div>
             </div>
+            
+            <div v-if="filteredClassrooms.length === 0" class="col-span-full text-center py-10 text-gray-400">
+                No rooms found matching "{{ searchQuery }}"
+            </div>
+        </div>
+
+        <div v-if="roomsPagination.total > 0" class="mt-4">
+             <Pagination 
+                v-model="roomsPagination.page" 
+                v-model:perPage="roomsPagination.perPage" 
+                :totalItems="roomsPagination.total" 
+            />
         </div>
     </div>
 
@@ -206,7 +287,7 @@ function toggleCourseSelection(courseId: string) {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-             <div v-for="session in sessions" :key="session.id" class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md transition">
+             <div v-for="session in filteredSessions" :key="session.id" class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md transition">
                  <div class="flex justify-between items-start mb-2">
                      <h3 class="font-bold text-lg text-gray-800">{{ session.name }}</h3>
                      <span class="text-xs px-2 py-1 bg-gray-100 rounded text-gray-600 font-medium">
@@ -241,6 +322,14 @@ function toggleCourseSelection(courseId: string) {
                  </div>
              </div>
         </div>
+
+         <div v-if="sessionsPagination.total > 0" class="mt-4">
+             <Pagination 
+                v-model="sessionsPagination.page" 
+                v-model:perPage="sessionsPagination.perPage" 
+                :totalItems="sessionsPagination.total" 
+            />
+        </div>
     </div>
 
     <!-- Create Room Modal -->
@@ -252,9 +341,13 @@ function toggleCourseSelection(courseId: string) {
                     <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
                     <input v-model="newClassroom.name" placeholder="e.g. Room 101" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                 </div>
-                 <div>
+                <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Address</label>
                     <input v-model="newClassroom.address" placeholder="Location/Address" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input v-model="newClassroom.phone" placeholder="Contact Number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Color Label</label>
@@ -280,9 +373,11 @@ function toggleCourseSelection(courseId: string) {
                 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">Classroom</label>
-                    <select v-model="newSession.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                        <option v-for="r in classrooms" :key="r.id" :value="r.id">{{ r.name }}</option>
-                    </select>
+                    <SearchableSelect
+                        v-model="newSession.classroom_id"
+                        :options="roomOptions"
+                        placeholder="Select Classroom..."
+                    />
                 </div>
 
                 <div>

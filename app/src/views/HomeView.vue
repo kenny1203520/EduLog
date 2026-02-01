@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue' // Added watch
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useRouter } from 'vue-router'
+import Pagination from '@/components/common/Pagination.vue'
 
 const studentStore = useStudentStore()
 const router = useRouter()
@@ -11,12 +12,22 @@ const newStudentName = ref('')
 const newStudentGrade = ref('')
 
 onMounted(() => {
-  studentStore.fetchAll()
+  studentStore.fetchAll(studentStore.pagination.page, studentStore.pagination.perPage)
 })
+
+watch(() => studentStore.pagination.page, (newPage) => {
+    studentStore.fetchAll(newPage, studentStore.pagination.perPage)
+})
+
+watch(() => studentStore.pagination.perPage, (newSize) => {
+    studentStore.fetchAll(1, newSize)
+})
+
+// ... (rest of script)
 
 async function handleCreateStudent() {
   if (!newStudentName.value) return
-  await studentStore.addStudent(newStudentName.value, newStudentGrade.value)
+  await studentStore.addStudent(newStudentName.value)
   showCreateModal.value = false
   newStudentName.value = ''
   newStudentGrade.value = ''
@@ -130,6 +141,15 @@ function copyToClipboard(text: string) {
       </div>
       <p class="text-gray-500 font-medium mb-1">{{ $t('dashboard.empty') }}</p>
       <p class="text-sm text-gray-400">{{ $t('dashboard.empty_sub') }}</p>
+    </div>
+
+    <!-- Pagination -->
+    <div v-if="!studentStore.loading && studentStore.students.length > 0 || studentStore.pagination.total > 0" class="mt-6">
+        <Pagination 
+            v-model="studentStore.pagination.page"
+            v-model:perPage="studentStore.pagination.perPage"
+            :totalItems="studentStore.pagination.total"
+        />
     </div>
 
     <!-- Simple Create Modal -->

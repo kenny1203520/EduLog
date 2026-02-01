@@ -11,11 +11,23 @@ export const useStudentStore = defineStore('student', () => {
 
   const studentCount = computed(() => students.value.length)
 
-  async function fetchAll() {
+  const pagination = ref({
+    page: 1,
+    perPage: 20,
+    total: 0
+  })
+
+  async function fetchAll(page: number = 1, perPage: number = 20) {
     loading.value = true
     error.value = null
     try {
-      students.value = await StudentService.getAll()
+      const result = await StudentService.getAll(page, perPage)
+      students.value = result.data
+      pagination.value = {
+        page,
+        perPage,
+        total: result.count
+      }
     } catch (e: any) {
       error.value = e.message
     } finally {
@@ -35,10 +47,10 @@ export const useStudentStore = defineStore('student', () => {
     }
   }
 
-  async function addStudent(name: string, grade?: string) {
+  async function addStudent(name: string) {
     loading.value = true
     try {
-      const newStudent = await StudentService.create({ name, grade })
+      const newStudent = await StudentService.create({ name })
       students.value.push(newStudent)
     } catch (e: any) {
       error.value = e.message
@@ -91,6 +103,7 @@ export const useStudentStore = defineStore('student', () => {
     loading,
     error,
     studentCount,
+    pagination,
     fetchAll,
     loadStudent,
     addStudent,

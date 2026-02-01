@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue' // Added watch
 import { CourseService } from '@/services/CourseService'
 import { Course, Lesson, type CourseDTO, type LessonDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
+import Pagination from '@/components/common/Pagination.vue'
 
 const { t } = useI18n()
 const courses = ref<Course[]>([])
 const loading = ref(true)
 const iscreateModalOpen = ref(false)
-const editingCourse = ref<Course | null>(null) // If creating, this is null. If editing, this is populated.
+const editingCourse = ref<Course | null>(null)
 
 // Form for new/edit course
 const courseForm = ref<Partial<CourseDTO>>({
@@ -16,6 +17,10 @@ const courseForm = ref<Partial<CourseDTO>>({
   stage: '',
   description: ''
 })
+
+const pagination = ref({ page: 1, perPage: 12, total: 0 })
+
+// ... (existing form and state)
 
 // Expanded state for courses to show lessons
 const expandedCourseIds = ref<Set<string>>(new Set())
@@ -46,13 +51,20 @@ onMounted(async () => {
 async function fetchCourses() {
   try {
     loading.value = true
-    courses.value = await CourseService.getCourses()
+    const res = await CourseService.getCourses(pagination.value.page, pagination.value.perPage)
+    courses.value = res.data
+    pagination.value.total = res.count
   } catch (e) {
     console.error(e)
   } finally {
     loading.value = false
   }
 }
+
+watch(() => pagination.value.page, fetchCourses)
+watch(() => pagination.value.perPage, () => { pagination.value.page = 1; fetchCourses() })
+
+// ... (rest of functions)
 
 function openCreateModal() {
   courseForm.value = { subject: '', stage: '', description: '' }
@@ -76,34 +88,61 @@ async function saveCourse() {
   }
 }
 
-// Lesson Management (Inline for now)
-const newLessonTitle = ref('')
+// Lesson Management
+const editingLessonId = ref<string | null>(null)
+const lessonForm = ref({
+    title: '',
+    sequence: 1
+})
 const addingLessonToCourseId = ref<string | null>(null)
 
-function startAddLesson(courseId: string) {
-  addingLessonToCourseId.value = courseId
-  newLessonTitle.value = ''
+function startAddLesson(course: Course) {
+  addingLessonToCourseId.value = course.id!
+  lessonForm.value = {
+      title: '',
+      sequence: course.lessons.length + 1
+  }
 }
 
-async function saveLesson(course: Course) {
-  if (!newLessonTitle.value.trim() || !course.id) return
+function editLesson(lesson: Lesson) {
+    editingLessonId.value = lesson.id!
+    lessonForm.value = {
+        title: lesson.title,
+        sequence: lesson.sequence
+    }
+}
+
+async function saveLesson(courseId: string) {
+  if (!lessonForm.value.title.trim()) return
   
   try {
-    const nextSeq = course.lessons.length + 1
-    await CourseService.createLesson({
-      course_id: course.id,
-      title: newLessonTitle.value,
-      sequence: nextSeq
-    })
+    if (editingLessonId.value) {
+        // Update
+        await CourseService.updateLesson(editingLessonId.value, {
+            title: lessonForm.value.title,
+            sequence: lessonForm.value.sequence
+        })
+        editingLessonId.value = null
+    } else {
+        // Create
+        await CourseService.createLesson({
+            course_id: courseId,
+            title: lessonForm.value.title,
+            sequence: lessonForm.value.sequence
+        })
+        addingLessonToCourseId.value = null
+    }
     
-    // Refresh just this course? Or all? For simplicity, fetch all.
-    // Or simpler: manually add to local state if we trust it.
-    // Let's refetch to be safe.
     await fetchCourses()
-    addingLessonToCourseId.value = null
   } catch (e) {
     console.error(e)
+    alert('Error saving lesson: ' + e)
   }
+}
+
+function cancelLessonEdit() {
+    editingLessonId.value = null
+    addingLessonToCourseId.value = null
 }
 
 async function deleteCourse(id: string) {
@@ -179,31 +218,53 @@ async function deleteLesson(id: string) {
                 <div v-if="expandedCourseIds.has(course.id!)" class="space-y-2 mt-3">
                     <ul class="space-y-1">
                         <li v-for="lesson in course.lessons" :key="lesson.id" class="flex items-center justify-between group p-2 rounded hover:bg-gray-50 text-sm">
-                            <span class="text-gray-700 font-medium">
-                                <span class="text-gray-400 mr-2">#{{ lesson.sequence }}</span>
-                                {{ lesson.title }}
-                            </span>
-                            <button @click="deleteLesson(lesson.id!)" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">
-                                &times;
-                            </button>
+                            <!-- Helper: Is Editing? -->
+                            <div v-if="editingLessonId === lesson.id" class="flex-1 flex gap-2 items-center">
+                                <input v-model.number="lessonForm.sequence" type="number" class="w-12 text-center border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs">
+                                <input v-model="lessonForm.title" class="flex-1 border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs" @keyup.enter="saveLesson(course.id!)">
+                                <button @click="saveLesson(course.id!)" class="text-emerald-600 font-bold text-xs">Save</button>
+                                <button @click="cancelLessonEdit" class="text-gray-400 text-xs">Cancel</button>
+                            </div>
+
+                            <!-- Display Mode -->
+                            <div v-else class="flex-1 flex items-center justify-between">
+                                <span class="text-gray-700 font-medium">
+                                    <span class="text-gray-400 mr-2">#{{ lesson.sequence }}</span>
+                                    {{ lesson.title }}
+                                </span>
+                                <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition">
+                                    <button @click="editLesson(lesson)" class="text-blue-500 hover:text-blue-700 text-xs">
+                                        {{ $t('common.edit') }}
+                                    </button>
+                                    <button @click="deleteLesson(lesson.id!)" class="text-gray-300 hover:text-red-500">
+                                        &times;
+                                    </button>
+                                </div>
+                            </div>
                         </li>
                     </ul>
 
                     <!-- Add Lesson Input -->
                     <div class="mt-3 pt-2 border-t border-gray-100">
-                        <div v-if="addingLessonToCourseId === course.id" class="flex gap-2">
+                        <div v-if="addingLessonToCourseId === course.id" class="flex gap-2 items-center">
                             <input 
-                                v-model="newLessonTitle" 
-                                placeholder="Lesson Title" 
-                                class="flex-1 text-sm border-gray-300 rounded focus:ring-emerald-500 focus:border-emerald-500"
-                                @keyup.enter="saveLesson(course)"
+                                v-model.number="lessonForm.sequence" 
+                                type="number" 
+                                class="w-12 text-center border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs"
+                                placeholder="#"
                             >
-                            <button @click="saveLesson(course)" class="text-emerald-600 font-bold text-sm">Save</button>
-                            <button @click="addingLessonToCourseId = null" class="text-gray-400 text-sm">Cancel</button>
+                            <input 
+                                v-model="lessonForm.title" 
+                                placeholder="Lesson Title" 
+                                class="flex-1 text-sm border-gray-300 rounded focus:ring-emerald-500 focus:border-emerald-500 py-1"
+                                @keyup.enter="saveLesson(course.id!)"
+                            >
+                            <button @click="saveLesson(course.id!)" class="text-emerald-600 font-bold text-sm">Save</button>
+                            <button @click="cancelLessonEdit" class="text-gray-400 text-sm">Cancel</button>
                         </div>
                         <button 
                             v-else 
-                            @click="startAddLesson(course.id!)"
+                            @click="startAddLesson(course)"
                             class="w-full py-1.5 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded hover:border-emerald-500 hover:text-emerald-600 transition text-center"
                         >
                             + Add Lesson
@@ -218,6 +279,14 @@ async function deleteLesson(id: string) {
       <!-- Empty State -->
       <div v-if="Object.keys(groupedCourses).length === 0" class="text-center py-10 bg-white rounded-xl border border-dashed border-gray-300">
         <p class="text-gray-500">No courses found. Create one to get started.</p>
+      </div>
+
+      <div v-if="pagination.total > 0" class="mt-8">
+        <Pagination 
+            v-model="pagination.page" 
+            v-model:perPage="pagination.perPage" 
+            :totalItems="pagination.total" 
+        />
       </div>
     </div>
 

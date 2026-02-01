@@ -811,7 +811,7 @@ function copyToClipboard(text: string) {
         <ul class="space-y-3 mb-6">
             <li v-for="enr in enrollments" :key="enr.id" class="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow">
                <div>
-                   <div class="font-bold text-gray-800">{{ enr.courseSubject }} <span class="text-gray-500 font-normal text-sm">- {{ enr.courseStage }}</span></div>
+                   <div class="font-bold text-gray-800">{{ enr.courseSubject }}<span class="text-gray-500 font-normal text-sm">_{{ enr.courseStage }}</span></div>
                    <div class="text-xs text-gray-500 flex items-center gap-2 mt-1">
                        <span v-if="enr.classroomName" class="px-2 py-0.5 bg-gray-100 rounded text-gray-600">{{ enr.classroomName }}</span>
                        <span class="capitalize" :class="{'text-emerald-600': enr.status === 'active', 'text-gray-400': enr.status !== 'active'}">
@@ -846,7 +846,7 @@ function copyToClipboard(text: string) {
                     <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('internal_courses.course') }}</label>
                     <select v-model="newEnrollment.course_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                         <option v-for="c in availableCourses" :key="c.id" :value="c.id">
-                            {{ c.subject }} - {{ c.stage }}
+                            {{ c.subject }}_{{ c.stage }}
                         </option>
                     </select>
                 </div>

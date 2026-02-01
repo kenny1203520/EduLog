@@ -21,12 +21,16 @@ export class Lesson {
   courseId: string
   title: string
   sequence: number
+  created_at?: string
+  updated_at?: string
 
   constructor(data: LessonDTO) {
     this.id = data.id
     this.courseId = data.course_id
     this.title = data.title
     this.sequence = data.sequence
+    this.created_at = data.created_at
+    this.updated_at = data.updated_at
   }
 }
 
@@ -35,6 +39,8 @@ export class Course {
   subject: string
   stage: string
   description?: string
+  created_at?: string
+  updated_at?: string
   lessons: Lesson[] = []
 
   constructor(data: CourseDTO) {
@@ -42,6 +48,8 @@ export class Course {
     this.subject = data.subject
     this.stage = data.stage
     this.description = data.description
+    this.created_at = data.created_at
+    this.updated_at = data.updated_at
   }
 
   get displayName(): string {

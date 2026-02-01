@@ -15,7 +15,7 @@ const debounce = (fn: Function, ms = 1000) => {
 }
 
 const route = useRoute()
-const enrollmentId = route.params.enrollmentId as string
+const enrollmentId = (Array.isArray(route.params.enrollmentId) ? route.params.enrollmentId[0] : route.params.enrollmentId) as string
 
 const loading = ref(true)
 const currentEnrollment = ref<Enrollment | null>(null)
@@ -46,7 +46,7 @@ async function loadData() {
         course.value = allCourses.find(c => c.id === cId) || null
         
         if (course.value && course.value.lessons.length > 0) {
-            selectLesson(course.value.lessons[0].id!)
+            selectLesson(course.value!.lessons[0].id!)
         }
     } catch (e) {
         console.error(e)

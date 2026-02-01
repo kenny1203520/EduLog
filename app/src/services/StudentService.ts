@@ -3,17 +3,24 @@ import { Student, type StudentDTO } from '@/models/Student'
 
 export class StudentService {
   /**
-   * Fetch all students ordered by name
+   * Fetch all students ordered by name with pagination
    */
-  static async getAll(): Promise<Student[]> {
-    const { data, error } = await supabase
+  static async getAll(page: number = 1, perPage: number = 1000): Promise<{ data: Student[], count: number }> {
+    const from = (page - 1) * perPage
+    const to = from + perPage - 1
+
+    const { data, error, count } = await supabase
       .from('students')
-      .select('*, student_contacts(*), student_schools(*), student_credentials(*)')
+      .select('*, student_contacts(*), student_schools(*), student_credentials(*)', { count: 'exact' })
       .order('name')
+      .range(from, to)
     
     if (error) throw new Error(error.message)
     
-    return (data as any[]).map(dto => new Student(dto))
+    return {
+        data: (data as any[]).map(dto => new Student(dto)),
+        count: count || 0
+    }
   }
 
   /**

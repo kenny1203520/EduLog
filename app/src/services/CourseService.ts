@@ -14,10 +14,17 @@ export interface LessonReportDTO {
 
 export class CourseService {
   // --- Class Sessions ---
-   static async getClassSessions(): Promise<ClassSessionDTO[]> {
-      const { data, error } = await supabase.from('class_sessions').select('*')
+   static async getClassSessions(page: number = 1, perPage: number = 100): Promise<{ data: ClassSessionDTO[], count: number }> {
+      const from = (page - 1) * perPage
+      const to = from + perPage - 1
+
+      const { data, error, count } = await supabase
+        .from('class_sessions')
+        .select('*', { count: 'exact' })
+        .range(from, to)
+
       if (error) throw new Error(error.message)
-      return data as ClassSessionDTO[]
+      return { data: data as ClassSessionDTO[], count: count || 0 }
    }
 
    static async createClassSession(session: Partial<ClassSessionDTO>): Promise<ClassSessionDTO> {
@@ -107,19 +114,23 @@ export class CourseService {
   }
 
   // --- Courses ---
-  static async getCourses(): Promise<Course[]> {
-    const { data, error } = await supabase
+  static async getCourses(page: number = 1, perPage: number = 100): Promise<{ data: Course[], count: number }> {
+    const from = (page - 1) * perPage
+    const to = from + perPage - 1
+
+    const { data, error, count } = await supabase
       .from('courses')
       .select(`
         *,
         lessons (*)
-      `)
+      `, { count: 'exact' })
       .order('subject', { ascending: true })
       .order('stage', { ascending: true })
+      .range(from, to)
 
     if (error) throw new Error(error.message)
 
-    return data.map((d: any) => {
+    const courses = data.map((d: any) => {
       const course = new Course(d)
       if (d.lessons) {
         // Sort lessons by sequence in JS if DB sort is not guaranteed or for safety
@@ -128,6 +139,7 @@ export class CourseService {
       }
       return course
     })
+    return { data: courses, count: count || 0 }
   }
 
   static async createCourse(course: Partial<CourseDTO>): Promise<Course> {
@@ -166,21 +178,26 @@ export class CourseService {
   }
 
   // --- Classrooms ---
-  static async getClassrooms(): Promise<Classroom[]> {
-      const { data, error } = await supabase
+  static async getClassrooms(page: number = 1, perPage: number = 100): Promise<{ data: Classroom[], count: number }> {
+      const from = (page - 1) * perPage
+      const to = from + perPage - 1
+
+      const { data, error, count } = await supabase
         .from('classrooms')
-        .select(`*, classroom_schedules (*)`)
+        .select(`*, classroom_schedules (*)`, { count: 'exact' })
         .order('name')
+        .range(from, to)
       
       if (error) throw new Error(error.message)
       
-      return data.map((d: any) => {
+      const classrooms = data.map((d: any) => {
           const c = new Classroom(d)
           if (d.classroom_schedules) {
               d.classroom_schedules.forEach((s: ClassroomScheduleDTO) => c.addSchedule(s))
           }
           return c
       })
+      return { data: classrooms, count: count || 0 }
   }
 
   static async createClassroom(classroom: Partial<ClassroomDTO>): Promise<Classroom> {
