@@ -14,14 +14,20 @@ export interface LessonReportDTO {
 
 export class CourseService {
   // --- Class Sessions ---
-   static async getClassSessions(page: number = 1, perPage: number = 100): Promise<{ data: ClassSessionDTO[], count: number }> {
+   static async getClassSessions(page: number = 1, perPage: number = 100, search?: string): Promise<{ data: ClassSessionDTO[], count: number }> {
       const from = (page - 1) * perPage
       const to = from + perPage - 1
 
-      const { data, error, count } = await supabase
+      let query = supabase
         .from('class_sessions')
         .select('*', { count: 'exact' })
-        .order('lesson_number', { ascending: true, nullsFirst: false })
+      
+      if (search) {
+          query = query.ilike('name', `%${search}%`)
+      }
+
+      const { data, error, count } = await query
+        .order('name', { ascending: true }) // Order by name for consistency
         .range(from, to)
 
       if (error) throw new Error(error.message)

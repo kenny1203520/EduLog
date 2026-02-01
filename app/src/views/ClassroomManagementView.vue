@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { CourseService } from '@/services/CourseService'
+import { OccurrenceService } from '@/services/OccurrenceService'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
@@ -75,9 +76,7 @@ async function loadRooms() {
 }
 
 async function loadSessions() {
-    const res = await CourseService.getClassSessions(sessionsPagination.value.page, sessionsPagination.value.perPage)
-    // Client-side filtering for sessions since getClassSessions doesn't support search yet
-    // and sessions usually aren't as many as classrooms in a single view
+    const res = await CourseService.getClassSessions(sessionsPagination.value.page, sessionsPagination.value.perPage, searchQuery.value)
     sessions.value = res.data
     sessionsPagination.value.total = res.count
 }
@@ -95,8 +94,10 @@ watch(searchQuery, () => {
     if (activeTab.value === 'rooms') {
         roomsPagination.value.page = 1
         loadRooms()
+    } else if (activeTab.value === 'sessions') {
+        sessionsPagination.value.page = 1
+        loadSessions()
     }
-    // For sessions, we use client-side computed filtering for now as it's more complex (search across room name, course name etc)
 })
 
 // Computed
@@ -147,7 +148,14 @@ async function deleteClassroom(id: string) {
 async function createSession() {
     if (!newSession.value.name) return
     try {
-        await CourseService.createClassSession(newSession.value)
+        const session = await CourseService.createClassSession(newSession.value)
+        
+        // Automatically generate occurrences for the next 3 months
+        const startDate = new Date()
+        const endDate = new Date()
+        endDate.setMonth(endDate.getMonth() + 3)
+        await OccurrenceService.generateOccurrences(session.id!, startDate, endDate)
+        
         await loadSessions()
         isCreateSessionModalOpen.value = false
         newSession.value = {

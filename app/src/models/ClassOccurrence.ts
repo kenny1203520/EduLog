@@ -72,8 +72,8 @@ export class ClassOccurrence {
     /**
      * Formats date as YYYY-MM-DD
      */
-    private formatDate(date: Date): string {
-        return date.toISOString().split('T')[0]
+    formatDate(date: Date): string {
+        return date.toISOString().split('T')[0] || ''
     }
 
     /**

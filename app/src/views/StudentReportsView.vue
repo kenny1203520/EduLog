@@ -2,19 +2,30 @@
   <div class="student-reports-view p-6 max-w-7xl mx-auto">
     <h1 class="text-2xl font-bold text-gray-900 mb-6">Class Reports</h1>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div v-if="loading" class="flex flex-col items-center justify-center py-20 text-gray-500">
+      <svg class="animate-spin h-10 w-10 mb-4" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+      </svg>
+      <p>Loading reports and calendar...</p>
+    </div>
+
+    <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Calendar Section -->
       <div class="lg:col-span-1">
         <OccurrenceCalendar 
           :occurrences="occurrences"
           @select-occurrence="selectOccurrence"
         />
+        <div v-if="occurrences.length === 0" class="mt-4 p-4 bg-amber-50 rounded-lg text-amber-700 text-sm border border-amber-200">
+          No occurrences found for this session. Reports cannot be created until occurrences are generated.
+        </div>
       </div>
 
       <!-- Editor Section -->
       <div class="lg:col-span-2">
         <div v-if="selectedOccurrence && selectedReport">
-          <!-- Occurrence Info Card -->
+          <!-- Occurrence Info Card ... (existing card) -->
           <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 mb-4 border border-blue-200">
             <h2 class="font-semibold text-gray-900 mb-2">
               {{ selectedOccurrence.displayString }}
@@ -41,12 +52,16 @@
         </div>
 
         <!-- Empty State -->
-        <div v-else class="bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 p-12 text-center">
-          <svg class="w-16 h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div v-else class="bg-gray-50 rounded-lg border-2 border-dashed border-gray-300 p-12 text-center h-full flex flex-col items-center justify-center">
+          <svg class="w-16 h-16 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
           </svg>
-          <h3 class="text-lg font-medium text-gray-900 mb-2">No Occurrence Selected</h3>
-          <p class="text-gray-600">Select a class occurrence from the calendar to view or edit its report.</p>
+          <h3 class="text-lg font-medium text-gray-900 mb-2">
+            {{ occurrences.length > 0 ? 'No Occurrence Selected' : 'No Reports Available' }}
+          </h3>
+          <p class="text-gray-600">
+            {{ occurrences.length > 0 ? 'Select a class occurrence from the calendar to view or edit its report.' : 'This session has no scheduled occurrences yet.' }}
+          </p>
         </div>
       </div>
     </div>
@@ -81,12 +96,13 @@ import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { CourseService } from '@/services/CourseService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 
 const route = useRoute()
 
-// State
+const loading = ref(true)
 const occurrences = ref<ClassOccurrence[]>([])
 const selectedOccurrence = ref<ClassOccurrence | null>(null)
 const selectedReport = ref<OccurrenceReport | null>(null)
@@ -103,18 +119,35 @@ onMounted(async () => {
 // Methods
 async function loadOccurrences() {
   try {
+    loading.value = true
     const enrollmentId = route.params.enrollmentId as string
     if (!enrollmentId) return
 
-    // Load occurrences for the next 3 months
-    const startDate = new Date()
-    const endDate = new Date()
-    endDate.setMonth(endDate.getMonth() + 3)
+    // Fetch enrollment to get session ID
+    const enrollment = await CourseService.getEnrollmentById(enrollmentId)
+    if (!enrollment || !enrollment.classSessionId) {
+      console.warn('Enrollment not found or no class session assigned')
+      loading.value = false
+      return
+    }
 
-    const data = await OccurrenceService.getOccurrencesByDateRange(startDate, endDate)
+    // Load occurrences: 4 weeks ago to 8 weeks ahead
+    const startDate = new Date()
+    startDate.setDate(startDate.getDate() - 28) // 4 weeks ago
+    
+    const endDate = new Date()
+    endDate.setDate(endDate.getDate() + 56) // 8 weeks forward
+
+    const data = await OccurrenceService.getOccurrencesByDateRange(
+      startDate, 
+      endDate, 
+      [enrollment.classSessionId]
+    )
     occurrences.value = data
   } catch (error) {
     console.error('Failed to load occurrences:', error)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -162,7 +195,7 @@ function closeConflictModal() {
   showConflictModal.value = false
 }
 
-async function resolveConflict(resolvedContent: string, strategy: string) {
+async function resolveConflict(resolvedContent: string) {
   if (!selectedReport.value) return
 
   try {
