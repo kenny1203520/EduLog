@@ -983,11 +983,11 @@ function copyToClipboard(text: string) {
                               </svg>
                               {{ enr.classroomName }}
                            </span>
-                           <span v-if="enr.classSessionName" class="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 rounded-lg border border-purple-200 text-purple-700">
+                           <span v-if="enr.classSessionName && enr.formattedSchedule" class="flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 rounded-lg border border-purple-200 text-purple-700">
                               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
-                              {{ enr.classSessionName }}
+                              {{ enr.classSessionName }} {{ enr.formattedSchedule }}
                            </span>
                            <span v-if="enr.lessonNumber" class="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-200 text-blue-700">
                               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
