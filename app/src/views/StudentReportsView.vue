@@ -101,9 +101,24 @@
                     <!-- Middle: Content -->
                     <div class="flex-1 space-y-3">
                         <div class="flex items-center justify-between">
-                            <h3 class="font-bold text-gray-900">
-                                {{ $t('report.lesson_label') }}: {{ displayReport.lessonTitle || '-' }}
-                            </h3>
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-bold text-gray-900 flex items-center gap-2">
+                                    {{ $t('report.lesson_label') }}: {{ displayReport.lessonTitle || '-' }}
+                                    <span v-if="displayReport.isCompleted" class="text-emerald-500"
+                                        :title="$t('report.completed')">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                            fill="currentColor">
+                                            <path fill-rule="evenodd"
+                                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                                clip-rule="evenodd" />
+                                        </svg>
+                                    </span>
+                                </h3>
+                                <span v-if="displayReport.progressDisplay"
+                                    class="text-xs font-mono bg-gray-100 px-2 py-0.5 rounded text-gray-600">
+                                    {{ displayReport.progressDisplay }}
+                                </span>
+                            </div>
                             <div class="text-xs text-gray-400 font-mono">Ver: {{ displayReport.version }}</div>
                         </div>
 
@@ -116,8 +131,16 @@
                         <!-- Notes Summary -->
                         <div v-if="displayReport.classNotes"
                             class="text-xs text-gray-500 italic bg-amber-50 p-2 rounded border border-amber-100">
-                            <span class="font-semibold text-amber-700">{{ $t('student.notes') }}:</span> {{
+                            <span class="font-bold text-amber-700 not-italic">{{ $t('student.notes') }}:</span> {{
                                 displayReport.classNotes }}
+                        </div>
+
+                        <!-- Contact Notes Summary -->
+                        <div v-if="displayReport.contactNotes"
+                            class="text-xs text-gray-500 italic bg-blue-50 p-2 rounded border border-blue-100">
+                            <span class="font-bold text-blue-700 not-italic">{{ $t('report.contact_notes') ||
+                                $t('report.contact_book') || 'Contact' }}:</span> {{
+                                    displayReport.contactNotes }}
                         </div>
                     </div>
 
@@ -399,7 +422,12 @@ const allReportDisplay = computed(() => {
                 version: r.version,
                 lessonTitle: lesson ? `${lesson.sequence ? `Lesson ${lesson.sequence}` : ''} ${lesson.title || ''}` : '',
                 classParticipation: r.class_participation,
-                classroomBehavior: r.classroom_behavior
+                classroomBehavior: r.classroom_behavior,
+                isCompleted: r.is_completed,
+                contactNotes: r.contact_notes,
+                progressDisplay: r.progress_letter
+                    ? `Progress: ${r.progress_letter}`
+                    : (r.progress_start ? `Progress: ${r.progress_start}${r.progress_end ? `-${r.progress_end}` : ''}` : '')
             }
         } else {
             // Check suspension status
@@ -425,7 +453,10 @@ const allReportDisplay = computed(() => {
                 version: 0,
                 lessonTitle: '-',
                 classParticipation: 0,
-                classroomBehavior: 0
+                classroomBehavior: 0,
+                isCompleted: false,
+                contactNotes: '',
+                progressDisplay: ''
             }
         }
     })
@@ -583,6 +614,13 @@ async function loadOccurrences() {
                 endDate,
                 [enrollment.classSessionId]
             )
+
+            // Filter by Enrollment Start Date (if exists)
+            if (enrollment.startDate) {
+                // Use formatted date for reliable string comparison
+                // occ.occurrenceDate is a Date object, enrollment.startDate is YYYY-MM-DD string
+                futureOccurrences = futureOccurrences.filter(o => o.formatDate(o.occurrenceDate) >= (enrollment.startDate as string))
+            }
         }
 
         // Load Suspensions
