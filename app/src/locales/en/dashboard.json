@@ -15,7 +15,8 @@
         "coming_soon": "Coming Soon",
         "today_classes": "Today's Classes",
         "productivity": "Productivity",
-        "ready": "Ready"
+        "ready": "Ready",
+        "active_students": "Active Students"
     },
     "schedule": {
         "title": "Today's Schedule",
