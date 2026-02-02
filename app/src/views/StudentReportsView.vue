@@ -97,7 +97,8 @@
                         <!-- Notes Summary -->
                         <div v-if="displayReport.classNotes"
                             class="text-xs text-gray-500 italic bg-amber-50 p-2 rounded border border-amber-100">
-                            <span class="font-semibold text-amber-700">Notes:</span> {{ displayReport.classNotes }}
+                            <span class="font-semibold text-amber-700">{{ $t('student.notes') }}:</span> {{
+                                displayReport.classNotes }}
                         </div>
                     </div>
 
@@ -186,7 +187,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
-                            {{ selectedOccurrence.displayString }}
+                            {{ formatOccurrenceDateTime(selectedOccurrence) }}
                         </h2>
                         <div class="text-sm text-gray-600 grid grid-cols-2 gap-4">
                             <div v-if="selectedOccurrence.classroomName" class="bg-white/50 p-2 rounded-lg">
@@ -230,9 +231,9 @@
                     <!-- Report Editor -->
                     <ReportEditor :report-id="selectedReport.id" :initial-content="selectedReport.content"
                         :initial-version="selectedReport.version" :loading="reportLoading"
-                        :title="`Report for ${selectedOccurrence.displayString}`" :show-manual-save="true"
-                        :available-lessons="courseLessons" :initial-lesson-id="selectedReport.lessonId"
-                        :initial-is-completed="selectedReport.isCompleted"
+                        :title="$t('report.report_for_date', { date: formatOccurrenceDateTime(selectedOccurrence) })"
+                        :show-manual-save="true" :available-lessons="courseLessons"
+                        :initial-lesson-id="selectedReport.lessonId" :initial-is-completed="selectedReport.isCompleted"
                         :initial-attendance-status="selectedReport.attendanceStatus"
                         :initial-absence-reason="selectedReport.absenceReason"
                         :initial-class-participation="selectedReport.classParticipation"
@@ -376,6 +377,14 @@ function formatWeekday(dateStr: string) {
 
 function formatDate(dateStr: string) {
     return new Date(dateStr).toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
+}
+
+function formatOccurrenceDateTime(occ: ClassOccurrence) {
+    // We construct a date object for the occurrence
+    // Note: d() usage depends on i18n setup, but toLocaleDateString is safer if d() isn't configured with 'short'
+    const date = new Date(occ.occurrenceDate).toLocaleDateString(locale.value)
+    const time = occ.effectiveStartTime ? occ.effectiveStartTime.slice(0, 5) : ''
+    return `${date} ${time}`.trim()
 }
 
 function getStatusColor(status: string) {

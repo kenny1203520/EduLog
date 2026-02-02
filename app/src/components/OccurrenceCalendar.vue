@@ -75,6 +75,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 
 interface CalendarDay {
@@ -97,19 +98,32 @@ const emit = defineEmits<{
     'select-occurrence': [occurrence: ClassOccurrence]
 }>()
 
+const { locale } = useI18n()
+
 // State
 const currentDate = ref(new Date())
 const selectedDay = ref<CalendarDay | null>(null)
 
 // Computed
 const currentMonthYear = computed(() => {
-    return currentDate.value.toLocaleDateString('en-US', {
+    return currentDate.value.toLocaleDateString(locale.value, {
         month: 'long',
         year: 'numeric'
     })
 })
 
-const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const dayHeaders = computed(() => {
+    const headers = []
+    const formatter = new Intl.DateTimeFormat(locale.value, { weekday: 'short' })
+    // Jan 1, 2023 was a Sunday
+    const startDay = new Date(2023, 0, 1)
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(startDay)
+        date.setDate(startDay.getDate() + i)
+        headers.push(formatter.format(date))
+    }
+    return headers
+})
 
 const calendarDays = computed<CalendarDay[]>(() => {
     const year = currentDate.value.getFullYear()
@@ -255,7 +269,7 @@ function getOccurrenceStatusBadgeClass(status: string) {
 }
 
 function formatSelectedDate(date: Date): string {
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(locale.value, {
         weekday: 'long',
         year: 'numeric',
         month: 'long',

@@ -17,6 +17,7 @@
     "no_reports_available_desc": "There are no class records for this session.",
     "save_success": "Report saved successfully",
     "select_course_to_view": "Select a course to view its learning reports",
+    "report_for_date": "Report for {date}",
     "lesson_label": "Lesson",
     "learning_content": "Learning Content",
     "participation": "Participation",
