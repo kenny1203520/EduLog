@@ -46,8 +46,17 @@ onMounted(async () => {
                 // 4. Load/Create Reports for all enrollments for today
                 for (const enr of enrollments.value) {
                     if (enr.id) {
-                        const report = await OccurrenceReportService.getOrCreateReport(enr.id, todayOccurrence.value.id)
-                        reportMap.value.set(enr.id, report)
+                        // Only generate/fetch reports for active students
+                        if (enr.status === 'active') {
+                            const report = await OccurrenceReportService.getOrCreateReport(enr.id, todayOccurrence.value.id)
+                            reportMap.value.set(enr.id, report)
+                        } else {
+                            // Valid logic: Should we load EXISTING reports for completed students?
+                            // getOrCreateReport will CREATE if missing.
+                            // If we want to view *past* reports, we usually look at past occurrences.
+                            // This is *today's* occurrence. A completed student shouldn't have a report for today.
+                            // So skipping is correct.
+                        }
                     }
                 }
             }

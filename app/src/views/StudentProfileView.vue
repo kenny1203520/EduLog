@@ -36,6 +36,7 @@ const emailError = computed(() => emailTouched.value ? getEmailError(form.value.
 // UI State
 const isSaving = ref(false)
 const isEditingMainDetails = ref(false)
+const showGovId = ref(false)
 
 function toggleEditMainDetails() {
   if (isEditingMainDetails.value) {
@@ -300,6 +301,64 @@ async function removeEnrollment(id: string) {
         alert(e)
     }
 }
+
+watch(isEditingMainDetails, (val) => {
+    if (val) {
+        showGovId.value = true
+    }
+})
+
+// --- Transfer Class ---
+const isTransferModalOpen = ref(false)
+const transferEnrollment = ref<Enrollment | null>(null)
+const transferTargetSessionId = ref('')
+const transferDate = ref(new Date().toISOString().split('T')[0])
+const itemTransferSessions = ref<ClassSessionDTO[]>([])
+
+const selectedTargetSession = computed(() => 
+    itemTransferSessions.value.find(s => s.id === transferTargetSessionId.value)
+)
+
+async function openTransferModal(enr: Enrollment) {
+    transferEnrollment.value = enr
+    transferTargetSessionId.value = ''
+    transferDate.value = new Date().toISOString().split('T')[0]
+    isTransferModalOpen.value = true
+    
+    // Fetch sessions for this course
+    try {
+        const { data } = await CourseService.getClassSessions(1, 1000)
+        // Filter for same course but different session
+        itemTransferSessions.value = data.filter(s => 
+            s.course_ids.includes(enr.courseId) && 
+            s.id !== enr.classSessionId
+        )
+    } catch(e) {
+        console.error(e)
+        alert('Failed to load available sessions')
+    }
+}
+
+async function submitTransfer() {
+    if (!transferEnrollment.value || !transferTargetSessionId.value || !transferDate.value) return
+    
+    if (!confirm(t('common.confirm_save'))) return
+    
+    try {
+        await EnrollmentService.transferClass(
+            transferEnrollment.value.id!,
+            transferTargetSessionId.value,
+            transferDate.value
+        )
+        await fetchEnrollments()
+        isTransferModalOpen.value = false
+        showToast(t('common.success'))
+    } catch(e: any) {
+        console.error(e)
+        alert(e.message || 'Transfer failed')
+    }
+}
+
 async function deleteContact(id: string) {
   if (!confirm(t('student.contacts.confirm_delete'))) return
   await StudentService.deleteContact(id)
@@ -564,9 +623,23 @@ function copyToClipboard(text: string) {
         </div>
         
         <div class="space-y-1.5">
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.gov_id') }}</label>
-          <input v-if="isEditingMainDetails" v-model="form.gov_id" type="text" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
-          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono">{{ form.gov_id || '-' }}</div>
+          <div class="flex items-center gap-2 mb-1.5">
+            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.gov_id') }}</label>
+            <button @click.stop="showGovId = !showGovId" class="text-gray-400 hover:text-gray-600 focus:outline-none" :title="showGovId ? 'Hide' : 'Show'" type="button">
+              <svg v-if="showGovId" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+              </svg>
+              <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+              </svg>
+            </button>
+          </div>
+          <input v-if="isEditingMainDetails" v-model="form.gov_id" :type="showGovId ? 'text' : 'password'" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+          <div v-else class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono flex items-center">
+             <span v-if="showGovId">{{ form.gov_id || '-' }}</span>
+             <span v-else>{{ form.gov_id ? '•'.repeat(Math.min(form.gov_id.length, 10)) : '-' }}</span>
+          </div>
         </div>
 
         <div class="space-y-1.5">
@@ -998,6 +1071,15 @@ function copyToClipboard(text: string) {
                         </div>
                      </div>
                      <div class="flex items-center gap-2">
+                         <button 
+                            @click="openTransferModal(enr)" 
+                            class="p-2.5 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-600 hover:text-white transition-all shadow-sm hover:shadow-md"
+                            :title="$t('student.internal_courses.transfer_btn')"
+                         >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                         </button>
                         <router-link 
                            :to="{ name: 'lesson-reports', params: { enrollmentId: enr.id } }" 
                            class="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md"
@@ -1387,6 +1469,77 @@ function copyToClipboard(text: string) {
       </div>
       <span class="font-bold tracking-wide">{{ toastMessage }}</span>
     </div>
+  </div>
+
+  <!-- Transfer Class Modal -->
+  <div v-if="isTransferModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+              <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  {{ $t('student.internal_courses.transfer_title') }}
+              </h3>
+              <button @click="isTransferModalOpen = false" class="text-gray-400 hover:text-gray-600 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+              </button>
+          </div>
+          
+          <div class="p-6 space-y-4">
+              <!-- Comparison Grid -->
+              <div v-if="transferEnrollment" class="grid grid-cols-2 gap-4">
+                  <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <label class="text-[10px] text-gray-500 font-bold uppercase block mb-1.5">{{ $t('student.internal_courses.transfer_from') }}</label>
+                    <div class="font-bold text-gray-800 text-sm mb-0.5">{{ transferEnrollment.formattedSchedule || '-' }}</div>
+                    <div class="text-xs text-gray-500">{{ transferEnrollment.classSessionName || '-' }}</div>
+                  </div>
+                  
+                  <div class="p-3 bg-orange-50 rounded-lg border border-orange-100">
+                    <label class="text-[10px] text-orange-500 font-bold uppercase block mb-1.5">{{ $t('student.internal_courses.transfer_target') }}</label>
+                    <template v-if="selectedTargetSession">
+                         <div class="font-bold text-gray-800 text-sm mb-0.5">
+                             {{ ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][selectedTargetSession.day_of_week] }} 
+                             {{ selectedTargetSession.start_time?.slice(0,5) }}
+                         </div>
+                         <div class="text-xs text-gray-500">{{ selectedTargetSession.name }}</div>
+                    </template>
+                    <div v-else class="text-gray-400 italic text-xs py-1">{{ $t('student.internal_courses.session_select_placeholder') }}</div>
+                  </div>
+              </div>
+
+              <div class="space-y-1.5">
+                  <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.internal_courses.transfer_target') }}</label>
+                  <select v-model="transferTargetSessionId" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+                      <option value="" disabled>{{ $t('student.internal_courses.session_select_placeholder') }}</option>
+                      <option v-for="s in itemTransferSessions" :key="s.id" :value="s.id">
+                          {{ s.name }} ({{ s.day_of_week !== undefined ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
+                      </option>
+                  </select>
+              </div>
+
+              <div class="space-y-1.5">
+                  <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.internal_courses.transfer_date') }}</label>
+                  <input v-model="transferDate" type="date" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+                  <p class="text-xs text-gray-500">{{ $t('student.internal_courses.transfer_hint') }}</p>
+              </div>
+          </div>
+
+          <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
+              <button @click="isTransferModalOpen = false" class="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-200 font-medium transition-colors">
+                  {{ $t('student.cancel') }}
+              </button>
+              <button 
+                  @click="submitTransfer" 
+                  :disabled="!transferTargetSessionId || !transferDate"
+                  class="px-4 py-2 rounded-xl bg-orange-500 text-white hover:bg-orange-600 font-medium shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                  {{ $t('student.internal_courses.transfer_confirm') }}
+              </button>
+          </div>
+      </div>
   </div>
 </template>
 
