@@ -16,6 +16,31 @@
             </h1>
         </div>
 
+        <div class="flex justify-end mb-4 bg-gray-100 p-1 rounded-lg inline-flex self-end">
+            <button @click="viewMode = 'calendar'" class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                :class="viewMode === 'calendar' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    {{ $t('common.calendar') || 'Calendar' }}
+                </div>
+            </button>
+            <button @click="switchToListView" class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                :class="viewMode === 'list' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    {{ $t('common.list') || 'List' }}
+                </div>
+            </button>
+        </div>
+
         <div v-if="loading"
             class="flex flex-col items-center justify-center py-20 text-gray-500 bg-white rounded-2xl shadow-sm border border-gray-100">
             <svg class="animate-spin h-10 w-10 mb-4 text-emerald-500" fill="none" viewBox="0 0 24 24">
@@ -26,7 +51,84 @@
             <p class="font-medium">{{ $t('report.loading_full') }}</p>
         </div>
 
-        <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- LIST VIEW -->
+        <div v-else-if="viewMode === 'list'"
+            class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+            <div v-if="listLoading" class="p-12 flex justify-center">
+                <svg class="animate-spin h-8 w-8 text-emerald-500" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                    <path class="opacity-75" fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+            </div>
+            <div v-else-if="allReports.length === 0" class="p-12 text-center text-gray-500">
+                No reports found.
+            </div>
+            <div v-else class="divide-y divide-gray-100">
+                <div v-for="displayReport in allReportDisplay" :key="displayReport.id"
+                    class="p-6 hover:bg-gray-50 flex gap-6 cursor-pointer group"
+                    @click="handleListRowClick(displayReport)">
+
+                    <!-- Left: Date -->
+                    <div class="w-24 shrink-0 flex flex-col items-center">
+                        <div class="text-sm font-bold text-gray-900">{{ formatDate(displayReport.date) }}</div>
+                        <div class="text-xs text-gray-500 uppercase mt-1">{{ formatWeekday(displayReport.date) }}</div>
+                        <div class="mt-2 px-2 py-1 rounded text-xs font-medium"
+                            :class="getStatusColor(displayReport.status)">
+                            {{ $t(`student.attendance.${displayReport.status}`) }}
+                        </div>
+                    </div>
+
+                    <!-- Middle: Content -->
+                    <div class="flex-1 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-gray-900">
+                                {{ $t('report.lesson_label') }}: {{ displayReport.lessonTitle || '-' }}
+                            </h3>
+                            <div class="text-xs text-gray-400 font-mono">Ver: {{ displayReport.version }}</div>
+                        </div>
+
+                        <!-- Main Content Summary -->
+                        <div class="text-sm text-gray-600 line-clamp-3">
+                            <span class="font-semibold text-gray-700">{{ $t('report.learning_content') }}:</span>
+                            {{ displayReport.content || $t('common.none') }}
+                        </div>
+
+                        <!-- Notes Summary -->
+                        <div v-if="displayReport.classNotes"
+                            class="text-xs text-gray-500 italic bg-amber-50 p-2 rounded border border-amber-100">
+                            <span class="font-semibold text-amber-700">Notes:</span> {{ displayReport.classNotes }}
+                        </div>
+                    </div>
+
+                    <!-- Right: Ratings -->
+                    <div class="w-48 shrink-0 border-l pl-6 space-y-4 flex flex-col justify-center">
+                        <div v-if="displayReport.classParticipation">
+                            <div class="text-xs text-gray-500 mb-1 flex justify-between">
+                                <span>{{ $t('report.participation') }}</span>
+                                <span class="font-bold text-gray-900">{{ displayReport.classParticipation }}</span>
+                            </div>
+                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-emerald-500"
+                                    :style="{ width: (displayReport.classParticipation * 20) + '%' }"></div>
+                            </div>
+                        </div>
+                        <div v-if="displayReport.classroomBehavior">
+                            <div class="text-xs text-gray-500 mb-1 flex justify-between">
+                                <span>{{ $t('report.behavior') }}</span>
+                                <span class="font-bold text-gray-900">{{ displayReport.classroomBehavior }}</span>
+                            </div>
+                            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-indigo-500"
+                                    :style="{ width: (displayReport.classroomBehavior * 20) + '%' }"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-else-if="viewMode === 'calendar'" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Calendar Section -->
             <div class="lg:col-span-1">
                 <OccurrenceCalendar :occurrences="occurrences" @select-occurrence="selectOccurrence" />
@@ -168,6 +270,24 @@
         <ConflictModal :is-open="showConflictModal" :server-content="conflictServerContent"
             :local-content="conflictLocalContent" @close="closeConflictModal" @resolve="resolveConflict" />
 
+        <!-- Update Available Toast -->
+        <div v-if="showUpdateToast"
+            class="fixed bottom-24 right-6 bg-blue-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-slide-up z-[100] border border-blue-500 cursor-pointer hover:bg-blue-700 transition"
+            @click="refreshReport">
+            <div class="bg-white/20 p-1 rounded-full animate-spin-slow">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </div>
+            <div>
+                <p class="font-bold tracking-wide">{{ $t('report.update_available') || 'Update Available' }}</p>
+                <p class="text-xs text-blue-100">
+                    {{ $t('report.update_available_desc') || 'Report updated by another user. Click to refresh.' }}
+                </p>
+            </div>
+        </div>
+
         <!-- Success Toast -->
         <div v-if="showSuccessToast"
             class="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-slide-up z-[100] border border-emerald-500">
@@ -182,8 +302,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { supabase } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/useAuthStore'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
@@ -192,9 +315,12 @@ import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { CourseService } from '@/services/CourseService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 
 const route = useRoute()
 const router = useRouter()
+const { locale } = useI18n()
+const authStore = useAuthStore()
 
 const loading = ref(true)
 const occurrences = ref<ClassOccurrence[]>([])
@@ -205,6 +331,7 @@ const showConflictModal = ref(false)
 const conflictServerContent = ref('')
 const conflictLocalContent = ref('')
 const showSuccessToast = ref(false)
+const showUpdateToast = ref(false) // New toast for updates
 const enrollmentInfo = ref<{
     studentName: string,
     courseDisplay: string,
@@ -213,10 +340,86 @@ const enrollmentInfo = ref<{
     externalLink?: string
 } | null>(null)
 const courseLessons = ref<any[]>([])
+let reportSubscription: RealtimeChannel | null = null
+
+// List View State
+import { computed } from 'vue'
+const viewMode = ref<'calendar' | 'list'>('calendar')
+const listLoading = ref(false)
+const allReports = ref<any[]>([])
+
+const allReportDisplay = computed(() => {
+    const list = allReports.value.map(r => {
+        const occ = r.class_occurrence
+        const lesson = r.lesson
+        return {
+            id: r.id,
+            occurrenceId: r.class_occurrence_id,
+            date: occ.occurrence_date,
+            status: r.attendance_status || 'present',
+            content: r.content,
+            classNotes: r.class_notes,
+            version: r.version,
+            lessonTitle: lesson ? `${lesson.sequence ? `Lesson ${lesson.sequence}` : ''} ${lesson.title || ''}` : '',
+            classParticipation: r.class_participation,
+            classroomBehavior: r.classroom_behavior
+        }
+    })
+
+    // Sort Oldest -> Newest (Ascending)
+    return list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+})
+
+function formatWeekday(dateStr: string) {
+    return new Date(dateStr).toLocaleDateString(locale.value, { weekday: 'short' })
+}
+
+function formatDate(dateStr: string) {
+    return new Date(dateStr).toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
+}
+
+function getStatusColor(status: string) {
+    switch (status) {
+        case 'present': return 'bg-emerald-100 text-emerald-700'
+        case 'absent': return 'bg-rose-100 text-rose-700'
+        case 'late': return 'bg-amber-100 text-amber-700'
+        case 'excused': return 'bg-blue-100 text-blue-700'
+        default: return 'bg-gray-100 text-gray-700'
+    }
+}
+
+async function switchToListView() {
+    viewMode.value = 'list'
+    const enrollmentId = route.params.enrollmentId as string
+    if (!enrollmentId) return
+
+    listLoading.value = true
+    try {
+        allReports.value = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
+    } catch (e) {
+        console.error('Failed to reload reports list', e)
+    } finally {
+        listLoading.value = false
+    }
+}
+
+function handleListRowClick(displayReport: any) {
+    viewMode.value = 'calendar'
+    const targetOcc = occurrences.value.find(o => o.id === displayReport.occurrenceId)
+    if (targetOcc) {
+        selectOccurrence(targetOcc)
+    }
+}
 
 // Lifecycle
 onMounted(async () => {
     await loadOccurrences()
+})
+
+onBeforeUnmount(() => {
+    if (reportSubscription) {
+        supabase.removeChannel(reportSubscription)
+    }
 })
 
 // Methods
@@ -252,6 +455,7 @@ async function loadOccurrences() {
         // 3. Load HISTORICAL occurrences from existing reports
         // This ensures we see past classes even if the student transferred sessions
         const reportsWithDetails = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
+        allReports.value = reportsWithDetails
 
         // Map reports to ClassOccurrence objects
         const historicalOccurrences: ClassOccurrence[] = reportsWithDetails.map((r: any) => {
@@ -340,6 +544,12 @@ async function loadOccurrences() {
 }
 
 async function selectOccurrence(occurrence: ClassOccurrence) {
+    // Cleanup previous subscription
+    if (reportSubscription) {
+        supabase.removeChannel(reportSubscription)
+        reportSubscription = null
+    }
+
     selectedOccurrence.value = occurrence
     try {
         reportLoading.value = true
@@ -352,11 +562,48 @@ async function selectOccurrence(occurrence: ClassOccurrence) {
             occurrence.id
         )
         selectedReport.value = report
+
+        // Subscribe to Realtime changes for this report
+        if (report.id) {
+            reportSubscription = supabase
+                .channel(`report-${report.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'UPDATE',
+                        schema: 'public',
+                        table: 'occurrence_reports',
+                        filter: `id=eq.${report.id}`
+                    },
+                    (payload) => {
+                        handleRealtimeUpdate(payload)
+                    }
+                )
+                .subscribe()
+        }
+
     } catch (error) {
         console.error('Failed to load report:', error)
     } finally {
         reportLoading.value = false
     }
+}
+
+function handleRealtimeUpdate(payload: any) {
+    const newRecord = payload.new
+    // Ignore our own updates
+    if (newRecord.last_edited_by === authStore.user?.id) return
+
+    // If version is newer, prompt user
+    if (selectedReport.value && newRecord.version > selectedReport.value.version) {
+        showUpdateToast.value = true
+    }
+}
+
+async function refreshReport() {
+    if (!selectedOccurrence.value) return
+    showUpdateToast.value = false
+    await selectOccurrence(selectedOccurrence.value)
 }
 
 function handleSaveSuccess(newVersion: number) {
@@ -391,7 +638,8 @@ async function resolveConflict(resolvedContent: string) {
     try {
         const report = await OccurrenceReportService.resolveConflict(
             selectedReport.value.id!,
-            resolvedContent
+            resolvedContent,
+            authStore.user?.id // Pass user ID
         )
 
         selectedReport.value = report

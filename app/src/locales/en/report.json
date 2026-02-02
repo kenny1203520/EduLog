@@ -17,6 +17,12 @@
     "no_reports_available_desc": "There are no class records for this session.",
     "save_success": "Report saved successfully",
     "select_course_to_view": "Select a course to view its learning reports",
+    "lesson_label": "Lesson",
+    "learning_content": "Learning Content",
+    "participation": "Participation",
+    "behavior": "Behavior",
+    "update_available": "Update Available",
+    "update_available_desc": "Report updated by another user. Click to refresh.",
     "editor": {
         "title": "Class Report",
         "lesson_label": "Lesson",

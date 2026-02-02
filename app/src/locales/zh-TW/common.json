@@ -24,6 +24,9 @@
         "show": "每頁顯示",
         "no_results": "無資料"
     },
+    "calendar": "行事曆",
+    "list": "列表",
+    "none": "無",
     "close_split_view": "關閉編輯器",
     "success": "成功",
     "confirm_save": "確定要儲存嗎？"

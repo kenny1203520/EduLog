@@ -24,6 +24,9 @@
         "show": "Show",
         "no_results": "No results"
     },
+    "calendar": "Calendar",
+    "list": "List",
+    "none": "None",
     "close_split_view": "Close Editor",
     "success": "Success",
     "confirm_save": "Are you sure you want to save?"

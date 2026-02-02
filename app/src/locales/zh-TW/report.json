@@ -17,6 +17,12 @@
     "no_reports_available_desc": "此時段尚無任何課堂紀錄。",
     "save_success": "報告已成功儲存",
     "select_course_to_view": "選擇一個課程以檢視其學習報告",
+    "lesson_label": "課次",
+    "learning_content": "學習內容",
+    "participation": "課堂參與",
+    "behavior": "課堂表現",
+    "update_available": "有更新",
+    "update_available_desc": "其他使用者已更新此報告，點擊以重新整理。",
     "editor": {
         "title": "課堂報告",
         "lesson_label": "課次",

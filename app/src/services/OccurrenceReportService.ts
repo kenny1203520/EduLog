@@ -540,7 +540,8 @@ export class OccurrenceReportService {
                         name,
                         classroom:classrooms!classroom_id(name)
                     )
-                )
+                ),
+                lesson:lessons!lesson_id(id, title, sequence)
             `)
             .eq('enrollment_id', enrollmentId)
             .order('class_occurrence(occurrence_date)', { ascending: false })

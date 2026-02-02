@@ -25,6 +25,12 @@
     "address": "Address",
     "phone": "Phone",
     "social_security_number": "SSN / Gov ID",
+    "attendance": {
+        "present": "Present",
+        "absent": "Absent",
+        "late": "Late",
+        "excused": "Excused"
+    },
     "sections": {
         "basic_info": "Basic Information",
         "contacts": "Contacts",
