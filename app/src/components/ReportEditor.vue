@@ -111,7 +111,7 @@
                     :class="{ 'opacity-50': disabled }" :disabled="disabled">
                     <option value="">{{ $t('report.editor.select_lesson') }}</option>
                     <option v-for="lesson in availableLessons" :key="lesson.id" :value="lesson.id">
-                        {{ $t('report.editor.lesson_label') || 'Lesson' }} {{ lesson.sequence }}: {{ lesson.title }}
+                        Lesson {{ (lesson as any).sequence }}: {{ (lesson as any).title }}
                     </option>
                 </select>
             </div>
@@ -354,7 +354,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{

@@ -19,8 +19,8 @@
     "select_course_to_view": "Select a course to view its learning reports",
     "editor": {
         "title": "Class Report",
-        "lesson_label": "Lesson / Course",
-        "lesson_selector_label": "Lesson / Course",
+        "lesson_label": "Lesson",
+        "lesson_selector_label": "Lesson",
         "select_lesson": "Select a lesson",
         "lesson_completed": "Lesson Completed",
         "view_course_folder": "Course Folder",

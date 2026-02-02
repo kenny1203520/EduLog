@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
+import { DateUtils } from '@/utils/DateUtils'
 
 /**
  * OccurrenceService handles business logic for class occurrences.
@@ -293,22 +294,75 @@ export class OccurrenceService {
     static async syncSessionOccurrences(sessionId: string): Promise<void> {
         const todayStr = this.formatDate(new Date())
 
-        // 1. Find all occurrences from today onwards
+        // 0. Fetch session details for day_of_week
+        const { data: session } = await supabase
+            .from('class_sessions')
+            .select('day_of_week')
+            .eq('id', sessionId)
+            .single()
+        
+        const sessionDayOfWeek = session?.day_of_week
+
+        // 1. Find all occurrences from today onwards with report details
         const { data: occurrences, error: fetchError } = await supabase
             .from('class_occurrences')
             .select(`
                 id,
                 occurrence_date,
-                occurrence_reports (id)
+                occurrence_reports (
+                    id,
+                    content,
+                    is_completed,
+                    attendance_status
+                )
             `)
             .eq('class_session_id', sessionId)
             .gte('occurrence_date', todayStr)
 
         if (fetchError) throw new Error(`Failed to fetch occurrences for sync: ${fetchError.message}`)
 
-        // 2. Identify those without reports (safe to delete)
+        // 2. Identify "ghost" reports (empty placeholders) and stale occurrences
+        const ghostReportIds: string[] = []
+        const occurrencesWithRealReports = new Set<string>()
+
+        ;(occurrences as any[]).forEach(occ => {
+            const date = DateUtils.parseLocalDate(occ.occurrence_date)
+            const isWrongDay = date && date.getDay() !== sessionDayOfWeek
+            
+            const reports = occ.occurrence_reports || []
+            let hasTrueRealReport = false
+            const hasAnyReport = reports.length > 0
+
+            reports.forEach((r: any) => {
+                const isEmpty = !r.content || r.content.trim() === ''
+                const isDefault = r.is_completed === false && r.attendance_status === 'present'
+                
+                if (isEmpty && isDefault) {
+                    // Only clean up ghosts on wrong days (stale)
+                    if (isWrongDay) {
+                        ghostReportIds.push(r.id)
+                    }
+                } else {
+                    hasTrueRealReport = true
+                }
+            })
+
+            // Keep the occurrence if:
+            // 1. It matches the session day AND has reports (we must preserve student slots)
+            // 2. OR it has a real report (we must preserve history/manual edits)
+            if (hasTrueRealReport || (!isWrongDay && hasAnyReport)) {
+                occurrencesWithRealReports.add(occ.id)
+            }
+        })
+
+        // Delete ghost reports on wrong days
+        if (ghostReportIds.length > 0) {
+            await supabase.from('occurrence_reports').delete().in('id', ghostReportIds)
+        }
+
+        // 3. Delete occurrences that are either on wrong days (if empty) or have no reports left
         const idsToDelete = (occurrences as any[])
-            .filter(occ => !occ.occurrence_reports || occ.occurrence_reports.length === 0)
+            .filter(occ => !occurrencesWithRealReports.has(occ.id))
             .map(occ => occ.id)
 
         if (idsToDelete.length > 0) {
@@ -320,14 +374,18 @@ export class OccurrenceService {
             if (deleteError) throw new Error(`Failed to delete stale occurrences: ${deleteError.message}`)
         }
 
-        // 3. Find the latest occurrence date (either with report or newly deleted) to determine regeneration range
-        // If we deleted everything, start from today.
-        // If some reports exist in the future, we still want to fill the gaps.
-        
-        const startDate = new Date()
-        const endDate = new Date()
-        endDate.setMonth(endDate.getMonth() + 6) // Regenerate for the next 6 months
+        // 4. Regenerate missing occurrences ONLY if there are active enrollments
+        const { count: enrollmentCount } = await supabase
+            .from('enrollments')
+            .select('*', { count: 'exact', head: true })
+            .eq('class_session_id', sessionId)
+            .eq('status', 'active')
 
-        await this.generateOccurrences(sessionId, startDate, endDate)
+        if (enrollmentCount && enrollmentCount > 0) {
+            const startDate = new Date()
+            const endDate = new Date()
+            endDate.setMonth(endDate.getMonth() + 6)
+            await this.generateOccurrences(sessionId, startDate, endDate)
+        }
     }
 }

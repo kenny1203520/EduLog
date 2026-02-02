@@ -125,10 +125,17 @@ export class EnrollmentService {
      * Delete an enrollment and cascade delete all related reports
      */
     static async delete(enrollmentId: string): Promise<void> {
+        // 0. Get session ID first to sync later
+        const { data: enrollment } = await supabase
+            .from('enrollments')
+            .select('class_session_id')
+            .eq('id', enrollmentId)
+            .single()
+
+        const sessionId = enrollment?.class_session_id
+
         // 1. Delete all occurrence reports
         await this.deleteReportsForEnrollment(enrollmentId)
-
-
 
         // 3. Delete the enrollment itself
         const { error: deleteError } = await supabase
@@ -137,6 +144,13 @@ export class EnrollmentService {
             .eq('id', enrollmentId)
 
         if (deleteError) throw new Error(`Failed to delete enrollment: ${deleteError.message}`)
+
+        // 4. Clean up orphaned occurrences if this was the last student
+        if (sessionId) {
+            await OccurrenceService.syncSessionOccurrences(sessionId).catch((err: any) => {
+                console.error('Failed to sync occurrences after enrollment delete:', err)
+            })
+        }
     }
 
     /**
@@ -267,6 +281,15 @@ export class EnrollmentService {
         )
 
         // Step 6: Update enrollment
-        return this.update(enrollmentId, { class_session_id: newSessionId })
+        const updated = await this.update(enrollmentId, { class_session_id: newSessionId })
+
+        // Step 7: Clean up orphaned occurrences in old session
+        if (oldSessionId) {
+            await OccurrenceService.syncSessionOccurrences(oldSessionId).catch((err: any) => {
+                console.error('Failed to sync old session after transfer:', err)
+            })
+        }
+
+        return updated
     }
 }
