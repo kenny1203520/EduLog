@@ -7,6 +7,7 @@ import common from './common.json'
 import landing from './landing.json'
 import classroom from './classroom.json'
 import course from './course.json'
+import holiday from './holiday.json'
 
 export default {
   nav,
@@ -17,5 +18,6 @@ export default {
   common,
   landing,
   classroom,
-  course
+  course,
+  holiday
 }

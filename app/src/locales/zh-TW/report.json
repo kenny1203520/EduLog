@@ -39,6 +39,7 @@
             "sick_or_injured": "生病/受傷",
             "reason_not_provided": "未告知原因",
             "travel_abroad": "出國",
+            "holiday": "休假日",
             "family_ceremony": "喜慶/喪假",
             "school_activity": "學校活動",
             "other": "其他原因"

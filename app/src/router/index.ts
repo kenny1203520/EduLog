@@ -60,6 +60,11 @@ const router = createRouter({
           path: 'reports/:enrollmentId',
           name: 'lesson-reports',
           component: () => import('@/views/StudentReportsView.vue')
+        },
+        {
+          path: 'holidays',
+          name: 'holidays',
+          component: () => import('@/views/HolidayManagementView.vue')
         }
       ]
     },

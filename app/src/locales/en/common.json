@@ -12,6 +12,8 @@
     "no_description": "No description",
     "copy_success": "Copied to clipboard!",
     "back": "Back",
+    "start": "Start",
+    "end": "End",
     "students": "Students",
     "pagination": {
         "showing": "Showing",

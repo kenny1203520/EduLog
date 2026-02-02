@@ -39,6 +39,7 @@
             "sick_or_injured": "Sick/Injured",
             "reason_not_provided": "Reason Not Provided",
             "travel_abroad": "Travel Abroad",
+            "holiday": "Holiday",
             "family_ceremony": "Family Ceremony",
             "school_activity": "School Activity",
             "other": "Other Reason"

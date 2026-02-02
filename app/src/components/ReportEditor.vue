@@ -198,6 +198,8 @@
                         $t('report.editor.absence_reasons.reason_not_provided') }}</option>
                     <option :value="$t('report.editor.absence_reasons.travel_abroad')">{{
                         $t('report.editor.absence_reasons.travel_abroad') }}</option>
+                    <option :value="$t('report.editor.absence_reasons.holiday')">{{
+                        $t('report.editor.absence_reasons.holiday') }}</option>
                     <option :value="$t('report.editor.absence_reasons.family_ceremony')">{{
                         $t('report.editor.absence_reasons.family_ceremony') }}</option>
                     <option :value="$t('report.editor.absence_reasons.school_activity')">{{
@@ -365,7 +367,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{

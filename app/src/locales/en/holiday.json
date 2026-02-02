@@ -1,0 +1,17 @@
+{
+    "title": "Holiday Management",
+    "add_holiday": "Add Holiday",
+    "date_label": "Holiday Date",
+    "name_label": "Description/Name",
+    "delete_confirm": "Are you sure you want to delete this holiday? Existing reports will not be automatically updated, but newly generated reports for this date will no longer be defaulted to holiday status.",
+    "no_holidays": "No holidays scheduled.",
+    "success_add": "Holiday added successfully",
+    "success_delete": "Holiday deleted successfully",
+    "holiday_placeholder": "e.g., Spring Festival, Summer Break...",
+    "marking_status": "Students with classes on this date will be automatically marked as 'Absent' with the reason 'Holiday'.",
+    "scope_label": "Impact Scope",
+    "scope_global": "All Classes (Global)",
+    "scope_classroom": "Specific Classroom",
+    "scope_session": "Specific Session",
+    "target_label": "Target Name"
+}

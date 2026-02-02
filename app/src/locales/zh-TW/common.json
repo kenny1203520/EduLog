@@ -12,6 +12,8 @@
     "no_description": "無簡介",
     "copy_success": "已複製到剪貼簿！",
     "back": "返回",
+    "start": "開始",
+    "end": "結束",
     "students": "學生",
     "pagination": {
         "showing": "顯示",
