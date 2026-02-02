@@ -5,7 +5,7 @@
     "delete_course": "Delete Course",
     "subject": "Subject / Category",
     "stage": "Stage / Level",
-    "display_name": "Display Name (Optional)",
+    "display_name": "Display Name",
     "display_name_hint": "Custom name shown to users instead of subject+stage",
     "description": "Description",
     "lessons_count": "{count} Lessons",

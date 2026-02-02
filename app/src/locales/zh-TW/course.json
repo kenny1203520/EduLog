@@ -5,7 +5,7 @@
     "delete_course": "刪除課程",
     "subject": "科目 / 分類",
     "stage": "階段 / 層級",
-    "display_name": "顯示名稱 (選填)",
+    "display_name": "顯示名稱",
     "display_name_hint": "自定義顯示名稱，將取代「科目+階段」顯示給用戶",
     "description": "課程簡介",
     "lessons_count": "{count} 個單元",
