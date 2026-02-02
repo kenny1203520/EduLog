@@ -30,7 +30,7 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">
                                 {{ $t('student.suspension.end_date') }}
                                 <span class="text-xs text-gray-500">({{ $t('student.suspension.indefinite_hint')
-                                    }})</span>
+                                }})</span>
                             </label>
                             <input type="date" v-model="newSuspension.endDate"
                                 class="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
@@ -80,7 +80,45 @@
                         <div v-for="suspension in suspensions" :key="suspension.id"
                             class="flex items-center justify-between p-4 bg-white border rounded-lg hover:bg-gray-50 relative group"
                             :class="{ 'border-l-4 border-l-red-500': suspension.isActive }">
-                            <div>
+                            <!-- Edit Mode -->
+                            <div v-if="editingId === suspension.id" class="flex-1 flex flex-col gap-3">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">{{
+                                            $t('student.suspension.end_date') }}</label>
+                                        <input type="date" v-model="editForm.endDate"
+                                            class="w-full text-sm rounded border-gray-300 focus:ring-indigo-500 focus:border-indigo-500">
+                                        <div class="mt-1">
+                                            <label
+                                                class="inline-flex items-center text-xs text-gray-500 cursor-pointer">
+                                                <input type="checkbox" :checked="!editForm.endDate"
+                                                    @change="(e) => editForm.endDate = ((e.target as HTMLInputElement).checked ? '' : (suspension.endDate || new Date().toISOString().split('T')[0])) as string"
+                                                    class="rounded border-gray-300 w-3 h-3 text-indigo-600 focus:ring-0 mr-1">
+                                                {{ $t('student.suspension.indefinite') }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-medium text-gray-500 mb-1">{{
+                                            $t('student.suspension.reason') }}</label>
+                                        <input type="text" v-model="editForm.reason"
+                                            class="w-full text-sm rounded border-gray-300 focus:ring-indigo-500 focus:border-indigo-500">
+                                    </div>
+                                </div>
+                                <div class="flex justify-end gap-2">
+                                    <button @click="cancelEdit"
+                                        class="text-xs px-2 py-1 rounded border hover:bg-gray-50">
+                                        {{ $t('common.cancel') }}
+                                    </button>
+                                    <button @click="saveEdit(suspension.id!)" :disabled="isSaving"
+                                        class="text-xs px-2 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50">
+                                        {{ isSaving ? $t('common.saving') : $t('common.save') }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- View Mode -->
+                            <div v-else class="flex-1">
                                 <div class="font-medium text-gray-900">
                                     {{ formatDate(suspension.startDate) }}
                                     <span class="mx-2 text-gray-400">→</span>
@@ -99,12 +137,24 @@
                                     </span>
                                 </div>
                             </div>
-                            <div class="flex items-center space-x-2">
-                                <!-- End Indefinite Button -->
+
+                            <!-- Actions (Only in View Mode) -->
+                            <div v-if="editingId !== suspension.id" class="flex items-center space-x-2 ml-4">
+                                <!-- End Indefinite Button (Quick Action) -->
                                 <button v-if="suspension.isIndefinite && suspension.isActive"
                                     @click="endSuspensionNow(suspension)"
-                                    class="text-sm text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50">
+                                    class="text-sm text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded hover:bg-indigo-50 whitespace-nowrap">
                                     {{ $t('student.suspension.end_now') }}
+                                </button>
+
+                                <button @click="startEdit(suspension)"
+                                    class="p-1 text-gray-400 hover:text-blue-600 rounded-full hover:bg-blue-50"
+                                    :title="$t('common.edit')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
                                 </button>
 
                                 <button @click="deleteSuspension(suspension.id!)"
@@ -140,6 +190,13 @@ const emit = defineEmits(['close'])
 const suspensions = ref<Suspension[]>([])
 const isLoading = ref(true)
 const isAdding = ref(false)
+const isSaving = ref(false)
+
+const editingId = ref<string | null>(null)
+const editForm = ref({
+    endDate: '',
+    reason: ''
+})
 
 const newSuspension = ref({
     startDate: new Date().toISOString().split('T')[0],
@@ -206,6 +263,38 @@ async function deleteSuspension(id: string) {
     }
 }
 
+
+function startEdit(suspension: Suspension) {
+    editingId.value = suspension.id || null
+    editForm.value = {
+        endDate: suspension.endDate || '',
+        reason: suspension.reason || ''
+    }
+}
+
+function cancelEdit() {
+    editingId.value = null
+    editForm.value = { endDate: '', reason: '' }
+}
+
+async function saveEdit(id: string) {
+    if (!id) return
+    isSaving.value = true
+    try {
+        await SuspensionService.updateSuspension(id, {
+            end_date: editForm.value.endDate || null,
+            reason: editForm.value.reason || undefined
+        })
+        await loadSuspensions()
+        editingId.value = null
+    } catch (e) {
+        console.error(e)
+        alert('Failed to update suspension')
+    } finally {
+        isSaving.value = false
+    }
+}
+
 async function endSuspensionNow(suspension: Suspension) {
     if (!suspension.id) return
     const today = new Date().toISOString().split('T')[0]
@@ -214,6 +303,7 @@ async function endSuspensionNow(suspension: Suspension) {
     // But button only shows if active, meaning start <= today.
 
     try {
+        // Use the general update method which handles syncing
         await SuspensionService.updateSuspension(suspension.id, {
             end_date: today
         })

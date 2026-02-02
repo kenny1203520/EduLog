@@ -91,18 +91,133 @@ export class SuspensionService {
      * Update a suspension and sync reports
      */
     static async updateSuspension(id: string, updates: Partial<SuspensionDTO>): Promise<Suspension> {
-        const { data, error } = await supabase
+        // 1. Fetch old data to compare ranges
+        const { data: oldData, error: fetchError } = await supabase
+            .from('student_suspensions')
+            .select('*')
+            .eq('id', id)
+            .single()
+
+        if (fetchError) throw new Error(`Failed to fetch original suspension: ${fetchError.message}`)
+        const oldSuspension = new Suspension(oldData)
+
+        // 2. Perform Update
+        const { data: newData, error: updateError } = await supabase
             .from('student_suspensions')
             .update(updates)
             .eq('id', id)
             .select()
             .single()
 
-        if (error) throw new Error(`Failed to update suspension: ${error.message}`)
+        if (updateError) throw new Error(`Failed to update suspension: ${updateError.message}`)
 
-        const suspension = new Suspension(data)
-        await this.syncReportsForSuspension(suspension)
-        return suspension
+        const newSuspension = new Suspension(newData)
+
+        // 3. Logic to Revert/Sync
+        // Case A: End date moved earlier (Shortened suspension) -> Revert reports in the gap
+        // Old: [Start, OldEnd]
+        // New: [Start, NewEnd]
+        // Gap: (NewEnd, OldEnd]
+        if (oldSuspension.endDate && newSuspension.endDate && newSuspension.endDate < oldSuspension.endDate) {
+            const revertStart = new Date(newSuspension.endDate)
+            revertStart.setDate(revertStart.getDate() + 1) // Start revert from the day AFTER new end date
+            const revertStartStr = revertStart.toISOString().split('T')[0]
+            
+            const gapSuspension = {
+                enrollment_id: newSuspension.enrollmentId,
+                start_date: revertStartStr,
+                end_date: oldSuspension.endDate
+            } as any
+
+             await this.parametricallyRevertReports(gapSuspension)
+            // Generate missing reports for this gap so they become editable
+            if (newSuspension.enrollmentId) {
+                await this.ensureReportsForRange(newSuspension.enrollmentId, revertStartStr, oldSuspension.endDate)
+            }
+        }
+        // Case B: Suspension ended (was indefinite, now has end date) -> Revert reports after new end date
+        else if (!oldSuspension.endDate && newSuspension.endDate) {
+             const revertStart = new Date(newSuspension.endDate)
+             revertStart.setDate(revertStart.getDate() + 1)
+             const revertStartStr = revertStart.toISOString().split('T')[0]
+
+             // Revert everything after the new end date
+             const gapSuspension = {
+                 enrollment_id: newSuspension.enrollmentId,
+                 start_date: revertStartStr,
+                 end_date: null // Unlimited future
+             } as any
+
+             await this.parametricallyRevertReports(gapSuspension)
+             if (newSuspension.enrollmentId) {
+                await this.ensureReportsForRange(newSuspension.enrollmentId, revertStartStr, null)
+             }
+        }
+        
+        // 4. Always sync the NEW range to ensure coverage
+        await this.syncReportsForSuspension(newSuspension)
+        
+        return newSuspension
+    }
+
+    /**
+     * Ensures reports exist for a given range (useful when un-suspending).
+     * Only creates them if they don't exist.
+     */
+    private static async ensureReportsForRange(enrollmentId: string, startDate: string, endDate: string | null): Promise<void> {
+        // 1. Get occurrences in range
+        let query = supabase
+            .from('class_occurrences')
+            .select('id, occurrence_date, class_session_id')
+            .gte('occurrence_date', startDate)
+            .eq('is_conducted', true) // Only conducted classes need reports
+
+        if (endDate) {
+            query = query.lte('occurrence_date', endDate)
+        }
+
+        // We need to filter by the enrollment's class session to be accurate
+        // First get enrollment class session
+        const { data: enrollment } = await supabase
+            .from('enrollments')
+            .select('class_session_id')
+            .eq('id', enrollmentId)
+            .single()
+        
+        if (!enrollment) return
+
+        query = query.eq('class_session_id', enrollment.class_session_id)
+
+        const { data: occurrences } = await query
+        if (!occurrences || occurrences.length === 0) return
+
+        // 2. Check which ones have reports
+        const { data: existingReports } = await supabase
+            .from('occurrence_reports')
+            .select('class_occurrence_id')
+            .eq('enrollment_id', enrollmentId)
+            .in('class_occurrence_id', occurrences.map(o => o.id))
+
+        const existingIds = new Set(existingReports?.map(r => r.class_occurrence_id) || [])
+        const missingOccurrences = occurrences.filter(o => !existingIds.has(o.id))
+
+        if (missingOccurrences.length === 0) return
+
+        // 3. Bulk insert missing reports
+        const newReports = missingOccurrences.map(o => ({
+            enrollment_id: enrollmentId,
+            class_occurrence_id: o.id,
+            version: 1,
+            content: '',
+            is_completed: false, // Start as incomplete so they show up as "Missing"
+            attendance_status: 'present' // Default to present
+        }))
+
+        const { error } = await supabase
+            .from('occurrence_reports')
+            .insert(newReports)
+
+        if (error) console.error('Failed to generate missing reports after unsuspension:', error)
     }
 
     /**
