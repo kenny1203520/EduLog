@@ -168,10 +168,10 @@ async function loadOccurrences() {
     const enrollmentId = route.params.enrollmentId as string
     if (!enrollmentId) return
 
-    // Fetch enrollment to get session ID
+    // 1. Fetch enrollment to get CURRENT session ID (for future)
     const enrollment = await CourseService.getEnrollmentById(enrollmentId)
-    if (!enrollment || !enrollment.classSessionId) {
-      console.warn('Enrollment not found or no class session assigned')
+    if (!enrollment) {
+      console.warn('Enrollment not found')
       loading.value = false
       return
     }
@@ -182,14 +182,7 @@ async function loadOccurrences() {
       courseDisplay: `${enrollment.courseSubject}_${enrollment.courseStage}`
     }
 
-    // Load occurrences: 4 weeks ago to 8 weeks ahead
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - 28) // 4 weeks ago
-    
-    const endDate = new Date()
-    endDate.setDate(endDate.getDate() + 56) // 8 weeks forward
-
-    // Load lessons for this course
+    // 2. Load lessons for this course (needed for editor)
     if (enrollment.courseId) {
       const lessons = await CourseService.getLessonsByCourse(enrollment.courseId)
       courseLessons.value = lessons.map(l => ({
@@ -198,12 +191,69 @@ async function loadOccurrences() {
       }))
     }
 
-    const data = await OccurrenceService.getOccurrencesByDateRange(
-      startDate, 
-      endDate, 
-      [enrollment.classSessionId]
-    )
-    occurrences.value = data
+    // 3. Load HISTORICAL occurrences from existing reports
+    // This ensures we see past classes even if the student transferred sessions
+    const reportsWithDetails = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
+    
+    // Map reports to ClassOccurrence objects
+    const historicalOccurrences: ClassOccurrence[] = reportsWithDetails.map((r: any) => {
+        const occData = r.class_occurrence
+        // Construct a partial DTO from available data
+        // Note: Some fields like actual_start_time might be missing if not selected, 
+        // but we updated the service to select *
+        return new ClassOccurrence({
+            id: r.class_occurrence_id,
+            class_session_id: occData.class_session.id,
+            occurrence_date: occData.occurrence_date,
+            status: occData.status,
+            original_start_time: occData.original_start_time,
+            original_end_time: occData.original_end_time,
+            actual_start_time: occData.actual_start_time,
+            actual_end_time: occData.actual_end_time,
+            notes: occData.notes,
+            created_at: occData.created_at,
+            updated_at: occData.updated_at
+        })
+    })
+
+    // 4. Load FUTURE/CURRENT occurrences for the active session
+    // This shows the schedule going forward
+    let futureOccurrences: ClassOccurrence[] = []
+    
+    if (enrollment.classSessionId) {
+        const startDate = new Date()
+        startDate.setDate(startDate.getDate() - 7) // Overlap slightly to ensure continuity
+        
+        const endDate = new Date()
+        endDate.setDate(endDate.getDate() + 90) // 3 months forward
+        
+        futureOccurrences = await OccurrenceService.getOccurrencesByDateRange(
+          startDate, 
+          endDate, 
+          [enrollment.classSessionId]
+        )
+    }
+
+    // 5. Merge and Sort
+    // We prioritize historical (report-based) occurrences because they represent confirmed attendance
+    const occurrenceMap = new Map<string, ClassOccurrence>()
+    
+    // Add future ones first
+    futureOccurrences.forEach(o => {
+        if (o.id) occurrenceMap.set(o.id, o)
+    })
+    
+    // Overwrite/Add historical ones (they are the source of truth for the past)
+    historicalOccurrences.forEach(o => {
+        if (o.id) occurrenceMap.set(o.id, o)
+    })
+    
+    // Convert back to array and sort
+    const merged = Array.from(occurrenceMap.values())
+    merged.sort((a, b) => new Date(a.occurrenceDate).getTime() - new Date(b.occurrenceDate).getTime())
+
+    occurrences.value = merged
+
   } catch (error) {
     console.error('Failed to load occurrences:', error)
   } finally {

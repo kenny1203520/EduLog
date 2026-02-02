@@ -168,10 +168,7 @@ const isSessionFull = computed(() => {
   return selectedSessionDetails.value.current_enrollments >= selectedSessionDetails.value.capacity
 })
 
-const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-function getDayLabel(day: number) {
-  return dayLabels[day] || day.toString()
-}
+
 
 const filteredClassrooms = computed(() => {
   if (!classroomSearchTerm.value.trim()) return availableClassrooms.value
@@ -247,7 +244,7 @@ async function enrollStudent() {
 const editingEnrollmentId = ref<string | null>(null)
 const editEnrollmentForm = ref<Partial<EnrollmentDTO>>({})
 
-function startEditEnrollment(enr: Enrollment) {
+async function startEditEnrollment(enr: Enrollment) {
   editingEnrollmentId.value = enr.id!
   editEnrollmentForm.value = {
     course_id: enr.courseId,
@@ -256,6 +253,22 @@ function startEditEnrollment(enr: Enrollment) {
     status: enr.status as any,
     start_date: enr.startDate,
     lesson_number: enr.lessonNumber
+  }
+
+  // Ensure options are loaded
+  if (availableCourses.value.length === 0) {
+      try {
+          const [coursesRes, roomsRes, sessionsRes] = await Promise.all([
+              CourseService.getCourses(1, 1000),
+              CourseService.getClassrooms(1, 1000),
+              CourseService.getClassSessions(1, 1000)
+          ])
+          availableCourses.value = coursesRes.data
+          availableClassrooms.value = roomsRes.data
+          availableSessions.value = sessionsRes.data
+      } catch (e) {
+          console.error('Failed to load edit options', e)
+      }
   }
 }
 
@@ -312,17 +325,135 @@ watch(isEditingMainDetails, (val) => {
 const isTransferModalOpen = ref(false)
 const transferEnrollment = ref<Enrollment | null>(null)
 const transferTargetSessionId = ref('')
-const transferDate = ref(new Date().toISOString().split('T')[0])
+const transferDate = ref('')
+const transferOriginalLastDateValue = ref('')  // User-selected last lesson date for original session
 const itemTransferSessions = ref<ClassSessionDTO[]>([])
 
 const selectedTargetSession = computed(() => 
     itemTransferSessions.value.find(s => s.id === transferTargetSessionId.value)
 )
 
+const transferOriginalLastDate = computed(() => {
+    // Display the user-selected value, or placeholder
+    if (!transferOriginalLastDateValue.value) return '-'
+    return transferOriginalLastDateValue.value.replace(/-/g, '/')
+})
+
+// Available future dates for the ORIGINAL session
+const transferOriginalAvailableDates = computed(() => {
+    if (!transferEnrollment.value || transferEnrollment.value.classSessionDayOfWeek === undefined) return []
+    
+    const dates = []
+    const targetDay = transferEnrollment.value.classSessionDayOfWeek
+    // Get start time from enrollment's session
+    const startTime = transferEnrollment.value.formattedSchedule?.match(/(\d{2}:\d{2})/)?.[1] || '10:00'
+    
+    let d = new Date()
+    const now = new Date()
+    
+    // Find next occurrence
+    let currentDay = d.getDay()
+    let diff = targetDay - currentDay
+    if (diff < 0) diff += 7
+    d.setDate(d.getDate() + diff)
+    
+    // Check time if it's today
+    if (d.toDateString() === now.toDateString()) {
+         const parts = startTime.split(':')
+         if (parts.length >= 2) {
+             const h = parseInt(parts[0]!)
+             const m = parseInt(parts[1]!)
+             
+             if (!isNaN(h) && !isNaN(m)) {
+                 const classTime = new Date(d)
+                 classTime.setHours(h, m, 0, 0)
+                 if (classTime < now) {
+                     d.setDate(d.getDate() + 7)
+                 }
+             }
+         }
+    }
+    
+    // Generate 5 occurrences
+    for (let i = 0; i < 5; i++) {
+        const dateStr = d.toISOString().split('T')[0]
+        if (!dateStr) continue
+        
+        const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]
+        const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
+        dates.push({ value: dateStr, label: label })
+        d.setDate(d.getDate() + 7)
+    }
+    return dates
+})
+
+const transferNewFirstDate = computed(() => {
+    // Check strict explicit undefined check because 0 is valid (Sunday)
+    if (!selectedTargetSession.value || selectedTargetSession.value.day_of_week === undefined || !transferDate.value) return '-'
+    // If user picks a date directly, just show that date?
+    // Or recalculate? If dropdown is used, transferDate IS the first lesson date.
+    return transferDate.value.replace(/-/g, '/')
+})
+
+const transferAvailableDates = computed(() => {
+    if (!selectedTargetSession.value || selectedTargetSession.value.day_of_week === undefined) return []
+    
+    const dates = []
+    const targetDay = selectedTargetSession.value.day_of_week
+    const startTime = selectedTargetSession.value.start_time?.slice(0,5)
+    
+    if (!startTime) return []
+
+    let d = new Date()
+    const now = new Date()
+    
+    // Find next occurrence
+    let currentDay = d.getDay()
+    let diff = targetDay - currentDay
+    if (diff < 0) diff += 7
+    d.setDate(d.getDate() + diff)
+    
+    // Check time if it's today
+    if (d.toDateString() === now.toDateString()) {
+         const parts = startTime.split(':')
+         if (parts.length >= 2) {
+             const h = parseInt(parts[0]!)
+             const m = parseInt(parts[1]!)
+             
+             if (!isNaN(h) && !isNaN(m)) {
+                 const classTime = new Date(d)
+                 classTime.setHours(h, m, 0, 0)
+                 if (classTime < now) {
+                     d.setDate(d.getDate() + 7)
+                 }
+             }
+         }
+    }
+    
+    // Generate 5 occurrences
+    for (let i = 0; i < 5; i++) {
+        const dateStr = d.toISOString().split('T')[0]
+        if (!dateStr) continue
+        
+        const dayName = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]
+        const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
+        dates.push({ value: dateStr, label: label })
+        d.setDate(d.getDate() + 7)
+    }
+    return dates
+})
+
+
+
+// Date helpers removed - now using dropdown selections
+
+
+
 async function openTransferModal(enr: Enrollment) {
     transferEnrollment.value = enr
     transferTargetSessionId.value = ''
-    transferDate.value = new Date().toISOString().split('T')[0]
+    transferDate.value = ''
+    transferOriginalLastDateValue.value = ''
     isTransferModalOpen.value = true
     
     // Fetch sessions for this course
@@ -1494,7 +1625,16 @@ function copyToClipboard(text: string) {
                   <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
                     <label class="text-[10px] text-gray-500 font-bold uppercase block mb-1.5">{{ $t('student.internal_courses.transfer_from') }}</label>
                     <div class="font-bold text-gray-800 text-sm mb-0.5">{{ transferEnrollment.formattedSchedule || '-' }}</div>
-                    <div class="text-xs text-gray-500">{{ transferEnrollment.classSessionName || '-' }}</div>
+                    <div class="text-xs text-gray-500 mb-1">{{ transferEnrollment.classSessionName || '-' }}</div>
+                     <div class="border-t border-gray-200 pt-1 mt-1">
+                        <label class="text-[10px] text-red-500 font-medium block mb-1">Last Lesson:</label>
+                        <select v-model="transferOriginalLastDateValue" class="w-full text-xs border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-gray-300 outline-none bg-white">
+                            <option value="" disabled>Select Date</option>
+                            <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
+                                {{ d.label }}
+                            </option>
+                        </select>
+                    </div>
                   </div>
                   
                   <div class="p-3 bg-orange-50 rounded-lg border border-orange-100">
@@ -1504,7 +1644,10 @@ function copyToClipboard(text: string) {
                              {{ ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][selectedTargetSession.day_of_week] }} 
                              {{ selectedTargetSession.start_time?.slice(0,5) }}
                          </div>
-                         <div class="text-xs text-gray-500">{{ selectedTargetSession.name }}</div>
+                         <div class="text-xs text-gray-500 mb-1">{{ selectedTargetSession.name }}</div>
+                         <div class="text-[10px] text-emerald-600 font-bold border-t border-orange-200 pt-1 mt-1">
+                            First Lesson: {{ transferNewFirstDate }}
+                        </div>
                     </template>
                     <div v-else class="text-gray-400 italic text-xs py-1">{{ $t('student.internal_courses.session_select_placeholder') }}</div>
                   </div>
@@ -1522,7 +1665,12 @@ function copyToClipboard(text: string) {
 
               <div class="space-y-1.5">
                   <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.internal_courses.transfer_date') }}</label>
-                  <input v-model="transferDate" type="date" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+                  <select v-model="transferDate" class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+                      <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}</option>
+                      <option v-for="d in transferAvailableDates" :key="d.value" :value="d.value">
+                          {{ d.label }}
+                      </option>
+                  </select>
                   <p class="text-xs text-gray-500">{{ $t('student.internal_courses.transfer_hint') }}</p>
               </div>
           </div>

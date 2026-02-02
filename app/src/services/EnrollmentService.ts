@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
+import { OccurrenceService } from './OccurrenceService'
 
 /**
  * EnrollmentService handles student course enrollments with automatic report generation.
@@ -137,15 +138,7 @@ export class EnrollmentService {
         // 1. Delete all occurrence reports
         await this.deleteReportsForEnrollment(enrollmentId)
 
-        // 2. Delete enrollment progress records
-        const { error: progressError } = await supabase
-            .from('enrollment_progress')
-            .delete()
-            .eq('enrollment_id', enrollmentId)
 
-        if (progressError && progressError.code !== '42P01') {
-            throw new Error(`Failed to delete progress: ${progressError.message}`)
-        }
 
         // 3. Delete the enrollment itself
         const { error: deleteError } = await supabase
@@ -161,14 +154,26 @@ export class EnrollmentService {
      * @private
      */
     private static async generateReportsForSession(enrollmentId: string, sessionId: string): Promise<void> {
+        // First, ensure occurrences exist for the next 3 months
+        const today = new Date()
+        const endDate = new Date(today)
+        endDate.setMonth(endDate.getMonth() + 3)
+        
+        try {
+            await OccurrenceService.generateOccurrences(sessionId, today, endDate)
+        } catch (e) {
+            console.warn('Failed to generate occurrences:', e)
+            // Continue - some occurrences might already exist
+        }
+        
         // Fetch all future occurrences for this session
-        const today = new Date().toISOString().split('T')[0]
+        const todayStr = today.toISOString().split('T')[0]
         
         const { data: occurrences, error: occError } = await supabase
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', sessionId)
-            .gte('occurrence_date', today)
+            .gte('occurrence_date', todayStr)
             .order('occurrence_date', { ascending: true })
 
         if (occError) {

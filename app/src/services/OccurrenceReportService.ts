@@ -466,9 +466,7 @@ export class OccurrenceReportService {
             .select(`
                 *,
                 class_occurrence:class_occurrences!class_occurrence_id(
-                    occurrence_date,
-                    status,
-                    original_start_time,
+                    *,
                     class_session:class_sessions!class_session_id(
                         name,
                         classroom:classrooms!classroom_id(name)
