@@ -229,6 +229,17 @@ export class CourseService {
   }
 
   // --- Lessons ---
+  static async getLessonsByCourse(courseId: string): Promise<Lesson[]> {
+    const { data, error } = await supabase
+      .from('lessons')
+      .select('*')
+      .eq('course_id', courseId)
+      .order('sequence', { ascending: true })
+    
+    if (error) throw new Error(error.message)
+    return data.map((d: any) => new Lesson(d))
+  }
+
   static async createLesson(lesson: Partial<LessonDTO>): Promise<Lesson> {
     const { data, error } = await supabase.from('lessons').insert(lesson).select().single()
     if (error) throw new Error(error.message)

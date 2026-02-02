@@ -30,5 +30,13 @@
         "5": "Fri",
         "6": "Sat"
     },
-    "view_students": "View Student List"
+    "view_students": "View Student List",
+    "total_students": "Total Students",
+    "capacity_utilization": "Capacity Utilization",
+    "enrollment_status": "Enrollment Status",
+    "student_name": "Student Name",
+    "actions": "Actions",
+    "attendance": "Attendance",
+    "participation": "Participation",
+    "behavior": "Behavior"
 }

@@ -74,6 +74,15 @@
             :initial-version="selectedReport.version"
             :title="`Report for ${selectedOccurrence.displayString}`"
             :show-manual-save="true"
+            :available-lessons="courseLessons"
+            :initial-lesson-id="selectedReport.lessonId"
+            :initial-is-completed="selectedReport.isCompleted"
+            :initial-attendance-status="selectedReport.attendanceStatus"
+            :initial-absence-reason="selectedReport.absenceReason"
+            :initial-class-participation="selectedReport.classParticipation"
+            :initial-classroom-behavior="selectedReport.classroomBehavior"
+            :initial-contact-notes="selectedReport.contactNotes"
+            :initial-class-notes="selectedReport.classNotes"
             @save-success="handleSaveSuccess"
             @save-error="handleSaveError"
             @conflict="handleConflict"
@@ -145,6 +154,7 @@ const conflictServerContent = ref('')
 const conflictLocalContent = ref('')
 const showSuccessToast = ref(false)
 const enrollmentInfo = ref<{ studentName: string, courseDisplay: string } | null>(null)
+const courseLessons = ref<{ id: string, displayName: string }[]>([])
 
 // Lifecycle
 onMounted(async () => {
@@ -178,6 +188,15 @@ async function loadOccurrences() {
     
     const endDate = new Date()
     endDate.setDate(endDate.getDate() + 56) // 8 weeks forward
+
+    // Load lessons for this course
+    if (enrollment.courseId) {
+      const lessons = await CourseService.getLessonsByCourse(enrollment.courseId)
+      courseLessons.value = lessons.map(l => ({
+        id: l.id!,
+        displayName: `${l.sequence}. ${l.title}`
+      }))
+    }
 
     const data = await OccurrenceService.getOccurrencesByDateRange(
       startDate, 

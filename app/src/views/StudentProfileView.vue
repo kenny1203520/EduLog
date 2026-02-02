@@ -151,7 +151,14 @@ const classroomSearchTerm = ref('')
 
 const filteredSessions = computed(() => {
     if (!newEnrollment.value.course_id) return []
-    return availableSessions.value.filter(s => s.course_ids.includes(newEnrollment.value.course_id!))
+    let sessions = availableSessions.value.filter(s => s.course_ids.includes(newEnrollment.value.course_id!))
+    
+    // Filter by classroom if selected
+    if (newEnrollment.value.classroom_id) {
+        sessions = sessions.filter(s => s.classroom_id === newEnrollment.value.classroom_id)
+    }
+    
+    return sessions
 })
 
 const isSessionFull = computed(() => {
@@ -1027,43 +1034,61 @@ function copyToClipboard(text: string) {
                      </svg>
                      {{ $t('student.internal_courses.edit_enrollment_title') }}
                   </h4>
-                  <div class="space-y-3">
-                     <div class="grid grid-cols-2 gap-3">
-                        <div>
-                           <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.status') }}</label>
-                           <select v-model="editEnrollmentForm.status" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                              <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
-                              <option value="completed">{{ $t('student.internal_courses.status_completed') }}</option>
-                              <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}</option>
-                           </select>
-                        </div>
-                        <div>
-                           <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.lesson_number') }}</label>
-                           <input type="number" v-model.number="editEnrollmentForm.lesson_number" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                        </div>
-                     </div>
-                     <div>
-                        <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.session_optional') }}</label>
-                        <select v-model="editEnrollmentForm.class_session_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                           <option :value="undefined">{{ $t('student.internal_courses.none_option') }}</option>
-                           <option v-for="s in editFilteredSessions" :key="s.id" :value="s.id">
-                              {{ s.name }} ({{ s.day_of_week !== undefined ? ['日','一','二','三','四','五','六'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
-                           </option>
-                        </select>
-                     </div>
-                     <div>
-                        <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.classroom_optional') }}</label>
-                        <select v-model="editEnrollmentForm.classroom_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                           <option :value="undefined">{{ $t('student.internal_courses.none_option') }}</option>
-                           <option v-for="r in availableClassrooms" :key="r.id" :value="r.id">
-                              {{ r.name }}
-                           </option>
-                        </select>
-                     </div>
-                     <div>
-                        <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.start_date') }}</label>
-                        <input type="date" v-model="editEnrollmentForm.start_date" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                     </div>
+                   <div class="space-y-3">
+                      <!-- 1. Course -->
+                      <div>
+                         <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.course') }}</label>
+                         <select v-model="editEnrollmentForm.course_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option v-for="c in availableCourses" :key="c.id" :value="c.id">
+                               {{ c.subject }}_{{ c.stage }}
+                            </option>
+                         </select>
+                      </div>
+
+                      <!-- 2. Classroom -->
+                      <div>
+                         <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.classroom_optional') }}</label>
+                         <select v-model="editEnrollmentForm.classroom_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option :value="undefined">{{ $t('student.internal_courses.none_option') }}</option>
+                            <option v-for="r in availableClassrooms" :key="r.id" :value="r.id">
+                               {{ r.name }}
+                            </option>
+                         </select>
+                      </div>
+
+                      <!-- 3. Session -->
+                      <div>
+                         <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.session_optional') }}</label>
+                         <select v-model="editEnrollmentForm.class_session_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                            <option :value="undefined">{{ $t('student.internal_courses.none_option') }}</option>
+                            <option v-for="s in editFilteredSessions" :key="s.id" :value="s.id">
+                               {{ s.name }} ({{ s.day_of_week !== undefined ? ['日','一','二','三','四','五','六'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
+                            </option>
+                         </select>
+                      </div>
+
+                      <div class="grid grid-cols-2 gap-3">
+                         <!-- 4. Status -->
+                         <div>
+                            <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.status') }}</label>
+                            <select v-model="editEnrollmentForm.status" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                               <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
+                               <option value="completed">{{ $t('student.internal_courses.status_completed') }}</option>
+                               <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}</option>
+                            </select>
+                         </div>
+                         <!-- 5. Lesson Number -->
+                         <div>
+                            <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.lesson_number') }}</label>
+                            <input type="number" v-model.number="editEnrollmentForm.lesson_number" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                         </div>
+                      </div>
+
+                      <!-- 6. Start Date -->
+                      <div>
+                         <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.start_date') }}</label>
+                         <input type="date" v-model="editEnrollmentForm.start_date" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                      </div>
                      <div class="flex justify-end gap-2 pt-3 border-t border-blue-200">
                         <button @click="cancelEditEnrollment" class="px-4 py-2 text-gray-600 bg-white hover:bg-gray-100 rounded-lg text-sm font-semibold transition-colors border border-gray-300">
                            {{ $t('common.cancel') }}
@@ -1087,109 +1112,119 @@ function copyToClipboard(text: string) {
         <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl m-4">
             <h3 class="text-xl font-bold mb-4">{{ $t('student.internal_courses.add_title') }}</h3>
             <div class="space-y-4">
+                <!-- 1. Course -->
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.course') }}</label>
                     <select v-model="newEnrollment.course_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                        <option :value="undefined">-- Select Course --</option>
                         <option v-for="c in availableCourses" :key="c.id" :value="c.id">
                             {{ c.subject }}_{{ c.stage }}
                         </option>
                     </select>
                 </div>
                 
-                <div v-if="newEnrollment.course_id">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.session_select') }}</label>
-                    <select v-model="newEnrollment.class_session_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                        <option :value="undefined">{{ $t('student.internal_courses.session_select_placeholder') }}</option>
-                        <option v-for="s in filteredSessions" :key="s.id" :value="s.id">
-                            {{ s.name }} ({{ s.day_of_week !== undefined ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
-                        </option>
-                        <option v-if="filteredSessions.length === 0" disabled>No sessions found for this course</option>
-                    </select>
-                    <p class="text-xs text-gray-400 mt-1">{{ $t('student.internal_courses.session_hint') }}</p>
-                    
-                    <!-- Session Details Card -->
-                    <div v-if="selectedSessionDetails" class="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-blue-50 rounded-lg border border-emerald-200">
-                      <h4 class="font-semibold text-sm text-gray-800 mb-3 flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-emerald-600">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-                        </svg>
-                        {{ $t('student.internal_courses.session_details') }}
-                      </h4>
-                      <div class="space-y-2 text-sm">
-                         <div class="flex justify-between items-start">
-                           <span class="text-gray-600">{{ $t('student.internal_courses.session_classroom') }}:</span>
-                           <span class="font-medium text-gray-900 text-right">{{ selectedSessionDetails.classroom_name }}</span>
-                         </div>
-                         <div v-if="selectedSessionDetails.classroom_address" class="flex justify-between items-start">
-                           <span class="text-gray-600">{{ $t('student.internal_courses.session_address') }}:</span>
-                           <span class="text-gray-700 text-right max-w-[200px]">{{ selectedSessionDetails.classroom_address }}</span>
-                         </div>
-                         <div class="flex justify-between items-start">
-                           <span class="text-gray-600">{{ $t('student.internal_courses.session_schedule') }}:</span>
-                          <span class="text-gray-700">
-                            {{ getDayLabel(selectedSessionDetails.day_of_week) }} 
-                            {{ selectedSessionDetails.start_time?.slice(0,5) }} - {{ selectedSessionDetails.end_time?.slice(0,5) }}
-                          </span>
-                        </div>
-                         <div class="flex justify-between items-start pt-2 border-t border-emerald-200">
-                           <span class="text-gray-600">{{ $t('student.internal_courses.session_capacity') }}:</span>
-                           <span class="font-semibold" :class="isSessionFull ? 'text-red-600' : 'text-emerald-700'">
-                             {{ selectedSessionDetails.current_enrollments }}/{{ selectedSessionDetails.capacity }}
-                             <span v-if="isSessionFull" class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{{ $t('student.internal_courses.session_full') }}</span>
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('student.internal_courses.classroom') }}</label>
-                    
-                    <!-- Improved Classroom Selector with Search -->
-                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                        <!-- Search Input -->
-                        <div class="relative mb-2">
-                            <input 
-                                v-model="classroomSearchTerm" 
-                                type="text" 
-                                :placeholder="$t('student.internal_courses.search_classroom')"
-                                class="w-full border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500 bg-white"
-                            >
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                        </div>
-                        <p class="text-xs text-gray-500 mb-2">{{ $t('student.internal_courses.classroom_search_hint') }}</p>
+                <div v-if="newEnrollment.course_id" class="space-y-4">
+                    <!-- 2. Classroom -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('student.internal_courses.classroom') }}</label>
                         
-                        <!-- Classroom Select with Filtered Results -->
-                        <select v-model="newEnrollment.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 bg-white" size="8">
-                            <option :value="undefined">{{ $t('student.internal_courses.classroom_none') }}</option>
-                            <option v-for="r in filteredClassrooms" :key="r.id" :value="r.id">
-                                {{ r.name }}{{ r.address ? ' - ' + r.address : '' }}
+                        <!-- Improved Classroom Selector with Search -->
+                        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            <!-- Search Input -->
+                            <div class="relative mb-2">
+                                <input 
+                                    v-model="classroomSearchTerm" 
+                                    type="text" 
+                                    :placeholder="$t('student.internal_courses.search_classroom')"
+                                    class="w-full border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                                >
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <p class="text-xs text-gray-500 mb-2">{{ $t('student.internal_courses.classroom_search_hint') }}</p>
+                            
+                            <!-- Classroom Select with Filtered Results -->
+                            <select v-model="newEnrollment.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 bg-white" size="8">
+                                <option :value="undefined">{{ $t('student.internal_courses.classroom_none') }}</option>
+                                <option v-for="r in filteredClassrooms" :key="r.id" :value="r.id">
+                                    {{ r.name }}{{ r.address ? ' - ' + r.address : '' }}
+                                </option>
+                                <option v-if="filteredClassrooms.length === 0 && classroomSearchTerm" disabled>
+                                    {{ $t('student.internal_courses.no_classrooms_found') }}
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- 3. Session -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.session_select') }}</label>
+                        <select v-model="newEnrollment.class_session_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                            <option :value="undefined">{{ $t('student.internal_courses.session_select_placeholder') }}</option>
+                            <option v-for="s in filteredSessions" :key="s.id" :value="s.id">
+                                {{ s.name }} ({{ s.day_of_week !== undefined ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
                             </option>
-                            <option v-if="filteredClassrooms.length === 0 && classroomSearchTerm" disabled>
-                                {{ $t('student.internal_courses.no_classrooms_found') }}
-                            </option>
+                            <option v-if="filteredSessions.length === 0" disabled>No sessions found for this course in this classroom</option>
+                        </select>
+                        <p class="text-xs text-gray-400 mt-1">{{ $t('student.internal_courses.session_hint') }}</p>
+                        
+                        <!-- Session Details Card -->
+                        <div v-if="selectedSessionDetails" class="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-blue-50 rounded-lg border border-emerald-200">
+                          <h4 class="font-semibold text-sm text-gray-800 mb-3 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-emerald-600">
+                              <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                            </svg>
+                            {{ $t('student.internal_courses.session_details') }}
+                          </h4>
+                          <div class="space-y-2 text-sm">
+                             <div class="flex justify-between items-start">
+                               <span class="text-gray-600">{{ $t('student.internal_courses.session_classroom') }}:</span>
+                               <span class="font-medium text-gray-900 text-right">{{ selectedSessionDetails.classroom_name }}</span>
+                             </div>
+                             <div v-if="selectedSessionDetails.classroom_address" class="flex justify-between items-start">
+                               <span class="text-gray-600">{{ $t('student.internal_courses.session_address') }}:</span>
+                               <span class="text-gray-700 text-right max-w-[200px]">{{ selectedSessionDetails.classroom_address }}</span>
+                             </div>
+                             <div class="flex justify-between items-start">
+                               <span class="text-gray-600">{{ $t('student.internal_courses.session_schedule') }}:</span>
+                               <span class="text-gray-700">
+                                 {{ getDayLabel(selectedSessionDetails.day_of_week) }} 
+                                 {{ selectedSessionDetails.start_time?.slice(0,5) }} - {{ selectedSessionDetails.end_time?.slice(0,5) }}
+                               </span>
+                             </div>
+                             <div class="flex justify-between items-start pt-2 border-t border-emerald-200">
+                               <span class="text-gray-600">{{ $t('student.internal_courses.session_capacity') }}:</span>
+                               <span class="font-semibold" :class="isSessionFull ? 'text-red-600' : 'text-emerald-700'">
+                                 {{ selectedSessionDetails.current_enrollments }}/{{ selectedSessionDetails.capacity }}
+                                 <span v-if="isSessionFull" class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{{ $t('student.internal_courses.session_full') }}</span>
+                               </span>
+                             </div>
+                          </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Status -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.status') }}</label>
+                        <select v-model="newEnrollment.status" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
+                            <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
+                            <option value="completed">{{ $t('student.internal_courses.status_completed') }}</option>
+                            <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}</option>
                         </select>
                     </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.status') }}</label>
-                    <select v-model="newEnrollment.status" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                        <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
-                        <option value="completed">{{ $t('student.internal_courses.status_completed') }}</option>
-                        <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}</option>
-                    </select>
-                </div>
 
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.start_date') }}</label>
-                        <input type="date" v-model="newEnrollment.start_date" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.lesson_number') }}</label>
-                        <input type="number" v-model.number="newEnrollment.lesson_number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" placeholder="1">
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- 5. Start Date -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.start_date') }}</label>
+                            <input type="date" v-model="newEnrollment.start_date" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" />
+                        </div>
+                        <!-- 6. Lesson Number -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.lesson_number') }}</label>
+                            <input type="number" v-model.number="newEnrollment.lesson_number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" />
+                        </div>
                     </div>
                 </div>
             </div>
