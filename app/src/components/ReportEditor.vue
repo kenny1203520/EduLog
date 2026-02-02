@@ -398,6 +398,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -508,6 +509,7 @@ const emit = defineEmits<{
 }>()
 
 const authStore = useAuthStore()
+const { t } = useI18n()
 
 // Local state
 const localContent = ref(props.initialContent)
@@ -557,10 +559,7 @@ const showAbsenceError = computed(() => {
 })
 
 const canSave = computed(() => {
-    // Cannot save if absent without reason
-    if (attendanceStatus.value === 'absent' && !absenceReason.value) {
-        return false
-    }
+    // Auto-set handles missing reason, so we allow saving
     return true
 })
 
@@ -585,6 +584,13 @@ const {
             return { success: false, message: '請填寫必填欄位' }
         }
 
+        // Auto-fill absence reason if missing
+        let finalAbsenceReason = absenceReason.value
+        if (attendanceStatus.value === 'absent' && !finalAbsenceReason) {
+            finalAbsenceReason = t('report.editor.absence_reasons.reason_not_provided')
+            absenceReason.value = finalAbsenceReason
+        }
+
         try {
             const result = await OccurrenceReportService.saveReport(
                 props.reportId,
@@ -596,7 +602,7 @@ const {
                     isCompleted: isCompleted.value,
                     progressLetter: progressLetter.value || undefined,
                     attendanceStatus: attendanceStatus.value,
-                    absenceReason: absenceReason.value || undefined,
+                    absenceReason: finalAbsenceReason || undefined,
                     classParticipation: classParticipation.value || undefined,
                     classroomBehavior: classroomBehavior.value || undefined,
                     contactNotes: contactNotes.value || undefined,
