@@ -8,6 +8,7 @@ import {
 import { EnrollmentProgressService } from './EnrollmentProgressService'
 import { OccurrenceService } from './OccurrenceService'
 import { HolidayService } from './HolidayService'
+import { SuspensionService } from './SuspensionService'
 
 /**
  * OccurrenceReportService handles business logic for occurrence reports.
@@ -62,15 +63,20 @@ export class OccurrenceReportService {
             ? await HolidayService.isHoliday(occurrence.occurrence_date, classroomId, sessionId) 
             : false
 
+        // Check for student suspension
+        const isSuspended = occurrence
+            ? await SuspensionService.isSuspended(enrollmentId, occurrence.occurrence_date)
+            : false
+
         // 2. Create new report if doesn't exist
         const newReport: Partial<OccurrenceReportDTO> = {
             enrollment_id: enrollmentId,
             class_occurrence_id: occurrenceId,
             content: '',
             version: 1,
-            attendance_status: isHoliday ? 'absent' : 'present',
-            absence_reason: isHoliday ? 'holiday' : undefined,
-            is_completed: isHoliday ? false : true
+            attendance_status: (isHoliday || isSuspended) ? 'absent' : 'present',
+            absence_reason: isSuspended ? 'suspension' : (isHoliday ? 'holiday' : undefined),
+            is_completed: (isHoliday || isSuspended) ? false : true
         }
 
         const { data: created, error: createError } = await supabase

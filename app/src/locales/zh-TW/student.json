@@ -159,5 +159,19 @@
     "edit": "編輯",
     "save": "儲存",
     "no_contact_email": "暫無 Email",
-    "no_contact_phone": "暫無電話"
+    "no_contact_phone": "暫無電話",
+    "suspension": {
+        "title": "停課管理",
+        "add_new": "新增停課",
+        "history": "停課紀錄",
+        "start_date": "開始日期",
+        "end_date": "結束日期",
+        "indefinite": "無限期",
+        "indefinite_hint": "留空代表無限期",
+        "reason": "原因",
+        "reason_placeholder": "可選填原因",
+        "active": "進行中",
+        "end_now": "立即結束",
+        "no_records": "尚無停課紀錄"
+    }
 }

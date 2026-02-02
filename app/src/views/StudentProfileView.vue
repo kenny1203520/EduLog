@@ -10,6 +10,7 @@ import { Course } from '@/models/Course'
 import { Classroom, type ClassSessionDTO } from '@/models/Classroom'
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 import { useEmailValidation } from '@/composables/useEmailValidation'
+import StudentSuspensions from '@/components/StudentSuspensions.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -343,6 +344,15 @@ watch(isEditingMainDetails, (val) => {
         showGovId.value = true
     }
 })
+
+// --- Student Suspension ---
+const isSuspensionsModalOpen = ref(false)
+const selectedEnrollmentIdForSuspension = ref<string>('')
+
+function openSuspensionsModal(enrollmentId: string) {
+    selectedEnrollmentIdForSuspension.value = enrollmentId
+    isSuspensionsModalOpen.value = true
+}
 
 // --- Transfer Class ---
 const isTransferModalOpen = ref(false)
@@ -771,7 +781,7 @@ function copyToClipboard(text: string) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.name')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.name" type="text"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -811,7 +821,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.birthday')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.birthday" type="date"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -841,7 +851,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('auth.email')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.email" type="email" @blur="emailTouched = true"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
                         :class="{ 'border-red-500 focus:ring-red-500': emailError }">
@@ -881,7 +891,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5 md:col-span-2">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.notes')
-                        }}</label>
+                    }}</label>
                     <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
                     <div v-else
@@ -1107,7 +1117,7 @@ function copyToClipboard(text: string) {
                                                 class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
                                                     $t('student.schools.school_student_id') }}</span>
                                             <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id
-                                                }}</span>
+                                            }}</span>
                                             <button @click="copyToClipboard(s.school_student_id)"
                                                 class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-0.5 cursor-pointer"
                                                 title="Copy">
@@ -1327,7 +1337,7 @@ function copyToClipboard(text: string) {
                                 <input type="date" v-model="newSchool.end_date"
                                     class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none">
                                 <p class="text-[10px] text-gray-400 text-right mt-0.5">{{ $t('student.schools.present')
-                                    }}</p>
+                                }}</p>
                             </div>
                         </div>
 
@@ -1419,6 +1429,15 @@ function copyToClipboard(text: string) {
                                             viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                        </svg>
+                                    </button>
+                                    <button @click="openSuspensionsModal(enr.id!)"
+                                        class="p-2.5 rounded-xl bg-purple-50 text-purple-600 hover:bg-purple-600 hover:text-white transition-all shadow-sm hover:shadow-md"
+                                        :title="$t('student.suspension.title')">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                     </button>
                                     <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: enr.id } }"
@@ -1517,7 +1536,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                                }}</option>
+                                            }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1543,7 +1562,7 @@ function copyToClipboard(text: string) {
                                 <div class="col-span-2">
                                     <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
-                                        }}</label>
+                                    }}</label>
                                     <input type="url" v-model="editEnrollmentForm.external_link"
                                         placeholder="https://..."
                                         class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -1740,7 +1759,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                                }}</option>
+                                            }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1765,7 +1784,7 @@ function copyToClipboard(text: string) {
                                 <div>
                                     <label class="block text-sm font-bold text-gray-700 mb-2">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
-                                        }}</label>
+                                    }}</label>
                                     <div class="relative">
                                         <input type="url" v-model="newEnrollment.external_link"
                                             placeholder="https://..."
@@ -1834,7 +1853,7 @@ function copyToClipboard(text: string) {
                                     <div class="flex items-center gap-2">
                                         <span>{{ platforms.includes(cred.platform) ?
                                             $t(`student.credentials.platforms.${cred.platform}`) : cred.platform
-                                            }}</span>
+                                        }}</span>
                                         <a v-if="cred.url" :href="cred.url" target="_blank"
                                             class="text-emerald-600 hover:text-emerald-700" :title="cred.url">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -2027,7 +2046,7 @@ function copyToClipboard(text: string) {
                             $t('student.internal_courses.transfer_from') }}</label>
                         <div class="font-bold text-gray-800 text-sm mb-0.5">{{ transferEnrollment.formattedSchedule ||
                             '-'
-                            }}</div>
+                        }}</div>
                         <div class="text-xs text-gray-500 mb-1">{{ transferEnrollment.classSessionName || '-' }}</div>
                         <div class="bg-gray-50 border border-gray-100 rounded-lg p-2 flex-1">
                             <label class="text-[10px] text-gray-400 font-bold uppercase block mb-1.5">{{
@@ -2105,6 +2124,8 @@ function copyToClipboard(text: string) {
             </div>
         </div>
     </div>
+    <StudentSuspensions v-if="isSuspensionsModalOpen" :enrollment-id="selectedEnrollmentIdForSuspension"
+        @close="isSuspensionsModalOpen = false" />
 </template>
 
 <style scoped>
@@ -2124,4 +2145,4 @@ function copyToClipboard(text: string) {
     animation: toast-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 </style>
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               
+                                                                                                                                                                                                                                                                                                                                                                                         

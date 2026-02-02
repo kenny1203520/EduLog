@@ -159,5 +159,19 @@
     "edit": "Edit",
     "save": "Save",
     "no_contact_email": "No Email",
-    "no_contact_phone": "No Phone"
+    "no_contact_phone": "No Phone",
+    "suspension": {
+        "title": "Suspension Management",
+        "add_new": "Add New Suspension",
+        "history": "Suspension History",
+        "start_date": "Start Date",
+        "end_date": "End Date",
+        "indefinite": "Indefinite",
+        "indefinite_hint": "Leave empty for indefinite",
+        "reason": "Reason",
+        "reason_placeholder": "Optional reason",
+        "active": "Active",
+        "end_now": "End Now",
+        "no_records": "No suspension records found."
+    }
 }
