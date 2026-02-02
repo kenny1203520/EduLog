@@ -104,5 +104,22 @@
         "error": "錯誤",
         "save_now": "立即儲存",
         "required_field_error": "請填寫必填欄位"
+    },
+    "conflict": {
+        "title": "偵測到版本衝突",
+        "description": "此報告在您編輯期間已被其他使用者修改。",
+        "strategies": {
+            "keep_local": "保留我的版本",
+            "keep_local_desc": "覆蓋伺服器上的版本，使用您目前的內容。",
+            "keep_server": "使用伺服器版本",
+            "keep_server_desc": "捨棄您的變更，使用伺服器上的最新內容。",
+            "manual": "手動合併",
+            "manual_desc": "檢視雙方差異並手動編輯最終內容。"
+        },
+        "server_version": "伺服器版本",
+        "local_version": "您的版本",
+        "merged_content": "合併後內容 (可編輯)",
+        "resolve_button": "解決衝突",
+        "cancel_button": "取消"
     }
 }

@@ -104,5 +104,22 @@
         "error": "Error",
         "save_now": "Save Now",
         "required_field_error": "Please fill in required fields"
+    },
+    "conflict": {
+        "title": "Conflict Detected",
+        "description": "This report was modified by another user while you were editing.",
+        "strategies": {
+            "keep_local": "Keep My Version",
+            "keep_local_desc": "Overwrite the server version with your local changes.",
+            "keep_server": "Keep Server Version",
+            "keep_server_desc": "Discard your local changes and use the server version.",
+            "manual": "Manually Merge",
+            "manual_desc": "Review both versions and create a merged version."
+        },
+        "server_version": "Server Version",
+        "local_version": "Your Local Version",
+        "merged_content": "Merged Content (edit as needed)",
+        "resolve_button": "Resolve Conflict",
+        "cancel_button": "Cancel"
     }
 }
