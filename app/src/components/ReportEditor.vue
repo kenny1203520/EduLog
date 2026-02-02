@@ -1,13 +1,84 @@
 <template>
   <div class="report-editor bg-white rounded-lg shadow-sm p-6">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
       <h3 class="text-lg font-semibold text-gray-800">
         {{ title || $t('report.editor.title') }}
       </h3>
       
-      <!-- Save Status Indicator -->
-      <div class="flex items-center gap-2 text-sm">
+      <div class="flex items-center gap-4">
+        <!-- Templates Dropdown -->
+        <div class="relative">
+          <button 
+            @click="showTemplates = !showTemplates"
+            class="text-sm font-medium text-gray-600 hover:text-emerald-600 flex items-center gap-1 focus:outline-none"
+            title="Manage Templates"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+            </svg>
+            <span>{{ $t('report.editor.templates', 'Templates') }}</span>
+          </button>
+
+          <!-- Templates Menu -->
+          <div v-if="showTemplates" class="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-4">
+            <h4 class="font-bold text-gray-800 mb-3 text-sm flex justify-between items-center">
+              {{ $t('report.editor.templates', 'Templates') }}
+              <button @click="showTemplates = false" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </h4>
+            
+            <!-- Save New -->
+            <div class="flex gap-2 mb-4">
+              <input 
+                v-model="newTemplateName"
+                type="text"
+                placeholder="New template name"
+                class="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500"
+                @keyup.enter="saveTemplate"
+              />
+              <button 
+                @click="saveTemplate"
+                :disabled="!newTemplateName.trim() || !localContent"
+                class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+
+            <!-- List -->
+            <div class="max-h-60 overflow-y-auto space-y-2">
+              <div v-if="savedTemplates.length === 0" class="text-xs text-gray-500 text-center py-2">
+                No templates saved
+              </div>
+              <div 
+                v-for="t in savedTemplates" 
+                :key="t.id"
+                class="group flex items-center justify-between p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200 transition-colors"
+              >
+                <button 
+                  @click="applyTemplate(t)"
+                  class="text-sm text-gray-700 hover:text-emerald-700 text-left truncate flex-1"
+                  :title="t.content"
+                >
+                  {{ t.name }}
+                </button>
+                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <button 
+                    @click.stop="deleteTemplate(t.id)"
+                    class="text-gray-400 hover:text-red-500 p-1 rounded"
+                    title="Delete"
+                  >
+                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Save Status Indicator -->
+        <div class="flex items-center gap-2 text-sm">
         <span v-if="isSaving" class="text-blue-600 flex items-center gap-1">
           <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
@@ -216,29 +287,32 @@
         <label class="block text-sm font-medium text-gray-700 mb-2">
           {{ $t('report.editor.class_participation_label') }}
         </label>
-        <textarea
-          v-model="classParticipation"
-          rows="3"
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y"
-          :placeholder="$t('report.editor.class_participation_placeholder')"
-        ></textarea>
+        <div class="flex items-center gap-2">
+          <RatingInput
+            v-model="classParticipation"
+            :show-value="true"
+          />
+        </div>
       </div>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-2">
           {{ $t('report.editor.classroom_behavior_label') }}
         </label>
-        <textarea
-          v-model="classroomBehavior"
-          rows="3"
-          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y"
-          :placeholder="$t('report.editor.classroom_behavior_placeholder')"
-        ></textarea>
+        <div class="flex items-center gap-2">
+          <RatingInput
+            v-model="classroomBehavior"
+            :show-value="true"
+          />
+        </div>
       </div>
     </div>
 
     <!-- Contact Notes -->
     <div class="mb-6">
-      <label class="block text-sm font-medium text-gray-700 mb-2">
+      <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+        <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+        </svg>
         {{ $t('report.editor.contact_notes_label') }}
       </label>
       <textarea
@@ -252,6 +326,9 @@
     <!-- Class Notes -->
     <div class="mb-6">
       <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+        <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        </svg>
         {{ $t('report.editor.class_notes_label') }}
         <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
       </label>
@@ -267,6 +344,9 @@
     <div class="mb-6">
       <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">
         <span class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
           {{ $t('report.editor.learning_report_label') }}
           <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle') }}</span>
         </span>
@@ -303,15 +383,70 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
+import RatingInput from '@/components/common/RatingInput.vue'
 
 interface Lesson {
   id: string
   displayName: string
 }
+
+interface Template {
+  id: string
+  name: string
+  content: string
+}
+
+// Templates State
+const showTemplates = ref(false)
+const savedTemplates = ref<Template[]>([])
+const newTemplateName = ref('')
+
+function loadTemplates() {
+  const stored = localStorage.getItem('edulog_report_templates')
+  if (stored) {
+    try {
+      savedTemplates.value = JSON.parse(stored)
+    } catch (e) {
+      console.error('Failed to parse templates', e)
+    }
+  }
+}
+
+function saveTemplate() {
+  if (!newTemplateName.value.trim() || !localContent.value.trim()) return
+  
+  const newTemplate: Template = {
+    id: Date.now().toString(),
+    name: newTemplateName.value.trim(),
+    content: localContent.value
+  }
+  
+  savedTemplates.value.push(newTemplate)
+  localStorage.setItem('edulog_report_templates', JSON.stringify(savedTemplates.value))
+  newTemplateName.value = ''
+}
+
+function applyTemplate(template: Template) {
+  if (localContent.value && !confirm('Replace current content with template?')) return
+  
+  localContent.value = template.content
+  handleInput() // Update and save
+  showTemplates.value = false
+}
+
+function deleteTemplate(id: string) {
+  if (!confirm('Delete this template?')) return
+  savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
+  localStorage.setItem('edulog_report_templates', JSON.stringify(savedTemplates.value))
+}
+
+onMounted(() => {
+  loadTemplates()
+})
 
 interface Props {
   reportId?: string
@@ -330,8 +465,8 @@ interface Props {
   initialProgressEnd?: string
   initialAttendanceStatus?: 'present' | 'absent'
   initialAbsenceReason?: string
-  initialClassParticipation?: string
-  initialClassroomBehavior?: string
+  initialClassParticipation?: number
+  initialClassroomBehavior?: number
   initialContactNotes?: string
   initialClassNotes?: string
 }
@@ -368,8 +503,8 @@ const progressStart = ref(props.initialProgressStart || '')
 const progressEnd = ref(props.initialProgressEnd || '')
 const attendanceStatus = ref<'present' | 'absent'>(props.initialAttendanceStatus)
 const absenceReason = ref(props.initialAbsenceReason || '')
-const classParticipation = ref(props.initialClassParticipation || '')
-const classroomBehavior = ref(props.initialClassroomBehavior || '')
+const classParticipation = ref(props.initialClassParticipation ?? 0)
+const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
 const contactNotes = ref(props.initialContactNotes || '')
 const classNotes = ref(props.initialClassNotes || '')
 
@@ -406,7 +541,8 @@ const {
   saveError,
   saveNow: autoSaveNow,
   triggerAutoSave,
-  getLastSavedString
+  getLastSavedString,
+  reset
 } = useAutoSave({
   debounceMs: props.debounceMs,
   onSave: async (content) => {
@@ -512,11 +648,11 @@ watch(() => props.initialAbsenceReason, (newVal) => {
 })
 
 watch(() => props.initialClassParticipation, (newVal) => {
-  classParticipation.value = newVal || ''
+  classParticipation.value = newVal ?? 0
 })
 
 watch(() => props.initialClassroomBehavior, (newVal) => {
-  classroomBehavior.value = newVal || ''
+  classroomBehavior.value = newVal ?? 0
 })
 
 watch(() => props.initialContactNotes, (newVal) => {
@@ -542,13 +678,43 @@ watch(isCompleted, (newValue) => {
   }
 })
 
+// Auto-save triggers for all fields
+watch([
+  selectedLessonId,
+  isCompleted,
+  progressStart,
+  progressEnd,
+  attendanceStatus,
+  absenceReason,
+  classParticipation,
+  classroomBehavior,
+  contactNotes,
+  classNotes
+], () => {
+  handleInput()
+})
+
+const isInitializing = ref(false)
+
+// Reset auto-save state when switching reports
+watch(() => props.reportId, () => {
+  isInitializing.value = true
+  reset()
+  // Allow time for props to propagate to local state
+  setTimeout(() => {
+    isInitializing.value = false
+  }, 500)
+}, { immediate: true })
+
 // Methods
 function handleInput() {
+  if (isInitializing.value) return
   emit('update:content', localContent.value)
   if (props.reportId) {
     triggerAutoSave(localContent.value)
   }
 }
+
 
 function saveNow() {
   if (props.reportId && canSave.value) {

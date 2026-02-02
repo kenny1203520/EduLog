@@ -39,5 +39,7 @@
     "attendance": "出席",
     "participation": "參與度",
     "behavior": "秩序",
-    "no_email": "暫無 Email"
+    "no_email": "暫無 Email",
+    "view_profile": "查看個人資料",
+    "view_reports": "查看學生報告"
 }

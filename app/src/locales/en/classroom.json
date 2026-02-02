@@ -39,5 +39,7 @@
     "attendance": "Attendance",
     "participation": "Participation",
     "behavior": "Behavior",
-    "no_email": "No Email"
+    "no_email": "No Email",
+    "view_profile": "View Profile",
+    "view_reports": "View Reports"
 }

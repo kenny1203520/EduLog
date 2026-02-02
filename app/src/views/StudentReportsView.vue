@@ -25,7 +25,7 @@
       <p class="font-medium">{{ $t('report.loading_full') }}</p>
     </div>
 
-    <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div v-else class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <!-- Calendar Section -->
       <div class="lg:col-span-1">
         <OccurrenceCalendar 
@@ -38,7 +38,7 @@
       </div>
 
       <!-- Editor Section -->
-      <div class="lg:col-span-2">
+      <div class="lg:col-span-1">
         <div v-if="selectedOccurrence && selectedReport">
           <!-- Occurrence Info Card -->
           <div class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-5 mb-6 border border-emerald-100 shadow-sm">
@@ -253,6 +253,20 @@ async function loadOccurrences() {
     merged.sort((a, b) => new Date(a.occurrenceDate).getTime() - new Date(b.occurrenceDate).getTime())
 
     occurrences.value = merged
+
+    // 6. Auto-select nearest occurrence (User Request)
+    if (merged.length > 0) {
+      const today = new Date().getTime()
+      
+      // Find the occurrence with the smallest absolute difference from today
+      const closest = merged.reduce((prev, curr) => {
+        const prevDiff = Math.abs(new Date(prev.occurrenceDate).getTime() - today)
+        const currDiff = Math.abs(new Date(curr.occurrenceDate).getTime() - today)
+        return currDiff < prevDiff ? curr : prev
+      })
+
+      await selectOccurrence(closest)
+    }
 
   } catch (error) {
     console.error('Failed to load occurrences:', error)

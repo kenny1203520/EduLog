@@ -6,6 +6,7 @@ import {
     type SaveReportResult 
 } from '@/models/OccurrenceReport'
 import { EnrollmentProgressService } from './EnrollmentProgressService'
+import { OccurrenceService } from './OccurrenceService'
 
 /**
  * OccurrenceReportService handles business logic for occurrence reports.
@@ -82,8 +83,8 @@ export class OccurrenceReportService {
             progressLetter?: string
             attendanceStatus?: 'present' | 'absent'
             absenceReason?: string
-            classParticipation?: string
-            classroomBehavior?: string
+            classParticipation?: number
+            classroomBehavior?: number
             contactNotes?: string
             classNotes?: string
         }
@@ -198,6 +199,7 @@ export class OccurrenceReportService {
             try {
                 await this.updateEnrollmentProgressAfterReport(
                     serverReport.enrollment_id,
+                    reportId,
                     detailedData.lessonId,
                     detailedData.isCompleted
                 )
@@ -236,72 +238,105 @@ export class OccurrenceReportService {
      */
     private static async updateEnrollmentProgressAfterReport(
         enrollmentId: string,
+        reportId: string,
         lessonId: string,
         isCompleted: boolean
     ): Promise<void> {
-        // Get the lesson details to find its sequence
+        // 1. Get lesson details
         const { data: lesson, error: lessonError } = await supabase
             .from('lessons')
-            .select('sequence, course_id')
+            .select('id, sequence, course_id')
             .eq('id', lessonId)
             .single()
 
-        if (lessonError || !lesson) {
-            console.error('Failed to fetch lesson:', lessonError)
-            return
-        }
+        if (lessonError || !lesson) return
 
-        // Get all lessons in this course
-        const { data: allLessonsData, error: allLessonsError } = await supabase
+        // 2. Get all lessons in this course to check for completion
+        const { data: allLessonsData } = await supabase
             .from('lessons')
-            .select('*')
+            .select('id, sequence')
             .eq('course_id', lesson.course_id)
             .order('sequence', { ascending: true })
 
-        if (allLessonsError || !allLessonsData) {
-            console.error('Failed to fetch course lessons:', allLessonsError)
+        if (!allLessonsData || allLessonsData.length === 0) return
+
+        const lastLesson = allLessonsData[allLessonsData.length - 1]
+        const isActuallyLastLesson = lastLesson?.id === lessonId
+
+        // 3. Auto-complete enrollment if the last lesson is finished
+        if (isCompleted && isActuallyLastLesson) {
+            await supabase
+                .from('enrollments')
+                .update({ status: 'completed' })
+                .eq('id', enrollmentId)
+            
+            console.log(`✅ Enrollment ${enrollmentId} auto-completed (last lesson finished)`)
             return
         }
 
-        // Check if this is the last lesson and it's completed
-        if (isCompleted && allLessonsData.length > 0) {
-            const lastLesson = allLessonsData[allLessonsData.length - 1]
-            
-            if (lastLesson.id === lessonId) {
-                // This is the last lesson and it's completed - auto-complete the enrollment
-                const { error: completeError } = await supabase
-                    .from('enrollments')
-                    .update({ status: 'completed' })
-                    .eq('id', enrollmentId)
-                
-                if (completeError) {
-                    console.error('Failed to auto-complete enrollment:', completeError)
-                } else {
-                    console.log(`✅ Enrollment ${enrollmentId} auto-completed (last lesson finished)`)
-                }
-            }
-        }
-
-        // Convert to Lesson objects
+        // 4. Update progress letter/sequence
         const allLessons = allLessonsData.map(l => ({
             id: l.id,
-            courseId: l.course_id,
-            title: l.title,
-            sequence: l.sequence,
-            created_at: l.created_at,
-            updated_at: l.updated_at
-        }))
+            sequence: l.sequence
+        })) as any
 
-        // Calculate new progress
-        const newProgress = await EnrollmentProgressService.calculateNewProgress(
+        await EnrollmentProgressService.calculateNewProgress(
             enrollmentId,
             lesson.sequence,
             isCompleted,
             allLessons
         )
 
-        // Update the enrollment
-        await EnrollmentProgressService.updateEnrollmentProgress(enrollmentId, newProgress)
+        // 5. Auto-extension logic
+        // If this is the last generated report and course is not finished, generate one more week
+        const { data: currentReport } = await supabase
+            .from('occurrence_reports')
+            .select('id, class_occurrence:class_occurrences!class_occurrence_id(id, occurrence_date, class_session_id)')
+            .eq('id', reportId)
+            .single()
+        
+        if (!currentReport || !currentReport.class_occurrence) return
+        
+        const currentOcc = currentReport.class_occurrence as any
+        const todayStr = currentOcc.occurrence_date
+        
+        // Count reports after this one
+        const { count } = await supabase
+            .from('occurrence_reports')
+            .select('id, class_occurrence:class_occurrences!class_occurrence_id(occurrence_date)', { count: 'exact', head: true })
+            .eq('enrollment_id', enrollmentId)
+            .gt('class_occurrence.occurrence_date', todayStr)
+        
+        if (!count || count === 0) {
+            if (!isCompleted || !isActuallyLastLesson) {
+                const nextWeek = new Date(todayStr)
+                nextWeek.setDate(nextWeek.getDate() + 7)
+                const nextWeekStr = nextWeek.toISOString().split('T')[0]
+                
+                await OccurrenceService.generateOccurrences(
+                    currentOcc.class_session_id,
+                    nextWeek,
+                    nextWeek
+                )
+                
+                const { data: nextOcc } = await supabase
+                    .from('class_occurrences')
+                    .select('id')
+                    .eq('class_session_id', currentOcc.class_session_id)
+                    .eq('occurrence_date', nextWeekStr)
+                    .single()
+                
+                if (nextOcc) {
+                    await supabase.from('occurrence_reports').insert({
+                        enrollment_id: enrollmentId,
+                        class_occurrence_id: nextOcc.id,
+                        content: '',
+                        version: 1,
+                        is_completed: false
+                    })
+                }
+            }
+        }
     }
 
     /**

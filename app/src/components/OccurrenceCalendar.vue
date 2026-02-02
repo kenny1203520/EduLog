@@ -199,16 +199,21 @@ const calendarDays = computed<CalendarDay[]>(() => {
 
 // Methods
 function getOccurrencesForDate(date: Date): ClassOccurrence[] {
-  const dateStr = formatDateString(date)
+  // Use local date components for the calendar cell (as it was created with new Date(y, m, d))
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const dateStr = `${year}-${month}-${day}`
+
   return props.occurrences.filter(occ => {
-    const occDateStr = formatDateString(occ.occurrenceDate)
+    // Occurrence date is stored as UTC (00:00:00Z) in the model
+    // So we use ISO string to get the stable YYYY-MM-DD part
+    const occDateStr = occ.occurrenceDate.toISOString().split('T')[0]
     return occDateStr === dateStr
   })
 }
 
-function formatDateString(date: Date): string {
-  return date.toISOString().split('T')[0] || ''
-}
+
 
 function previousMonth() {
   currentDate.value = new Date(

@@ -1,45 +1,64 @@
 <template>
   <div class="flex items-center gap-1.5">
-    <div class="flex">
+    <div class="flex relative">
       <template v-for="i in 5" :key="i">
-        <button 
-          type="button"
-          class="relative focus:outline-none group"
-          @mouseenter="hoverValue = i - 0.5"
+        <div 
+          class="relative w-7 h-7 cursor-pointer group"
           @mouseleave="hoverValue = null"
-          @click="updateRating(i - 0.5)"
         >
-          <!-- Left half of star -->
-          <div class="absolute inset-0 w-1/2 overflow-hidden pointer-events-auto">
-            <svg 
+          <!-- Base Star (Gray) -->
+          <svg 
+            xmlns="http://www.w3.org/2000/svg" 
+            class="absolute inset-0 w-full h-full text-gray-200" 
+            viewBox="0 0 24 24" 
+            fill="currentColor"
+          >
+            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+          </svg>
+
+          <!-- Left Half Active/Hover (Amber) -->
+          <div class="absolute inset-0 w-[50%] overflow-hidden pointer-events-none z-10 transition-colors"
+               :class="getStarClass(i - 0.5)">
+             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              class="h-6 w-6" 
-              :class="getStarClass(i - 0.5)"
+              class="w-7 h-7" 
               viewBox="0 0 24 24" 
               fill="currentColor"
             >
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
             </svg>
           </div>
-          
-          <!-- Full star (for hover/click area) -->
-          <button
-            type="button"
-            class="pointer-events-auto"
-            @mouseenter="hoverValue = i"
-            @click="updateRating(i)"
-          >
-            <svg 
+
+          <!-- Right Half Active/Hover (Amber) -->
+           <div class="absolute inset-0 w-full overflow-hidden pointer-events-none transition-colors"
+               :class="getStarClass(i)">
+             <svg 
               xmlns="http://www.w3.org/2000/svg" 
-              class="h-6 w-6" 
-              :class="getStarClass(i)"
+              class="w-full h-full" 
               viewBox="0 0 24 24" 
               fill="currentColor"
             >
               <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
             </svg>
-          </button>
-        </button>
+          </div>
+
+          <!-- Click Targets (Invisible) -->
+          <button 
+            type="button" 
+            class="absolute top-0 left-0 w-1/2 h-full z-20 focus:outline-none"
+            @mouseenter="hoverValue = i - 0.5"
+            @click="updateRating(i - 0.5)"
+            aria-label="Half star"
+          ></button>
+          
+          <button 
+            type="button" 
+            class="absolute top-0 right-0 w-1/2 h-full z-20 focus:outline-none"
+            @mouseenter="hoverValue = i"
+            @click="updateRating(i)"
+            aria-label="Full star"
+          ></button>
+        </div>
       </template>
     </div>
     <span class="text-sm font-black text-gray-500 min-w-[2rem] text-center bg-gray-100 rounded-md px-1.5 py-0.5" v-if="showValue">

@@ -82,9 +82,14 @@ export class EnrollmentService {
 
         if (enrollError) throw new Error(`Failed to create enrollment: ${enrollError.message}`)
 
-        // 2. If enrolled in a specific class session, generate reports for all future occurrences
+        // 2. If enrolled in a specific class session, generate reports based on course lesson count
         if (enrollment.class_session_id) {
-            await this.generateReportsForSession(enrollment.id!, enrollment.class_session_id)
+            await this.generateReportsForSession(
+                enrollment.id!, 
+                enrollment.class_session_id,
+                enrollment.start_date || new Date().toISOString().split('T')[0],
+                enrollment.course_id
+            )
         }
 
         return new Enrollment(enrollment as EnrollmentDTO)
@@ -108,9 +113,23 @@ export class EnrollmentService {
         const isClassTransfer = updates.class_session_id && updates.class_session_id !== current.class_session_id
 
         if (isClassTransfer) {
-            // Delete old reports and generate new ones
+            // Delete old reports and generate new ones starting from current date (for transfer)
             await this.deleteReportsForEnrollment(enrollmentId)
-            await this.generateReportsForSession(enrollmentId, updates.class_session_id!)
+            
+            // Get course_id for lesson count
+            const { data: enr } = await supabase
+                .from('enrollments')
+                .select('course_id')
+                .eq('id', enrollmentId)
+                .single()
+            
+            const todayStr = new Date().toISOString().split('T')[0]
+            await this.generateReportsForSession(
+                enrollmentId, 
+                updates.class_session_id as string,
+                todayStr as string,
+                enr?.course_id || ''
+            )
         }
 
         // Update the enrollment
@@ -153,56 +172,53 @@ export class EnrollmentService {
      * Generate occurrence reports for all future class occurrences in a session
      * @private
      */
-    private static async generateReportsForSession(enrollmentId: string, sessionId: string): Promise<void> {
-        // First, ensure occurrences exist for the next 3 months
-        const today = new Date()
-        const endDate = new Date(today)
-        endDate.setMonth(endDate.getMonth() + 3)
+    private static async generateReportsForSession(
+        enrollmentId: string, 
+        sessionId: string,
+        startDate: string,
+        courseId: string
+    ): Promise<void> {
+        // 1. Get lesson count for this course
+        const { data: lessons } = await supabase
+            .from('lessons')
+            .select('id')
+            .eq('course_id', courseId)
         
-        try {
-            await OccurrenceService.generateOccurrences(sessionId, today, endDate)
-        } catch (e) {
-            console.warn('Failed to generate occurrences:', e)
-            // Continue - some occurrences might already exist
-        }
+        const lessonCount = (lessons && lessons.length > 0) ? lessons.length : 12
         
-        // Fetch all future occurrences for this session
-        const todayStr = today.toISOString().split('T')[0]
+        // 2. Ensure occurrences exist
+        const start = new Date(startDate)
+        const endDate = new Date(start)
+        endDate.setDate(endDate.getDate() + (lessonCount * 7))
         
-        const { data: occurrences, error: occError } = await supabase
+        await OccurrenceService.generateOccurrences(sessionId, start, endDate).catch(() => {})
+        
+        // 3. Fetch exactly N future occurrences starting from startDate
+        const { data: occurrences } = await supabase
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', sessionId)
-            .gte('occurrence_date', todayStr)
+            .gte('occurrence_date', startDate)
             .order('occurrence_date', { ascending: true })
+            .limit(lessonCount)
 
-        if (occError) {
-            console.error('Failed to fetch occurrences:', occError)
-            return
-        }
+        if (occurrences && occurrences.length > 0) {
+            // 4. Batch create reports
+            const reports = occurrences.map(occ => ({
+                enrollment_id: enrollmentId,
+                class_occurrence_id: occ.id,
+                content: '',
+                version: 1,
+                is_completed: false
+            }))
 
-        if (!occurrences || occurrences.length === 0) {
-            console.warn(`No future occurrences found for session ${sessionId}`)
-            return
-        }
-
-        // Batch create reports
-        const reports = occurrences.map(occ => ({
-            enrollment_id: enrollmentId,
-            class_occurrence_id: occ.id,
-            content: '',
-            version: 1
-        }))
-
-        const { error: insertError } = await supabase
-            .from('occurrence_reports')
-            .insert(reports)
-
-        if (insertError) {
-            console.error('Failed to create reports:', insertError)
-            // Don't throw - enrollment is created, reports can be generated later
+            await supabase
+                .from('occurrence_reports')
+                .insert(reports)
         }
     }
+    
+
 
     /**
      * Delete all reports for an enrollment
@@ -229,39 +245,57 @@ export class EnrollmentService {
         newSessionId: string,
         transferDate: string
     ): Promise<Enrollment> {
-        // Mark reports before transfer date as historical (keep them)
-        // Delete reports after transfer date from old session
-        const { error: deleteError } = await supabase
-            .from('occurrence_reports')
-            .delete()
-            .eq('enrollment_id', enrollmentId)
-            .filter('class_occurrences.occurrence_date', 'gte', transferDate)
+        // Step 1: Get old session ID from current enrollment
+        const { data: currentEnrollment, error: enrollError } = await supabase
+            .from('enrollments')
+            .select('class_session_id')
+            .eq('id', enrollmentId)
+            .single()
 
-        if (deleteError) {
-            console.error('Failed to clean up old session reports:', deleteError)
-        }
+        if (enrollError) throw new Error(`Failed to fetch enrollment: ${enrollError.message}`)
 
-        // Generate reports for new session from transfer date onwards
-        const { data: newOccurrences, error: occError } = await supabase
+        const oldSessionId = currentEnrollment.class_session_id
+
+        // Step 2: Get all occurrence IDs from the OLD session that are >= transfer date
+        const { data: oldOccurrences, error: oldOccError } = await supabase
             .from('class_occurrences')
             .select('id')
-            .eq('class_session_id', newSessionId)
+            .eq('class_session_id', oldSessionId)
             .gte('occurrence_date', transferDate)
 
-        if (occError) throw new Error(`Failed to fetch new session occurrences: ${occError.message}`)
-
-        if (newOccurrences && newOccurrences.length > 0) {
-            const newReports = newOccurrences.map(occ => ({
-                enrollment_id: enrollmentId,
-                class_occurrence_id: occ.id,
-                content: '',
-                version: 1
-            }))
-
-            await supabase.from('occurrence_reports').insert(newReports)
+        if (oldOccError) {
+            console.error('Failed to fetch old occurrences:', oldOccError)
         }
 
-        // Update enrollment
+        // Step 3: Delete reports for those occurrences (using IN filter)
+        if (oldOccurrences && oldOccurrences.length > 0) {
+            const occurrenceIds = oldOccurrences.map(o => o.id)
+            const { error: deleteError } = await supabase
+                .from('occurrence_reports')
+                .delete()
+                .eq('enrollment_id', enrollmentId)
+                .in('class_occurrence_id', occurrenceIds)
+
+            if (deleteError) {
+                console.error('Failed to clean up old session reports:', deleteError)
+            }
+        }
+
+        // Step 4: Generate reports for new session using the standard generator
+        const { data: enr } = await supabase
+            .from('enrollments')
+            .select('course_id')
+            .eq('id', enrollmentId)
+            .single()
+
+        await this.generateReportsForSession(
+            enrollmentId,
+            newSessionId,
+            transferDate,
+            enr?.course_id || ''
+        )
+
+        // Step 6: Update enrollment
         return this.update(enrollmentId, { class_session_id: newSessionId })
     }
 }

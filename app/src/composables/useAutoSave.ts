@@ -134,8 +134,16 @@ export function useAutoSave(options: AutoSaveOptions) {
     }
 
     /**
-     * Gets formatted "last saved" time string
+     * Resets the auto-save state (e.g. when switching documents)
      */
+    function reset(): void {
+        clearTimer()
+        isSaving.value = false
+        lastSaved.value = null
+        hasUnsavedChanges.value = false
+        saveError.value = null
+    }
+
     function getLastSavedString(): string {
         if (!lastSaved.value) return 'Never'
         
@@ -163,6 +171,7 @@ export function useAutoSave(options: AutoSaveOptions) {
         saveNow,
         triggerAutoSave,
         cancelAutoSave,
+        reset,
         getLastSavedString
     }
 }
