@@ -368,7 +368,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                        }}</span>
+                    }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -603,11 +603,11 @@ const {
                     progressLetter: progressLetter.value || undefined,
                     attendanceStatus: attendanceStatus.value,
                     absenceReason: finalAbsenceReason || undefined,
-                    classParticipation: classParticipation.value || undefined,
-                    classroomBehavior: classroomBehavior.value || undefined,
-                    contactNotes: contactNotes.value || undefined,
-                    classNotes: classNotes.value || undefined,
-                    externalLink: reportExternalLink.value || undefined
+                    classParticipation: classParticipation.value,
+                    classroomBehavior: classroomBehavior.value,
+                    contactNotes: contactNotes.value,
+                    classNotes: classNotes.value,
+                    externalLink: reportExternalLink.value
                 }
             )
 
