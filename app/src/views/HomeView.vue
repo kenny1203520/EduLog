@@ -105,9 +105,9 @@ function openReport(enrollmentId: string) {
         <div class="flex items-center justify-between px-2">
             <h3 class="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
                 <span class="flex h-3 w-3 rounded-full bg-amber-500"></span>
-                {{ $t('dashboard.pending_reports') || 'Pending Reports' }}
+                {{ $t('dashboard.pending_reports') }}
             </h3>
-            <span class="text-sm font-bold text-gray-400">{{ pendingReports.length }} missing</span>
+            <span class="text-sm font-bold text-gray-400">{{ $t('dashboard.missing_count', { count: pendingReports.length }) }}</span>
         </div>
         
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -131,7 +131,7 @@ function openReport(enrollmentId: string) {
                 </div>
                 <div class="flex items-center justify-between mt-2">
                      <span class="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">
-                        {{ report.isMissing ? 'Missing' : 'Incomplete' }}
+                        {{ report.isMissing ? $t('dashboard.missing') : $t('dashboard.incomplete') }}
                      </span>
                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-300 group-hover:text-emerald-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

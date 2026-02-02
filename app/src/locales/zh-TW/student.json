@@ -128,7 +128,8 @@
         "session_address": "地址",
         "session_schedule": "時間",
         "session_capacity": "人數",
-        "session_full": "已滿"
+        "session_full": "已滿",
+        "external_link": "教材資料夾連結"
     },
     "credentials": {
         "platform": "平台",

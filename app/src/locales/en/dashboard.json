@@ -24,5 +24,9 @@
         "loading": "LOADING SCHEDULE...",
         "no_classes": "No classes scheduled today.",
         "no_classes_sub": "Enjoy your time or plan ahead!"
-    }
+    },
+    "pending_reports": "Pending Reports",
+    "missing": "Missing",
+    "incomplete": "Incomplete",
+    "missing_count": "{count} missing"
 }

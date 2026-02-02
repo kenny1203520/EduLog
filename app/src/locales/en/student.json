@@ -121,7 +121,8 @@
         "session_address": "Address",
         "session_schedule": "Schedule",
         "session_capacity": "Capacity",
-        "session_full": "FULL"
+        "session_full": "FULL",
+        "external_link": "External Report URL"
     },
     "credentials": {
         "platform": "Platform",

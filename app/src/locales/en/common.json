@@ -19,5 +19,6 @@
         "results": "results",
         "show": "Show",
         "no_results": "No results"
-    }
+    },
+    "close_split_view": "Close Editor"
 }
