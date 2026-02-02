@@ -647,7 +647,7 @@ export class OccurrenceReportService {
             .from('occurrence_reports')
             .select(`
                 id, content, is_completed, updated_at,
-                progress_start, progress_end, progress_letter,
+                progress_letter,
                 contact_notes, class_notes,
                 enrollments!inner (
                     students (first_name, last_name, english_name)
@@ -723,13 +723,13 @@ export class OccurrenceReportService {
             .from('occurrence_reports')
             .select(`
                 id, content, is_completed, updated_at,
-                progress_start, progress_end, progress_letter,
+                progress_letter,
                 contact_notes, class_notes,
                 lessons (title, sequence),
                 class_occurrences!inner (
                     occurrence_date,
                     class_sessions!inner (
-                        courses!inner (id, name)
+                        courses (id, name)
                     )
                 )
             `, { count: 'exact' })

@@ -419,6 +419,7 @@ import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
+import { ReportTemplateService } from '@/services/ReportTemplateService'
 
 import type { Lesson } from '@/models/Course'
 
@@ -426,6 +427,8 @@ interface Template {
     id: string
     name: string
     content: string
+    contactNotes?: string
+    classNotes?: string
 }
 
 // Templates State
@@ -441,43 +444,66 @@ const handleCopyContent = (text: string) => {
     handleInput()
 }
 
-function loadTemplates() {
-    const stored = localStorage.getItem('edulog_report_templates')
-    if (stored) {
-        try {
-            savedTemplates.value = JSON.parse(stored)
-        } catch (e) {
-            console.error('Failed to parse templates', e)
-        }
+async function loadTemplates() {
+    if (!authStore.user?.id) return
+    try {
+        const res = await ReportTemplateService.getTemplates(authStore.user.id)
+        savedTemplates.value = res.map(t => ({
+            id: t.id!,
+            name: t.name,
+            content: t.content,
+            contactNotes: t.contactNotes,
+            classNotes: t.classNotes
+        }))
+    } catch (e) {
+        console.error('Failed to load templates', e)
     }
 }
 
-function saveTemplate() {
-    if (!newTemplateName.value.trim() || !localContent.value.trim()) return
+async function saveTemplate() {
+    if (!newTemplateName.value.trim() || !localContent.value.trim() || !authStore.user?.id) return
 
-    const newTemplate: Template = {
-        id: Date.now().toString(),
-        name: newTemplateName.value.trim(),
-        content: localContent.value
+    try {
+        const newT = await ReportTemplateService.saveTemplate({
+            name: newTemplateName.value.trim(),
+            content: localContent.value,
+            contact_notes: contactNotes.value,
+            class_notes: classNotes.value,
+            instructor_id: authStore.user.id
+        })
+
+        savedTemplates.value.push({
+            id: newT.id!,
+            name: newT.name,
+            content: newT.content,
+            contactNotes: newT.contactNotes,
+            classNotes: newT.classNotes
+        })
+        newTemplateName.value = ''
+    } catch (e) {
+        console.error('Failed to save template', e)
     }
-
-    savedTemplates.value.push(newTemplate)
-    localStorage.setItem('edulog_report_templates', JSON.stringify(savedTemplates.value))
-    newTemplateName.value = ''
 }
 
-function applyTemplate(template: Template) {
-    if (localContent.value && !confirm('Replace current content with template?')) return
+function applyTemplate(template: any) {
+    if (localContent.value && !confirm(t('report.editor.apply_template_confirm'))) return
 
     localContent.value = template.content
+    if (template.contactNotes) contactNotes.value = template.contactNotes
+    if (template.classNotes) classNotes.value = template.classNotes
+
     handleInput() // Update and save
     showTemplates.value = false
 }
 
-function deleteTemplate(id: string) {
+async function deleteTemplate(id: string) {
     if (!confirm('Delete this template?')) return
-    savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
-    localStorage.setItem('edulog_report_templates', JSON.stringify(savedTemplates.value))
+    try {
+        await ReportTemplateService.deleteTemplate(id)
+        savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
+    } catch (e) {
+        console.error('Failed to delete template', e)
+    }
 }
 
 onMounted(() => {

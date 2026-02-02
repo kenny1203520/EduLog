@@ -159,7 +159,7 @@
             <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">
                     <span class="text-xs text-gray-400 whitespace-nowrap">{{ $t('report.reference_panel.items_per_page')
-                        }}</span>
+                    }}</span>
                     <select v-model="pageSize" class="text-xs border rounded p-1 bg-gray-50 focus:ring-indigo-500"
                         @change="handlePageSizeChange">
                         <option :value="10">10</option>
@@ -346,13 +346,7 @@ function formatDate(report: any) {
 }
 
 function getReportProgress(report: any) {
-    if (report.progress_letter) return report.progress_letter
-    if (report.progress_start) {
-        return report.progress_end
-            ? `${report.progress_start}-${report.progress_end}`
-            : report.progress_start
-    }
-    return ''
+    return report.progress_letter || ''
 }
 
 function formatHeader(report: any) {
@@ -361,9 +355,20 @@ function formatHeader(report: any) {
         if (!s) return 'Unknown Student'
         return s.english_name ? `${s.english_name} (${s.first_name})` : `${s.first_name} ${s.last_name || ''}`
     } else {
-        const course = report.class_occurrences?.class_sessions?.courses
+        const session = report.class_occurrences?.class_sessions
+        const course = session?.courses
+
+        let courseName = 'Unknown Course'
+        if (course) {
+            if (Array.isArray(course)) {
+                courseName = course[0]?.name || courseName
+            } else {
+                courseName = course.name || courseName
+            }
+        }
+
         const lessonSeq = report.lessons?.sequence ? `#${report.lessons.sequence}` : ''
-        return `${course?.name || 'Unknown Course'} ${lessonSeq}`
+        return `${courseName} ${lessonSeq}`.trim()
     }
 }
 
