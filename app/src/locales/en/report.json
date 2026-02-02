@@ -24,6 +24,18 @@
     "behavior": "Behavior",
     "update_available": "Update Available",
     "update_available_desc": "Report updated by another user. Click to refresh.",
+    "contact_notes": "Contact Notes",
+    "progress": "Progress",
+    "completed": "Completed",
+    "reference_panel": {
+        "title": "Report Reference",
+        "peer_reports": "Peer Samples",
+        "student_history": "Student History",
+        "search_placeholder": "Search content...",
+        "no_results": "No relevant reports found.",
+        "copy_content": "Copy Content",
+        "copy_success": "Copied to editor"
+    },
     "editor": {
         "title": "Class Report",
         "lesson_label": "Lesson",

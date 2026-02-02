@@ -24,6 +24,18 @@
     "behavior": "課堂表現",
     "update_available": "有更新",
     "update_available_desc": "其他使用者已更新此報告，點擊以重新整理。",
+    "contact_notes": "聯絡欄",
+    "progress": "進度",
+    "completed": "已完成",
+    "reference_panel": {
+        "title": "報告參考查詢",
+        "peer_reports": "同課次參考",
+        "student_history": "學生歷史紀錄",
+        "search_placeholder": "搜尋內容...",
+        "no_results": "找不到相關報告。",
+        "copy_content": "複製內容",
+        "copy_success": "已複製到編輯區"
+    },
     "editor": {
         "title": "課堂報告",
         "lesson_label": "課次",
