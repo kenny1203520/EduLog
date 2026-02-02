@@ -16,29 +16,48 @@
             </h1>
         </div>
 
-        <div class="flex justify-end mb-4 bg-gray-100 p-1 rounded-lg inline-flex self-end">
-            <button @click="viewMode = 'calendar'" class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                :class="viewMode === 'calendar' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
-                <div class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
+        <div class="flex justify-between items-end mb-4">
+            <!-- Sort Control (List View Only) -->
+            <div v-if="viewMode === 'list'" class="mb-1">
+                <button @click="toggleSort"
+                    class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                     </svg>
-                    {{ $t('common.calendar') || 'Calendar' }}
-                </div>
-            </button>
-            <button @click="switchToListView" class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
-                :class="viewMode === 'list' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
-                <div class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                    </svg>
-                    {{ $t('common.list') || 'List' }}
-                </div>
-            </button>
+                    <span>{{ sortOrder === 'asc' ? $t('common.sort_asc') || 'Oldest First' : $t('common.sort_desc') ||
+                        'Newest First' }}</span>
+                </button>
+            </div>
+            <div v-else></div>
+
+            <!-- View Toggle -->
+            <div class="bg-gray-100 p-1 rounded-lg inline-flex">
+                <button @click="viewMode = 'calendar'"
+                    class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                    :class="viewMode === 'calendar' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {{ $t('common.calendar') || 'Calendar' }}
+                    </div>
+                </button>
+                <button @click="switchToListView" class="px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                    :class="viewMode === 'list' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                        {{ $t('common.list') || 'List' }}
+                    </div>
+                </button>
+            </div>
         </div>
 
         <div v-if="loading"
@@ -349,6 +368,11 @@ import { computed } from 'vue'
 const viewMode = ref<'calendar' | 'list'>('calendar')
 const listLoading = ref(false)
 const allReports = ref<any[]>([])
+const sortOrder = ref<'asc' | 'desc'>('asc')
+
+function toggleSort() {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+}
 
 const allReportDisplay = computed(() => {
     // Base list on ALL occurrences (Calendar/Schedule based) to ensure no gaps
@@ -396,7 +420,12 @@ const allReportDisplay = computed(() => {
     })
 
     // Sort Oldest -> Newest (Ascending)
-    return mergedList.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    // Sort based on sortOrder
+    return mergedList.sort((a, b) => {
+        const timeA = new Date(a.date).getTime()
+        const timeB = new Date(b.date).getTime()
+        return sortOrder.value === 'asc' ? timeA - timeB : timeB - timeA
+    })
 })
 
 function formatWeekday(dateVal: string | Date) {

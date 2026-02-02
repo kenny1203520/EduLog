@@ -29,5 +29,7 @@
     "none": "None",
     "close_split_view": "Close Editor",
     "success": "Success",
-    "confirm_save": "Are you sure you want to save?"
+    "confirm_save": "Are you sure you want to save?",
+    "sort_asc": "Oldest First",
+    "sort_desc": "Newest First"
 }

@@ -29,5 +29,7 @@
     "none": "無",
     "close_split_view": "關閉編輯器",
     "success": "成功",
-    "confirm_save": "確定要儲存嗎？"
+    "confirm_save": "確定要儲存嗎？",
+    "sort_asc": "由舊到新",
+    "sort_desc": "由新到舊"
 }
