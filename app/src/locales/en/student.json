@@ -69,7 +69,19 @@
         "session_hint": "Selecting a session auto-fills the classroom.",
         "session_details": "Session Details",
         "add_btn": "Enroll",
-        "no_enrollments": "No active enrollments"
+        "no_enrollments": "No active enrollments",
+        "add_enrollment_hint": "Click 'Enroll in Course' on the student profile to add courses.",
+        "view_reports": "View Reports",
+        "edit_enrollment": "Edit Course",
+        "delete_enrollment": "Delete Course",
+        "edit_enrollment_title": "Edit Course Enrollment",
+        "status_active": "Active",
+        "status_completed": "Completed",
+        "status_dropped": "Dropped",
+        "session_optional": "Class Session (Optional)",
+        "classroom_optional": "Classroom (Optional)",
+        "none_option": "-- None --",
+        "lesson_label": "Lesson"
     },
     "credentials": {
         "platform": "Platform",
@@ -91,5 +103,9 @@
     },
     "actions": "Actions",
     "edit": "Edit",
-    "save": "Save"
+    "save": "Save",
+    "management": {
+        "no_grade": "No Grade Info",
+        "no_school": "No School Info"
+    }
 }

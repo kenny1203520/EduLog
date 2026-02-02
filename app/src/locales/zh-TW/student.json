@@ -69,7 +69,19 @@
         "session_hint": "選擇班級時段後會自動填寫教室。",
         "session_details": "班級資訊",
         "add_btn": "確認選課",
-        "no_enrollments": "尚未選修任何課程"
+        "no_enrollments": "尚未選修任何課程",
+        "add_enrollment_hint": "點擊學生個人頁面的「選修課程」開始為學生新增課程。",
+        "view_reports": "查看報告",
+        "edit_enrollment": "編輯課程",
+        "delete_enrollment": "刪除課程",
+        "edit_enrollment_title": "編輯課程註冊",
+        "status_active": "進行中",
+        "status_completed": "已完成",
+        "status_dropped": "已退選",
+        "session_optional": "班級時段 (選填)",
+        "classroom_optional": "教室 (選填)",
+        "none_option": "-- 無 --",
+        "lesson_label": "課次"
     },
     "credentials": {
         "platform": "平台",
@@ -91,5 +103,9 @@
     },
     "actions": "操作",
     "edit": "編輯",
-    "save": "儲存"
+    "save": "儲存",
+    "management": {
+        "no_grade": "暫無年級資訊",
+        "no_school": "暫無學校資訊"
+    }
 }

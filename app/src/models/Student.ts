@@ -96,7 +96,7 @@ export class Student {
    */
   get displayName(): string {
     const g = this.displayGrade
-    return g !== 'No Grade' ? `${this.name} (${g})` : this.name
+    return g ? `${this.name} (${g})` : this.name
   }
 
   /**
@@ -109,12 +109,12 @@ export class Student {
 
   get displayGrade(): string {
     const s = this.currentSchool
-    if (!s) return 'No Grade'
-    return s.class ? `${s.grade} - ${s.class}` : (s.grade || 'No Grade')
+    if (!s) return ''
+    return s.class ? `${s.grade} - ${s.class}` : (s.grade || '')
   }
 
   get displaySchoolName(): string {
-    return this.currentSchool?.name || 'No School'
+    return this.currentSchool?.name || ''
   }
 
   get displaySchoolId(): string {

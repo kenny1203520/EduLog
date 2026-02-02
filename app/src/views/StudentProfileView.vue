@@ -506,7 +506,11 @@ function copyToClipboard(text: string) {
     <div class="flex items-center justify-between border-b pb-4">
       <div>
         <h1 class="text-3xl font-bold text-gray-800">{{ studentStore.currentStudent.name }}</h1>
-        <p class="text-gray-500">{{ studentStore.currentStudent.displayGrade }} • {{ studentStore.currentStudent.id }}</p>
+        <p class="text-gray-500">
+          <span v-if="studentStore.currentStudent.displayGrade">{{ studentStore.currentStudent.displayGrade }} • </span>
+          <span v-else>{{ $t('student.management.no_grade') }} • </span>
+          {{ studentStore.currentStudent.id }}
+        </p>
       </div>
       <div class="space-x-3">
         <!-- Removed redundant view-reports link as per user request to go to profile first -->
@@ -961,7 +965,7 @@ function copyToClipboard(text: string) {
                               <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                               </svg>
-                              課次 {{ enr.lessonNumber }}
+                              {{ $t('student.internal_courses.lesson_label') }} {{ enr.lessonNumber }}
                            </span>
                         </div>
                      </div>
@@ -969,7 +973,7 @@ function copyToClipboard(text: string) {
                         <router-link 
                            :to="{ name: 'lesson-reports', params: { enrollmentId: enr.id } }" 
                            class="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white transition-all shadow-sm hover:shadow-md"
-                           title="查看報告"
+                           :title="$t('student.internal_courses.view_reports')"
                         >
                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -978,7 +982,7 @@ function copyToClipboard(text: string) {
                         <button 
                            @click="startEditEnrollment(enr)" 
                            class="p-2.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all shadow-sm hover:shadow-md"
-                           title="編輯課程"
+                           :title="$t('student.internal_courses.edit_enrollment')"
                         >
                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -987,7 +991,7 @@ function copyToClipboard(text: string) {
                         <button 
                            @click="removeEnrollment(enr.id!)" 
                            class="p-2.5 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm hover:shadow-md"
-                           title="刪除課程"
+                           :title="$t('student.internal_courses.delete_enrollment')"
                         >
                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                               <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
@@ -1003,51 +1007,51 @@ function copyToClipboard(text: string) {
                      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                      </svg>
-                     編輯課程註冊
+                     {{ $t('student.internal_courses.edit_enrollment_title') }}
                   </h4>
                   <div class="space-y-3">
                      <div class="grid grid-cols-2 gap-3">
                         <div>
-                           <label class="text-xs font-semibold text-gray-600 mb-1 block">狀態</label>
+                           <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.status') }}</label>
                            <select v-model="editEnrollmentForm.status" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                              <option value="active">進行中</option>
-                              <option value="completed">已完成</option>
-                              <option value="dropped">已退選</option>
+                              <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
+                              <option value="completed">{{ $t('student.internal_courses.status_completed') }}</option>
+                              <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}</option>
                            </select>
                         </div>
                         <div>
-                           <label class="text-xs font-semibold text-gray-600 mb-1 block">進度課次</label>
+                           <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.lesson_number') }}</label>
                            <input type="number" v-model.number="editEnrollmentForm.lesson_number" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
                         </div>
                      </div>
                      <div>
-                        <label class="text-xs font-semibold text-gray-600 mb-1 block">班級時段 (選填)</label>
+                        <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.session_optional') }}</label>
                         <select v-model="editEnrollmentForm.class_session_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                           <option :value="undefined">-- 無 --</option>
+                           <option :value="undefined">{{ $t('student.internal_courses.none_option') }}</option>
                            <option v-for="s in editFilteredSessions" :key="s.id" :value="s.id">
                               {{ s.name }} ({{ s.day_of_week !== undefined ? ['日','一','二','三','四','五','六'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
                            </option>
                         </select>
                      </div>
                      <div>
-                        <label class="text-xs font-semibold text-gray-600 mb-1 block">教室 (選填)</label>
+                        <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.classroom_optional') }}</label>
                         <select v-model="editEnrollmentForm.classroom_id" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                           <option :value="undefined">-- 無 --</option>
+                           <option :value="undefined">{{ $t('student.internal_courses.none_option') }}</option>
                            <option v-for="r in availableClassrooms" :key="r.id" :value="r.id">
                               {{ r.name }}
                            </option>
                         </select>
                      </div>
                      <div>
-                        <label class="text-xs font-semibold text-gray-600 mb-1 block">開始日期</label>
+                        <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.start_date') }}</label>
                         <input type="date" v-model="editEnrollmentForm.start_date" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
                      </div>
                      <div class="flex justify-end gap-2 pt-3 border-t border-blue-200">
                         <button @click="cancelEditEnrollment" class="px-4 py-2 text-gray-600 bg-white hover:bg-gray-100 rounded-lg text-sm font-semibold transition-colors border border-gray-300">
-                           取消
+                           {{ $t('common.cancel') }}
                         </button>
                         <button @click="saveEnrollment" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors shadow-sm">
-                           儲存
+                           {{ $t('common.save') }}
                         </button>
                      </div>
                   </div>
