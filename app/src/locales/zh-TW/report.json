@@ -58,6 +58,8 @@
         "template_load_error": "無法讀取範本",
         "save_to_template": "儲存為範本",
         "apply_template_confirm": "套用範本將取代目前的報告內容（包含聯絡欄與紀錄），確定要繼續嗎？",
+        "copy_course_info": "複製課程資訊",
+        "copy_success_simple": "已複製",
         "attendance_title": "出席狀況",
         "present": "出席",
         "absent": "未出席",

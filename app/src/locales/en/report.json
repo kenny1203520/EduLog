@@ -58,6 +58,8 @@
         "template_load_error": "Failed to load templates",
         "save_to_template": "Save as Template",
         "apply_template_confirm": "Applying this template will replace the current content, contact notes, and class notes. Continue?",
+        "copy_course_info": "Copy Course Info",
+        "copy_success_simple": "Copied",
         "attendance_title": "Attendance Status",
         "present": "Present",
         "absent": "Absent",

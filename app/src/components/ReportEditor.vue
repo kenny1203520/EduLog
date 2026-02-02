@@ -52,14 +52,21 @@
                     </h4>
 
                     <!-- Save New -->
-                    <div class="flex gap-2 mb-4">
-                        <input v-model="newTemplateName" type="text" placeholder="New template name"
-                            class="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500"
-                            @keyup.enter="saveTemplate" />
-                        <button @click="saveTemplate" :disabled="!newTemplateName.trim() || !localContent"
-                            class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-700 disabled:opacity-50">
-                            Save
-                        </button>
+                    <div class="flex flex-col gap-2 mb-4">
+                        <div class="flex gap-2">
+                            <input v-model="newTemplateName" type="text"
+                                :placeholder="$t('report.editor.template_name_placeholder')"
+                                class="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500"
+                                @keyup.enter="saveTemplate" />
+                            <button @click="saveTemplate" :disabled="!newTemplateName.trim() || !localContent"
+                                class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap">
+                                {{ $t('report.editor.save_to_template') }}
+                            </button>
+                        </div>
+                        <div v-if="templateStatus"
+                            class="text-[10px] text-emerald-600 font-bold text-center animate-bounce">
+                            {{ templateStatus }}
+                        </div>
                     </div>
 
                     <!-- List -->
@@ -115,9 +122,22 @@
             <!-- Lesson Selection -->
             <div class="mb-6">
                 <div class="flex items-center justify-between mb-2">
-                    <label class="block text-sm font-medium text-gray-700">
-                        {{ $t('report.editor.lesson_label') }}
-                    </label>
+                    <div class="flex items-center gap-2">
+                        <label class="block text-sm font-medium text-gray-700">
+                            {{ $t('report.editor.lesson_label') }}
+                        </label>
+                        <button v-if="selectedLessonId" @click="copyCourseInfo"
+                            class="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
+                            :title="$t('report.editor.copy_course_info')">
+                            <svg v-if="!justCopiedCourse" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                            </svg>
+                            <span v-else class="text-[10px] font-bold text-emerald-600 animate-pulse">{{
+                                $t('report.editor.copy_success_simple') }}</span>
+                        </button>
+                    </div>
                     <!-- Enrollment External Link Button -->
                     <a v-if="initialEnrollmentExternalLink" :href="initialEnrollmentExternalLink" target="_blank"
                         class="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors">
@@ -406,8 +426,9 @@
             </button>
         </div>
 
-        <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId" :student-id="student?.id"
-            :current-report-id="reportId" @close="showReferencePanel = false" @copy="handleCopyContent" />
+        <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId"
+            :student-id="props.initialStudentId" :current-report-id="reportId" @close="showReferencePanel = false"
+            @copy="handleCopyContent" />
     </div>
 </template>
 
@@ -436,6 +457,8 @@ const showTemplates = ref(false)
 const showReferencePanel = ref(false)
 const savedTemplates = ref<Template[]>([])
 const newTemplateName = ref('')
+const justCopiedCourse = ref(false)
+const templateStatus = ref('') // Added for feedback
 
 const handleCopyContent = (text: string) => {
     if (!text) return
@@ -480,9 +503,24 @@ async function saveTemplate() {
             classNotes: newT.classNotes
         })
         newTemplateName.value = ''
+        templateStatus.value = t('report.editor.template_saved')
+        setTimeout(() => { templateStatus.value = '' }, 3000)
     } catch (e) {
         console.error('Failed to save template', e)
     }
+}
+
+function copyCourseInfo() {
+    const lesson = props.availableLessons.find(l => l.id === selectedLessonId.value)
+    if (!lesson) return
+
+    const cName = props.courseName || ''
+    const text = cName ? `${cName} #${lesson.sequence}` : `Lesson ${lesson.sequence}: ${lesson.title}`
+
+    navigator.clipboard.writeText(text).then(() => {
+        justCopiedCourse.value = true
+        setTimeout(() => { justCopiedCourse.value = false }, 2000)
+    })
 }
 
 function applyTemplate(template: any) {
@@ -535,6 +573,8 @@ interface Props {
     initialClassNotes?: string
     initialReportExternalLink?: string
     initialEnrollmentExternalLink?: string
+    courseName?: string
+    initialStudentId?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -548,7 +588,9 @@ const props = withDefaults(defineProps<Props>(), {
     initialIsCompleted: true,
     initialAttendanceStatus: 'present',
     initialReportExternalLink: '',
-    initialEnrollmentExternalLink: ''
+    initialEnrollmentExternalLink: '',
+    courseName: '',
+    initialStudentId: ''
 })
 
 const emit = defineEmits<{

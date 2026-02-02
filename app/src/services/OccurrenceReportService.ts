@@ -663,7 +663,6 @@ export class OccurrenceReportService {
                 )
             `, { count: 'exact' })
             .eq('lesson_id', lessonId)
-            .eq('is_completed', true)
             .not('content', 'is', null)
             .neq('content', '')
 
@@ -734,7 +733,6 @@ export class OccurrenceReportService {
                 )
             `, { count: 'exact' })
             .in('enrollment_id', enrollmentIds)
-            .eq('is_completed', true)
             .not('content', 'is', null)
             .neq('content', '')
 

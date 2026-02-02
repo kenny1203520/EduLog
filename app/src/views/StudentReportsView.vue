@@ -276,7 +276,8 @@
                         :initial-version="selectedReport.version" :loading="reportLoading"
                         :title="$t('report.report_for_date', { date: formatOccurrenceDateTime(selectedOccurrence) })"
                         :show-manual-save="true" :available-lessons="courseLessons"
-                        :initial-lesson-id="selectedReport.lessonId" :initial-is-completed="selectedReport.isCompleted"
+                        :course-name="enrollmentInfo?.courseDisplay" :initial-lesson-id="selectedReport.lessonId"
+                        :initial-is-completed="selectedReport.isCompleted"
                         :initial-attendance-status="selectedReport.attendanceStatus"
                         :initial-absence-reason="selectedReport.absenceReason"
                         :initial-class-participation="selectedReport.classParticipation"
@@ -285,7 +286,8 @@
                         :initial-class-notes="selectedReport.classNotes"
                         :initial-report-external-link="selectedReport.externalLink"
                         :initial-enrollment-external-link="enrollmentInfo?.externalLink"
-                        @save-success="handleSaveSuccess" @save-error="handleSaveError" @conflict="handleConflict" />
+                        :initial-student-id="enrollmentInfo?.studentId" @save-success="handleSaveSuccess"
+                        @save-error="handleSaveError" @conflict="handleConflict" />
                 </div>
 
                 <!-- Empty State -->
@@ -383,7 +385,8 @@ const enrollmentInfo = ref<{
     courseDisplay: string,
     classroomName?: string,
     sessionName?: string,
-    externalLink?: string
+    externalLink?: string,
+    studentId?: string
 } | null>(null)
 const courseLessons = ref<any[]>([])
 let reportSubscription: RealtimeChannel | null = null
@@ -556,7 +559,8 @@ async function loadOccurrences() {
             courseDisplay: `${enrollment.courseSubject}_${enrollment.courseStage}`,
             classroomName: enrollment.classroomName,
             sessionName: enrollment.classSessionName,
-            externalLink: enrollment.externalLink
+            externalLink: enrollment.externalLink,
+            studentId: enrollment.studentId
         }
 
         // 2. Load lessons for this course (needed for editor)
