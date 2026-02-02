@@ -43,6 +43,8 @@ export interface StudentDTO {
   phone?: string
   residence_address?: string
   mailing_address?: string
+  birthday?: string // New Field
+  external_link?: string // New Field
   // Relations
   student_contacts?: StudentContactDTO[]
   student_schools?: StudentSchoolDTO[]
@@ -61,6 +63,8 @@ export class Student {
   public phone: string
   public residence_address: string
   public mailing_address: string
+  public birthday: string
+  public external_link: string
   
   public contacts: StudentContactDTO[]
   public schools: StudentSchoolDTO[]
@@ -78,6 +82,8 @@ export class Student {
     this.phone = dto.phone || ''
     this.residence_address = dto.residence_address || ''
     this.mailing_address = dto.mailing_address || ''
+    this.birthday = dto.birthday || ''
+    this.external_link = dto.external_link || ''
     
     this.contacts = dto.student_contacts || []
     this.schools = dto.student_schools || []

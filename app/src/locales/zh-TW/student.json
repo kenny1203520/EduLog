@@ -12,6 +12,8 @@
     "orange_apple_id": "橘子蘋果學苑 ID",
     "residence_address": "戶籍地址",
     "mailing_address": "通訊地址",
+    "birthday": "生日",
+    "external_link": "外部學生檔案連結",
     "notes": "備註",
     "save_details": "儲存資料",
     "required": "必填",

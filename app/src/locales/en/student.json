@@ -12,6 +12,8 @@
     "orange_apple_id": "Orange Apple ID",
     "residence_address": "Residence Address",
     "mailing_address": "Mailing Address",
+    "birthday": "Birthday",
+    "external_link": "External Student File Link",
     "notes": "Notes",
     "save_details": "Save Details",
     "required": "required",
