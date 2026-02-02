@@ -122,7 +122,7 @@
         "session_schedule": "Schedule",
         "session_capacity": "Capacity",
         "session_full": "FULL",
-        "external_link": "External Report URL",
+        "external_link": "External Report Overview URL",
         "transfer_btn": "Transfer",
         "transfer_title": "Transfer Class",
         "transfer_from": "From Session",

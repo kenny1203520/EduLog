@@ -147,7 +147,7 @@ export class EnrollmentService {
 
         // 4. Clean up orphaned occurrences if this was the last student
         if (sessionId) {
-            await OccurrenceService.syncSessionOccurrences(sessionId).catch((err: any) => {
+            await OccurrenceService.syncSessionOccurrences(sessionId, 'all').catch((err: any) => {
                 console.error('Failed to sync occurrences after enrollment delete:', err)
             })
         }

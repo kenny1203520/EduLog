@@ -291,7 +291,7 @@ export class OccurrenceService {
      * Deletes future scheduled occurrences that do not have reports and regenerates them.
      * This is useful when a session's day_of_week or time changes.
      */
-    static async syncSessionOccurrences(sessionId: string): Promise<void> {
+    static async syncSessionOccurrences(sessionId: string, scope: 'future' | 'all' = 'future'): Promise<void> {
         const todayStr = this.formatDate(new Date())
 
         // 0. Fetch session details for day_of_week
@@ -303,12 +303,16 @@ export class OccurrenceService {
         
         const sessionDayOfWeek = session?.day_of_week
 
-        // 1. Find all occurrences from today onwards with report details
-        const { data: occurrences, error: fetchError } = await supabase
+        // 1. Find occurrences based on scope
+        let query = supabase
             .from('class_occurrences')
             .select(`
                 id,
                 occurrence_date,
+                notes,
+                actual_start_time,
+                actual_end_time,
+                is_conducted,
                 occurrence_reports (
                     id,
                     content,
@@ -317,18 +321,28 @@ export class OccurrenceService {
                 )
             `)
             .eq('class_session_id', sessionId)
-            .gte('occurrence_date', todayStr)
+
+        if (scope === 'future') {
+            query = query.gte('occurrence_date', todayStr)
+        }
+
+        const { data: occurrences, error: fetchError } = await query
 
         if (fetchError) throw new Error(`Failed to fetch occurrences for sync: ${fetchError.message}`)
 
         // 2. Identify "ghost" reports (empty placeholders) and stale occurrences
         const ghostReportIds: string[] = []
-        const occurrencesWithRealReports = new Set<string>()
+        const occurrencesWithKeepReason = new Set<string>()
 
         ;(occurrences as any[]).forEach(occ => {
             const date = DateUtils.parseLocalDate(occ.occurrence_date)
             const isWrongDay = date && date.getDay() !== sessionDayOfWeek
             
+            // Manual Data check: Do we have notes, actual times, or is it explicitly marked (true OR false)?
+            const hasManualData = (occ.notes && occ.notes.trim() !== '') || 
+                                 occ.actual_start_time || 
+                                 occ.is_conducted !== null
+
             const reports = occ.occurrence_reports || []
             let hasTrueRealReport = false
             const hasAnyReport = reports.length > 0
@@ -338,8 +352,8 @@ export class OccurrenceService {
                 const isDefault = r.is_completed === false && r.attendance_status === 'present'
                 
                 if (isEmpty && isDefault) {
-                    // Only clean up ghosts on wrong days (stale)
-                    if (isWrongDay) {
+                    // Only clean up ghosts on wrong days (stale) OR if we are doing a deep clean ('all')
+                    if (isWrongDay || scope === 'all') {
                         ghostReportIds.push(r.id)
                     }
                 } else {
@@ -348,21 +362,27 @@ export class OccurrenceService {
             })
 
             // Keep the occurrence if:
-            // 1. It matches the session day AND has reports (we must preserve student slots)
+            // 1. It has manual occurrence-level data (notes, conducted status)
             // 2. OR it has a real report (we must preserve history/manual edits)
-            if (hasTrueRealReport || (!isWrongDay && hasAnyReport)) {
-                occurrencesWithRealReports.add(occ.id)
+            // 3. OR it matches the session day AND has reports (we must preserve student slots)
+            //    BUT if scope is 'all', we only keep if it has "value" (manual data or true reports)
+            //    Allowing ghosts on right days to stay only in 'future' (default) sync.
+            const hasValue = hasManualData || hasTrueRealReport
+            const isPlaceholderOnRightDay = !isWrongDay && hasAnyReport && scope !== 'all'
+
+            if (hasValue || isPlaceholderOnRightDay) {
+                occurrencesWithKeepReason.add(occ.id)
             }
         })
 
-        // Delete ghost reports on wrong days
+        // Delete ghost reports on targeted occurrences
         if (ghostReportIds.length > 0) {
             await supabase.from('occurrence_reports').delete().in('id', ghostReportIds)
         }
 
-        // 3. Delete occurrences that are either on wrong days (if empty) or have no reports left
+        // 3. Delete occurrences that are no longer needed
         const idsToDelete = (occurrences as any[])
-            .filter(occ => !occurrencesWithRealReports.has(occ.id))
+            .filter(occ => !occurrencesWithKeepReason.has(occ.id))
             .map(occ => occ.id)
 
         if (idsToDelete.length > 0) {

@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Student, type StudentDTO } from '@/models/Student'
+import { EnrollmentService } from './EnrollmentService'
 
 export class StudentService {
   /**
@@ -78,6 +79,14 @@ export class StudentService {
    * Performs manual cascade delete to ensure all related records are removed.
    */
   static async delete(id: string): Promise<void> {
+    // 0. Delete Enrollments via EnrollmentService (this triggers occurrence sync)
+    const enrollments = await EnrollmentService.getByStudentId(id)
+    for (const enr of enrollments) {
+        if (enr.id) {
+            await EnrollmentService.delete(enr.id)
+        }
+    }
+
     // 1. Delete Contacts
     const { error: e1 } = await supabase.from('student_contacts').delete().eq('student_id', id)
     if (e1) throw new Error('Failed to delete contacts: ' + e1.message)
@@ -90,7 +99,7 @@ export class StudentService {
     const { error: e3 } = await supabase.from('student_credentials').delete().eq('student_id', id)
     if (e3) throw new Error('Failed to delete credentials: ' + e3.message)
 
-    // 4. Delete Reports
+    // 4. Delete Reports (Legacy or linked)
     const { error: e4 } = await supabase.from('reports').delete().eq('student_id', id)
     if (e4 && e4.code !== '42P01') { 
         throw new Error('Failed to delete reports: ' + e4.message)
