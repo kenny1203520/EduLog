@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
     modelValue: number // current page
@@ -71,12 +74,12 @@ const visiblePages = computed(() => {
         <!-- Info & Per Page -->
         <div class="flex items-center gap-4 text-sm text-gray-600">
             <span v-if="totalItems > 0">
-                Showing <span class="font-medium">{{ startItem }}</span> to <span class="font-medium">{{ endItem }}</span> of <span class="font-medium">{{ totalItems }}</span> results
+                {{ $t('common.pagination.showing') }} <span class="font-medium">{{ startItem }}</span> {{ $t('common.pagination.to') }} <span class="font-medium">{{ endItem }}</span> {{ $t('common.pagination.of') }} <span class="font-medium">{{ totalItems }}</span> {{ $t('common.pagination.results') }}
             </span>
-            <span v-else>No results</span>
+            <span v-else>{{ $t('common.pagination.no_results') }}</span>
 
             <div class="flex items-center gap-2">
-                <span class="hidden sm:inline">Show</span>
+                <span class="hidden sm:inline">{{ $t('common.pagination.show') }}</span>
                 <select 
                     :value="perPage" 
                     @change="updatePerPage"

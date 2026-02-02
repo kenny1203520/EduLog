@@ -19,7 +19,7 @@ const courseForm = ref<Partial<CourseDTO>>({
   description: ''
 })
 
-const pagination = ref({ page: 1, perPage: 12, total: 0 })
+const pagination = ref({ page: 1, perPage: 10, total: 0 })
 
 // ... (existing form and state)
 
@@ -199,25 +199,28 @@ async function deleteLesson(id: string) {
     </div>
 
     <div v-else class="space-y-8">
-      <div v-for="(group, subject) in groupedCourses" :key="subject">
-        <h2 class="text-xl font-bold text-gray-700 mb-4 border-l-4 border-emerald-500 pl-3">{{ subject }}</h2>
+      <div v-for="(group, subject) in groupedCourses" :key="subject" class="mb-10 last:mb-0">
+        <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <span class="w-1.5 h-6 bg-emerald-500 rounded-full"></span>
+            {{ subject }}
+        </h2>
         
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div 
             v-for="course in group" 
             :key="course.id" 
             class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition overflow-hidden"
           >
             <!-- Card Header -->
-            <div class="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-start group">
+            <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-start group">
                 <div class="flex-1 min-w-0 cursor-pointer" @click="openEditModal(course)">
                     <h3 class="font-bold text-lg text-gray-800 truncate group-hover:text-emerald-700 transition-colors" :title="course.displayName">
                         {{ course.displayName }}
                     </h3>
-                    <p v-if="course.displayNameValue" class="text-xs text-gray-400 font-mono truncate">
+                    <p v-if="course.displayNameValue" class="text-xs text-gray-400 font-mono truncate mt-0.5">
                         {{ course.subject }} {{ course.stage }}
                     </p>
-                    <p class="text-sm text-gray-500 mt-1 line-clamp-2 italic">{{ course.description || $t('common.no_description', 'No description') }}</p>
+                    <p class="text-sm text-gray-500 mt-1.5 line-clamp-2 italic">{{ course.description || $t('common.no_description', 'No description') }}</p>
                 </div>
                 <div class="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition ml-2">
                     <button @click="openEditModal(course)" class="text-gray-400 hover:text-emerald-600 transition p-1 hover:bg-emerald-50 rounded" :title="$t('common.edit')">
@@ -234,8 +237,8 @@ async function deleteLesson(id: string) {
             </div>
 
             <!-- Lessons List -->
-            <div class="p-4 bg-white">
-                <div class="flex items-center justify-between mb-2">
+            <div class="p-3 bg-white">
+                <div class="flex items-center justify-between mb-1.5">
                     <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ $t('course.lessons_count', { count: course.lessons.length }) }}</span>
                     <button 
                         @click="toggleExpand(course.id!)" 
@@ -245,9 +248,9 @@ async function deleteLesson(id: string) {
                     </button>
                 </div>
 
-                <div v-if="expandedCourseIds.has(course.id!)" class="space-y-2 mt-3">
-                    <ul class="space-y-1">
-                        <li v-for="lesson in course.lessons" :key="lesson.id" class="flex items-center justify-between group p-2 rounded hover:bg-gray-50 text-sm">
+                <div v-if="expandedCourseIds.has(course.id!)" class="space-y-1.5 mt-2">
+                    <ul class="space-y-0.5">
+                        <li v-for="lesson in course.lessons" :key="lesson.id" class="flex items-center justify-between group p-1.5 rounded hover:bg-gray-50 text-sm">
                             <!-- Helper: Is Editing? -->
                             <div v-if="editingLessonId === lesson.id" class="flex-1 flex gap-2 items-center">
                                 <input v-model.number="lessonForm.sequence" type="number" class="w-12 text-center border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs">
@@ -275,7 +278,7 @@ async function deleteLesson(id: string) {
                     </ul>
 
                     <!-- Add Lesson Input -->
-                    <div class="mt-3 pt-2 border-t border-gray-100">
+                    <div class="mt-2 pt-1.5 border-t border-gray-100">
                         <div v-if="addingLessonToCourseId === course.id" class="flex gap-2 items-center">
                             <input 
                                 v-model.number="lessonForm.sequence" 

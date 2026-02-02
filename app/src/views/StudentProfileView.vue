@@ -147,6 +147,7 @@ const availableSessions = ref<ClassSessionDTO[]>([])
 const isEnrollModalOpen = ref(false)
 const newEnrollment = ref<Partial<EnrollmentDTO>>({ status: 'active' })
 const selectedSessionDetails = ref<any>(null)
+const classroomSearchTerm = ref('')
 
 const filteredSessions = computed(() => {
     if (!newEnrollment.value.course_id) return []
@@ -162,6 +163,15 @@ const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 function getDayLabel(day: number) {
   return dayLabels[day] || day.toString()
 }
+
+const filteredClassrooms = computed(() => {
+  if (!classroomSearchTerm.value.trim()) return availableClassrooms.value
+  const search = classroomSearchTerm.value.toLowerCase()
+  return availableClassrooms.value.filter(c => 
+    c.name.toLowerCase().includes(search) || 
+    c.address?.toLowerCase().includes(search)
+  )
+})
 
 // Watch Session Selection to Fetch Details
 watch(() => newEnrollment.value.class_session_id, async (sessionId) => {
@@ -913,7 +923,7 @@ function copyToClipboard(text: string) {
         </div>
       </section>
       <!-- Internal Courses -->
-      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+      <section class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 lg:col-span-2">
         <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
            <span class="p-1.5 bg-purple-100 text-purple-600 rounded-lg">
              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
@@ -1126,19 +1136,37 @@ function copyToClipboard(text: string) {
 
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.classroom') }}</label>
-                    <select v-model="newEnrollment.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                        <option :value="undefined">-- None --</option>
-                        <option v-for="r in availableClassrooms" :key="r.id" :value="r.id">
-                            {{ r.name }}
+                    
+                    <!-- Search Input for Classroom Filter -->
+                    <div class="relative mb-2">
+                        <input 
+                            v-model="classroomSearchTerm" 
+                            type="text" 
+                            :placeholder="$t('student.internal_courses.search_classroom')"
+                            class="w-full border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500"
+                        >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    
+                    <!-- Classroom Select with Filtered Results -->
+                    <select v-model="newEnrollment.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" size="5">
+                        <option :value="undefined">{{ $t('student.internal_courses.classroom_none') }}</option>
+                        <option v-for="r in filteredClassrooms" :key="r.id" :value="r.id">
+                            {{ r.name }}{{ r.address ? ' - ' + r.address : '' }}
+                        </option>
+                        <option v-if="filteredClassrooms.length === 0 && classroomSearchTerm" disabled>
+                            {{ $t('student.internal_courses.no_classrooms_found') }}
                         </option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.status') }}</label>
                     <select v-model="newEnrollment.status" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                        <option value="active">Active</option>
-                        <option value="completed">Completed</option>
-                        <option value="dropped">Dropped</option>
+                        <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
+                        <option value="completed">{{ $t('student.internal_courses.status_completed') }}</option>
+                        <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}</option>
                     </select>
                 </div>
 
@@ -1162,14 +1190,14 @@ function copyToClipboard(text: string) {
                   class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
                   :title="isSessionFull ? 'This session is at full capacity' : ''"
                 >
-                  {{ $t('internal_courses.add_btn') }}
+                  {{ $t('student.internal_courses.add_btn') }}
                 </button>
             </div>
         </div>
       </div>
 
       <!-- Credentials -->
-      <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 md:col-span-2 transition-all hover:shadow-md">
+      <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2 transition-all hover:shadow-md">
         <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">
           <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">

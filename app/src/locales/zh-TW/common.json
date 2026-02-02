@@ -11,5 +11,13 @@
     "no_description": "無簡介",
     "copy_success": "已複製到剪貼簿！",
     "back": "返回",
-    "students": "學生"
+    "students": "學生",
+    "pagination": {
+        "showing": "顯示",
+        "to": "至",
+        "of": "共",
+        "results": "筆資料",
+        "show": "每頁顯示",
+        "no_results": "無資料"
+    }
 }

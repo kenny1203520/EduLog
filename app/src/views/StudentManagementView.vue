@@ -88,13 +88,13 @@ function copyToClipboard(text: string) {
       <div 
         v-for="student in studentStore.students" 
         :key="student.id"
-        class="bg-white rounded-3xl shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group overflow-hidden flex flex-col h-full"
+        class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full"
       >
         <!-- Card Header -->
-        <div class="p-6 pb-4 flex items-start justify-between">
+        <div class="p-5 pb-3 flex items-start justify-between">
           <div class="flex items-center gap-4">
             <!-- Avatar -->
-            <div class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform">
+            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform">
               {{ student.name.charAt(0) }}
             </div>
             <!-- Name & Info -->
@@ -108,7 +108,7 @@ function copyToClipboard(text: string) {
         </div>
 
         <!-- Card Body -->
-        <div class="px-6 py-2 flex-1 space-y-3">
+        <div class="px-5 py-1.5 flex-1 space-y-2.5">
           <div class="flex flex-wrap items-center gap-2">
             <span class="inline-flex items-center px-3 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-100">
               {{ student.displayGrade || $t('student.management.no_grade', 'N/A') }}
@@ -128,7 +128,7 @@ function copyToClipboard(text: string) {
         </div>
 
         <!-- Card Actions -->
-        <div class="px-6 py-4 flex gap-2">
+        <div class="px-5 py-4 flex gap-2">
            <button 
              @click="navigateToProfile(student.id)"
              class="flex-1 bg-gray-50 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 py-2.5 rounded-xl text-sm font-bold transition-all border border-gray-100 hover:border-emerald-200"
@@ -144,7 +144,7 @@ function copyToClipboard(text: string) {
         </div>
 
         <!-- Card Footer -->
-        <div class="bg-gray-50/50 px-6 py-3 border-t border-gray-50 flex items-center justify-between text-[10px] font-bold text-gray-400 tracking-wider uppercase">
+        <div class="bg-gray-50/50 px-5 py-3 border-t border-gray-50 flex items-center justify-between text-[10px] font-bold text-gray-400 tracking-wider uppercase">
            <div class="flex items-center gap-4">
                <div class="flex items-center gap-1.5" :title="$t('student.credentials_title')">
                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 opacity-50">

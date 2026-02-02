@@ -81,7 +81,10 @@
         "session_optional": "Class Session (Optional)",
         "classroom_optional": "Classroom (Optional)",
         "none_option": "-- None --",
-        "lesson_label": "Lesson"
+        "lesson_label": "Lesson",
+        "search_classroom": "Search classroom...",
+        "classroom_none": "-- Not Selected --",
+        "no_classrooms_found": "No classrooms found"
     },
     "credentials": {
         "platform": "Platform",

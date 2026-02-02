@@ -81,7 +81,10 @@
         "session_optional": "班級時段 (選填)",
         "classroom_optional": "教室 (選填)",
         "none_option": "-- 無 --",
-        "lesson_label": "課次"
+        "lesson_label": "課次",
+        "search_classroom": "搜尋教室...",
+        "classroom_none": "-- 未選擇 --",
+        "no_classrooms_found": "找不到符合的教室"
     },
     "credentials": {
         "platform": "平台",

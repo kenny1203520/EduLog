@@ -11,5 +11,13 @@
     "no_description": "No description",
     "copy_success": "Copied to clipboard!",
     "back": "Back",
-    "students": "Students"
+    "students": "Students",
+    "pagination": {
+        "showing": "Showing",
+        "to": "to",
+        "of": "of",
+        "results": "results",
+        "show": "Show",
+        "no_results": "No results"
+    }
 }
