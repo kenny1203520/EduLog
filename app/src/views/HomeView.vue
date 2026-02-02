@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
+
+useI18n()
 
 const router = useRouter()
 const stats = ref({
@@ -44,11 +47,11 @@ function navigateToSession(id: string) {
         <div class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
             <div class="max-w-xl">
                 <h1 class="text-5xl font-black tracking-tighter mb-4 leading-none">
-                    Good Morning,<br>
-                    <span class="text-emerald-400">EduLog Manager</span>
+                    {{ $t('dashboard.greeting') }},<br>
+                    <span class="text-emerald-400">{{ $t('dashboard.app_name') }}</span>
                 </h1>
                 <p class="text-xl text-gray-400 font-bold italic">
-                    Here's what's happening today in your education center.
+                    {{ $t('dashboard.tagline') }}
                 </p>
             </div>
             <div class="flex gap-4">
@@ -56,13 +59,13 @@ function navigateToSession(id: string) {
                   @click="router.push({ name: 'students' })"
                   class="bg-white text-gray-900 px-8 py-4 rounded-2xl font-black text-lg hover:bg-emerald-50 transition-all shadow-xl active:scale-95"
                 >
-                  Manage Students
+                  {{ $t('dashboard.manage_students_btn') }}
                 </button>
                 <button 
                   @click="router.push({ name: 'courses' })"
                   class="bg-emerald-600 text-white px-8 py-4 rounded-2xl font-black text-lg hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-900/40 active:scale-95"
                 >
-                  Explore Courses
+                  {{ $t('dashboard.explore_courses_btn') }}
                 </button>
             </div>
         </div>
@@ -76,8 +79,8 @@ function navigateToSession(id: string) {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
             </div>
-            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Coming Soon</h4>
-            <p class="text-4xl font-black text-gray-900 tracking-tighter">Engagement</p>
+            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{{ $t('dashboard.stats.coming_soon') }}</h4>
+            <p class="text-4xl font-black text-gray-900 tracking-tighter">{{ $t('dashboard.stats.engagement') }}</p>
         </div>
         <div class="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group">
             <div class="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform">
@@ -85,15 +88,15 @@ function navigateToSession(id: string) {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
             </div>
-            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Today's Classes</h4>
+            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{{ $t('dashboard.stats.today_classes') }}</h4>
             <p class="text-4xl font-black text-gray-900 tracking-tighter">{{ stats.todayClasses }}</p>
         </div>
         <div class="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group text-emerald-600">
              <div class="w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform font-black">
                 %
             </div>
-            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Productivity</h4>
-            <p class="text-4xl font-black text-gray-900 tracking-tighter">Ready</p>
+            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{{ $t('dashboard.stats.productivity') }}</h4>
+            <p class="text-4xl font-black text-gray-900 tracking-tighter">{{ $t('dashboard.stats.ready') }}</p>
         </div>
     </div>
 
@@ -101,14 +104,14 @@ function navigateToSession(id: string) {
     <div class="bg-white rounded-[3rem] border border-gray-100 shadow-sm p-10">
         <div class="flex items-center justify-between mb-10">
             <div>
-                <h3 class="text-3xl font-black text-gray-900 tracking-tight">Today's Schedule</h3>
-                <p class="text-sm font-bold text-gray-400 mt-1 italic">Classes happening right now and later today.</p>
+                <h3 class="text-3xl font-black text-gray-900 tracking-tight">{{ $t('dashboard.schedule.title') }}</h3>
+                <p class="text-sm font-bold text-gray-400 mt-1 italic">{{ $t('dashboard.schedule.subtitle') }}</p>
             </div>
             <button 
                 @click="router.push({ name: 'classrooms' })"
                 class="text-emerald-600 font-black text-sm flex items-center gap-2 hover:translate-x-1 transition-transform"
             >
-                View Classrooms
+                {{ $t('dashboard.schedule.view_classrooms') }}
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
@@ -120,7 +123,7 @@ function navigateToSession(id: string) {
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <p class="text-gray-400 font-bold italic tracking-widest">LOADING SCHEDULE...</p>
+            <p class="text-gray-400 font-bold italic tracking-widest">{{ $t('dashboard.schedule.loading') }}</p>
         </div>
 
         <div v-else-if="todayOccurrences.length > 0" class="divide-y divide-gray-50">
@@ -161,8 +164,8 @@ function navigateToSession(id: string) {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
             </div>
-            <h4 class="text-xl font-black text-gray-900 mb-1">No classes scheduled today.</h4>
-            <p class="text-gray-400 font-medium italic">Enjoy your time or plan ahead!</p>
+            <h4 class="text-xl font-black text-gray-900 mb-1">{{ $t('dashboard.schedule.no_classes') }}</h4>
+            <p class="text-gray-400 font-medium italic">{{ $t('dashboard.schedule.no_classes_sub') }}</p>
         </div>
     </div>
 </div>

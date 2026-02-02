@@ -4,5 +4,25 @@
     "loading": "載入學生中...",
     "empty": "尚未建立學生資料",
     "empty_sub": "新增一位學生以開始使用！",
-    "added": "建立日期: {date}"
+    "added": "建立日期: {date}",
+    "greeting": "早安",
+    "app_name": "EduLog 管理系統",
+    "tagline": "以下是您教育中心今日的最新動態。",
+    "manage_students_btn": "管理學生",
+    "explore_courses_btn": "瀏覽課程",
+    "stats": {
+        "engagement": "參與度",
+        "coming_soon": "敬請期待",
+        "today_classes": "今日課程",
+        "productivity": "生產力",
+        "ready": "就緒"
+    },
+    "schedule": {
+        "title": "今日課表",
+        "subtitle": "正在進行中及即將開始的課程。",
+        "view_classrooms": "查看教室",
+        "loading": "載入課表中...",
+        "no_classes": "今日無排定課程",
+        "no_classes_sub": "享受您的時光或提前規劃！"
+    }
 }

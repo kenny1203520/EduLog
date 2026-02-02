@@ -4,5 +4,25 @@
     "loading": "Loading students...",
     "empty": "No students found.",
     "empty_sub": "Add your first student to get started!",
-    "added": "Added: {date}"
+    "added": "Added: {date}",
+    "greeting": "Good Morning",
+    "app_name": "EduLog Manager",
+    "tagline": "Here's what's happening today in your education center.",
+    "manage_students_btn": "Manage Students",
+    "explore_courses_btn": "Explore Courses",
+    "stats": {
+        "engagement": "Engagement",
+        "coming_soon": "Coming Soon",
+        "today_classes": "Today's Classes",
+        "productivity": "Productivity",
+        "ready": "Ready"
+    },
+    "schedule": {
+        "title": "Today's Schedule",
+        "subtitle": "Classes happening right now and later today.",
+        "view_classrooms": "View Classrooms",
+        "loading": "LOADING SCHEDULE...",
+        "no_classes": "No classes scheduled today.",
+        "no_classes_sub": "Enjoy your time or plan ahead!"
+    }
 }

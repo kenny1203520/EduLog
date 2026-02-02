@@ -269,7 +269,15 @@ async function saveEnrollment() {
 // Filtered sessions for edit form
 const editFilteredSessions = computed(() => {
   if (!editEnrollmentForm.value.course_id) return []
-  return availableSessions.value.filter(s => s.course_ids?.includes(editEnrollmentForm.value.course_id!))
+  
+  let sessions = availableSessions.value.filter(s => s.course_ids?.includes(editEnrollmentForm.value.course_id!))
+  
+  // Further filter by classroom if selected
+  if (editEnrollmentForm.value.classroom_id) {
+    sessions = sessions.filter(s => s.classroom_id === editEnrollmentForm.value.classroom_id)
+  }
+  
+  return sessions
 })
 
 
@@ -1108,26 +1116,26 @@ function copyToClipboard(text: string) {
                         {{ $t('student.internal_courses.session_details') }}
                       </h4>
                       <div class="space-y-2 text-sm">
-                        <div class="flex justify-between items-start">
-                          <span class="text-gray-600">Classroom:</span>
-                          <span class="font-medium text-gray-900 text-right">{{ selectedSessionDetails.classroom_name }}</span>
-                        </div>
-                        <div v-if="selectedSessionDetails.classroom_address" class="flex justify-between items-start">
-                          <span class="text-gray-600">Address:</span>
-                          <span class="text-gray-700 text-right max-w-[200px]">{{ selectedSessionDetails.classroom_address }}</span>
-                        </div>
-                        <div class="flex justify-between items-start">
-                          <span class="text-gray-600">Schedule:</span>
+                         <div class="flex justify-between items-start">
+                           <span class="text-gray-600">{{ $t('student.internal_courses.session_classroom') }}:</span>
+                           <span class="font-medium text-gray-900 text-right">{{ selectedSessionDetails.classroom_name }}</span>
+                         </div>
+                         <div v-if="selectedSessionDetails.classroom_address" class="flex justify-between items-start">
+                           <span class="text-gray-600">{{ $t('student.internal_courses.session_address') }}:</span>
+                           <span class="text-gray-700 text-right max-w-[200px]">{{ selectedSessionDetails.classroom_address }}</span>
+                         </div>
+                         <div class="flex justify-between items-start">
+                           <span class="text-gray-600">{{ $t('student.internal_courses.session_schedule') }}:</span>
                           <span class="text-gray-700">
                             {{ getDayLabel(selectedSessionDetails.day_of_week) }} 
                             {{ selectedSessionDetails.start_time?.slice(0,5) }} - {{ selectedSessionDetails.end_time?.slice(0,5) }}
                           </span>
                         </div>
-                        <div class="flex justify-between items-start pt-2 border-t border-emerald-200">
-                          <span class="text-gray-600">Capacity:</span>
-                          <span class="font-semibold" :class="isSessionFull ? 'text-red-600' : 'text-emerald-700'">
-                            {{ selectedSessionDetails.current_enrollments }}/{{ selectedSessionDetails.capacity }}
-                            <span v-if="isSessionFull" class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">FULL</span>
+                         <div class="flex justify-between items-start pt-2 border-t border-emerald-200">
+                           <span class="text-gray-600">{{ $t('student.internal_courses.session_capacity') }}:</span>
+                           <span class="font-semibold" :class="isSessionFull ? 'text-red-600' : 'text-emerald-700'">
+                             {{ selectedSessionDetails.current_enrollments }}/{{ selectedSessionDetails.capacity }}
+                             <span v-if="isSessionFull" class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{{ $t('student.internal_courses.session_full') }}</span>
                           </span>
                         </div>
                       </div>
@@ -1135,31 +1143,35 @@ function copyToClipboard(text: string) {
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.classroom') }}</label>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t('student.internal_courses.classroom') }}</label>
                     
-                    <!-- Search Input for Classroom Filter -->
-                    <div class="relative mb-2">
-                        <input 
-                            v-model="classroomSearchTerm" 
-                            type="text" 
-                            :placeholder="$t('student.internal_courses.search_classroom')"
-                            class="w-full border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500"
-                        >
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
+                    <!-- Improved Classroom Selector with Search -->
+                    <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <!-- Search Input -->
+                        <div class="relative mb-2">
+                            <input 
+                                v-model="classroomSearchTerm" 
+                                type="text" 
+                                :placeholder="$t('student.internal_courses.search_classroom')"
+                                class="w-full border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500 bg-white"
+                            >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <p class="text-xs text-gray-500 mb-2">{{ $t('student.internal_courses.classroom_search_hint') }}</p>
+                        
+                        <!-- Classroom Select with Filtered Results -->
+                        <select v-model="newEnrollment.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 bg-white" size="8">
+                            <option :value="undefined">{{ $t('student.internal_courses.classroom_none') }}</option>
+                            <option v-for="r in filteredClassrooms" :key="r.id" :value="r.id">
+                                {{ r.name }}{{ r.address ? ' - ' + r.address : '' }}
+                            </option>
+                            <option v-if="filteredClassrooms.length === 0 && classroomSearchTerm" disabled>
+                                {{ $t('student.internal_courses.no_classrooms_found') }}
+                            </option>
+                        </select>
                     </div>
-                    
-                    <!-- Classroom Select with Filtered Results -->
-                    <select v-model="newEnrollment.classroom_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" size="5">
-                        <option :value="undefined">{{ $t('student.internal_courses.classroom_none') }}</option>
-                        <option v-for="r in filteredClassrooms" :key="r.id" :value="r.id">
-                            {{ r.name }}{{ r.address ? ' - ' + r.address : '' }}
-                        </option>
-                        <option v-if="filteredClassrooms.length === 0 && classroomSearchTerm" disabled>
-                            {{ $t('student.internal_courses.no_classrooms_found') }}
-                        </option>
-                    </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.status') }}</label>

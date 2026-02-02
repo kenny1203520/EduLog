@@ -84,7 +84,13 @@
         "lesson_label": "Lesson",
         "search_classroom": "Search classroom...",
         "classroom_none": "-- Not Selected --",
-        "no_classrooms_found": "No classrooms found"
+        "no_classrooms_found": "No classrooms found",
+        "classroom_search_hint": "Search to filter classrooms",
+        "session_classroom": "Classroom",
+        "session_address": "Address",
+        "session_schedule": "Schedule",
+        "session_capacity": "Capacity",
+        "session_full": "FULL"
     },
     "credentials": {
         "platform": "Platform",
