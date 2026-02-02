@@ -21,6 +21,9 @@ export interface EnrollmentDTO {
     }
     class_sessions?: {
         name: string
+        day_of_week?: number
+        start_time?: string
+        end_time?: string
     }
     students?: {
         name: string
@@ -44,6 +47,9 @@ export class Enrollment {
     courseDisplayName?: string
     classroomName: string = ''
     classSessionName: string = ''
+    classSessionDayOfWeek?: number
+    classSessionStartTime?: string
+    classSessionEndTime?: string
     studentName?: string
     studentEmail?: string
 
@@ -67,6 +73,9 @@ export class Enrollment {
         }
         if (data.class_sessions) {
             this.classSessionName = data.class_sessions.name
+            this.classSessionDayOfWeek = data.class_sessions.day_of_week
+            this.classSessionStartTime = data.class_sessions.start_time
+            this.classSessionEndTime = data.class_sessions.end_time
         }
         if (data.students) {
             this.studentName = data.students.name
@@ -82,5 +91,13 @@ export class Enrollment {
     get formattedStartDate(): string {
         if (!this.startDate) return '-'
         return new Date(this.startDate).toLocaleDateString()
+    }
+
+    get formattedSchedule(): string {
+        if (this.classSessionDayOfWeek === undefined || !this.classSessionStartTime) return ''
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        const dayName = days[this.classSessionDayOfWeek]
+        const time = this.classSessionStartTime.slice(0, 5) // HH:MM
+        return `${dayName} ${time}`
     }
 }

@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { StudentService } from '@/services/StudentService'
 import { CourseService } from '@/services/CourseService'
+import { EnrollmentService } from '@/services/EnrollmentService'
 import { Course } from '@/models/Course'
 import { Classroom, type ClassSessionDTO } from '@/models/Classroom'
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
@@ -203,7 +204,7 @@ watch(() => newEnrollment.value.class_session_id, async (sessionId) => {
 
 async function fetchEnrollments() {
   if (!studentId.value) return
-  enrollments.value = await CourseService.getStudentEnrollments(studentId.value)
+  enrollments.value = await EnrollmentService.getByStudentId(studentId.value)
 }
 
 async function openEnrollModal() {
@@ -229,12 +230,13 @@ async function openEnrollModal() {
 async function enrollStudent() {
   if (!newEnrollment.value.course_id) return
   try {
-    await CourseService.enrollStudent({
+    await EnrollmentService.create({
       ...newEnrollment.value,
       student_id: studentId.value
     })
     await fetchEnrollments()
     isEnrollModalOpen.value = false
+    showToast(t('student.internal_courses.add_btn') + ' ' + t('common.success'))
   } catch (e) {
     alert(e)
   }
@@ -291,8 +293,9 @@ const editFilteredSessions = computed(() => {
 async function removeEnrollment(id: string) {
     if(!confirm(t('common.confirm_delete'))) return
     try {
-        await CourseService.deleteEnrollment(id)
+        await EnrollmentService.delete(id)
         await fetchEnrollments()
+        showToast(t('common.deleted'))
     } catch(e) {
         alert(e)
     }

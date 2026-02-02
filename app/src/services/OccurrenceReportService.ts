@@ -231,6 +231,7 @@ export class OccurrenceReportService {
 
     /**
      * Helper method to update enrollment progress after saving a report
+     * Also checks if this is the last lesson and auto-completes enrollment
      * @private
      */
     private static async updateEnrollmentProgressAfterReport(
@@ -260,6 +261,25 @@ export class OccurrenceReportService {
         if (allLessonsError || !allLessonsData) {
             console.error('Failed to fetch course lessons:', allLessonsError)
             return
+        }
+
+        // Check if this is the last lesson and it's completed
+        if (isCompleted && allLessonsData.length > 0) {
+            const lastLesson = allLessonsData[allLessonsData.length - 1]
+            
+            if (lastLesson.id === lessonId) {
+                // This is the last lesson and it's completed - auto-complete the enrollment
+                const { error: completeError } = await supabase
+                    .from('enrollments')
+                    .update({ status: 'completed' })
+                    .eq('id', enrollmentId)
+                
+                if (completeError) {
+                    console.error('Failed to auto-complete enrollment:', completeError)
+                } else {
+                    console.log(`✅ Enrollment ${enrollmentId} auto-completed (last lesson finished)`)
+                }
+            }
         }
 
         // Convert to Lesson objects
