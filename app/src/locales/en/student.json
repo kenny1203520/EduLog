@@ -1,5 +1,5 @@
 {
-    "add_title": "Add New Student",
+    "add_title": "Add Student",
     "name": "Student Name",
     "grade": "Grade / Class",
     "current_school": "Current School",
@@ -8,34 +8,45 @@
     "creating": "Creating...",
     "profile_edit": "Edit Profile",
     "details": "Personal Details",
-    "gov_id": "Gov ID",
+    "gov_id": "Government ID",
     "orange_apple_id": "Orange Apple ID",
     "residence_address": "Residence Address",
     "mailing_address": "Mailing Address",
     "notes": "Notes",
     "save_details": "Save Details",
-    "required": "Required",
+    "required": "required",
     "delete": "Delete Student",
     "confirm_delete_student": "Are you sure you want to delete this student? This action cannot be undone!",
     "saving": "Saving...",
     "loading": "Loading student data...",
     "view_reports": "View Reports",
+    "address": "Address",
+    "phone": "Phone",
+    "social_security_number": "SSN / Gov ID",
     "sections": {
+        "basic_info": "Basic Information",
         "contacts": "Contacts",
         "schools": "Schools",
+        "internal_courses": "Internal Courses",
         "credentials": "Credentials"
     },
     "contacts": {
+        "title": "Emergency Contacts",
         "add_title": "Add Contact",
         "name": "Name",
+        "relationship": "Relationship",
         "relation": "Relation",
         "phone": "Phone",
         "email": "Email",
         "add_btn": "Add Contact",
-        "confirm_delete": "Are you sure you want to delete this contact?"
+        "confirm_delete": "Are you sure you want to delete this contact?",
+        "delete_confirm": "Are you sure you want to delete this contact?"
     },
     "schools": {
+        "title": "Schools",
         "add_title": "Add School",
+        "type": "School Type",
+        "current": "Current School",
         "name": "School Name",
         "grade": "Grade",
         "class": "Class",
@@ -53,12 +64,31 @@
         "end_date": "End Date (Leave empty for Present)",
         "present": "Present",
         "add_btn": "Add School",
-        "confirm_delete": "Are you sure you want to delete this school?"
+        "confirm_delete": "Are you sure you want to delete this school?",
+        "delete_confirm": "Are you sure you want to delete this school?",
+        "senior_high": "Senior High",
+        "junior_high": "Junior High",
+        "elementary": "Elementary",
+        "other": "Other"
+    },
+    "management": {
+        "title": "Student Management",
+        "search_placeholder": "Search student name, ID...",
+        "status_all": "All Status",
+        "status_active": "Active",
+        "status_inactive": "Inactive",
+        "grade_all": "All Grades",
+        "add_student": "Add Student",
+        "total_students": "Total Students",
+        "no_students": "No students found matching your search.",
+        "no_grade": "No Grade Info",
+        "no_school": "No School Info"
     },
     "internal_courses": {
         "title": "Internal Courses",
         "add_title": "Enroll in Course",
         "course": "Course",
+        "select_course_option": "-- Select Course --",
         "classroom": "Classroom",
         "status": "Status",
         "reports": "Reports",
@@ -85,6 +115,7 @@
         "search_classroom": "Search classroom...",
         "classroom_none": "-- Not Selected --",
         "no_classrooms_found": "No classrooms found",
+        "no_sessions_found": "No sessions found for this course in this classroom",
         "classroom_search_hint": "Search to filter classrooms",
         "session_classroom": "Classroom",
         "session_address": "Address",
@@ -107,14 +138,13 @@
             "Minecraft": "Minecraft",
             "Anydesk": "Anydesk",
             "Quiz Platform": "Quiz Platform",
+            "Discord": "Discord",
             "Other": "Other"
         }
     },
     "actions": "Actions",
     "edit": "Edit",
     "save": "Save",
-    "management": {
-        "no_grade": "No Grade Info",
-        "no_school": "No School Info"
-    }
+    "no_contact_email": "No Email",
+    "no_contact_phone": "No Phone"
 }

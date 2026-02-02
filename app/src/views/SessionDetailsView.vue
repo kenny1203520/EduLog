@@ -225,7 +225,7 @@ async function updateRating(enrId: string, field: 'participation' | 'behavior', 
                                 </div>
                                 <div>
                                     <div class="font-black text-gray-900 text-lg">{{ e.studentName }}</div>
-                                    <div class="text-xs font-bold text-gray-400">{{ e.studentEmail || 'No Email' }}</div>
+                                    <div class="text-xs font-bold text-gray-400">{{ e.studentEmail || $t('classroom.no_email') }}</div>
                                 </div>
                             </div>
                         </td>
@@ -234,7 +234,7 @@ async function updateRating(enrId: string, field: 'participation' | 'behavior', 
                                 class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border"
                                 :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'"
                             >
-                                {{ e.status }}
+                                {{ $t('student.internal_courses.status_' + e.status) }}
                             </span>
                         </td>
 

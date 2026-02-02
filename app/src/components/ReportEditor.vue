@@ -476,7 +476,7 @@ const characterCount = computed(() => {
   return localContent.value.length
 })
 
-// Watchers
+// Watchers to sync props to local state (important for Master-Detail views where component is reused)
 watch(() => props.initialContent, (newContent) => {
   if (newContent !== localContent.value && !hasUnsavedChanges.value) {
     localContent.value = newContent
@@ -485,6 +485,46 @@ watch(() => props.initialContent, (newContent) => {
 
 watch(() => props.initialVersion, (newVersion) => {
   version.value = newVersion
+})
+
+watch(() => props.initialLessonId, (newVal) => {
+  selectedLessonId.value = newVal || ''
+})
+
+watch(() => props.initialIsCompleted, (newVal) => {
+  isCompleted.value = newVal ?? true
+})
+
+watch(() => props.initialProgressStart, (newVal) => {
+  progressStart.value = newVal || ''
+})
+
+watch(() => props.initialProgressEnd, (newVal) => {
+  progressEnd.value = newVal || ''
+})
+
+watch(() => props.initialAttendanceStatus, (newVal) => {
+  attendanceStatus.value = newVal || 'present'
+})
+
+watch(() => props.initialAbsenceReason, (newVal) => {
+  absenceReason.value = newVal || ''
+})
+
+watch(() => props.initialClassParticipation, (newVal) => {
+  classParticipation.value = newVal || ''
+})
+
+watch(() => props.initialClassroomBehavior, (newVal) => {
+  classroomBehavior.value = newVal || ''
+})
+
+watch(() => props.initialContactNotes, (newVal) => {
+  contactNotes.value = newVal || ''
+})
+
+watch(() => props.initialClassNotes, (newVal) => {
+  classNotes.value = newVal || ''
 })
 
 // Business rule: absent → incomplete

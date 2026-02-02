@@ -3,7 +3,6 @@ import { ref, onMounted, computed, watch } from 'vue' // Added watch
 import { CourseService } from '@/services/CourseService'
 import { Course, Lesson, type CourseDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
-import Pagination from '@/components/common/Pagination.vue'
 
 const { t } = useI18n()
 const courses = ref<Course[]>([])
@@ -23,16 +22,7 @@ const pagination = ref({ page: 1, perPage: 10, total: 0 })
 
 // ... (existing form and state)
 
-// Expanded state for courses to show lessons
-const expandedCourseIds = ref<Set<string>>(new Set())
-
-const toggleExpand = (id: string) => {
-  if (expandedCourseIds.value.has(id)) {
-    expandedCourseIds.value.delete(id)
-  } else {
-    expandedCourseIds.value.add(id)
-  }
-}
+// ... (existing form and state)
 
 const groupedCourses = computed(() => {
   const groups: Record<string, Course[]> = {}
@@ -44,6 +34,22 @@ const groupedCourses = computed(() => {
   })
   return groups
 })
+
+const selectedCourseId = ref<string | null>(null)
+const selectedCourse = computed(() => {
+    return courses.value.find(c => c.id === selectedCourseId.value) || null
+})
+
+// Auto-select first course when courses are loaded
+watch(courses, (newCourses) => {
+    if (newCourses.length > 0 && !selectedCourseId.value) {
+        selectedCourseId.value = newCourses[0]?.id || null
+    }
+})
+
+function selectCourse(id: string) {
+    selectedCourseId.value = id
+}
 
 onMounted(async () => {
   await fetchCourses()
@@ -179,152 +185,243 @@ async function deleteLesson(id: string) {
 </script>
 
 <template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <h1 class="text-2xl font-bold text-gray-800">{{ $t('nav.courses') }}</h1>
+  <div class="h-[calc(100vh-8rem)] flex flex-col">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6 shrink-0">
+      <h1 class="text-3xl font-black text-gray-900 tracking-tight">{{ $t('nav.courses') }}</h1>
       <button 
         @click="openCreateModal"
-        class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition flex items-center gap-2"
+        class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 flex items-center gap-2 font-bold active:scale-95"
       >
-        <span>+</span> {{ $t('common.add') }}
+        <span class="text-xl">+</span> {{ $t('common.add') }}
       </button>
     </div>
 
-    <div v-if="loading" class="text-center text-gray-500 py-10">
-        <svg class="animate-spin h-8 w-8 mx-auto mb-3 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <!-- Loading State -->
+    <div v-if="loading" class="flex-1 flex flex-col items-center justify-center text-gray-400 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm">
+        <svg class="animate-spin h-10 w-10 mb-4 text-emerald-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
-        {{ $t('student.loading') }}
+        <p class="font-bold italic tracking-widest">{{ $t('student.loading') }}...同步中</p>
     </div>
 
-    <div v-else class="space-y-8">
-      <div v-for="(group, subject) in groupedCourses" :key="subject" class="mb-10 last:mb-0">
-        <h2 class="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-            <span class="w-1.5 h-6 bg-emerald-500 rounded-full"></span>
-            {{ subject }}
-        </h2>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div 
-            v-for="course in group" 
-            :key="course.id" 
-            class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition overflow-hidden"
-          >
-            <!-- Card Header -->
-            <div class="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-start group">
-                <div class="flex-1 min-w-0 cursor-pointer" @click="openEditModal(course)">
-                    <h3 class="font-bold text-lg text-gray-800 truncate group-hover:text-emerald-700 transition-colors" :title="course.displayName">
-                        {{ course.displayName }}
-                    </h3>
-                    <p v-if="course.displayNameValue" class="text-xs text-gray-400 font-mono truncate mt-0.5">
-                        {{ course.subject }} {{ course.stage }}
-                    </p>
-                    <p class="text-sm text-gray-500 mt-1.5 line-clamp-2 italic">{{ course.description || $t('common.no_description', 'No description') }}</p>
-                </div>
-                <div class="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition ml-2">
-                    <button @click="openEditModal(course)" class="text-gray-400 hover:text-emerald-600 transition p-1 hover:bg-emerald-50 rounded" :title="$t('common.edit')">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                        </svg>
-                    </button>
-                    <button @click="deleteCourse(course.id!)" class="text-gray-400 hover:text-red-500 transition p-1 hover:bg-red-50 rounded" :title="$t('common.delete')">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
-
-            <!-- Lessons List -->
-            <div class="p-3 bg-white">
-                <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">{{ $t('course.lessons_count', { count: course.lessons.length }) }}</span>
+    <!-- Main Layout -->
+    <div v-else class="flex-1 flex gap-8 overflow-hidden">
+      <!-- Sidebar: Course List -->
+      <div class="w-80 flex flex-col bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden border-r-4 border-r-emerald-500/10">
+        <div class="p-6 border-b border-gray-50 bg-gray-50/30">
+            <h3 class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{ $t('course.list_title', '課程目錄') }}</h3>
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+            <div v-for="(group, subject) in groupedCourses" :key="subject">
+                <h4 class="px-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <span class="w-1 h-3 bg-emerald-400 rounded-full"></span>
+                    {{ subject }}
+                </h4>
+                <div class="space-y-1">
                     <button 
-                        @click="toggleExpand(course.id!)" 
-                        class="text-emerald-600 text-sm font-medium hover:text-emerald-700 transition"
+                        v-for="course in group" 
+                        :key="course.id"
+                        @click="selectCourse(course.id!)"
+                        class="w-full text-left px-4 py-3 rounded-xl transition-all duration-200 group relative overflow-hidden"
+                        :class="selectedCourseId === course.id 
+                            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100 translate-x-1' 
+                            : 'hover:bg-gray-50 text-gray-700'"
                     >
-                        {{ expandedCourseIds.has(course.id!) ? $t('course.hide_lessons') : $t('course.show_lessons') }}
+                        <div class="font-bold relative z-10">{{ course.displayName }}</div>
+                        <div class="text-[10px] opacity-70 relative z-10" :class="selectedCourseId === course.id ? 'text-emerald-50' : 'text-gray-400'">
+                           {{ course.stage }} · {{ course.lessons.length }} {{ $t('course.lessons_count_short', '堂課') }}
+                        </div>
                     </button>
                 </div>
-
-                <div v-if="expandedCourseIds.has(course.id!)" class="space-y-1.5 mt-2">
-                    <ul class="space-y-0.5">
-                        <li v-for="lesson in course.lessons" :key="lesson.id" class="flex items-center justify-between group p-1.5 rounded hover:bg-gray-50 text-sm">
-                            <!-- Helper: Is Editing? -->
-                            <div v-if="editingLessonId === lesson.id" class="flex-1 flex gap-2 items-center">
-                                <input v-model.number="lessonForm.sequence" type="number" class="w-12 text-center border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs">
-                                <input v-model="lessonForm.title" class="flex-1 border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs" @keyup.enter="saveLesson(course.id!)">
-                                <button @click="saveLesson(course.id!)" class="text-emerald-600 font-bold text-xs">{{ $t('common.save') }}</button>
-                                <button @click="cancelLessonEdit" class="text-gray-400 text-xs">{{ $t('common.cancel') }}</button>
-                            </div>
-
-                            <!-- Display Mode -->
-                            <div v-else class="flex-1 flex items-center justify-between">
-                                <span class="text-gray-700 font-medium">
-                                    <span class="text-gray-400 mr-2">#{{ lesson.sequence }}</span>
-                                    {{ lesson.title }}
-                                </span>
-                                <div class="flex gap-2 opacity-0 group-hover:opacity-100 transition">
-                                    <button @click="editLesson(lesson)" class="text-blue-500 hover:text-blue-700 text-xs">
-                                        {{ $t('common.edit') }}
-                                    </button>
-                                    <button @click="deleteLesson(lesson.id!)" class="text-gray-300 hover:text-red-500">
-                                        &times;
-                                    </button>
-                                </div>
-                            </div>
-                        </li>
-                    </ul>
-
-                    <!-- Add Lesson Input -->
-                    <div class="mt-2 pt-1.5 border-t border-gray-100">
-                        <div v-if="addingLessonToCourseId === course.id" class="flex gap-2 items-center">
-                            <input 
-                                v-model.number="lessonForm.sequence" 
-                                type="number" 
-                                class="w-12 text-center border-gray-300 rounded focus:ring-emerald-500 py-1 text-xs"
-                                placeholder="#"
-                            >
-                            <input 
-                                v-model="lessonForm.title" 
-                                :placeholder="$t('course.lesson_title')" 
-                                class="flex-1 text-sm border-gray-300 rounded focus:ring-emerald-500 focus:border-emerald-500 py-1"
-                                @keyup.enter="saveLesson(course.id!)"
-                            >
-                            <button @click="saveLesson(course.id!)" class="text-emerald-600 font-bold text-sm">{{ $t('common.save') }}</button>
-                            <button @click="cancelLessonEdit" class="text-gray-400 text-sm">{{ $t('common.cancel') }}</button>
-                        </div>
-                        <button 
-                            v-else 
-                            @click="startAddLesson(course)"
-                            class="w-full py-1.5 text-xs font-medium text-gray-500 border border-dashed border-gray-300 rounded-lg hover:border-emerald-500 hover:text-emerald-600 transition text-center bg-gray-50/50"
-                        >
-                            + {{ $t('course.add_lesson') }}
-                        </button>
-                    </div>
-                </div>
             </div>
-          </div>
+
+            <!-- Empty List -->
+            <div v-if="courses.length === 0" class="text-center py-10 opacity-50">
+                <p class="text-sm italic">{{ $t('course.no_courses') }}</p>
+            </div>
         </div>
-      </div>
-      
-      <!-- Empty State -->
-      <div v-if="Object.keys(groupedCourses).length === 0" class="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-300 shadow-sm flex flex-col items-center">
-        <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
+        
+        <!-- Pagination in Sidebar -->
+        <div class="p-4 border-t border-gray-50 bg-gray-50/20" v-if="pagination.total > 0">
+            <div class="flex items-center justify-between text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">
+                <span>{{ pagination.page }} / {{ Math.ceil(pagination.total / pagination.perPage) }}</span>
+                <span>TOTAL: {{ pagination.total }}</span>
+            </div>
+            <div class="flex gap-2">
+                <button 
+                    @click="pagination.page--" 
+                    :disabled="pagination.page === 1"
+                    class="flex-1 py-2 bg-white border border-gray-100 rounded-lg disabled:opacity-30 hover:bg-emerald-50 transition-colors"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15 19l-7-7 7-7" />
+                    </svg>
+                </button>
+                <button 
+                    @click="pagination.page++" 
+                    :disabled="pagination.page >= Math.ceil(pagination.total / pagination.perPage)"
+                    class="flex-1 py-2 bg-white border border-gray-100 rounded-lg disabled:opacity-30 hover:bg-emerald-50 transition-colors"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
+                    </svg>
+                </button>
+            </div>
         </div>
-        <p class="text-gray-500 font-medium pb-2 text-lg">{{ $t('course.no_courses') }}</p>
       </div>
 
-      <div v-if="pagination.total > 0" class="mt-8">
-        <Pagination 
-            v-model="pagination.page" 
-            v-model:perPage="pagination.perPage" 
-            :totalItems="pagination.total" 
-        />
+      <!-- Detail Pane: Selected Course Lessons -->
+      <div class="flex-1 flex flex-col bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden relative">
+        <div v-if="selectedCourse" class="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-500">
+           <!-- Detail Header -->
+           <div class="p-10 pb-6 border-b border-gray-50 bg-gradient-to-br from-white to-gray-50/50">
+              <div class="flex items-start justify-between gap-6 mb-4">
+                  <div class="flex-1 min-w-0">
+                      <div class="flex items-center gap-3 mb-2">
+                          <span class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100">
+                             {{ selectedCourse.subject }}
+                          </span>
+                          <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                             {{ selectedCourse.stage }}
+                          </span>
+                      </div>
+                      <h2 class="text-4xl font-black text-gray-900 tracking-tight leading-tight mb-2">{{ selectedCourse.displayName }}</h2>
+                      <p class="text-gray-500 font-medium italic text-lg leading-relaxed max-w-2xl">
+                        {{ selectedCourse.description || $t('common.no_description') }}
+                      </p>
+                  </div>
+                  <div class="flex gap-2">
+                      <button 
+                         @click="openEditModal(selectedCourse)"
+                         class="p-4 bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all shadow-sm border border-gray-100 active:scale-90"
+                         :title="$t('common.edit')"
+                      >
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                         </svg>
+                      </button>
+                      <button 
+                         @click="deleteCourse(selectedCourse.id!)"
+                         class="p-4 bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all shadow-sm border border-gray-100 active:scale-90"
+                         :title="$t('common.delete')"
+                      >
+                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                         </svg>
+                      </button>
+                  </div>
+              </div>
+           </div>
+
+           <!-- Lessons List -->
+           <div class="flex-1 overflow-y-auto p-10 pt-6 custom-scrollbar space-y-8">
+              <div>
+                  <div class="flex items-center justify-between mb-6">
+                      <h3 class="text-xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+                         <span class="w-2 h-6 bg-emerald-500 rounded-full"></span>
+                         {{ $t('course.lessons_title', '課程單元') }}
+                         <span class="ml-2 px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-lg font-bold">
+                            {{ selectedCourse.lessons.length }}
+                         </span>
+                      </h3>
+                      <button 
+                        @click="startAddLesson(selectedCourse)"
+                        class="text-emerald-600 font-black text-sm flex items-center gap-2 hover:translate-x-1 transition-transform"
+                      >
+                        + {{ $t('course.add_lesson') }}
+                      </button>
+                  </div>
+
+                  <div class="space-y-4">
+                      <!-- Add Lesson Row -->
+                      <div v-if="addingLessonToCourseId === selectedCourse.id" class="bg-emerald-50 rounded-2xl p-6 border-2 border-dashed border-emerald-200 animate-in zoom-in duration-300">
+                          <div class="flex gap-4">
+                              <div class="w-16 space-y-1">
+                                  <label class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">#SEQ</label>
+                                  <input 
+                                      v-model.number="lessonForm.sequence" 
+                                      type="number" 
+                                      class="w-full bg-white border-emerald-100 rounded-xl px-3 py-2 text-center font-black focus:ring-emerald-500 focus:border-emerald-500"
+                                  >
+                              </div>
+                              <div class="flex-1 space-y-1">
+                                  <label class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{ $t('course.lesson_title') }}</label>
+                                  <input 
+                                      v-model="lessonForm.title" 
+                                      class="w-full bg-white border-emerald-100 rounded-xl px-4 py-2 font-bold focus:ring-emerald-500 focus:border-emerald-500"
+                                      @keyup.enter="saveLesson(selectedCourse.id!)"
+                                      auto-focus
+                                  >
+                              </div>
+                          </div>
+                          <div class="flex justify-end gap-3 mt-4">
+                              <button @click="cancelLessonEdit" class="px-4 py-2 text-gray-500 font-bold hover:text-gray-700 transition-colors">{{ $t('common.cancel') }}</button>
+                              <button @click="saveLesson(selectedCourse.id!)" class="px-6 py-2 bg-emerald-600 text-white rounded-xl font-black hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all">{{ $t('common.save') }}</button>
+                          </div>
+                      </div>
+
+                      <!-- Lesson Items -->
+                      <div draggable="true" v-for="lesson in selectedCourse.lessons" :key="lesson.id" class="group flex items-center gap-4 bg-white border border-gray-100 p-4 rounded-2xl hover:shadow-md transition-all hover:bg-gray-50/50">
+                          <!-- Edit State -->
+                          <div v-if="editingLessonId === lesson.id" class="flex-1 flex gap-4 items-center animate-in fade-in duration-300">
+                              <input v-model.number="lessonForm.sequence" type="number" class="w-16 text-center bg-gray-50 border-gray-100 rounded-xl py-2 font-black">
+                              <input v-model="lessonForm.title" class="flex-1 bg-gray-50 border-gray-100 rounded-xl px-4 py-2 font-bold" @keyup.enter="saveLesson(selectedCourse.id!)">
+                              <div class="flex gap-2">
+                                  <button @click="saveLesson(selectedCourse.id!)" class="text-emerald-600 font-black text-sm px-3 py-1 hover:bg-emerald-50 rounded-lg">{{ $t('common.save') }}</button>
+                                  <button @click="cancelLessonEdit" class="text-gray-400 font-bold text-sm px-3 py-1 hover:bg-gray-100 rounded-lg">{{ $t('common.cancel') }}</button>
+                              </div>
+                          </div>
+
+                          <!-- View State -->
+                          <div v-else class="flex-1 flex items-center justify-between">
+                              <div class="flex items-center gap-6">
+                                  <span class="w-10 h-10 bg-gray-50 text-gray-400 rounded-xl flex items-center justify-center font-black text-xs border border-gray-100">
+                                      {{ lesson.sequence }}
+                                  </span>
+                                  <span class="text-xl font-bold text-gray-800 tracking-tight">{{ lesson.title }}</span>
+                              </div>
+                              <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                  <button @click="editLesson(lesson)" class="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all h-10 w-10 flex items-center justify-center shadow-sm bg-white" :title="$t('common.edit')">
+                                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                      </svg>
+                                  </button>
+                                  <button @click="deleteLesson(lesson.id!)" class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all h-10 w-10 flex items-center justify-center shadow-sm bg-white" :title="$t('common.delete')">
+                                      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M6 18L18 6M6 6l12 12" />
+                                      </svg>
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+
+                      <!-- Empty Lessons State -->
+                      <div v-if="selectedCourse.lessons.length === 0 && addingLessonToCourseId === null" class="text-center py-20 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
+                         <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-gray-100">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                             </svg>
+                         </div>
+                         <h4 class="text-lg font-black text-gray-900 mb-1">{{ $t('course.no_lessons_title', '尚未新增單元') }}</h4>
+                         <p class="text-gray-400 font-medium italic text-sm">{{ $t('course.no_lessons_sub', '為課程添加教學單元以追蹤學生進度。') }}</p>
+                      </div>
+                  </div>
+              </div>
+           </div>
+        </div>
+
+        <!-- Empty State (No Course Selected) -->
+        <div v-else class="flex-1 flex flex-col items-center justify-center p-10 bg-gray-50/30">
+           <div class="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center mb-8 shadow-xl border border-gray-100 animate-bounce duration-3000">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+           </div>
+           <h3 class="text-2xl font-black text-gray-900 mb-2">{{ $t('course.select_course_hint', '請選擇課程') }}</h3>
+           <p class="text-gray-400 font-bold italic tracking-wider max-w-xs text-center">{{ $t('course.select_course_sub', '從左側目錄中選擇一個課程，以管理其教學單元與內容。') }}</p>
+        </div>
       </div>
     </div>
 

@@ -38,5 +38,6 @@
     "actions": "操作",
     "attendance": "出席",
     "participation": "參與度",
-    "behavior": "秩序"
+    "behavior": "秩序",
+    "no_email": "暫無 Email"
 }

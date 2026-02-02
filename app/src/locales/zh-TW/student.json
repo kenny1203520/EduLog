@@ -20,23 +20,34 @@
     "saving": "儲存中...",
     "loading": "載入學生資料中...",
     "view_reports": "檢視報告列表",
+    "address": "地址",
+    "phone": "電話",
+    "social_security_number": "身分證字號 / 居留證號碼",
     "sections": {
+        "basic_info": "基本資料",
         "contacts": "聯絡人",
         "schools": "學校經歷",
-        "credentials": "帳號密碼"
+        "internal_courses": "校內課程",
+        "credentials": "帳戶與密碼"
     },
     "contacts": {
+        "title": "緊急聯絡人",
         "add_title": "新增聯絡人",
         "name": "姓名",
+        "relationship": "關係",
         "relation": "關係",
         "phone": "電話",
         "email": "Email",
         "add_btn": "新增聯絡人",
-        "confirm_delete": "確定要刪除此聯絡人嗎？"
+        "confirm_delete": "確定要刪除此聯絡人嗎？",
+        "delete_confirm": "確定要刪除這位聯絡人嗎？"
     },
     "schools": {
+        "title": "就讀學校",
         "add_title": "新增學校經歷",
         "name": "學校名稱",
+        "type": "學校類型",
+        "current": "當前學校",
         "grade": "年級",
         "class": "班級",
         "school_student_id": "學號",
@@ -52,13 +63,32 @@
         "start_date": "開始日期",
         "end_date": "結束日期",
         "present": "現在",
-        "add_btn": "新增學校",
-        "confirm_delete": "確定要刪除此學校經歷嗎？"
+        "add_btn": "新增學校經歷",
+        "confirm_delete": "確定要刪除此學校經歷嗎？",
+        "delete_confirm": "確定要刪除這筆學校記錄嗎？",
+        "senior_high": "高中",
+        "junior_high": "國中",
+        "elementary": "國小",
+        "other": "其他"
+    },
+    "management": {
+        "title": "學員管理中心",
+        "search_placeholder": "搜尋學生姓名、學號...",
+        "status_all": "所有狀態",
+        "status_active": "在學中",
+        "status_inactive": "非在學",
+        "grade_all": "所有年級",
+        "add_student": "新增學員",
+        "total_students": "學員總數",
+        "no_students": "找不到符合搜尋條件的學生。",
+        "no_grade": "暫無年級資訊",
+        "no_school": "暫無學校資訊"
     },
     "internal_courses": {
         "title": "校內課程",
         "add_title": "選修課程",
         "course": "課程",
+        "select_course_option": "-- 請選擇課程 --",
         "classroom": "教室",
         "status": "狀態",
         "reports": "課堂報告",
@@ -85,6 +115,7 @@
         "search_classroom": "搜尋教室...",
         "classroom_none": "-- 未選擇 --",
         "no_classrooms_found": "找不到符合的教室",
+        "no_sessions_found": "此教室與課程目前沒有時段",
         "classroom_search_hint": "搜尋以篩選教室",
         "session_classroom": "教室",
         "session_address": "地址",
@@ -98,7 +129,7 @@
         "password": "密碼",
         "url": "連結 URL",
         "platform_name": "平台名稱",
-        "add_title": "新增帳號",
+        "add_title": "新增平台帳號",
         "add_btn": "新增帳號",
         "confirm_delete": "確定要刪除此帳號嗎？",
         "platforms": {
@@ -107,14 +138,13 @@
             "Minecraft": "Minecraft",
             "Anydesk": "Anydesk",
             "Quiz Platform": "測驗平台",
+            "Discord": "Discord",
             "Other": "其他"
         }
     },
     "actions": "操作",
     "edit": "編輯",
     "save": "儲存",
-    "management": {
-        "no_grade": "暫無年級資訊",
-        "no_school": "暫無學校資訊"
-    }
+    "no_contact_email": "暫無 Email",
+    "no_contact_phone": "暫無電話"
 }

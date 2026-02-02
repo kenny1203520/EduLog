@@ -1116,7 +1116,7 @@ function copyToClipboard(text: string) {
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.course') }}</label>
                     <select v-model="newEnrollment.course_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                        <option :value="undefined">-- Select Course --</option>
+                        <option :value="undefined">{{ $t('student.internal_courses.select_course_option') }}</option>
                         <option v-for="c in availableCourses" :key="c.id" :value="c.id">
                             {{ c.subject }}_{{ c.stage }}
                         </option>
@@ -1163,9 +1163,9 @@ function copyToClipboard(text: string) {
                         <select v-model="newEnrollment.class_session_id" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
                             <option :value="undefined">{{ $t('student.internal_courses.session_select_placeholder') }}</option>
                             <option v-for="s in filteredSessions" :key="s.id" :value="s.id">
-                                {{ s.name }} ({{ s.day_of_week !== undefined ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][s.day_of_week] : '' }} {{ s.start_time?.slice(0,5) }})
+                                {{ s.name }} ({{ $t('classroom.days.' + s.day_of_week) }} {{ s.start_time?.slice(0,5) }})
                             </option>
-                            <option v-if="filteredSessions.length === 0" disabled>No sessions found for this course in this classroom</option>
+                            <option v-if="filteredSessions.length === 0" disabled>{{ $t('student.internal_courses.no_sessions_found') }}</option>
                         </select>
                         <p class="text-xs text-gray-400 mt-1">{{ $t('student.internal_courses.session_hint') }}</p>
                         
@@ -1189,7 +1189,7 @@ function copyToClipboard(text: string) {
                              <div class="flex justify-between items-start">
                                <span class="text-gray-600">{{ $t('student.internal_courses.session_schedule') }}:</span>
                                <span class="text-gray-700">
-                                 {{ getDayLabel(selectedSessionDetails.day_of_week) }} 
+                                 {{ $t('classroom.days.' + selectedSessionDetails.day_of_week) }} 
                                  {{ selectedSessionDetails.start_time?.slice(0,5) }} - {{ selectedSessionDetails.end_time?.slice(0,5) }}
                                </span>
                              </div>

@@ -38,5 +38,6 @@
     "actions": "Actions",
     "attendance": "Attendance",
     "participation": "Participation",
-    "behavior": "Behavior"
+    "behavior": "Behavior",
+    "no_email": "No Email"
 }
