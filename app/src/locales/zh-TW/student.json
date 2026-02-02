@@ -143,7 +143,9 @@
         "external_link": "外部報告總覽連結",
         "transfer_date_placeholder": "-- 請選擇生效日期 --",
         "last_lesson": "最後上課日",
-        "first_lesson": "首堂上課日"
+        "first_lesson": "首堂上課日",
+        "force_reschedule": "強制調課",
+        "force_reschedule_hint": "開啟後可選擇任一日期（包含過去）以遷移所有歷史記錄。"
     },
     "credentials": {
         "platform": "平台",

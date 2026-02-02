@@ -143,7 +143,9 @@
         "transfer_confirm": "Confirm Transfer",
         "transfer_date_placeholder": "-- Select Effective Date --",
         "last_lesson": "Last Lesson",
-        "first_lesson": "First Lesson"
+        "first_lesson": "First Lesson",
+        "force_reschedule": "Force Reschedule",
+        "force_reschedule_hint": "Allow selecting any date (including past) to migrate history."
     },
     "credentials": {
         "platform": "Platform",

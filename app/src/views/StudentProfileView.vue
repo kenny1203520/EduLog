@@ -361,6 +361,7 @@ const transferTargetSessionId = ref('')
 const transferDate = ref('')
 const transferOriginalLastDateValue = ref('')  // User-selected last lesson date for original session
 const itemTransferSessions = ref<ClassSessionDTO[]>([])
+const forceReschedule = ref(false)
 
 const selectedTargetSession = computed(() =>
     itemTransferSessions.value.find(s => s.id === transferTargetSessionId.value)
@@ -403,15 +404,30 @@ const transferOriginalAvailableDates = computed(() => {
         }
     }
 
-    // Generate 5 occurrences
-    for (let i = 0; i < 5; i++) {
-        const dateStr = d.toISOString().split('T')[0]
-        if (!dateStr) continue
-
-        const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
-        const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
-        dates.push({ value: dateStr, label: label })
-        d.setDate(d.getDate() + 7)
+    // Generate occurrences
+    if (forceReschedule.value) {
+        // Go back 12 weeks
+        d.setDate(d.getDate() - (12 * 7))
+        for (let i = 0; i < 24; i++) {
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            if (dateStr) {
+                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
+                dates.push({ value: dateStr, label: label })
+            }
+            d.setDate(d.getDate() + 7)
+        }
+    } else {
+        // Standard: Generate 5 future occurrences
+        for (let i = 0; i < 5; i++) {
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            if (dateStr) {
+                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
+                dates.push({ value: dateStr, label: label })
+            }
+            d.setDate(d.getDate() + 7)
+        }
     }
     return dates
 })
@@ -459,15 +475,30 @@ const transferAvailableDates = computed(() => {
         }
     }
 
-    // Generate 5 occurrences
-    for (let i = 0; i < 5; i++) {
-        const dateStr = d.toISOString().split('T')[0]
-        if (!dateStr) continue
-
-        const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
-        const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
-        dates.push({ value: dateStr, label: label })
-        d.setDate(d.getDate() + 7)
+    // Generate occurrences
+    if (forceReschedule.value) {
+        // Go back 12 weeks
+        d.setDate(d.getDate() - (12 * 7))
+        for (let i = 0; i < 24; i++) {
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            if (dateStr) {
+                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
+                dates.push({ value: dateStr, label: label })
+            }
+            d.setDate(d.getDate() + 7)
+        }
+    } else {
+        // Standard: Generate 5 future occurrences
+        for (let i = 0; i < 5; i++) {
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            if (dateStr) {
+                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
+                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
+                dates.push({ value: dateStr, label: label })
+            }
+            d.setDate(d.getDate() + 7)
+        }
     }
     return dates
 })
@@ -483,6 +514,7 @@ async function openTransferModal(enr: Enrollment) {
     transferTargetSessionId.value = ''
     transferDate.value = ''
     transferOriginalLastDateValue.value = ''
+    forceReschedule.value = false
     isTransferModalOpen.value = true
 
     // Fetch sessions for this course
@@ -2095,6 +2127,22 @@ function copyToClipboard(text: string) {
                             }})
                         </option>
                     </select>
+                </div>
+
+                <!-- Force Reschedule Toggle -->
+                <div class="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100 mb-2">
+                    <div class="flex flex-col">
+                        <span class="text-xs font-bold text-amber-700 uppercase">{{
+                            $t('student.internal_courses.force_reschedule') }}</span>
+                        <span class="text-[10px] text-amber-600 leading-tight">{{
+                            $t('student.internal_courses.force_reschedule_hint') }}</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" v-model="forceReschedule" class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500">
+                        </div>
+                    </label>
                 </div>
 
                 <div class="space-y-1.5">

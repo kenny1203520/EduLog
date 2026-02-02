@@ -223,72 +223,107 @@ export class EnrollmentService {
 
     /**
      * Transfer a student to a different class session
-     * This preserves historical reports and generates new ones for the new session
+     * This preserves historical reports and migrates them to the new session schedule
      */
     static async transferClass(
         enrollmentId: string,
         newSessionId: string,
         transferDate: string
     ): Promise<Enrollment> {
-        // Step 1: Get old session ID from current enrollment
-        const { data: currentEnrollment, error: enrollError } = await supabase
+        // 1. Get current enrollment and course info
+        const { data: enrollment, error: enrollError } = await supabase
             .from('enrollments')
-            .select('class_session_id')
+            .select('class_session_id, course_id')
             .eq('id', enrollmentId)
             .single()
 
         if (enrollError) throw new Error(`Failed to fetch enrollment: ${enrollError.message}`)
+        const oldSessionId = enrollment.class_session_id
 
-        const oldSessionId = currentEnrollment.class_session_id
+        // 2. Fetch existing reports that need to be moved to the new session
+        // We join with class_occurrences to verify they belong to the old session
+        const { data: reportsToMigrate, error: reportsError } = await supabase
+            .from('occurrence_reports')
+            .select(`
+                id, 
+                content,
+                class_occurrence_id,
+                class_occurrence:class_occurrences!class_occurrence_id(occurrence_date, class_session_id)
+            `)
+            .eq('enrollment_id', enrollmentId)
+            .eq('class_occurrence.class_session_id', oldSessionId)
+            .gte('class_occurrence.occurrence_date', transferDate)
+            .order('class_occurrence(occurrence_date)', { ascending: true })
 
-        // Step 2: Get all occurrence IDs from the OLD session that are >= transfer date
-        const { data: oldOccurrences, error: oldOccError } = await supabase
+        if (reportsError) throw new Error(`Failed to fetch reports for migration: ${reportsError.message}`)
+
+        // 3. Ensure occurrences exist for the NEW session
+        // We calculate lesson count to know how many occurrences to ensure/fetch
+        const { data: lessons } = await supabase.from('lessons').select('id').eq('course_id', enrollment.course_id)
+        const lessonCount = (lessons && lessons.length > 0) ? lessons.length : 12
+
+        const start = new Date(transferDate)
+        const endDate = new Date(start)
+        endDate.setDate(endDate.getDate() + (lessonCount * 7))
+        
+        await OccurrenceService.generateOccurrences(newSessionId, start, endDate).catch(() => {})
+
+        // 4. Fetch the target occurrences in the NEW session
+        const { data: newOccurrences, error: targetError } = await supabase
             .from('class_occurrences')
             .select('id')
-            .eq('class_session_id', oldSessionId)
+            .eq('class_session_id', newSessionId)
             .gte('occurrence_date', transferDate)
+            .order('occurrence_date', { ascending: true })
 
-        if (oldOccError) {
-            console.error('Failed to fetch old occurrences:', oldOccError)
+        if (targetError) throw new Error(`Failed to fetch target occurrences: ${targetError.message}`)
+
+        // 5. Intelligent Migration & Creation
+        // We pair existing reports with new occurrences where possible
+        const migrationPromises = []
+        const maxPairIndex = Math.min(reportsToMigrate.length, newOccurrences.length)
+
+        for (let i = 0; i < maxPairIndex; i++) {
+            const report = reportsToMigrate[i]
+            const newOcc = newOccurrences[i]
+            if (!report || !newOcc) continue
+
+            // Update path: re-point existing report to new occurrence
+            migrationPromises.push(
+                supabase.from('occurrence_reports').update({ class_occurrence_id: newOcc.id }).eq('id', report.id)
+            )
         }
 
-        // Step 3: Delete reports for those occurrences (using IN filter)
-        if (oldOccurrences && oldOccurrences.length > 0) {
-            const occurrenceIds = oldOccurrences.map(o => o.id)
-            const { error: deleteError } = await supabase
-                .from('occurrence_reports')
-                .delete()
-                .eq('enrollment_id', enrollmentId)
-                .in('class_occurrence_id', occurrenceIds)
-
-            if (deleteError) {
-                console.error('Failed to clean up old session reports:', deleteError)
-            }
+        // 6. Bulk Create any missing reports if new session has more occurrences than migrated reports
+        if (newOccurrences.length > reportsToMigrate.length) {
+            const missingOccs = newOccurrences.slice(reportsToMigrate.length)
+            const newReports = missingOccs.map(occ => ({
+                enrollment_id: enrollmentId,
+                class_occurrence_id: occ.id,
+                content: '',
+                version: 1,
+                is_completed: false
+            }))
+            migrationPromises.push(supabase.from('occurrence_reports').insert(newReports))
         }
 
-        // Step 4: Generate reports for new session using the standard generator
-        const { data: enr } = await supabase
-            .from('enrollments')
-            .select('course_id')
-            .eq('id', enrollmentId)
-            .single()
+        // 7. Cleanup: If old session had MORE reports than the new session provides, 
+        // delete the excess ones (they have no place in the new layout)
+        if (reportsToMigrate.length > newOccurrences.length) {
+            const excessReportIds = reportsToMigrate.slice(newOccurrences.length).map(r => r.id)
+            migrationPromises.push(supabase.from('occurrence_reports').delete().in('id', excessReportIds))
+        }
 
-        await this.generateReportsForSession(
-            enrollmentId,
-            newSessionId,
-            transferDate,
-            enr?.course_id || ''
-        )
+        await Promise.all(migrationPromises)
 
-        // Step 6: Update enrollment
+        // 8. Update enrollment record
         const updated = await this.update(enrollmentId, { class_session_id: newSessionId })
 
-        // Step 7: Clean up orphaned occurrences in old session
+        // 9. Sync occurrences in both old and new sessions (clean up orphans)
         if (oldSessionId) {
-            await OccurrenceService.syncSessionOccurrences(oldSessionId).catch((err: any) => {
-                console.error('Failed to sync old session after transfer:', err)
-            })
+            await OccurrenceService.syncSessionOccurrences(oldSessionId).catch(() => {})
         }
+        await OccurrenceService.syncSessionOccurrences(newSessionId).catch(() => {})
 
         return updated
     }
