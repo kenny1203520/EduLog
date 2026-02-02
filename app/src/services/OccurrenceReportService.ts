@@ -623,4 +623,139 @@ export class OccurrenceReportService {
         
         return pending.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     }
+
+    /**
+     * Gets reports for a specific lesson from other students (Peer Reports)
+     */
+    static async getReportsByLesson(
+        lessonId: string,
+        params: {
+            excludeReportId?: string,
+            page?: number,
+            pageSize?: number,
+            classroomId?: string,
+            sessionId?: string,
+            sortBy?: 'asc' | 'desc',
+            search?: string
+        } = {}
+    ): Promise<{ data: any[], count: number }> {
+        const { page = 1, pageSize = 10, excludeReportId, classroomId, sessionId, sortBy = 'desc', search } = params
+        const from = (page - 1) * pageSize
+        const to = from + pageSize - 1
+
+        let query = supabase
+            .from('occurrence_reports')
+            .select(`
+                id, content, is_completed, updated_at,
+                progress_start, progress_end, progress_letter,
+                contact_notes, class_notes,
+                enrollments!inner (
+                    students (first_name, last_name, english_name)
+                ),
+                class_occurrences!inner (
+                    occurrence_date,
+                    class_session_id,
+                    class_sessions!inner (
+                        name,
+                        classroom_id,
+                        classrooms!inner (name)
+                    )
+                )
+            `, { count: 'exact' })
+            .eq('lesson_id', lessonId)
+            .eq('is_completed', true)
+            .not('content', 'is', null)
+            .neq('content', '')
+
+        if (excludeReportId) {
+            query = query.neq('id', excludeReportId)
+        }
+
+        if (search) {
+            query = query.ilike('content', `%${search}%`)
+        }
+
+        if (classroomId) {
+            query = query.eq('class_occurrences.class_sessions.classroom_id', classroomId)
+        }
+
+        if (sessionId) {
+            query = query.eq('class_occurrences.class_session_id', sessionId)
+        }
+
+        const { data, error, count } = await query
+            .order('updated_at', { ascending: sortBy === 'asc' })
+            .range(from, to)
+        
+        if (error) throw new Error(error.message)
+        return { data: data || [], count: count || 0 }
+    }
+
+    /**
+     * Gets all historical reports for a specific student across all courses
+     */
+    static async getReportsByStudent(
+        studentId: string,
+        params: {
+            excludeReportId?: string,
+            page?: number,
+            pageSize?: number,
+            courseId?: string,
+            sortBy?: 'asc' | 'desc',
+            search?: string
+        } = {}
+    ): Promise<{ data: any[], count: number }> {
+        const { page = 1, pageSize = 10, excludeReportId, courseId, sortBy = 'desc', search } = params
+        const from = (page - 1) * pageSize
+        const to = from + pageSize - 1
+
+        // First get all enrollment IDs for this student
+        const { data: enrollments } = await supabase
+            .from('enrollments')
+            .select('id')
+            .eq('student_id', studentId)
+        
+        if (!enrollments?.length) return { data: [], count: 0 }
+        
+        const enrollmentIds = enrollments.map(e => e.id)
+
+        let query = supabase
+            .from('occurrence_reports')
+            .select(`
+                id, content, is_completed, updated_at,
+                progress_start, progress_end, progress_letter,
+                contact_notes, class_notes,
+                lessons (title, sequence),
+                class_occurrences!inner (
+                    occurrence_date,
+                    class_sessions!inner (
+                        courses!inner (id, name)
+                    )
+                )
+            `, { count: 'exact' })
+            .in('enrollment_id', enrollmentIds)
+            .eq('is_completed', true)
+            .not('content', 'is', null)
+            .neq('content', '')
+
+        if (excludeReportId) {
+            query = query.neq('id', excludeReportId)
+        }
+
+        if (search) {
+            query = query.ilike('content', `%${search}%`)
+        }
+
+        if (courseId) {
+            query = query.eq('class_occurrences.class_sessions.courses.id', courseId)
+        }
+
+        const { data, error, count } = await query
+            .order('updated_at', { ascending: sortBy === 'asc' })
+            .range(from, to)
+
+        if (error) throw new Error(error.message)
+
+        return { data: data || [], count: count || 0 }
+    }
 }

@@ -17,6 +17,18 @@
         </h3>
 
         <div class="flex items-center gap-4">
+            <!-- Reference Panel Toggle -->
+            <button @click="showReferencePanel = !showReferencePanel"
+                class="text-sm font-medium text-gray-600 hover:text-indigo-600 flex items-center gap-1 focus:outline-none"
+                :title="$t('report.reference_panel.title')">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span class="hidden sm:inline">{{ $t('report.reference_panel.title') }}</span>
+            </button>
+
             <!-- Templates Dropdown -->
             <div class="relative">
                 <button @click="showTemplates = !showTemplates"
@@ -368,7 +380,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -393,6 +405,9 @@
                 {{ isSaving ? $t('report.saving') : $t('report.editor.save_now') }}
             </button>
         </div>
+
+        <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId" :student-id="student?.id"
+            :current-report-id="reportId" @close="showReferencePanel = false" @copy="handleCopyContent" />
     </div>
 </template>
 
@@ -403,6 +418,7 @@ import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
+import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 
 import type { Lesson } from '@/models/Course'
 
@@ -414,8 +430,16 @@ interface Template {
 
 // Templates State
 const showTemplates = ref(false)
+const showReferencePanel = ref(false)
 const savedTemplates = ref<Template[]>([])
 const newTemplateName = ref('')
+
+const handleCopyContent = (text: string) => {
+    if (!text) return
+    const current = localContent.value || ''
+    localContent.value = current + (current ? '\n\n' : '') + text
+    handleInput()
+}
 
 function loadTemplates() {
     const stored = localStorage.getItem('edulog_report_templates')
@@ -471,6 +495,7 @@ interface Props {
     showManualSave?: boolean
     debounceMs?: number
     availableLessons?: Lesson[]
+    student?: any
     // Initial detailed data
     initialLessonId?: string
     initialIsCompleted?: boolean

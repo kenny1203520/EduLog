@@ -34,7 +34,14 @@
         "search_placeholder": "Search content...",
         "no_results": "No relevant reports found.",
         "copy_content": "Copy Content",
-        "copy_success": "Copied to editor"
+        "copy_success": "Copied to editor",
+        "items_per_page": "per page",
+        "page": "Page",
+        "filter_by_classroom": "All Classrooms",
+        "filter_by_session": "All Sessions",
+        "filter_by_course": "All Courses",
+        "prev": "Prev",
+        "next": "Next"
     },
     "editor": {
         "title": "Class Report",
