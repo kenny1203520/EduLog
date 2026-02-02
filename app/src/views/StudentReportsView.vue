@@ -336,6 +336,8 @@ import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { CourseService } from '@/services/CourseService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
+import { SuspensionService } from '@/services/SuspensionService'
+import { Suspension } from '@/models/Suspension'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 
 const route = useRoute()
@@ -368,6 +370,7 @@ import { computed } from 'vue'
 const viewMode = ref<'calendar' | 'list'>('calendar')
 const listLoading = ref(false)
 const allReports = ref<any[]>([])
+const suspensions = ref<Suspension[]>([])
 const sortOrder = ref<'asc' | 'desc'>('asc')
 
 function toggleSort() {
@@ -399,16 +402,24 @@ const allReportDisplay = computed(() => {
                 classroomBehavior: r.classroom_behavior
             }
         } else {
+            // Check suspension status
+            // Use formatDate to ensure we use the local date string (YYYY-MM-DD) and avoid UTC shift issues
+            const dateStr = occ.formatDate(occ.occurrenceDate)
+            const isSuspended = suspensions.value.some(s => {
+                const start = s.startDate
+                const end = s.endDate
+                if (end) {
+                    return dateStr >= start && dateStr <= end
+                }
+                return dateStr >= start
+            })
+
             // Placeholder for missing report
             return {
                 id: null,
                 occurrenceId: occ.id,
                 date: occ.occurrenceDate,
-                status: occ.status === 'completed' ? 'present' : (occ.status === 'cancelled' ? 'absent' : 'scheduled'), // Map cancelled to absent for display? Or keep 'cancelled'
-                // User mentioned "recorded as absent" for suspension. 
-                // If occurrence is cancelled, we might show 'cancelled' or let them fill it.
-                // If we show 'scheduled', it's neutral.
-                // Let's rely on getStatusColor handling 'cancelled'.
+                status: isSuspended ? 'cancelled' : (occ.status === 'completed' ? 'present' : (occ.status === 'cancelled' ? 'absent' : 'scheduled')),
                 content: '',
                 classNotes: '',
                 version: 0,
@@ -419,7 +430,6 @@ const allReportDisplay = computed(() => {
         }
     })
 
-    // Sort Oldest -> Newest (Ascending)
     // Sort based on sortOrder
     return mergedList.sort((a, b) => {
         const timeA = new Date(a.date).getTime()
@@ -573,6 +583,11 @@ async function loadOccurrences() {
                 endDate,
                 [enrollment.classSessionId]
             )
+        }
+
+        // Load Suspensions
+        if (enrollment.id) {
+            suspensions.value = await SuspensionService.getSuspensions(enrollment.id)
         }
 
         // 5. Merge and Sort
