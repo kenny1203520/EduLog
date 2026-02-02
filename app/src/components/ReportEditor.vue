@@ -368,7 +368,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -524,7 +524,20 @@ const classParticipation = ref(props.initialClassParticipation ?? 0)
 const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
 const contactNotes = ref(props.initialContactNotes || '')
 const classNotes = ref(props.initialClassNotes || '')
-const reportExternalLink = ref(props.initialReportExternalLink || '') // New ref for external link
+const reportExternalLink = ref(props.initialReportExternalLink || '')
+
+// Watch props to update local state when data loads
+watch(() => props.initialLessonId, (val) => { if (val) selectedLessonId.value = val })
+watch(() => props.initialIsCompleted, (val) => { isCompleted.value = val })
+watch(() => props.initialProgressStart, (val) => { if (val) progressStart.value = val })
+watch(() => props.initialProgressEnd, (val) => { if (val) progressEnd.value = val })
+watch(() => props.initialAttendanceStatus, (val) => { attendanceStatus.value = val })
+watch(() => props.initialAbsenceReason, (val) => { if (val) absenceReason.value = val })
+watch(() => props.initialClassParticipation, (val) => { if (val !== undefined) classParticipation.value = val })
+watch(() => props.initialClassroomBehavior, (val) => { if (val !== undefined) classroomBehavior.value = val })
+watch(() => props.initialContactNotes, (val) => { if (val) contactNotes.value = val })
+watch(() => props.initialClassNotes, (val) => { if (val) classNotes.value = val })
+watch(() => props.initialReportExternalLink, (val) => { if (val) reportExternalLink.value = val })
 
 // Computed progress letter for backend (combining start-end range)
 const progressLetter = computed(() => {

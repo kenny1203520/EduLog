@@ -7,6 +7,7 @@ import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import type { Enrollment } from '@/models/Enrollment'
 
 import ReportEditor from '@/components/ReportEditor.vue'
+import ConflictModal from '@/components/ConflictModal.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -22,8 +23,15 @@ const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSavi
 const showSplitView = ref(false)
 const selectedEnrollmentId = ref<string | null>(null)
 
+// Conflict Resolution State
+const showConflictModal = ref(false)
+const conflictServerContent = ref('')
+const conflictLocalContent = ref('')
+const conflictReportId = ref<string | null>(null)
+
 const session = ref<any>(null)
 const enrollments = ref<Enrollment[]>([])
+const courseLessons = ref<any[]>([])
 const loading = ref(true)
 
 onMounted(async () => {
@@ -36,11 +44,17 @@ onMounted(async () => {
         const { data: allEnrollments } = await CourseService.getEnrollmentsBySession(sessionId)
         enrollments.value = allEnrollments
 
+        // 2.5 Load lessons for this course (needed for editor)
+        if (allEnrollments.length > 0 && allEnrollments[0]?.courseId) {
+            const lessons = await CourseService.getLessonsByCourse(allEnrollments[0].courseId)
+            courseLessons.value = lessons
+        }
+
         // 3. Find or Create Today's Occurrence
         const today = new Date()
 
         // Check if session runs today (day_of_week)
-        if (session.value.day_of_week === today.getDay()) {
+        if (session.value && session.value.day_of_week === today.getDay()) {
             const occurrences = await OccurrenceService.getOccurrencesByDateRange(today, today, [sessionId])
             if (occurrences.length > 0) {
                 todayOccurrence.value = occurrences[0]
@@ -186,6 +200,50 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
         report.version = version
     }
 }
+
+function handleSaveError(error: string) {
+    alert(`Failed to save report: ${error}`)
+}
+
+function handleConflict(serverContent: string, enrollmentId: string) {
+    conflictServerContent.value = serverContent
+    const report = reportMap.value.get(enrollmentId)
+    conflictLocalContent.value = report?.content || ''
+    conflictReportId.value = report?.id || null
+    showConflictModal.value = true
+}
+
+function closeConflictModal() {
+    showConflictModal.value = false
+    conflictReportId.value = null
+}
+
+async function resolveConflict(resolvedContent: string) {
+    if (!conflictReportId.value) return
+
+    try {
+        const report = await OccurrenceReportService.resolveConflict(
+            conflictReportId.value,
+            resolvedContent
+        )
+
+        // Update local state
+        // Find which enrollment this belongs to
+        for (const [enrId, r] of reportMap.value.entries()) {
+            if (r.id === report.id) {
+                reportMap.value.set(enrId, report)
+                break
+            }
+        }
+
+        showConflictModal.value = false
+        conflictReportId.value = null
+        alert(t('report.save_success'))
+    } catch (error) {
+        console.error('Failed to resolve conflict:', error)
+        alert('Failed to resolve conflict')
+    }
+}
 </script>
 
 <template>
@@ -294,7 +352,7 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
                             </svg>
                         </div>
                     </div>
-                    <div
+                    <div v-if="session"
                         class="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2 flex items-center gap-12">
                         <div>
                             <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">{{
@@ -436,7 +494,8 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
                         :initial-content="reportMap.get(selectedEnrollmentId)?.content"
                         :initial-version="reportMap.get(selectedEnrollmentId)?.version"
                         :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
-                        :initial-external-link="enrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
+                        :initial-enrollment-external-link="enrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
+                        :initial-report-external-link="reportMap.get(selectedEnrollmentId)?.externalLink"
                         :initial-is-completed="reportMap.get(selectedEnrollmentId)?.isCompleted"
                         :initial-progress-start="reportMap.get(selectedEnrollmentId)?.progressStart"
                         :initial-progress-end="reportMap.get(selectedEnrollmentId)?.progressEnd"
@@ -446,9 +505,12 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
                         :initial-classroom-behavior="parseFloat(reportMap.get(selectedEnrollmentId)?.classroomBehavior || '0')"
                         :initial-contact-notes="reportMap.get(selectedEnrollmentId)?.contactNotes"
                         :initial-class-notes="reportMap.get(selectedEnrollmentId)?.classNotes"
+                        :available-lessons="courseLessons" :show-manual-save="true"
+                        :loading="savingMap.get(selectedEnrollmentId!)"
                         @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                         @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
-                        @save-success="handleSaveSuccess($event, selectedEnrollmentId!)"
+                        @save-success="handleSaveSuccess($event, selectedEnrollmentId!)" @save-error="handleSaveError"
+                        @conflict="handleConflict($event, selectedEnrollmentId!)"
                         class="h-full border-none shadow-none rounded-none" />
 
                     <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
@@ -458,5 +520,10 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
                 </div>
             </div>
         </div>
+
+        <!-- Conflict Resolution Modal -->
+        <ConflictModal :is-open="showConflictModal" :server-content="conflictServerContent"
+            :local-content="conflictLocalContent" @close="closeConflictModal" @resolve="resolveConflict" />
+
     </div>
 </template>
