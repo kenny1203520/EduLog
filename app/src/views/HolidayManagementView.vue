@@ -20,8 +20,8 @@ const holidayForm = ref({
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     name: '',
-    classroomId: '',
-    classSessionId: ''
+    classroomIds: [] as string[],
+    classSessionIds: [] as string[]
 })
 
 onMounted(async () => {
@@ -55,6 +55,14 @@ async function loadHolidays() {
     }
 }
 
+function getNamesForIds(type: 'classroom' | 'session', ids: string[]) {
+    if (type === 'classroom') {
+        return ids.map(id => classrooms.value.find(r => r.id === id)?.name).filter(Boolean).join(', ')
+    } else {
+        return ids.map(id => sessions.value.find(s => s.id === id)?.name).filter(Boolean).join(', ')
+    }
+}
+
 async function handleSaveHoliday() {
     if (!holidayForm.value.startDate || !holidayForm.value.endDate) return
     try {
@@ -64,8 +72,8 @@ async function handleSaveHoliday() {
             start_date: holidayForm.value.startDate,
             end_date: holidayForm.value.endDate,
             name: holidayForm.value.name,
-            classroom_id: scopeType.value === 'classroom' ? holidayForm.value.classroomId : null,
-            class_session_id: scopeType.value === 'session' ? holidayForm.value.classSessionId : null
+            classroom_ids: scopeType.value === 'classroom' ? holidayForm.value.classroomIds : [],
+            class_session_ids: scopeType.value === 'session' ? holidayForm.value.classSessionIds : []
         }
 
         if (editingId.value) {
@@ -75,8 +83,8 @@ async function handleSaveHoliday() {
                 startDate: payload.start_date,
                 endDate: payload.end_date,
                 name: payload.name,
-                classroomId: payload.classroom_id || undefined,
-                classSessionId: payload.class_session_id || undefined
+                classroomIds: payload.classroom_ids,
+                classSessionIds: payload.class_session_ids
             })
         }
         await loadHolidays()
@@ -105,17 +113,17 @@ function openAddModal() {
         startDate: new Date().toISOString().split('T')[0],
         endDate: new Date().toISOString().split('T')[0],
         name: '',
-        classroomId: '',
-        classSessionId: ''
+        classroomIds: [],
+        classSessionIds: []
     }
     isAddModalOpen.value = true
 }
 
 function openEditModal(holiday: Holiday) {
     editingId.value = holiday.id || null
-    if (holiday.classSessionId) {
+    if (holiday.classSessionIds && holiday.classSessionIds.length > 0) {
         scopeType.value = 'session'
-    } else if (holiday.classroomId) {
+    } else if (holiday.classroomIds && holiday.classroomIds.length > 0) {
         scopeType.value = 'classroom'
     } else {
         scopeType.value = 'global'
@@ -125,8 +133,8 @@ function openEditModal(holiday: Holiday) {
         startDate: holiday.startDate,
         endDate: holiday.endDate,
         name: holiday.name || '',
-        classroomId: holiday.classroomId || '',
-        classSessionId: holiday.classSessionId || ''
+        classroomIds: holiday.classroomIds ? [...holiday.classroomIds] : [],
+        classSessionIds: holiday.classSessionIds ? [...holiday.classSessionIds] : []
     }
     isAddModalOpen.value = true
 }
@@ -196,13 +204,15 @@ function closeModal() {
                             {{ holiday.formattedRange }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            <span v-if="holiday.sessionName"
+                            <span v-if="holiday.classSessionIds.length > 0"
                                 class="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium border border-purple-100">
-                                {{ $t('holiday.scope_session') }}: {{ holiday.sessionName }}
+                                {{ $t('holiday.scope_session') }}: {{ getNamesForIds('session', holiday.classSessionIds)
+                                }}
                             </span>
-                            <span v-else-if="holiday.classroomName"
+                            <span v-else-if="holiday.classroomIds.length > 0"
                                 class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium border border-blue-100">
-                                {{ $t('holiday.scope_classroom') }}: {{ holiday.classroomName }}
+                                {{ $t('holiday.scope_classroom') }}: {{ getNamesForIds('classroom',
+                                holiday.classroomIds) }}
                             </span>
                             <span v-else
                                 class="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs font-medium border border-emerald-100">
@@ -248,14 +258,14 @@ function closeModal() {
         <!-- Add/Edit Holiday Modal -->
         <div v-if="isAddModalOpen"
             class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
                 <h3 class="text-xl font-bold mb-6 text-gray-800">{{ editingId ? $t('common.edit') :
                     $t('holiday.add_holiday') }}</h3>
                 <div class="space-y-4">
                     <!-- Scope Selection -->
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('holiday.scope_label')
-                            }}</label>
+                        }}</label>
                         <div class="flex bg-gray-100 p-1 rounded-lg gap-1">
                             <button @click="scopeType = 'global'"
                                 class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
@@ -276,24 +286,33 @@ function closeModal() {
                     </div>
 
                     <!-- Scope Targets -->
-                    <div v-if="scopeType === 'classroom'">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{
-                            $t('holiday.scope_classroom') }}</label>
-                        <select v-model="holidayForm.classroomId"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                            <option value="">{{ $t('common.select', 'Select...') }}</option>
-                            <option v-for="room in classrooms" :key="room.id" :value="room.id">{{ room.name }}</option>
-                        </select>
+                    <div v-if="scopeType === 'classroom'" class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">{{ $t('holiday.scope_classroom')
+                            }}</label>
+                        <div class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+                            <label v-for="room in classrooms" :key="room.id"
+                                class="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer transition">
+                                <input type="checkbox" :value="room.id" v-model="holidayForm.classroomIds"
+                                    class="rounded text-emerald-600 focus:ring-emerald-500">
+                                <span class="text-sm text-gray-700 truncate">{{ room.name }}</span>
+                            </label>
+                        </div>
                     </div>
-                    <div v-if="scopeType === 'session'">
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{
-                            $t('holiday.scope_session') }}</label>
-                        <select v-model="holidayForm.classSessionId"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                            <option value="">{{ $t('common.select', 'Select...') }}</option>
-                            <option v-for="s in sessions" :key="s.id" :value="s.id">{{ s.name }} ({{
-                                classrooms.find(r => r.id === s.classroom_id)?.name}})</option>
-                        </select>
+                    <div v-if="scopeType === 'session'" class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">{{ $t('holiday.scope_session')
+                            }}</label>
+                        <div class="grid grid-cols-1 gap-1 max-h-48 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+                            <label v-for="s in sessions" :key="s.id"
+                                class="flex items-center gap-2 p-2 hover:bg-white rounded cursor-pointer transition">
+                                <input type="checkbox" :value="s.id" v-model="holidayForm.classSessionIds"
+                                    class="rounded text-emerald-600 focus:ring-emerald-500">
+                                <div class="flex flex-col min-w-0">
+                                    <span class="text-sm font-medium text-gray-800 truncate">{{ s.name }}</span>
+                                    <span class="text-xs text-gray-500 truncate">{{classrooms.find(r => r.id ===
+                                        s.classroom_id)?.name }}</span>
+                                </div>
+                            </label>
+                        </div>
                     </div>
 
                     <div class="grid grid-cols-2 gap-4">

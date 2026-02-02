@@ -3,13 +3,11 @@ export interface HolidayDTO {
     start_date: string
     end_date: string
     name?: string
-    classroom_id?: string
-    class_session_id?: string
+    classroom_ids?: string[]
+    class_session_ids?: string[]
     created_at?: string
     updated_at?: string
-    // Joined data
-    classrooms?: { name: string }
-    class_sessions?: { name: string }
+    // Joined data (Note: Supabase doesn't easily join arrays, so we'll fetch names in UI if needed)
 }
 
 export class Holiday {
@@ -17,10 +15,8 @@ export class Holiday {
     startDate: string
     endDate: string
     name?: string
-    classroomId?: string
-    classSessionId?: string
-    classroomName?: string
-    sessionName?: string
+    classroomIds: string[]
+    classSessionIds: string[]
     createdAt?: Date
     updatedAt?: Date
 
@@ -29,10 +25,8 @@ export class Holiday {
         this.startDate = data.start_date
         this.endDate = data.end_date
         this.name = data.name
-        this.classroomId = data.classroom_id
-        this.classSessionId = data.class_session_id
-        this.classroomName = data.classrooms?.name
-        this.sessionName = data.class_sessions?.name
+        this.classroomIds = data.classroom_ids || []
+        this.classSessionIds = data.class_session_ids || []
         this.createdAt = data.created_at ? new Date(data.created_at) : undefined
         this.updatedAt = data.updated_at ? new Date(data.updated_at) : undefined
     }

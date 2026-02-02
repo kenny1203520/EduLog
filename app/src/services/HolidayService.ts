@@ -8,7 +8,7 @@ export class HolidayService {
     static async listHolidays(): Promise<Holiday[]> {
         const { data, error } = await supabase
             .from('holidays')
-            .select('*, classrooms(name), class_sessions(name)')
+            .select('*')
             .order('start_date', { ascending: true })
 
         if (error) throw new Error(`Failed to fetch holidays: ${error.message}`)
@@ -29,20 +29,16 @@ export class HolidayService {
             .lte('start_date', dateStr)
             .gte('end_date', dateStr)
         
-        // Return true if any of these match:
-        // 1. Global holiday (both NULL)
-        // 2. Classroom-specific holiday
-        // 3. Session-specific holiday
-        
+        // Match Global (empty arrays) OR specific IDs in arrays
         const orConditions = [
-            'and(classroom_id.is.null,class_session_id.is.null)'
+            'and(classroom_ids.eq.{},class_session_ids.eq.{})'
         ]
 
         if (classroomId) {
-            orConditions.push(`classroom_id.eq.${classroomId}`)
+            orConditions.push(`classroom_ids.cs.{${classroomId}}`)
         }
         if (sessionId) {
-            orConditions.push(`class_session_id.eq.${sessionId}`)
+            orConditions.push(`class_session_ids.cs.{${sessionId}}`)
         }
 
         const { data, error } = await query.or(orConditions.join(',')).maybeSingle()
@@ -56,14 +52,14 @@ export class HolidayService {
     }
 
     /**
-     * Adds a new holiday range with optional scope
+     * Adds a new holiday range with optional scopes
      */
     static async createHoliday(params: {
         startDate: string, 
         endDate: string, 
         name?: string,
-        classroomId?: string,
-        classSessionId?: string
+        classroomIds?: string[],
+        classSessionIds?: string[]
     }): Promise<Holiday> {
         const { data, error } = await supabase
             .from('holidays')
@@ -71,8 +67,8 @@ export class HolidayService {
                 start_date: params.startDate,
                 end_date: params.endDate,
                 name: params.name,
-                classroom_id: params.classroomId || null,
-                class_session_id: params.classSessionId || null
+                classroom_ids: params.classroomIds || [],
+                class_session_ids: params.classSessionIds || []
             })
             .select()
             .single()
@@ -108,7 +104,6 @@ export class HolidayService {
 
     /**
      * Synchronizes existing reports within a holiday range.
-     * Marks reports as Absent/Holiday if they are currently "Present" and have no content.
      */
     private static async syncReportsForHoliday(holiday: Holiday): Promise<void> {
         // 1. Find all occurrences in range and scope
@@ -118,14 +113,13 @@ export class HolidayService {
             .gte('occurrence_date', holiday.startDate)
             .lte('occurrence_date', holiday.endDate)
         
-        if (holiday.classSessionId) {
-            query = query.eq('class_session_id', holiday.classSessionId)
-        } else if (holiday.classroomId) {
-            // occurrences don't directly have classroom_id? Let's check session
+        if (holiday.classSessionIds.length > 0) {
+            query = query.in('class_session_id', holiday.classSessionIds)
+        } else if (holiday.classroomIds.length > 0) {
             const { data: sessionIds } = await supabase
                 .from('class_sessions')
                 .select('id')
-                .eq('classroom_id', holiday.classroomId)
+                .in('classroom_id', holiday.classroomIds)
             
             if (!sessionIds || sessionIds.length === 0) return
             query = query.in('class_session_id', sessionIds.map(s => s.id))
@@ -136,8 +130,7 @@ export class HolidayService {
         if (!occurrences || occurrences.length === 0) return
         const occurrenceIds = occurrences.map(o => o.id)
 
-        // 2. Find and update reports for these occurrences
-        // Only update if content is empty (to avoid overwriting manual work)
+        // 2. Update reports
         const { error } = await supabase
             .from('occurrence_reports')
             .update({
@@ -146,12 +139,10 @@ export class HolidayService {
                 is_completed: false
             })
             .in('class_occurrence_id', occurrenceIds)
-            .or('content.eq.,content.is.null') // Only if content is empty or null
+            .or('content.eq.,content.is.null')
 
         if (error) {
             console.error('Failed to sync reports for holiday:', error)
-        } else {
-            console.log(`Successfully synced reports for holiday range ${holiday.startDate} to ${holiday.endDate}`)
         }
     }
 
