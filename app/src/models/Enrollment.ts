@@ -1,3 +1,4 @@
+import { DateUtils } from '@/utils/DateUtils'
 export interface EnrollmentDTO {
     id?: string
     student_id: string
@@ -92,8 +93,7 @@ export class Enrollment {
     }
 
     get formattedStartDate(): string {
-        if (!this.startDate) return '-'
-        return new Date(this.startDate).toLocaleDateString()
+        return DateUtils.displayDate(this.startDate)
     }
 
     get formattedSchedule(): string {

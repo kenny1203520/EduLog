@@ -325,7 +325,7 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
                             <div class="flex items-end gap-3">
                                 <p class="text-4xl font-black text-gray-900 tracking-tighter">{{
                                     Math.round((enrollments.length / (session?.capacity || 1)) * 100) }}%</p>
-                                <p class="text-sm font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
+                                <p class="text-xs font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
                                     $t('classroom.capacity') }}</p>
                             </div>
                         </div>

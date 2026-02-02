@@ -100,38 +100,9 @@ export class EnrollmentService {
      * Handles class transfers and classroom updates
      */
     static async update(enrollmentId: string, updates: Partial<EnrollmentDTO>): Promise<Enrollment> {
-        // Fetch current enrollment to check for changes
-        const { data: current, error: fetchError } = await supabase
-            .from('enrollments')
-            .select('class_session_id, classroom_id')
-            .eq('id', enrollmentId)
-            .single()
-
-        if (fetchError) throw new Error(`Failed to fetch enrollment: ${fetchError.message}`)
-
-        // Check if class session is changing (class transfer)
-        const isClassTransfer = updates.class_session_id && updates.class_session_id !== current.class_session_id
-
-        if (isClassTransfer) {
-            // Delete old reports and generate new ones starting from current date (for transfer)
-            await this.deleteReportsForEnrollment(enrollmentId)
-            
-            // Get course_id for lesson count
-            const { data: enr } = await supabase
-                .from('enrollments')
-                .select('course_id')
-                .eq('id', enrollmentId)
-                .single()
-            
-            const todayStr = new Date().toISOString().split('T')[0]
-            await this.generateReportsForSession(
-                enrollmentId, 
-                updates.class_session_id as string,
-                todayStr as string,
-                enr?.course_id || ''
-            )
-        }
-
+        // Note: Class transfer is handled by transferClass() method for better control
+        // over historical data preservation.
+        
         // Update the enrollment
         const { data: updated, error: updateError } = await supabase
             .from('enrollments')

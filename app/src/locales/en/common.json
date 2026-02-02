@@ -21,5 +21,7 @@
         "show": "Show",
         "no_results": "No results"
     },
-    "close_split_view": "Close Editor"
+    "close_split_view": "Close Editor",
+    "success": "Success",
+    "confirm_save": "Are you sure you want to save?"
 }

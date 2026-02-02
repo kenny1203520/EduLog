@@ -19,6 +19,7 @@
     "select_course_to_view": "Select a course to view its learning reports",
     "editor": {
         "title": "Class Report",
+        "lesson_label": "Lesson / Course",
         "lesson_selector_label": "Lesson / Course",
         "select_lesson": "Select a lesson",
         "lesson_completed": "Lesson Completed",

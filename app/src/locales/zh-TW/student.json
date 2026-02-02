@@ -129,7 +129,10 @@
         "session_schedule": "時間",
         "session_capacity": "人數",
         "session_full": "已滿",
-        "external_link": "教材資料夾連結"
+        "external_link": "教材資料夾連結",
+        "transfer_date_placeholder": "-- 請選擇生效日期 --",
+        "last_lesson": "最後上課日",
+        "first_lesson": "首堂上課日"
     },
     "credentials": {
         "platform": "平台",

@@ -1,3 +1,5 @@
+import { DateUtils } from '@/utils/DateUtils'
+
 /**
  * ClassOccurrence represents a single class session that occurs on a specific date.
  * This is different from ClassSession which defines the recurring schedule.
@@ -43,7 +45,8 @@ export class ClassOccurrence {
     constructor(data: ClassOccurrenceDTO) {
         this.id = data.id
         this.classSessionId = data.class_session_id
-        this.occurrenceDate = new Date(data.occurrence_date)
+        // Parse YYYY-MM-DD as local time to avoid timezone shifts
+        this.occurrenceDate = DateUtils.parseLocalDate(data.occurrence_date) || new Date()
         this.status = data.status
         this.originalStartTime = data.original_start_time
         this.originalEndTime = data.original_end_time
@@ -78,7 +81,7 @@ export class ClassOccurrence {
      * Formats date as YYYY-MM-DD
      */
     formatDate(date: Date): string {
-        return date.toISOString().split('T')[0] || ''
+        return DateUtils.formatLocalDate(date)
     }
 
     /**

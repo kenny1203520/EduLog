@@ -122,7 +122,17 @@
         "session_schedule": "Schedule",
         "session_capacity": "Capacity",
         "session_full": "FULL",
-        "external_link": "External Report URL"
+        "external_link": "External Report URL",
+        "transfer_btn": "Transfer",
+        "transfer_title": "Transfer Class",
+        "transfer_from": "From Session",
+        "transfer_target": "To Session",
+        "transfer_date": "Effective Date",
+        "transfer_hint": "Reports for the new session will be generated from this date onwards.",
+        "transfer_confirm": "Confirm Transfer",
+        "transfer_date_placeholder": "-- Select Effective Date --",
+        "last_lesson": "Last Lesson",
+        "first_lesson": "First Lesson"
     },
     "credentials": {
         "platform": "Platform",

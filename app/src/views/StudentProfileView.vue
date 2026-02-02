@@ -1975,11 +1975,13 @@ function copyToClipboard(text: string) {
                             '-'
                         }}</div>
                         <div class="text-xs text-gray-500 mb-1">{{ transferEnrollment.classSessionName || '-' }}</div>
-                        <div class="border-t border-gray-200 pt-1 mt-1">
-                            <label class="text-[10px] text-red-500 font-medium block mb-1">Last Lesson:</label>
+                        <div class="bg-gray-50 border border-gray-100 rounded-lg p-2 flex-1">
+                            <label class="text-[10px] text-gray-400 font-bold uppercase block mb-1.5">{{
+                                $t('student.internal_courses.last_lesson') }}</label>
                             <select v-model="transferOriginalLastDateValue"
                                 class="w-full text-xs border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-gray-300 outline-none bg-white">
-                                <option value="" disabled>Select Date</option>
+                                <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
+                                </option>
                                 <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
                                     {{ d.label }}
                                 </option>
@@ -1998,7 +2000,7 @@ function copyToClipboard(text: string) {
                             </div>
                             <div class="text-xs text-gray-500 mb-1">{{ selectedTargetSession.name }}</div>
                             <div class="text-[10px] text-emerald-600 font-bold border-t border-orange-200 pt-1 mt-1">
-                                First Lesson: {{ transferNewFirstDate }}
+                                {{ $t('student.internal_courses.first_lesson') }}: {{ transferNewFirstDate }}
                             </div>
                         </template>
                         <div v-else class="text-gray-400 italic text-xs py-1">{{
