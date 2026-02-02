@@ -334,11 +334,7 @@ const selectedTargetSession = computed(() =>
     itemTransferSessions.value.find(s => s.id === transferTargetSessionId.value)
 )
 
-const transferOriginalLastDate = computed(() => {
-    // Display the user-selected value, or placeholder
-    if (!transferOriginalLastDateValue.value) return '-'
-    return transferOriginalLastDateValue.value.replace(/-/g, '/')
-})
+
 
 // Available future dates for the ORIGINAL session
 const transferOriginalAvailableDates = computed(() => {
@@ -753,7 +749,7 @@ function copyToClipboard(text: string) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.name')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.name" type="text"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -793,7 +789,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('auth.email')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.email" type="email" @blur="emailTouched = true"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
                         :class="{ 'border-red-500 focus:ring-red-500': emailError }">
@@ -833,7 +829,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5 md:col-span-2">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.notes')
-                        }}</label>
+                    }}</label>
                     <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
                     <div v-else
@@ -879,7 +875,7 @@ function copyToClipboard(text: string) {
                             </path>
                         </svg>
                         {{ isSaving ? $t('student.saving') : (isEditingMainDetails ? $t('student.save_details') :
-                        $t('student.edit')) }}
+                            $t('student.edit')) }}
                     </button>
                 </div>
             </div>
@@ -911,7 +907,7 @@ function copyToClipboard(text: string) {
                                     {{ c.name }}
                                     <span
                                         class="text-xs text-gray-500 font-medium bg-white px-2 py-0.5 rounded-full border border-gray-100">{{
-                                        c.relation }}</span>
+                                            c.relation }}</span>
                                 </div>
                                 <div class="text-sm text-gray-600 mt-1 flex items-center gap-2 group">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -984,10 +980,10 @@ function copyToClipboard(text: string) {
                             <div class="flex justify-end space-x-2 pt-2">
                                 <button @click="cancelEditContact"
                                     class="text-gray-500 text-sm hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer">{{
-                                    $t('student.cancel') }}</button>
+                                        $t('student.cancel') }}</button>
                                 <button @click="saveContact"
                                     class="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer">{{
-                                    $t('student.save_details') }}</button>
+                                        $t('student.save_details') }}</button>
                             </div>
                         </div>
                     </li>
@@ -1057,9 +1053,9 @@ function copyToClipboard(text: string) {
                                             class="flex items-center gap-2 text-sm text-gray-600 group">
                                             <span
                                                 class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
-                                                $t('student.schools.school_student_id') }}</span>
+                                                    $t('student.schools.school_student_id') }}</span>
                                             <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id
-                                                }}</span>
+                                            }}</span>
                                             <button @click="copyToClipboard(s.school_student_id)"
                                                 class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-0.5 cursor-pointer"
                                                 title="Copy">
@@ -1076,7 +1072,7 @@ function copyToClipboard(text: string) {
                                             class="flex items-center gap-2 text-sm text-gray-600">
                                             <span
                                                 class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
-                                                $t('student.schools.grade') }}</span>
+                                                    $t('student.schools.grade') }}</span>
                                             <span class="font-medium text-gray-800">{{ s.grade }}</span>
                                         </div>
 
@@ -1085,7 +1081,7 @@ function copyToClipboard(text: string) {
                                             class="flex items-center gap-2 text-sm text-gray-600">
                                             <span
                                                 class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
-                                                $t('student.schools.class') }}</span>
+                                                    $t('student.schools.class') }}</span>
                                             <span class="font-medium text-gray-800">{{ s.class }}</span>
                                         </div>
                                     </div>
@@ -1201,10 +1197,10 @@ function copyToClipboard(text: string) {
                             <div class="flex justify-end space-x-2 pt-2 border-t border-gray-100">
                                 <button @click="cancelEditSchool"
                                     class="px-3 py-1.5 text-gray-500 text-sm hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer">{{
-                                    $t('student.cancel') }}</button>
+                                        $t('student.cancel') }}</button>
                                 <button @click="saveSchool"
                                     class="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer">{{
-                                    $t('student.save_details') }}</button>
+                                        $t('student.save_details') }}</button>
                             </div>
                         </div>
                     </li>
@@ -1279,7 +1275,7 @@ function copyToClipboard(text: string) {
                                 <input type="date" v-model="newSchool.end_date"
                                     class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none">
                                 <p class="text-[10px] text-gray-400 text-right mt-0.5">{{ $t('student.schools.present')
-                                    }}</p>
+                                }}</p>
                             </div>
                         </div>
 
@@ -1453,8 +1449,8 @@ function copyToClipboard(text: string) {
                                         </option>
                                         <option v-for="s in editFilteredSessions" :key="s.id" :value="s.id">
                                             {{ s.name }} ({{ s.day_of_week !== undefined ?
-                                                ['日', '一','二','三','四','五','六'][s.day_of_week] : '' }} {{
-                                            s.start_time?.slice(0,5) }})
+                                                ['日', '一', '二', '三', '四', '五', '六'][s.day_of_week] : '' }} {{
+                                                s.start_time?.slice(0, 5) }})
                                         </option>
                                     </select>
                                 </div>
@@ -1469,7 +1465,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                                }}</option>
+                                            }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1522,180 +1518,231 @@ function copyToClipboard(text: string) {
 
             <!-- Enroll Modal -->
             <div v-if="isEnrollModalOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                <div class="bg-white rounded-xl p-6 w-full max-w-md shadow-xl m-4">
-                    <h3 class="text-xl font-bold mb-4">{{ $t('student.internal_courses.add_title') }}</h3>
-                    <div class="space-y-4">
-                        <!-- 1. Course -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">{{
-                                $t('student.internal_courses.course') }}</label>
-                            <select v-model="newEnrollment.course_id"
-                                class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                                <option :value="undefined">{{ $t('student.internal_courses.select_course_option') }}
-                                </option>
-                                <option v-for="c in availableCourses" :key="c.id" :value="c.id">
-                                    {{ c.subject }}_{{ c.stage }}
-                                </option>
-                            </select>
-                        </div>
+                <div
+                    class="bg-white rounded-2xl flex flex-col w-full max-w-md md:max-w-xl max-h-[85vh] shadow-2xl m-4 overflow-hidden">
+                    <!-- Modal Header -->
+                    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                        <h3 class="text-xl font-bold text-gray-900">{{ $t('student.internal_courses.add_title') }}</h3>
+                        <button @click="isEnrollModalOpen = false"
+                            class="text-gray-400 hover:text-gray-600 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
 
-                        <div v-if="newEnrollment.course_id" class="space-y-4">
-                            <!-- 2. Classroom -->
+                    <!-- Modal Body (Scrollable) -->
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                        <div class="space-y-6">
+                            <!-- 1. Course Selection -->
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">{{
-                                    $t('student.internal_courses.classroom') }}</label>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                                    $t('student.internal_courses.course') }}</label>
+                                <select v-model="newEnrollment.course_id"
+                                    class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all bg-white">
+                                    <option :value="undefined">{{ $t('student.internal_courses.select_course_option') }}
+                                    </option>
+                                    <option v-for="c in availableCourses" :key="c.id" :value="c.id">
+                                        {{ c.subject }}_{{ c.stage }}
+                                    </option>
+                                </select>
+                            </div>
 
-                                <!-- Improved Classroom Selector with Search -->
-                                <div class="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                            <div v-if="newEnrollment.course_id"
+                                class="space-y-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <!-- 2. Classroom Selection with Search -->
+                                <div class="bg-emerald-50/50 rounded-2xl p-4 border border-emerald-100">
+                                    <label class="block text-sm font-bold text-emerald-900 mb-3">{{
+                                        $t('student.internal_courses.classroom') }}</label>
+
                                     <!-- Search Input -->
-                                    <div class="relative mb-2">
+                                    <div class="relative mb-3">
                                         <input v-model="classroomSearchTerm" type="text"
                                             :placeholder="$t('student.internal_courses.search_classroom')"
-                                            class="w-full border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500 bg-white">
+                                            class="w-full border-gray-200 rounded-xl pl-10 pr-4 py-2 text-sm focus:ring-emerald-500 focus:border-emerald-500 bg-white shadow-sm transition-all">
                                         <svg xmlns="http://www.w3.org/2000/svg"
-                                            class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                                            class="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
                                             fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                         </svg>
                                     </div>
-                                    <p class="text-xs text-gray-500 mb-2">{{
-                                        $t('student.internal_courses.classroom_search_hint') }}</p>
 
-                                    <!-- Classroom Select with Filtered Results -->
+                                    <!-- Filtered Classroom List -->
                                     <select v-model="newEnrollment.classroom_id"
-                                        class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 bg-white"
-                                        size="8">
-                                        <option :value="undefined">{{ $t('student.internal_courses.classroom_none') }}
+                                        class="w-full border-gray-200 rounded-xl focus:ring-emerald-500 bg-white transition-all text-sm mb-2"
+                                        size="6">
+                                        <option :value="undefined" class="py-2 px-3">{{
+                                            $t('student.internal_courses.classroom_none') }}
                                         </option>
-                                        <option v-for="r in filteredClassrooms" :key="r.id" :value="r.id">
+                                        <option v-for="r in filteredClassrooms" :key="r.id" :value="r.id"
+                                            class="py-2 px-3 rounded-lg hover:bg-emerald-50">
                                             {{ r.name }}{{ r.address ? ' - ' + r.address : '' }}
                                         </option>
-                                        <option v-if="filteredClassrooms.length === 0 && classroomSearchTerm" disabled>
+                                        <option v-if="filteredClassrooms.length === 0 && classroomSearchTerm" disabled
+                                            class="py-2 px-3 text-gray-400 italic">
                                             {{ $t('student.internal_courses.no_classrooms_found') }}
                                         </option>
                                     </select>
+                                    <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider px-1">
+                                        {{ $t('student.internal_courses.classroom_search_hint') }}
+                                    </p>
                                 </div>
-                            </div>
 
-                            <!-- 3. Session -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">{{
-                                    $t('student.internal_courses.session_select') }}</label>
-                                <select v-model="newEnrollment.class_session_id"
-                                    class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                                    <option :value="undefined">{{
-                                        $t('student.internal_courses.session_select_placeholder') }}</option>
-                                    <option v-for="s in filteredSessions" :key="s.id" :value="s.id">
-                                        {{ s.name }} ({{ $t('classroom.days.' + s.day_of_week) }} {{
-                                        s.start_time?.slice(0,5) }})
-                                    </option>
-                                    <option v-if="filteredSessions.length === 0" disabled>{{
-                                        $t('student.internal_courses.no_sessions_found') }}</option>
-                                </select>
-                                <p class="text-xs text-gray-400 mt-1">{{ $t('student.internal_courses.session_hint') }}
-                                </p>
+                                <!-- 3. Session Selection -->
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                                        $t('student.internal_courses.session_select') }}</label>
+                                    <select v-model="newEnrollment.class_session_id"
+                                        class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all bg-white mb-2">
+                                        <option :value="undefined">{{
+                                            $t('student.internal_courses.session_select_placeholder') }}</option>
+                                        <option v-for="s in filteredSessions" :key="s.id" :value="s.id">
+                                            {{ s.name }} ({{ $t('classroom.days.' + s.day_of_week) }} {{
+                                                s.start_time?.slice(0, 5) }})
+                                        </option>
+                                        <option v-if="filteredSessions.length === 0" disabled>{{
+                                            $t('student.internal_courses.no_sessions_found') }}</option>
+                                    </select>
+                                    <p class="text-xs font-medium text-gray-400 px-1">{{
+                                        $t('student.internal_courses.session_hint') }}</p>
 
-                                <!-- Session Details Card -->
-                                <div v-if="selectedSessionDetails"
-                                    class="mt-4 p-4 bg-gradient-to-br from-emerald-50 to-blue-50 rounded-lg border border-emerald-200">
-                                    <h4 class="font-semibold text-sm text-gray-800 mb-3 flex items-center gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                            stroke-width="1.5" stroke="currentColor" class="w-4 h-4 text-emerald-600">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-                                        </svg>
-                                        {{ $t('student.internal_courses.session_details') }}
-                                    </h4>
-                                    <div class="space-y-2 text-sm">
-                                        <div class="flex justify-between items-start">
-                                            <span class="text-gray-600">{{
-                                                $t('student.internal_courses.session_classroom') }}:</span>
-                                            <span class="font-medium text-gray-900 text-right">{{
-                                                selectedSessionDetails.classroom_name }}</span>
+                                    <!-- Session Details Card -->
+                                    <div v-if="selectedSessionDetails"
+                                        class="mt-4 p-5 bg-gradient-to-br from-emerald-50/50 to-blue-50/50 rounded-2xl border border-emerald-100/50 shadow-inner">
+                                        <div class="flex items-center gap-2 mb-4">
+                                            <div class="p-1.5 bg-emerald-50 rounded-lg">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                                    stroke-width="2" stroke="currentColor"
+                                                    class="w-4 h-4 text-emerald-600">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                                                </svg>
+                                            </div>
+                                            <h4 class="font-bold text-xs uppercase tracking-widest text-emerald-800">
+                                                {{ $t('student.internal_courses.session_details') }}
+                                            </h4>
                                         </div>
-                                        <div v-if="selectedSessionDetails.classroom_address"
-                                            class="flex justify-between items-start">
-                                            <span class="text-gray-600">{{
-                                                $t('student.internal_courses.session_address') }}:</span>
-                                            <span class="text-gray-700 text-right max-w-[200px]">{{
-                                                selectedSessionDetails.classroom_address }}</span>
-                                        </div>
-                                        <div class="flex justify-between items-start">
-                                            <span class="text-gray-600">{{
-                                                $t('student.internal_courses.session_schedule') }}:</span>
-                                            <span class="text-gray-700">
-                                                {{ $t('classroom.days.' + selectedSessionDetails.day_of_week) }}
-                                                {{ selectedSessionDetails.start_time?.slice(0, 5) }} - {{
-                                                selectedSessionDetails.end_time?.slice(0,5) }}
-                                            </span>
-                                        </div>
-                                        <div class="flex justify-between items-start pt-2 border-t border-emerald-200">
-                                            <span class="text-gray-600">{{
-                                                $t('student.internal_courses.session_capacity') }}:</span>
-                                            <span class="font-semibold"
-                                                :class="isSessionFull ? 'text-red-600' : 'text-emerald-700'">
-                                                {{ selectedSessionDetails.current_enrollments }}/{{
-                                                selectedSessionDetails.capacity }}
-                                                <span v-if="isSessionFull"
-                                                    class="ml-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{{
-                                                    $t('student.internal_courses.session_full') }}</span>
-                                            </span>
+                                        <div class="grid gap-3 text-sm">
+                                            <div class="flex justify-between items-center group">
+                                                <span class="text-gray-500 font-medium">{{
+                                                    $t('student.internal_courses.session_classroom') }}</span>
+                                                <span class="font-bold text-gray-900">{{
+                                                    selectedSessionDetails.classroom_name }}</span>
+                                            </div>
+                                            <div v-if="selectedSessionDetails.classroom_address"
+                                                class="flex justify-between items-start pt-1 border-t border-gray-100/50">
+                                                <span class="text-gray-500 font-medium">{{
+                                                    $t('student.internal_courses.session_address') }}</span>
+                                                <span
+                                                    class="text-gray-600 text-right max-w-[200px] text-xs leading-relaxed font-medium">{{
+                                                        selectedSessionDetails.classroom_address }}</span>
+                                            </div>
+                                            <div
+                                                class="flex justify-between items-center pt-1 border-t border-gray-100/50">
+                                                <span class="text-gray-500 font-medium">{{
+                                                    $t('student.internal_courses.session_schedule') }}</span>
+                                                <span
+                                                    class="text-emerald-700 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg">
+                                                    {{ $t('classroom.days.' + selectedSessionDetails.day_of_week) }}
+                                                    {{ selectedSessionDetails.start_time?.slice(0, 5) }} - {{
+                                                        selectedSessionDetails.end_time?.slice(0, 5) }}
+                                                </span>
+                                            </div>
+                                            <div
+                                                class="flex justify-between items-center pt-3 mt-1 border-t-2 border-dashed border-emerald-100">
+                                                <span class="text-gray-500 font-medium">{{
+                                                    $t('student.internal_courses.session_capacity') }}</span>
+                                                <div class="flex items-center gap-2">
+                                                    <div class="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                                        <div class="h-full transition-all duration-500"
+                                                            :class="isSessionFull ? 'bg-red-500' : 'bg-emerald-500'"
+                                                            :style="{ width: `${(selectedSessionDetails.current_enrollments / selectedSessionDetails.capacity) * 100}%` }">
+                                                        </div>
+                                                    </div>
+                                                    <span class="font-black tabular-nums"
+                                                        :class="isSessionFull ? 'text-red-600' : 'text-emerald-700'">
+                                                        {{ selectedSessionDetails.current_enrollments }}/{{
+                                                            selectedSessionDetails.capacity }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div v-if="isSessionFull"
+                                                class="mt-1 bg-red-50 text-red-700 px-4 py-2 rounded-xl text-xs font-bold border border-red-100 animate-pulse text-center">
+                                                {{ $t('student.internal_courses.session_full') }}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <!-- 4. Status -->
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">{{
-                                    $t('student.internal_courses.status') }}</label>
-                                <select v-model="newEnrollment.status"
-                                    class="w-full border-gray-300 rounded-lg focus:ring-emerald-500">
-                                    <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
-                                    <option value="completed">{{ $t('student.internal_courses.status_completed') }}
-                                    </option>
-                                    <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}</option>
-                                </select>
-                            </div>
+                                <!-- 4. Configuration Grid -->
+                                <div class="grid grid-cols-2 gap-6 pt-2">
+                                    <div>
+                                        <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                                            $t('student.internal_courses.status') }}</label>
+                                        <select v-model="newEnrollment.status"
+                                            class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all bg-white">
+                                            <option value="active">{{ $t('student.internal_courses.status_active') }}
+                                            </option>
+                                            <option value="completed">{{ $t('student.internal_courses.status_completed')
+                                            }}</option>
+                                            <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                                            $t('student.internal_courses.lesson_number') }}</label>
+                                        <input type="number" v-model.number="newEnrollment.lesson_number"
+                                            class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all" />
+                                    </div>
+                                </div>
 
-                            <div class="grid grid-cols-2 gap-4">
                                 <!-- 5. Start Date -->
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">{{
+                                <div class="bg-blue-50/50 p-4 rounded-2xl border border-blue-100/50">
+                                    <label class="block text-sm font-bold text-blue-900 mb-2">{{
                                         $t('student.internal_courses.start_date') }}</label>
                                     <input type="date" v-model="newEnrollment.start_date"
-                                        class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" />
+                                        class="w-full border-gray-200 rounded-xl focus:ring-blue-500 focus:border-blue-500 transition-all bg-white shadow-sm" />
                                 </div>
-                                <!-- 6. Lesson Number -->
+
+                                <!-- 6. External Link -->
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">{{
-                                        $t('student.internal_courses.lesson_number') }}</label>
-                                    <input type="number" v-model.number="newEnrollment.lesson_number"
-                                        class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" />
+                                    <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                                        $t('student.internal_courses.external_link') || 'External Report URL' }}</label>
+                                    <div class="relative">
+                                        <input type="url" v-model="newEnrollment.external_link"
+                                            placeholder="https://..."
+                                            class="w-full border-gray-300 rounded-xl pl-10 focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all" />
+                                        <svg xmlns="http://www.w3.org/2000/svg"
+                                            class="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"
+                                            fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M10.172 13.828a4 4 0 015.656 0l4-4a4 4 0 11-5.656-5.656l-1.102 1.101" />
+                                        </svg>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-
-                        <!-- 7. External Link -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">{{
-                                $t('student.internal_courses.external_link') || 'External Report URL' }}</label>
-                            <input type="url" v-model="newEnrollment.external_link" placeholder="https://..."
-                                class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" />
-                        </div>
                     </div>
-                </div>
-                <div class="flex justify-end gap-3 mt-6">
-                    <!-- Hardcoded Cancel translation fallback -->
-                    <button @click="isEnrollModalOpen = false"
-                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">{{ $t('common.cancel') ||
-                        $t('student.cancel') }}</button>
-                    <button @click="enrollStudent" :disabled="isSessionFull"
-                        class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
-                        :title="isSessionFull ? 'This session is at full capacity' : ''">
-                        {{ $t('student.internal_courses.add_btn') }}
-                    </button>
+
+                    <!-- Modal Footer (Fixed) -->
+                    <div class="px-6 py-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+                        <button @click="isEnrollModalOpen = false"
+                            class="px-5 py-2.5 text-gray-600 hover:bg-gray-200/60 font-bold rounded-xl transition-all">
+                            {{ $t('common.cancel') || $t('student.cancel') }}
+                        </button>
+                        <button @click="enrollStudent"
+                            :disabled="isSessionFull || !newEnrollment.course_id || !newEnrollment.class_session_id"
+                            class="px-8 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 hover:shadow-lg shadow-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                            :title="isSessionFull ? 'This session is at full capacity' : ''">
+                            {{ $t('student.internal_courses.add_btn') }}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1733,7 +1780,7 @@ function copyToClipboard(text: string) {
                                     <div class="flex items-center gap-2">
                                         <span>{{ platforms.includes(cred.platform) ?
                                             $t(`student.credentials.platforms.${cred.platform}`) : cred.platform
-                                            }}</span>
+                                        }}</span>
                                         <a v-if="cred.url" :href="cred.url" target="_blank"
                                             class="text-emerald-600 hover:text-emerald-700" :title="cred.url">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -1827,10 +1874,10 @@ function copyToClipboard(text: string) {
                                     <div class="flex justify-end gap-2">
                                         <button @click="cancelEditCredential"
                                             class="text-xs text-gray-500 hover:text-gray-700 bg-white px-2 py-1 rounded border border-gray-200 cursor-pointer">{{
-                                            $t('student.cancel') }}</button>
+                                                $t('student.cancel') }}</button>
                                         <button @click="saveCredential"
                                             class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 cursor-pointer">{{
-                                            $t('student.save_details') }}</button>
+                                                $t('student.save_details') }}</button>
                                     </div>
                                 </td>
                             </tr>
@@ -1926,7 +1973,7 @@ function copyToClipboard(text: string) {
                             $t('student.internal_courses.transfer_from') }}</label>
                         <div class="font-bold text-gray-800 text-sm mb-0.5">{{ transferEnrollment.formattedSchedule ||
                             '-'
-                            }}</div>
+                        }}</div>
                         <div class="text-xs text-gray-500 mb-1">{{ transferEnrollment.classSessionName || '-' }}</div>
                         <div class="border-t border-gray-200 pt-1 mt-1">
                             <label class="text-[10px] text-red-500 font-medium block mb-1">Last Lesson:</label>
@@ -1945,7 +1992,8 @@ function copyToClipboard(text: string) {
                             $t('student.internal_courses.transfer_target') }}</label>
                         <template v-if="selectedTargetSession">
                             <div class="font-bold text-gray-800 text-sm mb-0.5">
-                                {{ ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][selectedTargetSession.day_of_week] }}
+                                {{ ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][selectedTargetSession.day_of_week]
+                                }}
                                 {{ selectedTargetSession.start_time?.slice(0, 5) }}
                             </div>
                             <div class="text-xs text-gray-500 mb-1">{{ selectedTargetSession.name }}</div>
@@ -1967,8 +2015,8 @@ function copyToClipboard(text: string) {
                         </option>
                         <option v-for="s in itemTransferSessions" :key="s.id" :value="s.id">
                             {{ s.name }} ({{ s.day_of_week !== undefined ?
-                                ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri','Sat'][s.day_of_week] : '' }} {{
-                                s.start_time?.slice(0,5)
+                                ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][s.day_of_week] : '' }} {{
+                                s.start_time?.slice(0, 5)
                             }})
                         </option>
                     </select>

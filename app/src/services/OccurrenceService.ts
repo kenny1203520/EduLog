@@ -284,4 +284,50 @@ export class OccurrenceService {
 
         return this.getOccurrencesByDateRange(today, future)
     }
+
+    /**
+     * Synchronizes occurrences for a session.
+     * Deletes future scheduled occurrences that do not have reports and regenerates them.
+     * This is useful when a session's day_of_week or time changes.
+     */
+    static async syncSessionOccurrences(sessionId: string): Promise<void> {
+        const todayStr = this.formatDate(new Date())
+
+        // 1. Find all occurrences from today onwards
+        const { data: occurrences, error: fetchError } = await supabase
+            .from('class_occurrences')
+            .select(`
+                id,
+                occurrence_date,
+                occurrence_reports (id)
+            `)
+            .eq('class_session_id', sessionId)
+            .gte('occurrence_date', todayStr)
+
+        if (fetchError) throw new Error(`Failed to fetch occurrences for sync: ${fetchError.message}`)
+
+        // 2. Identify those without reports (safe to delete)
+        const idsToDelete = (occurrences as any[])
+            .filter(occ => !occ.occurrence_reports || occ.occurrence_reports.length === 0)
+            .map(occ => occ.id)
+
+        if (idsToDelete.length > 0) {
+            const { error: deleteError } = await supabase
+                .from('class_occurrences')
+                .delete()
+                .in('id', idsToDelete)
+
+            if (deleteError) throw new Error(`Failed to delete stale occurrences: ${deleteError.message}`)
+        }
+
+        // 3. Find the latest occurrence date (either with report or newly deleted) to determine regeneration range
+        // If we deleted everything, start from today.
+        // If some reports exist in the future, we still want to fill the gaps.
+        
+        const startDate = new Date()
+        const endDate = new Date()
+        endDate.setMonth(endDate.getMonth() + 6) // Regenerate for the next 6 months
+
+        await this.generateOccurrences(sessionId, startDate, endDate)
+    }
 }

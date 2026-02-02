@@ -44,5 +44,9 @@
     "view_reports": "查看學生報告",
     "class_held_title": "課務紀錄",
     "class_held_subtitle": "註記今日班級是否實際進行授課",
-    "class_held": "已授課"
+    "class_held": "已授課",
+    "refresh_schedule": "重新整理課表",
+    "refresh_schedule_hint": "這將刪除未填寫報告的未來課堂並重新生成",
+    "refresh_success": "課表已成功重新整理",
+    "refresh_confirm": "確定要重新整理課表嗎？這將刪除所有未填寫報告的未來課堂並根據目前的設定重新生成。"
 }
