@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useI18n } from 'vue-i18n'
 
-const { t } = useI18n()
+
+
 
 const props = defineProps<{
     modelValue: number // current page
@@ -74,17 +74,17 @@ const visiblePages = computed(() => {
         <!-- Info & Per Page -->
         <div class="flex items-center gap-4 text-sm text-gray-600">
             <span v-if="totalItems > 0">
-                {{ $t('common.pagination.showing') }} <span class="font-medium">{{ startItem }}</span> {{ $t('common.pagination.to') }} <span class="font-medium">{{ endItem }}</span> {{ $t('common.pagination.of') }} <span class="font-medium">{{ totalItems }}</span> {{ $t('common.pagination.results') }}
+                {{ $t('common.pagination.showing') }} <span class="font-medium">{{ startItem }}</span> {{
+                    $t('common.pagination.to') }} <span class="font-medium">{{ endItem }}</span> {{
+                    $t('common.pagination.of') }} <span class="font-medium">{{ totalItems }}</span> {{
+                    $t('common.pagination.results') }}
             </span>
             <span v-else>{{ $t('common.pagination.no_results') }}</span>
 
             <div class="flex items-center gap-2">
                 <span class="hidden sm:inline">{{ $t('common.pagination.show') }}</span>
-                <select 
-                    :value="perPage" 
-                    @change="updatePerPage"
-                    class="border-gray-200 rounded text-sm py-1 pl-2 pr-8 focus:ring-emerald-500 focus:border-emerald-500 cursor-pointer"
-                >
+                <select :value="perPage" @change="updatePerPage"
+                    class="border-gray-200 rounded text-sm py-1 pl-2 pr-8 focus:ring-emerald-500 focus:border-emerald-500 cursor-pointer">
                     <option :value="10">10</option>
                     <option :value="20">20</option>
                     <option :value="50">50</option>
@@ -95,36 +95,28 @@ const visiblePages = computed(() => {
 
         <!-- Pagination Controls -->
         <div v-if="totalPages > 1" class="flex items-center gap-1">
-            <button 
-                @click="changePage(modelValue - 1)" 
-                :disabled="modelValue === 1"
-                class="px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <button @click="changePage(modelValue - 1)" :disabled="modelValue === 1"
+                class="px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
             </button>
 
             <template v-for="(p, index) in visiblePages" :key="index">
                 <span v-if="p === '...'" class="px-2 text-gray-400">...</span>
-                <button 
-                    v-else 
-                    @click="changePage(p as number)"
-                    class="px-3 py-1 text-sm rounded border transition"
-                    :class="p === modelValue 
-                        ? 'bg-emerald-600 border-emerald-600 text-white font-medium' 
-                        : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-emerald-700'"
-                >
+                <button v-else @click="changePage(p as number)" class="px-3 py-1 text-sm rounded border transition"
+                    :class="p === modelValue
+                        ? 'bg-emerald-600 border-emerald-600 text-white font-medium'
+                        : 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-emerald-700'">
                     {{ p }}
                 </button>
             </template>
 
-            <button 
-                @click="changePage(modelValue + 1)" 
-                :disabled="modelValue === totalPages"
-                class="px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <button @click="changePage(modelValue + 1)" :disabled="modelValue === totalPages"
+                class="px-2 py-1 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
             </button>

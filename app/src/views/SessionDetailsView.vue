@@ -5,7 +5,7 @@ import { CourseService } from '@/services/CourseService'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import type { Enrollment } from '@/models/Enrollment'
-import RatingInput from '@/components/common/RatingInput.vue'
+
 import ReportEditor from '@/components/ReportEditor.vue'
 import { useI18n } from 'vue-i18n'
 
@@ -127,30 +127,7 @@ async function toggleAttendance(enrId: string, event: any) {
     }
 }
 
-async function updateRating(enrId: string, field: 'participation' | 'behavior', value: number) {
-    const report = reportMap.value.get(enrId)
-    if (!report) return
 
-    savingMap.value.set(enrId, true)
-    try {
-        await OccurrenceReportService.saveReport(
-            report.id,
-            report.content || '',
-            report.version,
-            undefined,
-            {
-                [field === 'participation' ? 'classParticipation' : 'classroomBehavior']: value.toString()
-            }
-        )
-        // Refresh local report state
-        const updated = await OccurrenceReportService.getReportById(report.id)
-        reportMap.value.set(enrId, updated)
-    } catch (e) {
-        console.error(`Failed to update ${field} rating:`, e)
-    } finally {
-        savingMap.value.delete(enrId)
-    }
-}
 
 async function refreshSchedule() {
     if (!confirm(t('classroom.refresh_confirm'))) return
@@ -347,10 +324,6 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
                                     $t('classroom.student_name') }}</th>
                                 <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.enrollment_status') }}</th>
-                                <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center"
-                                    v-if="todayOccurrence">{{ $t('classroom.participation') }}</th>
-                                <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center"
-                                    v-if="todayOccurrence">{{ $t('classroom.behavior') }}</th>
                                 <th
                                     class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">
                                     {{ $t('classroom.actions') }}</th>
@@ -386,24 +359,6 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
                                         :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
                                         {{ $t('student.internal_courses.status_' + e.status) }}
                                     </span>
-                                </td>
-
-                                <!-- Participation Rating -->
-                                <td class="px-8 py-6 flex justify-center" v-if="todayOccurrence">
-                                    <RatingInput
-                                        :model-value="parseFloat(reportMap.get(e.id!)?.classParticipation || '0')"
-                                        :show-value="false"
-                                        @update:model-value="updateRating(e.id!, 'participation', $event)"
-                                        class="scale-90" />
-                                </td>
-
-                                <!-- Behavior Rating -->
-                                <td class="px-8 py-6 flex justify-center" v-if="todayOccurrence">
-                                    <RatingInput
-                                        :model-value="parseFloat(reportMap.get(e.id!)?.classroomBehavior || '0')"
-                                        :show-value="false"
-                                        @update:model-value="updateRating(e.id!, 'behavior', $event)"
-                                        class="scale-90" />
                                 </td>
                                 <td class="px-8 py-6 text-right">
                                     <div class="flex justify-end gap-2">

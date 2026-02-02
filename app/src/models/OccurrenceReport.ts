@@ -158,6 +158,20 @@ export class OccurrenceReport {
     }
 
     /**
+     * Get start progress letter (e.g. "A" from "A-C" or "A")
+     */
+    get progressStart(): string {
+        return this.progressLetter ? (this.progressLetter.split('-')[0] || '') : ''
+    }
+
+    /**
+     * Get end progress letter (e.g. "C" from "A-C")
+     */
+    get progressEnd(): string {
+        return this.progressLetter && this.progressLetter.includes('-') ? (this.progressLetter.split('-')[1] || '') : ''
+    }
+
+    /**
      * Update content and metadata
      */
     updateContent(newContent: string, editorId?: string): void {
