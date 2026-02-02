@@ -1,5 +1,16 @@
 <template>
-    <div class="report-editor bg-white rounded-lg shadow-sm p-6">
+    <div class="report-editor bg-white rounded-lg shadow-sm p-6 relative min-h-[400px]">
+        <!-- Loading Overlay -->
+        <div v-if="loading"
+            class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-lg transition-all duration-300">
+            <svg class="animate-spin h-10 w-10 text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span class="text-sm font-bold text-gray-500">{{ $t('report.loading_full') }}</span>
+        </div>
+
         <!-- Header -->
         <h3 class="text-lg font-semibold text-gray-800">
             {{ title || $t('report.editor.title') }}
@@ -103,7 +114,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
-                        {{ $t('report.editor.view_course_folder') || 'Course Folder' }}
+                        {{ $t('report.editor.view_external_report') || 'Course Folder' }}
                     </a>
                 </div>
                 <select v-model="selectedLessonId"
@@ -354,7 +365,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                        }}</span>
+                    }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -447,6 +458,7 @@ onMounted(() => {
 
 interface Props {
     reportId?: string
+    loading?: boolean
     initialContent?: string
     initialVersion?: number
     title?: string
@@ -667,6 +679,10 @@ watch(() => props.initialClassNotes, (newVal) => {
     classNotes.value = newVal || ''
 })
 
+watch(() => props.initialReportExternalLink, (newVal) => {
+    reportExternalLink.value = newVal || ''
+})
+
 // Business rule: absent → incomplete
 watch(attendanceStatus, (newStatus) => {
     if (newStatus === 'absent') {
@@ -709,8 +725,20 @@ watch(() => props.reportId, () => {
     // Allow time for props to propagate to local state
     setTimeout(() => {
         isInitializing.value = false
-    }, 500)
+    }, 800)
 }, { immediate: true })
+
+// Stay in initializing state while parent is loading
+watch(() => props.loading, (newLoading) => {
+    if (newLoading) {
+        isInitializing.value = true
+    } else {
+        // When done loading, give it a moment to stabilize
+        setTimeout(() => {
+            isInitializing.value = false
+        }, 500)
+    }
+})
 
 // Methods
 function handleInput() {

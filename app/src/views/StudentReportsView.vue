@@ -127,7 +127,7 @@
 
                     <!-- Report Editor -->
                     <ReportEditor :report-id="selectedReport.id" :initial-content="selectedReport.content"
-                        :initial-version="selectedReport.version"
+                        :initial-version="selectedReport.version" :loading="reportLoading"
                         :title="`Report for ${selectedOccurrence.displayString}`" :show-manual-save="true"
                         :available-lessons="courseLessons" :initial-lesson-id="selectedReport.lessonId"
                         :initial-is-completed="selectedReport.isCompleted"
@@ -136,8 +136,10 @@
                         :initial-class-participation="selectedReport.classParticipation"
                         :initial-classroom-behavior="selectedReport.classroomBehavior"
                         :initial-contact-notes="selectedReport.contactNotes"
-                        :initial-class-notes="selectedReport.classNotes" @save-success="handleSaveSuccess"
-                        @save-error="handleSaveError" @conflict="handleConflict" />
+                        :initial-class-notes="selectedReport.classNotes"
+                        :initial-report-external-link="selectedReport.externalLink"
+                        :initial-enrollment-external-link="enrollmentInfo?.externalLink"
+                        @save-success="handleSaveSuccess" @save-error="handleSaveError" @conflict="handleConflict" />
                 </div>
 
                 <!-- Empty State -->
@@ -198,11 +200,18 @@ const loading = ref(true)
 const occurrences = ref<ClassOccurrence[]>([])
 const selectedOccurrence = ref<ClassOccurrence | null>(null)
 const selectedReport = ref<OccurrenceReport | null>(null)
+const reportLoading = ref(false)
 const showConflictModal = ref(false)
 const conflictServerContent = ref('')
 const conflictLocalContent = ref('')
 const showSuccessToast = ref(false)
-const enrollmentInfo = ref<{ studentName: string, courseDisplay: string, classroomName?: string, sessionName?: string } | null>(null)
+const enrollmentInfo = ref<{
+    studentName: string,
+    courseDisplay: string,
+    classroomName?: string,
+    sessionName?: string,
+    externalLink?: string
+} | null>(null)
 const courseLessons = ref<any[]>([])
 
 // Lifecycle
@@ -230,7 +239,8 @@ async function loadOccurrences() {
             studentName: enrollment.studentName || 'Student',
             courseDisplay: `${enrollment.courseSubject}_${enrollment.courseStage}`,
             classroomName: enrollment.classroomName,
-            sessionName: enrollment.classSessionName
+            sessionName: enrollment.classSessionName,
+            externalLink: enrollment.externalLink
         }
 
         // 2. Load lessons for this course (needed for editor)
@@ -332,6 +342,7 @@ async function loadOccurrences() {
 async function selectOccurrence(occurrence: ClassOccurrence) {
     selectedOccurrence.value = occurrence
     try {
+        reportLoading.value = true
         // Get or create report for this occurrence
         const enrollmentId = route.params.enrollmentId as string
         if (!enrollmentId || !occurrence.id) return
@@ -343,6 +354,8 @@ async function selectOccurrence(occurrence: ClassOccurrence) {
         selectedReport.value = report
     } catch (error) {
         console.error('Failed to load report:', error)
+    } finally {
+        reportLoading.value = false
     }
 }
 
