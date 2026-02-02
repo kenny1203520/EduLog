@@ -204,7 +204,8 @@
                             <div class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
                                     $t('report.status') }}</span>
-                                <span class="text-gray-800 font-medium">{{ selectedOccurrence.status }}</span>
+                                <span class="text-gray-800 font-medium">{{ $t('student.attendance.' +
+                                    selectedOccurrence.status) }}</span>
                             </div>
                             <div v-if="selectedOccurrence.effectiveStartTime" class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
@@ -350,33 +351,60 @@ const listLoading = ref(false)
 const allReports = ref<any[]>([])
 
 const allReportDisplay = computed(() => {
-    const list = allReports.value.map(r => {
-        const occ = r.class_occurrence
-        const lesson = r.lesson
-        return {
-            id: r.id,
-            occurrenceId: r.class_occurrence_id,
-            date: occ.occurrence_date,
-            status: r.attendance_status || 'present',
-            content: r.content,
-            classNotes: r.class_notes,
-            version: r.version,
-            lessonTitle: lesson ? `${lesson.sequence ? `Lesson ${lesson.sequence}` : ''} ${lesson.title || ''}` : '',
-            classParticipation: r.class_participation,
-            classroomBehavior: r.classroom_behavior
+    // Base list on ALL occurrences (Calendar/Schedule based) to ensure no gaps
+    const mergedList = occurrences.value.map(occ => {
+        // Find existing detailed report
+        // Note: occurrences.value is populated via loadOccurrences (Historical + Future)
+        // allReports.value is populated via switchToListView -> getReportsWithDetails (Historical with Lesson info)
+
+        // We need lookup map for performance if list is long, but N=50 is fine.
+        const r = allReports.value.find(rep => rep.class_occurrence_id === occ.id)
+
+        if (r) {
+            const lesson = r.lesson
+            return {
+                id: r.id,
+                occurrenceId: r.class_occurrence_id,
+                date: occ.occurrenceDate, // Use occurrence date as truth
+                status: r.attendance_status || (occ.status === 'completed' ? 'present' : 'scheduled'),
+                content: r.content,
+                classNotes: r.class_notes,
+                version: r.version,
+                lessonTitle: lesson ? `${lesson.sequence ? `Lesson ${lesson.sequence}` : ''} ${lesson.title || ''}` : '',
+                classParticipation: r.class_participation,
+                classroomBehavior: r.classroom_behavior
+            }
+        } else {
+            // Placeholder for missing report
+            return {
+                id: null,
+                occurrenceId: occ.id,
+                date: occ.occurrenceDate,
+                status: occ.status === 'completed' ? 'present' : (occ.status === 'cancelled' ? 'absent' : 'scheduled'), // Map cancelled to absent for display? Or keep 'cancelled'
+                // User mentioned "recorded as absent" for suspension. 
+                // If occurrence is cancelled, we might show 'cancelled' or let them fill it.
+                // If we show 'scheduled', it's neutral.
+                // Let's rely on getStatusColor handling 'cancelled'.
+                content: '',
+                classNotes: '',
+                version: 0,
+                lessonTitle: '-',
+                classParticipation: 0,
+                classroomBehavior: 0
+            }
         }
     })
 
     // Sort Oldest -> Newest (Ascending)
-    return list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    return mergedList.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 })
 
-function formatWeekday(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString(locale.value, { weekday: 'short' })
+function formatWeekday(dateVal: string | Date) {
+    return new Date(dateVal).toLocaleDateString(locale.value, { weekday: 'short' })
 }
 
-function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
+function formatDate(dateVal: string | Date) {
+    return new Date(dateVal).toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
 }
 
 function formatOccurrenceDateTime(occ: ClassOccurrence) {
@@ -393,6 +421,7 @@ function getStatusColor(status: string) {
         case 'absent': return 'bg-rose-100 text-rose-700'
         case 'late': return 'bg-amber-100 text-amber-700'
         case 'excused': return 'bg-blue-100 text-blue-700'
+        case 'cancelled': return 'bg-gray-100 text-gray-500 line-through' // Visual cue
         default: return 'bg-gray-100 text-gray-700'
     }
 }
@@ -404,7 +433,12 @@ async function switchToListView() {
 
     listLoading.value = true
     try {
+        // We still fetch details to enrich the rows
         allReports.value = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
+        // ensure occurrences are loaded too (just in case they switch view before mounting finished?)
+        if (occurrences.value.length === 0) {
+            await loadOccurrences()
+        }
     } catch (e) {
         console.error('Failed to reload reports list', e)
     } finally {
@@ -499,10 +533,11 @@ async function loadOccurrences() {
         if (enrollment.classSessionId) {
             const today = new Date()
             const startDate = new Date(today)
-            startDate.setDate(startDate.getDate() - 7) // Overlap slightly to ensure continuity
+            // Fix: Look back 6 months to cover recent history that might not have reports yet
+            startDate.setDate(startDate.getDate() - 180)
 
             const endDate = new Date(today)
-            endDate.setDate(endDate.getDate() + 90) // 3 months forward
+            endDate.setDate(endDate.getDate() + 180) // 6 months forward
 
             futureOccurrences = await OccurrenceService.getOccurrencesByDateRange(
                 startDate,

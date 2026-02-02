@@ -29,7 +29,10 @@
         "present": "出席",
         "absent": "缺席",
         "late": "遲到",
-        "excused": "事病假"
+        "excused": "事病假",
+        "scheduled": "預定",
+        "completed": "已完成",
+        "cancelled": "已取消"
     },
     "sections": {
         "basic_info": "基本資料",

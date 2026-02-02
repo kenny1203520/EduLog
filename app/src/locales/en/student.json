@@ -29,7 +29,10 @@
         "present": "Present",
         "absent": "Absent",
         "late": "Late",
-        "excused": "Excused"
+        "excused": "Excused",
+        "scheduled": "Scheduled",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
     },
     "sections": {
         "basic_info": "Basic Information",
