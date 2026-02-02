@@ -7,6 +7,7 @@ export interface EnrollmentDTO {
     status: 'active' | 'completed' | 'dropped'
     start_date?: string
     lesson_number?: number
+    external_link?: string
     created_at?: string
     updated_at?: string
     
@@ -40,6 +41,7 @@ export class Enrollment {
     status: string
     startDate?: string
     lessonNumber?: number
+    externalLink?: string
     
     // Display helpers
     courseSubject: string = ''
@@ -62,6 +64,7 @@ export class Enrollment {
         this.status = data.status || 'active'
         this.startDate = data.start_date
         this.lessonNumber = data.lesson_number
+        this.externalLink = data.external_link
         
         if (data.courses) {
             this.courseSubject = data.courses.subject

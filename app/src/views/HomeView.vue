@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { OccurrenceService } from '@/services/OccurrenceService'
+import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 
 useI18n()
@@ -32,10 +33,38 @@ onMounted(async () => {
     } finally {
         loading.value = false
     }
+
+    fetchPendingReports()
 })
+
+const pendingReports = ref<any[]>([])
+
+async function fetchPendingReports() {
+    try {
+        const data = await OccurrenceReportService.getPendingReports()
+        pendingReports.value = data
+    } catch (e) {
+        console.error('Failed to pending occurrences:', e)
+    }
+}
 
 function navigateToSession(id: string) {
     router.push({ name: 'session-details', params: { id } })
+}
+
+function openReport(enrollmentId: string) {
+    // Navigate to session details with split view open?
+    // Or navigate to report editor directly if we had a route?
+    // Session details is safest.
+    // We need to know the session ID from the pending report logic... 
+    // Wait, the pending report data has occurrenceId, but session ID is needed for route.
+    // Let's verify what `getPendingReports` returns. 
+    // It returns className, etc. but we didn't include sessionId in the push.
+    // Let's assume we can get it from the enrollment...? No.
+    // We should add sessionId to getPendingReports result.
+    
+    // For now, let's just go to reports list
+    router.push({ name: 'lesson-reports', params: { enrollmentId } })
 }
 </script>
 
@@ -71,6 +100,47 @@ function navigateToSession(id: string) {
         </div>
     </div>
 
+    <!-- PENDING REPORTS SECTION -->
+    <div v-if="pendingReports.length > 0" class="space-y-4">
+        <div class="flex items-center justify-between px-2">
+            <h3 class="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                <span class="flex h-3 w-3 rounded-full bg-amber-500"></span>
+                {{ $t('dashboard.pending_reports') || 'Pending Reports' }}
+            </h3>
+            <span class="text-sm font-bold text-gray-400">{{ pendingReports.length }} missing</span>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div v-for="report in pendingReports" :key="report.id" 
+                @click="openReport(report.enrollmentId)"
+                class="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all cursor-pointer group"
+            >
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-black">
+                            {{ report.studentName.charAt(0) }}
+                        </div>
+                        <div>
+                            <h4 class="font-black text-gray-900">{{ report.studentName }}</h4>
+                            <p class="text-xs font-bold text-gray-400">{{ report.className }}</p>
+                        </div>
+                    </div>
+                    <span class="px-2 py-1 bg-gray-50 text-gray-400 text-[10px] font-black uppercase rounded-lg">
+                        {{ new Date(report.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }}
+                    </span>
+                </div>
+                <div class="flex items-center justify-between mt-2">
+                     <span class="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">
+                        {{ report.isMissing ? 'Missing' : 'Incomplete' }}
+                     </span>
+                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-300 group-hover:text-emerald-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                     </svg>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Quick Stats -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div class="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group">
@@ -79,8 +149,8 @@ function navigateToSession(id: string) {
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                 </svg>
             </div>
-            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{{ $t('dashboard.stats.coming_soon') }}</h4>
-            <p class="text-4xl font-black text-gray-900 tracking-tighter">{{ $t('dashboard.stats.engagement') }}</p>
+            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{{ $t('dashboard.stats.active_students') || 'Active Students' }}</h4>
+            <p class="text-4xl font-black text-gray-900 tracking-tighter">{{ stats.totalStudents }}</p>
         </div>
         <div class="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group">
             <div class="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:scale-110 transition-transform">

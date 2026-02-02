@@ -98,14 +98,32 @@ export class OccurrenceService {
             .order('occurrence_date', { ascending: true })
             .range(from, to)
 
-        if (error) throw new Error(error.message)
+        if (error) throw new Error(`Failed to fetch occurrences: ${error.message}`)
 
         return {
-            data: data.map((dto: any) => new ClassOccurrence(dto)),
+            data: (data as any[]).map(dto => new ClassOccurrence(dto)),
             count: count || 0
         }
     }
 
+    /**
+     * Updates an occurrence (e.g., mark as not conducted)
+     */
+    static async updateOccurrence(
+        occurrenceId: string,
+        updates: Partial<ClassOccurrenceDTO>
+    ): Promise<ClassOccurrence> {
+        const { data, error } = await supabase
+            .from('class_occurrences')
+            .update(updates)
+            .eq('id', occurrenceId)
+            .select()
+            .single()
+
+        if (error) throw new Error(`Failed to update occurrence: ${error.message}`)
+
+        return new ClassOccurrence(data)
+    }
     /**
      * Gets occurrences within a date range
      */
@@ -157,25 +175,6 @@ export class OccurrenceService {
             .from('class_occurrences')
             .select('*')
             .eq('id', occurrenceId)
-            .single()
-
-        if (error) throw new Error(error.message)
-
-        return new ClassOccurrence(data as any)
-    }
-
-    /**
-     * Updates an occurrence
-     */
-    static async updateOccurrence(
-        occurrenceId: string,
-        updates: Partial<ClassOccurrenceDTO>
-    ): Promise<ClassOccurrence> {
-        const { data, error } = await supabase
-            .from('class_occurrences')
-            .update(updates)
-            .eq('id', occurrenceId)
-            .select()
             .single()
 
         if (error) throw new Error(error.message)
@@ -261,7 +260,10 @@ export class OccurrenceService {
      * Helper: Format date as YYYY-MM-DD
      */
     private static formatDate(date: Date): string {
-        return date.toISOString().split('T')[0] || ''
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
     }
 
     /**

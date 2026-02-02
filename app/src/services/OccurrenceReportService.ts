@@ -87,6 +87,7 @@ export class OccurrenceReportService {
             classroomBehavior?: number
             contactNotes?: string
             classNotes?: string
+            externalLink?: string
         }
     ): Promise<SaveReportResult> {
         // Fetch current server version
@@ -143,6 +144,9 @@ export class OccurrenceReportService {
             // Add all fields to update data
             if (detailedData.lessonId !== undefined) {
                 updateData.lesson_id = detailedData.lessonId
+            }
+            if (detailedData.externalLink !== undefined) {
+                updateData.external_link = detailedData.externalLink
             }
             updateData.is_completed = isCompleted
             
@@ -514,5 +518,78 @@ export class OccurrenceReportService {
         if (error) throw new Error(error.message)
 
         return data
+    }
+
+    /**
+     * Get pending reports (active enrollments, conducted class, incomplete report)
+     */
+    static async getPendingReports(): Promise<any[]> {
+        const thirtyDaysAgo = new Date()
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+        const dateStr = thirtyDaysAgo.toISOString().split('T')[0]
+
+        // We'll fetch occurrences first
+        const { data: occurrences, error: occError } = await supabase
+            .from('class_occurrences')
+            .select(`
+                id, occurrence_date, is_conducted,
+                class_sessions (
+                    id, name,
+                    classrooms (name),
+                    enrollments (
+                        id, student_id, status,
+                        students (first_name, last_name, english_name)
+                    )
+                )
+            `)
+            .eq('is_conducted', true)
+            .gte('occurrence_date', dateStr)
+            .lte('occurrence_date', new Date().toISOString().split('T')[0])
+            
+        if (occError) throw new Error(`Failed to fetch pending reports: ${occError.message}`)
+        if (!occurrences) return []
+
+        const pending: any[] = []
+        const occurrenceIds = occurrences.map(o => o.id)
+        if (occurrenceIds.length === 0) return []
+
+        // Fetch existing reports
+        const { data: reports } = await supabase
+            .from('occurrence_reports')
+            .select('id, enrollment_id, class_occurrence_id, is_completed')
+            .in('class_occurrence_id', occurrenceIds)
+
+        const reportLookup = new Map<string, any>()
+        reports?.forEach(r => {
+            reportLookup.set(`${r.enrollment_id}_${r.class_occurrence_id}`, r)
+        })
+
+        for (const occ of occurrences) {
+            const session = (occ as any).class_sessions
+            if (!session || !session.enrollments) continue
+
+            for (const enr of session.enrollments) {
+                if (enr.status !== 'active') continue
+
+                const key = `${enr.id}_${occ.id}`
+                const report = reportLookup.get(key)
+
+                // If no report OR report is not completed
+                if (!report || report.is_completed === false) {
+                    pending.push({
+                        id: report?.id || `missing_${key}`,
+                        studentName: enr.students?.english_name || enr.students?.first_name || 'Unknown',
+                        date: occ.occurrence_date,
+                        className: session.name,
+                        classroom: session.classrooms?.name,
+                        occurrenceId: occ.id,
+                        enrollmentId: enr.id,
+                        isMissing: !report
+                    })
+                }
+            }
+        }
+        
+        return pending.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     }
 }

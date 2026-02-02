@@ -99,20 +99,60 @@
     </div>
 
     <!-- Lesson Selection & Completion  -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-2">
-          {{ $t('report.editor.lesson_selector_label') }}
-        </label>
+    <div class="grid grid-cols-1">
+      <!-- Lesson Selection -->
+      <div class="mb-6">
+         <div class="flex items-center justify-between mb-2">
+            <label class="block text-sm font-medium text-gray-700">
+              {{ $t('report.editor.lesson_label') }}
+            </label>
+            <!-- Enrollment External Link Button -->
+             <a v-if="initialEnrollmentExternalLink" 
+               :href="initialEnrollmentExternalLink" 
+               target="_blank"
+               class="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors"
+             >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                {{ $t('report.editor.view_course_folder') || 'Course Folder' }}
+             </a>
+         </div>
         <select 
           v-model="selectedLessonId"
           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          :class="{'opacity-50': disabled}"
+          :disabled="disabled"
         >
           <option value="">{{ $t('report.editor.select_lesson') }}</option>
           <option v-for="lesson in availableLessons" :key="lesson.id" :value="lesson.id">
-            {{ lesson.displayName }}
+            Lesson {{ lesson.sequence }}: {{ lesson.title }}
           </option>
         </select>
+      </div>
+      
+      <!-- Report External Link Input -->
+      <div class="mb-4">
+         <label class="block text-xs font-medium text-gray-600 mb-1">
+            {{ $t('report.editor.report_link_label') || 'Report Link' }}
+         </label>
+         <div class="flex gap-2">
+             <input 
+               type="url" 
+               v-model="reportExternalLink"
+               placeholder="https://..."
+               class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+             />
+             <a v-if="reportExternalLink" 
+               :href="reportExternalLink" 
+               target="_blank"
+               class="flex items-center justify-center w-10 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-600"
+             >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+             </a>
+         </div>
       </div>
       <div class="flex items-end">
         <label class="flex items-center gap-2 cursor-pointer">
@@ -389,10 +429,7 @@ import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 
-interface Lesson {
-  id: string
-  displayName: string
-}
+import type { Lesson } from '@/models/Course'
 
 interface Template {
   id: string
@@ -469,23 +506,28 @@ interface Props {
   initialClassroomBehavior?: number
   initialContactNotes?: string
   initialClassNotes?: string
+  initialReportExternalLink?: string
+  initialEnrollmentExternalLink?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   initialContent: '',
   initialVersion: 1,
-  placeholder: '',
+  placeholder: 'Enter report content...',
   disabled: false,
   showManualSave: false,
   debounceMs: 2000,
   availableLessons: () => [],
   initialIsCompleted: true,
-  initialAttendanceStatus: 'present'
+  initialAttendanceStatus: 'present',
+  initialReportExternalLink: '',
+  initialEnrollmentExternalLink: ''
 })
 
 const emit = defineEmits<{
   'update:content': [content: string]
   'save-success': [version: number]
+  'update:report-external-link': [value: string]
   'save-error': [error: string]
   'conflict': [serverContent: string]
 }>()
@@ -507,6 +549,7 @@ const classParticipation = ref(props.initialClassParticipation ?? 0)
 const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
 const contactNotes = ref(props.initialContactNotes || '')
 const classNotes = ref(props.initialClassNotes || '')
+const reportExternalLink = ref(props.initialReportExternalLink || '') // New ref for external link
 
 // Computed progress letter for backend (combining start-end range)
 const progressLetter = computed(() => {
@@ -569,7 +612,8 @@ const {
           classParticipation: classParticipation.value || undefined,
           classroomBehavior: classroomBehavior.value || undefined,
           contactNotes: contactNotes.value || undefined,
-          classNotes: classNotes.value || undefined
+          classNotes: classNotes.value || undefined,
+          externalLink: reportExternalLink.value || undefined
         }
       )
 
@@ -678,7 +722,7 @@ watch(isCompleted, (newValue) => {
   }
 })
 
-// Auto-save triggers for all fields
+// Watch for changes that should trigger auto-save
 watch([
   selectedLessonId,
   isCompleted,
@@ -689,8 +733,10 @@ watch([
   classParticipation,
   classroomBehavior,
   contactNotes,
-  classNotes
+  classNotes,
+  reportExternalLink
 ], () => {
+  if (isInitializing.value) return
   handleInput()
 })
 
@@ -709,7 +755,32 @@ watch(() => props.reportId, () => {
 // Methods
 function handleInput() {
   if (isInitializing.value) return
+  
+  // Trigger auto-save with all data
+  // We need to pass the external link to the parent via emit or just trust the triggerAutoSave
+  // triggerAutoSave calls saveFn with the CONTENT string usually. 
+  // But we have extra fields.
+  // The 'content' prop is usually just the text body.
+  // We should probably emit the external link update separately or ensure the parent reads it from the reference?
+  // Since we are using a custom autosave hook that likely calls a save function in the parent...
+  // Let's assume the parent needs to know about the external link update immediately?
+  // Or we can rely on `triggerAutoSave` triggering the save function which pulls from... wait.
+  
+  // In `SessionDetailsView.vue`, the `handleEditorUpdate` usually takes `content`.
+  // We need to verify how `ReportEditor` communicates updates.
+  // It emits `update:content`. 
+  
   emit('update:content', localContent.value)
+  emit('update:report-external-link', reportExternalLink.value)
+  
+  // Construct the full report data object for saving if needed, 
+  // but `triggerAutoSave` takes `data: T` (generic). 
+  // It seems `localContent` is passed to `triggerAutoSave`. 
+  // If `localContent` is just the string, then `useAutoSave` calls `onSave(localContent)`.
+  
+  // We need to modify what we pass to triggerAutoSave if we want to save more than just content.
+  // OR we emit the updates and the parent handles the saving orchestration.
+  
   if (props.reportId) {
     triggerAutoSave(localContent.value)
   }

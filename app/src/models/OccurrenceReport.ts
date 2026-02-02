@@ -19,6 +19,7 @@ export interface OccurrenceReportDTO {
     classroom_behavior?: number
     contact_notes?: string
     class_notes?: string
+    external_link?: string
     
     version: number
     last_edited_by?: string
@@ -55,6 +56,7 @@ export class OccurrenceReport {
     classroomBehavior?: number
     contactNotes?: string
     classNotes?: string
+    externalLink?: string
     
     version: number
     lastEditedBy?: string
@@ -78,6 +80,7 @@ export class OccurrenceReport {
         this.classroomBehavior = data.classroom_behavior
         this.contactNotes = data.contact_notes
         this.classNotes = data.class_notes
+        this.externalLink = data.external_link
         
         this.version = data.version
         this.lastEditedBy = data.last_edited_by
@@ -106,6 +109,7 @@ export class OccurrenceReport {
             classroom_behavior: this.classroomBehavior,
             contact_notes: this.contactNotes,
             class_notes: this.classNotes,
+            external_link: this.externalLink,
             
             version: this.version,
             last_edited_by: this.lastEditedBy,
@@ -208,8 +212,8 @@ export class ReportVersion {
  */
 export interface SaveReportResult {
     success: boolean
-    conflict: boolean
-    newVersion?: number
-    serverContent?: string
     message?: string
+    newVersion?: number
+    conflict?: boolean
+    serverContent?: string
 }

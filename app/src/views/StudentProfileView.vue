@@ -252,7 +252,8 @@ async function startEditEnrollment(enr: Enrollment) {
     class_session_id: enr.classSessionId,
     status: enr.status as any,
     start_date: enr.startDate,
-    lesson_number: enr.lessonNumber
+    lesson_number: enr.lessonNumber,
+    external_link: enr.externalLink
   }
 
   // Ensure options are loaded
@@ -1305,6 +1306,12 @@ function copyToClipboard(text: string) {
                          <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.start_date') }}</label>
                          <input type="date" v-model="editEnrollmentForm.start_date" class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
                       </div>
+                      
+                      <!-- 7. External Link -->
+                      <div class="col-span-2">
+                         <label class="text-xs font-semibold text-gray-600 mb-1 block">{{ $t('student.internal_courses.external_link') || 'External Report URL' }}</label>
+                         <input type="url" v-model="editEnrollmentForm.external_link" placeholder="https://..." class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+                      </div>
                      <div class="flex justify-end gap-2 pt-3 border-t border-blue-200">
                         <button @click="cancelEditEnrollment" class="px-4 py-2 text-gray-600 bg-white hover:bg-gray-100 rounded-lg text-sm font-semibold transition-colors border border-gray-300">
                            {{ $t('common.cancel') }}
@@ -1441,6 +1448,13 @@ function copyToClipboard(text: string) {
                             <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.lesson_number') }}</label>
                             <input type="number" v-model.number="newEnrollment.lesson_number" class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" />
                         </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 7. External Link -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t('student.internal_courses.external_link') || 'External Report URL' }}</label>
+                        <input type="url" v-model="newEnrollment.external_link" placeholder="https://..." class="w-full border-gray-300 rounded-lg focus:ring-emerald-500" />
                     </div>
                 </div>
             </div>
