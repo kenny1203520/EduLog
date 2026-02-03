@@ -327,4 +327,158 @@ export class EnrollmentService {
 
         return updated
     }
+
+    /**
+     * Transfer a single lesson to a different class session
+     * (E.g. for make-up classes)
+     */
+    static async transferSingleLesson(
+        enrollmentId: string,
+        originalDate: string,
+        targetSessionId: string,
+        targetDate: string
+    ): Promise<void> {
+        // 1. Get current enrollment and original session
+        const { data: enrollment, error: enrollError } = await supabase
+            .from('enrollments')
+            .select('class_session_id')
+            .eq('id', enrollmentId)
+            .single()
+
+        if (enrollError) throw new Error(`Failed to fetch enrollment: ${enrollError.message}`)
+
+        // 2. Find the report on the original date
+        // Join with class_occurrences to verify ownership
+        const { data: reports, error: reportError } = await supabase
+            .from('occurrence_reports')
+            .select(`
+                *,
+                class_occurrence:class_occurrences!class_occurrence_id(occurrence_date, class_session_id)
+            `)
+            .eq('enrollment_id', enrollmentId)
+            .eq('class_occurrence.class_session_id', enrollment.class_session_id)
+            .eq('class_occurrence.occurrence_date', originalDate)
+
+        if (reportError) throw new Error(`Failed to find original report: ${reportError.message}`)
+        
+        const originalReport = reports && reports.length > 0 ? reports[0] : null
+
+        if (!originalReport) {
+            console.warn(`No report found for ${originalDate}`)
+        }
+
+        // 3. Ensure target occurrence exists
+        const tDate = new Date(targetDate)
+        await OccurrenceService.generateOccurrences(targetSessionId, tDate, tDate).catch(() => {})
+
+        const { data: targetOcc, error: targetOccError } = await supabase
+			.from('class_occurrences')
+			.select('id')
+			.eq('class_session_id', targetSessionId)
+			.eq('occurrence_date', targetDate)
+			.single()
+
+        if (targetOccError) throw new Error(`Failed to find target occurrence: ${targetOccError.message}`)
+
+        // 4. Migrate (Clone) or Create
+        if (originalReport) {
+            // Update the target (or create if target somehow already has one)
+            const { data: existingTargetReport } = await supabase
+                .from('occurrence_reports')
+                .select('id')
+                .eq('enrollment_id', enrollmentId)
+                .eq('class_occurrence_id', targetOcc.id)
+                .maybeSingle()
+
+            if (existingTargetReport) {
+                const { error: updateError } = await supabase
+                    .from('occurrence_reports')
+                    .update({
+                        content: originalReport.content,
+                        lesson_id: originalReport.lesson_id,
+                        attendance_status: originalReport.attendance_status,
+                        absence_reason: originalReport.absence_reason,
+                        class_participation: originalReport.class_participation,
+                        classroom_behavior: originalReport.classroom_behavior,
+                        contact_notes: originalReport.contact_notes,
+                        class_notes: originalReport.class_notes,
+                        is_completed: originalReport.is_completed,
+                        version: (originalReport.version || 1) + 1
+                    })
+                    .eq('id', existingTargetReport.id)
+                if (updateError) throw new Error(`Failed to update target report: ${updateError.message}`)
+            } else {
+                const { error: insertError } = await supabase
+                    .from('occurrence_reports')
+                    .insert({
+                        enrollment_id: enrollmentId,
+                        class_occurrence_id: targetOcc.id,
+                        content: originalReport.content,
+                        lesson_id: originalReport.lesson_id,
+                        attendance_status: originalReport.attendance_status,
+                        absence_reason: originalReport.absence_reason,
+                        class_participation: originalReport.class_participation,
+                        classroom_behavior: originalReport.classroom_behavior,
+                        contact_notes: originalReport.contact_notes,
+                        class_notes: originalReport.class_notes,
+                        is_completed: originalReport.is_completed,
+                        version: 1
+                    })
+                if (insertError) throw new Error(`Failed to clone report to target: ${insertError.message}`)
+            }
+
+            // 5. Update Original to be a "Rescheduled" STUB
+            const { error: stubError } = await supabase
+                .from('occurrence_reports')
+                .update({
+                    content: '', // Clear content
+                    attendance_status: 'absent',
+                    absence_reason: 'rescheduled', // MAGIC STRING for filtering
+                    is_completed: true,
+                    version: (originalReport.version || 1) + 1
+                })
+                .eq('id', originalReport.id)
+            
+            if (stubError) throw new Error(`Failed to stub original report: ${stubError.message}`)
+
+        } else {
+            // Create path (No original report existed)
+            const { error: insertError } = await supabase
+                .from('occurrence_reports')
+                .insert({
+                    enrollment_id: enrollmentId,
+                    class_occurrence_id: targetOcc.id,
+                    content: '',
+                    version: 1,
+                    is_completed: false
+                })
+            if (insertError) throw new Error(`Failed to create replacement report: ${insertError.message}`)
+
+            // Also create a stub for the original date so it can be filtered out
+            const { data: origOcc } = await supabase
+                .from('class_occurrences')
+                .select('id')
+                .eq('class_session_id', enrollment.class_session_id)
+                .eq('occurrence_date', originalDate)
+                .single()
+            
+            if (origOcc) {
+                await supabase.from('occurrence_reports').insert({
+                    enrollment_id: enrollmentId,
+                    class_occurrence_id: origOcc.id,
+                    content: '',
+                    attendance_status: 'absent',
+                    absence_reason: 'rescheduled',
+                    is_completed: true,
+                    version: 1
+                })
+            }
+        }
+
+        // 6. Sync occurrences
+        await OccurrenceService.syncSessionOccurrences(targetSessionId).catch(() => {})
+        if (enrollment.class_session_id) {
+            await OccurrenceService.syncSessionOccurrences(enrollment.class_session_id).catch(() => {})
+        }
+    }
 }

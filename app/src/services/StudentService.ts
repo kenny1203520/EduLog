@@ -6,15 +6,20 @@ export class StudentService {
   /**
    * Fetch all students ordered by name with pagination
    */
-  static async getAll(page: number = 1, perPage: number = 1000): Promise<{ data: Student[], count: number }> {
+  static async getAll(page: number = 1, perPage: number = 1000, search?: string): Promise<{ data: Student[], count: number }> {
     const from = (page - 1) * perPage
     const to = from + perPage - 1
 
-    const { data, error, count } = await supabase
+    let query = supabase
       .from('students')
       .select('*, student_contacts(*), student_schools(*), student_credentials(*)', { count: 'exact' })
       .order('name')
-      .range(from, to)
+
+    if (search) {
+      query = query.ilike('name', `%${search}%`)
+    }
+
+    const { data, error, count } = await query.range(from, to)
     
     if (error) throw new Error(error.message)
     

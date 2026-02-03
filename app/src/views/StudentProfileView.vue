@@ -362,6 +362,8 @@ const transferDate = ref('')
 const transferOriginalLastDateValue = ref('')  // User-selected last lesson date for original session
 const itemTransferSessions = ref<ClassSessionDTO[]>([])
 const forceReschedule = ref(false)
+const isSingleTransferMode = ref(false)
+const transferOriginalDate = ref('')
 
 const selectedTargetSession = computed(() =>
     itemTransferSessions.value.find(s => s.id === transferTargetSessionId.value)
@@ -512,9 +514,9 @@ const transferAvailableDates = computed(() => {
 async function openTransferModal(enr: Enrollment) {
     transferEnrollment.value = enr
     transferTargetSessionId.value = ''
-    transferDate.value = ''
-    transferOriginalLastDateValue.value = ''
+    transferOriginalDate.value = ''
     forceReschedule.value = false
+    isSingleTransferMode.value = false
     isTransferModalOpen.value = true
 
     // Fetch sessions for this course
@@ -533,15 +535,25 @@ async function openTransferModal(enr: Enrollment) {
 
 async function submitTransfer() {
     if (!transferEnrollment.value || !transferTargetSessionId.value || !transferDate.value) return
+    if (isSingleTransferMode.value && !transferOriginalDate.value) return
 
     if (!confirm(t('common.confirm_save'))) return
 
     try {
-        await EnrollmentService.transferClass(
-            transferEnrollment.value.id!,
-            transferTargetSessionId.value,
-            transferDate.value
-        )
+        if (isSingleTransferMode.value) {
+            await EnrollmentService.transferSingleLesson(
+                transferEnrollment.value.id!,
+                transferOriginalDate.value,
+                transferTargetSessionId.value,
+                transferDate.value
+            )
+        } else {
+            await EnrollmentService.transferClass(
+                transferEnrollment.value.id!,
+                transferTargetSessionId.value,
+                transferDate.value
+            )
+        }
         await fetchEnrollments()
         isTransferModalOpen.value = false
         showToast(t('common.success'))
@@ -2071,6 +2083,20 @@ function copyToClipboard(text: string) {
             </div>
 
             <div class="p-6 space-y-4">
+                <!-- Transfer Mode Selection -->
+                <div class="flex p-1 bg-gray-100 rounded-xl">
+                    <button @click="isSingleTransferMode = false"
+                        class="flex-1 py-4 text-xs font-bold rounded-lg transition-all"
+                        :class="!isSingleTransferMode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                        {{ $t('student.internal_courses.transfer_mode_permanent') }}
+                    </button>
+                    <button @click="isSingleTransferMode = true"
+                        class="flex-1 py-4 text-xs font-bold rounded-lg transition-all"
+                        :class="isSingleTransferMode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                        {{ $t('student.internal_courses.transfer_mode_single') }}
+                    </button>
+                </div>
+
                 <!-- Comparison Grid -->
                 <div v-if="transferEnrollment" class="grid grid-cols-2 gap-4">
                     <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
@@ -2080,7 +2106,10 @@ function copyToClipboard(text: string) {
                             '-'
                         }}</div>
                         <div class="text-xs text-gray-500 mb-1">{{ transferEnrollment.classSessionName || '-' }}</div>
-                        <div class="bg-gray-50 border border-gray-100 rounded-lg p-2 flex-1">
+
+                        <!-- Last Lesson Selector (Permanent Mode Only) -->
+                        <div v-if="!isSingleTransferMode"
+                            class="bg-gray-50 border border-gray-100 rounded-lg p-2 flex-1">
                             <label class="text-[10px] text-gray-400 font-bold uppercase block mb-1.5">{{
                                 $t('student.internal_courses.last_lesson') }}</label>
                             <select v-model="transferOriginalLastDateValue"
@@ -2104,7 +2133,8 @@ function copyToClipboard(text: string) {
                                 {{ selectedTargetSession.start_time?.slice(0, 5) }}
                             </div>
                             <div class="text-xs text-gray-500 mb-1">{{ selectedTargetSession.name }}</div>
-                            <div class="text-[10px] text-emerald-600 font-bold border-t border-orange-200 pt-1 mt-1">
+                            <div v-if="!isSingleTransferMode"
+                                class="text-[10px] text-emerald-600 font-bold border-t border-orange-200 pt-1 mt-1">
                                 {{ $t('student.internal_courses.first_lesson') }}: {{ transferNewFirstDate }}
                             </div>
                         </template>
@@ -2129,8 +2159,25 @@ function copyToClipboard(text: string) {
                     </select>
                 </div>
 
+                <!-- Single Lesson Original Selection -->
+                <div v-if="isSingleTransferMode"
+                    class="space-y-1.5 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 animate-in slide-in-from-top-1 duration-200">
+                    <label class="text-xs font-bold text-indigo-700 uppercase tracking-wide flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                        {{ $t('student.internal_courses.transfer_original_date') }}
+                    </label>
+                    <select v-model="transferOriginalDate"
+                        class="w-full border-indigo-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                        <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
+                        </option>
+                        <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
+                            {{ d.label }}
+                        </option>
+                    </select>
+                </div>
+
                 <!-- Force Reschedule Toggle -->
-                <div class="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100 mb-2">
+                <div class="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100">
                     <div class="flex flex-col">
                         <span class="text-xs font-bold text-amber-700 uppercase">{{
                             $t('student.internal_courses.force_reschedule') }}</span>
@@ -2147,7 +2194,8 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
-                        $t('student.internal_courses.transfer_date') }}</label>
+                        isSingleTransferMode ? $t('student.internal_courses.transfer_target_date') :
+                            $t('student.internal_courses.transfer_date') }}</label>
                     <select v-model="transferDate"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
                         <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}

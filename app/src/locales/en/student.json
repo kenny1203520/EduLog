@@ -145,7 +145,12 @@
         "last_lesson": "Last Lesson",
         "first_lesson": "First Lesson",
         "force_reschedule": "Force Reschedule",
-        "force_reschedule_hint": "Allow selecting any date (including past) to migrate history."
+        "force_reschedule_hint": "Allow selecting any date (including past) to migrate history.",
+        "transfer_mode": "Transfer Mode",
+        "transfer_mode_permanent": "Permanent Transfer (Future)",
+        "transfer_mode_single": "Single Lesson (Make-up)",
+        "transfer_original_date": "Lesson to Reschedule",
+        "transfer_target_date": "New Class Date"
     },
     "credentials": {
         "platform": "Platform",

@@ -6,6 +6,7 @@ import { Student } from '@/models/Student'
 export const useStudentStore = defineStore('student', () => {
   const students = ref<Student[]>([])
   const currentStudent = ref<Student | null>(null)
+  const searchQuery = ref('')
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -21,7 +22,7 @@ export const useStudentStore = defineStore('student', () => {
     loading.value = true
     error.value = null
     try {
-      const result = await StudentService.getAll(page, perPage)
+      const result = await StudentService.getAll(page, perPage, searchQuery.value)
       students.value = result.data
       pagination.value = {
         page,
@@ -100,6 +101,7 @@ export const useStudentStore = defineStore('student', () => {
   return {
     students,
     currentStudent,
+    searchQuery,
     loading,
     error,
     studentCount,

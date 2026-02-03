@@ -145,7 +145,12 @@
         "last_lesson": "最後上課日",
         "first_lesson": "首堂上課日",
         "force_reschedule": "強制調課",
-        "force_reschedule_hint": "開啟後可選擇任一日期（包含過去）以遷移所有歷史記錄。"
+        "force_reschedule_hint": "開啟後可選擇任一日期（包含過去）以遷移所有歷史記錄。",
+        "transfer_mode": "調課模式",
+        "transfer_mode_permanent": "永久調課 (包含未來)",
+        "transfer_mode_single": "單堂調課 (補課)",
+        "transfer_original_date": "原定上課日",
+        "transfer_target_date": "補課日期"
     },
     "credentials": {
         "platform": "平台",

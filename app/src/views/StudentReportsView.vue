@@ -430,7 +430,8 @@ const allReportDisplay = computed(() => {
                 contactNotes: r.contact_notes,
                 progressDisplay: r.progress_letter
                     ? `Progress: ${r.progress_letter}`
-                    : (r.progress_start ? `Progress: ${r.progress_start}${r.progress_end ? `-${r.progress_end}` : ''}` : '')
+                    : (r.progress_start ? `Progress: ${r.progress_start}${r.progress_end ? `-${r.progress_end}` : ''}` : ''),
+                absenceReason: r.absence_reason
             }
         } else {
             // Check suspension status
@@ -459,17 +460,20 @@ const allReportDisplay = computed(() => {
                 classroomBehavior: 0,
                 isCompleted: false,
                 contactNotes: '',
-                progressDisplay: ''
+                progressDisplay: '',
+                absenceReason: null
             }
         }
     })
 
     // Sort based on sortOrder
-    return mergedList.sort((a, b) => {
-        const timeA = new Date(a.date).getTime()
-        const timeB = new Date(b.date).getTime()
-        return sortOrder.value === 'asc' ? timeA - timeB : timeB - timeA
-    })
+    return mergedList
+        .filter(r => r.status !== 'rescheduled' && r.absenceReason !== 'rescheduled') // Shield against rescheduled stubs
+        .sort((a, b) => {
+            const timeA = new Date(a.date).getTime()
+            const timeB = new Date(b.date).getTime()
+            return sortOrder.value === 'asc' ? timeA - timeB : timeB - timeA
+        })
 })
 
 function formatWeekday(dateVal: string | Date) {
@@ -613,17 +617,85 @@ async function loadOccurrences() {
             const endDate = new Date(today)
             endDate.setDate(endDate.getDate() + 180) // 6 months forward
 
+            // Collect all session IDs: Current + Historical
+            // This ensures we see schedule gaps for previous classes too (if reports exist)
+            const relevantSessionIds = new Set<string>([enrollment.classSessionId])
+            historicalOccurrences.forEach(occ => {
+                if (occ.classSessionId) relevantSessionIds.add(occ.classSessionId)
+            })
+
             futureOccurrences = await OccurrenceService.getOccurrencesByDateRange(
                 startDate,
                 endDate,
-                [enrollment.classSessionId]
+                Array.from(relevantSessionIds)
             )
 
+            // 4a. Auto-Repair Schedule (Gap Filling)
+            // If enrollment is active but schedule ran out (e.g. paused for months), generate it now.
+            if (enrollment.status === 'active' && enrollment.classSessionId) {
+                const currentSessionOccs = futureOccurrences.filter(o => o.classSessionId === enrollment.classSessionId)
+
+                // Find latest date in the window
+                let lastDate = startDate // Default to start of window
+                if (currentSessionOccs.length > 0) {
+                    const sorted = [...currentSessionOccs].sort((a, b) => b.occurrenceDate.getTime() - a.occurrenceDate.getTime())
+                    if (sorted[0]) {
+                        lastDate = sorted[0].occurrenceDate
+                    }
+                }
+
+                // If last scheduled date is "too soon" OR if we have very active occurrences (gap detection)
+                // We check if "Last Date" is less than "Today + 30 Days"
+                const today = new Date()
+                const thresholdDate = new Date(today)
+                thresholdDate.setDate(thresholdDate.getDate() + 30)
+
+                // Robustness: If we have very few occurrences in this huge window, strictly backfill.
+                // Or if the schedule cuts off early.
+                if (lastDate < thresholdDate || currentSessionOccs.length < 12) {
+                    console.log('⚡ Schedule sparse, exhausted, or gaps detected. Auto-generating occurrences...')
+
+                    // Generate from the VIEW window start to ensure backfilling gaps
+                    // upsert ensures we don't duplicate existing ones
+                    const genStart = new Date(startDate)
+
+                    await OccurrenceService.generateOccurrences(
+                        enrollment.classSessionId,
+                        genStart,
+                        thresholdDate
+                    )
+
+                    // Re-fetch to populate the view
+                    futureOccurrences = await OccurrenceService.getOccurrencesByDateRange(
+                        startDate,
+                        endDate,
+                        Array.from(relevantSessionIds)
+                    )
+                }
+            }
+
             // Filter by Enrollment Start Date (if exists)
-            if (enrollment.startDate) {
-                // Use formatted date for reliable string comparison
-                // occ.occurrenceDate is a Date object, enrollment.startDate is YYYY-MM-DD string
-                futureOccurrences = futureOccurrences.filter(o => o.formatDate(o.occurrenceDate) >= (enrollment.startDate as string))
+            // But be careful: if the student transferred, startDate might be the transfer date.
+            // We should not hide legitimate history (existing reports) that occurred before this date.
+            let effectiveStartDate = enrollment.startDate as string
+
+            if (historicalOccurrences.length > 0) {
+                // Find the earliest report date
+                const sortedHistory = [...historicalOccurrences].sort((a, b) =>
+                    new Date(a.occurrenceDate).getTime() - new Date(b.occurrenceDate).getTime()
+                )
+                if (sortedHistory[0]) {
+                    const firstReportDate = sortedHistory[0].formatDate(sortedHistory[0].occurrenceDate)
+
+                    // If we have a report BEFORE the official start date, expand the window
+                    if (!effectiveStartDate || firstReportDate < effectiveStartDate) {
+                        effectiveStartDate = firstReportDate
+                    }
+                }
+            }
+
+            if (effectiveStartDate) {
+                futureOccurrences = futureOccurrences.filter(o => o.formatDate(o.occurrenceDate) >= effectiveStartDate)
             }
         }
 
@@ -646,8 +718,24 @@ async function loadOccurrences() {
             if (o.id) occurrenceMap.set(o.id, o)
         })
 
-        // Convert back to array and sort
-        const merged = Array.from(occurrenceMap.values())
+        // 5a. Filter out "Rescheduled" stubs
+        // We look at allReports (the source data for reportsWithDetails)
+        // 5a. Filter out "Rescheduled" stubs
+        // We look at allReports (the source data for reportsWithDetails)
+        const rescheduledOccIds = new Set(
+            allReports.value
+                .filter(r => r.absence_reason === 'rescheduled' || (r.attendance_status === 'absent' && r.absence_reason === 'rescheduled'))
+                .map(r => r.class_occurrence_id)
+        )
+
+        // Convert back to array, filter, and sort
+        const merged = Array.from(occurrenceMap.values()).filter(occ => {
+            // Filter by ID
+            if (rescheduledOccIds.has(occ.id)) return false
+            // Check if occ itself has a rescheduled status (though usually it's in the report)
+            if (occ.status === 'rescheduled') return false
+            return true
+        })
         merged.sort((a, b) => new Date(a.occurrenceDate).getTime() - new Date(b.occurrenceDate).getTime())
 
         occurrences.value = merged

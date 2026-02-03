@@ -86,7 +86,13 @@ export class Student {
     this.external_link = dto.external_link || ''
     
     this.contacts = dto.student_contacts || []
-    this.schools = dto.student_schools || []
+    this.schools = (dto.student_schools || []).sort((a, b) => {
+      const dateA = a.start_date || ''
+      const dateB = b.start_date || ''
+      if (dateA < dateB) return 1
+      if (dateA > dateB) return -1
+      return 0
+    })
     this.credentials = dto.student_credentials || []
   }
 
