@@ -121,7 +121,7 @@ export class SuspensionService {
         if (oldSuspension.endDate && newSuspension.endDate && newSuspension.endDate < oldSuspension.endDate) {
             const revertStart = new Date(newSuspension.endDate)
             revertStart.setDate(revertStart.getDate() + 1) // Start revert from the day AFTER new end date
-            const revertStartStr = revertStart.toISOString().split('T')[0]
+            const revertStartStr = revertStart.toISOString().split('T')[0] as string
             
             const gapSuspension = {
                 enrollment_id: newSuspension.enrollmentId,
@@ -139,7 +139,7 @@ export class SuspensionService {
         else if (!oldSuspension.endDate && newSuspension.endDate) {
              const revertStart = new Date(newSuspension.endDate)
              revertStart.setDate(revertStart.getDate() + 1)
-             const revertStartStr = revertStart.toISOString().split('T')[0]
+             const revertStartStr = revertStart.toISOString().split('T')[0] as string
 
              // Revert everything after the new end date
              const gapSuspension = {

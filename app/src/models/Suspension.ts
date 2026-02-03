@@ -28,7 +28,7 @@ export class Suspension {
     }
 
     get isActive(): boolean {
-        const now = new Date().toISOString().split('T')[0]
+        const now = new Date().toISOString().split('T')[0] as string
         if (this.endDate) {
             return now >= this.startDate && now <= this.endDate
         }
