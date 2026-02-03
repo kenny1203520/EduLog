@@ -88,7 +88,8 @@ export class EnrollmentService {
                 enrollment.id!, 
                 enrollment.class_session_id,
                 enrollment.start_date || new Date().toISOString().split('T')[0],
-                enrollment.course_id
+                enrollment.course_id,
+                enrollment.lesson_number || 1
             )
         }
 
@@ -161,7 +162,8 @@ export class EnrollmentService {
         enrollmentId: string, 
         sessionId: string,
         startDate: string,
-        courseId: string
+        courseId: string,
+        startLesson: number
     ): Promise<void> {
         // 1. Get lesson count for this course
         const { data: lessons } = await supabase
@@ -169,7 +171,7 @@ export class EnrollmentService {
             .select('id')
             .eq('course_id', courseId)
         
-        const lessonCount = (lessons && lessons.length > 0) ? lessons.length : 12
+        const lessonCount = ((lessons && lessons.length > 0) ? lessons.length : 15) - startLesson + 1
         
         // 2. Ensure occurrences exist
         const start = new Date(startDate)
@@ -202,8 +204,6 @@ export class EnrollmentService {
                 .insert(reports)
         }
     }
-    
-
 
     /**
      * Delete all reports for an enrollment
@@ -228,6 +228,7 @@ export class EnrollmentService {
     static async transferClass(
         enrollmentId: string,
         newSessionId: string,
+        originalLastDate: string,
         transferDate: string
     ): Promise<Enrollment> {
         // 1. Get current enrollment and course info
@@ -240,26 +241,28 @@ export class EnrollmentService {
         if (enrollError) throw new Error(`Failed to fetch enrollment: ${enrollError.message}`)
         const oldSessionId = enrollment.class_session_id
 
-        // 2. Fetch existing reports that need to be moved to the new session
-        // We join with class_occurrences to verify they belong to the old session
+        // 2. Fetch existing reports that need to be moved to the new class session
         const { data: reportsToMigrate, error: reportsError } = await supabase
             .from('occurrence_reports')
             .select(`
-                id, 
-                content,
+                id,
                 class_occurrence_id,
-                class_occurrence:class_occurrences!class_occurrence_id(occurrence_date, class_session_id)
+                version,
+                class_occurrence:class_occurrences!inner(occurrence_date, class_session_id)
             `)
-            .eq('enrollment_id', enrollmentId)
+            .eq('enrollment_id', enrollmentId)  
             .eq('class_occurrence.class_session_id', oldSessionId)
-            .gte('class_occurrence.occurrence_date', transferDate)
-            .order('class_occurrence(occurrence_date)', { ascending: true })
+            .gt('class_occurrence.occurrence_date', originalLastDate)
+            .order('occurrence_date', { foreignTable: 'class_occurrences', ascending: true });
 
         if (reportsError) throw new Error(`Failed to fetch reports for migration: ${reportsError.message}`)
 
-        // 3. Ensure occurrences exist for the NEW session
+        // 3. Ensure occurrences exist for the NEW class session
         // We calculate lesson count to know how many occurrences to ensure/fetch
-        const { data: lessons } = await supabase.from('lessons').select('id').eq('course_id', enrollment.course_id)
+        const { data: lessons } = await supabase
+            .from('lessons')
+            .select('id')
+            .eq('course_id', enrollment.course_id)
         const lessonCount = (lessons && lessons.length > 0) ? lessons.length : 12
 
         const start = new Date(transferDate)
@@ -268,7 +271,7 @@ export class EnrollmentService {
         
         await OccurrenceService.generateOccurrences(newSessionId, start, endDate).catch(() => {})
 
-        // 4. Fetch the target occurrences in the NEW session
+        // 4. Fetch the target occurrences in the NEW class session
         const { data: newOccurrences, error: targetError } = await supabase
             .from('class_occurrences')
             .select('id')
@@ -278,48 +281,40 @@ export class EnrollmentService {
 
         if (targetError) throw new Error(`Failed to fetch target occurrences: ${targetError.message}`)
 
+        const sortedReports = [...reportsToMigrate].sort((a, b) => {
+            const dateA = new Date(a.class_occurrence[0]?.occurrence_date).getTime();
+            const dateB = new Date(b.class_occurrence[0]?.occurrence_date).getTime();
+            return dateA - dateB;
+        });
+
         // 5. Intelligent Migration & Creation
         // We pair existing reports with new occurrences where possible
         const migrationPromises = []
-        const maxPairIndex = Math.min(reportsToMigrate.length, newOccurrences.length)
+        const maxPairIndex = Math.min(sortedReports.length, newOccurrences.length)
 
         for (let i = 0; i < maxPairIndex; i++) {
-            const report = reportsToMigrate[i]
+            const report = sortedReports[i]
             const newOcc = newOccurrences[i]
             if (!report || !newOcc) continue
 
             // Update path: re-point existing report to new occurrence
             migrationPromises.push(
-                supabase.from('occurrence_reports').update({ class_occurrence_id: newOcc.id }).eq('id', report.id)
+                supabase
+                    .from('occurrence_reports')
+                    .update({ 
+                        class_occurrence_id: newOcc.id,
+                        version: (report.version || 1) + 1
+                    })
+                    .eq('id', report.id)
             )
-        }
-
-        // 6. Bulk Create any missing reports if new session has more occurrences than migrated reports
-        if (newOccurrences.length > reportsToMigrate.length) {
-            const missingOccs = newOccurrences.slice(reportsToMigrate.length)
-            const newReports = missingOccs.map(occ => ({
-                enrollment_id: enrollmentId,
-                class_occurrence_id: occ.id,
-                content: '',
-                version: 1,
-                is_completed: false
-            }))
-            migrationPromises.push(supabase.from('occurrence_reports').insert(newReports))
-        }
-
-        // 7. Cleanup: If old session had MORE reports than the new session provides, 
-        // delete the excess ones (they have no place in the new layout)
-        if (reportsToMigrate.length > newOccurrences.length) {
-            const excessReportIds = reportsToMigrate.slice(newOccurrences.length).map(r => r.id)
-            migrationPromises.push(supabase.from('occurrence_reports').delete().in('id', excessReportIds))
         }
 
         await Promise.all(migrationPromises)
 
-        // 8. Update enrollment record
+        // 6. Update enrollment record
         const updated = await this.update(enrollmentId, { class_session_id: newSessionId })
 
-        // 9. Sync occurrences in both old and new sessions (clean up orphans)
+        // 7. Sync occurrences in both old and new sessions (clean up orphans)
         if (oldSessionId) {
             await OccurrenceService.syncSessionOccurrences(oldSessionId).catch(() => {})
         }
@@ -338,7 +333,7 @@ export class EnrollmentService {
         targetSessionId: string,
         targetDate: string
     ): Promise<void> {
-        // 1. Get current enrollment and original session
+        // 1. Get current enrollment and original class session
         const { data: enrollment, error: enrollError } = await supabase
             .from('enrollments')
             .select('class_session_id')
@@ -347,27 +342,31 @@ export class EnrollmentService {
 
         if (enrollError) throw new Error(`Failed to fetch enrollment: ${enrollError.message}`)
 
-        // 2. Find the report on the original date
-        // Join with class_occurrences to verify ownership
+        // 2. Find the original occurrence
+        const { data: originalOcc, error: originalOccError } = await supabase
+            .from('class_occurrences')
+            .select('id')
+            .eq('class_session_id', enrollment.class_session_id)
+            .eq('occurrence_date', originalDate)
+            .single()
+
+        if (originalOccError) throw new Error(`Failed to find original occurrence: ${originalOccError.message}`)
+
+        // 3. Find the report on the original date
         const { data: reports, error: reportError } = await supabase
             .from('occurrence_reports')
-            .select(`
-                *,
-                class_occurrence:class_occurrences!class_occurrence_id(occurrence_date, class_session_id)
-            `)
+            .select(`*`)
             .eq('enrollment_id', enrollmentId)
-            .eq('class_occurrence.class_session_id', enrollment.class_session_id)
-            .eq('class_occurrence.occurrence_date', originalDate)
+            .eq('class_occurrence_id', originalOcc.id)
+            .maybeSingle()
 
         if (reportError) throw new Error(`Failed to find original report: ${reportError.message}`)
-        
-        const originalReport = reports && reports.length > 0 ? reports[0] : null
 
-        if (!originalReport) {
+        if (!reports) {
             console.warn(`No report found for ${originalDate}`)
         }
 
-        // 3. Ensure target occurrence exists
+        // 4. Ensure target occurrence exists
         const tDate = new Date(targetDate)
         await OccurrenceService.generateOccurrences(targetSessionId, tDate, tDate).catch(() => {})
 
@@ -380,66 +379,17 @@ export class EnrollmentService {
 
         if (targetOccError) throw new Error(`Failed to find target occurrence: ${targetOccError.message}`)
 
-        // 4. Migrate (Clone) or Create
-        if (originalReport) {
-            // Update the target (or create if target somehow already has one)
-            const { data: existingTargetReport } = await supabase
-                .from('occurrence_reports')
-                .select('id')
-                .eq('enrollment_id', enrollmentId)
-                .eq('class_occurrence_id', targetOcc.id)
-                .maybeSingle()
-
-            if (existingTargetReport) {
-                const { error: updateError } = await supabase
-                    .from('occurrence_reports')
-                    .update({
-                        content: originalReport.content,
-                        lesson_id: originalReport.lesson_id,
-                        attendance_status: originalReport.attendance_status,
-                        absence_reason: originalReport.absence_reason,
-                        class_participation: originalReport.class_participation,
-                        classroom_behavior: originalReport.classroom_behavior,
-                        contact_notes: originalReport.contact_notes,
-                        class_notes: originalReport.class_notes,
-                        is_completed: originalReport.is_completed,
-                        version: (originalReport.version || 1) + 1
-                    })
-                    .eq('id', existingTargetReport.id)
-                if (updateError) throw new Error(`Failed to update target report: ${updateError.message}`)
-            } else {
-                const { error: insertError } = await supabase
-                    .from('occurrence_reports')
-                    .insert({
-                        enrollment_id: enrollmentId,
-                        class_occurrence_id: targetOcc.id,
-                        content: originalReport.content,
-                        lesson_id: originalReport.lesson_id,
-                        attendance_status: originalReport.attendance_status,
-                        absence_reason: originalReport.absence_reason,
-                        class_participation: originalReport.class_participation,
-                        classroom_behavior: originalReport.classroom_behavior,
-                        contact_notes: originalReport.contact_notes,
-                        class_notes: originalReport.class_notes,
-                        is_completed: originalReport.is_completed,
-                        version: 1
-                    })
-                if (insertError) throw new Error(`Failed to clone report to target: ${insertError.message}`)
-            }
-
-            // 5. Update Original to be a "Rescheduled" STUB
-            const { error: stubError } = await supabase
+        // 5. Create or Update
+        if (reports) {
+            // Update path (Report already existed)
+            const { error: updateError } = await supabase
                 .from('occurrence_reports')
                 .update({
-                    content: '', // Clear content
-                    attendance_status: 'absent',
-                    absence_reason: 'rescheduled', // MAGIC STRING for filtering
-                    is_completed: true,
-                    version: (originalReport.version || 1) + 1
+                    class_occurrence_id: targetOcc.id,
+                    version: (reports.version || 1) + 1
                 })
-                .eq('id', originalReport.id)
-            
-            if (stubError) throw new Error(`Failed to stub original report: ${stubError.message}`)
+                .eq('id', reports.id)
+            if (updateError) throw new Error(`Failed to update target report: ${updateError.message}`)
 
         } else {
             // Create path (No original report existed)
@@ -453,26 +403,6 @@ export class EnrollmentService {
                     is_completed: false
                 })
             if (insertError) throw new Error(`Failed to create replacement report: ${insertError.message}`)
-
-            // Also create a stub for the original date so it can be filtered out
-            const { data: origOcc } = await supabase
-                .from('class_occurrences')
-                .select('id')
-                .eq('class_session_id', enrollment.class_session_id)
-                .eq('occurrence_date', originalDate)
-                .single()
-            
-            if (origOcc) {
-                await supabase.from('occurrence_reports').insert({
-                    enrollment_id: enrollmentId,
-                    class_occurrence_id: origOcc.id,
-                    content: '',
-                    attendance_status: 'absent',
-                    absence_reason: 'rescheduled',
-                    is_completed: true,
-                    version: 1
-                })
-            }
         }
 
         // 6. Sync occurrences
