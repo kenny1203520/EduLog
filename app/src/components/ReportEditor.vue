@@ -400,7 +400,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                        }}</span>
+                    }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -515,7 +515,7 @@ function copyCourseInfo() {
     if (!lesson) return
 
     const cName = props.courseName || ''
-    const text = cName ? `${cName} #${lesson.sequence}` : `Lesson ${lesson.sequence}: ${lesson.title}`
+    const text = cName ? `${cName} Lesson ${lesson.sequence} ${lesson.title}` : `Lesson ${lesson.sequence}: ${lesson.title}`
 
     navigator.clipboard.writeText(text).then(() => {
         justCopiedCourse.value = true
