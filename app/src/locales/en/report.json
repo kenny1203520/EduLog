@@ -18,6 +18,7 @@
     "save_success": "Report saved successfully",
     "select_course_to_view": "Select a course to view its learning reports",
     "report_for_date": "Report for {date}",
+    "load_error": "Failed to load incomplete reports",
     "lesson_label": "Lesson",
     "learning_content": "Learning Content",
     "participation": "Participation",
@@ -27,6 +28,14 @@
     "contact_notes": "Contact Notes",
     "progress": "Progress",
     "completed": "Completed",
+    "incomplete_reports_title": "Incomplete Reports",
+    "incomplete_reports_subtitle": "Review and complete missing reports across all students.",
+    "all_caught_up": "All caught up!",
+    "no_incomplete_reports": "No incomplete reports found.",
+    "missing_content": "Missing Content",
+    "missing_unit": "Missing Unit",
+    "select_incomplete_to_edit": "Select a report to start editing",
+    "report_id": "Report ID",
     "reference_panel": {
         "title": "Report Reference",
         "peer_reports": "Peer Samples",
@@ -41,7 +50,12 @@
         "filter_by_session": "All Sessions",
         "filter_by_course": "All Courses",
         "prev": "Prev",
-        "next": "Next"
+        "next": "Next",
+        "newest": "Newest",
+        "oldest": "Oldest",
+        "contact": "Contact",
+        "class_notes": "Class Notes",
+        "total": "Total"
     },
     "editor": {
         "title": "Class Report",

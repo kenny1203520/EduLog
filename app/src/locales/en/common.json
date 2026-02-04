@@ -32,5 +32,10 @@
     "success": "Success",
     "confirm_save": "Are you sure you want to save?",
     "sort_asc": "Oldest First",
-    "sort_desc": "Newest First"
+    "sort_desc": "Newest First",
+    "refresh": "Refresh",
+    "items": "Items",
+    "loading": "Loading",
+    "unknown_student": "Unknown Student",
+    "unknown_course": "Unknown Course"
 }

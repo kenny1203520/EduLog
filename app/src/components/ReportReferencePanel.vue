@@ -212,6 +212,9 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { CourseService } from '@/services/CourseService'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps<{
     show: boolean
@@ -375,14 +378,14 @@ function getReportProgress(report: any) {
 function formatHeader(report: any) {
     if (activeTab.value === 'peer') {
         const s = report.enrollments?.students
-        if (!s) return 'Unknown Student'
+        if (!s) return t('common.unknown_student')
         return s.english_name ? `${s.english_name} (${s.first_name})` : `${s.first_name} ${s.last_name || ''}`
     } else {
         const session = report.class_occurrences?.class_sessions
         const course = session?.courses
         const lesson = report.lessons
 
-        let courseName = 'Unknown Course'
+        let courseName = t('common.unknown_course')
         if (course) {
             if (Array.isArray(course)) {
                 courseName = course[0]?.name || courseName

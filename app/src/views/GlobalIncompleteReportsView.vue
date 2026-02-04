@@ -11,17 +11,16 @@
                                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                     </div>
-                    {{ $t('report.incomplete_reports_title') || 'Incomplete Reports' }}
+                    {{ $t('report.incomplete_reports_title') }}
                 </h1>
                 <p class="text-sm text-gray-500 mt-1 ml-13">
-                    {{ $t('report.incomplete_reports_subtitle')
-                        || 'Review and complete missing reports across all students.' }}
+                    {{ $t('report.incomplete_reports_subtitle') }}
                 </p>
             </div>
 
             <div class="flex items-center gap-4">
                 <div class="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
-                    {{ incompleteReports.length }} {{ $t('common.items') || 'Items' }}
+                    {{ incompleteReports.length }} {{ $t('common.items') }}
                 </div>
                 <button @click="loadReports"
                     class="text-emerald-600 hover:text-emerald-700 p-2 rounded-full hover:bg-emerald-50 transition"
@@ -61,9 +60,8 @@
                                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     </div>
-                    <p class="font-medium text-gray-600">{{ $t('report.all_caught_up') || 'All caught up!' }}</p>
-                    <p class="text-xs mt-1">{{ $t('report.no_incomplete_reports') || 'No incomplete reports found.' }}
-                    </p>
+                    <p class="font-medium text-gray-600">{{ $t('report.all_caught_up') }}</p>
+                    <p class="text-xs mt-1">{{ $t('report.no_incomplete_reports') }}</p>
                 </div>
 
                 <div v-else class="flex-1 overflow-y-auto">
@@ -87,11 +85,11 @@
                         <div class="flex gap-2 mt-2">
                             <span v-if="report.missingContent"
                                 class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
-                                {{ $t('report.missing_content') || 'Missing Content' }}
+                                {{ $t('report.missing_content') }}
                             </span>
                             <span v-if="report.missingLesson"
                                 class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-100">
-                                {{ $t('report.missing_unit') || 'Missing Unit' }}
+                                {{ $t('report.missing_unit') }}
                             </span>
                             <span v-if="report.updatedAt"
                                 class="ml-auto text-[10px] text-gray-400 flex items-center gap-1">
@@ -165,8 +163,7 @@
                             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     <p class="text-lg font-medium">
-                        {{ $t('report.select_incomplete_to_edit')
-                            || 'Select a report to start editing' }}
+                        {{ $t('report.select_incomplete_to_edit') }}
                     </p>
                 </div>
             </div>
@@ -182,7 +179,7 @@ import ReportEditor from '@/components/ReportEditor.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 
-const { locale } = useI18n()
+const { locale, t } = useI18n()
 const toast = useToast()
 
 const loading = ref(true)
@@ -202,7 +199,7 @@ async function loadReports() {
         }
     } catch (err) {
         console.error(err)
-        toast.error('Failed to load incomplete reports')
+        toast.error(t('report.load_error'))
     } finally {
         loading.value = false
     }
@@ -291,7 +288,7 @@ watch(selectedReport, async (newVal) => {
 })
 
 async function handleSaveSuccess(updatedReport: any) {
-    toast.success('Report saved!')
+    toast.success(t('report.save_success'))
 
     // Update the local list item
     const idx = incompleteReports.value.findIndex(r => r.id === updatedReport.id)
