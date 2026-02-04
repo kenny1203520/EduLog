@@ -4,11 +4,22 @@
     "classrooms": "教室管理",
     "holidays": "休假日管理",
     "students": "學生列表",
+    "historical_reports": "報告總覽",
+    "student_profile": "個人檔案",
     "logout": "登出",
     "login": "登入",
     "home": "首頁",
     "features": "功能特點",
     "get_started": "立即開始",
     "incomplete_reports": "未完成報告",
-    "subtitle": "家教報告系統"
+    "subtitle": "家教報告系統",
+    "description": {
+        "dashboard": "掌握教學進度與報告，EduLog 為您提供最便捷的管理解決方案。",
+        "students": "全面管理您的學生資訊與學習紀錄。",
+        "courses": "輕鬆排程課程，追蹤每位學生的學習路徑。",
+        "classrooms": "檢視並管理所有教室的教學進度。",
+        "reports": "編輯並提交專業的教學報告，即時回饋家長。",
+        "holidays": "管理班級停課與節日安排。",
+        "incomplete": "追蹤尚未完成的教學報告，確保教學不中斷。"
+    }
 }
