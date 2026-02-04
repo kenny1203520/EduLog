@@ -701,9 +701,8 @@ async function switchToListView() {
 
     listLoading.value = true
     try {
-        // We still fetch details to enrich the rows
+        // Refresh markers
         allReports.value = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
-        // ensure occurrences are loaded too (just in case they switch view before mounting finished?)
         if (occurrences.value.length === 0) {
             await loadOccurrences()
         }
@@ -949,24 +948,36 @@ async function loadOccurrences() {
 
         // 6. Auto-select nearest occurrence (User Request)
         if (merged.length > 0) {
-            const today = new Date().getTime()
 
             // Find the occurrence with the smallest absolute difference from today (Date + Time)
-            const closest = merged.reduce((prev, curr) => {
-                const getFullTime = (occ: ClassOccurrence) => {
-                    const d = new Date(occ.occurrenceDate)
-                    if (occ.effectiveStartTime) {
-                        const [h, m] = occ.effectiveStartTime.split(':').map(Number)
-                        if (h !== undefined) d.setHours(h, m || 0, 0, 0)
-                    }
-                    return d.getTime()
-                }
-                const prevDiff = Math.abs(getFullTime(prev) - today)
-                const currDiff = Math.abs(getFullTime(curr) - today)
-                return currDiff < prevDiff ? curr : prev
-            })
+            const now = new Date()
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
 
-            await selectOccurrence(closest)
+            const pastOccurrences = merged.filter(occ => occ.occurrenceDate.getTime() <= todayStart)
+            const futureOccurrences = merged.filter(occ => occ.occurrenceDate.getTime() > todayStart)
+
+            if (pastOccurrences.length > 0) {
+                // Find the latest occurrence that is today or in the past
+                // pastOccurrences is sorted descending (latest first)
+                // But verify sorting logic in merged list just in case
+                const sortedPast = [...pastOccurrences].sort((a, b) =>
+                    new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime()
+                )
+
+                // Prefer the one closest to now but ONLY in the past/today
+                // Actually usually we just want "Latest Past" which is index 0 of sorted descending
+                const latestPast = sortedPast[0]
+
+                if (latestPast) {
+                    await selectOccurrence(latestPast)
+                }
+            } else if (futureOccurrences.length > 0) {
+                // Only if no past history at all (new student?), revert to earliest upcoming
+                const earliestFuture = futureOccurrences[0]
+                if (earliestFuture) {
+                    await selectOccurrence(earliestFuture)
+                }
+            }
         }
 
     } catch (error) {
@@ -990,40 +1001,61 @@ async function selectOccurrence(occurrence: ClassOccurrence) {
         const enrollmentId = route.params.enrollmentId as string
         if (!enrollmentId || !occurrence.id) return
 
-        const report = await OccurrenceReportService.getOrCreateReport(
-            enrollmentId,
-            occurrence.id
-        )
-
         // Check if report was already there or if it's new (via presence in allReports)
         const hasExistingReport = allReports.value.some(r => r.class_occurrence_id === occurrence.id)
+
+        // Create explicit Create method for manual creation
         if (!hasExistingReport) {
+            // Check if we should confirm
             if (!confirm(t('report.editor.confirm_create_report', 'This class has no report yet. A new one will be created. Continue?'))) {
                 reportLoading.value = false
                 selectedOccurrence.value = null
                 return
             }
+
+            // Create report only after confirmation
+            const report = await OccurrenceReportService.createReport(enrollmentId, occurrence.id)
+            selectedReport.value = report
+
+            // Optimistically update markers by adding to allReports
+            // This is better than full reload
+            if (report) {
+                // Clone report as any to match the detailed format locally or fetch details?
+                // For now, minimal details enough to make "hasExistingReport" true next time
+                // We ideally want fresh data but let's try pushing to avoid reload flicker
+                // However, we rely on `reportsWithDetails` structure.
+                // Let's do a lightweight fetch of just this report's details or rely on existing occurrence+new report
+
+                // Simpler: Just refresh reports list in background without UI flicker?
+                // Or just manually construct the object.
+                const newReportDetail = {
+                    ...report,
+                    class_occurrence_id: occurrence.id,
+                    class_occurrence: {
+                        ...occurrence
+                    }
+                }
+                allReports.value.push(newReportDetail as any)
+            }
+        } else {
+            // Just fetch existing
+            const report = await OccurrenceReportService.getReport(enrollmentId, occurrence.id)
+            selectedReport.value = report
         }
 
-        selectedReport.value = report
-
-        // If it was newly created, we might want to refresh allReports to update markers
-        if (!hasExistingReport) {
-            await switchToListView() // This refreshes allReports
-            viewMode.value = 'calendar' // Keep in calendar view
-        }
+        const currentReportId = selectedReport.value?.id
 
         // Subscribe to Realtime changes for this report
-        if (report.id) {
+        if (currentReportId) {
             reportSubscription = supabase
-                .channel(`report-${report.id}`)
+                .channel(`report-${currentReportId}`)
                 .on(
                     'postgres_changes',
                     {
                         event: 'UPDATE',
                         schema: 'public',
                         table: 'occurrence_reports',
-                        filter: `id=eq.${report.id}`
+                        filter: `id=eq.${currentReportId}`
                     },
                     (payload) => {
                         handleRealtimeUpdate(payload)
@@ -1059,6 +1091,7 @@ async function refreshReport() {
 function handleSaveSuccess(newVersion: number) {
     if (selectedReport.value) {
         selectedReport.value.version = newVersion
+        selectedReport.value.updatedAt = new Date()
     }
 
     successMessage.value = t('report.save_success')

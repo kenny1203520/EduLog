@@ -25,24 +25,28 @@ export class OccurrenceReportService {
      * @param occurrenceId - The class occurrence ID
      * @returns The report (existing or newly created)
      */
-    static async getOrCreateReport(
+    // Fetches an existing report without creating one
+    static async getReport(
         enrollmentId: string,
         occurrenceId: string
-    ): Promise<OccurrenceReport> {
-        // Try to fetch existing report
-        const { data: existing, error: fetchError } = await supabase
+    ): Promise<OccurrenceReport | null> {
+        const { data: existing, error } = await supabase
             .from('occurrence_reports')
             .select('*')
             .eq('enrollment_id', enrollmentId)
             .eq('class_occurrence_id', occurrenceId)
             .maybeSingle()
 
-        if (fetchError) throw new Error(`Failed to fetch report: ${fetchError.message}`)
+        if (error) throw new Error(`Failed to fetch report: ${error.message}`)
 
-        if (existing) {
-            return new OccurrenceReport(existing)
-        }
+        return existing ? new OccurrenceReport(existing) : null
+    }
 
+    // Explicitly creates a new report
+    static async createReport(
+        enrollmentId: string,
+        occurrenceId: string
+    ): Promise<OccurrenceReport> {
         // 1. Fetch occurrence and session info to check for holiday scope
         const { data: occurrence } = await supabase
             .from('class_occurrences')
@@ -68,7 +72,7 @@ export class OccurrenceReportService {
             ? await SuspensionService.isSuspended(enrollmentId, occurrence.occurrence_date)
             : false
 
-        // 2. Create new report if doesn't exist
+        // 2. Create new report
         const newReport: Partial<OccurrenceReportDTO> = {
             enrollment_id: enrollmentId,
             class_occurrence_id: occurrenceId,
@@ -88,6 +92,18 @@ export class OccurrenceReportService {
         if (createError) throw new Error(`Failed to create report: ${createError.message}`)
 
         return new OccurrenceReport(created)
+    }
+
+    static async getOrCreateReport(
+        enrollmentId: string,
+        occurrenceId: string
+    ): Promise<OccurrenceReport> {
+        // Try to fetch existing report
+        const existing = await this.getReport(enrollmentId, occurrenceId)
+        if (existing) return existing
+
+        // If not found, create it
+        return this.createReport(enrollmentId, occurrenceId)
     }
 
     /**
