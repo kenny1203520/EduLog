@@ -1,5 +1,6 @@
 {
     "title": "Course & Lesson Management",
+    "list_title": "Course Catalog",
     "add_course": "Add Course",
     "edit_course": "Edit Course",
     "delete_course": "Delete Course",
@@ -9,6 +10,8 @@
     "display_name_hint": "Custom name shown to users instead of subject+stage",
     "description": "Description",
     "lessons_count": "{count} Lessons",
+    "lessons_count_short": "Lessons",
+    "lessons_title": "Course Lessons",
     "show_lessons": "Show",
     "hide_lessons": "Hide",
     "add_lesson": "Add Lesson",
@@ -16,6 +19,9 @@
     "delete_lesson": "Delete Lesson",
     "lesson_title": "Lesson Title",
     "lesson_sequence": "Sequence",
-    "no_courses": "No courses found. Create one to get started.",
-    "save_changes": "Save Changes"
+    "save_changes": "Save Changes",
+    "no_lessons_title": "No Lessons Yet",
+    "no_lessons_sub": "Add lessons to this course to track student progress.",
+    "select_course_hint": "Select a Course",
+    "select_course_sub": "Choose a course from the list to manage its lessons and content."
 }

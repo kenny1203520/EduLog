@@ -412,7 +412,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -688,7 +688,7 @@ const {
         }
 
         if (!canSave.value) {
-            return { success: false, message: '請填寫必填欄位' }
+            return { success: false, message: t('report.editor.required_field_error') }
         }
 
         // Auto-fill absence reason if missing

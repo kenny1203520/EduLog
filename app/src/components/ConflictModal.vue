@@ -28,7 +28,7 @@
                 <!-- Strategy Selection -->
                 <div class="mb-10">
                     <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 ml-1">
-                        {{ $t('report.conflict.strategies_label') || 'Resolution Strategy' }}
+                        {{ $t('report.conflict.strategies_label') }}
                     </label>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <label v-for="strategy in strategyOptions" :key="strategy.value"
@@ -88,7 +88,7 @@
                         </label>
                         <textarea v-model="mergedContent"
                             class="w-full h-80 p-8 bg-white border-2 border-emerald-100 rounded-[2.5rem] font-mono text-sm leading-relaxed focus:ring-8 focus:ring-emerald-500/5 focus:border-emerald-500 transition-all outline-none text-gray-900 shadow-sm"
-                            :placeholder="$t('report.conflict.merge_placeholder') || 'Edit the final merged content...'" />
+                            :placeholder="$t('report.conflict.merge_placeholder')" />
                     </div>
                 </div>
             </div>

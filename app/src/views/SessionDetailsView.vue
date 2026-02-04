@@ -127,7 +127,7 @@ async function toggleAttendance(enrId: string, event: any) {
             undefined,
             {
                 attendanceStatus: newStatus,
-                absenceReason: isPresent ? undefined : '未告知原因'
+                absenceReason: isPresent ? undefined : t('report.editor.absence_reasons.reason_not_provided')
             }
         )
         // Refresh local report state
