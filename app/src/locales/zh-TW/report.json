@@ -103,7 +103,11 @@
         "all_saved": "已儲存",
         "error": "錯誤",
         "save_now": "立即儲存",
-        "required_field_error": "請填寫必填欄位"
+        "required_field_error": "請填寫必填欄位",
+        "delete_report": "刪除報告",
+        "delete_report_confirm": "確定要刪除此報告嗎？刪除後，學生的課程進度將會自動更新（若此報告是最後一次上課紀錄，進度將會退回）。",
+        "delete_success": "報告已刪除",
+        "confirm_create_report": "此課堂尚未建立報告，點選後將會自動為學生建立一份新的報告。確定要繼續嗎？"
     },
     "conflict": {
         "title": "偵測到版本衝突",

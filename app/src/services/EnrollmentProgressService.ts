@@ -116,6 +116,43 @@ export class EnrollmentProgressService {
     }
 
     /**
+     * Recalculates the student's progress by finding the first uncompleted lesson.
+     */
+    static async recalculateEnrollmentProgress(enrollmentId: string): Promise<number> {
+        // 1. Get enrollment and its course
+        const { data: enrollment, error: enrollError } = await supabase
+            .from('enrollments')
+            .select('course_id, lesson_number')
+            .eq('id', enrollmentId)
+            .single()
+
+        if (enrollError || !enrollment) throw new Error(`Failed to fetch enrollment: ${enrollError?.message}`)
+
+        // 2. Fetch all lessons for the course
+        const { data: lessonsData, error: lessonsError } = await supabase
+            .from('lessons')
+            .select('*')
+            .eq('course_id', enrollment.course_id)
+            .order('sequence', { ascending: true })
+
+        if (lessonsError || !lessonsData) throw new Error(`Failed to fetch lessons: ${lessonsError?.message}`)
+
+        const allLessons = lessonsData.map(l => ({
+            id: l.id,
+            sequence: l.sequence
+        })) as any
+
+        // 3. Find first uncompleted lesson
+        const firstUncompleted = await this.findFirstUncompletedLesson(enrollmentId, allLessons)
+
+        // 4. Update progress
+        const newProgress = firstUncompleted?.sequence ?? enrollment.lesson_number
+        await this.updateEnrollmentProgress(enrollmentId, newProgress)
+
+        return newProgress
+    }
+
+    /**
      * Gets the current progress and calculates what lesson should be next
      * @param enrollmentId - The enrollment ID
      * @param courseId - The course ID (to fetch lessons)

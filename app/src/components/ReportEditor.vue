@@ -115,6 +115,18 @@
                     {{ $t('report.editor.all_saved') }}
                 </span>
             </div>
+
+            <!-- Delete Button -->
+            <button v-if="reportId" @click="handleDeleteReport"
+                class="ml-auto text-sm font-medium text-red-500 hover:text-red-700 flex items-center gap-1 focus:outline-none"
+                :title="$t('report.editor.delete_report', 'Delete Report')">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span class="hidden sm:inline">{{ $t('report.editor.delete_report', 'Delete Report') }}</span>
+            </button>
         </div>
 
         <!-- Lesson Selection & Completion  -->
@@ -400,7 +412,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -544,6 +556,19 @@ async function deleteTemplate(id: string) {
     }
 }
 
+async function handleDeleteReport() {
+    if (!props.reportId) return
+    if (!confirm(t('report.editor.delete_report_confirm', 'Are you sure you want to delete this report? This will revert the student\'s progress.'))) return
+
+    try {
+        await OccurrenceReportService.deleteReportAndRevertProgress(props.reportId)
+        emit('deleted')
+    } catch (e: any) {
+        console.error('Failed to delete report', e)
+        saveError.value = e.message
+    }
+}
+
 onMounted(() => {
     loadTemplates()
 })
@@ -599,6 +624,7 @@ const emit = defineEmits<{
     'update:report-external-link': [value: string]
     'save-error': [error: string]
     'conflict': [serverContent: string]
+    'deleted': []
 }>()
 
 const authStore = useAuthStore()

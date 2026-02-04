@@ -39,7 +39,7 @@
                 <div v-if="day.occurrences.length > 0" class="mt-1 space-y-1">
                     <div v-for="occurrence in day.occurrences.slice(0, 3)" :key="occurrence.id"
                         :class="getOccurrenceIndicatorClass(occurrence)" class="text-xs px-1 py-0.5 rounded truncate">
-                        {{ occurrence.status === 'completed' ? '✓' : occurrence.status === 'cancelled' ? '✗' : '○' }}
+                        {{ getOccurrenceSymbol(occurrence) }}
                     </div>
                     <div v-if="day.occurrences.length > 3" class="text-xs text-gray-500">
                         +{{ day.occurrences.length - 3 }}
@@ -88,10 +88,14 @@ interface CalendarDay {
 
 interface Props {
     occurrences?: ClassOccurrence[]
+    existingReportIds?: Set<string>
+    occurrenceStatuses?: Record<string, string>
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    occurrences: () => []
+    occurrences: () => [],
+    existingReportIds: () => new Set(),
+    occurrenceStatuses: () => ({})
 })
 
 const emit = defineEmits<{
@@ -243,16 +247,42 @@ function getDayClasses(day: CalendarDay) {
 }
 
 function getOccurrenceIndicatorClass(occurrence: ClassOccurrence) {
-    switch (occurrence.status) {
-        case 'completed':
-            return 'bg-green-100 text-green-700'
+    const status = props.occurrenceStatuses[occurrence.id!] || occurrence.status
+    const hasReport = props.existingReportIds.has(occurrence.id!)
+
+    switch (status) {
+        case 'present':
+        case 'completed': // Legacy support
+            return 'bg-emerald-500 text-white shadow-sm'
+        case 'absent':
+            return 'bg-rose-500 text-white shadow-sm'
+        case 'late':
+            return 'bg-amber-100 text-amber-700 border border-amber-200'
+        case 'excused':
+            return 'bg-blue-50 text-blue-600 border border-blue-100'
         case 'cancelled':
-            return 'bg-red-100 text-red-700'
+            return 'bg-gray-100 text-gray-400 line-through'
         case 'scheduled':
-            return 'bg-blue-100 text-blue-700'
+            return hasReport
+                ? 'bg-blue-100 text-blue-700' // Draft/In-progress
+                : 'bg-gray-100 text-gray-400 border border-dashed border-gray-300' // Pure schedule
         default:
             return 'bg-gray-100 text-gray-700'
     }
+}
+
+function getOccurrenceSymbol(occurrence: ClassOccurrence) {
+    const status = props.occurrenceStatuses[occurrence.id!] || occurrence.status
+    const hasReport = props.existingReportIds.has(occurrence.id!)
+
+    if (status === 'present' || status === 'completed') return '✓'
+    if (status === 'absent' || status === 'cancelled') return '✗'
+    if (status === 'late') return '○'
+    if (status === 'excused') return '◌'
+    if (status === 'scheduled') {
+        return hasReport ? '○' : '◌'
+    }
+    return '○'
 }
 
 function getOccurrenceStatusBadgeClass(status: string) {

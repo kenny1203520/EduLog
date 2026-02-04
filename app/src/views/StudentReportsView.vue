@@ -85,8 +85,15 @@
             </div>
             <div v-else class="divide-y divide-gray-100">
                 <div v-for="displayReport in allReportDisplay" :key="displayReport.id"
-                    class="p-6 hover:bg-gray-50 flex gap-6 cursor-pointer group"
+                    class="p-6 hover:bg-gray-50 flex gap-6 cursor-pointer group relative"
+                    :class="{ 'bg-gray-50/50 opacity-80': !displayReport.id }"
                     @click="handleListRowClick(displayReport)">
+
+                    <!-- Placeholder Indicator -->
+                    <div v-if="!displayReport.id"
+                        class="absolute top-2 right-2 text-[10px] font-bold text-gray-400 border border-gray-200 px-1 rounded uppercase tracking-tighter">
+                        Scheduled
+                    </div>
 
                     <!-- Left: Date -->
                     <div class="w-24 shrink-0 flex flex-col items-center">
@@ -174,7 +181,8 @@
         <div v-else-if="viewMode === 'calendar'" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Calendar Section -->
             <div class="lg:col-span-1">
-                <OccurrenceCalendar :occurrences="occurrences" @select-occurrence="selectOccurrence" />
+                <OccurrenceCalendar :occurrences="occurrences" :existing-report-ids="existingReportIds"
+                    :occurrence-statuses="occurrenceStatuses" @select-occurrence="selectOccurrence" />
 
                 <!-- Class Context Info (Bottom Left) -->
                 <div v-if="enrollmentInfo" class="mt-6 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
@@ -287,7 +295,7 @@
                         :initial-report-external-link="selectedReport.externalLink"
                         :initial-enrollment-external-link="enrollmentInfo?.externalLink"
                         :initial-student-id="enrollmentInfo?.studentId" @save-success="handleSaveSuccess"
-                        @save-error="handleSaveError" @conflict="handleConflict" />
+                        @save-error="handleSaveError" @conflict="handleConflict" @deleted="handleDeleted" />
                 </div>
 
                 <!-- Empty State -->
@@ -342,7 +350,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                 </svg>
             </div>
-            <span class="font-bold tracking-wide">{{ $t('report.save_success') }}</span>
+            <span class="font-bold tracking-wide">{{ successMessage || $t('report.save_success') }}</span>
         </div>
     </div>
 </template>
@@ -367,7 +375,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 
 const route = useRoute()
 const router = useRouter()
-const { locale } = useI18n()
+const { t, locale } = useI18n()
 const authStore = useAuthStore()
 
 const loading = ref(true)
@@ -379,6 +387,7 @@ const showConflictModal = ref(false)
 const conflictServerContent = ref('')
 const conflictLocalContent = ref('')
 const showSuccessToast = ref(false)
+const successMessage = ref('')
 const showUpdateToast = ref(false) // New toast for updates
 const enrollmentInfo = ref<{
     studentName: string,
@@ -474,6 +483,30 @@ const allReportDisplay = computed(() => {
             const timeB = new Date(b.date).getTime()
             return sortOrder.value === 'asc' ? timeA - timeB : timeB - timeA
         })
+})
+
+const existingReportIds = computed(() => {
+    return new Set(allReports.value.map(r => r.class_occurrence_id))
+})
+
+const occurrenceStatuses = computed(() => {
+    const statusMap: Record<string, string> = {}
+
+    // 1. Initial base statuses from occurrences
+    occurrences.value.forEach(occ => {
+        statusMap[occ.id!] = occ.status
+    })
+
+    // 2. Overwrite with granular report-level status
+    allReports.value.forEach(r => {
+        if (r.attendance_status) {
+            statusMap[r.class_occurrence_id] = r.attendance_status
+        } else if (r.is_completed) {
+            statusMap[r.class_occurrence_id] = 'present'
+        }
+    })
+
+    return statusMap
 })
 
 function formatWeekday(dateVal: string | Date) {
@@ -779,7 +812,24 @@ async function selectOccurrence(occurrence: ClassOccurrence) {
             enrollmentId,
             occurrence.id
         )
+
+        // Check if report was already there or if it's new (via presence in allReports)
+        const hasExistingReport = allReports.value.some(r => r.class_occurrence_id === occurrence.id)
+        if (!hasExistingReport) {
+            if (!confirm(t('report.editor.confirm_create_report', 'This class has no report yet. A new one will be created. Continue?'))) {
+                reportLoading.value = false
+                selectedOccurrence.value = null
+                return
+            }
+        }
+
         selectedReport.value = report
+
+        // If it was newly created, we might want to refresh allReports to update markers
+        if (!hasExistingReport) {
+            await switchToListView() // This refreshes allReports
+            viewMode.value = 'calendar' // Keep in calendar view
+        }
 
         // Subscribe to Realtime changes for this report
         if (report.id) {
@@ -829,15 +879,24 @@ function handleSaveSuccess(newVersion: number) {
         selectedReport.value.version = newVersion
     }
 
-    // Show success toast
+    successMessage.value = t('report.save_success')
     showSuccessToast.value = true
-    setTimeout(() => {
-        showSuccessToast.value = false
-    }, 3000)
+    setTimeout(() => { showSuccessToast.value = false }, 3000)
+    switchToListView() // Refresh list view data
+    viewMode.value = 'calendar' // But keep calendar active
 }
 
 function handleSaveError(error: string) {
     alert(`Failed to save report: ${error}`)
+}
+
+function handleDeleted() {
+    successMessage.value = t('report.editor.delete_success')
+    showSuccessToast.value = true
+    setTimeout(() => { showSuccessToast.value = false }, 3000)
+    selectedReport.value = null
+    selectedOccurrence.value = null
+    loadOccurrences() // Full reload to catch progress changes and remove report
 }
 
 function handleConflict(serverContent: string) {

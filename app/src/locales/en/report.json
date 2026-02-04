@@ -103,7 +103,11 @@
         "all_saved": "All saved",
         "error": "Error",
         "save_now": "Save Now",
-        "required_field_error": "Please fill in required fields"
+        "required_field_error": "Please fill in required fields",
+        "delete_report": "Delete Report",
+        "delete_report_confirm": "Are you sure you want to delete this report? This will automatically recalculate the student's progress.",
+        "delete_success": "Report Deleted",
+        "confirm_create_report": "This class has no report yet. Clicking will automatically create a new report for the student. Do you want to continue?"
     },
     "conflict": {
         "title": "Conflict Detected",

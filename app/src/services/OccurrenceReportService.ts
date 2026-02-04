@@ -476,6 +476,31 @@ export class OccurrenceReportService {
     }
 
     /**
+     * Deletes a report and reverts enrollment progress.
+     */
+    static async deleteReportAndRevertProgress(reportId: string): Promise<void> {
+        // 1. Fetch report to get enrollment_id
+        const { data: report, error: fetchError } = await supabase
+            .from('occurrence_reports')
+            .select('enrollment_id')
+            .eq('id', reportId)
+            .single()
+
+        if (fetchError || !report) throw new Error(`Failed to fetch report for deletion: ${fetchError?.message}`)
+
+        // 2. Delete report
+        const { error: deleteError } = await supabase
+            .from('occurrence_reports')
+            .delete()
+            .eq('id', reportId)
+
+        if (deleteError) throw new Error(`Failed to delete report: ${deleteError.message}`)
+
+        // 3. Recalculate progress
+        await EnrollmentProgressService.recalculateEnrollmentProgress(report.enrollment_id)
+    }
+
+    /**
      * Deletes a report (use with caution)
      */
     static async deleteReport(reportId: string): Promise<void> {
