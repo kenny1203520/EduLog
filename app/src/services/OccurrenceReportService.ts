@@ -595,7 +595,7 @@ export class OccurrenceReportService {
                     classrooms (name),
                     enrollments (
                         id, student_id, status,
-                        students (first_name, last_name, english_name)
+                        students (name)
                     )
                 )
             `)
@@ -635,7 +635,7 @@ export class OccurrenceReportService {
                 if (!report || report.is_completed === false) {
                     pending.push({
                         id: report?.id || `missing_${key}`,
-                        studentName: enr.students?.english_name || enr.students?.first_name || 'Unknown',
+                        studentName: enr.students?.name || 'Unknown',
                         date: occ.occurrence_date,
                         className: session.name,
                         classroom: session.classrooms?.name,
