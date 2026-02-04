@@ -280,8 +280,9 @@
                     </div>
 
                     <!-- Report Editor -->
-                    <ReportEditor :report-id="selectedReport.id" :initial-content="selectedReport.content"
-                        :initial-version="selectedReport.version" :loading="reportLoading"
+                    <ReportEditor :key="selectedReport.id" :report-id="selectedReport.id"
+                        :initial-content="selectedReport.content" :initial-version="selectedReport.version"
+                        :loading="reportLoading"
                         :title="$t('report.report_for_date', { date: formatOccurrenceDateTime(selectedOccurrence) })"
                         :show-manual-save="true" :available-lessons="courseLessons"
                         :course-name="enrollmentInfo?.courseDisplay" :initial-lesson-id="selectedReport.lessonId"
