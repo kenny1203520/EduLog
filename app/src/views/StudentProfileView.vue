@@ -11,6 +11,7 @@ import { Classroom, type ClassSessionDTO } from '@/models/Classroom'
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 import { useEmailValidation } from '@/composables/useEmailValidation'
 import StudentSuspensions from '@/components/StudentSuspensions.vue'
+import { supabase } from '@/lib/supabase'
 
 const route = useRoute()
 const router = useRouter()
@@ -364,75 +365,113 @@ const itemTransferSessions = ref<ClassSessionDTO[]>([])
 const forceReschedule = ref(false)
 const isSingleTransferMode = ref(false)
 const transferOriginalDate = ref('')
+const transferEnrollmentReports = ref<any[]>([])
 
 const selectedTargetSession = computed(() =>
     itemTransferSessions.value.find(s => s.id === transferTargetSessionId.value)
 )
 
-
+const selectedOriginalDateInfo = computed(() => {
+    const val = isSingleTransferMode.value ? transferOriginalDate.value : transferOriginalLastDateValue.value
+    return transferOriginalAvailableDates.value.find(d => d.value === val)
+})
 
 // Available future dates for the ORIGINAL session
-const transferOriginalAvailableDates = computed(() => {
-    if (!transferEnrollment.value || transferEnrollment.value.classSessionDayOfWeek === undefined) return []
+const transferOriginalAvailableDates = ref<{ value: string, label: string, class_session_name: string }[]>([])
 
-    const dates = []
-    const targetDay = transferEnrollment.value.classSessionDayOfWeek
-    // Get start time from enrollment's session
-    const startTime = transferEnrollment.value.formattedSchedule?.match(/(\d{2}:\d{2})/)?.[1] || '10:00'
+watch([transferEnrollment, forceReschedule], async ([enr]) => {
+    if (!enr || (enr as any).classSessionDayOfWeek === undefined) {
+        transferOriginalAvailableDates.value = []
+        transferEnrollmentReports.value = []
+        return
+    }
 
-    let d = new Date()
-    const now = new Date()
+    try {
+        const { data: reports, error: reportsError } = await supabase
+            .from('occurrence_reports')
+            .select(`
+                id,
+                class_occurrence_id,
+                class_occurrence:class_occurrences!inner(
+                    occurrence_date,
+                    class_session_id,
+                    original_start_time,
+                    original_end_time,
+                    class_session:class_sessions!inner(name)
+                )
+            `)
+            .eq('enrollment_id', enr.id)
 
-    // Find next occurrence
-    let currentDay = d.getDay()
-    let diff = targetDay - currentDay
-    if (diff < 0) diff += 7
-    d.setDate(d.getDate() + diff)
+        if (reportsError) {
+            console.error('Failed to load reports', reportsError)
+            transferOriginalAvailableDates.value = []
+            transferEnrollmentReports.value = []
+            return
+        }
 
-    // Check time if it's today
-    if (d.toDateString() === now.toDateString()) {
-        const parts = startTime.split(':')
-        if (parts.length >= 2) {
-            const h = parseInt(parts[0]!)
-            const m = parseInt(parts[1]!)
+        if (!reports || reports.length === 0) {
+            transferOriginalAvailableDates.value = []
+            transferEnrollmentReports.value = []
+            return
+        }
 
-            if (!isNaN(h) && !isNaN(m)) {
-                const classTime = new Date(d)
-                classTime.setHours(h, m, 0, 0)
-                if (classTime < now) {
-                    d.setDate(d.getDate() + 7)
+        // Handle structural variation (sometimes Supabase returns object, sometimes array for join)
+        const getOcc = (r: any) => Array.isArray(r.class_occurrence) ? r.class_occurrence[0] : r.class_occurrence
+
+        const reports_sorted = reports.sort((a: any, b: any) => {
+            const dateA = new Date(getOcc(a)?.occurrence_date || 0).getTime()
+            const dateB = new Date(getOcc(b)?.occurrence_date || 0).getTime()
+            return dateA - dateB
+        })
+        transferEnrollmentReports.value = reports_sorted
+
+        const dates: { value: string, label: string, class_session_name: string }[] = []
+        const now = new Date()
+
+        reports_sorted.forEach((report: any) => {
+            const occ = getOcc(report)
+            if (!occ) return
+
+            const d = new Date(occ.occurrence_date)
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+            const dayName = t('classroom.days.' + d.getDay())
+            const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${occ.original_start_time}`
+            if (forceReschedule.value || d >= now) {
+                dates.push({
+                    value: dateStr as string,
+                    label: label as string,
+                    class_session_name: report.class_occurrence?.class_session?.name
+                })
+            }
+        })
+
+        const lastOcc = getOcc(reports_sorted[reports_sorted.length - 1])
+        const lastDate = lastOcc?.occurrence_date
+        if (lastDate) {
+            for (let i = 1; i <= 8; i++) {
+                const d = new Date(lastDate)
+                d.setDate(d.getDate() + (i * 7)) // Generate weekly occurrences
+                const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+                const dayName = t('classroom.days.' + d.getDay())
+                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${lastOcc?.original_start_time}`
+                if (d >= now) {
+                    dates.push({
+                        value: dateStr as string,
+                        label: label as string,
+                        class_session_name: transferEnrollment.value?.classSessionName || ''
+                    })
                 }
             }
         }
-    }
 
-    // Generate occurrences
-    if (forceReschedule.value) {
-        // Go back 12 weeks
-        d.setDate(d.getDate() - (12 * 7))
-        for (let i = 0; i < 24; i++) {
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-            if (dateStr) {
-                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
-                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
-                dates.push({ value: dateStr, label: label })
-            }
-            d.setDate(d.getDate() + 7)
-        }
-    } else {
-        // Standard: Generate 5 future occurrences
-        for (let i = 0; i < 5; i++) {
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-            if (dateStr) {
-                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
-                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
-                dates.push({ value: dateStr, label: label })
-            }
-            d.setDate(d.getDate() + 7)
-        }
+        dates.sort((a, b) => new Date(a.value).getTime() - new Date(b.value).getTime())
+
+        transferOriginalAvailableDates.value = dates
+    } catch (e) {
+        console.error('Error in transferOriginalAvailableDates watch:', e)
+        transferOriginalAvailableDates.value = []
     }
-    return dates
-})
+}, { immediate: true })
 
 const transferNewFirstDate = computed(() => {
     // Check strict explicit undefined check because 0 is valid (Sunday)
@@ -445,72 +484,81 @@ const transferNewFirstDate = computed(() => {
 const transferAvailableDates = computed(() => {
     if (!selectedTargetSession.value || selectedTargetSession.value.day_of_week === undefined) return []
 
-    const dates = []
+    const dates: { value: string, label: string }[] = []
     const targetDay = selectedTargetSession.value.day_of_week
-    const startTime = selectedTargetSession.value.start_time?.slice(0, 5)
+    const startTimeStr = selectedTargetSession.value.start_time?.slice(0, 5)
+    if (!startTimeStr) return []
 
-    if (!startTime) return []
-
-    let d = new Date()
     const now = new Date()
+    const getOcc = (r: any) => Array.isArray(r.class_occurrence) ? r.class_occurrence[0] : r.class_occurrence
 
-    // Find next occurrence
-    let currentDay = d.getDay()
-    let diff = targetDay - currentDay
+    // Helper to check if a date/time has passed today
+    const isPastToday = (d: Date) => {
+        if (d.toDateString() !== now.toDateString()) return d < now
+        const [h, m] = startTimeStr.split(':').map(Number)
+        if (h === undefined || m === undefined) return false
+        const classTime = new Date(d)
+        classTime.setHours(h, m, 0, 0)
+        return classTime < now
+    }
+
+    // Determine Start Date:
+    let startDate: Date
+    if (forceReschedule.value) {
+        // Force Mode: AnchorDate - 4 weeks
+        const anchorDateValue = isSingleTransferMode.value ? transferOriginalDate.value : transferOriginalLastDateValue.value
+        if (anchorDateValue) {
+            startDate = new Date(anchorDateValue)
+            startDate.setDate(startDate.getDate() - (4 * 7))
+        } else if (transferEnrollmentReports.value.length > 0) {
+            // Fallback to first historical report
+            startDate = new Date(getOcc(transferEnrollmentReports.value[0])?.occurrence_date)
+            startDate.setDate(startDate.getDate() - (4 * 7))
+        } else {
+            startDate = new Date(now)
+            startDate.setDate(startDate.getDate() - (4 * 7))
+        }
+    } else {
+        // Standard Mode: Today onwards
+        startDate = new Date(now)
+    }
+
+    // Determine End Date: Current date + 8 weeks
+    const endWindow = new Date(now)
+    endWindow.setDate(endWindow.getDate() + (8 * 7))
+
+    const existingDates = new Set(transferEnrollmentReports.value.map(r => getOcc(r)?.occurrence_date).filter(Boolean))
+
+    let d = new Date(startDate)
+    // Adjust to target day
+    let diff = targetDay - d.getDay()
     if (diff < 0) diff += 7
     d.setDate(d.getDate() + diff)
 
-    // Check time if it's today
-    if (d.toDateString() === now.toDateString()) {
-        const parts = startTime.split(':')
-        if (parts.length >= 2) {
-            const h = parseInt(parts[0]!)
-            const m = parseInt(parts[1]!)
+    while (d <= endWindow) {
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
-            if (!isNaN(h) && !isNaN(m)) {
-                const classTime = new Date(d)
-                classTime.setHours(h, m, 0, 0)
-                if (classTime < now) {
-                    d.setDate(d.getDate() + 7)
-                }
-            }
+        // Exclude logic for Single Transfer
+        const isAlreadyScheduled = existingDates.has(dateStr)
+        const isPastAndTodayTimeOver = isPastToday(d)
+
+        // Non-force mode: skip past dates
+        // Single mode: skip already scheduled dates
+        const shouldSkip = (isSingleTransferMode.value && isAlreadyScheduled) ||
+            (!forceReschedule.value && isPastAndTodayTimeOver)
+
+        if (!shouldSkip) {
+            const dayName = t('classroom.days.' + d.getDay())
+            const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTimeStr}`
+            dates.push({ value: dateStr, label: label })
         }
+        d.setDate(d.getDate() + 7)
     }
 
-    // Generate occurrences
-    if (forceReschedule.value) {
-        // Go back 12 weeks
-        d.setDate(d.getDate() - (12 * 7))
-        for (let i = 0; i < 24; i++) {
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-            if (dateStr) {
-                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
-                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
-                dates.push({ value: dateStr, label: label })
-            }
-            d.setDate(d.getDate() + 7)
-        }
-    } else {
-        // Standard: Generate 5 future occurrences
-        for (let i = 0; i < 5; i++) {
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-            if (dateStr) {
-                const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]
-                const label = `${dateStr.replace(/-/g, '/')} (${dayName}) ${startTime}`
-                dates.push({ value: dateStr, label: label })
-            }
-            d.setDate(d.getDate() + 7)
-        }
-    }
-    return dates
+    return dates.sort((a, b) => a.value.localeCompare(b.value))
 })
 
-
-
 // Date helpers removed - now using dropdown selections
-
-
-
 async function openTransferModal(enr: Enrollment) {
     transferEnrollment.value = enr
     transferTargetSessionId.value = ''
@@ -826,7 +874,7 @@ function copyToClipboard(text: string) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.name')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.name" type="text"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -866,7 +914,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.birthday')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.birthday" type="date"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -896,7 +944,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('auth.email')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.email" type="email" @blur="emailTouched = true"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
                         :class="{ 'border-red-500 focus:ring-red-500': emailError }">
@@ -936,7 +984,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5 md:col-span-2">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.notes')
-                        }}</label>
+                    }}</label>
                     <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
                     <div v-else
@@ -1162,7 +1210,7 @@ function copyToClipboard(text: string) {
                                                 class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
                                                     $t('student.schools.school_student_id') }}</span>
                                             <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id
-                                                }}</span>
+                                            }}</span>
                                             <button @click="copyToClipboard(s.school_student_id)"
                                                 class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-0.5 cursor-pointer"
                                                 title="Copy">
@@ -1382,7 +1430,7 @@ function copyToClipboard(text: string) {
                                 <input type="date" v-model="newSchool.end_date"
                                     class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none">
                                 <p class="text-[10px] text-gray-400 text-right mt-0.5">{{ $t('student.schools.present')
-                                    }}</p>
+                                }}</p>
                             </div>
                         </div>
 
@@ -1581,7 +1629,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                                }}</option>
+                                            }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1607,7 +1655,7 @@ function copyToClipboard(text: string) {
                                 <div class="col-span-2">
                                     <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
-                                        }}</label>
+                                    }}</label>
                                     <input type="url" v-model="editEnrollmentForm.external_link"
                                         placeholder="https://..."
                                         class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -1804,7 +1852,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                                }}</option>
+                                            }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1829,7 +1877,7 @@ function copyToClipboard(text: string) {
                                 <div>
                                     <label class="block text-sm font-bold text-gray-700 mb-2">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
-                                        }}</label>
+                                    }}</label>
                                     <div class="relative">
                                         <input type="url" v-model="newEnrollment.external_link"
                                             placeholder="https://..."
@@ -1898,7 +1946,7 @@ function copyToClipboard(text: string) {
                                     <div class="flex items-center gap-2">
                                         <span>{{ platforms.includes(cred.platform) ?
                                             $t(`student.credentials.platforms.${cred.platform}`) : cred.platform
-                                            }}</span>
+                                        }}</span>
                                         <a v-if="cred.url" :href="cred.url" target="_blank"
                                             class="text-emerald-600 hover:text-emerald-700" :title="cred.url">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -2100,38 +2148,30 @@ function copyToClipboard(text: string) {
 
                 <!-- Comparison Grid -->
                 <div v-if="transferEnrollment" class="grid grid-cols-2 gap-4">
+                    <!-- Original Class Info -->
                     <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
                         <label class="text-[10px] text-gray-500 font-bold uppercase block mb-1.5">{{
                             $t('student.internal_courses.transfer_from') }}</label>
-                        <div class="font-bold text-gray-800 text-sm mb-0.5">{{ transferEnrollment.formattedSchedule ||
-                            '-'
-                            }}</div>
-                        <div class="text-xs text-gray-500 mb-1">{{ transferEnrollment.classSessionName || '-' }}</div>
-
-                        <!-- Last Lesson Selector (Permanent Mode Only) -->
-                        <div v-if="!isSingleTransferMode"
-                            class="bg-gray-50 border border-gray-100 rounded-lg p-2 flex-1">
-                            <label class="text-[10px] text-gray-400 font-bold uppercase block mb-1.5">{{
-                                $t('student.internal_courses.last_lesson') }}</label>
-                            <select v-model="transferOriginalLastDateValue"
-                                class="w-full text-xs border-gray-200 rounded px-2 py-1 focus:ring-1 focus:ring-gray-300 outline-none bg-white">
-                                <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
-                                </option>
-                                <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
-                                    {{ d.label }}
-                                </option>
-                            </select>
+                        <div class="font-bold text-gray-800 text-sm mb-0.5">
+                            {{ selectedOriginalDateInfo ? selectedOriginalDateInfo.label :
+                                (transferEnrollment.formattedSchedule || '-') }}
+                        </div>
+                        <div class="text-xs text-gray-500 mb-1">
+                            {{ selectedOriginalDateInfo ? selectedOriginalDateInfo.class_session_name :
+                                (transferEnrollment.classSessionName || '-') }}
                         </div>
                     </div>
 
+                    <!-- New Class Info -->
                     <div class="p-3 bg-orange-50 rounded-lg border border-orange-100">
                         <label class="text-[10px] text-orange-500 font-bold uppercase block mb-1.5">{{
                             $t('student.internal_courses.transfer_target') }}</label>
                         <template v-if="selectedTargetSession">
                             <div class="font-bold text-gray-800 text-sm mb-0.5">
-                                {{ ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][selectedTargetSession.day_of_week]
-                                }}
-                                {{ selectedTargetSession.start_time?.slice(0, 5) }}
+                                {{ transferDate ? new Date(transferDate).toLocaleDateString() : '-' }}
+                                {{ '(' + $t('classroom.days.' + selectedTargetSession.day_of_week) + ')' }}
+                                {{ selectedTargetSession.start_time?.slice(0, 5) }} - {{
+                                    selectedTargetSession.end_time?.slice(0, 5) }}
                             </div>
                             <div class="text-xs text-gray-500 mb-1">{{ selectedTargetSession.name }}</div>
                             <div v-if="!isSingleTransferMode"
@@ -2144,18 +2184,19 @@ function copyToClipboard(text: string) {
                     </div>
                 </div>
 
-                <div class="space-y-1.5">
-                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
-                        $t('student.internal_courses.transfer_target') }}</label>
-                    <select v-model="transferTargetSessionId"
-                        class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
-                        <option value="" disabled>{{ $t('student.internal_courses.session_select_placeholder') }}
+                <!-- Last Lesson Selector (Permanent Mode Only) -->
+                <div v-if="!isSingleTransferMode"
+                    class="space-y-1.5 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 animate-in slide-in-from-top-1 duration-200">
+                    <label class="text-xs font-bold text-indigo-700 uppercase tracking-wide flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                        {{ $t('student.internal_courses.last_lesson') }}
+                    </label>
+                    <select v-model="transferOriginalLastDateValue"
+                        class="w-full border-indigo-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                        <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
                         </option>
-                        <option v-for="s in itemTransferSessions" :key="s.id" :value="s.id">
-                            {{ s.name }} ({{ s.day_of_week !== undefined ?
-                                ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][s.day_of_week] : '' }} {{
-                                s.start_time?.slice(0, 5)
-                            }})
+                        <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
+                            {{ d.label }}
                         </option>
                     </select>
                 </div>
@@ -2177,6 +2218,38 @@ function copyToClipboard(text: string) {
                     </select>
                 </div>
 
+                <!-- Target Class Selection -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                        $t('student.internal_courses.transfer_target') }}</label>
+                    <select v-model="transferTargetSessionId"
+                        class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+                        <option value="" disabled>{{ $t('student.internal_courses.session_select_placeholder') }}
+                        </option>
+                        <option v-for="s in itemTransferSessions" :key="s.id" :value="s.id">
+                            {{ s.name }} ({{ $t('classroom.days.' + s.day_of_week) }} {{
+                                s.start_time?.slice(0, 5)
+                            }})
+                        </option>
+                    </select>
+                </div>
+
+                <!-- Target Date Selection -->
+                <div class="space-y-1.5">
+                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                        isSingleTransferMode ? $t('student.internal_courses.transfer_target_date') :
+                            $t('student.internal_courses.transfer_date') }}</label>
+                    <select v-model="transferDate"
+                        class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+                        <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
+                        </option>
+                        <option v-for="d in transferAvailableDates" :key="d.value" :value="d.value">
+                            {{ d.label }}
+                        </option>
+                    </select>
+                    <p class="text-xs text-gray-500">{{ $t('student.internal_courses.transfer_hint') }}</p>
+                </div>
+
                 <!-- Force Reschedule Toggle -->
                 <div class="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100">
                     <div class="flex flex-col">
@@ -2191,21 +2264,6 @@ function copyToClipboard(text: string) {
                             class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500">
                         </div>
                     </label>
-                </div>
-
-                <div class="space-y-1.5">
-                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
-                        isSingleTransferMode ? $t('student.internal_courses.transfer_target_date') :
-                            $t('student.internal_courses.transfer_date') }}</label>
-                    <select v-model="transferDate"
-                        class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
-                        <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
-                        </option>
-                        <option v-for="d in transferAvailableDates" :key="d.value" :value="d.value">
-                            {{ d.label }}
-                        </option>
-                    </select>
-                    <p class="text-xs text-gray-500">{{ $t('student.internal_courses.transfer_hint') }}</p>
                 </div>
             </div>
 
