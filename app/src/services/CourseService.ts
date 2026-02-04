@@ -162,6 +162,7 @@ export class CourseService {
         .from('enrollments')
         .select(`
             *,
+            courses (subject, stage, display_name),
             students (name, email)
         `)
         .eq('class_session_id', sessionId)

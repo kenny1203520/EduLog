@@ -528,8 +528,19 @@ function copyCourseInfo() {
     if (!lesson) return
 
     const cName = props.courseName || ''
-    const lessonLabel = t('report.editor.lesson_label')
-    const text = cName ? `${cName} ${lessonLabel} ${lesson.sequence} ${lesson.title}` : `${lessonLabel} ${lesson.sequence}: ${lesson.title}`
+    const dName = props.courseDisplayName || ''
+    const lessonLabel = t('report.editor.lesson_label', 'Lesson')
+
+    // Format: [Course Name] [Display Name] Lesson [lesson_name]
+    // Note: session.name is passed as courseName, enrollment.courseDisplayName as courseDisplayName
+    let text = ''
+    if (cName && dName) {
+        text = `${cName} ${dName} ${lessonLabel} ${lesson.title}`
+    } else if (cName || dName) {
+        text = `${cName || dName} ${lessonLabel} ${lesson.title}`
+    } else {
+        text = `${lessonLabel} ${lesson.sequence}: ${lesson.title}`
+    }
 
     navigator.clipboard.writeText(text).then(() => {
         justCopiedCourse.value = true
@@ -601,6 +612,7 @@ interface Props {
     initialReportExternalLink?: string
     initialEnrollmentExternalLink?: string
     courseName?: string
+    courseDisplayName?: string
     initialStudentId?: string
 }
 
@@ -617,6 +629,7 @@ const props = withDefaults(defineProps<Props>(), {
     initialReportExternalLink: '',
     initialEnrollmentExternalLink: '',
     courseName: '',
+    courseDisplayName: '',
     initialStudentId: ''
 })
 
