@@ -1,0 +1,11 @@
+{
+    "status": "出席狀況",
+    "present": "出席",
+    "absent": "未出席",
+    "late": "遲到",
+    "excused": "事病假",
+    "scheduled": "預定上課",
+    "bookable": "可預訂",
+    "completed": "已完成",
+    "cancelled": "已取消"
+}

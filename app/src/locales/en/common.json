@@ -37,5 +37,10 @@
     "items": "Items",
     "loading": "Loading",
     "unknown_student": "Unknown Student",
-    "unknown_course": "Unknown Course"
+    "unknown_course": "Unknown Course",
+    "version": "Ver",
+    "edited_by": "By",
+    "today": "Today",
+    "prev_month": "Previous Month",
+    "next_month": "Next Month"
 }

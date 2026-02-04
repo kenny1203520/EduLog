@@ -143,5 +143,7 @@
         "merged_content": "Merged Content (edit as needed)",
         "resolve_button": "Resolve Conflict",
         "cancel_button": "Cancel"
-    }
+    },
+    "no_report_today": "No report found for today.",
+    "is_student_active_hint": "Is this student active?"
 }

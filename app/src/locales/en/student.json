@@ -24,17 +24,7 @@
     "view_reports": "View Reports",
     "address": "Address",
     "phone": "Phone",
-    "social_security_number": "SSN / Gov ID",
-    "attendance": {
-        "present": "Present",
-        "absent": "Absent",
-        "late": "Late",
-        "excused": "Excused",
-        "scheduled": "Scheduled",
-        "bookable": "Available",
-        "completed": "Completed",
-        "cancelled": "Cancelled"
-    },
+    "social_security_number": "Social Security Number / ARC",
     "sections": {
         "basic_info": "Basic Information",
         "contacts": "Contacts",

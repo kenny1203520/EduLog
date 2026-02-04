@@ -39,14 +39,14 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
                     </svg>
-                    <span>{{ $t('report.editor.templates', 'Templates') }}</span>
+                    <span>{{ $t('report.editor.templates') }}</span>
                 </button>
 
                 <!-- Templates Menu -->
                 <div v-if="showTemplates"
                     class="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-4">
                     <h4 class="font-bold text-gray-800 mb-3 text-sm flex justify-between items-center">
-                        {{ $t('report.editor.templates', 'Templates') }}
+                        {{ $t('report.editor.templates') }}
                         <button @click="showTemplates = false"
                             class="text-gray-400 hover:text-gray-600">&times;</button>
                     </h4>
@@ -213,12 +213,12 @@
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="present" v-model="attendanceStatus"
                         class="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500" />
-                    <span class="text-sm font-medium text-gray-700">{{ $t('report.editor.present') }}</span>
+                    <span class="text-sm font-medium text-gray-700">{{ $t('attendance.present') }}</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="absent" v-model="attendanceStatus"
                         class="w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500" />
-                    <span class="text-sm font-medium text-gray-700">{{ $t('report.editor.absent') }}</span>
+                    <span class="text-sm font-medium text-gray-700">{{ $t('attendance.absent') }}</span>
                 </label>
             </div>
 
@@ -413,7 +413,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                        }}</span>
+                    }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{

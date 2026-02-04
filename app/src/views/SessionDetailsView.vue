@@ -396,7 +396,7 @@ async function resolveConflict(resolvedContent: string) {
                         <thead>
                             <tr class="bg-gray-50/50">
                                 <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center"
-                                    v-if="todayOccurrence">{{ $t('classroom.attendance') }}</th>
+                                    v-if="todayOccurrence">{{ $t('attendance.status') }}</th>
                                 <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.student_name') }}</th>
                                 <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
@@ -534,8 +534,8 @@ async function resolveConflict(resolvedContent: string) {
                         class="h-full border-none shadow-none rounded-none" />
 
                     <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
-                        <p class="font-bold">No report found for today.</p>
-                        <p class="text-xs mt-1">Is this student active?</p>
+                        <p class="font-bold">{{ $t('report.no_report_today') }}</p>
+                        <p class="text-xs mt-1">{{ $t('report.is_student_active_hint') }}</p>
                     </div>
                 </div>
             </div>

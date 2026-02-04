@@ -1,0 +1,11 @@
+{
+    "status": "Attendance Status",
+    "present": "Present",
+    "absent": "Absent",
+    "late": "Late",
+    "excused": "Excused",
+    "scheduled": "Scheduled",
+    "bookable": "Available",
+    "completed": "Completed",
+    "cancelled": "Cancelled"
+}

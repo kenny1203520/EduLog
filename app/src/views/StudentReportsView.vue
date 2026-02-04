@@ -31,11 +31,9 @@
                         </svg>
                     </div>
                     <div class="text-left">
-                        <h3 class="font-bold text-amber-900 text-lg">{{ $t('report.incomplete_reports_title') ||
-                            'Pending Reports' }}</h3>
+                        <h3 class="font-bold text-amber-900 text-lg">{{ $t('report.incomplete_reports_title') }}</h3>
                         <p class="text-sm text-amber-700 font-medium">
-                            {{ $t('report.incomplete_reports_desc', { count: incompleteReports.length }) || `You have
-                            ${incompleteReports.length} report(s) needing attention` }}
+                            {{ $t('report.incomplete_reports_desc', { count: incompleteReports.length }) }}
                         </p>
                     </div>
                 </div>
@@ -64,7 +62,8 @@
                         </div>
 
                         <div>
-                            <div class="text-xs text-gray-400 font-bold mb-1">Ver: {{ item.version }}</div>
+                            <div class="text-xs text-gray-400 font-bold mb-1">{{ $t('common.version') }}: {{
+                                item.version }}</div>
                             <div class="flex flex-wrap gap-2">
                                 <span v-if="item.missingContent"
                                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100">
@@ -74,7 +73,7 @@
                                             d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
                                             clip-rule="evenodd" />
                                     </svg>
-                                    {{ $t('report.missing_content') || 'Missing Content' }}
+                                    {{ $t('report.missing_content') }}
                                 </span>
                                 <span v-if="item.missingLesson"
                                     class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-orange-50 text-orange-600 border border-orange-100">
@@ -83,7 +82,7 @@
                                         <path
                                             d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
                                     </svg>
-                                    {{ $t('report.missing_unit') || 'Missing Unit' }}
+                                    {{ $t('report.missing_unit') }}
                                 </span>
                             </div>
                         </div>
@@ -177,7 +176,7 @@
                     <!-- Placeholder Indicator -->
                     <div v-if="!displayReport.id"
                         class="absolute top-2 right-2 text-[10px] font-bold text-gray-400 border border-gray-200 px-1 rounded uppercase tracking-tighter">
-                        Scheduled
+                        {{ $t('attendance.scheduled') }}
                     </div>
 
                     <!-- Left: Date -->
@@ -189,7 +188,7 @@
                         </div>
                         <div class="mt-2 px-2 py-1 rounded text-xs font-medium"
                             :class="getStatusColor(displayReport.status)">
-                            {{ $t(`student.attendance.${displayReport.status}`) }}
+                            {{ $t(`attendance.${displayReport.status}`) }}
                         </div>
                     </div>
 
@@ -343,7 +342,7 @@
                             <div class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
                                     $t('report.status') }}</span>
-                                <span class="text-gray-800 font-medium">{{ $t('student.attendance.' +
+                                <span class="text-gray-800 font-medium">{{ $t('attendance.' +
                                     selectedOccurrence.status) }}</span>
                             </div>
                             <div v-if="selectedOccurrence.effectiveStartTime" class="bg-white/50 p-2 rounded-lg">
@@ -362,7 +361,7 @@
                                         selectedReport.lastEditedAt)?.toLocaleString() }}</span>
                                 </div>
                                 <span v-if="selectedReport.lastEditedBy"
-                                    class="text-[10px] text-gray-400 font-bold italic">By: {{
+                                    class="text-[10px] text-gray-400 font-bold italic">{{ $t('common.edited_by') }}: {{
                                         selectedReport.lastEditedBy }}</span>
                             </div>
                         </div>

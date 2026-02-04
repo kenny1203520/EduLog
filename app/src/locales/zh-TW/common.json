@@ -37,5 +37,10 @@
     "items": "項目",
     "loading": "載入中",
     "unknown_student": "未知學生",
-    "unknown_course": "未知課程"
+    "unknown_course": "未知課程",
+    "version": "版本",
+    "edited_by": "編輯者",
+    "today": "今天",
+    "prev_month": "上個月",
+    "next_month": "下個月"
 }
