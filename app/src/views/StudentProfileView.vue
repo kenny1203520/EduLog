@@ -506,13 +506,13 @@ const transferAvailableDates = computed(() => {
     let startDate: Date
     if (forceReschedule.value) {
         // Force Mode: AnchorDate - 4 weeks
-        const anchorDateValue = isSingleTransferMode.value ? transferOriginalDate.value : transferOriginalLastDateValue.value
+        const anchorDateValue = transferOriginalAvailableDates.value[0]?.value
         if (anchorDateValue) {
             startDate = new Date(anchorDateValue)
             startDate.setDate(startDate.getDate() - (4 * 7))
         } else if (transferEnrollmentReports.value.length > 0) {
             // Fallback to first historical report
-            startDate = new Date(getOcc(transferEnrollmentReports.value[0])?.occurrence_date)
+            startDate = new Date(getOcc(transferEnrollmentReports.value[0])?.occurrence_date || now)
             startDate.setDate(startDate.getDate() - (4 * 7))
         } else {
             startDate = new Date(now)
@@ -524,7 +524,8 @@ const transferAvailableDates = computed(() => {
     }
 
     // Determine End Date: Current date + 8 weeks
-    const endWindow = new Date(now)
+    const lastDate = new Date(transferOriginalAvailableDates.value[transferOriginalAvailableDates.value.length - 1]?.value || now)
+    const endWindow = lastDate > now ? lastDate : now
     endWindow.setDate(endWindow.getDate() + (8 * 7))
 
     const existingDates = new Set(transferEnrollmentReports.value.map(r => getOcc(r)?.occurrence_date).filter(Boolean))
