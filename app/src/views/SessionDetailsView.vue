@@ -229,6 +229,21 @@ async function toggleSplitView(enrollmentId: string) {
 
         selectedEnrollmentId.value = enrollmentId
         showSplitView.value = true
+
+        // Fetch latest report content to ensure sync with server (fixes stale data issues)
+        if (todayOccurrence.value?.id) {
+            savingMap.value.set(enrollmentId, true)
+            OccurrenceReportService.getOrCreateReport(enrollmentId, todayOccurrence.value.id)
+                .then(report => {
+                    reportMap.value.set(enrollmentId, report)
+                })
+                .catch(e => {
+                    console.error('Failed to sync report on quick edit open', e)
+                })
+                .finally(() => {
+                    savingMap.value.delete(enrollmentId)
+                })
+        }
     }
 }
 
