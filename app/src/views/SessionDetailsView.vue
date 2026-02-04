@@ -555,8 +555,13 @@ async function resolveConflict(resolvedContent: string) {
                             <div>
                                 <h3 class="font-black text-gray-900">{{enrollments.find(e => e.id ===
                                     selectedEnrollmentId)?.studentName}}</h3>
-                                <p class="text-xs font-bold text-gray-400">{{ todayOccurrence?.occurrenceDate ? new
-                                    Date(todayOccurrence?.occurrenceDate).toLocaleDateString() : 'Today' }}</p>
+                                <p class="text-xs font-bold text-gray-400">
+                                    {{ todayOccurrence?.occurrenceDate ? new
+                                        Date(todayOccurrence?.occurrenceDate).toLocaleDateString() : 'Today' }}
+                                    <span v-if="todayOccurrence?.effectiveStartTime" class="ml-1 text-emerald-600">
+                                        {{ todayOccurrence.effectiveStartTime.slice(0, 5) }}
+                                    </span>
+                                </p>
                             </div>
                         </div>
                         <button @click="showSplitView = false" class="p-2 hover:bg-gray-100 rounded-full">
@@ -588,6 +593,7 @@ async function resolveConflict(resolvedContent: string) {
                         :initial-student-id="enrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
                         :course-name="enrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + enrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
                         :course-display-name="enrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
+                        :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
                         :available-lessons="courseLessons" :show-manual-save="true"
                         :loading="savingMap.get(selectedEnrollmentId!)"
                         @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"

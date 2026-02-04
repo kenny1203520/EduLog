@@ -626,10 +626,10 @@ export class OccurrenceReportService {
         const occurrenceIds = occurrences.map(o => o.id)
         if (occurrenceIds.length === 0) return []
 
-        // Fetch existing reports
+        // Fetch existing reports with attendance and content check fields
         const { data: reports } = await supabase
             .from('occurrence_reports')
-            .select('id, enrollment_id, class_occurrence_id, is_completed')
+            .select('id, enrollment_id, class_occurrence_id, is_completed, attendance_status, content, lesson_id')
             .in('class_occurrence_id', occurrenceIds)
 
         const reportLookup = new Map<string, any>()
@@ -647,19 +647,30 @@ export class OccurrenceReportService {
                 const key = `${enr.id}_${occ.id}`
                 const report = reportLookup.get(key)
 
-                // If no report OR report is not completed
-                if (!report || report.is_completed === false) {
-                    pending.push({
-                        id: report?.id || `missing_${key}`,
-                        studentName: enr.students?.name || 'Unknown',
-                        date: occ.occurrence_date,
-                        className: session.name,
-                        classroom: session.classrooms?.name,
-                        occurrenceId: occ.id,
-                        enrollmentId: enr.id,
-                        isMissing: !report
-                    })
+                // Logic Refinement: Report is ONLY considered pending if:
+                // 1. Student is PRESENT
+                // 2. Progress is NOT done (not manually completed AND no chapter range filled like 'A-B')
+                // 3. AND Learning content is EMPTY
+                if (report && report.attendance_status === 'present') {
+                    const hasRange = report.progress_letter && report.progress_letter.includes('-')
+                    const isProgressDone = report.is_completed || hasRange
+                    const hasContent = report.content && report.content.trim().length > 0
+
+                    if (!isProgressDone && !hasContent) {
+                        pending.push({
+                            id: report.id,
+                            studentName: enr.students?.name || 'Unknown',
+                            date: occ.occurrence_date,
+                            className: session.name,
+                            classroom: session.classrooms?.name,
+                            occurrenceId: occ.id,
+                            enrollmentId: enr.id,
+                            isMissing: true // By this strict logic, it represents a totally empty entry for an attended class
+                        })
+                    }
                 }
+                // Entirely missing reports or other attendance statuses are explicitly skipped
+                // to focus on completing records for attended students.
             }
         }
         

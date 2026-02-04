@@ -130,6 +130,9 @@
                                     formatWeekday(selectedReport.date) }}</div>
                                 <div class="text-xl font-black text-gray-800">{{ new Date(selectedReport.date).getDate()
                                     }}</div>
+                                <div v-if="selectedReport.startTime" class="text-[10px] font-bold text-emerald-600">
+                                    {{ selectedReport.startTime.slice(0, 5) }}
+                                </div>
                             </div>
                             <div>
                                 <h3 class="font-bold text-lg text-gray-900">{{ selectedReport.studentName }}</h3>
@@ -151,7 +154,7 @@
                     <ReportEditor :key="selectedReport.id" :report-id="selectedReport.id"
                         :initial-content="selectedReport.content" :initial-version="selectedReport.version"
                         :loading="editorLoading"
-                        :title="$t('report.report_for_date', { date: formatDate(selectedReport.date) })"
+                        :title="$t('report.report_for_date', { date: formatDateTime(selectedReport) })"
                         :show-manual-save="true" :available-lessons="activeLessons"
                         :course-name="selectedReport.className" :initial-lesson-id="selectedReport.lessonId"
                         :initial-is-completed="selectedReport.isCompleted"
@@ -298,6 +301,12 @@ function handleSaveError(msg: string) {
 
 function formatDate(dateVal: string | Date) {
     return new Date(dateVal).toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
+}
+
+function formatDateTime(report: any) {
+    const date = new Date(report.date).toLocaleDateString(locale.value)
+    const time = report.startTime ? report.startTime.slice(0, 5) : ''
+    return `${date} ${time}`.trim()
 }
 
 function formatWeekday(dateVal: string | Date) {
