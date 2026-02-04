@@ -173,7 +173,7 @@
                     <div class="flex items-center gap-2">
                         <span class="text-xs text-gray-400 whitespace-nowrap">{{
                             $t('report.reference_panel.items_per_page')
-                        }}</span>
+                            }}</span>
                         <select v-model="pageSize" class="text-xs border rounded p-1 bg-gray-50 focus:ring-indigo-500"
                             @change="handlePageSizeChange">
                             <option :value="10">10</option>
@@ -378,20 +378,14 @@ function getReportProgress(report: any) {
 function formatHeader(report: any) {
     if (activeTab.value === 'peer') {
         const s = report.enrollments?.students
-        if (!s) return t('common.unknown_student')
-        return s.english_name ? `${s.english_name} (${s.first_name})` : `${s.first_name} ${s.last_name || ''}`
+        return s.name || t('common.unknown_student')
     } else {
-        const session = report.class_occurrences?.class_sessions
-        const course = session?.courses
+        const course = report.enrollments?.courses
         const lesson = report.lessons
 
         let courseName = t('common.unknown_course')
         if (course) {
-            if (Array.isArray(course)) {
-                courseName = course[0]?.name || courseName
-            } else {
-                courseName = course.name || courseName
-            }
+            courseName = course.display_name || course.subject || courseName
         }
 
         const lessonInfo = lesson ? `#${lesson.sequence} ${lesson.title}` : ''

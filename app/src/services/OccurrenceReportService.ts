@@ -676,7 +676,7 @@ export class OccurrenceReportService {
                 progress_letter,
                 contact_notes, class_notes,
                 enrollments!inner (
-                    students (first_name, last_name, english_name)
+                    students (name)
                 ),
                 class_occurrences!inner (
                     occurrence_date,
@@ -751,10 +751,13 @@ export class OccurrenceReportService {
                 progress_letter,
                 contact_notes, class_notes,
                 lessons (title, sequence),
+                enrollments!inner (
+                    courses (id, subject, display_name)
+                ),
                 class_occurrences!inner (
                     occurrence_date,
                     class_sessions!inner (
-                        courses (id, name)
+                        name
                     )
                 )
             `, { count: 'exact' })
@@ -771,7 +774,7 @@ export class OccurrenceReportService {
         }
 
         if (courseId) {
-            query = query.eq('class_occurrences.class_sessions.courses.id', courseId)
+            query = query.eq('enrollments.course_id', courseId)
         }
 
         const { data, error, count } = await query
