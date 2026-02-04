@@ -144,6 +144,7 @@
         "transfer_target_date": "New Class Date"
     },
     "credentials": {
+        "title": "Credentials",
         "platform": "Platform",
         "username": "Username",
         "password": "Password",

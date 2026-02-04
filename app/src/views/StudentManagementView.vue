@@ -182,7 +182,7 @@ function copyToClipboard(text: string) {
                 <div
                     class="bg-gray-50/50 px-5 py-3 border-t border-gray-50 flex items-center justify-between text-[10px] font-bold text-gray-400 tracking-wider uppercase">
                     <div class="flex items-center gap-4">
-                        <div class="flex items-center gap-1.5" :title="$t('student.credentials_title')">
+                        <div class="flex items-center gap-1.5" :title="$t('student.credentials.title')">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                                 class="w-4 h-4 opacity-50">
                                 <path fill-rule="evenodd"
@@ -191,7 +191,7 @@ function copyToClipboard(text: string) {
                             </svg>
                             <span>{{ student.credentials?.length || 0 }}</span>
                         </div>
-                        <div class="flex items-center gap-1.5" :title="$t('student.contacts_title')">
+                        <div class="flex items-center gap-1.5" :title="$t('student.contacts.title')">
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                                 class="w-4 h-4 opacity-50">
                                 <path
