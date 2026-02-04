@@ -13,6 +13,8 @@
     "get_started": "立即開始",
     "incomplete_reports": "未完成報告",
     "subtitle": "家教報告系統",
+    "collapse": "收合側邊欄",
+    "expand": "展開選單",
     "description": {
         "dashboard": "掌握教學進度與報告，EduLog 為您提供最便捷的管理解決方案。",
         "students": "全面管理您的學生資訊與學習紀錄。",

@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 const auth = useAuthStore()
 const router = useRouter()
 const isSidebarOpen = ref(false)
+const isDesktopSidebarOpen = ref(true)
 
 async function handleLogout() {
     await auth.signOut()
@@ -42,10 +43,13 @@ async function handleLogout() {
 
         <!-- Sidebar -->
         <aside
-            class="fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white shadow-xl lg:shadow-md flex flex-col transition-transform duration-300 transform lg:transform-none"
-            :class="isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
-            <div class="p-6 border-b flex justify-between items-center">
-                <div>
+            class="fixed lg:static inset-y-0 left-0 z-50 bg-white shadow-xl lg:shadow-md flex flex-col transition-all duration-300 transform lg:transform-none"
+            :class="[
+                isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+                isDesktopSidebarOpen ? 'lg:w-64' : 'lg:w-0 lg:overflow-hidden'
+            ]">
+            <div class="p-6 border-b flex justify-between items-center" :class="{ 'lg:hidden': !isDesktopSidebarOpen }">
+                <div class="whitespace-nowrap overflow-hidden">
                     <h1 class="text-2xl font-bold text-emerald-600">EduLog</h1>
                     <p class="text-xs text-gray-500 mt-1">{{ $t('nav.subtitle') }}</p>
                 </div>
@@ -174,8 +178,31 @@ async function handleLogout() {
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-1 overflow-auto bg-gray-50 pt-16 lg:pt-0">
-            <div class="p-4 lg:p-8">
+        <!-- Main Content -->
+        <main class="flex-1 overflow-auto bg-gray-50 pt-16 lg:pt-0 relative transition-all duration-300">
+            <!-- Desktop Toggle Bar (Sticky) -->
+            <div class="hidden lg:flex sticky top-0 z-20 px-8 py-4 bg-gray-50/90 backdrop-blur-sm items-center gap-2">
+                <button @click="isDesktopSidebarOpen = !isDesktopSidebarOpen"
+                    class="p-2 -ml-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-2 group"
+                    :title="isDesktopSidebarOpen ? $t('nav.collapse') : $t('nav.expand')">
+                    <div
+                        class="p-1 rounded-md border border-gray-200 bg-white group-hover:border-emerald-200 transition-colors shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path v-if="isDesktopSidebarOpen" stroke-linecap="round" stroke-linejoin="round"
+                                stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                            <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </div>
+                    <span v-if="!isDesktopSidebarOpen"
+                        class="text-sm font-bold text-gray-500 group-hover:text-emerald-600 animate-in fade-in slide-in-from-left-2">
+                        {{ $t('nav.expand') || 'Expand Menu' }}
+                    </span>
+                </button>
+            </div>
+
+            <div class="px-4 pb-4 lg:px-8 lg:pb-8">
                 <router-view />
             </div>
         </main>
