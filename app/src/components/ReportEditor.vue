@@ -166,7 +166,8 @@
                     :class="{ 'opacity-50': disabled }" :disabled="disabled">
                     <option value="">{{ $t('report.editor.select_lesson') }}</option>
                     <option v-for="lesson in availableLessons" :key="lesson.id" :value="lesson.id">
-                        Lesson {{ (lesson as any).sequence }}: {{ (lesson as any).title }}
+                        Lesson {{ (lesson as any).sequence }}: {{ (lesson as any).title
+                        }}
                     </option>
                 </select>
             </div>
