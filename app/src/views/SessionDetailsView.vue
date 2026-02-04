@@ -84,13 +84,46 @@ onMounted(async () => {
         }
 
         if (todayOccurrence.value) {
-            // 4. Load/Create Reports for all enrollments for today
+            // 4. Load/Create Reports for all permanent enrollments
+            // AND Detect Guest Students (Rescheduled into this class)
+
+            // 4a. Get ALL reports for this occurrence first
+            const occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(todayOccurrence.value.id)
+            const reportEnrollmentIds = new Set(occurrenceReports.map(r => r.enrollmentId))
+
+            // 4b. Identify Guests (Have report but not in permanent list)
+            const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
+            const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
+
+            // 4c. Load Guest Enrollments
+            if (guestEnrollmentIds.length > 0) {
+                const guestPromises = guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!))
+                const guests = await Promise.all(guestPromises)
+
+                guests.forEach(guest => {
+                    if (guest) {
+                        // Mark as guest for UI
+                        (guest as any).isGuest = true
+                        enrollments.value.push(guest)
+
+                        // Populate report map immediately since we already fetched it
+                        const existingReport = occurrenceReports.find(r => r.enrollmentId === guest.id)
+                        if (existingReport) {
+                            reportMap.value.set(guest.id!, existingReport)
+                        }
+                    }
+                })
+            }
+
+            // 4d. Ensure reports exist for permanent students
             for (const enr of enrollments.value) {
                 if (enr.id) {
-                    // Only generate/fetch reports for active students
-                    if (enr.status === 'active') {
-                        const report = await OccurrenceReportService.getOrCreateReport(enr.id, todayOccurrence.value.id)
-                        reportMap.value.set(enr.id, report)
+                    // Start report loading for everyone (guests already handled, but check is fast)
+                    if (!reportMap.value.has(enr.id)) {
+                        if (enr.status === 'active') {
+                            const report = await OccurrenceReportService.getOrCreateReport(enr.id, todayOccurrence.value.id)
+                            reportMap.value.set(enr.id, report)
+                        }
                     }
                 }
             }
@@ -431,6 +464,10 @@ async function resolveConflict(resolvedContent: string) {
                                     </div>
                                 </td>
                                 <td class="px-8 py-6">
+                                    <span v-if="(e as any).isGuest"
+                                        class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100 mr-2">
+                                        {{ $t('common.rescheduled') || 'Rescheduled' }}
+                                    </span>
                                     <span
                                         class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border"
                                         :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
