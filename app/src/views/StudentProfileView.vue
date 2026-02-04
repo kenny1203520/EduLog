@@ -392,15 +392,17 @@ watch([transferEnrollment, forceReschedule], async ([enr]) => {
             .select(`
                 id,
                 class_occurrence_id,
+                enrollment_id,
                 class_occurrence:class_occurrences!inner(
                     occurrence_date,
                     class_session_id,
                     original_start_time,
                     original_end_time,
                     class_session:class_sessions!inner(name)
-                )
+                ),
+                enrollments!inner(student_id)
             `)
-            .eq('enrollment_id', enr.id)
+            .eq('enrollments.student_id', studentId.value)
 
         if (reportsError) {
             console.error('Failed to load reports', reportsError)
@@ -419,9 +421,15 @@ watch([transferEnrollment, forceReschedule], async ([enr]) => {
         const getOcc = (r: any) => Array.isArray(r.class_occurrence) ? r.class_occurrence[0] : r.class_occurrence
 
         const reports_sorted = reports.sort((a: any, b: any) => {
-            const dateA = new Date(getOcc(a)?.occurrence_date || 0).getTime()
-            const dateB = new Date(getOcc(b)?.occurrence_date || 0).getTime()
-            return dateA - dateB
+            const occA = getOcc(a)
+            const occB = getOcc(b)
+            const dateA = new Date(occA?.occurrence_date || 0).getTime()
+            const dateB = new Date(occB?.occurrence_date || 0).getTime()
+            if (dateA !== dateB) return dateA - dateB
+
+            const timeA = occA?.original_start_time || ''
+            const timeB = occB?.original_start_time || ''
+            return timeA.localeCompare(timeB)
         })
         transferEnrollmentReports.value = reports_sorted
 
@@ -528,7 +536,19 @@ const transferAvailableDates = computed(() => {
     const endWindow = lastDate > now ? lastDate : now
     endWindow.setDate(endWindow.getDate() + (8 * 7))
 
-    const existingDates = new Set(transferEnrollmentReports.value.map(r => getOcc(r)?.occurrence_date).filter(Boolean))
+    const existingDateTimeKeys = new Set(transferEnrollmentReports.value.map(r => {
+        const occ = getOcc(r)
+        if (!occ) return null
+
+        // Skip the one we are currently moving FROM to allow same-time transfers
+        if (isSingleTransferMode.value &&
+            occ.occurrence_date === transferOriginalDate.value &&
+            occ.class_session_id === transferEnrollment.value?.classSessionId) {
+            return null
+        }
+
+        return `${occ.occurrence_date}_${occ.original_start_time?.slice(0, 5)}`
+    }).filter(Boolean))
 
     let d = new Date(startDate)
     // Adjust to target day
@@ -538,15 +558,14 @@ const transferAvailableDates = computed(() => {
 
     while (d <= endWindow) {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const currentKey = `${dateStr}_${startTimeStr}`
 
         // Exclude logic for Single Transfer
-        const isAlreadyScheduled = existingDates.has(dateStr)
+        const isCollision = existingDateTimeKeys.has(currentKey)
         const isPastAndTodayTimeOver = isPastToday(d)
 
-        // Non-force mode: skip past dates
-        // Single mode: skip already scheduled dates
-        const shouldSkip = (isSingleTransferMode.value && isAlreadyScheduled) ||
-            (!forceReschedule.value && isPastAndTodayTimeOver)
+        // Skip if there's already a report at this date/time OR if it's past
+        const shouldSkip = isCollision || (!forceReschedule.value && isPastAndTodayTimeOver)
 
         if (!shouldSkip) {
             const dayName = t('classroom.days.' + d.getDay())
@@ -573,8 +592,7 @@ async function openTransferModal(enr: Enrollment) {
         const { data } = await CourseService.getClassSessions(1, 1000)
         // Filter for same course but different session
         itemTransferSessions.value = data.filter(s =>
-            s.course_ids.includes(enr.courseId) &&
-            s.id !== enr.classSessionId
+            s.course_ids.includes(enr.courseId)
         )
     } catch (e) {
         console.error(e)

@@ -98,7 +98,10 @@
                     <!-- Left: Date -->
                     <div class="w-24 shrink-0 flex flex-col items-center">
                         <div class="text-sm font-bold text-gray-900">{{ formatDate(displayReport.date) }}</div>
-                        <div class="text-xs text-gray-500 uppercase mt-1">{{ formatWeekday(displayReport.date) }}</div>
+                        <div class="text-xs font-bold text-emerald-600 mt-0.5">{{ displayReport.startTime.slice(0, 5) }}
+                        </div>
+                        <div class="text-[10px] text-gray-500 uppercase mt-1">{{ formatWeekday(displayReport.date) }}
+                        </div>
                         <div class="mt-2 px-2 py-1 rounded text-xs font-medium"
                             :class="getStatusColor(displayReport.status)">
                             {{ $t(`student.attendance.${displayReport.status}`) }}
@@ -429,6 +432,7 @@ const allReportDisplay = computed(() => {
                 id: r.id,
                 occurrenceId: r.class_occurrence_id,
                 date: occ.occurrenceDate, // Use occurrence date as truth
+                startTime: occ.effectiveStartTime || '',
                 status: r.attendance_status || (occ.status === 'completed' ? 'present' : 'scheduled'),
                 content: r.content,
                 classNotes: r.class_notes,
@@ -461,6 +465,7 @@ const allReportDisplay = computed(() => {
                 id: null,
                 occurrenceId: occ.id,
                 date: occ.occurrenceDate,
+                startTime: occ.effectiveStartTime || '',
                 status: isSuspended ? 'cancelled' : (occ.status === 'completed' ? 'present' : (occ.status === 'cancelled' ? 'absent' : 'bookable')),
                 content: '',
                 classNotes: '',
@@ -482,7 +487,13 @@ const allReportDisplay = computed(() => {
         .sort((a, b) => {
             const timeA = new Date(a.date).getTime()
             const timeB = new Date(b.date).getTime()
-            return sortOrder.value === 'asc' ? timeA - timeB : timeB - timeA
+            if (timeA !== timeB) {
+                return sortOrder.value === 'asc' ? timeA - timeB : timeB - timeA
+            }
+            // Same date, sort by startTime
+            return sortOrder.value === 'asc'
+                ? a.startTime.localeCompare(b.startTime)
+                : b.startTime.localeCompare(a.startTime)
         })
 })
 
@@ -785,7 +796,15 @@ async function loadOccurrences() {
             if (occ.status === 'rescheduled') return false
             return true
         })
-        merged.sort((a, b) => new Date(a.occurrenceDate).getTime() - new Date(b.occurrenceDate).getTime())
+        merged.sort((a, b) => {
+            const dateA = new Date(a.occurrenceDate).getTime()
+            const dateB = new Date(b.occurrenceDate).getTime()
+            if (dateA !== dateB) return dateA - dateB
+
+            const timeA = a.effectiveStartTime || ''
+            const timeB = b.effectiveStartTime || ''
+            return timeA.localeCompare(timeB)
+        })
 
         occurrences.value = merged
 
@@ -793,10 +812,18 @@ async function loadOccurrences() {
         if (merged.length > 0) {
             const today = new Date().getTime()
 
-            // Find the occurrence with the smallest absolute difference from today
+            // Find the occurrence with the smallest absolute difference from today (Date + Time)
             const closest = merged.reduce((prev, curr) => {
-                const prevDiff = Math.abs(new Date(prev.occurrenceDate).getTime() - today)
-                const currDiff = Math.abs(new Date(curr.occurrenceDate).getTime() - today)
+                const getFullTime = (occ: ClassOccurrence) => {
+                    const d = new Date(occ.occurrenceDate)
+                    if (occ.effectiveStartTime) {
+                        const [h, m] = occ.effectiveStartTime.split(':').map(Number)
+                        if (h !== undefined) d.setHours(h, m || 0, 0, 0)
+                    }
+                    return d.getTime()
+                }
+                const prevDiff = Math.abs(getFullTime(prev) - today)
+                const currDiff = Math.abs(getFullTime(curr) - today)
                 return currDiff < prevDiff ? curr : prev
             })
 
