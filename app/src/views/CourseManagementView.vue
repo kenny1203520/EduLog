@@ -209,13 +209,13 @@ async function deleteLesson(id: string) {
         </div>
 
         <!-- Main Layout -->
-        <div v-else class="flex-1 flex gap-8 overflow-hidden">
+        <div v-else class="flex-1 flex gap-8 overflow-hidden relative">
             <!-- Sidebar: Course List -->
-            <div
-                class="w-80 flex flex-col bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden border-r-4 border-r-emerald-500/10">
+            <div class="w-full lg:w-80 flex flex-col bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden border-r-4 border-r-emerald-500/10 transition-transform duration-300 absolute inset-0 z-10 lg:static lg:transform-none"
+                :class="selectedCourseId ? '-translate-x-full lg:translate-x-0' : 'translate-x-0'">
                 <div class="p-6 border-b border-gray-50 bg-gray-50/30">
                     <h3 class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{ $t('course.list_title')
-                        }}</h3>
+                    }}</h3>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
                     <div v-for="(group, subject) in groupedCourses" :key="subject">
@@ -276,15 +276,26 @@ async function deleteLesson(id: string) {
             </div>
 
             <!-- Detail Pane: Selected Course Lessons -->
-            <div
-                class="flex-1 flex flex-col bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden relative">
+            <div class="flex-1 flex flex-col bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden relative w-full lg:w-auto h-full absolute lg:static inset-0 z-20 bg-white transition-transform duration-300"
+                :class="selectedCourseId ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'">
                 <div v-if="selectedCourse"
                     class="flex-1 flex flex-col overflow-hidden animate-in fade-in slide-in-from-right-4 duration-500">
                     <!-- Detail Header -->
-                    <div class="p-10 pb-6 border-b border-gray-50 bg-gradient-to-br from-white to-gray-50/50">
-                        <div class="flex items-start justify-between gap-6 mb-4">
+                    <div
+                        class="p-6 lg:p-10 pb-6 border-b border-gray-50 bg-gradient-to-br from-white to-gray-50/50 relative">
+                        <!-- Mobile Back Button -->
+                        <button @click="selectedCourseId = null"
+                            class="lg:hidden absolute top-4 left-4 p-2 text-gray-400 hover:text-gray-600 bg-white rounded-full shadow-sm border border-gray-100 z-30">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
+
+                        <div class="flex flex-col lg:flex-row items-start justify-between gap-6 mb-4 mt-8 lg:mt-0">
                             <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-3 mb-2">
+                                <div class="flex items-center gap-3 mb-2 flex-wrap">
                                     <span
                                         class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100">
                                         {{ selectedCourse.subject }}
@@ -294,15 +305,17 @@ async function deleteLesson(id: string) {
                                         {{ selectedCourse.stage }}
                                     </span>
                                 </div>
-                                <h2 class="text-4xl font-black text-gray-900 tracking-tight leading-tight mb-2">{{
-                                    selectedCourse.displayName }}</h2>
+                                <h2
+                                    class="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight leading-tight mb-2 break-words">
+                                    {{
+                                        selectedCourse.displayName }}</h2>
                                 <p class="text-gray-500 font-medium italic text-lg leading-relaxed max-w-2xl">
                                     {{ selectedCourse.description || $t('common.no_description') }}
                                 </p>
                             </div>
-                            <div class="flex gap-2">
+                            <div class="flex gap-2 self-end lg:self-start">
                                 <button @click="openEditModal(selectedCourse)"
-                                    class="p-4 bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all shadow-sm border border-gray-100 active:scale-90"
+                                    class="p-3 lg:p-4 bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all shadow-sm border border-gray-100 active:scale-90"
                                     :title="$t('common.edit')">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
@@ -311,7 +324,7 @@ async function deleteLesson(id: string) {
                                     </svg>
                                 </button>
                                 <button @click="deleteCourse(selectedCourse.id!)"
-                                    class="p-4 bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all shadow-sm border border-gray-100 active:scale-90"
+                                    class="p-3 lg:p-4 bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all shadow-sm border border-gray-100 active:scale-90"
                                     :title="$t('common.delete')">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
@@ -324,7 +337,7 @@ async function deleteLesson(id: string) {
                     </div>
 
                     <!-- Lessons List -->
-                    <div class="flex-1 overflow-y-auto p-10 pt-6 custom-scrollbar space-y-8">
+                    <div class="flex-1 overflow-y-auto p-6 lg:p-10 pt-6 custom-scrollbar space-y-8">
                         <div>
                             <div class="flex items-center justify-between mb-6">
                                 <h3 class="text-xl font-black text-gray-900 tracking-tight flex items-center gap-3">
@@ -345,8 +358,8 @@ async function deleteLesson(id: string) {
                                 <!-- Add Lesson Row -->
                                 <div v-if="addingLessonToCourseId === selectedCourse.id"
                                     class="bg-emerald-50 rounded-2xl p-6 border-2 border-dashed border-emerald-200 animate-in zoom-in duration-300">
-                                    <div class="flex gap-4">
-                                        <div class="w-16 space-y-1">
+                                    <div class="flex flex-col lg:flex-row gap-4">
+                                        <div class="w-full lg:w-16 space-y-1">
                                             <label
                                                 class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">#SEQ</label>
                                             <input v-model.number="lessonForm.sequence" type="number"
@@ -355,7 +368,7 @@ async function deleteLesson(id: string) {
                                         <div class="flex-1 space-y-1">
                                             <label
                                                 class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
-                                                $t('course.lesson_title') }}</label>
+                                                    $t('course.lesson_title') }}</label>
                                             <input v-model="lessonForm.title"
                                                 class="w-full bg-white border-emerald-100 rounded-xl px-4 py-2 font-bold focus:ring-emerald-500 focus:border-emerald-500"
                                                 @keyup.enter="saveLesson(selectedCourse.id!)" auto-focus>
@@ -364,45 +377,46 @@ async function deleteLesson(id: string) {
                                     <div class="flex justify-end gap-3 mt-4">
                                         <button @click="cancelLessonEdit"
                                             class="px-4 py-2 text-gray-500 font-bold hover:text-gray-700 transition-colors">{{
-                                            $t('common.cancel') }}</button>
+                                                $t('common.cancel') }}</button>
                                         <button @click="saveLesson(selectedCourse.id!)"
                                             class="px-6 py-2 bg-emerald-600 text-white rounded-xl font-black hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all">{{
-                                            $t('common.save') }}</button>
+                                                $t('common.save') }}</button>
                                     </div>
                                 </div>
 
                                 <!-- Lesson Items -->
                                 <div draggable="true" v-for="lesson in selectedCourse.lessons" :key="lesson.id"
-                                    class="group flex items-center gap-4 bg-white border border-gray-100 p-4 rounded-2xl hover:shadow-md transition-all hover:bg-gray-50/50">
+                                    class="group flex flex-col lg:flex-row items-center gap-4 bg-white border border-gray-100 p-4 rounded-2xl hover:shadow-md transition-all hover:bg-gray-50/50">
                                     <!-- Edit State -->
                                     <div v-if="editingLessonId === lesson.id"
-                                        class="flex-1 flex gap-4 items-center animate-in fade-in duration-300">
+                                        class="flex-1 w-full flex flex-col lg:flex-row gap-4 items-center animate-in fade-in duration-300">
                                         <input v-model.number="lessonForm.sequence" type="number"
-                                            class="w-16 text-center bg-gray-50 border-gray-100 rounded-xl py-2 font-black">
+                                            class="w-full lg:w-16 text-center bg-gray-50 border-gray-100 rounded-xl py-2 font-black">
                                         <input v-model="lessonForm.title"
-                                            class="flex-1 bg-gray-50 border-gray-100 rounded-xl px-4 py-2 font-bold"
+                                            class="flex-1 w-full bg-gray-50 border-gray-100 rounded-xl px-4 py-2 font-bold"
                                             @keyup.enter="saveLesson(selectedCourse.id!)">
-                                        <div class="flex gap-2">
+                                        <div class="flex gap-2 w-full lg:w-auto justify-end">
                                             <button @click="saveLesson(selectedCourse.id!)"
                                                 class="text-emerald-600 font-black text-sm px-3 py-1 hover:bg-emerald-50 rounded-lg">{{
-                                                $t('common.save') }}</button>
+                                                    $t('common.save') }}</button>
                                             <button @click="cancelLessonEdit"
                                                 class="text-gray-400 font-bold text-sm px-3 py-1 hover:bg-gray-100 rounded-lg">{{
-                                                $t('common.cancel') }}</button>
+                                                    $t('common.cancel') }}</button>
                                         </div>
                                     </div>
 
                                     <!-- View State -->
-                                    <div v-else class="flex-1 flex items-center justify-between">
+                                    <div v-else class="flex-1 w-full flex items-center justify-between">
                                         <div class="flex items-center gap-6">
                                             <span
                                                 class="w-10 h-10 bg-gray-50 text-gray-400 rounded-xl flex items-center justify-center font-black text-xs border border-gray-100">
                                                 {{ lesson.sequence }}
                                             </span>
                                             <span class="text-xl font-bold text-gray-800 tracking-tight">{{ lesson.title
-                                                }}</span>
+                                            }}</span>
                                         </div>
-                                        <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                        <div
+                                            class="flex gap-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
                                             <button @click="editLesson(lesson)"
                                                 class="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all h-10 w-10 flex items-center justify-center shadow-sm bg-white"
                                                 :title="$t('common.edit')">
@@ -438,9 +452,9 @@ async function deleteLesson(id: string) {
                                         </svg>
                                     </div>
                                     <h4 class="text-lg font-black text-gray-900 mb-1">{{ $t('course.no_lessons_title')
-                                        }}</h4>
+                                    }}</h4>
                                     <p class="text-gray-400 font-medium italic text-sm">{{ $t('course.no_lessons_sub')
-                                        }}</p>
+                                    }}</p>
                                 </div>
                             </div>
                         </div>
@@ -457,9 +471,8 @@ async function deleteLesson(id: string) {
                                 d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
                         </svg>
                     </div>
-                    <h3 class="text-2xl font-black text-gray-900 mb-2">{{ $t('course.select_course_hint') }}</h3>
-                    <p class="text-gray-400 font-bold italic tracking-wider max-w-xs text-center">{{
-                        $t('course.select_course_sub') }}</p>
+                    <h3 class="text-2xl font-black text-gray-900 mb-2 invisible lg:visible">{{
+                        $t('course.select_course_hint') }}</h3>
                 </div>
             </div>
         </div>
@@ -474,7 +487,7 @@ async function deleteLesson(id: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.subject')
-                            }}</label>
+                        }}</label>
                         <input v-model="courseForm.subject" placeholder="e.g. 菁英, 程式, 數學"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -494,7 +507,7 @@ async function deleteLesson(id: string) {
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
-                            }}</label>
+                        }}</label>
                         <textarea v-model="courseForm.description" rows="3"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"></textarea>
                     </div>

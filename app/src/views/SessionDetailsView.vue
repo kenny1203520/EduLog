@@ -366,7 +366,7 @@ async function resolveConflict(resolvedContent: string) {
             :class="showSplitView ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'">
 
             <!-- LEFT COLUMN: Student List & Stats -->
-            <div class="space-y-6">
+            <div class="space-y-6" :class="{ 'hidden lg:block': showSplitView }">
                 <!-- Class Status Toggle (New) -->
                 <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center justify-between"
                     v-if="todayOccurrence">
@@ -524,6 +524,15 @@ async function resolveConflict(resolvedContent: string) {
                     class="sticky top-6 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 p-6 overflow-hidden">
                     <div class="flex items-center justify-between mb-6">
                         <div class="flex items-center gap-3">
+                            <!-- Mobile Back Button -->
+                            <button @click="showSplitView = false"
+                                class="lg:hidden p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
                             <div
                                 class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">
                                 {{enrollments.find(e => e.id === selectedEnrollmentId)?.studentName?.charAt(0)}}

@@ -55,7 +55,7 @@
                         <div
                             class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
                             <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
-                            }}</span>
+                                }}</span>
                             <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
                             <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
                                 v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
@@ -169,7 +169,7 @@
             </div>
             <div v-else class="divide-y divide-gray-100">
                 <div v-for="displayReport in allReportDisplay" :key="displayReport.id"
-                    class="p-6 hover:bg-gray-50 flex gap-6 cursor-pointer group relative"
+                    class="p-6 hover:bg-gray-50 flex flex-col md:flex-row gap-4 md:gap-6 cursor-pointer group relative"
                     :class="{ 'bg-gray-50/50 opacity-80': !displayReport.id }"
                     @click="handleListRowClick(displayReport)">
 
@@ -180,15 +180,22 @@
                     </div>
 
                     <!-- Left: Date -->
-                    <div class="w-24 shrink-0 flex flex-col items-center">
-                        <div class="text-sm font-bold text-gray-900">{{ formatDate(displayReport.date) }}</div>
-                        <div class="text-xs font-bold text-emerald-600 mt-0.5">{{ displayReport.startTime.slice(0, 5) }}
+                    <div
+                        class="w-full md:w-24 shrink-0 flex flex-row md:flex-col items-center md:items-center justify-between md:justify-start gap-2">
+                        <div class="flex items-center gap-2 md:flex-col md:gap-0">
+                            <div class="text-sm font-bold text-gray-900">{{ formatDate(displayReport.date) }}</div>
+                            <div class="text-[10px] text-gray-500 uppercase md:mt-1">{{
+                                formatWeekday(displayReport.date) }}
+                            </div>
                         </div>
-                        <div class="text-[10px] text-gray-500 uppercase mt-1">{{ formatWeekday(displayReport.date) }}
-                        </div>
-                        <div class="mt-2 px-2 py-1 rounded text-xs font-medium"
-                            :class="getStatusColor(displayReport.status)">
-                            {{ $t(`attendance.${displayReport.status}`) }}
+                        <div class="flex items-center gap-2 md:flex-col md:gap-0">
+                            <div class="text-xs font-bold text-emerald-600 md:mt-0.5">{{
+                                displayReport.startTime.slice(0, 5) }}
+                            </div>
+                            <div class="px-2 py-1 rounded text-xs font-medium md:mt-2"
+                                :class="getStatusColor(displayReport.status)">
+                                {{ $t(`attendance.${displayReport.status}`) }}
+                            </div>
                         </div>
                     </div>
 
@@ -239,7 +246,8 @@
                     </div>
 
                     <!-- Right: Ratings -->
-                    <div class="w-48 shrink-0 border-l pl-6 space-y-4 flex flex-col justify-center">
+                    <div
+                        class="w-full md:w-48 shrink-0 border-l-0 md:border-l pl-0 md:pl-6 pt-4 md:pt-0 border-t md:border-t-0 border-gray-100 space-y-4 flex flex-col justify-center">
                         <div v-if="displayReport.classParticipation">
                             <div class="text-xs text-gray-500 mb-1 flex justify-between">
                                 <span>{{ $t('report.participation') }}</span>

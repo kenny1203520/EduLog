@@ -34,10 +34,10 @@
             </div>
         </div>
 
-        <div class="flex-1 overflow-hidden flex">
+        <div class="flex-1 overflow-hidden flex relative">
             <!-- Left Pane: Report List -->
-            <div
-                class="w-1/3 min-w-[350px] max-w-md border-r bg-white flex flex-col h-full shadow-[2px_0_10px_rgba(0,0,0,0.02)] z-0">
+            <div class="w-full md:w-1/3 md:min-w-[350px] md:max-w-md border-r bg-white flex flex-col h-full shadow-[2px_0_10px_rgba(0,0,0,0.02)] z-0 transition-all"
+                :class="{ 'hidden md:flex': selectedReport }">
 
                 <!-- Filters (search, etc in future) -->
                 <!-- <div class="p-4 border-b">...</div> -->
@@ -109,24 +109,34 @@
             </div>
 
             <!-- Right Pane: Editor -->
-            <div class="flex-1 bg-gray-50 overflow-y-auto p-6 flex flex-col relative">
+            <div class="flex-1 bg-gray-50 overflow-y-auto p-6 flex flex-col relative w-full md:w-auto"
+                :class="{ 'hidden md:flex': !selectedReport }">
                 <div v-if="selectedReport" class="flex-1 flex flex-col max-w-4xl mx-auto w-full">
                     <!-- Context Banner -->
                     <div
-                        class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex justify-between items-center animate-in fade-in slide-in-from-bottom-2">
+                        class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-2">
                         <div class="flex items-center gap-4">
+                            <!-- Back Button (Mobile) -->
+                            <button @click="selectedReport = null"
+                                class="md:hidden p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15 19l-7-7 7-7" />
+                                </svg>
+                            </button>
                             <div class="text-center bg-gray-50 p-2 rounded-lg border border-gray-100 min-w-[70px]">
                                 <div class="text-xs font-bold text-gray-400 uppercase">{{
                                     formatWeekday(selectedReport.date) }}</div>
                                 <div class="text-xl font-black text-gray-800">{{ new Date(selectedReport.date).getDate()
-                                }}</div>
+                                    }}</div>
                             </div>
                             <div>
                                 <h3 class="font-bold text-lg text-gray-900">{{ selectedReport.studentName }}</h3>
                                 <div class="text-sm text-gray-500 flex gap-2">
                                     <span>{{ selectedReport.className }}</span>
                                     <span v-if="selectedReport.classroomName">• {{ selectedReport.classroomName
-                                    }}</span>
+                                        }}</span>
                                 </div>
                             </div>
                         </div>
