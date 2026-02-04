@@ -43,5 +43,9 @@
     "today": "Today",
     "prev_month": "Previous Month",
     "next_month": "Next Month",
-    "rescheduled": "Rescheduled"
+    "rescheduled": "Rescheduled",
+    "total": "Total",
+    "syncing": "Syncing",
+    "id": "ID",
+    "matching": "matching"
 }

@@ -43,5 +43,9 @@
     "today": "今天",
     "prev_month": "上個月",
     "next_month": "下個月",
-    "rescheduled": "調課"
+    "rescheduled": "調課",
+    "total": "總計",
+    "syncing": "同步中",
+    "id": "ID",
+    "matching": "符合"
 }

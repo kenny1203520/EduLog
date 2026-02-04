@@ -154,7 +154,7 @@ function copyToClipboard(text: string) {
                         <span v-if="student.displaySchoolId"
                             class="inline-flex items-center gap-1.5 text-[10px] font-bold text-gray-400 bg-gray-50 px-2.5 py-1 rounded-xl border border-gray-100 cursor-copy hover:bg-gray-100 hover:text-emerald-600 transition-colors"
                             @click.stop.prevent="copyToClipboard(student.displaySchoolId)">
-                            ID: {{ student.displaySchoolId }}
+                            {{ $t('common.id') }}: {{ student.displaySchoolId }}
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
                                 class="w-3.5 h-3.5">
                                 <path

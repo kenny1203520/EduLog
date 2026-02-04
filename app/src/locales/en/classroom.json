@@ -30,7 +30,9 @@
         "5": "Fri",
         "6": "Sat"
     },
-    "view_students": "View Student List",
+    "view_students": "View Students",
+    "capacity_short": "Cap",
+    "courses_list": "Courses",
     "total_students": "Total Students",
     "capacity_utilization": "Capacity Utilization",
     "enrollment_status": "Enrollment Status",

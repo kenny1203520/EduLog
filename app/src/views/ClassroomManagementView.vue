@@ -343,7 +343,8 @@ function toggleCourseSelection(courseId: string) {
 
                 <div v-if="filteredClassrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
-                    {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">matching "{{ searchQuery }}"</span>
+                    {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
+                        }}"</span>
                 </div>
             </div>
 
@@ -369,7 +370,7 @@ function toggleCourseSelection(courseId: string) {
                         <h3 class="font-bold text-lg text-gray-800">{{ session.name }}</h3>
                         <span class="text-xs px-2 py-1 bg-gray-100 rounded text-gray-600 font-medium">
                             {{ getDayLabel(session.day_of_week) }} {{ session.start_time.slice(0, 5) }}-{{
-                            session.end_time.slice(0,5) }}
+                                session.end_time.slice(0, 5) }}
                         </span>
                     </div>
 
@@ -384,17 +385,17 @@ function toggleCourseSelection(courseId: string) {
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                             </svg>
-                            Cap: {{ session.capacity }}
+                            {{ $t('classroom.capacity_short') }}: {{ session.capacity }}
                         </span>
                     </div>
 
                     <div class="text-xs text-gray-500">
-                        <div class="font-medium mb-1">Courses:</div>
+                        <div class="font-medium mb-1">{{ $t('classroom.courses_list') }}:</div>
                         <div class="flex flex-wrap gap-1">
                             <span v-for="cid in session.course_ids" :key="cid"
                                 class="px-1.5 py-0.5 bg-gray-100 border border-gray-200 rounded text-gray-600 truncate max-w-[150px]">
                                 {{courses.find(c => c.id === cid)?.subject}} - {{courses.find(c => c.id ===
-                                cid)?.stage }}
+                                    cid)?.stage}}
                             </span>
                             <span v-if="!session.course_ids || session.course_ids.length === 0"
                                 class="italic text-gray-300">None</span>
@@ -439,25 +440,25 @@ function toggleCourseSelection(courseId: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                            }}</label>
+                        }}</label>
                         <input type="color" v-model="newClassroom.color"
                             class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                     </div>
@@ -483,7 +484,7 @@ function toggleCourseSelection(courseId: string) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
-                            }}</label>
+                        }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -497,7 +498,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
-                            }}</label>
+                        }}</label>
                         <input type="number" v-model="newSession.capacity"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -512,7 +513,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                            }}</label>
+                        }}</label>
                         <div class="flex flex-wrap gap-2">
                             <select v-model="newSession.day_of_week"
                                 class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
@@ -547,7 +548,7 @@ function toggleCourseSelection(courseId: string) {
                                     </svg>
                                 </div>
                                 <span class="text-sm text-gray-700">{{ c.subject }} <span class="text-gray-400">- {{
-                                        c.stage }}{{ c.displayNameValue ? ` (${c.displayNameValue})` : ''
+                                    c.stage }}{{ c.displayNameValue ? ` (${c.displayNameValue})` : ''
                                         }}</span></span>
                             </div>
                         </div>

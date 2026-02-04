@@ -30,7 +30,9 @@
         "5": "週五",
         "6": "週六"
     },
-    "view_students": "查看學生名單",
+    "view_students": "檢視學生列表",
+    "capacity_short": "容量",
+    "courses_list": "包含課程",
     "total_students": "學員總數",
     "capacity_utilization": "教室使用率",
     "enrollment_status": "學籍狀態",

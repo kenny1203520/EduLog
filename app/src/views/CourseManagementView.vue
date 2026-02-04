@@ -205,7 +205,7 @@ async function deleteLesson(id: string) {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
                 </path>
             </svg>
-            <p class="font-bold italic tracking-widest">{{ $t('student.loading') }}...同步中</p>
+            <p class="font-bold italic tracking-widest">{{ $t('student.loading') }}...{{ $t('common.syncing') }}</p>
         </div>
 
         <!-- Main Layout -->
@@ -215,7 +215,7 @@ async function deleteLesson(id: string) {
                 :class="selectedCourseId ? '-translate-x-full lg:translate-x-0' : 'translate-x-0'">
                 <div class="p-6 border-b border-gray-50 bg-gray-50/30">
                     <h3 class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{ $t('course.list_title')
-                    }}</h3>
+                        }}</h3>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
                     <div v-for="(group, subject) in groupedCourses" :key="subject">
@@ -251,7 +251,7 @@ async function deleteLesson(id: string) {
                     <div
                         class="flex items-center justify-between text-[10px] font-black text-gray-400 uppercase tracking-wider mb-2">
                         <span>{{ pagination.page }} / {{ Math.ceil(pagination.total / pagination.perPage) }}</span>
-                        <span>TOTAL: {{ pagination.total }}</span>
+                        <span>{{ $t('common.total') }}: {{ pagination.total }}</span>
                     </div>
                     <div class="flex gap-2">
                         <button @click="pagination.page--" :disabled="pagination.page === 1"
@@ -413,7 +413,7 @@ async function deleteLesson(id: string) {
                                                 {{ lesson.sequence }}
                                             </span>
                                             <span class="text-xl font-bold text-gray-800 tracking-tight">{{ lesson.title
-                                            }}</span>
+                                                }}</span>
                                         </div>
                                         <div
                                             class="flex gap-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
@@ -452,9 +452,9 @@ async function deleteLesson(id: string) {
                                         </svg>
                                     </div>
                                     <h4 class="text-lg font-black text-gray-900 mb-1">{{ $t('course.no_lessons_title')
-                                    }}</h4>
+                                        }}</h4>
                                     <p class="text-gray-400 font-medium italic text-sm">{{ $t('course.no_lessons_sub')
-                                    }}</p>
+                                        }}</p>
                                 </div>
                             </div>
                         </div>
@@ -487,13 +487,13 @@ async function deleteLesson(id: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.subject')
-                        }}</label>
-                        <input v-model="courseForm.subject" placeholder="e.g. 菁英, 程式, 數學"
+                            }}</label>
+                        <input v-model="courseForm.subject" :placeholder="$t('course.subject_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.stage') }}</label>
-                        <input v-model="courseForm.stage" placeholder="e.g. Level 1, Advanced"
+                        <input v-model="courseForm.stage" :placeholder="$t('course.stage_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
@@ -502,12 +502,12 @@ async function deleteLesson(id: string) {
                             <span class="text-xs text-gray-400 block font-normal mt-0.5">{{
                                 $t('course.display_name_hint') }}</span>
                         </label>
-                        <input v-model="courseForm.display_name" placeholder="e.g. Python 程式進階班"
+                        <input v-model="courseForm.display_name" :placeholder="$t('course.display_name_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
-                        }}</label>
+                            }}</label>
                         <textarea v-model="courseForm.description" rows="3"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"></textarea>
                     </div>

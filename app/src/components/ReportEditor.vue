@@ -33,7 +33,7 @@
             <div class="relative">
                 <button @click="showTemplates = !showTemplates"
                     class="text-sm font-medium text-gray-600 hover:text-emerald-600 flex items-center gap-1 focus:outline-none"
-                    title="Manage Templates">
+                    :title="$t('report.editor.templates')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -72,7 +72,7 @@
                     <!-- List -->
                     <div class="max-h-60 overflow-y-auto space-y-2">
                         <div v-if="savedTemplates.length === 0" class="text-xs text-gray-500 text-center py-2">
-                            No templates saved
+                            {{ $t('report.editor.no_templates') }}
                         </div>
                         <div v-for="t in savedTemplates" :key="t.id"
                             class="group flex items-center justify-between p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200 transition-colors">
@@ -83,7 +83,7 @@
                             </button>
                             <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button @click.stop="deleteTemplate(t.id)"
-                                    class="text-gray-400 hover:text-red-500 p-1 rounded" title="Delete">
+                                    class="text-gray-400 hover:text-red-500 p-1 rounded" :title="$t('common.delete')">
                                     <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -158,7 +158,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                         </svg>
-                        {{ $t('report.editor.view_external_report') || 'Course Folder' }}
+                        {{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}
                     </a>
                 </div>
                 <select v-model="selectedLessonId"
@@ -175,7 +175,7 @@
             <!-- Report External Link Input -->
             <div class="mb-4">
                 <label class="block text-xs font-medium text-gray-600 mb-1">
-                    {{ $t('report.editor.report_link_label') || 'Report Link' }}
+                    {{ $t('report.editor.report_link_label') }}
                 </label>
                 <div class="flex gap-2">
                     <input type="url" v-model="reportExternalLink" placeholder="https://..."
@@ -413,7 +413,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -528,7 +528,8 @@ function copyCourseInfo() {
     if (!lesson) return
 
     const cName = props.courseName || ''
-    const text = cName ? `${cName} Lesson ${lesson.sequence} ${lesson.title}` : `Lesson ${lesson.sequence}: ${lesson.title}`
+    const lessonLabel = t('report.editor.lesson_label')
+    const text = cName ? `${cName} ${lessonLabel} ${lesson.sequence} ${lesson.title}` : `${lessonLabel} ${lesson.sequence}: ${lesson.title}`
 
     navigator.clipboard.writeText(text).then(() => {
         justCopiedCourse.value = true
@@ -548,7 +549,7 @@ function applyTemplate(template: any) {
 }
 
 async function deleteTemplate(id: string) {
-    if (!confirm('Delete this template?')) return
+    if (!confirm(t('report.editor.delete_template_confirm'))) return
     try {
         await ReportTemplateService.deleteTemplate(id)
         savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
@@ -606,7 +607,7 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
     initialContent: '',
     initialVersion: 1,
-    placeholder: 'Enter report content...',
+    placeholder: '',
     disabled: false,
     showManualSave: false,
     debounceMs: 2000,
