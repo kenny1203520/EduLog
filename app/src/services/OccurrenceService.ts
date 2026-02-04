@@ -349,7 +349,7 @@ export class OccurrenceService {
 
             reports.forEach((r: any) => {
                 const isEmpty = !r.content || r.content.trim() === ''
-                const isDefault = r.is_completed === false && r.attendance_status === 'present'
+                const isDefault = r.is_completed === false && !r.attendance_status
                 
                 if (isEmpty && isDefault) {
                     // Only clean up ghosts on wrong days (stale) OR if we are doing a deep clean ('all')

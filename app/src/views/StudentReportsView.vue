@@ -460,7 +460,7 @@ const allReportDisplay = computed(() => {
                 id: null,
                 occurrenceId: occ.id,
                 date: occ.occurrenceDate,
-                status: isSuspended ? 'cancelled' : (occ.status === 'completed' ? 'present' : (occ.status === 'cancelled' ? 'absent' : 'scheduled')),
+                status: isSuspended ? 'cancelled' : (occ.status === 'completed' ? 'present' : (occ.status === 'cancelled' ? 'absent' : 'bookable')),
                 content: '',
                 classNotes: '',
                 version: 0,
@@ -503,6 +503,19 @@ const occurrenceStatuses = computed(() => {
             statusMap[r.class_occurrence_id] = r.attendance_status
         } else if (r.is_completed) {
             statusMap[r.class_occurrence_id] = 'present'
+        } else {
+            // Report exists but no specific attendance set yet
+            statusMap[r.class_occurrence_id] = 'scheduled'
+        }
+    })
+
+    // 3. Mark as bookable if no report AND it's scheduled
+    occurrences.value.forEach(occ => {
+        if (!statusMap[occ.id!] || statusMap[occ.id!] === 'scheduled') {
+            const hasReport = allReports.value.some(r => r.class_occurrence_id === occ.id)
+            if (!hasReport && occ.status === 'scheduled') {
+                statusMap[occ.id!] = 'bookable'
+            }
         }
     })
 
@@ -531,7 +544,9 @@ function getStatusColor(status: string) {
         case 'absent': return 'bg-rose-100 text-rose-700'
         case 'late': return 'bg-amber-100 text-amber-700'
         case 'excused': return 'bg-blue-100 text-blue-700'
-        case 'cancelled': return 'bg-gray-100 text-gray-500 line-through' // Visual cue
+        case 'cancelled': return 'bg-gray-100 text-gray-500 line-through'
+        case 'scheduled': return 'bg-blue-50 text-blue-600'
+        case 'bookable': return 'bg-gray-50 text-gray-400 border border-gray-100'
         default: return 'bg-gray-100 text-gray-700'
     }
 }

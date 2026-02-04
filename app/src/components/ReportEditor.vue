@@ -610,8 +610,8 @@ const props = withDefaults(defineProps<Props>(), {
     showManualSave: false,
     debounceMs: 2000,
     availableLessons: () => [],
-    initialIsCompleted: true,
-    initialAttendanceStatus: 'present',
+    initialIsCompleted: false,
+    initialAttendanceStatus: undefined,
     initialReportExternalLink: '',
     initialEnrollmentExternalLink: '',
     courseName: '',
@@ -639,7 +639,7 @@ const selectedLessonId = ref(props.initialLessonId || '')
 const isCompleted = ref(props.initialIsCompleted)
 const progressStart = ref(props.initialProgressStart || '')
 const progressEnd = ref(props.initialProgressEnd || '')
-const attendanceStatus = ref<'present' | 'absent'>(props.initialAttendanceStatus)
+const attendanceStatus = ref<'present' | 'absent' | undefined>(props.initialAttendanceStatus)
 const absenceReason = ref(props.initialAbsenceReason || '')
 const classParticipation = ref(props.initialClassParticipation ?? 0)
 const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
@@ -785,7 +785,7 @@ watch(() => props.initialLessonId, (newVal) => {
 })
 
 watch(() => props.initialIsCompleted, (newVal) => {
-    isCompleted.value = newVal ?? true
+    isCompleted.value = newVal ?? false
 })
 
 watch(() => props.initialProgressStart, (newVal) => {
@@ -797,7 +797,7 @@ watch(() => props.initialProgressEnd, (newVal) => {
 })
 
 watch(() => props.initialAttendanceStatus, (newVal) => {
-    attendanceStatus.value = newVal || 'present'
+    attendanceStatus.value = newVal
 })
 
 watch(() => props.initialAbsenceReason, (newVal) => {

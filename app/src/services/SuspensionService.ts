@@ -210,7 +210,7 @@ export class SuspensionService {
             version: 1,
             content: '',
             is_completed: false, // Start as incomplete so they show up as "Missing"
-            attendance_status: 'present' // Default to present
+            attendance_status: undefined // No default attendance
         }))
 
         const { error } = await supabase
@@ -297,7 +297,6 @@ export class SuspensionService {
         await supabase
             .from('occurrence_reports')
             .update({
-                attendance_status: 'present', // Default back to present? or leave absent but clear reason?
                 absence_reason: null
                 // We keep is_completed as false maybe? Users should manually resume.
                 // But generally reverting to 'present' is risky if they were absent for other reasons.

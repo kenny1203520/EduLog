@@ -248,8 +248,6 @@ function getDayClasses(day: CalendarDay) {
 
 function getOccurrenceIndicatorClass(occurrence: ClassOccurrence) {
     const status = props.occurrenceStatuses[occurrence.id!] || occurrence.status
-    const hasReport = props.existingReportIds.has(occurrence.id!)
-
     switch (status) {
         case 'present':
         case 'completed': // Legacy support
@@ -263,9 +261,9 @@ function getOccurrenceIndicatorClass(occurrence: ClassOccurrence) {
         case 'cancelled':
             return 'bg-gray-100 text-gray-400 line-through'
         case 'scheduled':
-            return hasReport
-                ? 'bg-blue-100 text-blue-700' // Draft/In-progress
-                : 'bg-gray-100 text-gray-400 border border-dashed border-gray-300' // Pure schedule
+            return 'bg-blue-100 text-blue-700 border border-blue-200'
+        case 'bookable':
+            return 'bg-gray-50 text-gray-400 border border-dashed border-gray-300'
         default:
             return 'bg-gray-100 text-gray-700'
     }
@@ -273,15 +271,13 @@ function getOccurrenceIndicatorClass(occurrence: ClassOccurrence) {
 
 function getOccurrenceSymbol(occurrence: ClassOccurrence) {
     const status = props.occurrenceStatuses[occurrence.id!] || occurrence.status
-    const hasReport = props.existingReportIds.has(occurrence.id!)
 
     if (status === 'present' || status === 'completed') return '✓'
     if (status === 'absent' || status === 'cancelled') return '✗'
     if (status === 'late') return '○'
     if (status === 'excused') return '◌'
-    if (status === 'scheduled') {
-        return hasReport ? '○' : '◌'
-    }
+    if (status === 'scheduled') return '○'
+    if (status === 'bookable') return '◌'
     return '○'
 }
 

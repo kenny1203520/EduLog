@@ -196,7 +196,8 @@ export class EnrollmentService {
                 class_occurrence_id: occ.id,
                 content: '',
                 version: 1,
-                is_completed: false
+                is_completed: false,
+                attendance_status: undefined
             }))
 
             await supabase
@@ -400,7 +401,8 @@ export class EnrollmentService {
                     class_occurrence_id: targetOcc.id,
                     content: '',
                     version: 1,
-                    is_completed: false
+                    is_completed: false,
+                    attendance_status: undefined
                 })
             if (insertError) throw new Error(`Failed to create replacement report: ${insertError.message}`)
         }

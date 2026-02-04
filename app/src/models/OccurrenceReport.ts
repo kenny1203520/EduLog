@@ -74,7 +74,7 @@ export class OccurrenceReport {
         
         // Detailed fields
         this.progressLetter = data.progress_letter
-        this.attendanceStatus = data.attendance_status || 'present'
+        this.attendanceStatus = data.attendance_status
         this.absenceReason = data.absence_reason
         this.classParticipation = data.class_participation
         this.classroomBehavior = data.classroom_behavior

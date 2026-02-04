@@ -74,9 +74,9 @@ export class OccurrenceReportService {
             class_occurrence_id: occurrenceId,
             content: '',
             version: 1,
-            attendance_status: (isHoliday || isSuspended) ? 'absent' : 'present',
+            attendance_status: (isHoliday || isSuspended) ? 'absent' : undefined,
             absence_reason: isSuspended ? 'suspension' : (isHoliday ? 'holiday' : undefined),
-            is_completed: (isHoliday || isSuspended) ? false : true
+            is_completed: false // Default to false (scheduled) instead of true (present)
         }
 
         const { data: created, error: createError } = await supabase
@@ -366,7 +366,8 @@ export class OccurrenceReportService {
                         class_occurrence_id: nextOcc.id,
                         content: '',
                         version: 1,
-                        is_completed: false
+                        is_completed: false,
+                        attendance_status: undefined
                     })
                 }
             }
