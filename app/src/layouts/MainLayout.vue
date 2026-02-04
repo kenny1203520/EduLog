@@ -28,6 +28,7 @@ async function handleLogout() {
                             d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                 </button>
+                <img src="/pwa-192x192.png" alt="EduLog Logo" class="h-8 w-8 rounded-lg shadow-sm" />
                 <div class="font-bold text-emerald-600 text-lg">EduLog</div>
             </div>
 
@@ -50,8 +51,13 @@ async function handleLogout() {
             ]">
             <div class="p-6 border-b flex justify-between items-center" :class="{ 'lg:hidden': !isDesktopSidebarOpen }">
                 <div class="whitespace-nowrap overflow-hidden">
-                    <h1 class="text-2xl font-bold text-emerald-600">EduLog</h1>
-                    <p class="text-xs text-gray-500 mt-1">{{ $t('nav.subtitle') }}</p>
+                    <div class="flex items-center gap-3">
+                        <img src="/pwa-192x192.png" alt="EduLog Logo" class="w-10 h-10 rounded-xl shadow-md" />
+                        <div>
+                            <h1 class="text-2xl font-bold text-emerald-600">EduLog</h1>
+                            <p class="text-xs text-gray-500 mt-1">{{ $t('nav.subtitle') }}</p>
+                        </div>
+                    </div>
                 </div>
                 <!-- Close Button (Mobile Only) -->
                 <button @click="isSidebarOpen = false" class="lg:hidden p-2 text-gray-400 hover:text-gray-600">
