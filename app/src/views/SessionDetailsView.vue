@@ -170,11 +170,30 @@ async function toggleClassStatus(event: any) {
     }
 }
 
-function toggleSplitView(enrollmentId: string) {
+const lessonsCache = new Map<string, any[]>()
+
+async function toggleSplitView(enrollmentId: string) {
     if (selectedEnrollmentId.value === enrollmentId && showSplitView.value) {
         showSplitView.value = false
         selectedEnrollmentId.value = null
     } else {
+        // finding the enrollment to get the courseId
+        const enrollment = enrollments.value.find(e => e.id === enrollmentId)
+        if (enrollment?.courseId) {
+            // Check cache first
+            if (lessonsCache.has(enrollment.courseId)) {
+                courseLessons.value = lessonsCache.get(enrollment.courseId)!
+            } else {
+                try {
+                    const lessons = await CourseService.getLessonsByCourse(enrollment.courseId)
+                    lessonsCache.set(enrollment.courseId, lessons)
+                    courseLessons.value = lessons
+                } catch (e) {
+                    console.error('Failed to load lessons for course', enrollment.courseId, e)
+                }
+            }
+        }
+
         selectedEnrollmentId.value = enrollmentId
         showSplitView.value = true
     }
