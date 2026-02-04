@@ -813,6 +813,7 @@ export class OccurrenceReportService {
                 enrollments!inner (
                     id,
                     student_id,
+                    course_id,
                     students!inner (
                         id,
                         name
@@ -883,6 +884,7 @@ export class OccurrenceReportService {
                     missingLesson: !r.lesson_id,
                     version: r.version,
                     occurrenceId: r.class_occurrence_id,
+                    courseId: enrollment?.course_id,
                     // Add fields needed for ReportEditor
                     content: r.content,
                     lessonId: r.lesson_id,

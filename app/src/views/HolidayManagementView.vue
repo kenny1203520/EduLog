@@ -174,176 +174,220 @@ function closeModal() {
             </div>
         </div>
 
-        <div v-if="loading" class="text-center text-gray-400 py-10">
-            <svg class="animate-spin h-8 w-8 mx-auto mb-3 text-emerald-500" fill="none" viewBox="0 0 24 24">
+        <div v-if="loading"
+            class="flex flex-col items-center justify-center py-20 bg-white rounded-[2.5rem] border border-gray-100 shadow-sm">
+            <svg class="animate-spin h-10 w-10 mb-4 text-emerald-500" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor"
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
                 </path>
             </svg>
-            {{ $t('common.loading', 'Loading...') }}
+            <p class="text-gray-400 font-bold italic tracking-widest">{{ $t('common.loading') }}</p>
         </div>
 
-        <div v-else class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{
-                            $t('holiday.date_label') }}</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{
-                            $t('holiday.scope_label') }}</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{{
-                            $t('holiday.name_label') }}</th>
-                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{{
-                            $t('common.actions', 'Actions') }}</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    <tr v-for="holiday in holidays" :key="holiday.id" class="hover:bg-gray-50 transition">
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            {{ holiday.formattedRange }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+        <div v-else-if="holidays.length > 0"
+            class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div v-for="holiday in holidays" :key="holiday.id"
+                class="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden">
+                <!-- Card Header: Title & Actions -->
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2 mb-1">
                             <span v-if="holiday.classSessionIds.length > 0"
-                                class="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium border border-purple-100">
-                                {{ $t('holiday.scope_session') }}: {{ getNamesForIds('session', holiday.classSessionIds)
-                                }}
+                                class="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-purple-100">
+                                {{ $t('holiday.scope_session') }}
                             </span>
                             <span v-else-if="holiday.classroomIds.length > 0"
-                                class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium border border-blue-100">
-                                {{ $t('holiday.scope_classroom') }}: {{ getNamesForIds('classroom',
-                                holiday.classroomIds) }}
+                                class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                                {{ $t('holiday.scope_classroom') }}
                             </span>
                             <span v-else
-                                class="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs font-medium border border-emerald-100">
+                                class="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100">
                                 {{ $t('holiday.scope_global') }}
                             </span>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {{ holiday.name || '-' }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div class="flex justify-end gap-2">
-                                <button @click="openEditModal(holiday)"
-                                    class="text-emerald-600 hover:text-emerald-900 transition p-2 hover:bg-emerald-50 rounded-lg"
-                                    :title="$t('common.edit')">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
-                                        fill="currentColor">
-                                        <path
-                                            d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                                    </svg>
-                                </button>
-                                <button @click="handleDeleteHoliday(holiday.id!)"
-                                    class="text-red-600 hover:text-red-900 transition p-2 hover:bg-red-50 rounded-lg"
-                                    :title="$t('common.delete')">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
-                                        fill="currentColor">
-                                        <path fill-rule="evenodd"
-                                            d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                                            clip-rule="evenodd" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    <tr v-if="holidays.length === 0">
-                        <td colspan="4" class="px-6 py-10 text-center text-gray-400 italic">
-                            {{ $t('holiday.no_holidays') }}
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+                        </div>
+                        <h3 class="text-xl font-black text-gray-900 truncate leading-tight">
+                            {{ holiday.name || 'Untitled Holiday' }}
+                        </h3>
+                    </div>
+
+                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button @click="openEditModal(holiday)"
+                            class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                            :title="$t('common.edit')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
+                                fill="currentColor">
+                                <path
+                                    d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                            </svg>
+                        </button>
+                        <button @click="handleDeleteHoliday(holiday.id!)"
+                            class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                            :title="$t('common.delete')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
+                                fill="currentColor">
+                                <path fill-rule="evenodd"
+                                    d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card Content -->
+                <div class="space-y-4">
+                    <!-- Date Range -->
+                    <div class="flex items-center gap-3">
+                        <div
+                            class="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-emerald-600 border border-gray-100 shrink-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                $t('holiday.date_label') }}</p>
+                            <p class="text-sm font-bold text-gray-700">{{ holiday.formattedRange }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Target Detail -->
+                    <div v-if="holiday.classroomIds.length > 0 || holiday.classSessionIds.length > 0"
+                        class="pt-3 border-t border-gray-50">
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{{
+                            $t('holiday.scope_label') }} Detail</p>
+                        <p class="text-xs font-medium text-gray-600 line-clamp-2 italic">
+                            {{ holiday.classSessionIds.length > 0 ? getNamesForIds('session', holiday.classSessionIds) :
+                                getNamesForIds('classroom', holiday.classroomIds) }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Card Bottom Accent -->
+                <div class="absolute bottom-0 left-0 right-0 h-1.5" :class="[
+                    holiday.classSessionIds.length > 0 ? 'bg-purple-500/20' :
+                        holiday.classroomIds.length > 0 ? 'bg-blue-500/20' : 'bg-emerald-500/20'
+                ]"></div>
+            </div>
         </div>
 
-        <!-- Add/Edit Holiday Modal -->
+        <!-- Empty State -->
+        <div v-else
+            class="text-center py-32 bg-white rounded-[3rem] border border-dashed border-gray-200 shadow-sm flex flex-col items-center animate-in fade-in duration-1000">
+            <div
+                class="w-24 h-24 bg-emerald-50 rounded-[2rem] flex items-center justify-center mb-8 shadow-inner transform -rotate-12">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-emerald-400" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+            </div>
+            <h3 class="text-2xl font-black text-gray-900 mb-2">{{ $t('holiday.no_holidays') }}</h3>
+        </div>
+
+        <!-- Add/Edit Modal -->
         <div v-if="isAddModalOpen"
-            class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
-                <h3 class="text-xl font-bold mb-6 text-gray-800">{{ editingId ? $t('common.edit') :
+            class="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div
+                class="bg-white p-10 rounded-[2.5rem] w-full max-w-lg shadow-2xl animate-in zoom-in fade-in duration-300 overflow-y-auto max-h-[90vh]">
+                <h3 class="text-3xl font-black text-gray-900 mb-8 tracking-tight">{{ editingId ? $t('common.edit') :
                     $t('holiday.add_holiday') }}</h3>
-                <div class="space-y-4">
+
+                <div class="space-y-8">
                     <!-- Scope Selection -->
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('holiday.scope_label')
-                        }}</label>
-                        <div class="flex bg-gray-100 p-1 rounded-lg gap-1">
+                    <div class="space-y-3">
+                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                            $t('holiday.scope_label') }}</label>
+                        <div class="flex bg-gray-50 p-1.5 rounded-2xl border border-gray-100 gap-1">
                             <button @click="scopeType = 'global'"
-                                class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
-                                :class="scopeType === 'global' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                                class="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
+                                :class="scopeType === 'global' ? 'bg-white text-emerald-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'">
                                 {{ $t('holiday.scope_global') }}
                             </button>
                             <button @click="scopeType = 'classroom'"
-                                class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
-                                :class="scopeType === 'classroom' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                                class="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
+                                :class="scopeType === 'classroom' ? 'bg-white text-emerald-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'">
                                 {{ $t('holiday.scope_classroom') }}
                             </button>
                             <button @click="scopeType = 'session'"
-                                class="flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
-                                :class="scopeType === 'session' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                                class="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
+                                :class="scopeType === 'session' ? 'bg-white text-emerald-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'">
                                 {{ $t('holiday.scope_session') }}
                             </button>
                         </div>
                     </div>
 
                     <!-- Scope Targets -->
-                    <div v-if="scopeType === 'classroom'" class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700">{{ $t('holiday.scope_classroom')
-                            }}</label>
-                        <div class="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+                    <div v-if="scopeType === 'classroom'" class="space-y-3 animate-in fade-in slide-in-from-top-2">
+                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                            $t('holiday.scope_classroom') }}</label>
+                        <div
+                            class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-3 border border-gray-100 rounded-2xl bg-gray-50 custom-scrollbar">
                             <label v-for="room in classrooms" :key="room.id"
-                                class="flex items-center gap-2 p-1.5 hover:bg-white rounded cursor-pointer transition">
+                                class="flex items-center gap-3 p-3 hover:bg-white rounded-xl cursor-pointer transition-all border border-transparent hover:border-emerald-100 select-none"
+                                :class="holidayForm.classroomIds.includes(room.id!) ? 'bg-white border-emerald-100 ring-1 ring-emerald-50' : ''">
                                 <input type="checkbox" :value="room.id" v-model="holidayForm.classroomIds"
-                                    class="rounded text-emerald-600 focus:ring-emerald-500">
-                                <span class="text-sm text-gray-700 truncate">{{ room.name }}</span>
+                                    class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300">
+                                <span class="text-sm font-bold text-gray-700 truncate">{{ room.name }}</span>
                             </label>
                         </div>
                     </div>
-                    <div v-if="scopeType === 'session'" class="space-y-2">
-                        <label class="block text-sm font-semibold text-gray-700">{{ $t('holiday.scope_session')
-                            }}</label>
-                        <div class="grid grid-cols-1 gap-1 max-h-48 overflow-y-auto p-2 border rounded-lg bg-gray-50">
+
+                    <div v-if="scopeType === 'session'" class="space-y-3 animate-in fade-in slide-in-from-top-2">
+                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                            $t('holiday.scope_session') }}</label>
+                        <div
+                            class="grid grid-cols-1 gap-1 max-h-60 overflow-y-auto p-3 border border-gray-100 rounded-2xl bg-gray-50 custom-scrollbar">
                             <label v-for="s in sessions" :key="s.id"
-                                class="flex items-center gap-2 p-2 hover:bg-white rounded cursor-pointer transition">
+                                class="flex items-center gap-4 p-3 hover:bg-white rounded-xl cursor-pointer transition-all border border-transparent hover:border-emerald-100 select-none"
+                                :class="holidayForm.classSessionIds.includes(s.id!) ? 'bg-white border-emerald-100 ring-1 ring-emerald-50' : ''">
                                 <input type="checkbox" :value="s.id" v-model="holidayForm.classSessionIds"
-                                    class="rounded text-emerald-600 focus:ring-emerald-500">
+                                    class="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300">
                                 <div class="flex flex-col min-w-0">
-                                    <span class="text-sm font-medium text-gray-800 truncate">{{ s.name }}</span>
-                                    <span class="text-xs text-gray-500 truncate">{{classrooms.find(r => r.id ===
-                                        s.classroom_id)?.name }}</span>
+                                    <span class="text-sm font-black text-gray-900 truncate">{{ s.name }}</span>
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
+                                        {{classrooms.find(r => r.id === s.classroom_id)?.name}}
+                                    </span>
                                 </div>
                             </label>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('holiday.date_label')
-                            }} ({{ $t('common.start') }})</label>
+                    <div class="grid grid-cols-2 gap-6">
+                        <div class="space-y-2">
+                            <label
+                                class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                                    $t('holiday.date_label') }} ({{ $t('common.start') }})</label>
                             <input type="date" v-model="holidayForm.startDate"
-                                class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                                class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700">
                         </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.end')
-                            }}</label>
+                        <div class="space-y-2">
+                            <label
+                                class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                                    $t('common.end') }}</label>
                             <input type="date" v-model="holidayForm.endDate"
-                                class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                                class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700">
                         </div>
                     </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('holiday.name_label')
-                        }}</label>
+
+                    <div class="space-y-2">
+                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                            $t('holiday.name_label') }}</label>
                         <input v-model="holidayForm.name" :placeholder="$t('holiday.holiday_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 placeholder:text-gray-300">
                     </div>
                 </div>
-                <div class="flex justify-end gap-3 mt-8">
+
+                <div class="flex gap-4 pt-8 mt-4 border-t border-gray-50">
                     <button @click="closeModal" :disabled="isSaving"
-                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors disabled:opacity-50">
+                        class="flex-1 px-8 py-4 text-gray-400 hover:text-gray-600 font-black transition-colors disabled:opacity-50">
                         {{ $t('common.cancel') }}
                     </button>
                     <button @click="handleSaveHoliday" :disabled="isSaving"
-                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all disabled:opacity-50 flex items-center gap-2">
-                        <svg v-if="isSaving" class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        class="flex-1 px-8 py-4 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-100 disabled:opacity-50 font-black flex items-center justify-center gap-3 active:scale-95">
+                        <svg v-if="isSaving" class="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
                             </circle>
                             <path class="opacity-75" fill="currentColor"

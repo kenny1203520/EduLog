@@ -119,14 +119,14 @@
                                 <div class="text-xs font-bold text-gray-400 uppercase">{{
                                     formatWeekday(selectedReport.date) }}</div>
                                 <div class="text-xl font-black text-gray-800">{{ new Date(selectedReport.date).getDate()
-                                    }}</div>
+                                }}</div>
                             </div>
                             <div>
                                 <h3 class="font-bold text-lg text-gray-900">{{ selectedReport.studentName }}</h3>
                                 <div class="text-sm text-gray-500 flex gap-2">
                                     <span>{{ selectedReport.className }}</span>
                                     <span v-if="selectedReport.classroomName">• {{ selectedReport.classroomName
-                                        }}</span>
+                                    }}</span>
                                 </div>
                             </div>
                         </div>
@@ -209,42 +209,11 @@ async function selectReport(report: any) {
     if (selectedReport.value?.id === report.id) return
 
     selectedReport.value = report
+    activeLessons.value = [] // Clear immediately to prevent selection mismatch
     editorLoading.value = true
 
-    // Load lessons for this specific class/course context
-    // We need the course ID. Usually available via session -> course
-    // In our service method we didn't fetch courseId explicitly but session->classroom might not be enough.
-    // However, if we don't have courseId, we can't fetch lessons easily.
-    // Let's rely on ReportEditor handling fetching? No, ReportEditor expects availableLessons prop.
-    // We need to fetch lessons for the course.
-    // Improvement: Fetch course_id in the master query.
-
     try {
-        // We'll quickly fetch the course ID for this enrollment or session if not present
-        // Or updated the service to return course_id.
-        // For now, let's assume we can fetch lessons by session ID in LessonService? 
-        // Usually lessons are per Course.
-        // Let's update the lessons list.
-        if (report.className) {
-            // This is hacky if we don't have courseId. 
-            // We should trust the Service returns enough info.
-            // Let's fetch the full report details again via ID to get strict types and relations if needed?
-            // Actually, let's just create a helper to get course lessons by enrollment/report.
-
-            // Getting lessons requires Course ID. 
-            // We can fetch the report detail again using OccurrenceReportService.getReportById(report.id)
-            // But that returns OccurrenceReport model which might not have deep joined course ID.
-
-            // Let's assume we can get it or just pass empty for now and fix if needed. 
-            // Or better: fetch lessons for the enrollment's course.
-            await OccurrenceReportService.getReportsByEnrollment(report.enrollmentId, 1, 1)
-            // This gives us a report, we can check its relations? No, standard query.
-
-            // Let's fetch the courseId via enrollment
-            // We can do this with a direct supabase call or service.
-            // For now, let's stick to what we have. If lessons dropdown is empty, we know why.
-        }
-
+        // Lessons will be fetched by the watcher on selectedReport
     } catch (e) {
         console.error(e)
     } finally {
@@ -257,30 +226,21 @@ import { watch } from 'vue'
 import { supabase } from '@/lib/supabase'
 
 watch(selectedReport, async (newVal) => {
-    if (!newVal) return
+    if (!newVal || !newVal.courseId) {
+        activeLessons.value = []
+        return
+    }
 
-    // Fetch course lessons
+    // Fetch course lessons using courseId from report
     try {
-        // We need course_id. Let's get it from enrollment -> class_session -> course_id
-        const { data: enrollment } = await supabase
-            .from('enrollments')
-            .select('class_sessions(course_id)')
-            .eq('id', newVal.enrollmentId)
-            .single()
+        const { data: lessons, error } = await supabase
+            .from('lessons')
+            .select('id, title, sequence')
+            .eq('course_id', newVal.courseId)
+            .order('sequence', { ascending: true })
 
-        const courseId = (enrollment?.class_sessions as any)?.course_id
-
-        if (courseId) {
-            // direct fetch instead of LessonService
-            const { data: lessons } = await supabase
-                .from('lessons')
-                .select('id, title, sequence')
-                .eq('course_id', courseId)
-                .order('sequence', { ascending: true })
-            activeLessons.value = lessons || []
-        } else {
-            activeLessons.value = []
-        }
+        if (error) throw error
+        activeLessons.value = lessons || []
     } catch (e) {
         console.error('Failed to load lessons for report context', e)
         activeLessons.value = []
