@@ -16,6 +16,91 @@
             </h1>
         </div>
 
+        <!-- Incomplete Reports Module -->
+        <div v-if="incompleteReports.length > 0 && !loading"
+            class="mb-6 bg-amber-50 border border-amber-200 rounded-2xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+            <button @click="showIncompleteModule = !showIncompleteModule"
+                class="w-full flex items-center justify-between p-4 bg-amber-100/50 hover:bg-amber-100 transition cursor-pointer">
+                <div class="flex items-center gap-4">
+                    <div
+                        class="w-10 h-10 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center shadow-inner">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <h3 class="font-bold text-amber-900 text-lg">{{ $t('report.incomplete_reports_title') ||
+                            'Pending Reports' }}</h3>
+                        <p class="text-sm text-amber-700 font-medium">
+                            {{ $t('report.incomplete_reports_desc', { count: incompleteReports.length }) || `You have
+                            ${incompleteReports.length} report(s) needing attention` }}
+                        </p>
+                    </div>
+                </div>
+                <div class="bg-white/50 p-2 rounded-full text-amber-600 transition-transform duration-300"
+                    :class="{ 'rotate-180': showIncompleteModule }">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </div>
+            </button>
+
+            <div v-if="showIncompleteModule" class="divide-y divide-amber-100 bg-white/50 backdrop-blur-sm">
+                <div v-for="item in incompleteReports" :key="item.id" @click="handleIncompleteClick(item)"
+                    class="p-4 hover:bg-amber-50 transition cursor-pointer flex items-center justify-between group">
+                    <div class="flex items-center gap-6">
+                        <!-- Date Box -->
+                        <div
+                            class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
+                            <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
+                            }}</span>
+                            <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
+                            <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
+                                v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
+                        </div>
+
+                        <div>
+                            <div class="text-xs text-gray-400 font-bold mb-1">Ver: {{ item.version }}</div>
+                            <div class="flex flex-wrap gap-2">
+                                <span v-if="item.missingContent"
+                                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-rose-50 text-rose-600 border border-rose-100">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20"
+                                        fill="currentColor">
+                                        <path fill-rule="evenodd"
+                                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                                            clip-rule="evenodd" />
+                                    </svg>
+                                    {{ $t('report.missing_content') || 'Missing Content' }}
+                                </span>
+                                <span v-if="item.missingLesson"
+                                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-orange-50 text-orange-600 border border-orange-100">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20"
+                                        fill="currentColor">
+                                        <path
+                                            d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
+                                    </svg>
+                                    {{ $t('report.missing_unit') || 'Missing Unit' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Arrow -->
+                    <div
+                        class="w-10 h-10 rounded-full bg-white border border-amber-100 flex items-center justify-center text-amber-300 group-hover:bg-amber-500 group-hover:text-white group-hover:border-amber-500 transition-all shadow-sm">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                            class="h-5 w-5 transform group-hover:translate-x-0.5 transition-transform" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="flex justify-between items-end mb-4">
             <!-- Sort Control (List View Only) -->
             <div v-if="viewMode === 'list'" class="mb-1">
@@ -252,7 +337,8 @@
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
                                     $t('classroom.session') }}</span>
                                 <span class="text-gray-800 font-medium truncate"
-                                    :title="selectedOccurrence.sessionName">{{ selectedOccurrence.sessionName }}</span>
+                                    :title="selectedOccurrence.sessionName">{{
+                                        selectedOccurrence.sessionName }}</span>
                             </div>
                             <div class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
@@ -411,6 +497,52 @@ const listLoading = ref(false)
 const allReports = ref<any[]>([])
 const suspensions = ref<Suspension[]>([])
 const sortOrder = ref<'asc' | 'desc'>('asc')
+const showIncompleteModule = ref(false)
+
+const incompleteReports = computed(() => {
+    const now = new Date()
+    return allReports.value
+        .filter(r => {
+            // Must be 'present'
+            if (r.attendance_status !== 'present') return false
+
+            // Check content completeness
+            const hasContent = r.content && r.content.trim().length > 0
+            const hasLesson = !!r.lesson_id
+            if (hasContent && hasLesson) return false
+
+            // Date Check: Must be today or in the past
+            // occurrence_date is typically YYYY-MM-DD string or Date object.
+            // If string YYYY-MM-DD, new Date() treats it as UTC or Local midnight depending on browser parsing? 
+            // Better to be safe: create date object.
+            const occ = r.class_occurrence
+            if (!occ || !occ.occurrence_date) return false
+
+            const occDate = new Date(occ.occurrence_date)
+            // Reset "now" to end of today to ensure we catch everything from today? 
+            // Actually user wants "today included". 
+            // If occDate is T00:00:00 today. Now is T13:00:00 today. occDate < Now. Correct.
+            // If occDate is T00:00:00 tomorrow. Now is T13:00:00 today. occDate > Now. Correct.
+            return occDate <= now
+        })
+        .map(r => {
+            const occ = r.class_occurrence
+            let startTime = ''
+            if (occ) {
+                startTime = occ.actual_start_time || occ.original_start_time || ''
+            }
+            return {
+                id: r.id,
+                occurrenceId: r.class_occurrence_id,
+                date: occ?.occurrence_date,
+                startTime: startTime,
+                missingContent: !r.content || r.content.trim().length === 0,
+                missingLesson: !r.lesson_id,
+                version: r.version
+            }
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+})
 
 function toggleSort() {
     sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
@@ -580,6 +712,14 @@ async function switchToListView() {
         console.error('Failed to reload reports list', e)
     } finally {
         listLoading.value = false
+    }
+}
+
+async function handleIncompleteClick(item: any) {
+    viewMode.value = 'calendar'
+    const targetOcc = occurrences.value.find(o => o.id === item.occurrenceId)
+    if (targetOcc) {
+        selectOccurrence(targetOcc)
     }
 }
 

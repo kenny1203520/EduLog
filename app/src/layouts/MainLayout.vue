@@ -60,6 +60,12 @@ async function handleLogout() {
                     active-class="bg-emerald-50 text-emerald-700 font-medium">
                     {{ $t('nav.holidays') }}
                 </router-link>
+
+                <router-link to="/dashboard/reports/incomplete"
+                    class="block px-4 py-2 rounded-md text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition"
+                    active-class="bg-emerald-50 text-emerald-700 font-medium">
+                    {{ $t('nav.incomplete_reports') || 'Incomplete Reports' }}
+                </router-link>
                 <!-- Future Navigation Items -->
                 <!-- <router-link to="/students" ...>Students</router-link> -->
             </nav>

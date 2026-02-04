@@ -782,4 +782,115 @@ export class OccurrenceReportService {
 
         return { data: data || [], count: count || 0 }
     }
+
+    /**
+     * Gets all incomplete reports globally (across all students/courses)
+     * "Incomplete" means present but missing content or lesson.
+     * Restricted to today or past dates.
+     */
+    static async getGlobalIncompleteReports(): Promise<any[]> {
+        const now = new Date()
+        // Format as YYYY-MM-DD for simple string comparison in database if possible, 
+        // but since occurrences store specific times or just dates, we should be careful.
+        // Assuming occurrence_date is a DATE or TIMESTAMP column.
+        
+        // We want all reports where attendance = 'present'
+        // AND (content is empty OR lesson_id is null)
+        // AND occurrence_date <= today
+        
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select(`
+                id,
+                content,
+                lesson_id,
+                attendance_status,
+                is_completed,
+                version,
+                updated_at,
+                enrollment_id,
+                class_occurrence_id,
+                enrollments!inner (
+                    id,
+                    student_id,
+                    students!inner (
+                        id,
+                        first_name,
+                        last_name,
+                        english_name
+                    )
+                ),
+                class_occurrence:class_occurrences!inner (
+                    id,
+                    occurrence_date,
+                    original_start_time,
+                    actual_start_time,
+                    class_session:class_sessions!inner (
+                        id,
+                        name,
+                        classroom:classrooms (
+                            id,
+                            name
+                        )
+                    )
+                )
+            `)
+            .eq('attendance_status', 'present')
+            //.or('content.is.null,content.eq.,lesson_id.is.null') // OR logic is tricky mixed with ANDs in Supabase if not careful with syntax
+            // simpler to fetch 'present' and filter in JS if the dataset isn't massive.
+            // But let's try to filter date in DB at least to reduce size.
+            .lte('class_occurrence.occurrence_date', now.toISOString())
+            .order('class_occurrence(occurrence_date)', { ascending: false })
+
+        if (error) throw new Error(`Failed to fetch incomplete reports: ${error.message}`)
+
+        // Refine filter in JS for the OR condition (missing content OR missing lesson)
+        // Supabase .or() usually requires the whole query to be structured around it or using filter()
+        
+        return (data || [])
+            .filter(r => {
+                const hasContent = r.content && r.content.trim().length > 0
+                const hasLesson = !!r.lesson_id
+                
+                // If both present, it's complete.
+                if (hasContent && hasLesson) return false
+                
+                // Double check date (redundant but safe)
+                const occ = Array.isArray(r.class_occurrence) ? r.class_occurrence[0] : r.class_occurrence
+                if (!occ) return false
+                // const occDate = new Date(occ.occurrence_date) // Unused variable
+                
+                return true
+            })
+            .map(r => {
+                // Supabase joins can be arrays or objects depending on the relationship type inferred
+                const enrollment = Array.isArray(r.enrollments) ? r.enrollments[0] : r.enrollments
+                const student = Array.isArray(enrollment?.students) ? enrollment.students[0] : enrollment?.students
+                
+                const occ = Array.isArray(r.class_occurrence) ? r.class_occurrence[0] : r.class_occurrence
+                const session = Array.isArray(occ?.class_session) ? occ.class_session[0] : occ?.class_session
+                const classroom = Array.isArray(session?.classroom) ? session.classroom[0] : session?.classroom
+
+                return {
+                    id: r.id,
+                    reportId: r.id,
+                    enrollmentId: r.enrollment_id,
+                    studentName: student?.english_name || student?.first_name || 'Unknown',
+                    fullStudent: student,
+                    date: occ?.occurrence_date,
+                    startTime: occ?.actual_start_time || occ?.original_start_time,
+                    className: session?.name || 'Unknown Class',
+                    classroomName: classroom?.name,
+                    missingContent: !r.content || r.content.trim().length === 0,
+                    missingLesson: !r.lesson_id,
+                    version: r.version,
+                    occurrenceId: r.class_occurrence_id,
+                    // Add fields needed for ReportEditor
+                    content: r.content,
+                    lessonId: r.lesson_id,
+                    isCompleted: r.is_completed,
+                    attendanceStatus: r.attendance_status
+                }
+            })
+    }
 }

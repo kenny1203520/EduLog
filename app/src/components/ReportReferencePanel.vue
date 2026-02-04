@@ -85,8 +85,8 @@
                     <select v-model="sortBy"
                         class="w-24 text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500 shadow-sm"
                         @change="refreshData">
-                        <option value="desc">Newest</option>
-                        <option value="asc">Oldest</option>
+                        <option value="desc">{{ $t('report.reference_panel.newest') }}</option>
+                        <option value="asc">{{ $t('report.reference_panel.oldest') }}</option>
                     </select>
                 </div>
             </div>
@@ -138,7 +138,7 @@
                         <div v-if="report.contact_notes" class="flex gap-2">
                             <span
                                 class="text-[10px] items-center py-0.5 px-1.5 rounded-md bg-blue-100 text-blue-800 font-bold whitespace-nowrap self-start">📞
-                                Contact</span>
+                                {{ $t('report.reference_panel.contact') }}</span>
                             <p class="text-[11px] text-gray-600 italic line-clamp-2">
                                 {{ report.contact_notes }}
                             </p>
@@ -146,7 +146,7 @@
                         <div v-if="report.class_notes" class="flex gap-2">
                             <span
                                 class="text-[10px] items-center py-0.5 px-1.5 rounded-md bg-purple-100 text-purple-800 font-bold whitespace-nowrap self-start">📝
-                                Notes</span>
+                                {{ $t('report.reference_panel.class_notes') }}</span>
                             <p class="text-[11px] text-gray-600 italic line-clamp-2">
                                 {{ report.class_notes }}
                             </p>
@@ -173,7 +173,7 @@
                     <div class="flex items-center gap-2">
                         <span class="text-xs text-gray-400 whitespace-nowrap">{{
                             $t('report.reference_panel.items_per_page')
-                            }}</span>
+                        }}</span>
                         <select v-model="pageSize" class="text-xs border rounded p-1 bg-gray-50 focus:ring-indigo-500"
                             @change="handlePageSizeChange">
                             <option :value="10">10</option>
@@ -182,7 +182,7 @@
                         </select>
                     </div>
                     <div class="text-xs text-gray-500 font-medium">
-                        Total: <span class="text-indigo-600">{{ totalCount }}</span>
+                        {{ $t('report.reference_panel.total') }}: <span class="text-indigo-600">{{ totalCount }}</span>
                     </div>
                 </div>
 

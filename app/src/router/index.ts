@@ -62,6 +62,11 @@ const router = createRouter({
           component: () => import('@/views/StudentReportsView.vue')
         },
         {
+          path: 'reports/incomplete',
+          name: 'incomplete-reports',
+          component: () => import('@/views/GlobalIncompleteReportsView.vue')
+        },
+        {
           path: 'holidays',
           name: 'holidays',
           component: () => import('@/views/HolidayManagementView.vue')
