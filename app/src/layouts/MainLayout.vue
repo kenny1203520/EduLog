@@ -43,7 +43,7 @@ async function handleLogout() {
         <!-- Sidebar -->
         <aside
             class="fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white shadow-xl lg:shadow-md flex flex-col transition-transform duration-300 transform lg:transform-none"
-            :class="isSidebarOpen ? 'translate-x-0' : '-translate-x-full'">
+            :class="isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'">
             <div class="p-6 border-b flex justify-between items-center">
                 <div>
                     <h1 class="text-2xl font-bold text-emerald-600">EduLog</h1>
