@@ -815,9 +815,7 @@ export class OccurrenceReportService {
                     student_id,
                     students!inner (
                         id,
-                        first_name,
-                        last_name,
-                        english_name
+                        name
                     )
                 ),
                 class_occurrence:class_occurrences!inner (
@@ -875,7 +873,7 @@ export class OccurrenceReportService {
                     id: r.id,
                     reportId: r.id,
                     enrollmentId: r.enrollment_id,
-                    studentName: student?.english_name || student?.first_name || 'Unknown',
+                    studentName: student?.name || 'Unknown',
                     fullStudent: student,
                     date: occ?.occurrence_date,
                     startTime: occ?.actual_start_time || occ?.original_start_time,
