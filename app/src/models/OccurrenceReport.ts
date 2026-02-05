@@ -230,4 +230,5 @@ export interface SaveReportResult {
     newVersion?: number
     conflict?: boolean
     serverContent?: string
+    serverReport?: OccurrenceReportDTO // Full server report for deep comparison
 }

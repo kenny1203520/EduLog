@@ -638,7 +638,7 @@ const emit = defineEmits<{
     'save-success': [version: number]
     'update:report-external-link': [value: string]
     'save-error': [error: string]
-    'conflict': [serverContent: string]
+    'conflict': [serverContent: string, serverReport?: any, localReport?: any]
     'deleted': []
 }>()
 
@@ -733,8 +733,24 @@ const {
                 }
             )
 
+            const localReportPayload = {
+                id: props.reportId,
+                content: content,
+                version: version.value,
+                lesson_id: selectedLessonId.value || null,
+                is_completed: isCompleted.value,
+                progress_letter: progressLetter.value || null,
+                attendance_status: attendanceStatus.value,
+                absence_reason: finalAbsenceReason || null,
+                class_participation: classParticipation.value,
+                classroom_behavior: classroomBehavior.value,
+                contact_notes: contactNotes.value,
+                class_notes: classNotes.value,
+                external_link: reportExternalLink.value
+            }
+
             if (result.conflict) {
-                emit('conflict', result.serverContent || '')
+                emit('conflict', result.serverContent || '', result.serverReport, localReportPayload)
                 return result
             }
 
@@ -750,8 +766,24 @@ const {
             return { success: false, message }
         }
     },
-    onConflict: (serverContent) => {
-        emit('conflict', serverContent)
+    onConflict: (serverContent, serverReport) => {
+        // Construct local payload for comparison
+        const localReportPayload = {
+            id: props.reportId,
+            content: localContent.value,
+            version: version.value,
+            lesson_id: selectedLessonId.value || null,
+            is_completed: isCompleted.value,
+            progress_letter: progressLetter.value || null,
+            attendance_status: attendanceStatus.value,
+            absence_reason: absenceReason.value || null,
+            class_participation: classParticipation.value,
+            classroom_behavior: classroomBehavior.value,
+            contact_notes: contactNotes.value,
+            class_notes: classNotes.value,
+            external_link: reportExternalLink.value
+        }
+        emit('conflict', serverContent, serverReport, localReportPayload)
     },
     onSuccess: (newVersion) => {
         version.value = newVersion

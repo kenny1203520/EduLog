@@ -136,10 +136,10 @@ export class OccurrenceReportService {
             externalLink?: string
         }
     ): Promise<SaveReportResult> {
-        // Fetch current server version
+        // Fetch current server version with ALL fields for conflict resolution
         const { data: serverReport, error: fetchError } = await supabase
             .from('occurrence_reports')
-            .select('version, content, enrollment_id, lesson_id')
+            .select('*')
             .eq('id', reportId)
             .single()
 
@@ -157,6 +157,7 @@ export class OccurrenceReportService {
                 success: false,
                 conflict: true,
                 serverContent: serverReport.content,
+                serverReport: serverReport, // Return full DTO
                 message: 'Conflict detected: Report was modified by another user'
             }
         }

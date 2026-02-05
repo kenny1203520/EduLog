@@ -145,7 +145,22 @@
         "local_version": "Your Local Version",
         "merged_content": "Merged Content (edit as needed)",
         "resolve_button": "Resolve Conflict",
-        "cancel_button": "Cancel"
+        "cancel_button": "Cancel",
+        "field_differences": "Field Differences",
+        "field": "Field",
+        "local_value": "Your Value",
+        "server_value": "Server Value"
+    },
+    "fields": {
+        "is_completed": "Completed",
+        "progress_letter": "Progress",
+        "attendance_status": "Attendance",
+        "lesson_id": "Lesson ID",
+        "external_link": "Report Link",
+        "class_participation": "Participation",
+        "classroom_behavior": "Behavior",
+        "contact_notes": "Contact Notes",
+        "class_notes": "Class Notes"
     },
     "no_report_today": "No report found for today.",
     "is_student_active_hint": "Is this student active?"

@@ -145,7 +145,22 @@
         "local_version": "您的版本",
         "merged_content": "合併後內容 (可編輯)",
         "resolve_button": "解決衝突",
-        "cancel_button": "取消"
+        "cancel_button": "取消",
+        "field_differences": "欄位差異",
+        "field": "欄位",
+        "local_value": "您的內容",
+        "server_value": "伺服器內容"
+    },
+    "fields": {
+        "is_completed": "完成狀態",
+        "progress_letter": "進度",
+        "attendance_status": "出席",
+        "lesson_id": "課程編號",
+        "external_link": "報告連結",
+        "class_participation": "參與度",
+        "classroom_behavior": "秩序",
+        "contact_notes": "聯絡欄",
+        "class_notes": "課堂筆記"
     },
     "no_report_today": "今天找不到該學生的報告紀錄。",
     "is_student_active_hint": "該學員目前是否為在學狀態？"

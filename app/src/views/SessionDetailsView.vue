@@ -28,6 +28,8 @@ const showConflictModal = ref(false)
 const conflictServerContent = ref('')
 const conflictLocalContent = ref('')
 const conflictReportId = ref<string | null>(null)
+const conflictServerReport = ref<any>(null)
+const conflictLocalReport = ref<any>(null)
 
 const session = ref<any>(null)
 const enrollments = ref<Enrollment[]>([])
@@ -272,11 +274,13 @@ function handleSaveError(error: string) {
     alert(`Failed to save report: ${error}`)
 }
 
-function handleConflict(serverContent: string, enrollmentId: string) {
+function handleConflict(serverContent: string, enrollmentId: string, serverReport?: any, localReport?: any) {
     conflictServerContent.value = serverContent
     const report = reportMap.value.get(enrollmentId)
-    conflictLocalContent.value = report?.content || ''
+    conflictLocalContent.value = localReport?.content || report?.content || ''
     conflictReportId.value = report?.id || null
+    conflictServerReport.value = serverReport
+    conflictLocalReport.value = localReport
     showConflictModal.value = true
 }
 
@@ -285,13 +289,17 @@ function closeConflictModal() {
     conflictReportId.value = null
 }
 
-async function resolveConflict(resolvedContent: string) {
+async function resolveConflict(resolvedContent: any) {
     if (!conflictReportId.value) return
 
     try {
+        // resolvedContent is now an object containing updates for multiple fields
+        // Type cast or validation might be good here, but for now we pass it through
+        const updates = typeof resolvedContent === 'string' ? { content: resolvedContent } : resolvedContent
+
         const report = await OccurrenceReportService.resolveConflict(
             conflictReportId.value,
-            resolvedContent
+            updates
         )
 
         // Update local state
@@ -480,7 +488,7 @@ async function resolveConflict(resolvedContent: string) {
                                 <span class="text-sm font-bold transition-colors"
                                     :class="reportMap.get(e.id!)?.attendanceStatus === 'present' ? 'text-emerald-600' : 'text-gray-400'">
                                     {{ reportMap.get(e.id!)?.attendanceStatus === 'present' ? $t('attendance.present') :
-                                    $t('attendance.absent') }}
+                                        $t('attendance.absent') }}
                                 </span>
                                 <div class="relative flex items-center">
                                     <input type="checkbox"
@@ -697,7 +705,7 @@ async function resolveConflict(resolvedContent: string) {
                         @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                         @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
                         @save-success="handleSaveSuccess($event, selectedEnrollmentId!)" @save-error="handleSaveError"
-                        @conflict="handleConflict($event, selectedEnrollmentId!)"
+                        @conflict="(sc, sr, lr) => handleConflict(sc, selectedEnrollmentId!, sr, lr)"
                         class="h-full border-none shadow-none rounded-none" />
 
                     <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
@@ -710,7 +718,8 @@ async function resolveConflict(resolvedContent: string) {
 
         <!-- Conflict Resolution Modal -->
         <ConflictModal :is-open="showConflictModal" :server-content="conflictServerContent"
-            :local-content="conflictLocalContent" @close="closeConflictModal" @resolve="resolveConflict" />
+            :local-content="conflictLocalContent" :server-report="conflictServerReport"
+            :local-report="conflictLocalReport" @close="closeConflictModal" @resolve="resolveConflict" />
 
     </div>
 </template>
