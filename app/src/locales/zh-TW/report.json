@@ -146,12 +146,14 @@
         "merged_content": "合併後內容 (可編輯)",
         "resolve_button": "解決衝突",
         "cancel_button": "取消",
+        "use_this": "使用此版本",
         "field_differences": "欄位差異",
         "field": "欄位",
         "local_value": "您的內容",
         "server_value": "伺服器內容"
     },
     "fields": {
+        "content": "學習報告",
         "is_completed": "完成狀態",
         "progress_letter": "進度",
         "attendance_status": "出席",

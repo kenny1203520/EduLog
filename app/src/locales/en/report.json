@@ -146,12 +146,14 @@
         "merged_content": "Merged Content (edit as needed)",
         "resolve_button": "Resolve Conflict",
         "cancel_button": "Cancel",
+        "use_this": "Use This",
         "field_differences": "Field Differences",
         "field": "Field",
         "local_value": "Your Value",
         "server_value": "Server Value"
     },
     "fields": {
+        "content": "Learning Report",
         "is_completed": "Completed",
         "progress_letter": "Progress",
         "attendance_status": "Attendance",
