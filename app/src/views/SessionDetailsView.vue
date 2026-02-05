@@ -438,8 +438,106 @@ async function resolveConflict(resolvedContent: string) {
                     </div>
                 </div>
 
-                <!-- Student List Table -->
-                <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
+                <!-- Mobile Card List (Visible on < MD) -->
+                <div class="grid grid-cols-1 gap-4 md:hidden">
+                    <div v-for="e in enrollments" :key="e.id"
+                        class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                        <!-- Header: Info & Status -->
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xl shrink-0">
+                                    {{ e.studentName?.charAt(0) }}
+                                </div>
+                                <div>
+                                    <div class="font-black text-gray-900 text-lg leading-tight">{{ e.studentName }}
+                                    </div>
+                                    <div class="text-xs font-bold text-gray-400 mt-0.5">{{ e.studentEmail ||
+                                        $t('classroom.no_email') }}</div>
+                                </div>
+                            </div>
+                            <!-- Status Badges (Stacked) -->
+                            <div class="flex flex-col items-end gap-2 shrink-0">
+                                <span v-if="(e as any).isGuest"
+                                    class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100">
+                                    {{ $t('common.rescheduled') || 'Guest' }}
+                                </span>
+                                <span
+                                    class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
+                                    :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
+                                    {{ $t('student.internal_courses.status_' + e.status) }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <hr class="border-gray-50">
+
+                        <!-- Attendance Row -->
+                        <div class="flex items-center justify-between" v-if="todayOccurrence">
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
+                                $t('attendance.status') }}</span>
+                            <label class="flex items-center gap-3 cursor-pointer group">
+                                <span class="text-sm font-bold transition-colors"
+                                    :class="reportMap.get(e.id!)?.attendanceStatus === 'present' ? 'text-emerald-600' : 'text-gray-400'">
+                                    {{ reportMap.get(e.id!)?.attendanceStatus === 'present' ? $t('attendance.present') :
+                                    $t('attendance.absent') }}
+                                </span>
+                                <div class="relative flex items-center">
+                                    <input type="checkbox"
+                                        :checked="reportMap.get(e.id!)?.attendanceStatus === 'present'"
+                                        :disabled="savingMap.has(e.id!)" @change="toggleAttendance(e.id!, $event)"
+                                        class="sr-only peer">
+                                    <div
+                                        class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                    </div>
+                                </div>
+                            </label>
+                        </div>
+
+                        <!-- Actions Grid -->
+                        <div class="grid grid-cols-3 gap-3 pt-2">
+                            <button @click.stop="navigateToProfile(e.studentId)"
+                                class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl bg-gray-50 text-gray-400 border border-gray-100 active:scale-95 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                <span class="text-[10px] font-bold">{{ $t('common.profile') }}</span>
+                            </button>
+
+                            <button @click.stop="navigateToReports(e.id!)"
+                                class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 active:scale-95 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span class="text-[10px] font-bold">{{ $t('common.reports') }}</span>
+                            </button>
+
+                            <button @click.stop="toggleSplitView(e.id!)"
+                                class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl border active:scale-95 transition-all"
+                                :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-blue-600 border-blue-100 bg-blue-50'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                </svg>
+                                <span class="text-[10px] font-bold">{{ $t('common.edit') }}</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Empty State Mobile -->
+                    <div v-if="enrollments.length === 0"
+                        class="flex flex-col items-center justify-center py-12 text-gray-300">
+                        <span class="font-black italic tracking-widest">No students enrolled</span>
+                    </div>
+                </div>
+
+                <!-- Desktop Table List (Hidden on Mobile) -->
+                <div class="hidden md:block bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-gray-50/50">
