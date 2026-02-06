@@ -11,7 +11,7 @@ export interface ClassroomDTO {
 export interface ClassSessionDTO {
     id?: string
     name: string
-    classroom_id?: string
+    classroom_id?: string | null
     course_ids: string[]
     day_of_week: number
     start_time: string

@@ -63,7 +63,7 @@
     "confirm_delete_room": "確定要刪除此教室嗎？",
     "room_save_success": "教室已成功儲存",
     "room_delete_success": "教室已成功刪除",
-    "confirm_delete_session": "確定要刪除此時段嗎？",
-    "session_save_success": "時段已成功儲存",
-    "session_delete_success": "時段已成功刪除"
+    "confirm_delete_session": "確定要刪除此班級時段嗎？",
+    "session_save_success": "班級時段已成功儲存",
+    "session_delete_success": "班級時段已成功刪除"
 }

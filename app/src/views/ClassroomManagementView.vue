@@ -145,7 +145,7 @@ const filteredSessions = computed(() => {
     if (!searchQuery.value.trim()) return sessions.value
     const q = searchQuery.value.toLowerCase()
     return sessions.value.filter(s => {
-        const roomName = getRoomName(s.classroom_id).toLowerCase()
+        const roomName = getRoomName(s.classroom_id!).toLowerCase()
         const courseNames = s.course_ids?.map(cid => {
             const c = courses.value.find(c => c.id === cid)
             return `${c?.subject} ${c?.stage} ${c?.displayNameValue || ''}`.toLowerCase()
@@ -208,13 +208,18 @@ async function deleteClassroom(id: string) {
 
 async function saveSession() {
     if (!newSession.value.name) return
+    const payload = { ...newSession.value }
+    if (!payload.classroom_id) {
+        payload.classroom_id = null
+    }
+
     try {
         if (editingSession.value?.id) {
-            await CourseService.updateClassSession(editingSession.value.id, newSession.value)
+            await CourseService.updateClassSession(editingSession.value.id, payload)
             // Sync occurrences if the schedule might have changed
             await OccurrenceService.syncSessionOccurrences(editingSession.value.id).catch(console.error)
         } else {
-            const session = await CourseService.createClassSession(newSession.value)
+            const session = await CourseService.createClassSession(payload)
             // Generate occurrences for new sessions
             const startDate = new Date()
             const endDate = new Date()
@@ -382,7 +387,7 @@ function toggleCourseSelection(courseId: string) {
                 <div v-if="filteredClassrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
-                    }}"</span>
+                        }}"</span>
                 </div>
             </div>
 
@@ -415,7 +420,7 @@ function toggleCourseSelection(courseId: string) {
                     <div class="text-sm text-gray-600 mb-3 flex items-center gap-2">
                         <span
                             class="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs font-bold border border-emerald-100">
-                            {{ getRoomName(session.classroom_id) }}
+                            {{ getRoomName(session.classroom_id!) }}
                         </span>
                         <span class="text-gray-400 text-xs flex items-center gap-1">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"
@@ -478,25 +483,25 @@ function toggleCourseSelection(courseId: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                            }}</label>
+                        }}</label>
                         <input type="color" v-model="newClassroom.color"
                             class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                     </div>
@@ -522,7 +527,7 @@ function toggleCourseSelection(courseId: string) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
-                            }}</label>
+                        }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -536,7 +541,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
-                            }}</label>
+                        }}</label>
                         <input type="number" v-model="newSession.capacity"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -551,7 +556,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                            }}</label>
+                        }}</label>
                         <div class="flex flex-wrap gap-2">
                             <select v-model="newSession.day_of_week"
                                 class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
