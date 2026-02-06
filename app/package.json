@@ -17,17 +17,17 @@
         "postcss": "^8.5.6",
         "tailwindcss": "^4.1.18",
         "vue": "^3.5.24",
-        "vue-i18n": "^9.14.5",
+        "vue-i18n": "^11.2.8",
         "vue-router": "^5.0.1",
         "vue-toastification": "^2.0.0-rc.5"
     },
     "devDependencies": {
-        "@types/node": "^24.10.9",
+        "@types/node": "^25.2.1",
         "@vitejs/plugin-vue": "^6.0.1",
         "@vue/tsconfig": "^0.8.1",
         "typescript": "~5.9.3",
         "vite": "^7.2.4",
         "vite-plugin-pwa": "^1.2.0",
-        "vue-tsc": "^3.1.4"
+        "vue-tsc": "^3.2.4"
     }
 }
