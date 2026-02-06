@@ -832,11 +832,6 @@ const {
                 return result
             }
 
-            if (result.success && result.newVersion) {
-                version.value = result.newVersion
-                emit('save-success', result.newVersion)
-            }
-
             return result
         } catch (error: any) {
             const message = error.message || 'Failed to save report'
