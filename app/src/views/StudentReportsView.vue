@@ -426,34 +426,6 @@
             :local-report="conflictLocalReport!" :available-lessons="courseLessons" @close="closeConflictModal"
             @resolve="resolveConflict" />
 
-        <!-- Update Available Toast -->
-        <div v-if="showUpdateToast"
-            class="fixed bottom-24 right-6 bg-blue-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-slide-up z-[100] border border-blue-500 cursor-pointer hover:bg-blue-700 transition"
-            @click="refreshReport">
-            <div class="bg-white/20 p-1 rounded-full animate-spin-slow">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-            </div>
-            <div>
-                <p class="font-bold tracking-wide">{{ $t('report.update_available') || 'Update Available' }}</p>
-                <p class="text-xs text-blue-100">
-                    {{ $t('report.update_available_desc') || 'Report updated by another user. Click to refresh.' }}
-                </p>
-            </div>
-        </div>
-
-        <!-- Success Toast -->
-        <div v-if="showSuccessToast"
-            class="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-slide-up z-[100] border border-emerald-500">
-            <div class="bg-white/20 p-1 rounded-full">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                </svg>
-            </div>
-            <span class="font-bold tracking-wide">{{ successMessage || $t('report.save_success') }}</span>
-        </div>
     </div>
 </template>
 
@@ -475,11 +447,13 @@ import { SuspensionService } from '@/services/SuspensionService'
 import { Suspension } from '@/models/Suspension'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { useToast } from 'vue-toastification'
 
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
+const toast = useToast()
 
 const loading = ref(true)
 const occurrences = ref<ClassOccurrence[]>([])
@@ -492,9 +466,6 @@ const conflictLocalVersion = ref(0)
 const conflictReportId = ref<string | null>(null)
 const conflictServerReport = ref<OccurrenceReportDTO | null>(null)
 const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
-const showSuccessToast = ref(false)
-const successMessage = ref('')
-const showUpdateToast = ref(false) // New toast for updates
 const enrollmentInfo = ref<{
     id: string,
     studentName: string,
@@ -1101,13 +1072,17 @@ function handleRealtimeUpdate(payload: any) {
 
     // If version is newer, prompt user
     if (selectedReport.value && newRecord.version > selectedReport.value.version) {
-        showUpdateToast.value = true
+        toast.info(t('report.update_available') || 'Update Available', {
+            timeout: 0,
+            onClick: () => {
+                refreshReport()
+            }
+        })
     }
 }
 
 async function refreshReport() {
     if (!selectedOccurrence.value) return
-    showUpdateToast.value = false
     await selectOccurrence(selectedOccurrence.value)
 }
 
@@ -1117,21 +1092,17 @@ function handleSaveSuccess(newVersion: number) {
         selectedReport.value.updatedAt = new Date()
     }
 
-    successMessage.value = t('report.save_success')
-    showSuccessToast.value = true
-    setTimeout(() => { showSuccessToast.value = false }, 3000)
+    toast.success(t('report.save_success'))
     switchToListView() // Refresh list view data
     viewMode.value = 'calendar' // But keep calendar active
 }
 
 function handleSaveError(error: string) {
-    alert(`Failed to save report: ${error}`)
+    toast.error(`Failed to save report: ${error}`)
 }
 
 function handleDeleted() {
-    successMessage.value = t('report.editor.delete_success')
-    showSuccessToast.value = true
-    setTimeout(() => { showSuccessToast.value = false }, 3000)
+    toast.success(t('report.editor.delete_success'))
     selectedReport.value = null
     selectedOccurrence.value = null
     loadOccurrences() // Full reload to catch progress changes and remove report
@@ -1164,31 +1135,12 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
         showConflictModal.value = false
 
         // Show success toast
-        showSuccessToast.value = true
-        setTimeout(() => {
-            showSuccessToast.value = false
-        }, 3000)
+        toast.success(t('report.save_success'))
     } catch (error) {
         console.error('Failed to resolve conflict:', error)
-        alert('Failed to resolve conflict')
+        toast.error(t('report.resolve_conflict_error') || 'Failed to resolve conflict')
     }
 }
 </script>
 
-<style scoped>
-@keyframes slide-up {
-    from {
-        transform: translateY(100%);
-        opacity: 0;
-    }
-
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
-}
-
-.animate-slide-up {
-    animation: slide-up 0.3s ease-out;
-}
-</style>
+<style scoped></style>

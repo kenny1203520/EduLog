@@ -9,9 +9,11 @@ import type { Enrollment } from '@/models/Enrollment'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 const { t } = useI18n()
+const toast = useToast()
 
 const route = useRoute()
 const router = useRouter()
@@ -183,11 +185,11 @@ async function refreshSchedule() {
     if (!confirm(t('classroom.refresh_confirm'))) return
     try {
         await OccurrenceService.syncSessionOccurrences(sessionId)
-        alert(t('classroom.refresh_success'))
+        toast.success(t('classroom.refresh_success'))
         window.location.reload()
     } catch (e) {
         console.error(e)
-        alert('Failed to refresh schedule')
+        toast.error(t('classroom.refresh_failed') || 'Failed to refresh schedule')
     }
 }
 
@@ -272,7 +274,7 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
 }
 
 function handleSaveError(error: string) {
-    alert(`Failed to save report: ${error}`)
+    toast.error(`Failed to save report: ${error}`)
 }
 
 function handleConflict(serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO) {
@@ -309,10 +311,10 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
         showConflictModal.value = false
         conflictReportId.value = null
-        alert(t('report.save_success'))
+        toast.success(t('report.save_success'))
     } catch (error) {
         console.error('Failed to resolve conflict:', error)
-        alert('Failed to resolve conflict')
+        toast.error(t('report.resolve_conflict_error') || 'Failed to resolve conflict')
     }
 }
 </script>
