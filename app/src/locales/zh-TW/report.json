@@ -150,19 +150,24 @@
         "field_differences": "欄位差異",
         "field": "欄位",
         "local_value": "您的內容",
-        "server_value": "伺服器內容"
+        "server_value": "伺服器內容",
+        "empty": "(空)",
+        "is_completed": {
+            "yes": "是",
+            "no": "否"
+        }
     },
     "fields": {
-        "content": "學習報告",
-        "is_completed": "完成狀態",
+        "lesson_name": "課次",
+        "external_link": "報告連結",
+        "is_completed": "完整完成",
         "progress_letter": "進度",
         "attendance_status": "出席",
-        "lesson_id": "課程編號",
-        "external_link": "報告連結",
-        "class_participation": "參與度",
-        "classroom_behavior": "秩序",
+        "class_participation": "課程參與",
+        "classroom_behavior": "課堂秩序",
         "contact_notes": "聯絡欄",
-        "class_notes": "課堂筆記"
+        "class_notes": "課堂筆記/紀錄",
+        "content": "學習報告"
     },
     "no_report_today": "今天找不到該學生的報告紀錄。",
     "is_student_active_hint": "該學員目前是否為在學狀態？"

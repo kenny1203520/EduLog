@@ -587,33 +587,33 @@ onMounted(() => {
 })
 
 interface Props {
-    reportId?: string
-    loading?: boolean
-    initialContent?: string
-    initialVersion?: number
-    title?: string
-    placeholder?: string
-    disabled?: boolean
-    showManualSave?: boolean
-    debounceMs?: number
-    availableLessons?: Lesson[]
-    student?: any
-    // Initial detailed data
-    initialLessonId?: string
-    initialIsCompleted?: boolean
-    initialProgressStart?: string
-    initialProgressEnd?: string
-    initialAttendanceStatus?: 'present' | 'absent'
-    initialAbsenceReason?: string
-    initialClassParticipation?: number
-    initialClassroomBehavior?: number
-    initialContactNotes?: string
-    initialClassNotes?: string
-    initialReportExternalLink?: string
-    initialEnrollmentExternalLink?: string
-    courseName?: string
-    courseDisplayName?: string
-    initialStudentId?: string
+    reportId?: string // 報告ID
+    initialVersion?: number // 報告版本
+    loading?: boolean // 是否載入中
+    placeholder?: string // 報告預設文字
+    disabled?: boolean // 是否禁用
+    showManualSave?: boolean // 是否顯示手動儲存
+    debounceMs?: number // 停止輸入後多久自動儲存(ms)
+    title?: string // 報告標題
+    courseName?: string // 課程名稱
+    courseStage?: string // 課程階段
+    courseDisplayName?: string // 課程顯示名稱
+    initialStudentId?: string // 學生ID
+    student?: any // 學生
+    initialLessonId?: string // 課次
+    availableLessons?: Lesson[] // 可選課次清單
+    initialReportExternalLink?: string // 外部連結
+    initialIsCompleted?: boolean // 是否完整完成
+    initialProgressStart?: string // 進度開始
+    initialProgressEnd?: string // 進度結束
+    initialAttendanceStatus?: 'present' | 'absent' // 出缺勤狀態
+    initialAbsenceReason?: string // 缺勤原因
+    initialClassParticipation?: number // 課堂參與
+    initialClassroomBehavior?: number // 課堂秩序
+    initialContactNotes?: string // 聯絡欄
+    initialClassNotes?: string // 課堂筆記/紀錄
+    initialContent?: string // 學習報告
+    initialEnrollmentExternalLink?: string // 課程外部連結
 }
 
 const props = withDefaults(defineProps<Props>(), {

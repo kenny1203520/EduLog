@@ -150,19 +150,24 @@
         "field_differences": "Field Differences",
         "field": "Field",
         "local_value": "Your Value",
-        "server_value": "Server Value"
+        "server_value": "Server Value",
+        "empty": "(empty)",
+        "is_completed": {
+            "yes": "Yes",
+            "no": "No"
+        }
     },
     "fields": {
-        "content": "Learning Report",
+        "lesson_name": "Lesson",
+        "external_link": "Report Link",
         "is_completed": "Completed",
         "progress_letter": "Progress",
         "attendance_status": "Attendance",
-        "lesson_id": "Lesson ID",
-        "external_link": "Report Link",
-        "class_participation": "Participation",
-        "classroom_behavior": "Behavior",
+        "class_participation": "Class Participation",
+        "classroom_behavior": "Classroom Behavior",
         "contact_notes": "Contact Notes",
-        "class_notes": "Class Notes"
+        "class_notes": "Class Notes/Observations",
+        "content": "Learning Report"
     },
     "no_report_today": "No report found for today.",
     "is_student_active_hint": "Is this student active?"

@@ -682,10 +682,14 @@ async function resolveConflict(resolvedContent: any) {
 
                     <ReportEditor v-if="reportMap.get(selectedEnrollmentId)" :key="selectedEnrollmentId"
                         :report-id="reportMap.get(selectedEnrollmentId)?.id"
-                        :initial-content="reportMap.get(selectedEnrollmentId)?.content"
                         :initial-version="reportMap.get(selectedEnrollmentId)?.version"
+                        :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
+                        :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
+                        :course-name="enrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + enrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
+                        :course-display-name="enrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
+                        :initial-student-id="enrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
                         :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
-                        :initial-enrollment-external-link="enrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
+                        :available-lessons="courseLessons"
                         :initial-report-external-link="reportMap.get(selectedEnrollmentId)?.externalLink"
                         :initial-is-completed="reportMap.get(selectedEnrollmentId)?.isCompleted"
                         :initial-progress-start="reportMap.get(selectedEnrollmentId)?.progressStart"
@@ -696,12 +700,8 @@ async function resolveConflict(resolvedContent: any) {
                         :initial-classroom-behavior="parseFloat(reportMap.get(selectedEnrollmentId)?.classroomBehavior || '0')"
                         :initial-contact-notes="reportMap.get(selectedEnrollmentId)?.contactNotes"
                         :initial-class-notes="reportMap.get(selectedEnrollmentId)?.classNotes"
-                        :initial-student-id="enrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
-                        :course-name="enrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + enrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
-                        :course-display-name="enrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
-                        :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
-                        :available-lessons="courseLessons" :show-manual-save="true"
-                        :loading="savingMap.get(selectedEnrollmentId!)"
+                        :initial-content="reportMap.get(selectedEnrollmentId)?.content"
+                        :initial-enrollment-external-link="enrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
                         @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                         @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
                         @save-success="handleSaveSuccess($event, selectedEnrollmentId!)" @save-error="handleSaveError"
@@ -719,7 +719,8 @@ async function resolveConflict(resolvedContent: any) {
         <!-- Conflict Resolution Modal -->
         <ConflictModal :is-open="showConflictModal" :server-content="conflictServerContent"
             :local-content="conflictLocalContent" :server-report="conflictServerReport"
-            :local-report="conflictLocalReport" @close="closeConflictModal" @resolve="resolveConflict" />
+            :local-report="conflictLocalReport" :available-lessons="courseLessons" @close="closeConflictModal"
+            @resolve="resolveConflict" />
 
     </div>
 </template>
