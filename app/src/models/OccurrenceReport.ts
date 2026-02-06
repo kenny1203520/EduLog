@@ -8,7 +8,6 @@ export interface OccurrenceReportDTO {
     enrollment_id: string
     class_occurrence_id: string
     lesson_id?: string
-    content: string
     is_completed?: boolean
     
     // Detailed report fields
@@ -19,6 +18,7 @@ export interface OccurrenceReportDTO {
     classroom_behavior?: number
     contact_notes?: string
     class_notes?: string
+    content: string
     external_link?: string
     
     version: number
@@ -45,7 +45,6 @@ export class OccurrenceReport {
     enrollmentId: string
     classOccurrenceId: string
     lessonId?: string
-    content: string
     isCompleted?: boolean
     
     // Detailed fields
@@ -56,6 +55,7 @@ export class OccurrenceReport {
     classroomBehavior?: number
     contactNotes?: string
     classNotes?: string
+    content: string
     externalLink?: string
     
     version: number
@@ -69,7 +69,6 @@ export class OccurrenceReport {
         this.enrollmentId = data.enrollment_id
         this.classOccurrenceId = data.class_occurrence_id
         this.lessonId = data.lesson_id
-        this.content = data.content
         this.isCompleted = data.is_completed ?? true
         
         // Detailed fields
@@ -80,6 +79,7 @@ export class OccurrenceReport {
         this.classroomBehavior = data.classroom_behavior
         this.contactNotes = data.contact_notes
         this.classNotes = data.class_notes
+        this.content = data.content
         this.externalLink = data.external_link
         
         this.version = data.version
@@ -98,7 +98,6 @@ export class OccurrenceReport {
             enrollment_id: this.enrollmentId,
             class_occurrence_id: this.classOccurrenceId,
             lesson_id: this.lessonId,
-            content: this.content,
             is_completed: this.isCompleted,
             
             // Detailed fields
@@ -109,6 +108,7 @@ export class OccurrenceReport {
             classroom_behavior: this.classroomBehavior,
             contact_notes: this.contactNotes,
             class_notes: this.classNotes,
+            content: this.content,
             external_link: this.externalLink,
             
             version: this.version,

@@ -1,3 +1,4 @@
+import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { ref } from 'vue'
 
 /**
@@ -8,10 +9,10 @@ export interface AutoSaveOptions {
     debounceMs?: number
     
     /** Callback function to save content, returns save result */
-    onSave: (content: string) => Promise<{ success: boolean, conflict?: boolean, newVersion?: number, serverContent?: string, serverReport?: any }>
+    onSave: (content: string) => Promise<{ success: boolean, conflict?: boolean, newVersion?: number, serverVersion?: number, serverReport?: OccurrenceReportDTO | null }>
     
     /** Callback when a conflict is detected */
-    onConflict?: (serverVersion: string, serverReport?: any) => void
+    onConflict?: (serverReport: OccurrenceReportDTO | null) => void
     
     /** Callback after successful save */
     onSuccess?: (newVersion: number) => void
@@ -83,7 +84,7 @@ export function useAutoSave(options: AutoSaveOptions) {
                 // Conflict detected
                 hasUnsavedChanges.value = true
                 if (onConflict) {
-                    onConflict(result.serverContent || '', result.serverReport)
+                    onConflict(result.serverReport || null)
                 }
             } else if (result.success) {
                 // Success

@@ -158,6 +158,7 @@
         }
     },
     "fields": {
+        "lesson_id": "Lesson ID",
         "lesson_name": "Lesson",
         "external_link": "Report Link",
         "is_completed": "Completed",

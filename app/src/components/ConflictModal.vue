@@ -63,14 +63,47 @@
                                     <th class="px-6 py-4">{{ $t('report.conflict.field') }}</th>
                                     <th class="px-6 py-4 text-rose-500">{{ $t('report.conflict.server_value') }}</th>
                                     <th class="px-6 py-4 text-emerald-600">{{ $t('report.conflict.local_value') }}</th>
+                                    <th v-if="selectedStrategy === 'manual'" class="px-6 py-4">{{
+                                        $t('report.conflict.merged_content') }}</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-100">
                                 <tr v-for="diff in fieldDifferences" :key="diff.field"
                                     class="hover:bg-white transition-colors">
                                     <td class="px-6 py-4 font-bold text-gray-700">{{ diff.label }}</td>
-                                    <td class="px-6 py-4 text-gray-600 font-mono text-xs">{{ diff.server }}</td>
-                                    <td class="px-6 py-4 text-gray-600 font-mono text-xs">{{ diff.local }}</td>
+                                    <td :class="[
+                                        (selectedStrategy === 'keep-server') || (selectedStrategy === 'manual' && (mergedReport as any)[diff.field] === (serverReport as any)[diff.field])
+                                            ? 'bg-emerald-50' : 'bg-rose-50'
+                                    ]" class="px-6 py-4 text-gray-600 font-mono text-xs">
+                                        {{diff.field == 'lesson_id' ? "Lesson " + availableLessons?.find((l: any) =>
+                                            l.id === diff.serverRaw)?.sequence + " " + availableLessons?.find((l: any) =>
+                                                l.id === diff.serverRaw)?.title : diff.server}}
+                                        <button v-if="selectedStrategy === 'manual'"
+                                            @click="setMergedValue(diff.field, diff.serverRaw)"
+                                            class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
+                                            {{ $t('report.conflict.use_this') || 'Use This' }}
+                                        </button>
+                                    </td>
+                                    <td :class="[
+                                        (selectedStrategy === 'keep-local') || (selectedStrategy === 'manual' && (mergedReport as any)[diff.field] === (localReport as any)[diff.field])
+                                            ? 'bg-emerald-50' : 'bg-rose-50'
+                                    ]" class="px-6 py-4 text-gray-600 font-mono text-xs">
+                                        {{diff.field == 'lesson_id' ? "Lesson " + availableLessons?.find((l: any) =>
+                                            l.id === diff.localRaw)?.sequence + " " + availableLessons?.find((l: any) =>
+                                                l.id === diff.localRaw)?.title : diff.local
+                                        }}
+                                        <button v-if="selectedStrategy === 'manual'"
+                                            @click="setMergedValue(diff.field, diff.localRaw)"
+                                            class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
+                                            {{ $t('report.conflict.use_this') || 'Use This' }}
+                                        </button>
+                                    </td>
+                                    <td v-if="selectedStrategy === 'manual'" class="px-6 py-4">
+                                        {{diff.field == 'lesson_id' ? "Lesson " + availableLessons?.find((l: any) =>
+                                            l.id === mergedReport.lesson_id)?.sequence + " " + availableLessons?.find((l:
+                                                any) => l.id === mergedReport.lesson_id)?.title : getMergedValue(diff.field)
+                                        }}
+                                    </td>
                                 </tr>
                             </tbody>
                         </table>
@@ -80,7 +113,7 @@
                 <!-- MERGE SECTIONS -->
 
                 <!-- 1. Contact Notes -->
-                <div v-if="(serverReport?.contact_notes || localReport?.contactNotes) && (serverReport?.contact_notes != localReport?.contactNotes)"
+                <div v-if="(serverReport?.contact_notes || localReport?.contact_notes) && (serverReport?.contact_notes != localReport?.contact_notes)"
                     class="flex flex-col">
                     <h3 class="flex items-center gap-2 text-sm font-black text-gray-900 uppercase tracking-widest mb-6">
                         <span class="w-2 h-8 bg-blue-500 rounded-full"></span>
@@ -94,16 +127,28 @@
                                 <span class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.server_version') }}</span>
                                 <button
-                                    @click="mergedContactNotes = serverReport?.contact_notes || ''; selectedStrategy = 'manual'"
+                                    @click="mergedReport.contact_notes = serverReport?.contact_notes || ''; selectedStrategy = 'manual'"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
                             </div>
-                            <div
-                                class="p-6 bg-gray-50 border border-gray-100 rounded-[2rem] h-40 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar relative">
-                                <div v-if="serverReport?.contact_notes !== localReport?.contactNotes"
+                            <div :class="[
+                                (selectedStrategy === 'keep-server' || (selectedStrategy === 'manual' && mergedReport.contact_notes === serverReport?.contact_notes))
+                                    ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'
+                            ]"
+                                class="p-6 border rounded-[2rem] h-40 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar relative">
+                                <div v-if="serverReport?.contact_notes !== localReport?.contact_notes"
                                     class="absolute top-4 right-4 w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
-                                {{ serverReport?.contact_notes || $t('report.conflict.empty') }}
+                                <div class="whitespace-pre-wrap">
+                                    <template v-for="(chunk, idx) in contactNotesDiff" :key="idx">
+                                        <span v-if="chunk.type !== 'added'"
+                                            :class="chunk.type === 'removed' ? 'bg-rose-100 text-rose-900 line-through' : ''">
+                                            {{ chunk.value }}
+                                        </span>
+                                    </template>
+                                    <span v-if="!serverReport?.contact_notes" class="text-gray-400 italic">{{
+                                        $t('report.conflict.empty') }}</span>
+                                </div>
                             </div>
                         </div>
                         <!-- Local Contact Notes -->
@@ -112,31 +157,43 @@
                                 <span class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.local_version') }}</span>
                                 <button
-                                    @click="mergedContactNotes = localReport?.contactNotes || ''; selectedStrategy = 'manual'"
+                                    @click="mergedReport.contact_notes = localReport?.contact_notes || ''; selectedStrategy = 'manual'"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
                             </div>
-                            <div
-                                class="p-6 bg-gray-50 border border-gray-100 rounded-[2rem] h-40 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar">
-                                {{ localReport?.contactNotes || $t('report.conflict.empty') }}
+                            <div :class="[
+                                (selectedStrategy === 'keep-local' || (selectedStrategy === 'manual' && mergedReport.contact_notes === localReport?.contact_notes))
+                                    ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'
+                            ]"
+                                class="p-6 border rounded-[2rem] h-40 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar">
+                                <div class="whitespace-pre-wrap">
+                                    <template v-for="(chunk, idx) in contactNotesDiff" :key="idx">
+                                        <span v-if="chunk.type !== 'removed'"
+                                            :class="chunk.type === 'added' ? 'bg-emerald-100 text-emerald-900' : ''">
+                                            {{ chunk.value }}
+                                        </span>
+                                    </template>
+                                    <span v-if="!localReport?.contact_notes" class="text-gray-400 italic">{{
+                                        $t('report.conflict.empty') }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <label
+                    <label v-if="selectedStrategy === 'manual'"
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <textarea v-model="mergedContactNotes"
+                    <textarea v-if="selectedStrategy === 'manual'" v-model="mergedReport.contact_notes"
                         class="w-full h-40 p-6 md:p-8 bg-white border-2 border-emerald-100 rounded-[2.5rem] font-mono text-sm leading-relaxed focus:ring-8 focus:ring-emerald-500/5 focus:border-emerald-500 transition-all outline-none text-gray-900 shadow-sm resize-none" />
                 </div>
 
-                <hr v-if="(serverReport?.class_notes || localReport?.classNotes) && (serverReport?.class_notes != localReport?.classNotes)"
+                <hr v-if="(serverReport?.class_notes || localReport?.class_notes) && (serverReport?.class_notes != localReport?.class_notes)"
                     class="border-gray-100 my-12 md:my-16" />
 
                 <!-- 2. Class Notes -->
-                <div v-if="(serverReport?.class_notes || localReport?.classNotes) && (serverReport?.class_notes != localReport?.classNotes)"
+                <div v-if="(serverReport?.class_notes || localReport?.class_notes) && (serverReport?.class_notes != localReport?.class_notes)"
                     class="flex flex-col">
                     <h3 class="flex items-center gap-2 text-sm font-black text-gray-900 uppercase tracking-widest mb-6">
                         <span class="w-2 h-8 bg-purple-500 rounded-full"></span>
@@ -150,16 +207,28 @@
                                 <span class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.server_version') }}</span>
                                 <button
-                                    @click="mergedClassNotes = serverReport?.class_notes || ''; selectedStrategy = 'manual'"
+                                    @click="mergedReport.class_notes = serverReport?.class_notes || ''; selectedStrategy = 'manual'"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
                             </div>
-                            <div
-                                class="p-6 bg-gray-50 border border-gray-100 rounded-[2rem] h-40 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar relative">
-                                <div v-if="serverReport?.class_notes !== localReport?.classNotes"
+                            <div :class="[
+                                (selectedStrategy === 'keep-server' || (selectedStrategy === 'manual' && mergedReport.class_notes === serverReport?.class_notes))
+                                    ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'
+                            ]"
+                                class="p-6 border rounded-[2rem] h-40 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar relative">
+                                <div v-if="serverReport?.class_notes !== localReport?.class_notes"
                                     class="absolute top-4 right-4 w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
-                                {{ serverReport?.class_notes || $t('report.conflict.empty') }}
+                                <div class="whitespace-pre-wrap">
+                                    <template v-for="(chunk, idx) in classNotesDiff" :key="idx">
+                                        <span v-if="chunk.type !== 'added'"
+                                            :class="chunk.type === 'removed' ? 'bg-rose-100 text-rose-900 line-through' : ''">
+                                            {{ chunk.value }}
+                                        </span>
+                                    </template>
+                                    <span v-if="!serverReport?.class_notes" class="text-gray-400 italic">{{
+                                        $t('report.conflict.empty') }}</span>
+                                </div>
                             </div>
                         </div>
                         <!-- Local Class Notes -->
@@ -168,23 +237,35 @@
                                 <span class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.local_version') }}</span>
                                 <button
-                                    @click="mergedClassNotes = localReport?.classNotes || ''; selectedStrategy = 'manual'"
+                                    @click="mergedReport.class_notes = localReport?.class_notes || ''; selectedStrategy = 'manual'"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
                             </div>
-                            <div
-                                class="p-6 bg-gray-50 border border-gray-100 rounded-[2rem] h-40 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar">
-                                {{ localReport?.classNotes || $t('report.conflict.empty') }}
+                            <div :class="[
+                                (selectedStrategy === 'keep-local' || (selectedStrategy === 'manual' && mergedReport.class_notes === localReport?.class_notes))
+                                    ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'
+                            ]"
+                                class="p-6 border rounded-[2rem] h-40 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar">
+                                <div class="whitespace-pre-wrap">
+                                    <template v-for="(chunk, idx) in classNotesDiff" :key="idx">
+                                        <span v-if="chunk.type !== 'removed'"
+                                            :class="chunk.type === 'added' ? 'bg-emerald-100 text-emerald-900' : ''">
+                                            {{ chunk.value }}
+                                        </span>
+                                    </template>
+                                    <span v-if="!localReport?.class_notes" class="text-gray-400 italic">{{
+                                        $t('report.conflict.empty') }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <label
+                    <label v-if="selectedStrategy === 'manual'"
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <textarea v-model="mergedClassNotes"
+                    <textarea v-if="selectedStrategy === 'manual'" v-model="mergedReport.class_notes"
                         class="w-full h-40 p-6 md:p-8 bg-white border-2 border-emerald-100 rounded-[2.5rem] font-mono text-sm leading-relaxed focus:ring-8 focus:ring-emerald-500/5 focus:border-emerald-500 transition-all outline-none text-gray-900 shadow-sm resize-none" />
                 </div>
 
@@ -205,16 +286,29 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.server_version') }}</span>
-                                <button @click="mergedContent = serverContent; selectedStrategy = 'manual'"
+                                <button
+                                    @click="mergedReport.content = serverReport?.content || ''; selectedStrategy = 'manual'"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
                             </div>
-                            <div
-                                class="p-6 bg-gray-50 border border-gray-100 rounded-[2rem] h-60 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar relative group">
-                                <div v-if="serverContent !== localContent"
+                            <div :class="[
+                                (selectedStrategy === 'keep-server' || (selectedStrategy === 'manual' && mergedReport.content === serverReport?.content))
+                                    ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'
+                            ]"
+                                class="p-6 border rounded-[2rem] h-60 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar relative group">
+                                <div v-if="serverReport?.version !== localReport?.version"
                                     class="absolute top-4 right-4 w-2 h-2 rounded-full bg-rose-500 animate-pulse"></div>
-                                {{ serverContent }}
+                                <div class="whitespace-pre-wrap">
+                                    <template v-for="(chunk, idx) in contentDiff" :key="idx">
+                                        <span v-if="chunk.type !== 'added'"
+                                            :class="chunk.type === 'removed' ? 'bg-rose-100 text-rose-900 line-through' : ''">
+                                            {{ chunk.value }}
+                                        </span>
+                                    </template>
+                                    <span v-if="!serverReport?.content" class="text-gray-400 italic">{{
+                                        $t('report.conflict.empty') }}</span>
+                                </div>
                             </div>
                         </div>
                         <!-- Local Content -->
@@ -222,23 +316,36 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.local_version') }}</span>
-                                <button @click="mergedContent = localContent; selectedStrategy = 'manual'"
+                                <button
+                                    @click="mergedReport.content = localReport?.content || ''; selectedStrategy = 'manual'"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
                             </div>
-                            <div
-                                class="p-6 bg-gray-50 border border-gray-100 rounded-[2rem] h-60 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar">
-                                {{ localContent }}
+                            <div :class="[
+                                (selectedStrategy === 'keep-local' || (selectedStrategy === 'manual' && mergedReport.content === localReport?.content))
+                                    ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'
+                            ]"
+                                class="p-6 border rounded-[2rem] h-60 overflow-y-auto font-mono text-sm leading-relaxed text-gray-600 shadow-inner custom-scrollbar">
+                                <div class="whitespace-pre-wrap">
+                                    <template v-for="(chunk, idx) in contentDiff" :key="idx">
+                                        <span v-if="chunk.type !== 'removed'"
+                                            :class="chunk.type === 'added' ? 'bg-emerald-100 text-emerald-900' : ''">
+                                            {{ chunk.value }}
+                                        </span>
+                                    </template>
+                                    <span v-if="!localReport?.content" class="text-gray-400 italic">{{
+                                        $t('report.conflict.empty') }}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <label
+                    <label v-if="selectedStrategy === 'manual'"
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <textarea v-model="mergedContent"
+                    <textarea v-if="selectedStrategy === 'manual'" v-model="mergedReport.content"
                         class="w-full h-60 p-6 md:p-8 bg-white border-2 border-emerald-100 rounded-[2.5rem] font-mono text-sm leading-relaxed focus:ring-8 focus:ring-emerald-500/5 focus:border-emerald-500 transition-all outline-none text-gray-900 shadow-sm resize-none"
                         :placeholder="$t('report.conflict.merge_placeholder')" />
                 </div>
@@ -263,14 +370,14 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import type { Lesson } from '@/models/Course'
 
 interface Props {
     isOpen: boolean
-    serverContent: string
-    localContent: string
-    serverReport?: any // Full server data (DTO from DB: snake_case)
-    localReport?: any  // Full local data (Domain Model: camelCase)
-    availableLessons?: any[]
+    serverReport: OccurrenceReportDTO
+    localReport: OccurrenceReportDTO
+    availableLessons?: Lesson[]
 }
 
 const props = defineProps<Props>()
@@ -278,22 +385,83 @@ const { t } = useI18n()
 
 const emit = defineEmits<{
     'close': []
-    'resolve': [resolvedData: any, strategy: string]
+    'resolve': [resolvedReport: OccurrenceReportDTO, strategy: string]
 }>()
 
 // State
 const selectedStrategy = ref<'keep-local' | 'keep-server' | 'manual'>('manual')
-const mergedContent = ref('')
-const mergedContactNotes = ref('')
-const mergedClassNotes = ref('')
+const mergedReport = ref<OccurrenceReportDTO>({ ...props.localReport });
+
+const getMergedValue = (field: keyof OccurrenceReportDTO) => {
+    const val = (mergedReport.value as any)[field]
+    if (field === 'lesson_id') {
+        const lesson = props.availableLessons?.find((l: any) => l.id === val)
+        return `Lesson ${lesson?.sequence} ${lesson?.title}`
+    }
+    if (typeof val === 'boolean') return val ? t('report.conflict.is_completed.yes') : t('report.conflict.is_completed.no')
+    if (val === null || val === undefined) return t('report.conflict.empty')
+    return val
+}
+
+const setMergedValue = (field: keyof OccurrenceReportDTO, value: any) => {
+    if (field === 'lesson_id') {
+        const lesson = props.availableLessons?.find((l: any) => l.id === value)
+        mergedReport.value.lesson_id = lesson?.id
+    }
+    (mergedReport.value as any)[field] = value
+}
+
+// Diff Utility
+type DiffChunk = { value: string, type: 'added' | 'removed' | 'unchanged' }
+function computeDiff(oldText: string = '', newText: string = ''): DiffChunk[] {
+    const s1 = (oldText || '').split(/(\s+)/).filter(x => x.length > 0);
+    const s2 = (newText || '').split(/(\s+)/).filter(x => x.length > 0);
+    const n = s1.length;
+    const m = s2.length;
+    const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+
+    for (let i = 1; i <= n; i++) {
+        const row = dp[i]!;
+        const prevRow = dp[i - 1]!;
+        for (let j = 1; j <= m; j++) {
+            if (s1[i - 1] === s2[j - 1]) {
+                row[j] = prevRow[j - 1]! + 1;
+            } else {
+                row[j] = Math.max(prevRow[j]!, row[j - 1]!);
+            }
+        }
+    }
+
+    const result: DiffChunk[] = [];
+    let i = n, j = m;
+    while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && s1[i - 1] === s2[j - 1]) {
+            result.unshift({ value: s1[i - 1]!, type: 'unchanged' });
+            i--; j--;
+        } else if (j > 0 && (i === 0 || (dp[i]?.[j - 1] ?? 0) >= (dp[i - 1]?.[j] ?? 0))) {
+            result.unshift({ value: s2[j - 1]!, type: 'added' });
+            j--;
+        } else if (i > 0) {
+            result.unshift({ value: s1[i - 1]!, type: 'removed' });
+            i--;
+        } else {
+            break;
+        }
+    }
+    return result;
+}
+
+const contactNotesDiff = computed(() => computeDiff(props.serverReport?.contact_notes, props.localReport?.contact_notes))
+const classNotesDiff = computed(() => computeDiff(props.serverReport?.class_notes, props.localReport?.class_notes))
+const contentDiff = computed(() => computeDiff(props.serverReport?.content, props.localReport?.content))
 
 // Computed field differences
 const fieldDifferences = computed(() => {
     if (!props.serverReport || !props.localReport) return []
 
     // We focus on fields OTHER than the big text blocks now
-    const fields = [
-        { key: 'lesson_name', label: t('report.fields.lesson_name') },
+    const fields: { key: keyof OccurrenceReportDTO; label: string }[] = [
+        { key: 'lesson_id', label: t('report.fields.lesson_name') },
         { key: 'external_link', label: t('report.fields.external_link') },
         { key: 'is_completed', label: t('report.fields.is_completed') },
         { key: 'progress_letter', label: t('report.fields.progress_letter') },
@@ -303,7 +471,7 @@ const fieldDifferences = computed(() => {
         // Notes are now handled in main UI
     ]
 
-    const diffs: any[] = []
+    const diffs: { field: keyof OccurrenceReportDTO; label: string; server: any; local: any; serverRaw: any; localRaw: any }[] = []
 
     // Helper to normalize values for comparison
     const normalize = (val: any) => {
@@ -315,22 +483,17 @@ const fieldDifferences = computed(() => {
     fields.forEach(f => {
         if (!props.serverReport || !props.localReport) return
 
+        // Get values using the correct key (snake_case for server, camelCase for local)
         let serverVal = props.serverReport[f.key]
         let localVal = props.localReport[f.key]
 
-        if (f.key === 'lesson_name') {
-            serverVal = props.serverReport.lesson_id
-            localVal = props.localReport.lesson_id
-            const serverLesson = props.availableLessons?.find((l: any) => l.id === serverVal)
-            const localLesson = props.availableLessons?.find((l: any) => l.id === localVal)
-            serverVal = `Lesson ${serverLesson?.sequence} ${serverLesson?.title}` || serverVal
-            localVal = `Lesson ${localLesson?.sequence} ${localLesson?.title}` || localVal
-        }
-
         // Fallback for camelCase keys in local object
         if (localVal === undefined && props.localReport) {
-            const camelKey = f.key.replace(/_([a-z])/g, (g: string) => g[1].toUpperCase())
-            localVal = props.localReport[camelKey]
+            const camelKey: string = f.key.replace(/_([a-z])/g, (g: string) => g[1]?.toUpperCase() || '')
+
+            if (camelKey && (props.localReport as any)[camelKey] !== undefined) {
+                localVal = (props.localReport as any)[camelKey]
+            }
         }
 
         // Normalize
@@ -342,7 +505,9 @@ const fieldDifferences = computed(() => {
                 field: f.key,
                 label: f.label,
                 server: s || t('report.conflict.empty'),
-                local: l || t('report.conflict.empty')
+                local: l || t('report.conflict.empty'),
+                serverRaw: serverVal,
+                localRaw: localVal
             })
         }
     })
@@ -374,27 +539,16 @@ const strategyOptions = computed(() => [
 watch(() => props.isOpen, (isOpen) => {
     if (isOpen) {
         // Initialize merged content with local version by default
-        mergedContent.value = props.localContent
-        mergedContactNotes.value = props.localReport?.contactNotes || ''
-        mergedClassNotes.value = props.localReport?.classNotes || ''
+        mergedReport.value = { ...props.localReport }
         selectedStrategy.value = 'manual'
     }
 })
 
-watch(() => props.localContent, (newContent) => {
-    if (selectedStrategy.value === 'manual' || selectedStrategy.value === 'keep-local') {
-        mergedContent.value = newContent
-    }
-})
-// Add watchers for other fields if dynamic updates are possible outside modal, 
-// usually modal blocks interaction so this is less critical but good for correctness
 watch(() => props.localReport, (newReport) => {
     if (selectedStrategy.value === 'manual' || selectedStrategy.value === 'keep-local') {
-        mergedContactNotes.value = newReport?.contactNotes || ''
-        mergedClassNotes.value = newReport?.classNotes || ''
+        mergedReport.value = { ...newReport }
     }
 })
-
 
 // Methods
 function close() {
@@ -402,27 +556,14 @@ function close() {
 }
 
 function resolve() {
-    let finalUpdates: any = {}
+    let finalUpdates: OccurrenceReportDTO;
 
     if (selectedStrategy.value === 'keep-local') {
-        finalUpdates = {
-            content: props.localContent,
-            contact_notes: props.localReport?.contactNotes,
-            class_notes: props.localReport?.classNotes
-        }
+        finalUpdates = props.localReport;
     } else if (selectedStrategy.value === 'keep-server') {
-        finalUpdates = {
-            content: props.serverContent,
-            contact_notes: props.serverReport?.contact_notes,
-            class_notes: props.serverReport?.class_notes
-        }
+        finalUpdates = props.serverReport
     } else {
-        // Manual
-        finalUpdates = {
-            content: mergedContent.value,
-            contact_notes: mergedContactNotes.value,
-            class_notes: mergedClassNotes.value
-        }
+        finalUpdates = mergedReport.value
     }
 
     emit('resolve', finalUpdates, selectedStrategy.value)

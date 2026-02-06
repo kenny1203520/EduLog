@@ -454,6 +454,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import { ReportTemplateService } from '@/services/ReportTemplateService'
+import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 import type { Lesson } from '@/models/Course'
 
@@ -594,6 +595,8 @@ interface Props {
     disabled?: boolean // 是否禁用
     showManualSave?: boolean // 是否顯示手動儲存
     debounceMs?: number // 停止輸入後多久自動儲存(ms)
+    enrollmentId?: string // 課程報名ID
+    classOccurrenceId?: string // 課堂上課日期時間ID
     title?: string // 報告標題
     courseName?: string // 課程名稱
     courseStage?: string // 課程階段
@@ -614,23 +617,37 @@ interface Props {
     initialClassNotes?: string // 課堂筆記/紀錄
     initialContent?: string // 學習報告
     initialEnrollmentExternalLink?: string // 課程外部連結
+    initialCreatedAt?: string // 建立時間
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    initialContent: '',
+    reportId: undefined,
     initialVersion: 1,
+    loading: false,
     placeholder: '',
     disabled: false,
     showManualSave: false,
     debounceMs: 2000,
-    availableLessons: () => [],
-    initialIsCompleted: false,
-    initialAttendanceStatus: undefined,
-    initialReportExternalLink: '',
-    initialEnrollmentExternalLink: '',
+    title: undefined,
     courseName: '',
+    courseStage: '',
     courseDisplayName: '',
-    initialStudentId: ''
+    initialStudentId: '',
+    initialLessonId: '',
+    availableLessons: () => [],
+    initialReportExternalLink: '',
+    initialIsCompleted: false,
+    initialProgressStart: undefined,
+    initialProgressEnd: undefined,
+    initialAttendanceStatus: undefined,
+    initialAbsenceReason: undefined,
+    initialClassParticipation: 0,
+    initialClassroomBehavior: 0,
+    initialContactNotes: '',
+    initialClassNotes: '',
+    initialContent: '',
+    initialEnrollmentExternalLink: '',
+    initialCreatedAt: '',
 })
 
 const emit = defineEmits<{
@@ -638,7 +655,7 @@ const emit = defineEmits<{
     'save-success': [version: number]
     'update:report-external-link': [value: string]
     'save-error': [error: string]
-    'conflict': [serverContent: string, serverReport?: any, localReport?: any]
+    'conflict': [serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO]
     'deleted': []
 }>()
 
@@ -716,7 +733,6 @@ const {
         try {
             const result = await OccurrenceReportService.saveReport(
                 props.reportId,
-                content,
                 version.value,
                 authStore.user?.id,
                 {
@@ -729,28 +745,37 @@ const {
                     classroomBehavior: classroomBehavior.value,
                     contactNotes: contactNotes.value,
                     classNotes: classNotes.value,
+                    content: content,
                     externalLink: reportExternalLink.value
                 }
             )
 
-            const localReportPayload = {
+            const localReportPayload: OccurrenceReportDTO = {
                 id: props.reportId,
+                enrollment_id: props.enrollmentId || '',
+                class_occurrence_id: props.classOccurrenceId || '',
+                lesson_id: selectedLessonId.value || '',
                 content: content,
-                version: version.value,
-                lesson_id: selectedLessonId.value || null,
                 is_completed: isCompleted.value,
-                progress_letter: progressLetter.value || null,
+
+                progress_letter: progressLetter.value || '',
                 attendance_status: attendanceStatus.value,
-                absence_reason: finalAbsenceReason || null,
+                absence_reason: finalAbsenceReason || '',
                 class_participation: classParticipation.value,
                 classroom_behavior: classroomBehavior.value,
                 contact_notes: contactNotes.value,
                 class_notes: classNotes.value,
-                external_link: reportExternalLink.value
+                external_link: reportExternalLink.value,
+
+                version: version.value,
+                last_edited_at: new Date().toISOString(),
+                last_edited_by: authStore.user?.id,
+                created_at: props.initialCreatedAt,
+                updated_at: new Date().toISOString(),
             }
 
             if (result.conflict) {
-                emit('conflict', result.serverContent || '', result.serverReport, localReportPayload)
+                emit('conflict', result.serverReport!, localReportPayload)
                 return result
             }
 
@@ -766,24 +791,32 @@ const {
             return { success: false, message }
         }
     },
-    onConflict: (serverContent, serverReport) => {
+    onConflict: (serverReport) => {
         // Construct local payload for comparison
-        const localReportPayload = {
+        const localReportPayload: OccurrenceReportDTO = {
             id: props.reportId,
+            enrollment_id: props.enrollmentId || '',
+            class_occurrence_id: props.classOccurrenceId || '',
+            lesson_id: selectedLessonId.value || '',
             content: localContent.value,
-            version: version.value,
-            lesson_id: selectedLessonId.value || null,
             is_completed: isCompleted.value,
-            progress_letter: progressLetter.value || null,
+
+            progress_letter: progressLetter.value || '',
             attendance_status: attendanceStatus.value,
-            absence_reason: absenceReason.value || null,
+            absence_reason: absenceReason.value || '',
             class_participation: classParticipation.value,
             classroom_behavior: classroomBehavior.value,
             contact_notes: contactNotes.value,
             class_notes: classNotes.value,
-            external_link: reportExternalLink.value
+            external_link: reportExternalLink.value,
+
+            version: version.value,
+            last_edited_at: new Date().toISOString(),
+            last_edited_by: authStore.user?.id,
+            created_at: props.initialCreatedAt,
+            updated_at: new Date().toISOString(),
         }
-        emit('conflict', serverContent, serverReport, localReportPayload)
+        emit('conflict', serverReport!, localReportPayload)
     },
     onSuccess: (newVersion) => {
         version.value = newVersion

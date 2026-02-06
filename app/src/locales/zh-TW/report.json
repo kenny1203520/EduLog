@@ -158,6 +158,7 @@
         }
     },
     "fields": {
+        "lesson_id": "課次ID",
         "lesson_name": "課次",
         "external_link": "報告連結",
         "is_completed": "完整完成",

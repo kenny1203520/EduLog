@@ -112,7 +112,6 @@ export class OccurrenceReportService {
      * Also handles automatic progress tracking based on lesson completion.
      * 
      * @param reportId - The report ID
-     * @param content - Learning report content
      * @param currentVersion - Client's current version
      * @param userId - User making the edit (optional)
      * @param detailedData - All detailed report fields
@@ -120,7 +119,6 @@ export class OccurrenceReportService {
      */
     static async saveReport(
         reportId: string,
-        content: string,
         currentVersion: number,
         userId?: string,
         detailedData?: {
@@ -133,6 +131,7 @@ export class OccurrenceReportService {
             classroomBehavior?: number
             contactNotes?: string
             classNotes?: string
+            content: string,
             externalLink?: string
         }
     ): Promise<SaveReportResult> {
@@ -166,7 +165,6 @@ export class OccurrenceReportService {
         const newVersion = currentVersion + 1
 
         const updateData: any = {
-            content,
             version: newVersion,
             last_edited_by: userId,
             last_edited_at: new Date().toISOString()
@@ -217,6 +215,9 @@ export class OccurrenceReportService {
             }
             if (detailedData.classNotes !== undefined) {
                 updateData.class_notes = detailedData.classNotes
+            }
+            if (detailedData.content !== undefined) {
+                updateData.content = detailedData.content
             }
         }
 
