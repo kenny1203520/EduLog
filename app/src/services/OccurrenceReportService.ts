@@ -174,16 +174,11 @@ export class OccurrenceReportService {
         if (detailedData) {
             // Apply business rules
             let isCompleted = detailedData.isCompleted ?? true
-            let progressLetter = detailedData.progressLetter
+            let progressLetter = detailedData.progressLetter || null
 
             // Rule: Absent → force incomplete
             if (detailedData.attendanceStatus === 'absent') {
                 isCompleted = false
-            }
-
-            // Rule: Completed → clear progress letter
-            if (isCompleted) {
-                progressLetter = undefined
             }
 
             // Add all fields to update data
@@ -321,8 +316,7 @@ export class OccurrenceReportService {
                 .from('enrollments')
                 .update({ status: 'completed' })
                 .eq('id', enrollmentId)
-            
-            console.log(`✅ Enrollment ${enrollmentId} auto-completed (last lesson finished)`)
+
             return
         }
 
@@ -397,13 +391,13 @@ export class OccurrenceReportService {
      * This overwrites the server version with the resolved content.
      * 
      * @param reportId - The report ID
-     * @param resolvedContent - The content after manual resolution
+     * @param resolvedReport - The report after manual resolution
      * @param userId - User resolving the conflict
      * @returns Updated report
      */
     static async resolveConflict(
         reportId: string,
-        resolvedContent: string,
+        resolvedReport: OccurrenceReportDTO,
         userId?: string
     ): Promise<OccurrenceReport> {
         // Fetch current report to get version
@@ -418,14 +412,30 @@ export class OccurrenceReportService {
         // Force update with new version
         const newVersion = current.version + 1
 
+        // Sanitize payload to avoid UUID errors and restricted field updates
+        const updatePayload: any = {
+            // UUID fields: convert empty string to null to prevent "invalid input syntax for type uuid"
+            lesson_id: resolvedReport.lesson_id || null,
+            
+            is_completed: resolvedReport.is_completed,
+            progress_letter: resolvedReport.progress_letter || null,
+            attendance_status: resolvedReport.attendance_status,
+            absence_reason: resolvedReport.absence_reason,
+            class_participation: resolvedReport.class_participation,
+            classroom_behavior: resolvedReport.classroom_behavior,
+            contact_notes: resolvedReport.contact_notes,
+            class_notes: resolvedReport.class_notes,
+            content: resolvedReport.content,
+            external_link: resolvedReport.external_link,
+
+            version: newVersion,
+            last_edited_by: userId,
+            last_edited_at: new Date().toISOString()
+        }
+
         const { data: updated, error: updateError } = await supabase
             .from('occurrence_reports')
-            .update({
-                content: resolvedContent,
-                version: newVersion,
-                last_edited_by: userId,
-                last_edited_at: new Date().toISOString()
-            })
+            .update(updatePayload)
             .eq('id', reportId)
             .select()
             .single()

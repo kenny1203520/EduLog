@@ -9,6 +9,7 @@ import type { Enrollment } from '@/models/Enrollment'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import { useI18n } from 'vue-i18n'
+import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 const { t } = useI18n()
 
@@ -25,11 +26,11 @@ const selectedEnrollmentId = ref<string | null>(null)
 
 // Conflict Resolution State
 const showConflictModal = ref(false)
-const conflictServerContent = ref('')
-const conflictLocalContent = ref('')
+const conflictServerVersion = ref(0)
+const conflictLocalVersion = ref(0)
 const conflictReportId = ref<string | null>(null)
-const conflictServerReport = ref<any>(null)
-const conflictLocalReport = ref<any>(null)
+const conflictServerReport = ref<OccurrenceReportDTO | null>(null)
+const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
 
 const session = ref<any>(null)
 const enrollments = ref<Enrollment[]>([])
@@ -157,12 +158,12 @@ async function toggleAttendance(enrId: string, event: any) {
     try {
         await OccurrenceReportService.saveReport(
             report.id,
-            report.content || '',
             report.version,
             undefined,
             {
                 attendanceStatus: newStatus,
-                absenceReason: isPresent ? undefined : t('report.editor.absence_reasons.reason_not_provided')
+                absenceReason: isPresent ? undefined : t('report.editor.absence_reasons.reason_not_provided'),
+                content: report.content || '',
             }
         )
         // Refresh local report state
@@ -274,11 +275,10 @@ function handleSaveError(error: string) {
     alert(`Failed to save report: ${error}`)
 }
 
-function handleConflict(serverContent: string, enrollmentId: string, serverReport?: any, localReport?: any) {
-    conflictServerContent.value = serverContent
-    const report = reportMap.value.get(enrollmentId)
-    conflictLocalContent.value = localReport?.content || report?.content || ''
-    conflictReportId.value = report?.id || null
+function handleConflict(serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO) {
+    conflictReportId.value = serverReport.id || null
+    conflictServerVersion.value = serverReport.version
+    conflictLocalVersion.value = localReport.version
     conflictServerReport.value = serverReport
     conflictLocalReport.value = localReport
     showConflictModal.value = true
@@ -289,17 +289,13 @@ function closeConflictModal() {
     conflictReportId.value = null
 }
 
-async function resolveConflict(resolvedContent: any) {
+async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
     if (!conflictReportId.value) return
 
     try {
-        // resolvedContent is now an object containing updates for multiple fields
-        // Type cast or validation might be good here, but for now we pass it through
-        const updates = typeof resolvedContent === 'string' ? { content: resolvedContent } : resolvedContent
-
         const report = await OccurrenceReportService.resolveConflict(
             conflictReportId.value,
-            updates
+            resolvedReport
         )
 
         // Update local state
@@ -705,8 +701,7 @@ async function resolveConflict(resolvedContent: any) {
                         @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                         @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
                         @save-success="handleSaveSuccess($event, selectedEnrollmentId!)" @save-error="handleSaveError"
-                        @conflict="(sc, sr, lr) => handleConflict(sc, selectedEnrollmentId!, sr, lr)"
-                        class="h-full border-none shadow-none rounded-none" />
+                        @conflict="handleConflict" class="h-full border-none shadow-none rounded-none" />
 
                     <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
                         <p class="font-bold">{{ $t('report.no_report_today') }}</p>
@@ -717,9 +712,9 @@ async function resolveConflict(resolvedContent: any) {
         </div>
 
         <!-- Conflict Resolution Modal -->
-        <ConflictModal :is-open="showConflictModal" :server-content="conflictServerContent"
-            :local-content="conflictLocalContent" :server-report="conflictServerReport"
-            :local-report="conflictLocalReport" :available-lessons="courseLessons" @close="closeConflictModal"
+        <ConflictModal :is-open="showConflictModal" :serverVersion="conflictServerVersion"
+            :localVersion="conflictLocalVersion" :server-report="conflictServerReport!"
+            :local-report="conflictLocalReport!" :available-lessons="courseLessons" @close="closeConflictModal"
             @resolve="resolveConflict" />
 
     </div>

@@ -55,7 +55,7 @@
                         <div
                             class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
                             <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
-                                }}</span>
+                            }}</span>
                             <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
                             <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
                                 v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
@@ -377,22 +377,26 @@
 
                     <!-- Report Editor -->
                     <ReportEditor :key="selectedReport.id" :report-id="selectedReport.id"
-                        :initial-content="selectedReport.content" :initial-version="selectedReport.version"
-                        :loading="reportLoading"
+                        :initial-version="selectedReport.version" :loading="reportLoading" :show-manual-save="true"
+                        :enrollment-id="enrollmentInfo?.id" :class-occurrence-id="selectedOccurrence.id"
                         :title="$t('report.report_for_date', { date: formatOccurrenceDateTime(selectedOccurrence) })"
-                        :show-manual-save="true" :available-lessons="courseLessons"
-                        :course-name="enrollmentInfo?.courseDisplay" :initial-lesson-id="selectedReport.lessonId"
+                        :course-name="enrollmentInfo?.courseName || undefined"
+                        :course-stage="enrollmentInfo?.courseStage || undefined"
+                        :course-display-name="enrollmentInfo?.courseDisplay || undefined"
+                        :initial-student-id="enrollmentInfo?.studentId" :initial-lesson-id="selectedReport.lessonId"
+                        :available-lessons="courseLessons" :initial-report-external-link="selectedReport.externalLink"
                         :initial-is-completed="selectedReport.isCompleted"
+                        :initial-progress-start="selectedReport.progressStart"
+                        :initial-progress-end="selectedReport.progressEnd"
                         :initial-attendance-status="selectedReport.attendanceStatus"
                         :initial-absence-reason="selectedReport.absenceReason"
                         :initial-class-participation="selectedReport.classParticipation"
                         :initial-classroom-behavior="selectedReport.classroomBehavior"
                         :initial-contact-notes="selectedReport.contactNotes"
-                        :initial-class-notes="selectedReport.classNotes"
-                        :initial-report-external-link="selectedReport.externalLink"
+                        :initial-class-notes="selectedReport.classNotes" :initial-content="selectedReport.content"
                         :initial-enrollment-external-link="enrollmentInfo?.externalLink"
-                        :initial-student-id="enrollmentInfo?.studentId" @save-success="handleSaveSuccess"
-                        @save-error="handleSaveError" @conflict="handleConflict" @deleted="handleDeleted" />
+                        @save-success="handleSaveSuccess" @save-error="handleSaveError" @conflict="handleConflict"
+                        @deleted="handleDeleted" />
                 </div>
 
                 <!-- Empty State -->
@@ -418,8 +422,9 @@
         </div>
 
         <!-- Conflict Resolution Modal -->
-        <ConflictModal :is-open="showConflictModal" :server-content="conflictServerContent"
-            :local-content="conflictLocalContent" @close="closeConflictModal" @resolve="resolveConflict" />
+        <ConflictModal :is-open="showConflictModal" :server-report="conflictServerReport!"
+            :local-report="conflictLocalReport!" :available-lessons="courseLessons" @close="closeConflictModal"
+            @resolve="resolveConflict" />
 
         <!-- Update Available Toast -->
         <div v-if="showUpdateToast"
@@ -469,6 +474,7 @@ import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { SuspensionService } from '@/services/SuspensionService'
 import { Suspension } from '@/models/Suspension'
 import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 const route = useRoute()
 const router = useRouter()
@@ -481,14 +487,20 @@ const selectedOccurrence = ref<ClassOccurrence | null>(null)
 const selectedReport = ref<OccurrenceReport | null>(null)
 const reportLoading = ref(false)
 const showConflictModal = ref(false)
-const conflictServerContent = ref('')
-const conflictLocalContent = ref('')
+const conflictServerVersion = ref(0)
+const conflictLocalVersion = ref(0)
+const conflictReportId = ref<string | null>(null)
+const conflictServerReport = ref<OccurrenceReportDTO | null>(null)
+const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
 const showSuccessToast = ref(false)
 const successMessage = ref('')
 const showUpdateToast = ref(false) // New toast for updates
 const enrollmentInfo = ref<{
+    id: string,
     studentName: string,
-    courseDisplay: string,
+    courseName: string,
+    courseStage?: string,
+    courseDisplay?: string,
     classroomName?: string,
     sessionName?: string,
     externalLink?: string,
@@ -765,8 +777,11 @@ async function loadOccurrences() {
 
         // Store enrollment info for display
         enrollmentInfo.value = {
+            id: enrollment.id || '',
             studentName: enrollment.studentName || 'Student',
-            courseDisplay: `${enrollment.courseSubject}_${enrollment.courseStage}`,
+            courseName: enrollment.courseSubject || 'Course',
+            courseStage: enrollment.courseStage,
+            courseDisplay: enrollment.courseDisplayName,
             classroomName: enrollment.classroomName,
             sessionName: enrollment.classSessionName,
             externalLink: enrollment.externalLink,
@@ -1122,9 +1137,12 @@ function handleDeleted() {
     loadOccurrences() // Full reload to catch progress changes and remove report
 }
 
-function handleConflict(serverContent: string) {
-    conflictServerContent.value = serverContent
-    conflictLocalContent.value = selectedReport.value?.content || ''
+function handleConflict(serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO) {
+    conflictReportId.value = serverReport.id || null
+    conflictServerVersion.value = serverReport.version
+    conflictLocalVersion.value = localReport.version
+    conflictServerReport.value = serverReport
+    conflictLocalReport.value = localReport
     showConflictModal.value = true
 }
 
@@ -1132,7 +1150,7 @@ function closeConflictModal() {
     showConflictModal.value = false
 }
 
-async function resolveConflict(resolvedContent: string) {
+async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
     if (!selectedReport.value) return
 
     try {
