@@ -4,9 +4,11 @@ import { HolidayService } from '@/services/HolidayService'
 import { CourseService } from '@/services/CourseService'
 import { Holiday } from '@/models/Holiday'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 
 const { t } = useI18n()
+const toast = useToast()
 const holidays = ref<Holiday[]>([])
 const classrooms = ref<ClassroomDTO[]>([])
 const sessions = ref<ClassSessionDTO[]>([])
@@ -89,8 +91,9 @@ async function handleSaveHoliday() {
         }
         await loadHolidays()
         closeModal()
+        toast.success(t('holiday.save_success') || 'Holiday saved successfully')
     } catch (e: any) {
-        alert(e.message)
+        toast.error(e.message || 'Failed to save holiday')
     } finally {
         isSaving.value = false
     }
@@ -101,8 +104,9 @@ async function handleDeleteHoliday(id: string) {
     try {
         await HolidayService.deleteHoliday(id)
         await loadHolidays()
+        toast.success(t('holiday.delete_success') || 'Holiday deleted successfully')
     } catch (e: any) {
-        alert(e.message)
+        toast.error(e.message || 'Failed to delete holiday')
     }
 }
 

@@ -1,7 +1,7 @@
 <template>
     <div class="report-editor bg-white rounded-lg shadow-sm p-6 relative min-h-[400px]">
         <!-- Loading Overlay -->
-        <div v-if="loading"
+        <div v-if="props.loading"
             class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-lg transition-all duration-300">
             <svg class="animate-spin h-10 w-10 text-emerald-500 mb-2" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
@@ -13,7 +13,7 @@
 
         <!-- Header -->
         <h3 class="text-lg font-semibold text-gray-800">
-            {{ title || $t('report.editor.title') }}
+            {{ props.title || $t('report.editor.title') }}
         </h3>
 
         <div class="flex items-center gap-4">
@@ -63,14 +63,10 @@
                                 {{ $t('report.editor.save_to_template') }}
                             </button>
                         </div>
-                        <div v-if="templateStatus"
-                            class="text-[10px] text-emerald-600 font-bold text-center animate-bounce">
-                            {{ templateStatus }}
-                        </div>
                     </div>
 
                     <!-- List -->
-                    <div class="max-h-60 overflow-y-auto space-y-2">
+                    <div class="max-h-60 overflow-y-auto space-y-2 mt-4 pt-4 border-t border-gray-100">
                         <div v-if="savedTemplates.length === 0" class="text-xs text-gray-500 text-center py-2">
                             {{ $t('report.editor.no_templates') }}
                         </div>
@@ -96,7 +92,7 @@
             </div>
 
             <!-- Save Status Indicator -->
-            <div class="flex items-center gap-2 text-sm">
+            <div class="flex items-center gap-2 text-sm ml-auto">
                 <span v-if="isSaving" class="text-blue-600 flex items-center gap-1">
                     <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
@@ -117,8 +113,8 @@
             </div>
 
             <!-- Delete Button -->
-            <button v-if="reportId" @click="handleDeleteReport"
-                class="ml-auto text-sm font-medium text-red-500 hover:text-red-700 flex items-center gap-1 focus:outline-none"
+            <button v-if="props.reportId" @click="handleDeleteReport"
+                class="text-sm font-medium text-red-500 hover:text-red-700 flex items-center gap-1 focus:outline-none"
                 :title="$t('report.editor.delete_report', 'Delete Report')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
@@ -421,9 +417,10 @@
                 </span>
             </label>
             <textarea v-model="localContent" @input="handleInput"
-                :placeholder="placeholder || $t('report.editor.learning_report_placeholder')" :disabled="disabled"
+                :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
+                :disabled="props.disabled"
                 class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono text-sm"
-                :class="{ 'bg-gray-50': disabled, 'opacity-50': disabled }" />
+                :class="{ 'bg-gray-50': props.disabled, 'opacity-50': props.disabled }" />
         </div>
 
         <!-- Error Display -->
@@ -440,7 +437,7 @@
         </div>
 
         <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId"
-            :student-id="props.initialStudentId" :current-report-id="reportId" @close="showReferencePanel = false"
+            :student-id="props.initialStudentId" :current-report-id="props.reportId" @close="showReferencePanel = false"
             @copy="handleCopyContent" />
     </div>
 </template>
@@ -454,6 +451,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import { ReportTemplateService } from '@/services/ReportTemplateService'
+import { useToast } from 'vue-toastification'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 import type { Lesson } from '@/models/Course'
@@ -472,7 +470,7 @@ const showReferencePanel = ref(false)
 const savedTemplates = ref<Template[]>([])
 const newTemplateName = ref('')
 const justCopiedCourse = ref(false)
-const templateStatus = ref('') // Added for feedback
+const toast = useToast()
 
 const handleCopyContent = (text: string) => {
     if (!text) return
@@ -517,8 +515,7 @@ async function saveTemplate() {
             classNotes: newT.classNotes
         })
         newTemplateName.value = ''
-        templateStatus.value = t('report.editor.template_saved')
-        setTimeout(() => { templateStatus.value = '' }, 3000)
+        toast.success(t('report.editor.template_saved'))
     } catch (e) {
         console.error('Failed to save template', e)
     }
@@ -565,6 +562,7 @@ async function deleteTemplate(id: string) {
     try {
         await ReportTemplateService.deleteTemplate(id)
         savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
+        toast.success(t('report.editor.template_deleted') || 'Template deleted')
     } catch (e) {
         console.error('Failed to delete template', e)
     }
@@ -576,6 +574,7 @@ async function handleDeleteReport() {
 
     try {
         await OccurrenceReportService.deleteReportAndRevertProgress(props.reportId)
+        toast.success(t('report.editor.delete_success') || 'Report deleted')
         emit('deleted')
     } catch (e: any) {
         console.error('Failed to delete report', e)

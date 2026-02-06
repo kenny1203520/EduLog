@@ -6,10 +6,12 @@ import { OccurrenceService } from '@/services/OccurrenceService'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 const { t } = useI18n()
+const toast = useToast()
 const router = useRouter()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 
@@ -139,8 +141,9 @@ async function saveClassroom() {
         }
         await Promise.all([loadRooms(), loadAllRooms()])
         closeRoomModal()
+        toast.success(t('classroom.room_save_success') || 'Room saved successfully')
     } catch (e) {
-        alert(e)
+        toast.error(e as string)
     }
 }
 
@@ -166,8 +169,9 @@ async function deleteClassroom(id: string) {
     try {
         await CourseService.deleteClassroom(id)
         await Promise.all([loadRooms(), loadAllRooms()])
+        toast.success(t('classroom.room_delete_success') || 'Room deleted successfully')
     } catch (e) {
-        alert(e)
+        toast.error(e as string)
     }
 }
 
@@ -189,8 +193,9 @@ async function saveSession() {
 
         await loadSessions()
         closeSessionModal()
+        toast.success(t('classroom.session_save_success') || 'Session saved successfully')
     } catch (e) {
-        alert(e)
+        toast.error(e as string)
     }
 }
 
@@ -224,8 +229,9 @@ async function deleteSession(id: string) {
     try {
         await CourseService.deleteClassSession(id)
         await loadSessions()
+        toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
     } catch (e) {
-        alert(e)
+        toast.error(e as string)
     }
 }
 
@@ -344,7 +350,7 @@ function toggleCourseSelection(courseId: string) {
                 <div v-if="filteredClassrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
-                        }}"</span>
+                    }}"</span>
                 </div>
             </div>
 
@@ -440,25 +446,25 @@ function toggleCourseSelection(courseId: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                        }}</label>
+                            }}</label>
                         <input type="color" v-model="newClassroom.color"
                             class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                     </div>
@@ -484,7 +490,7 @@ function toggleCourseSelection(courseId: string) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
-                        }}</label>
+                            }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -498,7 +504,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
-                        }}</label>
+                            }}</label>
                         <input type="number" v-model="newSession.capacity"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -513,7 +519,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                        }}</label>
+                            }}</label>
                         <div class="flex flex-wrap gap-2">
                             <select v-model="newSession.day_of_week"
                                 class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">

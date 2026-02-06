@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { StudentService } from '@/services/StudentService'
 import { CourseService } from '@/services/CourseService'
@@ -16,6 +17,7 @@ import { supabase } from '@/lib/supabase'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const toast = useToast()
 const studentStore = useStudentStore()
 const studentId = computed(() => route.params.id as string)
 const { validateEmail, getEmailError } = useEmailValidation()
@@ -95,7 +97,7 @@ async function saveMainDetails() {
     // Validate email if provided
     if (form.value.email && !validateEmail(form.value.email)) {
         emailTouched.value = true
-        alert('Please enter a valid email address')
+        toast.error('Please enter a valid email address')
         return
     }
 
@@ -109,10 +111,10 @@ async function saveMainDetails() {
         }
         await studentStore.updateStudent(studentId.value, payload)
         emailTouched.value = false // Reset validation state
-        // Success feedback could go here
+        toast.success(t('common.save_success') || 'Details saved successfully')
     } catch (e) {
         console.error(e)
-        alert('Failed to save details')
+        toast.error('Failed to save details')
     } finally {
         isSaving.value = false
         isEditingMainDetails.value = false
@@ -127,7 +129,7 @@ async function handleDeleteStudent() {
         router.push('/dashboard')
     } catch (e: any) {
         console.error(e)
-        alert('Failed to delete student: ' + (e.message || e))
+        toast.error('Failed to delete student: ' + (e.message || e))
     }
 }
 
@@ -136,24 +138,13 @@ const newContact = ref({ name: '', relation: '', phone: '', email: '' })
 const contactEmailTouched = ref(false)
 const contactEmailError = computed(() => contactEmailTouched.value ? getEmailError(newContact.value.email) : null)
 
-const showSuccessToast = ref(false)
-const toastMessage = ref('')
-
-function showToast(msg: string) {
-    toastMessage.value = msg
-    showSuccessToast.value = true
-    setTimeout(() => {
-        showSuccessToast.value = false
-    }, 3000)
-}
-
 async function addContact() {
     if (!newContact.value.name) return
 
     // Validate email if provided
     if (newContact.value.email && !validateEmail(newContact.value.email)) {
         contactEmailTouched.value = true
-        alert('Please enter a valid email address for contact')
+        toast.error('Please enter a valid email address for contact')
         return
     }
 
@@ -162,8 +153,10 @@ async function addContact() {
         newContact.value = { name: '', relation: '', phone: '', email: '' } // Reset
         contactEmailTouched.value = false
         await studentStore.loadStudent(studentId.value) // Refresh
-    } catch (e) {
+        toast.success(t('student.contacts.add_btn') + ' ' + t('common.success'))
+    } catch (e: any) {
         console.error(e)
+        toast.error(e.message || 'Failed to add contact')
     }
 }
 const enrollments = ref<Enrollment[]>([])
@@ -258,9 +251,9 @@ async function enrollStudent() {
         })
         await fetchEnrollments()
         isEnrollModalOpen.value = false
-        showToast(t('student.internal_courses.add_btn') + ' ' + t('common.success'))
-    } catch (e) {
-        alert(e)
+        toast.success(t('student.internal_courses.add_btn') + ' ' + t('common.success'))
+    } catch (e: any) {
+        toast.error(e.message || 'Failed to enroll student')
     }
 }
 
@@ -308,9 +301,10 @@ async function saveEnrollment() {
         await CourseService.updateEnrollment(editingEnrollmentId.value, editEnrollmentForm.value)
         await fetchEnrollments()
         cancelEditEnrollment()
+        toast.success(t('common.save_success'))
     } catch (e) {
         console.error(e)
-        alert('Failed to update enrollment')
+        toast.error('Failed to update enrollment')
     }
 }
 
@@ -334,9 +328,9 @@ async function removeEnrollment(id: string) {
     try {
         await EnrollmentService.delete(id)
         await fetchEnrollments()
-        showToast(t('common.deleted'))
+        toast.success(t('common.deleted'))
     } catch (e) {
-        alert(e)
+        toast.error(e as string)
     }
 }
 
@@ -596,7 +590,7 @@ async function openTransferModal(enr: Enrollment) {
         )
     } catch (e) {
         console.error(e)
-        alert('Failed to load available sessions')
+        toast.error('Failed to load available sessions')
     }
 }
 
@@ -624,17 +618,23 @@ async function submitTransfer() {
         }
         await fetchEnrollments()
         isTransferModalOpen.value = false
-        showToast(t('common.success'))
+        toast.success(t('common.success'))
     } catch (e: any) {
         console.error(e)
-        alert(e.message || 'Transfer failed')
+        toast.error(e.message || 'Transfer failed')
     }
 }
 
 async function deleteContact(id: string) {
     if (!confirm(t('student.contacts.confirm_delete'))) return
-    await StudentService.deleteContact(id)
-    await studentStore.loadStudent(studentId.value)
+    try {
+        await StudentService.deleteContact(id)
+        await studentStore.loadStudent(studentId.value)
+        toast.success(t('common.deleted'))
+    } catch (e: any) {
+        console.error(e)
+        toast.error(e.message || 'Failed to delete contact')
+    }
 }
 
 // --- Schools Management ---
@@ -644,7 +644,7 @@ const newSchool = ref({ name: '', status: '', grade: '', class: '', start_date: 
 async function addSchool() {
     // Name can be empty, but status is strictly required
     if (!newSchool.value.status) {
-        alert(t('student.schools.status') + ' is required')
+        toast.error(t('student.schools.status') + ' is required')
         return;
     }
 
@@ -652,17 +652,17 @@ async function addSchool() {
     if (newSchool.value.status === 'enrolled') {
         // Enrolled: Grade & Start Date required. End Date optional (implies Present)
         if (!newSchool.value.grade) {
-            alert(t('student.schools.grade_required'))
+            toast.error(t('student.schools.grade_required'))
             return
         }
         if (!newSchool.value.start_date) {
-            alert(t('student.schools.start_date') + ' is required for Enrolled status')
+            toast.error(t('student.schools.start_date') + ' is required for Enrolled status')
             return
         }
     } else {
         // Graduated, Incomplete, Suspended: Start & End Date required. Grade NOT required.
         if (!newSchool.value.start_date || !newSchool.value.end_date) {
-            alert(t('student.schools.start_date') + ' and ' + t('student.schools.end_date') + ' are required')
+            toast.error(t('student.schools.start_date') + ' and ' + t('student.schools.end_date') + ' are required')
             return
         }
     }
@@ -671,14 +671,22 @@ async function addSchool() {
         await StudentService.addSchool({ ...newSchool.value, student_id: studentId.value })
         newSchool.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' }
         await studentStore.loadStudent(studentId.value)
-    } catch (e) {
+        toast.success(t('student.schools.add_btn') + ' ' + t('common.success'))
+    } catch (e: any) {
         console.error(e)
+        toast.error(e.message || 'Failed to add school')
     }
 }
 async function deleteSchool(id: string) {
     if (!confirm(t('student.schools.confirm_delete'))) return
-    await StudentService.deleteSchool(id)
-    await studentStore.loadStudent(studentId.value)
+    try {
+        await StudentService.deleteSchool(id)
+        await studentStore.loadStudent(studentId.value)
+        toast.success(t('common.deleted'))
+    } catch (e: any) {
+        console.error(e)
+        toast.error(e.message || 'Failed to delete school')
+    }
 }
 
 // --- Credentials Management ---
@@ -704,14 +712,22 @@ async function addCredential() {
         await StudentService.addCredential(payload)
         newCredential.value = { platform: 'Orange Apple', custom_platform: '', username: '', password: '', url: '' }
         await studentStore.loadStudent(studentId.value)
-    } catch (e) {
+        toast.success(t('student.credentials.add_btn') + ' ' + t('common.success'))
+    } catch (e: any) {
         console.error(e)
+        toast.error(e.message || 'Failed to add credential')
     }
 }
 async function deleteCredential(id: string) {
     if (!confirm(t('student.credentials.confirm_delete'))) return
-    await StudentService.deleteCredential(id)
-    await studentStore.loadStudent(studentId.value)
+    try {
+        await StudentService.deleteCredential(id)
+        await studentStore.loadStudent(studentId.value)
+        toast.success(t('common.deleted'))
+    } catch (e: any) {
+        console.error(e)
+        toast.error(e.message || 'Failed to delete credential')
+    }
 }
 
 // --- Editing State & Functions ---
@@ -736,9 +752,10 @@ async function saveContact() {
         await StudentService.updateContact(editingContactId.value, editContactForm.value)
         cancelEditContact()
         await studentStore.loadStudent(studentId.value)
+        toast.success(t('common.save_success'))
     } catch (e) {
         console.error(e)
-        alert('Failed to update contact')
+        toast.error('Failed to update contact')
     }
 }
 
@@ -761,21 +778,21 @@ async function saveSchool() {
 
     // Validation Logic (Same as Add)
     if (!editSchoolForm.value.status) {
-        alert(t('student.schools.status') + ' is required')
+        toast.error(t('student.schools.status') + ' is required')
         return;
     }
     if (editSchoolForm.value.status === 'enrolled') {
         if (!editSchoolForm.value.grade) {
-            alert(t('student.schools.grade_required'))
+            toast.error(t('student.schools.grade_required'))
             return
         }
         if (!editSchoolForm.value.start_date) {
-            alert(t('student.schools.start_date') + ' is required for Enrolled status')
+            toast.error(t('student.schools.start_date') + ' is required for Enrolled status')
             return
         }
     } else {
         if (!editSchoolForm.value.start_date || !editSchoolForm.value.end_date) {
-            alert(t('student.schools.start_date') + ' and ' + t('student.schools.end_date') + ' are required')
+            toast.error(t('student.schools.start_date') + ' and ' + t('student.schools.end_date') + ' are required')
             return
         }
     }
@@ -784,9 +801,10 @@ async function saveSchool() {
         await StudentService.updateSchool(editingSchoolId.value, editSchoolForm.value)
         cancelEditSchool()
         await studentStore.loadStudent(studentId.value)
+        toast.success(t('common.save_success'))
     } catch (e) {
         console.error(e)
-        alert('Failed to update school')
+        toast.error('Failed to update school')
     }
 }
 
@@ -829,9 +847,10 @@ async function saveCredential() {
         await StudentService.updateCredential(editingCredentialId.value, payload)
         cancelEditCredential()
         await studentStore.loadStudent(studentId.value)
+        toast.success(t('common.save_success'))
     } catch (e) {
         console.error(e)
-        alert('Failed to update credential')
+        toast.error('Failed to update credential')
     }
 }
 
@@ -845,9 +864,10 @@ function togglePasswordVisibility(id: string) {
 function copyToClipboard(text: string) {
     if (!text) return
     navigator.clipboard.writeText(text).then(() => {
-        showToast(t('common.copy_success'))
+        toast.success(t('common.copy_success'))
     }).catch(err => {
         console.error('Failed to copy: ', err)
+        toast.error('Failed to copy to clipboard')
     })
 }
 
@@ -893,7 +913,7 @@ function copyToClipboard(text: string) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.name')
-                    }}</label>
+                        }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.name" type="text"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -933,7 +953,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.birthday')
-                    }}</label>
+                        }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.birthday" type="date"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -963,7 +983,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('auth.email')
-                    }}</label>
+                        }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.email" type="email" @blur="emailTouched = true"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
                         :class="{ 'border-red-500 focus:ring-red-500': emailError }">
@@ -1003,7 +1023,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5 md:col-span-2">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.notes')
-                    }}</label>
+                        }}</label>
                     <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
                     <div v-else
@@ -1229,7 +1249,7 @@ function copyToClipboard(text: string) {
                                                 class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
                                                     $t('student.schools.school_student_id') }}</span>
                                             <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id
-                                            }}</span>
+                                                }}</span>
                                             <button @click="copyToClipboard(s.school_student_id)"
                                                 class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-0.5 cursor-pointer"
                                                 title="Copy">
@@ -1449,7 +1469,7 @@ function copyToClipboard(text: string) {
                                 <input type="date" v-model="newSchool.end_date"
                                     class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none">
                                 <p class="text-[10px] text-gray-400 text-right mt-0.5">{{ $t('student.schools.present')
-                                }}</p>
+                                    }}</p>
                             </div>
                         </div>
 
@@ -1648,7 +1668,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                            }}</option>
+                                                }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1674,7 +1694,7 @@ function copyToClipboard(text: string) {
                                 <div class="col-span-2">
                                     <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
-                                    }}</label>
+                                        }}</label>
                                     <input type="url" v-model="editEnrollmentForm.external_link"
                                         placeholder="https://..."
                                         class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -1871,7 +1891,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                            }}</option>
+                                                }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1896,7 +1916,7 @@ function copyToClipboard(text: string) {
                                 <div>
                                     <label class="block text-sm font-bold text-gray-700 mb-2">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
-                                    }}</label>
+                                        }}</label>
                                     <div class="relative">
                                         <input type="url" v-model="newEnrollment.external_link"
                                             placeholder="https://..."
@@ -1930,392 +1950,367 @@ function copyToClipboard(text: string) {
                     </div>
                 </div>
             </div>
+            <!-- Credentials -->
+            <section
+                class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2 transition-all hover:shadow-md">
+                <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+                    <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-6 h-6">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+                        </svg>
+                    </div>
+                    {{ $t('student.sections.credentials') }}
+                </h2>
+
+                <div class="overflow-x-auto rounded-xl border border-gray-100 mb-8">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
+                            <tr>
+                                <th class="px-4 py-3 font-semibold w-1/3">{{ $t('student.credentials.platform') }}</th>
+                                <th class="px-4 py-3 font-semibold">{{ $t('student.credentials.username') }}</th>
+                                <th class="px-4 py-3 font-semibold">{{ $t('student.credentials.password') }}</th>
+                                <th class="px-4 py-3 font-semibold text-right">{{ $t('student.actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <template v-for="cred in studentStore.currentStudent.credentials" :key="cred.id">
+                                <!-- View Mode -->
+                                <tr v-if="editingCredentialId !== cred.id"
+                                    class="bg-white hover:bg-gray-50 transition-colors">
+                                    <td class="px-4 py-3 font-medium text-gray-800">
+                                        <div class="flex items-center gap-2">
+                                            <span>{{ platforms.includes(cred.platform) ?
+                                                $t(`student.credentials.platforms.${cred.platform}`) : cred.platform
+                                            }}</span>
+                                            <a v-if="cred.url" :href="cred.url" target="_blank"
+                                                class="text-emerald-600 hover:text-emerald-700" :title="cred.url">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                                    stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+                                                </svg>
+                                            </a>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-gray-600 font-mono">{{ cred.username }}</td>
+                                    <td class="px-4 py-3 text-gray-600 font-mono flex items-center gap-2">
+                                        <span class="min-w-[80px]">
+                                            {{ showPasswordMap[cred.id!] ? cred.password : '••••••••' }}
+                                        </span>
+                                        <button @click="togglePasswordVisibility(cred.id!)"
+                                            class="text-gray-400 hover:text-emerald-600 transition-colors ml-1 cursor-pointer"
+                                            :title="showPasswordMap[cred.id!] ? 'Hide' : 'Show'">
+                                            <svg v-if="!showPasswordMap[cred.id!]" xmlns="http://www.w3.org/2000/svg"
+                                                fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                                                class="w-4 h-4">
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                    d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                            </svg>
+                                            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none"
+                                                viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                                                class="w-4 h-4">
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                    d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                            </svg>
+                                        </button>
+                                        <button @click="copyToClipboard(cred.password?.toString() || '')"
+                                            class="text-gray-400 hover:text-emerald-600 transition-colors ml-1 cursor-pointer"
+                                            title="Copy">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                    d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                                            </svg>
+                                        </button>
+                                    </td>
+                                    <td class="px-4 py-3 text-right">
+                                        <div class="flex justify-end gap-1">
+                                            <button @click="startEditCredential(cred)"
+                                                class="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors cursor-pointer">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                                    stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                                                </svg>
+                                            </button>
+                                            <button @click="deleteCredential(cred.id!)"
+                                                class="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                                    stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        d="M6 18 18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Edit Mode -->
+                                <tr v-else class="bg-emerald-50/50">
+                                    <td class="px-3 py-2 space-y-2">
+                                        <select v-model="editCredentialForm.platform"
+                                            class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
+                                            <option v-for="p in platforms" :key="p" :value="p">{{
+                                                $t(`student.credentials.platforms.${p}`) }}</option>
+                                        </select>
+                                        <input v-if="editCredentialForm.platform === 'Other'"
+                                            v-model="editCredentialForm.custom_platform"
+                                            :placeholder="$t('student.credentials.platform_name')"
+                                            class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                        <input
+                                            v-if="editCredentialForm.platform === 'Quiz Platform' || editCredentialForm.platform === 'Other'"
+                                            v-model="editCredentialForm.url"
+                                            :placeholder="$t('student.credentials.url')"
+                                            class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                    </td>
+                                    <td class="px-3 py-2 align-top">
+                                        <input v-model="editCredentialForm.username"
+                                            class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                    </td>
+                                    <td class="px-3 py-2 align-top">
+                                        <input v-model="editCredentialForm.password" type="text"
+                                            class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                    </td>
+                                    <td class="px-3 py-2 text-right align-top">
+                                        <div class="flex justify-end gap-2">
+                                            <button @click="cancelEditCredential"
+                                                class="text-xs text-gray-500 hover:text-gray-700 bg-white px-2 py-1 rounded border border-gray-200 cursor-pointer">{{
+                                                    $t('student.cancel') }}</button>
+                                            <button @click="saveCredential"
+                                                class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 cursor-pointer">{{
+                                                    $t('student.save_details') }}</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="border-t border-gray-100 pt-6">
+                    <h3 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider flex items-center gap-2">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        {{ $t('student.credentials.add_title') }}
+                    </h3>
+                    <div
+                        class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3 items-start">
+                            <select v-model="newCredential.platform"
+                                class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
+                                <option v-for="p in platforms" :key="p" :value="p">{{ p }}</option>
+                            </select>
+                            <input v-model="newCredential.username" :placeholder="$t('student.credentials.username')"
+                                class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            <input v-model="newCredential.password" :placeholder="$t('student.credentials.password')"
+                                type="text"
+                                class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            <button @click="addCredential"
+                                class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer h-[38px]">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                    stroke="currentColor" class="w-4 h-4">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                </svg>
+                                {{ $t('student.credentials.add_btn') }}
+                            </button>
+                        </div>
+
+                        <!-- Conditional Fields Row -->
+                        <div v-if="newCredential.platform === 'Other' || newCredential.platform === 'Quiz Platform'"
+                            class="grid grid-cols-1 md:grid-cols-2 gap-3 pb-1">
+                            <input v-if="newCredential.platform === 'Other'" v-model="newCredential.custom_platform"
+                                :placeholder="$t('student.credentials.platform_name')"
+                                class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            <input
+                                v-if="newCredential.platform === 'Quiz Platform' || newCredential.platform === 'Other'"
+                                v-model="newCredential.url" :placeholder="$t('student.credentials.url')"
+                                class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                                :class="{ 'md:col-span-2': newCredential.platform === 'Quiz Platform' }">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
         </div>
 
-        <!-- Credentials -->
-        <section
-            class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 lg:col-span-2 transition-all hover:shadow-md">
-            <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">
-                <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                        stroke="currentColor" class="w-6 h-6">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
-                    </svg>
+        <!-- Transfer Class Modal -->
+        <div v-if="isTransferModalOpen"
+            class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div
+                class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                    <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-500" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        {{ $t('student.internal_courses.transfer_title') }}
+                    </h3>
+                    <button @click="isTransferModalOpen = false"
+                        class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
-                {{ $t('student.sections.credentials') }}
-            </h2>
 
-            <div class="overflow-x-auto rounded-xl border border-gray-100 mb-8">
-                <table class="w-full text-sm text-left">
-                    <thead class="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-                        <tr>
-                            <th class="px-4 py-3 font-semibold w-1/3">{{ $t('student.credentials.platform') }}</th>
-                            <th class="px-4 py-3 font-semibold">{{ $t('student.credentials.username') }}</th>
-                            <th class="px-4 py-3 font-semibold">{{ $t('student.credentials.password') }}</th>
-                            <th class="px-4 py-3 font-semibold text-right">{{ $t('student.actions') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-gray-100">
-                        <template v-for="cred in studentStore.currentStudent.credentials" :key="cred.id">
-                            <!-- View Mode -->
-                            <tr v-if="editingCredentialId !== cred.id"
-                                class="bg-white hover:bg-gray-50 transition-colors">
-                                <td class="px-4 py-3 font-medium text-gray-800">
-                                    <div class="flex items-center gap-2">
-                                        <span>{{ platforms.includes(cred.platform) ?
-                                            $t(`student.credentials.platforms.${cred.platform}`) : cred.platform
-                                        }}</span>
-                                        <a v-if="cred.url" :href="cred.url" target="_blank"
-                                            class="text-emerald-600 hover:text-emerald-700" :title="cred.url">
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                    d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-                                            </svg>
-                                        </a>
-                                    </div>
-                                </td>
-                                <td class="px-4 py-3 text-gray-600 font-mono">{{ cred.username }}</td>
-                                <td class="px-4 py-3 text-gray-600 font-mono flex items-center gap-2">
-                                    <span class="min-w-[80px]">
-                                        {{ showPasswordMap[cred.id!] ? cred.password : '••••••••' }}
-                                    </span>
-                                    <button @click="togglePasswordVisibility(cred.id!)"
-                                        class="text-gray-400 hover:text-emerald-600 transition-colors ml-1 cursor-pointer"
-                                        :title="showPasswordMap[cred.id!] ? 'Hide' : 'Show'">
-                                        <svg v-if="!showPasswordMap[cred.id!]" xmlns="http://www.w3.org/2000/svg"
-                                            fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
-                                            class="w-4 h-4">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                        </svg>
-                                        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                            stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
-                                        </svg>
-                                    </button>
-                                    <button @click="copyToClipboard(cred.password?.toString() || '')"
-                                        class="text-gray-400 hover:text-emerald-600 transition-colors ml-1 cursor-pointer"
-                                        title="Copy">
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                            stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
-                                        </svg>
-                                    </button>
-                                </td>
-                                <td class="px-4 py-3 text-right">
-                                    <div class="flex justify-end gap-1">
-                                        <button @click="startEditCredential(cred)"
-                                            class="p-1 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors cursor-pointer">
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                    d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                                            </svg>
-                                        </button>
-                                        <button @click="deleteCredential(cred.id!)"
-                                            class="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer">
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                                stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                    d="M6 18 18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-
-                            <!-- Edit Mode -->
-                            <tr v-else class="bg-emerald-50/50">
-                                <td class="px-3 py-2 space-y-2">
-                                    <select v-model="editCredentialForm.platform"
-                                        class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
-                                        <option v-for="p in platforms" :key="p" :value="p">{{
-                                            $t(`student.credentials.platforms.${p}`) }}</option>
-                                    </select>
-                                    <input v-if="editCredentialForm.platform === 'Other'"
-                                        v-model="editCredentialForm.custom_platform"
-                                        :placeholder="$t('student.credentials.platform_name')"
-                                        class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                                    <input
-                                        v-if="editCredentialForm.platform === 'Quiz Platform' || editCredentialForm.platform === 'Other'"
-                                        v-model="editCredentialForm.url" :placeholder="$t('student.credentials.url')"
-                                        class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                                </td>
-                                <td class="px-3 py-2 align-top">
-                                    <input v-model="editCredentialForm.username"
-                                        class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                                </td>
-                                <td class="px-3 py-2 align-top">
-                                    <input v-model="editCredentialForm.password" type="text"
-                                        class="w-full border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                                </td>
-                                <td class="px-3 py-2 text-right align-top">
-                                    <div class="flex justify-end gap-2">
-                                        <button @click="cancelEditCredential"
-                                            class="text-xs text-gray-500 hover:text-gray-700 bg-white px-2 py-1 rounded border border-gray-200 cursor-pointer">{{
-                                                $t('student.cancel') }}</button>
-                                        <button @click="saveCredential"
-                                            class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 cursor-pointer">{{
-                                                $t('student.save_details') }}</button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </template>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="border-t border-gray-100 pt-6">
-                <h3 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider flex items-center gap-2">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    {{ $t('student.credentials.add_title') }}
-                </h3>
-                <div
-                    class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3 items-start">
-                        <select v-model="newCredential.platform"
-                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer">
-                            <option v-for="p in platforms" :key="p" :value="p">{{ p }}</option>
-                        </select>
-                        <input v-model="newCredential.username" :placeholder="$t('student.credentials.username')"
-                            class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                        <input v-model="newCredential.password" :placeholder="$t('student.credentials.password')"
-                            type="text"
-                            class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                        <button @click="addCredential"
-                            class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer h-[38px]">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                                stroke="currentColor" class="w-4 h-4">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                            </svg>
-                            {{ $t('student.credentials.add_btn') }}
+                <div class="p-6 space-y-4">
+                    <!-- Transfer Mode Selection -->
+                    <div class="flex p-1 bg-gray-100 rounded-xl">
+                        <button @click="isSingleTransferMode = false"
+                            class="flex-1 py-4 text-xs font-bold rounded-lg transition-all"
+                            :class="!isSingleTransferMode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                            {{ $t('student.internal_courses.transfer_mode_permanent') }}
+                        </button>
+                        <button @click="isSingleTransferMode = true"
+                            class="flex-1 py-4 text-xs font-bold rounded-lg transition-all"
+                            :class="isSingleTransferMode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                            {{ $t('student.internal_courses.transfer_mode_single') }}
                         </button>
                     </div>
 
-                    <!-- Conditional Fields Row -->
-                    <div v-if="newCredential.platform === 'Other' || newCredential.platform === 'Quiz Platform'"
-                        class="grid grid-cols-1 md:grid-cols-2 gap-3 pb-1">
-                        <input v-if="newCredential.platform === 'Other'" v-model="newCredential.custom_platform"
-                            :placeholder="$t('student.credentials.platform_name')"
-                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                        <input v-if="newCredential.platform === 'Quiz Platform' || newCredential.platform === 'Other'"
-                            v-model="newCredential.url" :placeholder="$t('student.credentials.url')"
-                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                            :class="{ 'md:col-span-2': newCredential.platform === 'Quiz Platform' }">
-                    </div>
-                </div>
-            </div>
-        </section>
-
-    </div>
-
-    <!-- Success Toast -->
-    <div v-if="showSuccessToast"
-        class="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 animate-toast-up z-[100] border border-emerald-500">
-        <div class="bg-white/20 p-1 rounded-full">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-            </svg>
-        </div>
-        <span class="font-bold tracking-wide">{{ toastMessage }}</span>
-    </div>
-
-    <!-- Transfer Class Modal -->
-    <div v-if="isTransferModalOpen"
-        class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div
-            class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-orange-500" fill="none"
-                        viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                    </svg>
-                    {{ $t('student.internal_courses.transfer_title') }}
-                </h3>
-                <button @click="isTransferModalOpen = false"
-                    class="text-gray-400 hover:text-gray-600 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-
-            <div class="p-6 space-y-4">
-                <!-- Transfer Mode Selection -->
-                <div class="flex p-1 bg-gray-100 rounded-xl">
-                    <button @click="isSingleTransferMode = false"
-                        class="flex-1 py-4 text-xs font-bold rounded-lg transition-all"
-                        :class="!isSingleTransferMode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
-                        {{ $t('student.internal_courses.transfer_mode_permanent') }}
-                    </button>
-                    <button @click="isSingleTransferMode = true"
-                        class="flex-1 py-4 text-xs font-bold rounded-lg transition-all"
-                        :class="isSingleTransferMode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
-                        {{ $t('student.internal_courses.transfer_mode_single') }}
-                    </button>
-                </div>
-
-                <!-- Comparison Grid -->
-                <div v-if="transferEnrollment" class="grid grid-cols-2 gap-4">
-                    <!-- Original Class Info -->
-                    <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
-                        <label class="text-[10px] text-gray-500 font-bold uppercase block mb-1.5">{{
-                            $t('student.internal_courses.transfer_from') }}</label>
-                        <div class="font-bold text-gray-800 text-sm mb-0.5">
-                            {{ selectedOriginalDateInfo ? selectedOriginalDateInfo.label :
-                                (transferEnrollment.formattedSchedule || '-') }}
-                        </div>
-                        <div class="text-xs text-gray-500 mb-1">
-                            {{ selectedOriginalDateInfo ? selectedOriginalDateInfo.class_session_name :
-                                (transferEnrollment.classSessionName || '-') }}
-                        </div>
-                    </div>
-
-                    <!-- New Class Info -->
-                    <div class="p-3 bg-orange-50 rounded-lg border border-orange-100">
-                        <label class="text-[10px] text-orange-500 font-bold uppercase block mb-1.5">{{
-                            $t('student.internal_courses.transfer_target') }}</label>
-                        <template v-if="selectedTargetSession">
+                    <!-- Comparison Grid -->
+                    <div v-if="transferEnrollment" class="grid grid-cols-2 gap-4">
+                        <!-- Original Class Info -->
+                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                            <label class="text-[10px] text-gray-500 font-bold uppercase block mb-1.5">{{
+                                $t('student.internal_courses.transfer_from') }}</label>
                             <div class="font-bold text-gray-800 text-sm mb-0.5">
-                                {{ transferDate ? new Date(transferDate).toLocaleDateString() : '-' }}
-                                {{ '(' + $t('classroom.days.' + selectedTargetSession.day_of_week) + ')' }}
-                                {{ selectedTargetSession.start_time?.slice(0, 5) }} - {{
-                                    selectedTargetSession.end_time?.slice(0, 5) }}
+                                {{ selectedOriginalDateInfo ? selectedOriginalDateInfo.label :
+                                    (transferEnrollment.formattedSchedule || '-') }}
                             </div>
-                            <div class="text-xs text-gray-500 mb-1">{{ selectedTargetSession.name }}</div>
-                            <div v-if="!isSingleTransferMode"
-                                class="text-[10px] text-emerald-600 font-bold border-t border-orange-200 pt-1 mt-1">
-                                {{ $t('student.internal_courses.first_lesson') }}: {{ transferNewFirstDate }}
+                            <div class="text-xs text-gray-500 mb-1">
+                                {{ selectedOriginalDateInfo ? selectedOriginalDateInfo.class_session_name :
+                                    (transferEnrollment.classSessionName || '-') }}
                             </div>
-                        </template>
-                        <div v-else class="text-gray-400 italic text-xs py-1">{{
-                            $t('student.internal_courses.session_select_placeholder') }}</div>
-                    </div>
-                </div>
-
-                <!-- Last Lesson Selector (Permanent Mode Only) -->
-                <div v-if="!isSingleTransferMode"
-                    class="space-y-1.5 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 animate-in slide-in-from-top-1 duration-200">
-                    <label class="text-xs font-bold text-indigo-700 uppercase tracking-wide flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
-                        {{ $t('student.internal_courses.last_lesson') }}
-                    </label>
-                    <select v-model="transferOriginalLastDateValue"
-                        class="w-full border-indigo-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                        <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
-                        </option>
-                        <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
-                            {{ d.label }}
-                        </option>
-                    </select>
-                </div>
-
-                <!-- Single Lesson Original Selection -->
-                <div v-if="isSingleTransferMode"
-                    class="space-y-1.5 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 animate-in slide-in-from-top-1 duration-200">
-                    <label class="text-xs font-bold text-indigo-700 uppercase tracking-wide flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
-                        {{ $t('student.internal_courses.transfer_original_date') }}
-                    </label>
-                    <select v-model="transferOriginalDate"
-                        class="w-full border-indigo-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
-                        <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
-                        </option>
-                        <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
-                            {{ d.label }}
-                        </option>
-                    </select>
-                </div>
-
-                <!-- Target Class Selection -->
-                <div class="space-y-1.5">
-                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
-                        $t('student.internal_courses.transfer_target') }}</label>
-                    <select v-model="transferTargetSessionId"
-                        class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
-                        <option value="" disabled>{{ $t('student.internal_courses.session_select_placeholder') }}
-                        </option>
-                        <option v-for="s in itemTransferSessions" :key="s.id" :value="s.id">
-                            {{ s.name }} ({{ $t('classroom.days.' + s.day_of_week) }} {{
-                                s.start_time?.slice(0, 5)
-                            }})
-                        </option>
-                    </select>
-                </div>
-
-                <!-- Target Date Selection -->
-                <div class="space-y-1.5">
-                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
-                        isSingleTransferMode ? $t('student.internal_courses.transfer_target_date') :
-                            $t('student.internal_courses.transfer_date') }}</label>
-                    <select v-model="transferDate"
-                        class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
-                        <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
-                        </option>
-                        <option v-for="d in transferAvailableDates" :key="d.value" :value="d.value">
-                            {{ d.label }}
-                        </option>
-                    </select>
-                    <p class="text-xs text-gray-500">{{ $t('student.internal_courses.transfer_hint') }}</p>
-                </div>
-
-                <!-- Force Reschedule Toggle -->
-                <div class="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100">
-                    <div class="flex flex-col">
-                        <span class="text-xs font-bold text-amber-700 uppercase">{{
-                            $t('student.internal_courses.force_reschedule') }}</span>
-                        <span class="text-[10px] text-amber-600 leading-tight">{{
-                            $t('student.internal_courses.force_reschedule_hint') }}</span>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" v-model="forceReschedule" class="sr-only peer">
-                        <div
-                            class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500">
                         </div>
-                    </label>
-                </div>
-            </div>
 
-            <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
-                <button @click="isTransferModalOpen = false"
-                    class="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-200 font-medium transition-colors">
-                    {{ $t('student.cancel') }}
-                </button>
-                <button @click="submitTransfer" :disabled="!transferTargetSessionId || !transferDate"
-                    class="px-4 py-2 rounded-xl bg-orange-500 text-white hover:bg-orange-600 font-medium shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                    {{ $t('student.internal_courses.transfer_confirm') }}
-                </button>
+                        <!-- New Class Info -->
+                        <div class="p-3 bg-orange-50 rounded-lg border border-orange-100">
+                            <label class="text-[10px] text-orange-500 font-bold uppercase block mb-1.5">{{
+                                $t('student.internal_courses.transfer_target') }}</label>
+                            <template v-if="selectedTargetSession">
+                                <div class="font-bold text-gray-800 text-sm mb-0.5">
+                                    {{ transferDate ? new Date(transferDate).toLocaleDateString() : '-' }}
+                                    {{ '(' + $t('classroom.days.' + selectedTargetSession.day_of_week) + ')' }}
+                                    {{ selectedTargetSession.start_time?.slice(0, 5) }} - {{
+                                        selectedTargetSession.end_time?.slice(0, 5) }}
+                                </div>
+                                <div class="text-xs text-gray-500 mb-1">{{ selectedTargetSession.name }}</div>
+                                <div v-if="!isSingleTransferMode"
+                                    class="text-[10px] text-emerald-600 font-bold border-t border-orange-200 pt-1 mt-1">
+                                    {{ $t('student.internal_courses.first_lesson') }}: {{ transferNewFirstDate }}
+                                </div>
+                            </template>
+                            <div v-else class="text-gray-400 italic text-xs py-1">{{
+                                $t('student.internal_courses.session_select_placeholder') }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Last Lesson Selector (Permanent Mode Only) -->
+                    <div v-if="!isSingleTransferMode"
+                        class="space-y-1.5 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 animate-in slide-in-from-top-1 duration-200">
+                        <label
+                            class="text-xs font-bold text-indigo-700 uppercase tracking-wide flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                            {{ $t('student.internal_courses.last_lesson') }}
+                        </label>
+                        <select v-model="transferOriginalLastDateValue"
+                            class="w-full border-indigo-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                            <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
+                            </option>
+                            <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
+                                {{ d.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Single Lesson Original Selection -->
+                    <div v-if="isSingleTransferMode"
+                        class="space-y-1.5 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100 animate-in slide-in-from-top-1 duration-200">
+                        <label
+                            class="text-xs font-bold text-indigo-700 uppercase tracking-wide flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                            {{ $t('student.internal_courses.transfer_original_date') }}
+                        </label>
+                        <select v-model="transferOriginalDate"
+                            class="w-full border-indigo-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-indigo-500 outline-none bg-white">
+                            <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
+                            </option>
+                            <option v-for="d in transferOriginalAvailableDates" :key="d.value" :value="d.value">
+                                {{ d.label }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Target Class Selection -->
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            $t('student.internal_courses.transfer_target') }}</label>
+                        <select v-model="transferTargetSessionId"
+                            class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+                            <option value="" disabled>{{ $t('student.internal_courses.session_select_placeholder') }}
+                            </option>
+                            <option v-for="s in itemTransferSessions" :key="s.id" :value="s.id">
+                                {{ s.name }} ({{ $t('classroom.days.' + s.day_of_week) }} {{
+                                    s.start_time?.slice(0, 5)
+                                }})
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Target Date Selection -->
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            isSingleTransferMode ? $t('student.internal_courses.transfer_target_date') :
+                                $t('student.internal_courses.transfer_date') }}</label>
+                        <select v-model="transferDate"
+                            class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-orange-500 outline-none bg-white">
+                            <option value="" disabled>{{ $t('student.internal_courses.transfer_date_placeholder') }}
+                            </option>
+                            <option v-for="d in transferAvailableDates" :key="d.value" :value="d.value">
+                                {{ d.label }}
+                            </option>
+                        </select>
+                        <p class="text-xs text-gray-500">{{ $t('student.internal_courses.transfer_hint') }}</p>
+                    </div>
+
+                    <!-- Force Reschedule Toggle -->
+                    <div class="flex items-center justify-between p-3 bg-amber-50 rounded-xl border border-amber-100">
+                        <div class="flex flex-col">
+                            <span class="text-xs font-bold text-amber-700 uppercase">{{
+                                $t('student.internal_courses.force_reschedule') }}</span>
+                            <span class="text-[10px] text-amber-600 leading-tight">{{
+                                $t('student.internal_courses.force_reschedule_hint') }}</span>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" v-model="forceReschedule" class="sr-only peer">
+                            <div
+                                class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-amber-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500">
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
+                    <button @click="isTransferModalOpen = false"
+                        class="px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-200 font-medium transition-colors">
+                        {{ $t('student.cancel') }}
+                    </button>
+                    <button @click="submitTransfer" :disabled="!transferTargetSessionId || !transferDate"
+                        class="px-4 py-2 rounded-xl bg-orange-500 text-white hover:bg-orange-600 font-medium shadow-sm hover:shadow transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        {{ $t('student.internal_courses.transfer_confirm') }}
+                    </button>
+                </div>
             </div>
         </div>
+        <StudentSuspensions v-if="isSuspensionsModalOpen" :enrollment-id="selectedEnrollmentIdForSuspension"
+            @close="isSuspensionsModalOpen = false" />
     </div>
-    <StudentSuspensions v-if="isSuspensionsModalOpen" :enrollment-id="selectedEnrollmentIdForSuspension"
-        @close="isSuspensionsModalOpen = false" />
 </template>
-
-<style scoped>
-@keyframes toast-up {
-    from {
-        transform: translateY(100%) scale(0.9);
-        opacity: 0;
-    }
-
-    to {
-        transform: translateY(0) scale(1);
-        opacity: 1;
-    }
-}
-
-.animate-toast-up {
-    animation: toast-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-</style>

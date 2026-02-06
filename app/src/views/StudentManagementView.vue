@@ -3,9 +3,11 @@ import { ref, onMounted, watch } from 'vue'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
 
-useI18n()
+const { t } = useI18n()
+const toast = useToast()
 const studentStore = useStudentStore()
 const router = useRouter()
 
@@ -50,12 +52,10 @@ function navigateToReports(id: string) {
     router.push({ name: 'student-all-reports', params: { id } })
 }
 
-const showSuccessToast = ref(false)
 function copyToClipboard(text: string) {
     if (navigator.clipboard) {
         navigator.clipboard.writeText(text).then(() => {
-            showSuccessToast.value = true
-            setTimeout(() => { showSuccessToast.value = false }, 3000)
+            toast.success(t('common.copy_success'))
         })
     }
 }
@@ -264,13 +264,5 @@ function copyToClipboard(text: string) {
             </div>
         </div>
 
-        <!-- Success Toast -->
-        <div v-if="showSuccessToast"
-            class="fixed bottom-10 right-10 bg-emerald-600 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-bottom-10 duration-500 z-[100]">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-            </svg>
-            <span class="font-black tracking-wide">{{ $t('common.copy_success') }}</span>
-        </div>
     </div>
 </template>

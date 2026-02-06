@@ -3,8 +3,10 @@ import { ref, onMounted, computed, watch } from 'vue' // Added watch
 import { CourseService } from '@/services/CourseService'
 import { Course, Lesson, type CourseDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
 
 const { t } = useI18n()
+const toast = useToast()
 const courses = ref<Course[]>([])
 const loading = ref(true)
 const iscreateModalOpen = ref(false)
@@ -101,8 +103,9 @@ async function saveCourse() {
         }
         await fetchCourses()
         iscreateModalOpen.value = false
+        toast.success(t('course.save_success') || 'Course saved successfully')
     } catch (e) {
-        alert('Error saving course: ' + e)
+        toast.error('Error saving course: ' + e)
     }
 }
 
@@ -152,9 +155,10 @@ async function saveLesson(courseId: string) {
         }
 
         await fetchCourses()
+        toast.success(t('course.lesson_save_success') || 'Lesson saved successfully')
     } catch (e) {
         console.error(e)
-        alert('Error saving lesson: ' + e)
+        toast.error('Error saving lesson: ' + e)
     }
 }
 
@@ -168,8 +172,9 @@ async function deleteCourse(id: string) {
     try {
         await CourseService.deleteCourse(id)
         await fetchCourses()
+        toast.success(t('course.delete_success') || 'Course deleted successfully')
     } catch (e) {
-        alert(e)
+        toast.error(e as string)
     }
 }
 
@@ -178,8 +183,9 @@ async function deleteLesson(id: string) {
     try {
         await CourseService.deleteLesson(id)
         await fetchCourses()
+        toast.success(t('course.lesson_delete_success') || 'Lesson deleted successfully')
     } catch (e) {
-        alert(e)
+        toast.error(e as string)
     }
 }
 </script>
@@ -215,7 +221,7 @@ async function deleteLesson(id: string) {
                 :class="selectedCourseId ? '-translate-x-full lg:translate-x-0' : 'translate-x-0'">
                 <div class="p-6 border-b border-gray-50 bg-gray-50/30">
                     <h3 class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{ $t('course.list_title')
-                        }}</h3>
+                    }}</h3>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
                     <div v-for="(group, subject) in groupedCourses" :key="subject">
@@ -413,7 +419,7 @@ async function deleteLesson(id: string) {
                                                 {{ lesson.sequence }}
                                             </span>
                                             <span class="text-xl font-bold text-gray-800 tracking-tight">{{ lesson.title
-                                                }}</span>
+                                            }}</span>
                                         </div>
                                         <div
                                             class="flex gap-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
@@ -452,9 +458,9 @@ async function deleteLesson(id: string) {
                                         </svg>
                                     </div>
                                     <h4 class="text-lg font-black text-gray-900 mb-1">{{ $t('course.no_lessons_title')
-                                        }}</h4>
+                                    }}</h4>
                                     <p class="text-gray-400 font-medium italic text-sm">{{ $t('course.no_lessons_sub')
-                                        }}</p>
+                                    }}</p>
                                 </div>
                             </div>
                         </div>
@@ -487,7 +493,7 @@ async function deleteLesson(id: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.subject')
-                            }}</label>
+                        }}</label>
                         <input v-model="courseForm.subject" :placeholder="$t('course.subject_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -507,7 +513,7 @@ async function deleteLesson(id: string) {
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
-                            }}</label>
+                        }}</label>
                         <textarea v-model="courseForm.description" rows="3"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"></textarea>
                     </div>

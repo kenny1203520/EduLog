@@ -202,6 +202,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
 import { SuspensionService } from '@/services/SuspensionService'
 import type { Suspension } from '@/models/Suspension'
 import { DateUtils } from '@/utils/DateUtils'
@@ -210,6 +212,8 @@ const props = defineProps<{
     enrollmentId: string
 }>()
 
+const { t } = useI18n()
+const toast = useToast()
 const emit = defineEmits(['close'])
 
 const suspensions = ref<Suspension[]>([])
@@ -268,9 +272,10 @@ async function addSuspension() {
             reason: ''
         }
         await loadSuspensions()
-    } catch (e) {
+        toast.success(t('common.success') || 'Suspension added successfully')
+    } catch (e: any) {
         console.error(e)
-        alert('Failed to create suspension')
+        toast.error(e.message || 'Failed to create suspension')
     } finally {
         isAdding.value = false
     }
@@ -282,9 +287,10 @@ async function deleteSuspension(id: string) {
     try {
         await SuspensionService.deleteSuspension(id)
         await loadSuspensions()
-    } catch (e) {
+        toast.success(t('common.deleted') || 'Suspension deleted successfully')
+    } catch (e: any) {
         console.error(e)
-        alert('Failed to delete suspension')
+        toast.error(e.message || 'Failed to delete suspension')
     }
 }
 
@@ -312,9 +318,10 @@ async function saveEdit(id: string) {
         })
         await loadSuspensions()
         editingId.value = null
-    } catch (e) {
+        toast.success(t('common.success') || 'Suspension updated successfully')
+    } catch (e: any) {
         console.error(e)
-        alert('Failed to update suspension')
+        toast.error(e.message || 'Failed to update suspension')
     } finally {
         isSaving.value = false
     }
@@ -333,9 +340,10 @@ async function endSuspensionNow(suspension: Suspension) {
             end_date: today
         })
         await loadSuspensions()
-    } catch (e) {
+        toast.success(t('common.success') || 'Suspension ended successfully')
+    } catch (e: any) {
         console.error(e)
-        alert('Failed to update suspension')
+        toast.error(e.message || 'Failed to update suspension')
     }
 }
 
