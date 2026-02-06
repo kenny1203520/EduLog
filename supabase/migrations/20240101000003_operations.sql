@@ -156,63 +156,7 @@ ALTER TABLE public.report_versions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable all access for authenticated users" ON public.report_versions FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
 
 -- ==========================================
--- 5. Lesson Reports (Legacy)
--- ==========================================
-
-CREATE TABLE IF NOT EXISTS public.lesson_reports (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
-  updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
-  enrollment_id uuid NOT NULL,
-  lesson_id uuid NOT NULL,
-  content text DEFAULT ''::text,
-  version integer DEFAULT 1,
-  updated_by uuid,
-  user_id uuid NOT NULL DEFAULT auth.uid(),
-  CONSTRAINT lesson_reports_pkey PRIMARY KEY (id),
-  CONSTRAINT lesson_reports_enrollment_id_fkey FOREIGN KEY (enrollment_id) REFERENCES public.enrollments(id),
-  CONSTRAINT lesson_reports_lesson_id_fkey FOREIGN KEY (lesson_id) REFERENCES public.lessons(id),
-  CONSTRAINT lesson_reports_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES auth.users(id),
-  CONSTRAINT lesson_reports_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
-);
-
--- RLS
-ALTER TABLE public.lesson_reports ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access for authenticated users" ON public.lesson_reports FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-
--- Trigger
-CREATE TRIGGER update_lesson_reports_updated_at 
-  BEFORE UPDATE ON public.lesson_reports 
-  FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
-
--- ==========================================
--- 6. Reports (Legacy)
--- ==========================================
-
-CREATE TABLE IF NOT EXISTS public.reports (
-  id uuid NOT NULL DEFAULT gen_random_uuid(),
-  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
-  content text DEFAULT ''::text,
-  date date DEFAULT CURRENT_DATE,
-  student_id uuid NOT NULL,
-  user_id uuid NOT NULL DEFAULT auth.uid(),
-  updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
-  CONSTRAINT reports_pkey PRIMARY KEY (id),
-  CONSTRAINT reports_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.students(id),
-  CONSTRAINT reports_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
-);
-
--- RLS
-ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Enable all access for authenticated users" ON public.reports FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
-
--- Trigger
-CREATE TRIGGER update_reports_updated_at 
-  BEFORE UPDATE ON public.reports 
-  FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
-
--- ==========================================
--- 7. Report Templates
+-- 5. Report Templates
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS public.report_templates (
@@ -233,7 +177,7 @@ ALTER TABLE public.report_templates ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Enable all access for authenticated users" ON public.report_templates FOR ALL USING (auth.role() = 'authenticated') WITH CHECK (auth.role() = 'authenticated');
 
 -- ==========================================
--- 8. Student Suspensions
+-- 6. Student Suspensions
 -- ==========================================
 
 CREATE TABLE IF NOT EXISTS public.student_suspensions (
