@@ -138,6 +138,34 @@ async function confirmDeleteStudent() {
     }
 }
 
+// --- Generic Confirm Modal State ---
+const genericConfirm = ref({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    isDangerous: false,
+    action: null as (() => any) | null
+})
+
+function openConfirm(message: string, action: () => any, title?: string, isDangerous = false) {
+    genericConfirm.value = {
+        isOpen: true,
+        title: title || t('common.confirm'),
+        message,
+        confirmText: t('common.confirm'),
+        isDangerous,
+        action
+    }
+}
+
+async function handleGenericConfirm() {
+    if (genericConfirm.value.action) {
+        await genericConfirm.value.action()
+    }
+    genericConfirm.value.isOpen = false
+}
+
 // --- Contacts Management ---
 const newContact = ref({ name: '', relation: '', phone: '', email: '' })
 const contactEmailTouched = ref(false)
@@ -329,14 +357,15 @@ const editFilteredSessions = computed(() => {
 
 
 async function removeEnrollment(id: string) {
-    if (!confirm(t('common.confirm_delete'))) return
-    try {
-        await EnrollmentService.delete(id)
-        await fetchEnrollments()
-        toast.success(t('common.deleted'))
-    } catch (e) {
-        toast.error(e as string)
-    }
+    openConfirm(t('common.confirm_delete'), async () => {
+        try {
+            await EnrollmentService.delete(id)
+            await fetchEnrollments()
+            toast.success(t('common.deleted'))
+        } catch (e) {
+            toast.error(e as string)
+        }
+    }, t('common.delete'), true)
 }
 
 watch(isEditingMainDetails, (val) => {
@@ -603,43 +632,44 @@ async function submitTransfer() {
     if (!transferEnrollment.value || !transferTargetSessionId.value || !transferDate.value) return
     if (isSingleTransferMode.value && !transferOriginalDate.value) return
 
-    if (!confirm(t('common.confirm_save'))) return
-
-    try {
-        if (isSingleTransferMode.value) {
-            await EnrollmentService.transferSingleLesson(
-                transferEnrollment.value.id!,
-                transferOriginalDate.value,
-                transferTargetSessionId.value,
-                transferDate.value
-            )
-        } else {
-            await EnrollmentService.transferClass(
-                transferEnrollment.value.id!,
-                transferTargetSessionId.value,
-                transferOriginalLastDateValue.value,
-                transferDate.value
-            )
+    openConfirm(t('common.confirm_save'), async () => {
+        try {
+            if (isSingleTransferMode.value) {
+                await EnrollmentService.transferSingleLesson(
+                    transferEnrollment.value!.id!,
+                    transferOriginalDate.value,
+                    transferTargetSessionId.value,
+                    transferDate.value
+                )
+            } else {
+                await EnrollmentService.transferClass(
+                    transferEnrollment.value!.id!,
+                    transferTargetSessionId.value,
+                    transferOriginalLastDateValue.value,
+                    transferDate.value
+                )
+            }
+            await fetchEnrollments()
+            isTransferModalOpen.value = false
+            toast.success(t('common.success'))
+        } catch (e: any) {
+            console.error(e)
+            toast.error(e.message || 'Transfer failed')
         }
-        await fetchEnrollments()
-        isTransferModalOpen.value = false
-        toast.success(t('common.success'))
-    } catch (e: any) {
-        console.error(e)
-        toast.error(e.message || 'Transfer failed')
-    }
+    }, t('common.save'))
 }
 
 async function deleteContact(id: string) {
-    if (!confirm(t('student.contacts.confirm_delete'))) return
-    try {
-        await StudentService.deleteContact(id)
-        await studentStore.loadStudent(studentId.value)
-        toast.success(t('common.deleted'))
-    } catch (e: any) {
-        console.error(e)
-        toast.error(e.message || 'Failed to delete contact')
-    }
+    openConfirm(t('student.contacts.confirm_delete'), async () => {
+        try {
+            await StudentService.deleteContact(id)
+            await studentStore.loadStudent(studentId.value)
+            toast.success(t('common.deleted'))
+        } catch (e: any) {
+            console.error(e)
+            toast.error(e.message || 'Failed to delete contact')
+        }
+    }, t('common.delete'), true)
 }
 
 // --- Schools Management ---
@@ -683,15 +713,16 @@ async function addSchool() {
     }
 }
 async function deleteSchool(id: string) {
-    if (!confirm(t('student.schools.confirm_delete'))) return
-    try {
-        await StudentService.deleteSchool(id)
-        await studentStore.loadStudent(studentId.value)
-        toast.success(t('common.deleted'))
-    } catch (e: any) {
-        console.error(e)
-        toast.error(e.message || 'Failed to delete school')
-    }
+    openConfirm(t('student.schools.confirm_delete'), async () => {
+        try {
+            await StudentService.deleteSchool(id)
+            await studentStore.loadStudent(studentId.value)
+            toast.success(t('common.deleted'))
+        } catch (e: any) {
+            console.error(e)
+            toast.error(e.message || 'Failed to delete school')
+        }
+    }, t('common.delete'), true)
 }
 
 // --- Credentials Management ---
@@ -724,15 +755,16 @@ async function addCredential() {
     }
 }
 async function deleteCredential(id: string) {
-    if (!confirm(t('student.credentials.confirm_delete'))) return
-    try {
-        await StudentService.deleteCredential(id)
-        await studentStore.loadStudent(studentId.value)
-        toast.success(t('common.deleted'))
-    } catch (e: any) {
-        console.error(e)
-        toast.error(e.message || 'Failed to delete credential')
-    }
+    openConfirm(t('student.credentials.confirm_delete'), async () => {
+        try {
+            await StudentService.deleteCredential(id)
+            await studentStore.loadStudent(studentId.value)
+            toast.success(t('common.deleted'))
+        } catch (e: any) {
+            console.error(e)
+            toast.error(e.message || 'Failed to delete credential')
+        }
+    }, t('common.delete'), true)
 }
 
 // --- Editing State & Functions ---
@@ -918,7 +950,7 @@ function copyToClipboard(text: string) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.name')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.name" type="text"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -958,7 +990,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.birthday')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.birthday" type="date"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                     <div v-else
@@ -988,7 +1020,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('auth.email')
-                        }}</label>
+                    }}</label>
                     <input v-if="isEditingMainDetails" v-model="form.email" type="email" @blur="emailTouched = true"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
                         :class="{ 'border-red-500 focus:ring-red-500': emailError }">
@@ -1028,7 +1060,7 @@ function copyToClipboard(text: string) {
 
                 <div class="space-y-1.5 md:col-span-2">
                     <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.notes')
-                        }}</label>
+                    }}</label>
                     <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3"
                         class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
                     <div v-else
@@ -1254,7 +1286,7 @@ function copyToClipboard(text: string) {
                                                 class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
                                                     $t('student.schools.school_student_id') }}</span>
                                             <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id
-                                                }}</span>
+                                            }}</span>
                                             <button @click="copyToClipboard(s.school_student_id)"
                                                 class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-0.5 cursor-pointer"
                                                 title="Copy">
@@ -1474,7 +1506,7 @@ function copyToClipboard(text: string) {
                                 <input type="date" v-model="newSchool.end_date"
                                     class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white text-gray-600 focus:ring-2 focus:ring-emerald-500 outline-none">
                                 <p class="text-[10px] text-gray-400 text-right mt-0.5">{{ $t('student.schools.present')
-                                    }}</p>
+                                }}</p>
                             </div>
                         </div>
 
@@ -1673,7 +1705,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                                }}</option>
+                                            }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1699,7 +1731,7 @@ function copyToClipboard(text: string) {
                                 <div class="col-span-2">
                                     <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
-                                        }}</label>
+                                    }}</label>
                                     <input type="url" v-model="editEnrollmentForm.external_link"
                                         placeholder="https://..."
                                         class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
@@ -1896,7 +1928,7 @@ function copyToClipboard(text: string) {
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
-                                                }}</option>
+                                            }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
@@ -1921,7 +1953,7 @@ function copyToClipboard(text: string) {
                                 <div>
                                     <label class="block text-sm font-bold text-gray-700 mb-2">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
-                                        }}</label>
+                                    }}</label>
                                     <div class="relative">
                                         <input type="url" v-model="newEnrollment.external_link"
                                             placeholder="https://..."
@@ -1988,7 +2020,7 @@ function copyToClipboard(text: string) {
                                         <div class="flex items-center gap-2">
                                             <span>{{ platforms.includes(cred.platform) ?
                                                 $t(`student.credentials.platforms.${cred.platform}`) : cred.platform
-                                            }}</span>
+                                                }}</span>
                                             <a v-if="cred.url" :href="cred.url" target="_blank"
                                                 class="text-emerald-600 hover:text-emerald-700" :title="cred.url">
                                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -2322,5 +2354,9 @@ function copyToClipboard(text: string) {
             :message="$t('student.confirm_delete_student', 'Are you sure you want to delete this student and all associated data? This action cannot be undone.')"
             :confirm-text="$t('common.delete')" :is-dangerous="true" @confirm="confirmDeleteStudent"
             @close="showDeleteConfirm = false" />
+
+        <ConfirmModal :is-open="genericConfirm.isOpen" :title="genericConfirm.title" :message="genericConfirm.message"
+            :confirm-text="genericConfirm.confirmText" :is-dangerous="genericConfirm.isDangerous"
+            @confirm="handleGenericConfirm" @close="genericConfirm.isOpen = false" />
     </div>
 </template>

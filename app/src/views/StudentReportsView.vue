@@ -55,7 +55,7 @@
                         <div
                             class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
                             <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
-                            }}</span>
+                                }}</span>
                             <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
                             <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
                                 v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
@@ -426,6 +426,11 @@
             :local-report="conflictLocalReport!" :available-lessons="courseLessons" @close="closeConflictModal"
             @resolve="resolveConflict" />
 
+        <ConfirmModal :is-open="showCreateConfirm"
+            :title="$t('report.editor.confirm_create_report_title', 'Create New Report?')"
+            :message="$t('report.editor.confirm_create_report', 'This class has no report yet. A new one will be created.')"
+            :confirm-text="$t('common.continue')" @confirm="handleConfirmCreate" @close="showCreateConfirm = false" />
+
     </div>
 </template>
 
@@ -438,6 +443,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { CourseService } from '@/services/CourseService'
@@ -479,6 +485,38 @@ const enrollmentInfo = ref<{
 } | null>(null)
 const courseLessons = ref<any[]>([])
 let reportSubscription: RealtimeChannel | null = null
+
+// Confirm Modal State
+const showCreateConfirm = ref(false)
+const pendingOccurrence = ref<ClassOccurrence | null>(null)
+
+async function handleConfirmCreate() {
+    if (!pendingOccurrence.value) return
+    showCreateConfirm.value = false
+
+    // Resume creation flow
+    const enrollmentId = route.params.enrollmentId as string
+    if (!enrollmentId) return
+
+    try {
+        const report = await OccurrenceReportService.createReport(enrollmentId, pendingOccurrence.value.id!)
+        selectedReport.value = report
+
+        if (report) {
+            const newReportDetail = {
+                ...report,
+                class_occurrence_id: pendingOccurrence.value.id,
+                class_occurrence: {
+                    ...pendingOccurrence.value
+                }
+            }
+            allReports.value.push(newReportDetail as any)
+        }
+    } catch (e) {
+        console.error('Failed to create report', e)
+        toast.error(t('report.create_error') || 'Failed to create report')
+    }
+}
 
 // List View State
 import { computed } from 'vue'
@@ -1000,37 +1038,10 @@ async function selectOccurrence(occurrence: ClassOccurrence) {
 
         // Create explicit Create method for manual creation
         if (!hasExistingReport) {
-            // Check if we should confirm
-            if (!confirm(t('report.editor.confirm_create_report', 'This class has no report yet. A new one will be created. Continue?'))) {
-                reportLoading.value = false
-                selectedOccurrence.value = null
-                return
-            }
-
-            // Create report only after confirmation
-            const report = await OccurrenceReportService.createReport(enrollmentId, occurrence.id)
-            selectedReport.value = report
-
-            // Optimistically update markers by adding to allReports
-            // This is better than full reload
-            if (report) {
-                // Clone report as any to match the detailed format locally or fetch details?
-                // For now, minimal details enough to make "hasExistingReport" true next time
-                // We ideally want fresh data but let's try pushing to avoid reload flicker
-                // However, we rely on `reportsWithDetails` structure.
-                // Let's do a lightweight fetch of just this report's details or rely on existing occurrence+new report
-
-                // Simpler: Just refresh reports list in background without UI flicker?
-                // Or just manually construct the object.
-                const newReportDetail = {
-                    ...report,
-                    class_occurrence_id: occurrence.id,
-                    class_occurrence: {
-                        ...occurrence
-                    }
-                }
-                allReports.value.push(newReportDetail as any)
-            }
+            // Store pending occurrence and show modal
+            pendingOccurrence.value = occurrence
+            showCreateConfirm.value = true
+            return
         } else {
             // Just fetch existing
             const report = await OccurrenceReportService.getReport(enrollmentId, occurrence.id)

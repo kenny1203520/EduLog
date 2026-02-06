@@ -197,6 +197,9 @@
                 </div>
             </div>
         </div>
+        <ConfirmModal :is-open="genericConfirm.isOpen" :title="genericConfirm.title" :message="genericConfirm.message"
+            :confirm-text="genericConfirm.confirmText" :is-dangerous="genericConfirm.isDangerous"
+            @confirm="handleGenericConfirm" @close="genericConfirm.isOpen = false" />
     </div>
 </template>
 
@@ -207,6 +210,7 @@ import { useToast } from 'vue-toastification'
 import { SuspensionService } from '@/services/SuspensionService'
 import type { Suspension } from '@/models/Suspension'
 import { DateUtils } from '@/utils/DateUtils'
+import ConfirmModal from './common/ConfirmModal.vue'
 
 const props = defineProps<{
     enrollmentId: string
@@ -232,6 +236,34 @@ const newSuspension = ref({
     endDate: '', // Empty string for indefinite
     reason: ''
 })
+
+// Generic Confirm Modal State
+const genericConfirm = ref({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    isDangerous: false,
+    action: null as (() => any) | null
+})
+
+function openConfirm(message: string, action: () => any, title?: string, isDangerous = false) {
+    genericConfirm.value = {
+        isOpen: true,
+        title: title || t('common.confirm'),
+        message,
+        confirmText: t('common.confirm'),
+        isDangerous,
+        action
+    }
+}
+
+async function handleGenericConfirm() {
+    if (genericConfirm.value.action) {
+        await genericConfirm.value.action()
+    }
+    genericConfirm.value.isOpen = false
+}
 
 const isValid = computed(() => {
     if (!newSuspension.value.startDate) return false
@@ -282,16 +314,16 @@ async function addSuspension() {
 }
 
 async function deleteSuspension(id: string) {
-    if (!confirm('Are you sure you want to delete this suspension record? Reports marked as suspension might need manual review.')) return
-
-    try {
-        await SuspensionService.deleteSuspension(id)
-        await loadSuspensions()
-        toast.success(t('common.deleted') || 'Suspension deleted successfully')
-    } catch (e: any) {
-        console.error(e)
-        toast.error(e.message || 'Failed to delete suspension')
-    }
+    openConfirm('Are you sure you want to delete this suspension record? Reports marked as suspension might need manual review.', async () => {
+        try {
+            await SuspensionService.deleteSuspension(id)
+            await loadSuspensions()
+            toast.success(t('common.deleted') || 'Suspension deleted successfully')
+        } catch (e: any) {
+            console.error(e)
+            toast.error(e.message || 'Failed to delete suspension')
+        }
+    }, t('common.delete'), true)
 }
 
 

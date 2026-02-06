@@ -10,10 +10,40 @@ import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
+import ConfirmModal from '../components/common/ConfirmModal.vue'
+
 const { t } = useI18n()
 const toast = useToast()
 const router = useRouter()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
+
+// Generic Confirm Modal State
+const genericConfirm = ref({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    isDangerous: false,
+    action: null as (() => any) | null
+})
+
+function openConfirm(message: string, action: () => any, title?: string, isDangerous = false) {
+    genericConfirm.value = {
+        isOpen: true,
+        title: title || t('common.confirm'),
+        message,
+        confirmText: t('common.confirm'),
+        isDangerous,
+        action
+    }
+}
+
+async function handleGenericConfirm() {
+    if (genericConfirm.value.action) {
+        await genericConfirm.value.action()
+    }
+    genericConfirm.value.isOpen = false
+}
 
 // Data
 const classrooms = ref<Classroom[]>([])
@@ -165,14 +195,15 @@ function closeRoomModal() {
 }
 
 async function deleteClassroom(id: string) {
-    if (!confirm(t('common.confirm_delete'))) return
-    try {
-        await CourseService.deleteClassroom(id)
-        await Promise.all([loadRooms(), loadAllRooms()])
-        toast.success(t('classroom.room_delete_success') || 'Room deleted successfully')
-    } catch (e) {
-        toast.error(e as string)
-    }
+    openConfirm(t('classroom.confirm_delete_room'), async () => {
+        try {
+            await CourseService.deleteClassroom(id)
+            await Promise.all([loadRooms(), loadAllRooms()])
+            toast.success(t('classroom.room_delete_success') || 'Room deleted successfully')
+        } catch (e) {
+            toast.error(e as string)
+        }
+    }, t('common.delete'), true)
 }
 
 async function saveSession() {
@@ -225,14 +256,15 @@ function navigateToSession(id: string) {
 }
 
 async function deleteSession(id: string) {
-    if (!confirm(t('common.confirm_delete'))) return
-    try {
-        await CourseService.deleteClassSession(id)
-        await loadSessions()
-        toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
-    } catch (e) {
-        toast.error(e as string)
-    }
+    openConfirm(t('classroom.confirm_delete_session'), async () => {
+        try {
+            await CourseService.deleteClassSession(id)
+            await loadSessions()
+            toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
+        } catch (e) {
+            toast.error(e as string)
+        }
+    }, t('common.delete'), true)
 }
 
 // Helpers
@@ -572,5 +604,8 @@ function toggleCourseSelection(courseId: string) {
                 </div>
             </div>
         </div>
+        <ConfirmModal :is-open="genericConfirm.isOpen" :title="genericConfirm.title" :message="genericConfirm.message"
+            :confirm-text="genericConfirm.confirmText" :is-dangerous="genericConfirm.isDangerous"
+            @confirm="handleGenericConfirm" @close="genericConfirm.isOpen = false" />
     </div>
 </template>

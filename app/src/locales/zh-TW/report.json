@@ -129,7 +129,9 @@
         "delete_report_title": "刪除報告",
         "delete_report_confirm": "確定要刪除此報告嗎？刪除後，學生的課程進度將會自動更新（若此報告是最後一次上課紀錄，進度將會退回）。",
         "delete_success": "報告已刪除",
-        "confirm_create_report": "此課堂尚未建立報告，點選後將會自動為學生建立一份新的報告。確定要繼續嗎？"
+        "confirm_create_report": "此課堂尚未建立報告，點選後將會自動為學生建立一份新的報告。確定要繼續嗎？",
+        "confirm_create_report_title": "建立新報告？",
+        "create_error": "建立報告失敗"
     },
     "conflict": {
         "title": "偵測到版本衝突",

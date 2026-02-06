@@ -5,12 +5,42 @@ import { Course, Lesson, type CourseDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 
+import ConfirmModal from '../components/common/ConfirmModal.vue'
+
 const { t } = useI18n()
 const toast = useToast()
 const courses = ref<Course[]>([])
 const loading = ref(true)
 const iscreateModalOpen = ref(false)
 const editingCourse = ref<Course | null>(null)
+
+// Generic Confirm Modal State
+const genericConfirm = ref({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    isDangerous: false,
+    action: null as (() => any) | null
+})
+
+function openConfirm(message: string, action: () => any, title?: string, isDangerous = false) {
+    genericConfirm.value = {
+        isOpen: true,
+        title: title || t('common.confirm'),
+        message,
+        confirmText: t('common.confirm'),
+        isDangerous,
+        action
+    }
+}
+
+async function handleGenericConfirm() {
+    if (genericConfirm.value.action) {
+        await genericConfirm.value.action()
+    }
+    genericConfirm.value.isOpen = false
+}
 
 // Form for new/edit course
 const courseForm = ref<Partial<CourseDTO>>({
@@ -168,25 +198,27 @@ function cancelLessonEdit() {
 }
 
 async function deleteCourse(id: string) {
-    if (!confirm(t('common.confirm_delete'))) return
-    try {
-        await CourseService.deleteCourse(id)
-        await fetchCourses()
-        toast.success(t('course.delete_success') || 'Course deleted successfully')
-    } catch (e) {
-        toast.error(e as string)
-    }
+    openConfirm(t('course.confirm_delete'), async () => {
+        try {
+            await CourseService.deleteCourse(id)
+            await fetchCourses()
+            toast.success(t('course.delete_success') || 'Course deleted successfully')
+        } catch (e) {
+            toast.error(e as string)
+        }
+    }, t('common.delete'), true)
 }
 
 async function deleteLesson(id: string) {
-    if (!confirm(t('common.confirm_delete'))) return
-    try {
-        await CourseService.deleteLesson(id)
-        await fetchCourses()
-        toast.success(t('course.lesson_delete_success') || 'Lesson deleted successfully')
-    } catch (e) {
-        toast.error(e as string)
-    }
+    openConfirm(t('course.lesson_confirm_delete'), async () => {
+        try {
+            await CourseService.deleteLesson(id)
+            await fetchCourses()
+            toast.success(t('course.lesson_delete_success') || 'Lesson deleted successfully')
+        } catch (e) {
+            toast.error(e as string)
+        }
+    }, t('common.delete'), true)
 }
 </script>
 
@@ -530,5 +562,8 @@ async function deleteLesson(id: string) {
             </div>
         </div>
 
+        <ConfirmModal :is-open="genericConfirm.isOpen" :title="genericConfirm.title" :message="genericConfirm.message"
+            :confirm-text="genericConfirm.confirmText" :is-dangerous="genericConfirm.isDangerous"
+            @confirm="handleGenericConfirm" @close="genericConfirm.isOpen = false" />
     </div>
 </template>

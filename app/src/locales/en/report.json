@@ -129,7 +129,9 @@
         "delete_report_title": "Delete Report",
         "delete_report_confirm": "Are you sure you want to delete this report? This will automatically recalculate the student's progress.",
         "delete_success": "Report Deleted",
-        "confirm_create_report": "This class has no report yet. Clicking will automatically create a new report for the student. Do you want to continue?"
+        "confirm_create_report": "This class has no report yet. Clicking will automatically create a new report for the student. Do you want to continue?",
+        "confirm_create_report_title": "Create New Report?",
+        "create_error": "Failed to create report"
     },
     "conflict": {
         "title": "Conflict Detected",

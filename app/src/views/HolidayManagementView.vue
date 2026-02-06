@@ -7,6 +7,8 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 
+import ConfirmModal from '../components/common/ConfirmModal.vue'
+
 const { t } = useI18n()
 const toast = useToast()
 const holidays = ref<Holiday[]>([])
@@ -16,6 +18,10 @@ const loading = ref(true)
 const isSaving = ref(false)
 const isAddModalOpen = ref(false)
 const editingId = ref<string | null>(null)
+
+// Confirm Modal State
+const showDeleteConfirm = ref(false)
+const deleteId = ref<string | null>(null)
 
 const scopeType = ref<'global' | 'classroom' | 'session'>('global')
 const holidayForm = ref({
@@ -99,14 +105,22 @@ async function handleSaveHoliday() {
     }
 }
 
-async function handleDeleteHoliday(id: string) {
-    if (!confirm(t('holiday.delete_confirm'))) return
+function handleDeleteHoliday(id: string) {
+    deleteId.value = id
+    showDeleteConfirm.value = true
+}
+
+async function confirmDelete() {
+    if (!deleteId.value) return
     try {
-        await HolidayService.deleteHoliday(id)
+        await HolidayService.deleteHoliday(deleteId.value)
         await loadHolidays()
         toast.success(t('holiday.delete_success') || 'Holiday deleted successfully')
     } catch (e: any) {
         toast.error(e.message || 'Failed to delete holiday')
+    } finally {
+        showDeleteConfirm.value = false
+        deleteId.value = null
     }
 }
 
@@ -403,5 +417,8 @@ function closeModal() {
                 </div>
             </div>
         </div>
+        <ConfirmModal :is-open="showDeleteConfirm" :title="$t('common.delete')" :message="$t('holiday.delete_confirm')"
+            :confirm-text="$t('common.delete')" :is-dangerous="true" @confirm="confirmDelete"
+            @close="showDeleteConfirm = false" />
     </div>
 </template>
