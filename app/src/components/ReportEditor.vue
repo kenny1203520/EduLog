@@ -409,7 +409,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                        }}</span>
+                    }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -439,6 +439,10 @@
         <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId"
             :student-id="props.initialStudentId" :current-report-id="props.reportId" @close="showReferencePanel = false"
             @copy="handleCopyContent" />
+
+        <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
+            :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
+            @confirm="handleConfirmAction" @close="confirmState.isOpen = false" />
     </div>
 </template>
 
@@ -452,6 +456,7 @@ import RatingInput from '@/components/common/RatingInput.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import { ReportTemplateService } from '@/services/ReportTemplateService'
 import { useToast } from 'vue-toastification'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 import type { Lesson } from '@/models/Course'
@@ -471,6 +476,32 @@ const savedTemplates = ref<Template[]>([])
 const newTemplateName = ref('')
 const justCopiedCourse = ref(false)
 const toast = useToast()
+
+// Confirm Modal State
+const confirmState = ref({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    isDangerous: false,
+    action: null as Function | null
+})
+
+const openConfirm = (title: string, message: string, action: Function, isDangerous = false) => {
+    confirmState.value = {
+        isOpen: true,
+        title,
+        message,
+        confirmText: t('common.confirm', 'Confirm'),
+        isDangerous,
+        action
+    }
+}
+
+const handleConfirmAction = () => {
+    if (confirmState.value.action) confirmState.value.action()
+    confirmState.value.isOpen = false
+}
 
 const handleCopyContent = (text: string) => {
     if (!text) return
@@ -547,39 +578,62 @@ function copyCourseInfo() {
 }
 
 function applyTemplate(template: any) {
-    if (localContent.value && !confirm(t('report.editor.apply_template_confirm'))) return
+    const doApply = () => {
+        localContent.value = template.content
+        if (template.contactNotes) contactNotes.value = template.contactNotes
+        if (template.classNotes) classNotes.value = template.classNotes
 
-    localContent.value = template.content
-    if (template.contactNotes) contactNotes.value = template.contactNotes
-    if (template.classNotes) classNotes.value = template.classNotes
+        handleInput() // Update and save
+        showTemplates.value = false
+    }
 
-    handleInput() // Update and save
-    showTemplates.value = false
+    if (localContent.value) {
+        openConfirm(
+            t('report.editor.apply_template_title', 'Apply Template'),
+            t('report.editor.apply_template_confirm', 'Are you sure? Current content will be overwritten.'),
+            doApply,
+            false // Safe action (relatively)
+        )
+    } else {
+        doApply()
+    }
 }
 
-async function deleteTemplate(id: string) {
-    if (!confirm(t('report.editor.delete_template_confirm'))) return
-    try {
-        await ReportTemplateService.deleteTemplate(id)
-        savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
-        toast.success(t('report.editor.template_deleted') || 'Template deleted')
-    } catch (e) {
-        console.error('Failed to delete template', e)
-    }
+function deleteTemplate(id: string) {
+    openConfirm(
+        t('report.editor.delete_template_title', 'Delete Template'),
+        t('report.editor.delete_template_confirm', 'Are you sure you want to delete this template?'),
+        async () => {
+            try {
+                await ReportTemplateService.deleteTemplate(id)
+                savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
+                toast.success(t('report.editor.template_deleted') || 'Template deleted')
+            } catch (e) {
+                console.error('Failed to delete template', e)
+            }
+        },
+        true // Dangerous
+    )
 }
 
 async function handleDeleteReport() {
     if (!props.reportId) return
-    if (!confirm(t('report.editor.delete_report_confirm', 'Are you sure you want to delete this report? This will revert the student\'s progress.'))) return
 
-    try {
-        await OccurrenceReportService.deleteReportAndRevertProgress(props.reportId)
-        toast.success(t('report.editor.delete_success') || 'Report deleted')
-        emit('deleted')
-    } catch (e: any) {
-        console.error('Failed to delete report', e)
-        saveError.value = e.message
-    }
+    openConfirm(
+        t('report.editor.delete_report_title', 'Delete Report'),
+        t('report.editor.delete_report_confirm', 'Are you sure you want to delete this report? This will revert the student\'s progress.'),
+        async () => {
+            try {
+                await OccurrenceReportService.deleteReportAndRevertProgress(props.reportId!)
+                toast.success(t('report.editor.delete_success') || 'Report deleted')
+                emit('deleted')
+            } catch (e: any) {
+                console.error('Failed to delete report', e)
+                saveError.value = e.message
+            }
+        },
+        true // Dangerous
+    )
 }
 
 onMounted(() => {

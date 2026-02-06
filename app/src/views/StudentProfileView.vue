@@ -13,12 +13,14 @@ import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 import { useEmailValidation } from '@/composables/useEmailValidation'
 import StudentSuspensions from '@/components/StudentSuspensions.vue'
 import { supabase } from '@/lib/supabase'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
 const studentStore = useStudentStore()
+const showDeleteConfirm = ref(false)
 const studentId = computed(() => route.params.id as string)
 const { validateEmail, getEmailError } = useEmailValidation()
 
@@ -122,8 +124,11 @@ async function saveMainDetails() {
 }
 
 async function handleDeleteStudent() {
-    if (!confirm(t('student.confirm_delete_student'))) return
+    showDeleteConfirm.value = true
+}
 
+async function confirmDeleteStudent() {
+    showDeleteConfirm.value = false
     try {
         await studentStore.deleteStudent(studentId.value)
         router.push('/dashboard')
@@ -2312,5 +2317,10 @@ function copyToClipboard(text: string) {
         </div>
         <StudentSuspensions v-if="isSuspensionsModalOpen" :enrollment-id="selectedEnrollmentIdForSuspension"
             @close="isSuspensionsModalOpen = false" />
+
+        <ConfirmModal :is-open="showDeleteConfirm" :title="$t('student.delete_title', 'Delete Student')"
+            :message="$t('student.confirm_delete_student', 'Are you sure you want to delete this student and all associated data? This action cannot be undone.')"
+            :confirm-text="$t('common.delete')" :is-dangerous="true" @confirm="confirmDeleteStudent"
+            @close="showDeleteConfirm = false" />
     </div>
 </template>
