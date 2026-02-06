@@ -8,6 +8,7 @@ import type { Enrollment } from '@/models/Enrollment'
 
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
@@ -149,12 +150,21 @@ function navigateToReports(enrollmentId: string) {
 }
 
 // Attendance & Rating Handlers
-async function toggleAttendance(enrId: string, event: any) {
+async function toggleAttendance(enrId: string) {
     const report = reportMap.value.get(enrId)
     if (!report) return
 
-    const isPresent = event.target.checked
-    const newStatus = isPresent ? 'present' : 'absent'
+    // Cycle: Pending -> Present -> Absent -> Pending
+    const currentStatus = report.attendanceStatus || 'pending'
+    let newStatus: 'present' | 'absent' | 'pending' = 'pending'
+
+    if (currentStatus === 'pending') {
+        newStatus = 'present'
+    } else if (currentStatus === 'present') {
+        newStatus = 'absent'
+    } else {
+        newStatus = 'pending'
+    }
 
     savingMap.value.set(enrId, true)
     try {
@@ -164,7 +174,7 @@ async function toggleAttendance(enrId: string, event: any) {
             undefined,
             {
                 attendanceStatus: newStatus,
-                absenceReason: isPresent ? undefined : t('report.editor.absence_reasons.reason_not_provided'),
+                absenceReason: newStatus === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : undefined,
                 content: report.content || '',
             }
         )
@@ -173,23 +183,70 @@ async function toggleAttendance(enrId: string, event: any) {
         reportMap.value.set(enrId, updated)
     } catch (e) {
         console.error('Failed to toggle attendance:', e)
-        event.target.checked = !isPresent // Revert UI
+        toast.error(t('common.save_error') || 'Failed to save attendance')
     } finally {
         savingMap.value.delete(enrId)
     }
 }
 
+async function copyAttendanceInfo() {
+    if (!todayOccurrence.value || !session.value) return
 
+    const date = new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+    const startTime = todayOccurrence.value.originalStartTime?.substring(0, 5) || ''
+    const endTime = todayOccurrence.value.originalEndTime?.substring(0, 5) || ''
+    const time = `${startTime}-${endTime}`
 
-async function refreshSchedule() {
-    if (!confirm(t('classroom.refresh_confirm'))) return
+    // Helper to format list
+    const formatList = (status: 'present' | 'absent' | 'pending') => {
+        const list = enrollments.value
+            .filter(e => {
+                const report = reportMap.value.get(e.id!)
+                const s = report?.attendanceStatus || 'pending' // Default to pending if missing
+                return s === status
+            })
+            .map(e => e.studentName)
+            .join(', ')
+        return list || t('common.none')
+    }
+
+    const presentList = formatList('present')
+    const absentList = formatList('absent')
+    const pendingList = formatList('pending')
+
+    const text = `${t('classroom.class_info_title')}\n` +
+        `${session.value.name} (${date} ${time})\n\n` +
+        `${t('classroom.present_list')}: ${presentList}\n` +
+        `${t('classroom.absent_list')}: ${absentList}\n` +
+        `${t('classroom.pending_list')}: ${pendingList}`
+
+    try {
+        await navigator.clipboard.writeText(text)
+        toast.success(t('classroom.copy_success'))
+    } catch (err) {
+        console.error('Failed to copy: ', err)
+        toast.error('Failed to copy to clipboard')
+    }
+}
+
+// Refresh Schedule Logic
+const showRefreshConfirm = ref(false)
+
+function requestRefreshSchedule() {
+    showRefreshConfirm.value = true
+}
+
+async function handleConfirmRefresh() {
     try {
         await OccurrenceService.syncSessionOccurrences(sessionId)
         toast.success(t('classroom.refresh_success'))
+        showRefreshConfirm.value = false
         window.location.reload()
     } catch (e) {
         console.error(e)
+        // @ts-ignore
         toast.error(t('classroom.refresh_failed') || 'Failed to refresh schedule')
+        showRefreshConfirm.value = false
     }
 }
 
@@ -354,7 +411,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             </div>
 
             <!-- Refresh Schedule Button -->
-            <button @click="refreshSchedule"
+            <button @click="requestRefreshSchedule"
                 class="p-3 rounded-2xl bg-white border border-gray-100 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-100 transition-all shadow-sm active:scale-90"
                 :title="$t('classroom.refresh_schedule')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
@@ -399,13 +456,25 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                         </p>
                     </div>
 
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" :checked="todayOccurrence.isConducted"
-                            @change="toggleClassStatus($event)" class="sr-only peer">
-                        <div
-                            class="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
-                        </div>
-                    </label>
+                    <div class="flex items-center gap-4">
+                        <button @click="copyAttendanceInfo"
+                            class="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                            :title="$t('classroom.copy_attendance')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                            </svg>
+                        </button>
+
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" :checked="todayOccurrence.isConducted"
+                                @change="toggleClassStatus($event)" class="sr-only peer">
+                            <div
+                                class="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
+                            </div>
+                        </label>
+                    </div>
                 </div>
 
                 <!-- Stats Bar (Conditional or Compact in Split View?) -->
@@ -482,22 +551,45 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                         <div class="flex items-center justify-between" v-if="todayOccurrence">
                             <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
                                 $t('attendance.status') }}</span>
-                            <label class="flex items-center gap-3 cursor-pointer group">
+                            <div class="flex items-center gap-3">
                                 <span class="text-sm font-bold transition-colors"
                                     :class="reportMap.get(e.id!)?.attendanceStatus === 'present' ? 'text-emerald-600' : 'text-gray-400'">
-                                    {{ reportMap.get(e.id!)?.attendanceStatus === 'present' ? $t('attendance.present') :
-                                        $t('attendance.absent') }}
+                                    {{ reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' +
+                                        reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending') }}
                                 </span>
-                                <div class="relative flex items-center">
-                                    <input type="checkbox"
-                                        :checked="reportMap.get(e.id!)?.attendanceStatus === 'present'"
-                                        :disabled="savingMap.has(e.id!)" @change="toggleAttendance(e.id!, $event)"
-                                        class="sr-only peer">
-                                    <div
-                                        class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
-                                    </div>
-                                </div>
-                            </label>
+                                <button type="button" @click="toggleAttendance(e.id!)"
+                                    class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center"
+                                    :class="{
+                                        'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
+                                        'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
+                                        'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
+                                    }" :title="$t('attendance.status')" :disabled="savingMap.has(e.id!)">
+                                    <!-- Present Icon (Check) -->
+                                    <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
+                                        xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
+                                        fill="currentColor">
+                                        <path fill-rule="evenodd"
+                                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                            clip-rule="evenodd" />
+                                    </svg>
+
+                                    <!-- Absent Icon (X) -->
+                                    <svg v-else-if="reportMap.get(e.id!)?.attendanceStatus === 'absent'"
+                                        xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
+                                        fill="currentColor">
+                                        <path fill-rule="evenodd"
+                                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                            clip-rule="evenodd" />
+                                    </svg>
+
+                                    <!-- Pending Icon (Circle/Question) -->
+                                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Actions Grid -->
@@ -563,10 +655,40 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                 class="hover:bg-emerald-50/20 transition-colors group">
                                 <!-- Attendance Column -->
                                 <td class="px-8 py-6 text-center" v-if="todayOccurrence">
-                                    <input type="checkbox"
-                                        :checked="reportMap.get(e.id!)?.attendanceStatus === 'present'"
-                                        :disabled="savingMap.has(e.id!)" @change="toggleAttendance(e.id!, $event)"
-                                        class="w-6 h-6 rounded-lg border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-50">
+                                    <button type="button" @click="toggleAttendance(e.id!)"
+                                        class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center mx-auto"
+                                        :class="{
+                                            'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
+                                            'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
+                                            'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
+                                        }"
+                                        :title="$t('attendance.status') + ': ' + (reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' + reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending'))"
+                                        :disabled="savingMap.has(e.id!)">
+                                        <!-- Present Icon (Check) -->
+                                        <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
+                                            xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
+                                            fill="currentColor">
+                                            <path fill-rule="evenodd"
+                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                clip-rule="evenodd" />
+                                        </svg>
+
+                                        <!-- Absent Icon (X) -->
+                                        <svg v-else-if="reportMap.get(e.id!)?.attendanceStatus === 'absent'"
+                                            xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
+                                            fill="currentColor">
+                                            <path fill-rule="evenodd"
+                                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                                clip-rule="evenodd" />
+                                        </svg>
+
+                                        <!-- Pending Icon (Circle/Question) -->
+                                        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </button>
                                 </td>
 
                                 <td class="px-8 py-6">
@@ -718,6 +840,10 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             :localVersion="conflictLocalVersion" :server-report="conflictServerReport!"
             :local-report="conflictLocalReport!" :available-lessons="courseLessons" @close="closeConflictModal"
             @resolve="resolveConflict" />
+
+        <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
+            :message="$t('classroom.refresh_confirm')" confirm-text="Refresh" confirm-type="warning"
+            @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
 
     </div>
 </template>
