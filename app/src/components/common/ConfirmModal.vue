@@ -65,12 +65,12 @@ onUnmounted(() => {
                 <div class="flex gap-3 pt-2">
                     <button @click="$emit('close')"
                         class="flex-1 px-6 py-3.5 text-gray-500 hover:text-gray-700 font-bold bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors">
-                        {{ cancelText || 'Cancel' }}
+                        {{ cancelText || $t('common.cancel') }}
                     </button>
                     <button @click="$emit('confirm')"
                         class="flex-1 px-6 py-3.5 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
                         :class="isDangerous ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'">
-                        {{ confirmText || 'Confirm' }}
+                        {{ confirmText || $t('common.confirm') }}
                     </button>
                 </div>
             </div>

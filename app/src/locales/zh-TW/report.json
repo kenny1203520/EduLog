@@ -73,8 +73,10 @@
         "template_deleted": "範本已刪除",
         "template_load_error": "無法讀取範本",
         "no_templates": "尚無已儲存的範本",
+        "delete_template_title": "刪除範本",
         "delete_template_confirm": "確定要刪除此範本嗎？",
         "save_to_template": "儲存為範本",
+        "apply_template_title": "套用範本",
         "apply_template_confirm": "套用範本將取代目前的報告內容（包含聯絡欄與紀錄），確定要繼續嗎？",
         "course_folder": "課程資料夾",
         "copy_course_info": "複製課程資訊",
@@ -124,6 +126,7 @@
         "save_now": "立即儲存",
         "required_field_error": "請填寫必填欄位",
         "delete_report": "刪除報告",
+        "delete_report_title": "刪除報告",
         "delete_report_confirm": "確定要刪除此報告嗎？刪除後，學生的課程進度將會自動更新（若此報告是最後一次上課紀錄，進度將會退回）。",
         "delete_success": "報告已刪除",
         "confirm_create_report": "此課堂尚未建立報告，點選後將會自動為學生建立一份新的報告。確定要繼續嗎？"

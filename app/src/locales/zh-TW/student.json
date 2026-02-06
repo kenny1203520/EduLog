@@ -18,6 +18,7 @@
     "save_details": "儲存資料",
     "required": "必填",
     "delete": "刪除學生",
+    "delete_title": "刪除學生",
     "confirm_delete_student": "確定要刪除這位學生嗎？此動作無法復原！",
     "saving": "儲存中...",
     "loading": "載入學生資料中...",
