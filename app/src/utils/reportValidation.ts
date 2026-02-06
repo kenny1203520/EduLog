@@ -11,7 +11,7 @@ export interface ReportValidationError {
  * - If incomplete → progress_letter is recommended
  */
 export function validateReportData(data: {
-    attendanceStatus?: 'present' | 'absent'
+    attendanceStatus?: 'present' | 'absent' | 'pending'
     absenceReason?: string
     isCompleted?: boolean
     progressLetter?: string
@@ -48,7 +48,7 @@ export function validateReportData(data: {
  * - If completed → clear progress_letter
  */
 export function applyBusinessRules(data: {
-    attendanceStatus?: 'present' | 'absent'
+    attendanceStatus?: 'present' | 'absent' | 'pending'
     isCompleted?: boolean
     progressLetter?: string
 }): {

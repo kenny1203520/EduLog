@@ -78,7 +78,7 @@ export class OccurrenceReportService {
             class_occurrence_id: occurrenceId,
             content: '',
             version: 1,
-            attendance_status: (isHoliday || isSuspended) ? 'absent' : undefined,
+            attendance_status: (isHoliday || isSuspended) ? 'absent' : 'pending',
             absence_reason: isSuspended ? 'suspension' : (isHoliday ? 'holiday' : undefined),
             is_completed: false // Default to false (scheduled) instead of true (present)
         }
@@ -125,7 +125,7 @@ export class OccurrenceReportService {
             lessonId?: string
             isCompleted?: boolean
             progressLetter?: string
-            attendanceStatus?: 'present' | 'absent'
+            attendanceStatus?: 'present' | 'absent' | 'pending'
             absenceReason?: string
             classParticipation?: number
             classroomBehavior?: number

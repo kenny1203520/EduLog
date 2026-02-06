@@ -2,6 +2,7 @@
     "status": "出席狀況",
     "present": "出席",
     "absent": "未出席",
+    "pending": "待點名",
     "late": "遲到",
     "excused": "事病假",
     "scheduled": "預定上課",

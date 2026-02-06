@@ -11,8 +11,8 @@ export interface OccurrenceReportDTO {
     is_completed?: boolean
     
     // Detailed report fields
-    progress_letter?: string  // A-H when incomplete
-    attendance_status?: 'present' | 'absent'
+    progress_letter?: string  // A-Z when incomplete
+    attendance_status?: 'present' | 'absent' | 'pending'
     absence_reason?: string
     class_participation?: number
     classroom_behavior?: number
@@ -49,7 +49,7 @@ export class OccurrenceReport {
     
     // Detailed fields
     progressLetter?: string
-    attendanceStatus?: 'present' | 'absent'
+    attendanceStatus?: 'present' | 'absent' | 'pending'
     absenceReason?: string
     classParticipation?: number
     classroomBehavior?: number

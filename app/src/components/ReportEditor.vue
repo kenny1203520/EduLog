@@ -207,6 +207,11 @@
 
             <div class="flex items-center gap-4 mb-3">
                 <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" value="pending" v-model="attendanceStatus"
+                        class="w-4 h-4 text-gray-400 border-gray-300 focus:ring-gray-400" />
+                    <span class="text-sm font-medium text-gray-700">{{ $t('attendance.pending') }}</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="present" v-model="attendanceStatus"
                         class="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500" />
                     <span class="text-sm font-medium text-gray-700">{{ $t('attendance.present') }}</span>
@@ -662,7 +667,7 @@ interface Props {
     initialIsCompleted?: boolean // 是否完整完成
     initialProgressStart?: string // 進度開始
     initialProgressEnd?: string // 進度結束
-    initialAttendanceStatus?: 'present' | 'absent' // 出缺勤狀態
+    initialAttendanceStatus?: 'present' | 'absent' | 'pending' // 出缺勤狀態
     initialAbsenceReason?: string // 缺勤原因
     initialClassParticipation?: number // 課堂參與
     initialClassroomBehavior?: number // 課堂秩序
@@ -692,7 +697,7 @@ const props = withDefaults(defineProps<Props>(), {
     initialIsCompleted: false,
     initialProgressStart: undefined,
     initialProgressEnd: undefined,
-    initialAttendanceStatus: undefined,
+    initialAttendanceStatus: 'pending',
     initialAbsenceReason: undefined,
     initialClassParticipation: 0,
     initialClassroomBehavior: 0,
@@ -724,7 +729,7 @@ const selectedLessonId = ref(props.initialLessonId || '')
 const isCompleted = ref(props.initialIsCompleted)
 const progressStart = ref(props.initialProgressStart || '')
 const progressEnd = ref(props.initialProgressEnd || '')
-const attendanceStatus = ref<'present' | 'absent' | undefined>(props.initialAttendanceStatus)
+const attendanceStatus = ref<'present' | 'absent' | 'pending'>(props.initialAttendanceStatus)
 const absenceReason = ref(props.initialAbsenceReason || '')
 const classParticipation = ref(props.initialClassParticipation ?? 0)
 const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
