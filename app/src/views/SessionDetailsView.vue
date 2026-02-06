@@ -842,7 +842,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             @resolve="resolveConflict" />
 
         <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
-            :message="$t('classroom.refresh_confirm')" confirm-text="Refresh" confirm-type="warning"
+            :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
             @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
 
     </div>
