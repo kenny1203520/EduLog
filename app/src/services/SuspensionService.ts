@@ -210,7 +210,7 @@ export class SuspensionService {
             version: 1,
             content: '',
             is_completed: false, // Start as incomplete so they show up as "Missing"
-            attendance_status: undefined // No default attendance
+            attendance_status: 'pending' // No default attendance
         }))
 
         const { error } = await supabase

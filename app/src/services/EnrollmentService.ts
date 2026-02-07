@@ -197,7 +197,7 @@ export class EnrollmentService {
                 content: '',
                 version: 1,
                 is_completed: false,
-                attendance_status: undefined
+                attendance_status: 'pending'
             }))
 
             await supabase
@@ -402,7 +402,7 @@ export class EnrollmentService {
                     content: '',
                     version: 1,
                     is_completed: false,
-                    attendance_status: undefined
+                    attendance_status: 'pending'
                 })
             if (insertError) throw new Error(`Failed to create replacement report: ${insertError.message}`)
         }

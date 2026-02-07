@@ -379,7 +379,7 @@ export class OccurrenceReportService {
                         content: '',
                         version: 1,
                         is_completed: false,
-                        attendance_status: undefined
+                        attendance_status: 'pending'
                     })
                 }
             }
