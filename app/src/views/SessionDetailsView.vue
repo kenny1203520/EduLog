@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseService } from '@/services/CourseService'
 import { OccurrenceService } from '@/services/OccurrenceService'
@@ -39,6 +39,15 @@ const session = ref<any>(null)
 const enrollments = ref<Enrollment[]>([])
 const courseLessons = ref<any[]>([])
 const loading = ref(true)
+
+// Filtered Enrollments: Only show active students if they have a report
+const visibleEnrollments = computed(() => {
+    return enrollments.value.filter(e => {
+        // Must have a valid report in the map to be visible
+        // (Null means checked but no report exists)
+        return reportMap.value.get(e.id!)
+    })
+})
 
 onMounted(async () => {
     try {
@@ -97,6 +106,13 @@ onMounted(async () => {
             const occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(todayOccurrence.value.id)
             const reportEnrollmentIds = new Set(occurrenceReports.map(r => r.enrollmentId))
 
+            // Pre-populate map with ALL existing reports (Guests AND Active)
+            occurrenceReports.forEach(r => {
+                if (r.enrollmentId) {
+                    reportMap.value.set(r.enrollmentId, r)
+                }
+            })
+
             // 4b. Identify Guests (Have report but not in permanent list)
             const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
             const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
@@ -111,25 +127,19 @@ onMounted(async () => {
                         // Mark as guest for UI
                         (guest as any).isGuest = true
                         enrollments.value.push(guest)
-
-                        // Populate report map immediately since we already fetched it
-                        const existingReport = occurrenceReports.find(r => r.enrollmentId === guest.id)
-                        if (existingReport) {
-                            reportMap.value.set(guest.id!, existingReport)
-                        }
+                        // Report is already in map from step 4a
                     }
                 })
             }
 
-            // 4d. Ensure reports exist for permanent students
+            // 4d. Check for students WITHOUT reports
             for (const enr of enrollments.value) {
                 if (enr.id) {
-                    // Start report loading for everyone (guests already handled, but check is fast)
                     if (!reportMap.value.has(enr.id)) {
-                        if (enr.status === 'active') {
-                            const report = await OccurrenceReportService.getOrCreateReport(enr.id, todayOccurrence.value.id)
-                            reportMap.value.set(enr.id, report)
-                        }
+                        // If not in reportMap by now, they don't have a report in the batch fetch.
+                        // We mark them as null so the filter knows hide them.
+                        // No need to fetch individually because getReportsByOccurrence got everything.
+                        reportMap.value.set(enr.id, null)
                     }
                 }
             }
@@ -199,7 +209,7 @@ async function copyAttendanceInfo() {
 
     // Helper to format list
     const formatList = (status: 'present' | 'absent' | 'pending') => {
-        const list = enrollments.value
+        const list = visibleEnrollments.value
             .filter(e => {
                 const report = reportMap.value.get(e.id!)
                 const s = report?.attendanceStatus || 'pending' // Default to pending if missing
@@ -295,7 +305,7 @@ async function toggleSplitView(enrollmentId: string) {
         // Fetch latest report content to ensure sync with server (fixes stale data issues)
         if (todayOccurrence.value?.id) {
             savingMap.value.set(enrollmentId, true)
-            OccurrenceReportService.getOrCreateReport(enrollmentId, todayOccurrence.value.id)
+            OccurrenceReportService.getReport(enrollmentId, todayOccurrence.value.id)
                 .then(report => {
                     reportMap.value.set(enrollmentId, report)
                 })
@@ -484,7 +494,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                         <div>
                             <h4 class="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-2">{{
                                 $t('classroom.total_students') }}</h4>
-                            <p class="text-5xl font-black tracking-tighter">{{ enrollments.length }}</p>
+                            <p class="text-5xl font-black tracking-tighter">{{ visibleEnrollments.length }}</p>
                         </div>
                         <div class="bg-white/20 p-4 rounded-3xl">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24"
@@ -501,21 +511,22 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                 $t('classroom.capacity_utilization') }}</h4>
                             <div class="flex items-end gap-3">
                                 <p class="text-4xl font-black text-gray-900 tracking-tighter">{{
-                                    Math.round((enrollments.length / (session?.capacity || 1)) * 100) }}%</p>
+                                    Math.round((visibleEnrollments.length / (session?.capacity || 1)) * 100) }}%</p>
                                 <p class="text-xs font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
                                     $t('classroom.capacity') }}</p>
                             </div>
                         </div>
                         <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                             <div class="h-full bg-emerald-500 rounded-full transition-all duration-1000"
-                                :style="{ width: `${(enrollments.length / (session?.capacity || 1)) * 100}%` }"></div>
+                                :style="{ width: `${(visibleEnrollments.length / (session?.capacity || 1)) * 100}%` }">
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Mobile Card List (Visible on < MD) -->
                 <div class="grid grid-cols-1 gap-4 md:hidden">
-                    <div v-for="e in enrollments" :key="e.id"
+                    <div v-for="e in visibleEnrollments" :key="e.id"
                         class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
                         <!-- Header: Info & Status -->
                         <div class="flex items-start justify-between">
@@ -628,7 +639,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                     </div>
 
                     <!-- Empty State Mobile -->
-                    <div v-if="enrollments.length === 0"
+                    <div v-if="visibleEnrollments.length === 0"
                         class="flex flex-col items-center justify-center py-12 text-gray-300">
                         <span class="font-black italic tracking-widest">No students enrolled</span>
                     </div>
@@ -651,7 +662,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-50">
-                            <tr v-for="e in enrollments" :key="e.id"
+                            <tr v-for="e in visibleEnrollments" :key="e.id"
                                 class="hover:bg-emerald-50/20 transition-colors group">
                                 <!-- Attendance Column -->
                                 <td class="px-8 py-6 text-center" v-if="todayOccurrence">
@@ -748,7 +759,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                     </div>
                                 </td>
                             </tr>
-                            <tr v-if="enrollments.length === 0">
+                            <tr v-if="visibleEnrollments.length === 0">
                                 <td colspan="3"
                                     class="px-8 py-20 text-center font-black italic text-gray-300 tracking-widest">
                                     No students enrolled yet.
