@@ -563,17 +563,16 @@ function copyCourseInfo() {
 
     const cName = props.courseName || ''
     const dName = props.courseDisplayName || ''
-    const lessonLabel = t('report.editor.lesson_label', 'Lesson')
 
     // Format: [Course Name] [Display Name] Lesson [lesson_name]
     // Note: session.name is passed as courseName, enrollment.courseDisplayName as courseDisplayName
     let text = ''
     if (cName && dName) {
-        text = `${cName} ${dName} ${lessonLabel} ${lesson.title}`
+        text = `${cName} ${dName} Lesson ${lesson.sequence} ${lesson.title}`
     } else if (cName || dName) {
-        text = `${cName || dName} ${lessonLabel} ${lesson.title}`
+        text = `${cName || dName} Lesson ${lesson.sequence} ${lesson.title}`
     } else {
-        text = `${lessonLabel} ${lesson.sequence}: ${lesson.title}`
+        text = `Lesson ${lesson.sequence} ${lesson.title}`
     }
 
     navigator.clipboard.writeText(text).then(() => {
