@@ -650,14 +650,14 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-gray-50/50">
-                                <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center"
+                                <th class="px-4 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center"
                                     v-if="todayOccurrence">{{ $t('attendance.status') }}</th>
-                                <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                <th class="px-4 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.student_name') }}</th>
-                                <th class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                <th class="px-4 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.enrollment_status') }}</th>
                                 <th
-                                    class="px-8 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">
+                                    class="px-4 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">
                                     {{ $t('classroom.actions') }}</th>
                             </tr>
                         </thead>
@@ -665,7 +665,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             <tr v-for="e in visibleEnrollments" :key="e.id"
                                 class="hover:bg-emerald-50/20 transition-colors group">
                                 <!-- Attendance Column -->
-                                <td class="px-8 py-6 text-center" v-if="todayOccurrence">
+                                <td class="px-4 py-6 text-center" v-if="todayOccurrence">
                                     <button type="button" @click="toggleAttendance(e.id!)"
                                         class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center mx-auto"
                                         :class="{
@@ -702,7 +702,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                     </button>
                                 </td>
 
-                                <td class="px-8 py-6">
+                                <td class="px-4 py-6">
                                     <div class="flex items-center gap-4">
                                         <div
                                             class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xl">
@@ -715,7 +715,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-8 py-6">
+                                <td class="px-4 py-6">
                                     <span v-if="(e as any).isGuest"
                                         class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100 mr-2">
                                         {{ $t('common.rescheduled') || 'Rescheduled' }}
@@ -726,7 +726,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                         {{ $t('student.internal_courses.status_' + e.status) }}
                                     </span>
                                 </td>
-                                <td class="px-8 py-6 text-right">
+                                <td class="px-4 py-6 text-right">
                                     <div class="flex justify-end gap-2">
                                         <button @click="navigateToProfile(e.studentId)"
                                             class="p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"

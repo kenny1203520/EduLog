@@ -356,8 +356,8 @@
         </div>
 
         <!-- Evaluation Section -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            <div>
+        <div class="flex flex-wrap gap-4 mb-6">
+            <div class="flex-1 min-w-[165px]">
                 <label class="block text-sm font-medium text-gray-700 mb-2">
                     {{ $t('report.editor.class_participation_label') }}
                 </label>
@@ -365,7 +365,7 @@
                     <RatingInput v-model="classParticipation" :show-value="true" />
                 </div>
             </div>
-            <div>
+            <div class="flex-1 min-w-[165px]">
                 <label class="block text-sm font-medium text-gray-700 mb-2">
                     {{ $t('report.editor.classroom_behavior_label') }}
                 </label>
@@ -414,7 +414,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -675,6 +675,7 @@ interface Props {
     initialContent?: string // 學習報告
     initialEnrollmentExternalLink?: string // 課程外部連結
     initialCreatedAt?: string // 建立時間
+    compact?: boolean // 是否為緊湊模式 (for split view)
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -705,6 +706,7 @@ const props = withDefaults(defineProps<Props>(), {
     initialContent: '',
     initialEnrollmentExternalLink: '',
     initialCreatedAt: '',
+    compact: false,
 })
 
 const emit = defineEmits<{
