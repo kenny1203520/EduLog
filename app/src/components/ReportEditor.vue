@@ -259,8 +259,8 @@
             </div>
         </div>
 
-        <!-- Progress Letter (only when incomplete) -->
-        <div v-if="!isCompleted" class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+        <!-- Progress Letter (for lesson chapter record) -->
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-3">
                 {{ $t('report.editor.progress_label') }}
             </label>
@@ -414,7 +414,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                        }}</span>
+                    }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -953,13 +953,15 @@ watch(attendanceStatus, (newStatus) => {
     }
 })
 
-// Business rule: completed → clear progress letters
+// Note: Progress values are now retained even when isCompleted is toggled
+/*
 watch(isCompleted, (newValue) => {
     if (newValue) {
         progressStart.value = ''
         progressEnd.value = ''
     }
 })
+*/
 
 // Watch for changes that should trigger auto-save
 watch([
