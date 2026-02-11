@@ -141,17 +141,51 @@ watch(searchQuery, () => {
 // Computed
 const filteredClassrooms = computed(() => classrooms.value) // Now handled server-side
 
-const filteredSessions = computed(() => {
-    if (!searchQuery.value.trim()) return sessions.value
-    const q = searchQuery.value.toLowerCase()
-    return sessions.value.filter(s => {
-        const roomName = getRoomName(s.classroom_id!).toLowerCase()
-        const courseNames = s.course_ids?.map(cid => {
-            const c = courses.value.find(c => c.id === cid)
-            return `${c?.subject} ${c?.stage} ${c?.displayNameValue || ''}`.toLowerCase()
-        }).join(' ') || ''
+const dayColorMap: Record<number, string> = {
+    1: '#3b82f6', // Mon: Blue
+    2: '#8b5cf6', // Tue: Violet
+    3: '#ec4899', // Wed: Pink
+    4: '#f59e0b', // Thu: Amber
+    5: '#06b6d4', // Fri: Cyan
+    6: '#10b981', // Sat: Emerald
+    0: '#ef4444'  // Sun: Red
+}
 
-        return s.name.toLowerCase().includes(q) || roomName.includes(q) || courseNames.includes(q)
+function getDayColor(day: number) {
+    return dayColorMap[day] || '#10b981'
+}
+
+const filteredSessions = computed(() => {
+    let result = [...sessions.value]
+
+    if (searchQuery.value.trim()) {
+        const q = searchQuery.value.toLowerCase()
+        result = result.filter(s => {
+            const roomName = getRoomName(s.classroom_id!).toLowerCase()
+            const courseNames = s.course_ids?.map(cid => {
+                const c = courses.value.find(c => c.id === cid)
+                return `${c?.subject} ${c?.stage} ${c?.displayNameValue || ''}`.toLowerCase()
+            }).join(' ') || ''
+
+            return s.name.toLowerCase().includes(q) || roomName.includes(q) || courseNames.includes(q)
+        })
+    }
+
+    // Three-level sorting: Classroom -> Day -> Time
+    return result.sort((a, b) => {
+        // 1. Classroom
+        const roomA = getRoomName(a.classroom_id!)
+        const roomB = getRoomName(b.classroom_id!)
+        const roomCompare = roomA.localeCompare(roomB)
+        if (roomCompare !== 0) return roomCompare
+
+        // 2. Day of Week (1-6, then 0 for Sunday)
+        const dayA = a.day_of_week === 0 ? 7 : a.day_of_week
+        const dayB = b.day_of_week === 0 ? 7 : b.day_of_week
+        if (dayA !== dayB) return dayA - dayB
+
+        // 3. Start Time
+        return a.start_time.localeCompare(b.start_time)
     })
 })
 
@@ -444,7 +478,7 @@ function toggleCourseSelection(courseId: string) {
                 <div v-if="filteredClassrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
-                    }}"</span>
+                        }}"</span>
                 </div>
             </div>
 
@@ -465,8 +499,8 @@ function toggleCourseSelection(courseId: string) {
                     <div class="p-5 pb-3 flex items-start justify-between">
                         <div class="flex items-center gap-4">
                             <!-- Session Indicator Icon -->
-                            <div
-                                class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform shadow-inner">
+                            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform shadow-inner"
+                                :style="{ backgroundColor: `${getDayColor(session.day_of_week)}15`, color: getDayColor(session.day_of_week) }">
                                 {{ session.name.charAt(0) }}
                             </div>
                             <!-- Session Name & Info -->
@@ -477,7 +511,8 @@ function toggleCourseSelection(courseId: string) {
                                 </h3>
                                 <div class="flex items-center gap-2 mt-0.5">
                                     <span
-                                        class="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 uppercase tracking-widest">
+                                        class="text-[10px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-widest"
+                                        :style="{ backgroundColor: `${getDayColor(session.day_of_week)}10`, color: getDayColor(session.day_of_week), borderColor: `${getDayColor(session.day_of_week)}30` }">
                                         {{ getDayLabel(session.day_of_week) }}
                                     </span>
                                     <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
@@ -524,7 +559,7 @@ function toggleCourseSelection(courseId: string) {
                                 </svg>
                             </div>
                             <span class="text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!)
-                                }}</span>
+                            }}</span>
                         </div>
 
                         <!-- Capacity Info -->
@@ -552,7 +587,8 @@ function toggleCourseSelection(courseId: string) {
                     <!-- Card Actions -->
                     <div class="px-5 py-4 flex gap-2">
                         <button @click="navigateToSession(session.id!)"
-                            class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-black transition-all shadow-md shadow-emerald-100 active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest">
+                            class="flex-1 py-2.5 rounded-xl text-sm font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-white"
+                            :style="{ backgroundColor: getDayColor(session.day_of_week) }">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                                 stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
@@ -585,25 +621,25 @@ function toggleCourseSelection(courseId: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                            }}</label>
+                        }}</label>
                         <input type="color" v-model="newClassroom.color"
                             class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                     </div>
@@ -629,7 +665,7 @@ function toggleCourseSelection(courseId: string) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
-                            }}</label>
+                        }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -643,7 +679,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
-                            }}</label>
+                        }}</label>
                         <input type="number" v-model="newSession.capacity"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -658,7 +694,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                            }}</label>
+                        }}</label>
                         <div class="flex flex-wrap gap-2">
                             <select v-model="newSession.day_of_week"
                                 class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">

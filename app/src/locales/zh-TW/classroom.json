@@ -65,5 +65,7 @@
     "room_delete_success": "教室已成功刪除",
     "confirm_delete_session": "確定要刪除此班級時段嗎？",
     "session_save_success": "班級時段已成功儲存",
-    "session_delete_success": "班級時段已成功刪除"
+    "session_delete_success": "班級時段已成功刪除",
+    "quick_attendance_title": "快速點名",
+    "quick_attendance_subtitle": "選擇學生以進行批次出席狀態更新"
 }

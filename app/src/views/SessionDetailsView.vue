@@ -22,6 +22,8 @@ const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
+const selectedEnrollmentIds = ref<Set<string>>(new Set())
+const isQuickAttendanceExpanded = ref(false)
 
 // Split View State
 const showSplitView = ref(false)
@@ -54,7 +56,7 @@ async function loadData() {
         loading.value = true
         // Reset maps to avoid stale or merged data
         reportMap.value = new Map()
-        
+
         // 1. Get session details
         session.value = await CourseService.getSessionDetails(sessionId)
 
@@ -201,6 +203,56 @@ async function toggleAttendance(enrId: string) {
         toast.error(t('common.save_error') || 'Failed to save attendance')
     } finally {
         savingMap.value.delete(enrId)
+    }
+}
+
+async function batchSetAttendance(status: 'present' | 'absent') {
+    const ids = Array.from(selectedEnrollmentIds.value)
+    if (ids.length === 0) return
+
+    const promises = ids.map(async (enrId) => {
+        const report = reportMap.value.get(enrId)
+        if (!report) return
+
+        savingMap.value.set(enrId, true)
+        try {
+            await OccurrenceReportService.saveReport(
+                report.id,
+                report.version,
+                undefined,
+                {
+                    attendanceStatus: status,
+                    absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : undefined,
+                    content: report.content || '',
+                }
+            )
+            const updated = await OccurrenceReportService.getReportById(report.id)
+            reportMap.value.set(enrId, updated)
+        } catch (e) {
+            console.error(`Failed to set attendance for ${enrId}:`, e)
+        } finally {
+            savingMap.value.delete(enrId)
+        }
+    })
+
+    await Promise.all(promises)
+    selectedEnrollmentIds.value.clear()
+    toast.success(t('common.save_success'))
+}
+
+function toggleEnrollmentSelection(enrId: string) {
+    if (selectedEnrollmentIds.value.has(enrId)) {
+        selectedEnrollmentIds.value.delete(enrId)
+    } else {
+        selectedEnrollmentIds.value.add(enrId)
+    }
+}
+
+function toggleSelectAll() {
+    if (selectedEnrollmentIds.value.size === visibleEnrollments.value.length) {
+        selectedEnrollmentIds.value.clear()
+    } else {
+        selectedEnrollmentIds.value = new Set(visibleEnrollments.value.map(e => e.id!))
     }
 }
 
@@ -489,6 +541,124 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                 class="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
                             </div>
                         </label>
+                    </div>
+                </div>
+
+                <!-- Quick Attendance Block (Refined & Collapsible) -->
+                <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden"
+                    v-if="todayOccurrence">
+                    <!-- Header (Always Visible) -->
+                    <div class="p-6 md:p-8 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
+                        @click="isQuickAttendanceExpanded = !isQuickAttendanceExpanded">
+                        <div class="flex items-center gap-4">
+                            <div class="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="font-black text-xl text-gray-900">{{ $t('classroom.quick_attendance_title')
+                                    }}</h3>
+                                <p class="text-xs font-bold text-gray-400">
+                                    {{ $t('classroom.quick_attendance_subtitle') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <span v-if="selectedEnrollmentIds.size > 0"
+                                class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                {{ selectedEnrollmentIds.size }} {{ $t('common.selected') || 'Selected' }}
+                            </span>
+                            <div class="p-2 rounded-xl bg-gray-50 text-gray-400 transition-transform duration-300"
+                                :class="{ 'rotate-180': isQuickAttendanceExpanded }">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Expandable Content -->
+                    <div v-show="isQuickAttendanceExpanded"
+                        class="px-6 md:px-8 pb-8 pt-2 space-y-8 border-t border-gray-50">
+                        <!-- Batch Action Buttons -->
+                        <div class="flex items-center gap-3">
+                            <button @click="batchSetAttendance('present')" :disabled="selectedEnrollmentIds.size === 0"
+                                class="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100/50">
+                                {{ $t('attendance.present') }}
+                            </button>
+                            <button @click="batchSetAttendance('absent')" :disabled="selectedEnrollmentIds.size === 0"
+                                class="flex-1 px-6 py-4 bg-red-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-700 transition-all active:scale-95 shadow-lg shadow-red-100/50">
+                                {{ $t('attendance.absent') }}
+                            </button>
+                        </div>
+
+                        <div class="space-y-4">
+                            <!-- Select All Toggle -->
+                            <div class="flex items-center justify-between">
+                                <button @click="toggleSelectAll"
+                                    class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all active:scale-95"
+                                    :class="selectedEnrollmentIds.size === visibleEnrollments.length && visibleEnrollments.length > 0
+                                        ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-200'
+                                        : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'">
+                                    {{ selectedEnrollmentIds.size === visibleEnrollments.length &&
+                                        visibleEnrollments.length > 0 ? $t('common.deselect_all') : $t('common.select_all')
+                                    }}
+                                </button>
+                                <span class="text-[10px] font-black text-gray-300 uppercase tracking-widest">{{
+                                    visibleEnrollments.length }} {{ $t('common.total') }}</span>
+                            </div>
+
+                            <!-- Student Grid (Optimized for Visibility) -->
+                            <div
+                                class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                                <button v-for="e in visibleEnrollments" :key="e.id"
+                                    @click="toggleEnrollmentSelection(e.id!)"
+                                    class="px-5 py-4 rounded-2xl border transition-all active:scale-95 flex items-center justify-between gap-3 group ring-offset-2 relative overflow-hidden"
+                                    :class="[
+                                        selectedEnrollmentIds.has(e.id!)
+                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xl shadow-emerald-100 ring-2 ring-emerald-500'
+                                            : 'bg-white text-gray-700 border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/20'
+                                    ]">
+                                    <div class="flex items-center gap-3 min-w-0 z-10">
+                                        <!-- Status Indicator Dot -->
+                                        <div class="w-3 h-3 rounded-full shrink-0 shadow-sm border-2 border-white"
+                                            :class="{
+                                                'bg-emerald-400': reportMap.get(e.id!)?.attendanceStatus === 'present',
+                                                'bg-red-400': reportMap.get(e.id!)?.attendanceStatus === 'absent',
+                                                'bg-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
+                                            }"></div>
+
+                                        <span class="font-black text-base truncate">{{ e.studentName }}</span>
+                                    </div>
+
+                                    <!-- Checkmark for selection -->
+                                    <div class="shrink-0 z-10 transition-all duration-300 transform"
+                                        :class="selectedEnrollmentIds.has(e.id!) ? 'scale-100 opacity-100' : 'scale-50 opacity-0'">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-emerald-100"
+                                            viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd"
+                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                clip-rule="evenodd" />
+                                        </svg>
+                                    </div>
+
+                                    <!-- Subtle Background Pattern for Selected -->
+                                    <div v-if="selectedEnrollmentIds.has(e.id!)"
+                                        class="absolute -right-4 -bottom-4 text-white/5 transform rotate-12">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20" fill="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path
+                                                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                                        </svg>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

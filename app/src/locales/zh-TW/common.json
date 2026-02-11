@@ -53,5 +53,8 @@
     "profile": "個人資料",
     "reports": "課程報告",
     "matching": "符合",
-    "continue": "繼續"
+    "continue": "繼續",
+    "select_all": "全選",
+    "deselect_all": "取消全選",
+    "selected": "項已選取"
 }

@@ -53,5 +53,8 @@
     "profile": "Profile",
     "reports": "Reports",
     "matching": "matching",
-    "continue": "Continue"
+    "continue": "Continue",
+    "select_all": "Select All",
+    "deselect_all": "Deselect All",
+    "selected": "selected"
 }
