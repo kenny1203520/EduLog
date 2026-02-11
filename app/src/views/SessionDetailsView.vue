@@ -49,9 +49,12 @@ const visibleEnrollments = computed(() => {
     })
 })
 
-onMounted(async () => {
+async function loadData() {
     try {
         loading.value = true
+        // Reset maps to avoid stale or merged data
+        reportMap.value = new Map()
+        
         // 1. Get session details
         session.value = await CourseService.getSessionDetails(sessionId)
 
@@ -67,6 +70,7 @@ onMounted(async () => {
 
         // 3. Find or Create Today's Occurrence
         const today = new Date()
+        todayOccurrence.value = null
 
         // Check if session runs today (day_of_week)
         if (session.value && session.value.day_of_week === today.getDay()) {
@@ -136,9 +140,6 @@ onMounted(async () => {
             for (const enr of enrollments.value) {
                 if (enr.id) {
                     if (!reportMap.value.has(enr.id)) {
-                        // If not in reportMap by now, they don't have a report in the batch fetch.
-                        // We mark them as null so the filter knows hide them.
-                        // No need to fetch individually because getReportsByOccurrence got everything.
                         reportMap.value.set(enr.id, null)
                     }
                 }
@@ -149,6 +150,10 @@ onMounted(async () => {
     } finally {
         loading.value = false
     }
+}
+
+onMounted(() => {
+    loadData()
 })
 
 function navigateToProfile(studentId: string) {
@@ -251,7 +256,7 @@ async function handleConfirmRefresh() {
         await OccurrenceService.syncSessionOccurrences(sessionId)
         toast.success(t('classroom.refresh_success'))
         showRefreshConfirm.value = false
-        window.location.reload()
+        await loadData()
     } catch (e) {
         console.error(e)
         // @ts-ignore
