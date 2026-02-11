@@ -63,10 +63,11 @@ function copyToClipboard(text: string) {
 
 <template>
     <div class="space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-4">
-            <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('common.students') }}</h2>
+        <div class="flex justify-between items-center flex-wrap gap-5">
+            <h1 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('common.students') }}</h1>
+
             <div
-                class="flex flex-1 items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm max-w-md group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                class="flex flex-1 items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm max-w-xl group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
                 <div class="pl-3 text-gray-400">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
@@ -88,8 +89,8 @@ function copyToClipboard(text: string) {
             </div>
 
             <button @click="showCreateModal = true"
-                class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-200 font-bold flex items-center gap-2 active:scale-95 shrink-0">
-                <span class="text-xl">+</span> {{ $t('student.add_title') }}
+                class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center gap-2 active:scale-95 shrink-0 text-sm uppercase tracking-widest">
+                <span class="text-xl leading-none">+</span> {{ $t('student.add_title') }}
             </button>
         </div>
 
@@ -133,9 +134,9 @@ function copyToClipboard(text: string) {
                             {{ student.name.charAt(0) }}
                         </div>
                         <!-- Name & Info -->
-                        <div class="min-w-0">
+                        <div class="min-w-0 flex-1">
                             <h3
-                                class="font-black text-xl text-gray-900 truncate group-hover:text-emerald-700 transition">
+                                class="font-black text-xl text-gray-900 break-words group-hover:text-emerald-700 transition leading-tight">
                                 {{ student.name }}</h3>
                             <p class="text-sm text-gray-400 truncate font-medium" :title="student.displaySchoolName">
                                 {{ student.displaySchoolName || $t('student.management.no_school', 'No School Info') }}

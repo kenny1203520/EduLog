@@ -293,25 +293,57 @@ function toggleCourseSelection(courseId: string) {
 
 <template>
     <div class="space-y-6">
-        <div class="flex items-center justify-between flex-wrap gap-4">
-            <h1 class="text-2xl font-bold text-gray-800">{{ $t('classroom.title') }}</h1>
-            <div class="flex items-center gap-4">
-                <input v-model="searchQuery" :placeholder="$t('common.search', 'Search...')"
-                    class="border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-emerald-500 w-64">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            <h1 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('classroom.title') }}</h1>
 
-                <div class="flex bg-gray-100 p-1 rounded-lg">
+            <div class="flex flex-col sm:flex-row flex-1 items-center gap-4 w-full max-w-2xl">
+                <!-- Search Bar -->
+                <div
+                    class="w-full flex-1 flex items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                    <div class="pl-3 text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <input v-model="searchQuery" type="text" :placeholder="$t('common.search', 'Search...')"
+                        class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
+                    <button v-if="searchQuery" @click="searchQuery = ''"
+                        class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Tab Switcher -->
+                <div
+                    class="flex bg-gray-100/80 p-1 rounded-2xl border border-gray-100 shadow-inner w-full sm:w-auto overflow-x-auto shrink-0">
                     <button @click="activeTab = 'rooms'"
-                        class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
-                        :class="activeTab === 'rooms' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                        class="flex-1 sm:flex-none px-4 sm:px-5 py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all uppercase tracking-widest whitespace-nowrap"
+                        :class="activeTab === 'rooms' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'">
                         {{ $t('classroom.rooms_tab') }}
                     </button>
                     <button @click="activeTab = 'sessions'"
-                        class="px-4 py-1.5 rounded-md text-sm font-medium transition-all"
-                        :class="activeTab === 'sessions' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                        class="flex-1 sm:flex-none px-4 sm:px-5 py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all uppercase tracking-widest whitespace-nowrap"
+                        :class="activeTab === 'sessions' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'">
                         {{ $t('classroom.sessions_tab') }}
                     </button>
                 </div>
             </div>
+
+            <!-- Primary Action Button -->
+            <button v-if="activeTab === 'rooms'" @click="isCreateRoomModalOpen = true"
+                class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto">
+                <span class="text-xl leading-none">+</span> {{ $t('classroom.add_room') }}
+            </button>
+            <button v-else @click="isCreateSessionModalOpen = true"
+                class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto">
+                <span class="text-xl leading-none">+</span> {{ $t('classroom.add_session') }}
+            </button>
         </div>
 
         <div v-if="loading" class="text-center text-gray-500 py-10">
@@ -327,22 +359,36 @@ function toggleCourseSelection(courseId: string) {
 
         <!-- ROOMS TAB -->
         <div v-else-if="activeTab === 'rooms'">
-            <div class="flex justify-end mb-4">
-                <button @click="isCreateRoomModalOpen = true"
-                    class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm font-medium">
-                    <span>+</span> {{ $t('classroom.add_room') }}
-                </button>
-            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div v-for="room in filteredClassrooms" :key="room.id"
-                    class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden group hover:shadow-md transition">
-                    <div class="p-4 border-b border-gray-100 flex justify-between items-center"
-                        :style="{ borderTop: `4px solid ${room.color}` }">
-                        <h3 class="font-bold text-lg text-gray-800">{{ room.name }}</h3>
-                        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition">
+                    class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full">
+
+                    <!-- Card Header -->
+                    <div class="p-5 pb-3 flex items-start justify-between">
+                        <div class="flex items-center gap-4">
+                            <!-- Room Indicator Icon -->
+                            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform shadow-inner"
+                                :style="{ backgroundColor: `${room.color}15`, color: room.color }">
+                                {{ room.name.charAt(0) }}
+                            </div>
+                            <!-- Room Name & Info -->
+                            <div class="min-w-0 flex-1">
+                                <h3
+                                    class="font-black text-xl text-gray-900 break-words group-hover:text-emerald-700 transition leading-tight">
+                                    {{ room.name }}
+                                </h3>
+                                <p class="text-xs text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                                    {{ $t('classroom.rooms_tab') }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Quick Actions (Mobile Always Visible, Desktop Hover) -->
+                        <div
+                            class="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                             <button @click="openEditRoom(room)"
-                                class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                                class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                                 :title="$t('common.edit')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
                                     fill="currentColor">
@@ -351,7 +397,7 @@ function toggleCourseSelection(courseId: string) {
                                 </svg>
                             </button>
                             <button @click="deleteClassroom(room.id!)"
-                                class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
+                                class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                                 :title="$t('common.delete')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
                                     fill="currentColor">
@@ -362,32 +408,43 @@ function toggleCourseSelection(courseId: string) {
                             </button>
                         </div>
                     </div>
-                    <div class="p-4 text-gray-600 text-sm space-y-2">
-                        <div class="flex items-start gap-2" v-if="room.address">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 mt-0.5" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                            <span>{{ room.address }}</span>
+
+                    <!-- Card Body -->
+                    <div class="px-5 py-3 flex-1 space-y-3">
+                        <div v-if="room.address" class="flex items-start gap-2.5 text-gray-500">
+                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </div>
+                            <span class="text-sm font-medium leading-tight pt-1">{{ room.address }}</span>
                         </div>
-                        <div class="flex items-start gap-2" v-if="room.phone">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 mt-0.5" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                            </svg>
-                            <span>{{ room.phone }}</span>
+                        <div v-if="room.phone" class="flex items-center gap-2.5 text-gray-500">
+                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                            </div>
+                            <span class="text-sm font-medium pt-0.5">{{ room.phone }}</span>
                         </div>
+                    </div>
+
+                    <!-- Card Footer -->
+                    <div class="px-5 py-4 bg-gray-50/30 border-t border-gray-50 flex items-center justify-end">
+                        <div class="w-3 h-3 rounded-full shadow-inner" :style="{ backgroundColor: room.color }"></div>
                     </div>
                 </div>
 
                 <div v-if="filteredClassrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
-                        }}"</span>
+                    }}"</span>
                 </div>
             </div>
 
@@ -399,72 +456,117 @@ function toggleCourseSelection(courseId: string) {
 
         <!-- SESSIONS TAB -->
         <div v-else-if="activeTab === 'sessions'">
-            <div class="flex justify-end mb-4">
-                <button @click="isCreateSessionModalOpen = true"
-                    class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 transition flex items-center gap-2 shadow-sm font-medium">
-                    <span>+</span> {{ $t('classroom.add_session') }}
-                </button>
-            </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div v-for="session in filteredSessions" :key="session.id"
-                    class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md transition">
-                    <div class="flex justify-between items-start mb-2">
-                        <h3 class="font-bold text-lg text-gray-800">{{ session.name }}</h3>
-                        <span class="text-xs px-2 py-1 bg-gray-100 rounded text-gray-600 font-medium">
-                            {{ getDayLabel(session.day_of_week) }} {{ session.start_time.slice(0, 5) }}-{{
-                                session.end_time.slice(0, 5) }}
-                        </span>
-                    </div>
+                    class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full">
 
-                    <div class="text-sm text-gray-600 mb-3 flex items-center gap-2">
-                        <span
-                            class="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded text-xs font-bold border border-emerald-100">
-                            {{ getRoomName(session.classroom_id!) }}
-                        </span>
-                        <span class="text-gray-400 text-xs flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
-                            {{ $t('classroom.capacity_short') }}: {{ session.capacity }}
-                        </span>
-                    </div>
-
-                    <div class="text-xs text-gray-500">
-                        <div class="font-medium mb-1">{{ $t('classroom.courses_list') }}:</div>
-                        <div class="flex flex-wrap gap-1">
-                            <span v-for="cid in session.course_ids" :key="cid"
-                                class="px-1.5 py-0.5 bg-gray-100 border border-gray-200 rounded text-gray-600 truncate max-w-[150px]">
-                                {{courses.find(c => c.id === cid)?.subject}} - {{courses.find(c => c.id ===
-                                    cid)?.stage}}
-                            </span>
-                            <span v-if="!session.course_ids || session.course_ids.length === 0"
-                                class="italic text-gray-300">None</span>
+                    <!-- Card Header -->
+                    <div class="p-5 pb-3 flex items-start justify-between">
+                        <div class="flex items-center gap-4">
+                            <!-- Session Indicator Icon -->
+                            <div
+                                class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform shadow-inner">
+                                {{ session.name.charAt(0) }}
+                            </div>
+                            <!-- Session Name & Info -->
+                            <div class="min-w-0 flex-1">
+                                <h3
+                                    class="font-black text-xl text-gray-900 break-words group-hover:text-emerald-700 transition leading-tight">
+                                    {{ session.name }}
+                                </h3>
+                                <div class="flex items-center gap-2 mt-0.5">
+                                    <span
+                                        class="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100 uppercase tracking-widest">
+                                        {{ getDayLabel(session.day_of_week) }}
+                                    </span>
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                        {{ session.start_time.slice(0, 5) }}-{{ session.end_time.slice(0, 5) }}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="mt-4 pt-3 border-t border-gray-50 flex justify-between items-center">
-                        <button @click="navigateToSession(session.id!)"
-                            class="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 transition-transform hover:translate-x-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
-                            {{ $t('classroom.view_students', 'View Students') }}
-                        </button>
-                        <div class="flex items-center gap-2">
+                        <!-- Quick Actions (Mobile Always Visible, Desktop Hover) -->
+                        <div
+                            class="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                             <button @click="openEditSession(session)"
-                                class="p-1 px-2 text-xs font-medium text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition">
-                                {{ $t('common.edit') }}
+                                class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
+                                :title="$t('common.edit')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
+                                    fill="currentColor">
+                                    <path
+                                        d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                </svg>
                             </button>
                             <button @click="deleteSession(session.id!)"
-                                class="p-1 px-2 text-xs font-medium text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition">
-                                {{ $t('common.delete') }}
+                                class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                :title="$t('common.delete')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
+                                    fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                                        clip-rule="evenodd" />
+                                </svg>
                             </button>
                         </div>
+                    </div>
+
+                    <!-- Card Body -->
+                    <div class="px-5 py-2 flex-1 space-y-3">
+                        <!-- Room Info -->
+                        <div class="flex items-center gap-2.5 text-gray-500">
+                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                                </svg>
+                            </div>
+                            <span class="text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!)
+                                }}</span>
+                        </div>
+
+                        <!-- Capacity Info -->
+                        <div class="flex items-center gap-2.5 text-gray-500">
+                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                            </div>
+                            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
+                                $t('classroom.capacity_short') }}: {{ session.capacity }}</span>
+                        </div>
+
+                        <!-- Courses Tags -->
+                        <div v-if="session.course_ids?.length" class="flex flex-wrap gap-1.5 pt-1">
+                            <span v-for="cid in session.course_ids" :key="cid"
+                                class="px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-lg text-[10px] font-black text-gray-400 uppercase tracking-tight truncate max-w-[120px]">
+                                {{courses.find(c => c.id === cid)?.subject}}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Card Actions -->
+                    <div class="px-5 py-4 flex gap-2">
+                        <button @click="navigateToSession(session.id!)"
+                            class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-black transition-all shadow-md shadow-emerald-100 active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                            {{ $t('classroom.view_students', 'Students') }}
+                        </button>
+                    </div>
+
+                    <!-- Card Footer -->
+                    <div
+                        class="px-5 py-3 bg-gray-50/50 border-t border-gray-50 flex items-center justify-between text-[10px] font-black text-gray-300 tracking-widest uppercase">
+                        <span>#{{ session.id?.slice(0, 8) }}</span>
+                        <span>{{ session.lesson_number }} Lessons</span>
                     </div>
                 </div>
             </div>
@@ -483,25 +585,25 @@ function toggleCourseSelection(courseId: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                        }}</label>
+                            }}</label>
                         <input type="color" v-model="newClassroom.color"
                             class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                     </div>
@@ -527,7 +629,7 @@ function toggleCourseSelection(courseId: string) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
-                        }}</label>
+                            }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -541,7 +643,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
-                        }}</label>
+                            }}</label>
                         <input type="number" v-model="newSession.capacity"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -556,7 +658,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                        }}</label>
+                            }}</label>
                         <div class="flex flex-wrap gap-2">
                             <select v-model="newSession.day_of_week"
                                 class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
