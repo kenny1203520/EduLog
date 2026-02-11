@@ -375,8 +375,8 @@ import type { Lesson } from '@/models/Course'
 
 interface Props {
     isOpen: boolean
-    serverReport: OccurrenceReportDTO
-    localReport: OccurrenceReportDTO
+    serverReport: OccurrenceReportDTO | null
+    localReport: OccurrenceReportDTO | null
     availableLessons?: Lesson[]
 }
 
@@ -390,7 +390,7 @@ const emit = defineEmits<{
 
 // State
 const selectedStrategy = ref<'keep-local' | 'keep-server' | 'manual'>('manual')
-const mergedReport = ref<OccurrenceReportDTO>({ ...props.localReport });
+const mergedReport = ref<OccurrenceReportDTO>(props.localReport ? { ...props.localReport } : {} as OccurrenceReportDTO);
 
 const getMergedValue = (field: keyof OccurrenceReportDTO) => {
     const val = (mergedReport.value as any)[field]
@@ -451,9 +451,9 @@ function computeDiff(oldText: string = '', newText: string = ''): DiffChunk[] {
     return result;
 }
 
-const contactNotesDiff = computed(() => computeDiff(props.serverReport?.contact_notes, props.localReport?.contact_notes))
-const classNotesDiff = computed(() => computeDiff(props.serverReport?.class_notes, props.localReport?.class_notes))
-const contentDiff = computed(() => computeDiff(props.serverReport?.content, props.localReport?.content))
+const contactNotesDiff = computed(() => computeDiff(props.serverReport?.contact_notes || '', props.localReport?.contact_notes || ''))
+const classNotesDiff = computed(() => computeDiff(props.serverReport?.class_notes || '', props.localReport?.class_notes || ''))
+const contentDiff = computed(() => computeDiff(props.serverReport?.content || '', props.localReport?.content || ''))
 
 // Computed field differences
 const fieldDifferences = computed(() => {
@@ -537,7 +537,7 @@ const strategyOptions = computed(() => [
 
 // Watchers
 watch(() => props.isOpen, (isOpen) => {
-    if (isOpen) {
+    if (isOpen && props.localReport) {
         // Initialize merged content with local version by default
         mergedReport.value = { ...props.localReport }
         selectedStrategy.value = 'manual'
@@ -545,7 +545,7 @@ watch(() => props.isOpen, (isOpen) => {
 })
 
 watch(() => props.localReport, (newReport) => {
-    if (selectedStrategy.value === 'manual' || selectedStrategy.value === 'keep-local') {
+    if (newReport && (selectedStrategy.value === 'manual' || selectedStrategy.value === 'keep-local')) {
         mergedReport.value = { ...newReport }
     }
 })
@@ -558,9 +558,9 @@ function close() {
 function resolve() {
     let finalUpdates: OccurrenceReportDTO;
 
-    if (selectedStrategy.value === 'keep-local') {
+    if (selectedStrategy.value === 'keep-local' && props.localReport) {
         finalUpdates = props.localReport;
-    } else if (selectedStrategy.value === 'keep-server') {
+    } else if (selectedStrategy.value === 'keep-server' && props.serverReport) {
         finalUpdates = props.serverReport
     } else {
         finalUpdates = mergedReport.value

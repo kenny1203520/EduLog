@@ -852,7 +852,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
         </div>
 
         <!-- Conflict Resolution Modal -->
-        <ConflictModal :is-open="showConflictModal" :serverVersion="conflictServerVersion"
+        <ConflictModal v-if="showConflictModal" :is-open="showConflictModal" :serverVersion="conflictServerVersion"
             :localVersion="conflictLocalVersion" :server-report="conflictServerReport!"
             :local-report="conflictLocalReport!" :available-lessons="courseLessons" @close="closeConflictModal"
             @resolve="resolveConflict" />
