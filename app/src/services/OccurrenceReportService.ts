@@ -1,9 +1,9 @@
 import { supabase } from '@/lib/supabase'
-import { 
-    OccurrenceReport, 
-    type OccurrenceReportDTO, 
+import {
+    OccurrenceReport,
+    type OccurrenceReportDTO,
     ReportVersion,
-    type SaveReportResult 
+    type SaveReportResult
 } from '@/models/OccurrenceReport'
 import { EnrollmentProgressService } from './EnrollmentProgressService'
 import { OccurrenceService } from './OccurrenceService'
@@ -59,12 +59,12 @@ export class OccurrenceReportService {
             `)
             .eq('id', occurrenceId)
             .single()
-        
+
         const classroomId = (occurrence?.class_sessions as any)?.classroom_id
         const sessionId = occurrence?.class_session_id
 
-        const isHoliday = occurrence 
-            ? await HolidayService.isHoliday(occurrence.occurrence_date, classroomId, sessionId) 
+        const isHoliday = occurrence
+            ? await HolidayService.isHoliday(occurrence.occurrence_date, classroomId, sessionId)
             : false
 
         // Check for student suspension
@@ -189,7 +189,7 @@ export class OccurrenceReportService {
                 updateData.external_link = detailedData.externalLink
             }
             updateData.is_completed = isCompleted
-            
+
             if (progressLetter !== undefined) {
                 updateData.progress_letter = progressLetter
             }
@@ -340,38 +340,38 @@ export class OccurrenceReportService {
             .select('id, class_occurrence:class_occurrences!class_occurrence_id(id, occurrence_date, class_session_id)')
             .eq('id', reportId)
             .single()
-        
+
         if (!currentReport || !currentReport.class_occurrence) return
-        
+
         const currentOcc = currentReport.class_occurrence as any
         const todayStr = currentOcc.occurrence_date
-        
+
         // Count reports after this one
         const { count } = await supabase
             .from('occurrence_reports')
             .select('id, class_occurrence:class_occurrences!class_occurrence_id(occurrence_date)', { count: 'exact', head: true })
             .eq('enrollment_id', enrollmentId)
             .gt('class_occurrence.occurrence_date', todayStr)
-        
+
         if (!count || count === 0) {
             if (!isCompleted || !isActuallyLastLesson) {
                 const nextWeek = new Date(todayStr)
                 nextWeek.setDate(nextWeek.getDate() + 7)
                 const nextWeekStr = nextWeek.toISOString().split('T')[0]
-                
+
                 await OccurrenceService.generateOccurrences(
                     currentOcc.class_session_id,
                     nextWeek,
                     nextWeek
                 )
-                
+
                 const { data: nextOcc } = await supabase
                     .from('class_occurrences')
                     .select('id')
                     .eq('class_session_id', currentOcc.class_session_id)
                     .eq('occurrence_date', nextWeekStr)
                     .single()
-                
+
                 if (nextOcc) {
                     await supabase.from('occurrence_reports').insert({
                         enrollment_id: enrollmentId,
@@ -416,7 +416,7 @@ export class OccurrenceReportService {
         const updatePayload: any = {
             // UUID fields: convert empty string to null to prevent "invalid input syntax for type uuid"
             lesson_id: resolvedReport.lesson_id || null,
-            
+
             is_completed: resolvedReport.is_completed,
             progress_letter: resolvedReport.progress_letter || null,
             attendance_status: resolvedReport.attendance_status,
@@ -630,7 +630,7 @@ export class OccurrenceReportService {
             .eq('is_conducted', true)
             .gte('occurrence_date', dateStr)
             .lte('occurrence_date', new Date().toISOString().split('T')[0])
-            
+
         if (occError) throw new Error(`Failed to fetch pending reports: ${occError.message}`)
         if (!occurrences) return []
 
@@ -685,7 +685,7 @@ export class OccurrenceReportService {
                 // to focus on completing records for attended students.
             }
         }
-        
+
         return pending.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     }
 
@@ -719,6 +719,7 @@ export class OccurrenceReportService {
                 ),
                 class_occurrences!inner (
                     occurrence_date,
+                    original_start_time,
                     class_session_id,
                     class_sessions!inner (
                         name,
@@ -748,9 +749,10 @@ export class OccurrenceReportService {
         }
 
         const { data, error, count } = await query
-            .order('updated_at', { ascending: sortBy === 'asc' })
+            .order('class_occurrences(occurrence_date)', { ascending: sortBy === 'asc' })
+            .order('class_occurrences(original_start_time)', { ascending: sortBy === 'asc' })
             .range(from, to)
-        
+
         if (error) throw new Error(error.message)
         return { data: data || [], count: count || 0 }
     }
@@ -778,9 +780,9 @@ export class OccurrenceReportService {
             .from('enrollments')
             .select('id')
             .eq('student_id', studentId)
-        
+
         if (!enrollments?.length) return { data: [], count: 0 }
-        
+
         const enrollmentIds = enrollments.map(e => e.id)
 
         let query = supabase
@@ -795,6 +797,7 @@ export class OccurrenceReportService {
                 ),
                 class_occurrences!inner (
                     occurrence_date,
+                    original_start_time,
                     class_sessions!inner (
                         name
                     )
@@ -817,7 +820,8 @@ export class OccurrenceReportService {
         }
 
         const { data, error, count } = await query
-            .order('updated_at', { ascending: sortBy === 'asc' })
+            .order('class_occurrences(occurrence_date)', { ascending: sortBy === 'asc' })
+            .order('class_occurrences(original_start_time)', { ascending: sortBy === 'asc' })
             .range(from, to)
 
         if (error) throw new Error(error.message)
@@ -835,11 +839,11 @@ export class OccurrenceReportService {
         // Format as YYYY-MM-DD for simple string comparison in database if possible, 
         // but since occurrences store specific times or just dates, we should be careful.
         // Assuming occurrence_date is a DATE or TIMESTAMP column.
-        
+
         // We want all reports where attendance = 'present'
         // AND (content is empty OR lesson_id is null)
         // AND occurrence_date <= today
-        
+
         const { data, error } = await supabase
             .from('occurrence_reports')
             .select(`
@@ -887,27 +891,27 @@ export class OccurrenceReportService {
 
         // Refine filter in JS for the OR condition (missing content OR missing lesson)
         // Supabase .or() usually requires the whole query to be structured around it or using filter()
-        
+
         return (data || [])
             .filter(r => {
                 const hasContent = r.content && r.content.trim().length > 0
                 const hasLesson = !!r.lesson_id
-                
+
                 // If both present, it's complete.
                 if (hasContent && hasLesson) return false
-                
+
                 // Double check date (redundant but safe)
                 const occ = Array.isArray(r.class_occurrence) ? r.class_occurrence[0] : r.class_occurrence
                 if (!occ) return false
                 // const occDate = new Date(occ.occurrence_date) // Unused variable
-                
+
                 return true
             })
             .map(r => {
                 // Supabase joins can be arrays or objects depending on the relationship type inferred
                 const enrollment = Array.isArray(r.enrollments) ? r.enrollments[0] : r.enrollments
                 const student = Array.isArray(enrollment?.students) ? enrollment.students[0] : enrollment?.students
-                
+
                 const occ = Array.isArray(r.class_occurrence) ? r.class_occurrence[0] : r.class_occurrence
                 const session = Array.isArray(occ?.class_session) ? occ.class_session[0] : occ?.class_session
                 const classroom = Array.isArray(session?.classroom) ? session.classroom[0] : session?.classroom

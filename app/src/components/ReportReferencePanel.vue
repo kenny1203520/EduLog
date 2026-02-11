@@ -5,21 +5,22 @@
             @click="$emit('close')"></div>
 
         <div
-            class="absolute inset-y-0 right-0 z-[60] w-[540px] bg-white shadow-2xl border-l flex flex-col pointer-events-auto transition-transform duration-300 animate-in slide-in-from-right">
+            class="absolute inset-y-0 right-0 z-[60] w-full sm:w-[540px] bg-white shadow-2xl border-l flex flex-col pointer-events-auto transition-transform duration-300 animate-in slide-in-from-right pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
             <!-- Header -->
-            <div class="px-6 py-4 border-b flex items-center justify-between bg-white">
-                <h2 class="font-black text-gray-900 flex items-center gap-2.5 text-lg tracking-tight">
-                    <div class="p-2 bg-indigo-50 rounded-xl">
+            <div class="px-6 py-4 border-b flex items-center justify-between bg-white gap-4">
+                <h2 class="font-black text-gray-900 flex items-center gap-2.5 text-lg tracking-tight min-w-0">
+                    <div class="p-2 bg-indigo-50 rounded-xl shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-indigo-600" fill="none"
                             viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                 d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                         </svg>
                     </div>
-                    {{ $t('report.reference_panel.title') }}
+                    <span class="truncate">{{ $t('report.reference_panel.title') }}</span>
                 </h2>
                 <button @click="$emit('close')"
-                    class="p-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all">
+                    class="p-3 -mr-2 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-full transition-all shrink-0 active:scale-95"
+                    :aria-label="$t('common.close')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
@@ -57,16 +58,16 @@
                 </div>
 
                 <!-- Contextual Filters & Sort -->
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                     <template v-if="activeTab === 'peer'">
                         <select v-model="filterClassroom"
-                            class="flex-1 text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500"
+                            class="flex-1 min-w-[120px] text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500"
                             @change="handleClassroomChange">
                             <option value="">{{ $t('report.reference_panel.filter_by_classroom') }}</option>
                             <option v-for="c in classrooms" :key="c.id" :value="c.id">{{ c.name }}</option>
                         </select>
                         <select v-model="filterSession"
-                            class="flex-1 text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500"
+                            class="flex-1 min-w-[120px] text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500"
                             @change="refreshData">
                             <option value="">{{ $t('report.reference_panel.filter_by_session') }}</option>
                             <option v-for="s in filteredSessions" :key="s.id" :value="s.id">{{ s.name }}</option>
@@ -74,7 +75,7 @@
                     </template>
                     <template v-else>
                         <select v-model="filterCourse"
-                            class="flex-1 text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500"
+                            class="flex-1 min-w-[120px] text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500"
                             @change="refreshData">
                             <option value="">{{ $t('report.reference_panel.filter_by_course') }}</option>
                             <option v-for="c in courses" :key="c.id" :value="c.id">{{ c.display_name || c.subject }}
@@ -83,7 +84,7 @@
                     </template>
                     <!-- Sort -->
                     <select v-model="sortBy"
-                        class="w-24 text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500 shadow-sm"
+                        class="flex-1 sm:w-24 min-w-[80px] text-xs border rounded px-2 py-1 bg-white focus:ring-indigo-500 shadow-sm"
                         @change="refreshData">
                         <option value="desc">{{ $t('report.reference_panel.newest') }}</option>
                         <option value="asc">{{ $t('report.reference_panel.oldest') }}</option>
@@ -92,7 +93,7 @@
             </div>
 
             <!-- Content List -->
-            <div class="flex-1 overflow-y-auto bg-gray-100 p-4 space-y-4">
+            <div class="flex-1 overflow-y-auto overscroll-y-contain bg-gray-100 p-4 space-y-4">
                 <div v-if="loading" class="flex justify-center py-12">
                     <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600"></div>
                 </div>
@@ -105,7 +106,7 @@
                 <div v-else v-for="report in reports" :key="report.id"
                     class="bg-white rounded-xl border shadow-sm overflow-hidden border-gray-200">
                     <!-- Card Header -->
-                    <div class="px-5 py-4 bg-white border-b flex justify-between items-center">
+                    <div class="px-5 py-4 bg-white border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <div class="flex-1 min-w-0">
                             <div class="text-base font-black text-gray-900 truncate tracking-tight">
                                 {{ formatHeader(report) }}
@@ -169,7 +170,7 @@
 
             <!-- Pagination Footer -->
             <div class="px-4 py-3 border-t bg-white flex flex-col gap-3 shadow-[0_-4px_10px_rgba(0,0,0,0.03)]">
-                <div class="flex items-center justify-between">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div class="flex items-center gap-2">
                         <span class="text-xs text-gray-400 whitespace-nowrap">{{
                             $t('report.reference_panel.items_per_page')
@@ -203,6 +204,17 @@
                         </svg>
                     </button>
                 </div>
+
+                <!-- Secondary Close Button (Mobile Only) -->
+                <button @click="$emit('close')"
+                    class="sm:hidden w-full mt-4 py-3.5 bg-gray-100 text-gray-700 rounded-xl font-black text-sm hover:bg-gray-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    {{ $t('common.close') }}
+                </button>
             </div>
         </div>
     </div>
