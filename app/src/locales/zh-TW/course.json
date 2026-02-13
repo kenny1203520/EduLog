@@ -26,5 +26,8 @@
     "no_lessons_title": "尚未新增單元",
     "no_lessons_sub": "為課程添加教學單元以追蹤學生進度。",
     "select_course_hint": "請選擇課程",
-    "select_course_sub": "從左側目錄中選擇一個課程，以管理其教學單元與內容。"
+    "select_course_sub": "從左側目錄中選擇一個課程，以管理其教學單元與內容。",
+    "save_success": "儲存成功",
+    "delete_success": "刪除成功",
+    "confirm_delete": "確定要刪除此課程嗎？"
 }
