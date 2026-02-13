@@ -28,6 +28,7 @@ const isQuickAttendanceExpanded = ref(false)
 // Split View State
 const showSplitView = ref(false)
 const selectedEnrollmentId = ref<string | null>(null)
+const isRefreshing = ref(false)
 
 // Conflict Resolution State
 const showConflictModal = ref(false)
@@ -305,6 +306,7 @@ function requestRefreshSchedule() {
 
 async function handleConfirmRefresh() {
     try {
+        isRefreshing.value = true
         await OccurrenceService.syncSessionOccurrences(sessionId)
         toast.success(t('classroom.refresh_success'))
         showRefreshConfirm.value = false
@@ -314,6 +316,8 @@ async function handleConfirmRefresh() {
         // @ts-ignore
         toast.error(t('classroom.refresh_failed') || 'Failed to refresh schedule')
         showRefreshConfirm.value = false
+    } finally {
+        isRefreshing.value = false
     }
 }
 
@@ -474,6 +478,26 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                         </svg>
                         {{ session.start_time.slice(0, 5) }} - {{ session.end_time.slice(0, 5) }}
                     </span>
+                    <span v-if="session.external_link" class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                    <a v-if="session.external_link" :href="session.external_link" target="_blank"
+                        class="flex items-center gap-1.5 text-emerald-600 hover:underline">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                        </svg>
+                        {{ $t('classroom.external_link') }}
+                    </a>
+                    <span v-if="session.classroom?.external_link" class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                    <a v-if="session.classroom?.external_link" :href="session.classroom?.external_link" target="_blank"
+                        class="flex items-center gap-1.5 text-blue-600 hover:underline">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                        {{ $t('classroom.room_external_link', 'Room Link') }}
+                    </a>
                 </div>
             </div>
 
@@ -1029,7 +1053,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
         <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
             :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
-            @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
+            :is-loading="isRefreshing" @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
 
     </div>
 </template>
