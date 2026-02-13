@@ -279,6 +279,75 @@ export class OccurrenceReportService {
     }
 
     /**
+     * Restores a report to a specific version from history.
+     */
+    static async restoreReportVersion(
+        reportId: string,
+        versionId: string,
+        userId?: string
+    ): Promise<OccurrenceReport> {
+        // 1. Fetch the version data
+        const { data: version, error: versionError } = await supabase
+            .from('report_versions')
+            .select('*')
+            .eq('id', versionId)
+            .single()
+
+        if (versionError || !version) throw new Error(`Failed to fetch version: ${versionError?.message}`)
+
+        // 2. Determine what to restore
+        // Prefer snapshot if available, otherwise just content
+        let updatePayload: any = {}
+
+        if (version.snapshot) {
+            const snap = version.snapshot
+            updatePayload = {
+                lesson_id: snap.lesson_id,
+                is_completed: snap.is_completed,
+                progress_letter: snap.progress_letter,
+                attendance_status: snap.attendance_status,
+                absence_reason: snap.absence_reason,
+                class_participation: snap.class_participation,
+                classroom_behavior: snap.classroom_behavior,
+                contact_notes: snap.contact_notes,
+                class_notes: snap.class_notes,
+                content: snap.content,
+                external_link: snap.external_link
+            }
+        } else {
+            // Legacy restoration - only content
+            updatePayload = {
+                content: version.content
+            }
+        }
+
+        // 3. Increment version on the report
+        const { data: current } = await supabase
+            .from('occurrence_reports')
+            .select('version')
+            .eq('id', reportId)
+            .single()
+
+        const newVersion = (current?.version || 0) + 1
+
+        updatePayload.version = newVersion
+        updatePayload.last_edited_by = userId
+        updatePayload.last_edited_at = new Date().toISOString()
+
+        // 4. Update the report
+        const { data: updated, error: updateError } = await supabase
+            .from('occurrence_reports')
+            .update(updatePayload)
+            .eq('id', reportId)
+            .select()
+            .single()
+
+        if (updateError) throw new Error(`Failed to restore version: ${updateError.message}`)
+
+        return new OccurrenceReport(updated)
+    }
+
+    /**
      * Helper method to update enrollment progress after saving a report
      * Also checks if this is the last lesson and auto-completes enrollment
      * @private

@@ -9,7 +9,7 @@ export interface OccurrenceReportDTO {
     class_occurrence_id: string
     lesson_id?: string
     is_completed?: boolean
-    
+
     // Detailed report fields
     progress_letter?: string  // A-Z when incomplete
     attendance_status?: 'present' | 'absent' | 'pending'
@@ -20,7 +20,7 @@ export interface OccurrenceReportDTO {
     class_notes?: string
     content: string
     external_link?: string
-    
+
     version: number
     last_edited_by?: string
     last_edited_at?: string
@@ -34,6 +34,7 @@ export interface ReportVersionDTO {
     version: number
     content: string
     edited_by?: string
+    snapshot?: any
     created_at?: string
 }
 
@@ -46,7 +47,7 @@ export class OccurrenceReport {
     classOccurrenceId: string
     lessonId?: string
     isCompleted?: boolean
-    
+
     // Detailed fields
     progressLetter?: string
     attendanceStatus?: 'present' | 'absent' | 'pending'
@@ -57,7 +58,7 @@ export class OccurrenceReport {
     classNotes?: string
     content: string
     externalLink?: string
-    
+
     version: number
     lastEditedBy?: string
     lastEditedAt?: Date
@@ -70,7 +71,7 @@ export class OccurrenceReport {
         this.classOccurrenceId = data.class_occurrence_id
         this.lessonId = data.lesson_id
         this.isCompleted = data.is_completed ?? true
-        
+
         // Detailed fields
         this.progressLetter = data.progress_letter
         this.attendanceStatus = data.attendance_status
@@ -81,7 +82,7 @@ export class OccurrenceReport {
         this.classNotes = data.class_notes
         this.content = data.content
         this.externalLink = data.external_link
-        
+
         this.version = data.version
         this.lastEditedBy = data.last_edited_by
         this.lastEditedAt = data.last_edited_at ? new Date(data.last_edited_at) : undefined
@@ -99,7 +100,7 @@ export class OccurrenceReport {
             class_occurrence_id: this.classOccurrenceId,
             lesson_id: this.lessonId,
             is_completed: this.isCompleted,
-            
+
             // Detailed fields
             progress_letter: this.progressLetter,
             attendance_status: this.attendanceStatus,
@@ -110,7 +111,7 @@ export class OccurrenceReport {
             class_notes: this.classNotes,
             content: this.content,
             external_link: this.externalLink,
-            
+
             version: this.version,
             last_edited_by: this.lastEditedBy,
             last_edited_at: this.lastEditedAt?.toISOString(),
@@ -190,6 +191,7 @@ export class ReportVersion {
     version: number
     content: string
     editedBy?: string
+    snapshot?: any
     createdAt?: Date
 
     constructor(data: ReportVersionDTO) {
@@ -198,6 +200,7 @@ export class ReportVersion {
         this.version = data.version
         this.content = data.content
         this.editedBy = data.edited_by
+        this.snapshot = data.snapshot
         this.createdAt = data.created_at ? new Date(data.created_at) : undefined
     }
 
@@ -208,6 +211,7 @@ export class ReportVersion {
             version: this.version,
             content: this.content,
             edited_by: this.editedBy,
+            snapshot: this.snapshot,
             created_at: this.createdAt?.toISOString()
         }
     }
