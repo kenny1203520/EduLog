@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS public.classrooms (
     user_id uuid NOT NULL DEFAULT auth.uid(),
     address text,
     phone text,
+    external_link text,
     CONSTRAINT classrooms_pkey PRIMARY KEY (id),
     CONSTRAINT classrooms_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );

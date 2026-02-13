@@ -62,7 +62,7 @@ const isCreateRoomModalOpen = ref(false)
 const isCreateSessionModalOpen = ref(false)
 
 // Forms
-const newClassroom = ref<Partial<ClassroomDTO>>({ name: '', address: '', phone: '', color: '#10b981' })
+const newClassroom = ref<Partial<ClassroomDTO>>({ name: '', address: '', phone: '', color: '#10b981', external_link: '' })
 const editingClassroom = ref<Classroom | null>(null)
 
 const newSession = ref<Partial<ClassSessionDTO>>({
@@ -217,7 +217,8 @@ function openEditRoom(room: Classroom) {
         name: room.name,
         address: room.address,
         phone: room.phone,
-        color: room.color || '#10b981'
+        color: room.color || '#10b981',
+        external_link: room.external_link || ''
     }
     isCreateRoomModalOpen.value = true
 }
@@ -225,7 +226,7 @@ function openEditRoom(room: Classroom) {
 function closeRoomModal() {
     isCreateRoomModalOpen.value = false
     editingClassroom.value = null
-    newClassroom.value = { name: '', address: '', phone: '', color: '#10b981' }
+    newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
 }
 
 async function deleteClassroom(id: string) {
@@ -467,6 +468,18 @@ function toggleCourseSelection(courseId: string) {
                             </div>
                             <span class="text-sm font-medium pt-0.5">{{ room.phone }}</span>
                         </div>
+                        <div v-if="room.external_link" class="flex items-center gap-2.5 text-gray-500">
+                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                </svg>
+                            </div>
+                            <a :href="room.external_link" target="_blank"
+                                class="text-sm font-medium pt-0.5 text-emerald-600 hover:underline break-all">{{
+                                    room.external_link }}</a>
+                        </div>
                     </div>
 
                     <!-- Card Footer -->
@@ -635,6 +648,12 @@ function toggleCourseSelection(courseId: string) {
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
                         }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
+                        }}</label>
+                        <input v-model="newClassroom.external_link" :placeholder="$t('classroom.external_link_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>

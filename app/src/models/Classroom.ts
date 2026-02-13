@@ -6,6 +6,7 @@ export interface ClassroomDTO {
     color?: string
     created_at?: string
     updated_at?: string
+    external_link?: string
 }
 
 export interface ClassSessionDTO {
@@ -38,6 +39,7 @@ export class Classroom {
     address: string
     phone: string
     color: string
+    external_link: string
     created_at?: string
     updated_at?: string
     schedules: ClassroomScheduleDTO[] = []
@@ -48,11 +50,12 @@ export class Classroom {
         this.address = data.address || ''
         this.phone = data.phone || ''
         this.color = data.color || '#10b981'
+        this.external_link = data.external_link || ''
         this.created_at = data.created_at
         this.updated_at = data.updated_at
     }
 
-// ... (omitted)
+    // ... (omitted)
 
     addSchedule(schedule: ClassroomScheduleDTO) {
         this.schedules.push(schedule)
