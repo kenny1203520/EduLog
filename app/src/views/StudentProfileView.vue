@@ -55,6 +55,8 @@ const emailError = computed(() => emailTouched.value ? getEmailError(form.value.
 
 // UI State
 const isSaving = ref(false)
+const isDeleting = ref(false)
+const isModifying = ref(false)
 const isEditingMainDetails = ref(false)
 const showGovId = ref(false)
 
@@ -128,13 +130,16 @@ async function handleDeleteStudent() {
 }
 
 async function confirmDeleteStudent() {
-    showDeleteConfirm.value = false
     try {
+        isDeleting.value = true
         await studentStore.deleteStudent(studentId.value)
+        showDeleteConfirm.value = false
         router.push('/dashboard')
     } catch (e: any) {
         console.error(e)
         toast.error('Failed to delete student: ' + (e.message || e))
+    } finally {
+        isDeleting.value = false
     }
 }
 
@@ -145,6 +150,7 @@ const genericConfirm = ref({
     message: '',
     confirmText: '',
     isDangerous: false,
+    isLoading: false,
     action: null as (() => any) | null
 })
 
@@ -155,15 +161,25 @@ function openConfirm(message: string, action: () => any, title?: string, isDange
         message,
         confirmText: t('common.confirm'),
         isDangerous,
+        isLoading: false,
         action
     }
 }
 
 async function handleGenericConfirm() {
     if (genericConfirm.value.action) {
-        await genericConfirm.value.action()
+        try {
+            genericConfirm.value.isLoading = true
+            await genericConfirm.value.action()
+            genericConfirm.value.isOpen = false
+        } catch (e) {
+            console.error(e)
+        } finally {
+            genericConfirm.value.isLoading = false
+        }
+    } else {
+        genericConfirm.value.isOpen = false
     }
-    genericConfirm.value.isOpen = false
 }
 
 // --- Contacts Management ---
@@ -182,6 +198,7 @@ async function addContact() {
     }
 
     try {
+        isModifying.value = true
         await StudentService.addContact({ ...newContact.value, student_id: studentId.value })
         newContact.value = { name: '', relation: '', phone: '', email: '' } // Reset
         contactEmailTouched.value = false
@@ -190,6 +207,8 @@ async function addContact() {
     } catch (e: any) {
         console.error(e)
         toast.error(e.message || 'Failed to add contact')
+    } finally {
+        isModifying.value = false
     }
 }
 const enrollments = ref<Enrollment[]>([])
@@ -278,6 +297,7 @@ async function openEnrollModal() {
 async function enrollStudent() {
     if (!newEnrollment.value.course_id) return
     try {
+        isModifying.value = true
         await EnrollmentService.create({
             ...newEnrollment.value,
             student_id: studentId.value
@@ -287,6 +307,8 @@ async function enrollStudent() {
         toast.success(t('student.internal_courses.add_btn') + ' ' + t('common.success'))
     } catch (e: any) {
         toast.error(e.message || 'Failed to enroll student')
+    } finally {
+        isModifying.value = false
     }
 }
 
@@ -331,6 +353,7 @@ function cancelEditEnrollment() {
 async function saveEnrollment() {
     if (!editingEnrollmentId.value) return
     try {
+        isModifying.value = true
         await CourseService.updateEnrollment(editingEnrollmentId.value, editEnrollmentForm.value)
         await fetchEnrollments()
         cancelEditEnrollment()
@@ -338,6 +361,8 @@ async function saveEnrollment() {
     } catch (e) {
         console.error(e)
         toast.error('Failed to update enrollment')
+    } finally {
+        isModifying.value = false
     }
 }
 
@@ -703,6 +728,7 @@ async function addSchool() {
     }
 
     try {
+        isModifying.value = true
         await StudentService.addSchool({ ...newSchool.value, student_id: studentId.value })
         newSchool.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' }
         await studentStore.loadStudent(studentId.value)
@@ -710,6 +736,8 @@ async function addSchool() {
     } catch (e: any) {
         console.error(e)
         toast.error(e.message || 'Failed to add school')
+    } finally {
+        isModifying.value = false
     }
 }
 async function deleteSchool(id: string) {
@@ -745,6 +773,7 @@ async function addCredential() {
     delete (payload as any).custom_platform
 
     try {
+        isModifying.value = true
         await StudentService.addCredential(payload)
         newCredential.value = { platform: 'Orange Apple', custom_platform: '', username: '', password: '', url: '' }
         await studentStore.loadStudent(studentId.value)
@@ -752,6 +781,8 @@ async function addCredential() {
     } catch (e: any) {
         console.error(e)
         toast.error(e.message || 'Failed to add credential')
+    } finally {
+        isModifying.value = false
     }
 }
 async function deleteCredential(id: string) {
@@ -786,6 +817,7 @@ function cancelEditContact() {
 async function saveContact() {
     if (!editingContactId.value) return
     try {
+        isModifying.value = true
         await StudentService.updateContact(editingContactId.value, editContactForm.value)
         cancelEditContact()
         await studentStore.loadStudent(studentId.value)
@@ -793,6 +825,8 @@ async function saveContact() {
     } catch (e) {
         console.error(e)
         toast.error('Failed to update contact')
+    } finally {
+        isModifying.value = false
     }
 }
 
@@ -1212,9 +1246,17 @@ function copyToClipboard(text: string) {
                                 <button @click="cancelEditContact"
                                     class="text-gray-500 text-sm hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer">{{
                                         $t('student.cancel') }}</button>
-                                <button @click="saveContact"
-                                    class="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer">{{
-                                        $t('student.save_details') }}</button>
+                                <button @click="saveContact" :disabled="isModifying"
+                                    class="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                                    <svg v-if="isModifying" class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                            stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                        </path>
+                                    </svg>
+                                    {{ $t('student.save_details') }}
+                                </button>
                             </div>
                         </div>
                     </li>
@@ -1243,10 +1285,17 @@ function copyToClipboard(text: string) {
                                 </p>
                             </div>
                         </div>
-                        <button @click="addContact"
-                            class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                                stroke="currentColor" class="w-4 h-4">
+                        <button @click="addContact" :disabled="isModifying"
+                            class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
+                            </svg>
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke-width="2" stroke="currentColor" class="w-4 h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                             </svg>
                             {{ $t('student.contacts.add_btn') }}
@@ -1429,9 +1478,17 @@ function copyToClipboard(text: string) {
                                 <button @click="cancelEditSchool"
                                     class="px-3 py-1.5 text-gray-500 text-sm hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer">{{
                                         $t('student.cancel') }}</button>
-                                <button @click="saveSchool"
-                                    class="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer">{{
-                                        $t('student.save_details') }}</button>
+                                <button @click="saveSchool" :disabled="isModifying"
+                                    class="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                                    <svg v-if="isModifying" class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                            stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                        </path>
+                                    </svg>
+                                    {{ $t('student.save_details') }}
+                                </button>
                             </div>
                         </div>
                     </li>
@@ -1510,10 +1567,17 @@ function copyToClipboard(text: string) {
                             </div>
                         </div>
 
-                        <button @click="addSchool"
-                            class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                                stroke="currentColor" class="w-4 h-4">
+                        <button @click="addSchool" :disabled="isModifying"
+                            class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
+                            </svg>
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                stroke-width="2" stroke="currentColor" class="w-4 h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                             </svg>
                             {{ $t('student.schools.add_btn') }}
@@ -1741,8 +1805,16 @@ function copyToClipboard(text: string) {
                                         class="px-4 py-2 text-gray-600 bg-white hover:bg-gray-100 rounded-lg text-sm font-semibold transition-colors border border-gray-300">
                                         {{ $t('common.cancel') }}
                                     </button>
-                                    <button @click="saveEnrollment"
-                                        class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors shadow-sm">
+                                    <button @click="saveEnrollment" :disabled="isModifying"
+                                        class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-semibold transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                                        <svg v-if="isModifying" class="animate-spin h-4 w-4 text-white"
+                                            viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor"
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                            </path>
+                                        </svg>
                                         {{ $t('common.save') }}
                                     </button>
                                 </div>
@@ -1979,9 +2051,16 @@ function copyToClipboard(text: string) {
                             {{ $t('common.cancel') || $t('student.cancel') }}
                         </button>
                         <button @click="enrollStudent"
-                            :disabled="isSessionFull || !newEnrollment.course_id || !newEnrollment.class_session_id"
-                            class="px-8 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 hover:shadow-lg shadow-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                            :disabled="isSessionFull || !newEnrollment.course_id || !newEnrollment.class_session_id || isModifying"
+                            class="px-8 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 hover:shadow-lg shadow-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center gap-2"
                             :title="isSessionFull ? 'This session is at full capacity' : ''">
+                            <svg v-if="isModifying" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
+                            </svg>
                             {{ $t('student.internal_courses.add_btn') }}
                         </button>
                     </div>
@@ -2117,9 +2196,18 @@ function copyToClipboard(text: string) {
                                             <button @click="cancelEditCredential"
                                                 class="text-xs text-gray-500 hover:text-gray-700 bg-white px-2 py-1 rounded border border-gray-200 cursor-pointer">{{
                                                     $t('student.cancel') }}</button>
-                                            <button @click="saveCredential"
-                                                class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 cursor-pointer">{{
-                                                    $t('student.save_details') }}</button>
+                                            <button @click="saveCredential" :disabled="isModifying"
+                                                class="text-xs bg-emerald-600 text-white px-2 py-1 rounded hover:bg-emerald-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1">
+                                                <svg v-if="isModifying" class="animate-spin h-3 w-3 text-white"
+                                                    viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10"
+                                                        stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                                    </path>
+                                                </svg>
+                                                {{ $t('student.save_details') }}
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -2145,10 +2233,18 @@ function copyToClipboard(text: string) {
                             <input v-model="newCredential.password" :placeholder="$t('student.credentials.password')"
                                 type="text"
                                 class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                            <button @click="addCredential"
-                                class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer h-[38px]">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                                    stroke="currentColor" class="w-4 h-4">
+                            <button @click="addCredential" :disabled="isModifying"
+                                class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer h-[38px] disabled:opacity-50 disabled:cursor-not-allowed">
+                                <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600"
+                                    viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                        stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                    </path>
+                                </svg>
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="2" stroke="currentColor" class="w-4 h-4">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                                 </svg>
                                 {{ $t('student.credentials.add_btn') }}
@@ -2352,11 +2448,12 @@ function copyToClipboard(text: string) {
 
         <ConfirmModal :is-open="showDeleteConfirm" :title="$t('student.delete_title', 'Delete Student')"
             :message="$t('student.confirm_delete_student', 'Are you sure you want to delete this student and all associated data? This action cannot be undone.')"
-            :confirm-text="$t('common.delete')" :is-dangerous="true" @confirm="confirmDeleteStudent"
-            @close="showDeleteConfirm = false" />
+            :confirm-text="$t('common.delete')" :is-dangerous="true" :is-loading="isDeleting"
+            @confirm="confirmDeleteStudent" @close="showDeleteConfirm = false" />
 
         <ConfirmModal :is-open="genericConfirm.isOpen" :title="genericConfirm.title" :message="genericConfirm.message"
             :confirm-text="genericConfirm.confirmText" :is-dangerous="genericConfirm.isDangerous"
-            @confirm="handleGenericConfirm" @close="genericConfirm.isOpen = false" />
+            :is-loading="genericConfirm.isLoading" @confirm="handleGenericConfirm"
+            @close="genericConfirm.isOpen = false" />
     </div>
 </template>

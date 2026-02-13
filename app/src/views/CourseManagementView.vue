@@ -13,6 +13,7 @@ const courses = ref<Course[]>([])
 const loading = ref(true)
 const iscreateModalOpen = ref(false)
 const editingCourse = ref<Course | null>(null)
+const isSaving = ref(false)
 
 // Generic Confirm Modal State
 const genericConfirm = ref({
@@ -21,6 +22,7 @@ const genericConfirm = ref({
     message: '',
     confirmText: '',
     isDangerous: false,
+    isLoading: false,
     action: null as (() => any) | null
 })
 
@@ -31,15 +33,25 @@ function openConfirm(message: string, action: () => any, title?: string, isDange
         message,
         confirmText: t('common.confirm'),
         isDangerous,
+        isLoading: false,
         action
     }
 }
 
 async function handleGenericConfirm() {
     if (genericConfirm.value.action) {
-        await genericConfirm.value.action()
+        try {
+            genericConfirm.value.isLoading = true
+            await genericConfirm.value.action()
+            genericConfirm.value.isOpen = false
+        } catch (e) {
+            console.error(e)
+        } finally {
+            genericConfirm.value.isLoading = false
+        }
+    } else {
+        genericConfirm.value.isOpen = false
     }
-    genericConfirm.value.isOpen = false
 }
 
 // Form for new/edit course
@@ -124,6 +136,7 @@ function openEditModal(course: Course) {
 
 async function saveCourse() {
     try {
+        isSaving.value = true
         if (editingCourse.value && editingCourse.value.id) {
             // Update
             await CourseService.updateCourse(editingCourse.value.id, courseForm.value)
@@ -136,6 +149,8 @@ async function saveCourse() {
         toast.success(t('course.save_success') || 'Course saved successfully')
     } catch (e) {
         toast.error('Error saving course: ' + e)
+    } finally {
+        isSaving.value = false
     }
 }
 
@@ -167,6 +182,7 @@ async function saveLesson(courseId: string) {
     if (!lessonForm.value.title.trim()) return
 
     try {
+        isSaving.value = true
         if (editingLessonId.value) {
             // Update
             await CourseService.updateLesson(editingLessonId.value, {
@@ -189,6 +205,8 @@ async function saveLesson(courseId: string) {
     } catch (e) {
         console.error(e)
         toast.error('Error saving lesson: ' + e)
+    } finally {
+        isSaving.value = false
     }
 }
 
@@ -253,7 +271,7 @@ async function deleteLesson(id: string) {
                 :class="selectedCourseId ? '-translate-x-full lg:translate-x-0' : 'translate-x-0'">
                 <div class="p-6 border-b border-gray-50 bg-gray-50/30">
                     <h3 class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{ $t('course.list_title')
-                    }}</h3>
+                        }}</h3>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
                     <div v-for="(group, subject) in groupedCourses" :key="subject">
@@ -416,9 +434,18 @@ async function deleteLesson(id: string) {
                                         <button @click="cancelLessonEdit"
                                             class="px-4 py-2 text-gray-500 font-bold hover:text-gray-700 transition-colors">{{
                                                 $t('common.cancel') }}</button>
-                                        <button @click="saveLesson(selectedCourse.id!)"
-                                            class="px-6 py-2 bg-emerald-600 text-white rounded-xl font-black hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all">{{
-                                                $t('common.save') }}</button>
+                                        <button @click="saveLesson(selectedCourse.id!)" :disabled="isSaving"
+                                            class="px-6 py-2 bg-emerald-600 text-white rounded-xl font-black hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all flex items-center gap-2">
+                                            <svg v-if="isSaving" class="animate-spin h-4 w-4" fill="none"
+                                                viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                    stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor"
+                                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                                </path>
+                                            </svg>
+                                            {{ $t('common.save') }}
+                                        </button>
                                     </div>
                                 </div>
 
@@ -434,12 +461,22 @@ async function deleteLesson(id: string) {
                                             class="flex-1 w-full bg-gray-50 border-gray-100 rounded-xl px-4 py-2 font-bold"
                                             @keyup.enter="saveLesson(selectedCourse.id!)">
                                         <div class="flex gap-2 w-full lg:w-auto justify-end">
-                                            <button @click="saveLesson(selectedCourse.id!)"
-                                                class="text-emerald-600 font-black text-sm px-3 py-1 hover:bg-emerald-50 rounded-lg">{{
-                                                    $t('common.save') }}</button>
-                                            <button @click="cancelLessonEdit"
-                                                class="text-gray-400 font-bold text-sm px-3 py-1 hover:bg-gray-100 rounded-lg">{{
-                                                    $t('common.cancel') }}</button>
+                                            <button @click="saveLesson(selectedCourse.id!)" :disabled="isSaving"
+                                                class="text-emerald-600 font-black text-sm px-3 py-1 hover:bg-emerald-50 rounded-lg flex items-center gap-2">
+                                                <svg v-if="isSaving" class="animate-spin h-3 w-3" fill="none"
+                                                    viewBox="0 0 24 24">
+                                                    <circle class="opacity-25" cx="12" cy="12" r="10"
+                                                        stroke="currentColor" stroke-width="4"></circle>
+                                                    <path class="opacity-75" fill="currentColor"
+                                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                                    </path>
+                                                </svg>
+                                                {{ $t('common.save') }}
+                                            </button>
+                                            <button @click="cancelLessonEdit" :disabled="isSaving"
+                                                class="text-gray-400 font-bold text-sm px-3 py-1 hover:bg-gray-100 rounded-lg">
+                                                {{ $t('common.cancel') }}
+                                            </button>
                                         </div>
                                     </div>
 
@@ -451,7 +488,7 @@ async function deleteLesson(id: string) {
                                                 {{ lesson.sequence }}
                                             </span>
                                             <span class="text-xl font-bold text-gray-800 tracking-tight">{{ lesson.title
-                                            }}</span>
+                                                }}</span>
                                         </div>
                                         <div
                                             class="flex gap-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
@@ -490,9 +527,9 @@ async function deleteLesson(id: string) {
                                         </svg>
                                     </div>
                                     <h4 class="text-lg font-black text-gray-900 mb-1">{{ $t('course.no_lessons_title')
-                                    }}</h4>
+                                        }}</h4>
                                     <p class="text-gray-400 font-medium italic text-sm">{{ $t('course.no_lessons_sub')
-                                    }}</p>
+                                        }}</p>
                                 </div>
                             </div>
                         </div>
@@ -525,7 +562,7 @@ async function deleteLesson(id: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.subject')
-                        }}</label>
+                            }}</label>
                         <input v-model="courseForm.subject" :placeholder="$t('course.subject_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -545,17 +582,24 @@ async function deleteLesson(id: string) {
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
-                        }}</label>
+                            }}</label>
                         <textarea v-model="courseForm.description" rows="3"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"></textarea>
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">
-                    <button @click="iscreateModalOpen = false"
+                    <button @click="iscreateModalOpen = false" :disabled="isSaving"
                         class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{
                             $t('common.cancel') }}</button>
-                    <button @click="saveCourse"
-                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">
+                    <button @click="saveCourse" :disabled="isSaving"
+                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all flex items-center gap-2">
+                        <svg v-if="isSaving" class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
                         {{ editingCourse ? $t('course.save_changes') : $t('common.add') }}
                     </button>
                 </div>
@@ -564,6 +608,7 @@ async function deleteLesson(id: string) {
 
         <ConfirmModal :is-open="genericConfirm.isOpen" :title="genericConfirm.title" :message="genericConfirm.message"
             :confirm-text="genericConfirm.confirmText" :is-dangerous="genericConfirm.isDangerous"
-            @confirm="handleGenericConfirm" @close="genericConfirm.isOpen = false" />
+            :is-loading="genericConfirm.isLoading" @confirm="handleGenericConfirm"
+            @close="genericConfirm.isOpen = false" />
     </div>
 </template>

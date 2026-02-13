@@ -55,7 +55,7 @@
                         <div
                             class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
                             <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
-                                }}</span>
+                            }}</span>
                             <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
                             <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
                                 v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
@@ -429,7 +429,8 @@
         <ConfirmModal :is-open="showCreateConfirm"
             :title="$t('report.editor.confirm_create_report_title', 'Create New Report?')"
             :message="$t('report.editor.confirm_create_report', 'This class has no report yet. A new one will be created.')"
-            :confirm-text="$t('common.continue')" @confirm="handleConfirmCreate" @close="showCreateConfirm = false" />
+            :confirm-text="$t('common.continue')" :is-loading="isCreatingReport" @confirm="handleConfirmCreate"
+            @close="showCreateConfirm = false" />
 
     </div>
 </template>
@@ -488,17 +489,18 @@ let reportSubscription: RealtimeChannel | null = null
 
 // Confirm Modal State
 const showCreateConfirm = ref(false)
+const isCreatingReport = ref(false)
 const pendingOccurrence = ref<ClassOccurrence | null>(null)
 
 async function handleConfirmCreate() {
     if (!pendingOccurrence.value) return
-    showCreateConfirm.value = false
 
     // Resume creation flow
     const enrollmentId = route.params.enrollmentId as string
     if (!enrollmentId) return
 
     try {
+        isCreatingReport.value = true
         const report = await OccurrenceReportService.createReport(enrollmentId, pendingOccurrence.value.id!)
         selectedReport.value = report
 
@@ -512,9 +514,12 @@ async function handleConfirmCreate() {
             }
             allReports.value.push(newReportDetail as any)
         }
+        showCreateConfirm.value = false
     } catch (e) {
         console.error('Failed to create report', e)
         toast.error(t('report.create_error') || 'Failed to create report')
+    } finally {
+        isCreatingReport.value = false
     }
 }
 
@@ -1136,6 +1141,7 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
     if (!selectedReport.value) return
 
     try {
+        reportLoading.value = true
         const report = await OccurrenceReportService.resolveConflict(
             selectedReport.value.id!,
             resolvedContent,
@@ -1150,6 +1156,8 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
     } catch (error) {
         console.error('Failed to resolve conflict:', error)
         toast.error(t('report.resolve_conflict_error') || 'Failed to resolve conflict')
+    } finally {
+        reportLoading.value = false
     }
 }
 </script>

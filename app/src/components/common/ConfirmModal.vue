@@ -8,6 +8,7 @@ const props = defineProps<{
     confirmText?: string
     cancelText?: string
     isDangerous?: boolean
+    isLoading?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -68,8 +69,17 @@ onUnmounted(() => {
                         {{ cancelText || $t('common.cancel') }}
                     </button>
                     <button @click="$emit('confirm')"
-                        class="flex-1 px-6 py-3.5 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
-                        :class="isDangerous ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'">
+                        class="flex-1 px-6 py-3.5 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        :class="isDangerous ? 'bg-red-500 hover:bg-red-600 shadow-red-200' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200'"
+                        :disabled="isLoading">
+                        <svg v-if="isLoading" class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg"
+                            fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
                         {{ confirmText || $t('common.confirm') }}
                     </button>
                 </div>

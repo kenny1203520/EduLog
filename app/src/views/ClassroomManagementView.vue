@@ -24,6 +24,7 @@ const genericConfirm = ref({
     message: '',
     confirmText: '',
     isDangerous: false,
+    isLoading: false,
     action: null as (() => any) | null
 })
 
@@ -34,15 +35,25 @@ function openConfirm(message: string, action: () => any, title?: string, isDange
         message,
         confirmText: t('common.confirm'),
         isDangerous,
+        isLoading: false,
         action
     }
 }
 
 async function handleGenericConfirm() {
     if (genericConfirm.value.action) {
-        await genericConfirm.value.action()
+        try {
+            genericConfirm.value.isLoading = true
+            await genericConfirm.value.action()
+            genericConfirm.value.isOpen = false
+        } catch (e) {
+            console.error(e)
+        } finally {
+            genericConfirm.value.isLoading = false
+        }
+    } else {
+        genericConfirm.value.isOpen = false
     }
-    genericConfirm.value.isOpen = false
 }
 
 // Data
@@ -60,6 +71,8 @@ const sessionsPagination = ref({ page: 1, perPage: 10, total: 0 })
 // Modals
 const isCreateRoomModalOpen = ref(false)
 const isCreateSessionModalOpen = ref(false)
+const isSavingRoom = ref(false)
+const isSavingSession = ref(false)
 
 // Forms
 const newClassroom = ref<Partial<ClassroomDTO>>({ name: '', address: '', phone: '', color: '#10b981', external_link: '' })
@@ -199,6 +212,7 @@ const roomOptions = computed(() => allClassrooms.value.map(c => ({
 async function saveClassroom() {
     if (!newClassroom.value.name) return
     try {
+        isSavingRoom.value = true
         if (editingClassroom.value?.id) {
             await CourseService.updateClassroom(editingClassroom.value.id, newClassroom.value)
         } else {
@@ -209,6 +223,8 @@ async function saveClassroom() {
         toast.success(t('classroom.room_save_success') || 'Room saved successfully')
     } catch (e) {
         toast.error(e as string)
+    } finally {
+        isSavingRoom.value = false
     }
 }
 
@@ -250,6 +266,7 @@ async function saveSession() {
     }
 
     try {
+        isSavingSession.value = true
         if (editingSession.value?.id) {
             await CourseService.updateClassSession(editingSession.value.id, payload)
             // Sync occurrences if the schedule might have changed
@@ -268,6 +285,8 @@ async function saveSession() {
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
     } catch (e) {
         toast.error(e as string)
+    } finally {
+        isSavingSession.value = false
     }
 }
 
@@ -493,7 +512,7 @@ function toggleCourseSelection(courseId: string) {
                 <div v-if="filteredClassrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
-                        }}"</span>
+                    }}"</span>
                 </div>
             </div>
 
@@ -574,7 +593,7 @@ function toggleCourseSelection(courseId: string) {
                                 </svg>
                             </div>
                             <span class="text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!)
-                            }}</span>
+                                }}</span>
                         </div>
 
                         <!-- Capacity Info -->
@@ -648,41 +667,49 @@ function toggleCourseSelection(courseId: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
-                        }}</label>
-                        <input v-model="newClassroom.external_link" :placeholder="$t('classroom.external_link_placeholder')"
+                            }}</label>
+                        <input v-model="newClassroom.external_link"
+                            :placeholder="$t('classroom.external_link_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                        }}</label>
+                            }}</label>
                         <input type="color" v-model="newClassroom.color"
                             class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-8">
-                    <button @click="closeRoomModal"
+                    <button @click="closeRoomModal" :disabled="isSavingRoom"
                         class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{
                             $t('common.cancel', 'Cancel') }}</button>
-                    <button @click="saveClassroom"
-                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">
+                    <button @click="saveClassroom" :disabled="isSavingRoom"
+                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all flex items-center gap-2">
+                        <svg v-if="isSavingRoom" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
                         {{ editingClassroom ? $t('common.save', 'Save') : $t('common.add', 'Add') }}
                     </button>
                 </div>
@@ -698,7 +725,7 @@ function toggleCourseSelection(courseId: string) {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
-                        }}</label>
+                            }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -712,7 +739,7 @@ function toggleCourseSelection(courseId: string) {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
-                        }}</label>
+                            }}</label>
                         <input type="number" v-model="newSession.capacity"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -727,14 +754,15 @@ function toggleCourseSelection(courseId: string) {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
-                        }}</label>
-                        <input v-model="newSession.external_link" :placeholder="$t('classroom.external_link_placeholder')"
+                            }}</label>
+                        <input v-model="newSession.external_link"
+                            :placeholder="$t('classroom.external_link_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                        }}</label>
+                            }}</label>
                         <div class="flex flex-wrap gap-2">
                             <select v-model="newSession.day_of_week"
                                 class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
@@ -777,11 +805,18 @@ function toggleCourseSelection(courseId: string) {
                 </div>
 
                 <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">
-                    <button @click="closeSessionModal"
+                    <button @click="closeSessionModal" :disabled="isSavingSession"
                         class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{
                             $t('common.cancel') }}</button>
-                    <button @click="saveSession"
-                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all">
+                    <button @click="saveSession" :disabled="isSavingSession"
+                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all flex items-center gap-2">
+                        <svg v-if="isSavingSession" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
                         {{ editingSession ? $t('common.save') : $t('common.add') }}
                     </button>
                 </div>
@@ -789,6 +824,7 @@ function toggleCourseSelection(courseId: string) {
         </div>
         <ConfirmModal :is-open="genericConfirm.isOpen" :title="genericConfirm.title" :message="genericConfirm.message"
             :confirm-text="genericConfirm.confirmText" :is-dangerous="genericConfirm.isDangerous"
-            @confirm="handleGenericConfirm" @close="genericConfirm.isOpen = false" />
+            :is-loading="genericConfirm.isLoading" @confirm="handleGenericConfirm"
+            @close="genericConfirm.isOpen = false" />
     </div>
 </template>

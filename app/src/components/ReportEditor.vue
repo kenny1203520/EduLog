@@ -58,8 +58,17 @@
                                 :placeholder="$t('report.editor.template_name_placeholder')"
                                 class="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500"
                                 @keyup.enter="saveTemplate" />
-                            <button @click="saveTemplate" :disabled="!newTemplateName.trim() || !localContent"
-                                class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap">
+                            <button @click="saveTemplate"
+                                :disabled="!newTemplateName.trim() || !localContent || isSavingTemplate"
+                                class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap flex items-center gap-1">
+                                <svg v-if="isSavingTemplate" class="animate-spin h-3 w-3 text-white"
+                                    viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                        stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                    </path>
+                                </svg>
                                 {{ $t('report.editor.save_to_template') }}
                             </button>
                         </div>
@@ -414,7 +423,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -447,7 +456,7 @@
 
         <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
             :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
-            @confirm="handleConfirmAction" @close="confirmState.isOpen = false" />
+            :is-loading="confirmState.isLoading" @confirm="handleConfirmAction" @close="confirmState.isOpen = false" />
     </div>
 </template>
 
@@ -480,6 +489,7 @@ const showReferencePanel = ref(false)
 const savedTemplates = ref<Template[]>([])
 const newTemplateName = ref('')
 const justCopiedCourse = ref(false)
+const isSavingTemplate = ref(false)
 const toast = useToast()
 
 // Confirm Modal State
@@ -489,6 +499,7 @@ const confirmState = ref({
     message: '',
     confirmText: '',
     isDangerous: false,
+    isLoading: false,
     action: null as Function | null
 })
 
@@ -499,13 +510,25 @@ const openConfirm = (title: string, message: string, action: Function, isDangero
         message,
         confirmText: t('common.confirm', 'Confirm'),
         isDangerous,
+        isLoading: false,
         action
     }
 }
 
-const handleConfirmAction = () => {
-    if (confirmState.value.action) confirmState.value.action()
-    confirmState.value.isOpen = false
+const handleConfirmAction = async () => {
+    if (confirmState.value.action) {
+        try {
+            confirmState.value.isLoading = true
+            await confirmState.value.action()
+            confirmState.value.isOpen = false
+        } catch (e) {
+            console.error(e)
+        } finally {
+            confirmState.value.isLoading = false
+        }
+    } else {
+        confirmState.value.isOpen = false
+    }
 }
 
 const handleCopyContent = (text: string) => {
@@ -535,6 +558,7 @@ async function saveTemplate() {
     if (!newTemplateName.value.trim() || !localContent.value.trim() || !authStore.user?.id) return
 
     try {
+        isSavingTemplate.value = true
         const newT = await ReportTemplateService.saveTemplate({
             name: newTemplateName.value.trim(),
             content: localContent.value,
@@ -554,6 +578,9 @@ async function saveTemplate() {
         toast.success(t('report.editor.template_saved'))
     } catch (e) {
         console.error('Failed to save template', e)
+        toast.error('Failed to save template')
+    } finally {
+        isSavingTemplate.value = false
     }
 }
 

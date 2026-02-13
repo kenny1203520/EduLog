@@ -16,6 +16,7 @@ const classrooms = ref<ClassroomDTO[]>([])
 const sessions = ref<ClassSessionDTO[]>([])
 const loading = ref(true)
 const isSaving = ref(false)
+const isDeleting = ref(false)
 const isAddModalOpen = ref(false)
 const editingId = ref<string | null>(null)
 
@@ -113,12 +114,14 @@ function handleDeleteHoliday(id: string) {
 async function confirmDelete() {
     if (!deleteId.value) return
     try {
+        isDeleting.value = true
         await HolidayService.deleteHoliday(deleteId.value)
         await loadHolidays()
         toast.success(t('holiday.delete_success') || 'Holiday deleted successfully')
     } catch (e: any) {
         toast.error(e.message || 'Failed to delete holiday')
     } finally {
+        isDeleting.value = false
         showDeleteConfirm.value = false
         deleteId.value = null
     }
@@ -418,7 +421,7 @@ function closeModal() {
             </div>
         </div>
         <ConfirmModal :is-open="showDeleteConfirm" :title="$t('common.delete')" :message="$t('holiday.delete_confirm')"
-            :confirm-text="$t('common.delete')" :is-dangerous="true" @confirm="confirmDelete"
+            :confirm-text="$t('common.delete')" :is-dangerous="true" :is-loading="isDeleting" @confirm="confirmDelete"
             @close="showDeleteConfirm = false" />
     </div>
 </template>

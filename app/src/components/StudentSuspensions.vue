@@ -35,7 +35,7 @@
                                 {{ $t('student.suspension.end_date') }}
                                 <span class="text-[10px] lowercase italic lowercase">({{
                                     $t('student.suspension.indefinite_hint')
-                                    }})</span>
+                                }})</span>
                             </label>
                             <input type="date" v-model="newSuspension.endDate"
                                 class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
@@ -79,7 +79,7 @@
                             </path>
                         </svg>
                         <span class="text-xs font-bold text-gray-400 italic tracking-widest">{{ $t('common.loading')
-                            }}</span>
+                        }}</span>
                     </div>
                     <div v-else-if="suspensions.length === 0"
                         class="text-center py-12 bg-white rounded-[2rem] border border-dashed border-gray-100 text-gray-400 font-bold italic">
@@ -167,8 +167,16 @@
                                 class="flex items-center gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-all">
                                 <!-- End Indefinite Button (Quick Action) -->
                                 <button v-if="suspension.isIndefinite && suspension.isActive"
-                                    @click="endSuspensionNow(suspension)"
-                                    class="text-xs font-black text-emerald-600 hover:bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-100 shadow-sm transition-all active:scale-95 uppercase tracking-widest">
+                                    @click="endSuspensionNow(suspension)" :disabled="isEndingNowId === suspension.id"
+                                    class="text-xs font-black text-emerald-600 hover:bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-100 shadow-sm transition-all active:scale-95 uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                                    <svg v-if="isEndingNowId === suspension.id"
+                                        class="animate-spin h-3 w-3 text-emerald-600" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                            stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor"
+                                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                        </path>
+                                    </svg>
                                     {{ $t('student.suspension.end_now') }}
                                 </button>
 
@@ -199,7 +207,8 @@
         </div>
         <ConfirmModal :is-open="genericConfirm.isOpen" :title="genericConfirm.title" :message="genericConfirm.message"
             :confirm-text="genericConfirm.confirmText" :is-dangerous="genericConfirm.isDangerous"
-            @confirm="handleGenericConfirm" @close="genericConfirm.isOpen = false" />
+            :is-loading="genericConfirm.isLoading" @confirm="handleGenericConfirm"
+            @close="genericConfirm.isOpen = false" />
     </div>
 </template>
 
@@ -224,6 +233,7 @@ const suspensions = ref<Suspension[]>([])
 const isLoading = ref(true)
 const isAdding = ref(false)
 const isSaving = ref(false)
+const isEndingNowId = ref<string | null>(null)
 
 const editingId = ref<string | null>(null)
 const editForm = ref({
@@ -244,6 +254,7 @@ const genericConfirm = ref({
     message: '',
     confirmText: '',
     isDangerous: false,
+    isLoading: false,
     action: null as (() => any) | null
 })
 
@@ -254,15 +265,25 @@ function openConfirm(message: string, action: () => any, title?: string, isDange
         message,
         confirmText: t('common.confirm'),
         isDangerous,
+        isLoading: false,
         action
     }
 }
 
 async function handleGenericConfirm() {
     if (genericConfirm.value.action) {
-        await genericConfirm.value.action()
+        try {
+            genericConfirm.value.isLoading = true
+            await genericConfirm.value.action()
+            genericConfirm.value.isOpen = false
+        } catch (e) {
+            console.error(e)
+        } finally {
+            genericConfirm.value.isLoading = false
+        }
+    } else {
+        genericConfirm.value.isOpen = false
     }
-    genericConfirm.value.isOpen = false
 }
 
 const isValid = computed(() => {
@@ -367,6 +388,7 @@ async function endSuspensionNow(suspension: Suspension) {
     // But button only shows if active, meaning start <= today.
 
     try {
+        isEndingNowId.value = suspension.id
         // Use the general update method which handles syncing
         await SuspensionService.updateSuspension(suspension.id, {
             end_date: today
@@ -376,6 +398,8 @@ async function endSuspensionNow(suspension: Suspension) {
     } catch (e: any) {
         console.error(e)
         toast.error(e.message || 'Failed to update suspension')
+    } finally {
+        isEndingNowId.value = null
     }
 }
 
