@@ -21,6 +21,7 @@ export interface ClassSessionDTO {
     lesson_number?: number
     created_at?: string
     updated_at?: string
+    external_link?: string
 }
 
 export interface ClassroomScheduleDTO {

@@ -73,7 +73,8 @@ const newSession = ref<Partial<ClassSessionDTO>>({
     start_time: '10:00',
     end_time: '12:00',
     capacity: 10,
-    lesson_number: 1
+    lesson_number: 1,
+    external_link: ''
 })
 const editingSession = ref<ClassSessionDTO | null>(null)
 
@@ -287,7 +288,8 @@ function closeSessionModal() {
         start_time: '10:00',
         end_time: '12:00',
         capacity: 10,
-        lesson_number: 1
+        lesson_number: 1,
+        external_link: ''
     }
 }
 
@@ -587,6 +589,18 @@ function toggleCourseSelection(courseId: string) {
                             <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
                                 $t('classroom.capacity_short') }}: {{ session.capacity }}</span>
                         </div>
+                        <div v-if="session.external_link" class="flex items-center gap-2.5 text-gray-500">
+                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                </svg>
+                            </div>
+                            <a :href="session.external_link" target="_blank"
+                                class="text-xs font-black pt-0.5 text-emerald-600 hover:underline break-all uppercase tracking-tight">{{
+                                    session.external_link }}</a>
+                        </div>
 
                         <!-- Courses Tags -->
                         <div v-if="session.course_ids?.length" class="flex flex-wrap gap-1.5 pt-1">
@@ -709,6 +723,13 @@ function toggleCourseSelection(courseId: string) {
                         <input type="number" v-model.number="newSession.lesson_number"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
                             placeholder="1">
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
+                        }}</label>
+                        <input v-model="newSession.external_link" :placeholder="$t('classroom.external_link_placeholder')"
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
 
                     <div class="md:col-span-2">

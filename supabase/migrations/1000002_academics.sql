@@ -144,6 +144,7 @@ CREATE TABLE IF NOT EXISTS public.class_sessions (
     capacity integer DEFAULT 10,
     user_id uuid NOT NULL DEFAULT auth.uid(),
     lesson_number integer,
+    external_link text,
     CONSTRAINT class_sessions_pkey PRIMARY KEY (id),
     CONSTRAINT class_sessions_classroom_id_fkey FOREIGN KEY (classroom_id) REFERENCES public.classrooms(id),
     CONSTRAINT class_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
