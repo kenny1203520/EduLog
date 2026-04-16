@@ -5,8 +5,11 @@ import { CourseService } from '@/services/CourseService'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import type { Enrollment } from '@/models/Enrollment'
+import type { ClassOccurrence } from '@/models/ClassOccurrence'
+import { DateUtils } from '@/utils/DateUtils'
 
 import ReportEditor from '@/components/ReportEditor.vue'
+import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { useI18n } from 'vue-i18n'
@@ -20,6 +23,8 @@ const route = useRoute()
 const router = useRouter()
 const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
+const sessionOccurrences = ref<ClassOccurrence[]>([])
+const weekAnchorDate = ref(new Date())
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
@@ -42,6 +47,130 @@ const session = ref<any>(null)
 const enrollments = ref<Enrollment[]>([])
 const courseLessons = ref<any[]>([])
 const loading = ref(true)
+
+const displayedOccurrenceDate = computed(() => {
+    if (!todayOccurrence.value?.occurrenceDate) {
+        return t('classroom.no_teaching_day_selected')
+    }
+
+    return new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+})
+
+const weekRangeLabel = computed(() => {
+    const start = new Date(weekAnchorDate.value)
+    start.setDate(start.getDate() - 3)
+
+    const end = new Date(weekAnchorDate.value)
+    end.setDate(end.getDate() + 3)
+
+    return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
+})
+
+function formatDateOnly(date: Date): string {
+    return DateUtils.formatLocalDate(date)
+}
+
+function findOccurrenceByDate(date: Date): ClassOccurrence | undefined {
+    const target = formatDateOnly(date)
+    return sessionOccurrences.value.find(occ => formatDateOnly(occ.occurrenceDate) === target)
+}
+
+function findClosestOccurrence(targetDate: Date): ClassOccurrence | null {
+    if (sessionOccurrences.value.length === 0) {
+        return null
+    }
+
+    return [...sessionOccurrences.value].sort((a, b) => {
+        const diffA = Math.abs(new Date(a.occurrenceDate).getTime() - targetDate.getTime())
+        const diffB = Math.abs(new Date(b.occurrenceDate).getTime() - targetDate.getTime())
+        return diffA - diffB
+    })[0]
+}
+
+function findLatestOccurrenceBeforeOrOn(date: Date): ClassOccurrence | null {
+    const target = date.getTime()
+    const candidates = sessionOccurrences.value
+        .filter(occ => new Date(occ.occurrenceDate).getTime() <= target)
+        .sort((a, b) => new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime())
+
+    return candidates[0] || null
+}
+
+async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
+    const rangeStart = new Date(anchorDate)
+    rangeStart.setDate(rangeStart.getDate() - 42)
+
+    const rangeEnd = new Date(anchorDate)
+    rangeEnd.setDate(rangeEnd.getDate() + 42)
+
+    sessionOccurrences.value = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
+}
+
+async function loadReportsForCurrentOccurrence() {
+    reportMap.value = new Map()
+
+    if (!todayOccurrence.value) {
+        return
+    }
+
+    const occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(todayOccurrence.value.id)
+    const reportEnrollmentIds = new Set(occurrenceReports.map(r => r.enrollmentId))
+
+    occurrenceReports.forEach(r => {
+        if (r.enrollmentId) {
+            reportMap.value.set(r.enrollmentId, r)
+        }
+    })
+
+    const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
+    const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
+
+    if (guestEnrollmentIds.length > 0) {
+        const guestPromises = guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!))
+        const guests = await Promise.all(guestPromises)
+
+        guests.forEach(guest => {
+            if (guest) {
+                ;(guest as any).isGuest = true
+                if (!enrollments.value.find(e => e.id === guest.id)) {
+                    enrollments.value.push(guest)
+                }
+            }
+        })
+    }
+
+    for (const enr of enrollments.value) {
+        if (enr.id && !reportMap.value.has(enr.id)) {
+            reportMap.value.set(enr.id, null)
+        }
+    }
+}
+
+async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
+    todayOccurrence.value = occurrence
+
+    if (occurrence?.occurrenceDate) {
+        weekAnchorDate.value = new Date(occurrence.occurrenceDate)
+    }
+
+    await loadReportsForCurrentOccurrence()
+}
+
+async function handleCalendarOccurrenceSelect(occurrence: ClassOccurrence) {
+    await setCurrentOccurrence(occurrence)
+}
+
+async function moveWeek(offset: number) {
+    const nextAnchor = new Date(weekAnchorDate.value)
+    nextAnchor.setDate(nextAnchor.getDate() + offset * 7)
+    weekAnchorDate.value = nextAnchor
+
+    await loadSessionOccurrences(nextAnchor)
+
+    const sameDayOccurrence = findOccurrenceByDate(nextAnchor)
+    const fallbackOccurrence = findClosestOccurrence(nextAnchor)
+    await setCurrentOccurrence(sameDayOccurrence || fallbackOccurrence)
+}
 
 // Filtered Enrollments: Only show active students if they have a report
 const visibleEnrollments = computed(() => {
@@ -74,80 +203,23 @@ async function loadData() {
         // 3. Find or Create Today's Occurrence
         const today = new Date()
         todayOccurrence.value = null
+        weekAnchorDate.value = today
 
-        // Check if session runs today (day_of_week)
-        if (session.value && session.value.day_of_week === today.getDay()) {
-            const occurrences = await OccurrenceService.getOccurrencesByDateRange(today, today, [sessionId])
-            if (occurrences.length > 0) {
-                todayOccurrence.value = occurrences[0]
-            } else {
-                // Generate today's occurrence if it doesn't exist but is scheduled for today
-                const generated = await OccurrenceService.generateOccurrences(sessionId, today, today)
-                if (generated.length > 0) todayOccurrence.value = generated[0]
-            }
+        await loadSessionOccurrences(today)
+
+        const todayOccurrenceFromList = findOccurrenceByDate(today)
+
+        // Check if session runs today and generate missing teaching day occurrence
+        if (session.value && session.value.day_of_week === today.getDay() && !todayOccurrenceFromList) {
+            await OccurrenceService.generateOccurrences(sessionId, today, today)
+            await loadSessionOccurrences(today)
         }
 
-        // If NO occurrence found for today (or not scheduled today), try to find the LATEST past occurrence
-        if (!todayOccurrence.value) {
-            const ninetyDaysAgo = new Date()
-            ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
+        const preferredOccurrence = findOccurrenceByDate(today)
+            || findLatestOccurrenceBeforeOrOn(today)
+            || findClosestOccurrence(today)
 
-            const recent = await OccurrenceService.getOccurrencesByDateRange(
-                ninetyDaysAgo,
-                today,
-                [sessionId]
-            )
-
-            if (recent && recent.length > 0) {
-                // Sort desc and take first
-                recent.sort((a, b) => new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime())
-                todayOccurrence.value = recent[0]
-            }
-        }
-
-        if (todayOccurrence.value) {
-            // 4. Load/Create Reports for all permanent enrollments
-            // AND Detect Guest Students (Rescheduled into this class)
-
-            // 4a. Get ALL reports for this occurrence first
-            const occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(todayOccurrence.value.id)
-            const reportEnrollmentIds = new Set(occurrenceReports.map(r => r.enrollmentId))
-
-            // Pre-populate map with ALL existing reports (Guests AND Active)
-            occurrenceReports.forEach(r => {
-                if (r.enrollmentId) {
-                    reportMap.value.set(r.enrollmentId, r)
-                }
-            })
-
-            // 4b. Identify Guests (Have report but not in permanent list)
-            const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
-            const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
-
-            // 4c. Load Guest Enrollments
-            if (guestEnrollmentIds.length > 0) {
-                const guestPromises = guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!))
-                const guests = await Promise.all(guestPromises)
-
-                guests.forEach(guest => {
-                    if (guest) {
-                        // Mark as guest for UI
-                        (guest as any).isGuest = true
-                        enrollments.value.push(guest)
-                        // Report is already in map from step 4a
-                    }
-                })
-            }
-
-            // 4d. Check for students WITHOUT reports
-            for (const enr of enrollments.value) {
-                if (enr.id) {
-                    if (!reportMap.value.has(enr.id)) {
-                        reportMap.value.set(enr.id, null)
-                    }
-                }
-            }
-        }
+        await setCurrentOccurrence(preferredOccurrence)
     } catch (e) {
         console.error(e)
     } finally {
@@ -536,6 +608,30 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
             <!-- LEFT COLUMN: Student List & Stats -->
             <div class="space-y-6" :class="{ 'hidden lg:block': showSplitView }">
+                <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
+                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div>
+                            <h3 class="font-black text-gray-900">{{ $t('classroom.teaching_day_navigation') }}</h3>
+                            <p class="text-xs font-bold text-gray-400">{{ displayedOccurrenceDate }}</p>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <button @click="moveWeek(-1)"
+                                class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
+                                {{ $t('classroom.previous_week') }}
+                            </button>
+                            <button @click="moveWeek(1)"
+                                class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
+                                {{ $t('classroom.next_week') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">{{ weekRangeLabel }}</p>
+
+                    <OccurrenceCalendar :occurrences="sessionOccurrences" @select-occurrence="handleCalendarOccurrenceSelect" />
+                </div>
+
                 <!-- Class Status Toggle (New) -->
                 <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center justify-between"
                     v-if="todayOccurrence">

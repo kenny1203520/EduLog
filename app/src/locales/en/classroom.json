@@ -81,5 +81,9 @@
     "session_shown": "Session shown",
     "filter_by_room": "Filter by room",
     "all_rooms": "All rooms",
-    "clear_room_filter": "Clear room filter"
+    "clear_room_filter": "Clear room filter",
+    "teaching_day_navigation": "Teaching Day Navigation",
+    "previous_week": "Previous Week",
+    "next_week": "Next Week",
+    "no_teaching_day_selected": "No teaching day selected"
 }

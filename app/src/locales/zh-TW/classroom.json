@@ -83,5 +83,9 @@
     "all_rooms": "全部教室",
     "clear_room_filter": "清除教室篩選",
     "quick_attendance_title": "快速點名",
-    "quick_attendance_subtitle": "選擇學生以進行批次出席狀態更新"
+    "quick_attendance_subtitle": "選擇學生以進行批次出席狀態更新",
+    "teaching_day_navigation": "授課日導覽",
+    "previous_week": "前一週",
+    "next_week": "下一週",
+    "no_teaching_day_selected": "目前沒有可用授課日"
 }
