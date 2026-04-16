@@ -12,26 +12,96 @@ export interface LessonReportDTO {
     updated_at?: string
 }
 
+export type VisibilityEntityType = 'classroom' | 'class_session'
+
+export interface EntityVisibilityPreferenceDTO {
+    id?: string
+    user_id?: string
+    entity_type: VisibilityEntityType
+    entity_id: string
+    is_hidden: boolean
+    created_at?: string
+    updated_at?: string
+}
+
+export type VisibilityFilterMode = 'all' | 'visible' | 'hidden'
+
 export class CourseService {
     // --- Class Sessions ---
-    static async getClassSessions(page: number = 1, perPage: number = 100, search?: string): Promise<{ data: ClassSessionDTO[], count: number }> {
+    static async getClassSessions(
+        page: number = 1,
+        perPage: number = 100,
+        search?: string,
+        classroomId?: string | null,
+        visibilityMode: VisibilityFilterMode = 'all'
+    ): Promise<{ data: ClassSessionDTO[], count: number }> {
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
-        let query = supabase
-            .from('class_sessions')
-            .select('*', { count: 'exact' })
+        if (visibilityMode === 'all') {
+            let query = supabase
+                .from('class_sessions')
+                .select('*', { count: 'exact' })
 
-        if (search) {
-            query = query.ilike('name', `%${search}%`)
+            if (search) {
+                query = query.ilike('name', `%${search}%`)
+            }
+
+            if (classroomId) {
+                query = query.eq('classroom_id', classroomId)
+            }
+
+            const { data, error, count } = await query
+                .order('name', { ascending: true }) // Order by name for consistency
+                .range(from, to)
+
+            if (error) throw new Error(error.message)
+            return { data: data as ClassSessionDTO[], count: count || 0 }
         }
 
-        const { data, error, count } = await query
-            .order('name', { ascending: true }) // Order by name for consistency
-            .range(from, to)
+        const chunkSize = Math.max(perPage, 250)
+        const allSessions: ClassSessionDTO[] = []
 
-        if (error) throw new Error(error.message)
-        return { data: data as ClassSessionDTO[], count: count || 0 }
+        for (let offset = 0; ; offset += chunkSize) {
+            let query = supabase
+                .from('class_sessions')
+                .select('*')
+
+            if (search) {
+                query = query.ilike('name', `%${search}%`)
+            }
+
+            if (classroomId) {
+                query = query.eq('classroom_id', classroomId)
+            }
+
+            const { data, error } = await query
+                .order('name', { ascending: true })
+                .range(offset, offset + chunkSize - 1)
+
+            if (error) throw new Error(error.message)
+
+            const chunk = (data || []) as ClassSessionDTO[]
+            allSessions.push(...chunk)
+
+            if (chunk.length < chunkSize) {
+                break
+            }
+        }
+
+        const sessionIds = allSessions
+            .map(session => session.id)
+            .filter((id): id is string => Boolean(id))
+        const hiddenIds = await this.getHiddenEntityIds('class_session', sessionIds)
+        const filteredSessions = allSessions.filter(session => {
+            const isHidden = !!session.id && hiddenIds.has(session.id)
+            return visibilityMode === 'hidden' ? isHidden : !isHidden
+        })
+
+        return {
+            data: filteredSessions.slice(from, to + 1),
+            count: filteredSessions.length
+        }
     }
 
     static async createClassSession(session: Partial<ClassSessionDTO>): Promise<ClassSessionDTO> {
@@ -259,32 +329,86 @@ export class CourseService {
     }
 
     // --- Classrooms ---
-    static async getClassrooms(page: number = 1, perPage: number = 100, search?: string): Promise<{ data: Classroom[], count: number }> {
+    static async getClassrooms(
+        page: number = 1,
+        perPage: number = 100,
+        search?: string,
+        visibilityMode: VisibilityFilterMode = 'all'
+    ): Promise<{ data: Classroom[], count: number }> {
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
-        let query = supabase
-            .from('classrooms')
-            .select(`*, classroom_schedules (*)`, { count: 'exact' })
+        if (visibilityMode === 'all') {
+            let query = supabase
+                .from('classrooms')
+                .select(`*, classroom_schedules (*)`, { count: 'exact' })
 
-        if (search) {
-            query = query.ilike('name', `%${search}%`)
+            if (search) {
+                query = query.ilike('name', `%${search}%`)
+            }
+
+            const { data, error, count } = await query
+                .order('name')
+                .range(from, to)
+
+            if (error) throw new Error(error.message)
+
+            const classrooms = data.map((d: any) => {
+                const c = new Classroom(d)
+                if (d.classroom_schedules) {
+                    d.classroom_schedules.forEach((s: ClassroomScheduleDTO) => c.addSchedule(s))
+                }
+                return c
+            })
+            return { data: classrooms, count: count || 0 }
         }
 
-        const { data, error, count } = await query
-            .order('name')
-            .range(from, to)
+        const chunkSize = Math.max(perPage, 250)
+        const allClassrooms: Classroom[] = []
 
-        if (error) throw new Error(error.message)
+        for (let offset = 0; ; offset += chunkSize) {
+            let query = supabase
+                .from('classrooms')
+                .select(`*, classroom_schedules (*)`)
 
-        const classrooms = data.map((d: any) => {
-            const c = new Classroom(d)
-            if (d.classroom_schedules) {
-                d.classroom_schedules.forEach((s: ClassroomScheduleDTO) => c.addSchedule(s))
+            if (search) {
+                query = query.ilike('name', `%${search}%`)
             }
-            return c
+
+            const { data, error } = await query
+                .order('name')
+                .range(offset, offset + chunkSize - 1)
+
+            if (error) throw new Error(error.message)
+
+            const chunk = (data || []).map((d: any) => {
+                const classroom = new Classroom(d)
+                if (d.classroom_schedules) {
+                    d.classroom_schedules.forEach((s: ClassroomScheduleDTO) => classroom.addSchedule(s))
+                }
+                return classroom
+            })
+
+            allClassrooms.push(...chunk)
+
+            if (chunk.length < chunkSize) {
+                break
+            }
+        }
+
+        const classroomIds = allClassrooms
+            .map(classroom => classroom.id)
+            .filter((id): id is string => Boolean(id))
+        const hiddenIds = await this.getHiddenEntityIds('classroom', classroomIds)
+        const filteredClassrooms = allClassrooms.filter(classroom => {
+            const isHidden = !!classroom.id && hiddenIds.has(classroom.id)
+            return visibilityMode === 'hidden' ? isHidden : !isHidden
         })
-        return { data: classrooms, count: count || 0 }
+
+        return {
+            data: filteredClassrooms.slice(from, to + 1),
+            count: filteredClassrooms.length
+        }
     }
 
     static async createClassroom(classroom: Partial<ClassroomDTO>): Promise<Classroom> {
@@ -313,6 +437,55 @@ export class CourseService {
 
     static async deleteSchedule(id: string): Promise<void> {
         const { error } = await supabase.from('classroom_schedules').delete().eq('id', id)
+        if (error) throw new Error(error.message)
+    }
+
+    // --- Per-user visibility preferences ---
+    static async getHiddenEntityIds(entityType: VisibilityEntityType, entityIds?: string[]): Promise<Set<string>> {
+        let query = supabase
+            .from('user_entity_visibility_preferences')
+            .select('entity_id')
+            .eq('entity_type', entityType)
+            .eq('is_hidden', true)
+
+        if (entityIds && entityIds.length > 0) {
+            query = query.in('entity_id', entityIds)
+        }
+
+        const { data, error } = await query
+
+        if (error) throw new Error(error.message)
+
+        return new Set((data || []).map((row: any) => row.entity_id as string))
+    }
+
+    static async setEntityHidden(entityType: VisibilityEntityType, entityId: string, isHidden: boolean): Promise<void> {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('User not authenticated')
+
+        if (!isHidden) {
+            const { error } = await supabase
+                .from('user_entity_visibility_preferences')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('entity_type', entityType)
+                .eq('entity_id', entityId)
+
+            if (error) throw new Error(error.message)
+            return
+        }
+
+        const payload: EntityVisibilityPreferenceDTO = {
+            user_id: user.id,
+            entity_type: entityType,
+            entity_id: entityId,
+            is_hidden: true
+        }
+
+        const { error } = await supabase
+            .from('user_entity_visibility_preferences')
+            .upsert(payload, { onConflict: 'user_id,entity_type,entity_id' })
+
         if (error) throw new Error(error.message)
     }
 }

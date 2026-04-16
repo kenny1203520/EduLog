@@ -16,6 +16,10 @@ const { t } = useI18n()
 const toast = useToast()
 const router = useRouter()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
+type DisplayMode = 'visible' | 'all' | 'hidden'
+
+const displayMode = ref<DisplayMode>('visible')
+const selectedSessionClassroomFilter = ref('')
 
 // Generic Confirm Modal State
 const genericConfirm = ref({
@@ -63,6 +67,8 @@ const courses = ref<Course[]>([])
 const loading = ref(true)
 const searchQuery = ref('')
 const allClassrooms = ref<Classroom[]>([]) // For Dropdown
+const hiddenClassroomIds = ref<Set<string>>(new Set())
+const hiddenSessionIds = ref<Set<string>>(new Set())
 
 // Pagination state
 const roomsPagination = ref({ page: 1, perPage: 10, total: 0 })
@@ -122,15 +128,32 @@ async function loadData() {
 }
 
 async function loadRooms() {
-    const res = await CourseService.getClassrooms(roomsPagination.value.page, roomsPagination.value.perPage, searchQuery.value)
+    const res = await CourseService.getClassrooms(
+        roomsPagination.value.page,
+        roomsPagination.value.perPage,
+        searchQuery.value,
+        displayMode.value
+    )
     classrooms.value = res.data
     roomsPagination.value.total = res.count
+
+    const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
+    hiddenClassroomIds.value = await CourseService.getHiddenEntityIds('classroom', roomIds)
 }
 
 async function loadSessions() {
-    const res = await CourseService.getClassSessions(sessionsPagination.value.page, sessionsPagination.value.perPage, searchQuery.value)
+    const res = await CourseService.getClassSessions(
+        sessionsPagination.value.page,
+        sessionsPagination.value.perPage,
+        searchQuery.value,
+        selectedSessionClassroomFilter.value || null,
+        displayMode.value
+    )
     sessions.value = res.data
     sessionsPagination.value.total = res.count
+
+    const sessionIds = sessions.value.map(session => session.id).filter((id): id is string => Boolean(id))
+    hiddenSessionIds.value = await CourseService.getHiddenEntityIds('class_session', sessionIds)
 }
 
 async function loadAllRooms() {
@@ -142,6 +165,27 @@ watch(() => roomsPagination.value.page, loadRooms)
 watch(() => roomsPagination.value.perPage, () => { roomsPagination.value.page = 1; loadRooms() })
 watch(() => sessionsPagination.value.page, loadSessions)
 watch(() => sessionsPagination.value.perPage, () => { sessionsPagination.value.page = 1; loadSessions() })
+watch(selectedSessionClassroomFilter, () => {
+    sessionsPagination.value.page = 1
+    loadSessions()
+})
+watch(activeTab, () => {
+    if (activeTab.value === 'rooms') {
+        loadRooms()
+        return
+    }
+
+    loadSessions()
+})
+watch(displayMode, () => {
+    if (activeTab.value === 'rooms') {
+        roomsPagination.value.page = 1
+        loadRooms()
+    } else if (activeTab.value === 'sessions') {
+        sessionsPagination.value.page = 1
+        loadSessions()
+    }
+})
 watch(searchQuery, () => {
     if (activeTab.value === 'rooms') {
         roomsPagination.value.page = 1
@@ -151,9 +195,6 @@ watch(searchQuery, () => {
         loadSessions()
     }
 })
-
-// Computed
-const filteredClassrooms = computed(() => classrooms.value) // Now handled server-side
 
 const dayColorMap: Record<number, string> = {
     1: '#3b82f6', // Mon: Blue
@@ -169,36 +210,17 @@ function getDayColor(day: number) {
     return dayColorMap[day] || '#10b981'
 }
 
-const filteredSessions = computed(() => {
-    let result = [...sessions.value]
-
-    if (searchQuery.value.trim()) {
-        const q = searchQuery.value.toLowerCase()
-        result = result.filter(s => {
-            const roomName = getRoomName(s.classroom_id!).toLowerCase()
-            const courseNames = s.course_ids?.map(cid => {
-                const c = courses.value.find(c => c.id === cid)
-                return `${c?.subject} ${c?.stage} ${c?.displayNameValue || ''}`.toLowerCase()
-            }).join(' ') || ''
-
-            return s.name.toLowerCase().includes(q) || roomName.includes(q) || courseNames.includes(q)
-        })
-    }
-
-    // Three-level sorting: Classroom -> Day -> Time
-    return result.sort((a, b) => {
-        // 1. Classroom
+const sortedSessions = computed(() => {
+    return [...sessions.value].sort((a, b) => {
         const roomA = getRoomName(a.classroom_id!)
         const roomB = getRoomName(b.classroom_id!)
         const roomCompare = roomA.localeCompare(roomB)
         if (roomCompare !== 0) return roomCompare
 
-        // 2. Day of Week (1-6, then 0 for Sunday)
         const dayA = a.day_of_week === 0 ? 7 : a.day_of_week
         const dayB = b.day_of_week === 0 ? 7 : b.day_of_week
         if (dayA !== dayB) return dayA - dayB
 
-        // 3. Start Time
         return a.start_time.localeCompare(b.start_time)
     })
 })
@@ -256,6 +278,51 @@ async function deleteClassroom(id: string) {
             toast.error(e as string)
         }
     }, t('common.delete'), true)
+}
+
+function isClassroomHidden(id?: string) {
+    return !!id && hiddenClassroomIds.value.has(id)
+}
+
+function isSessionHidden(id?: string) {
+    return !!id && hiddenSessionIds.value.has(id)
+}
+
+async function refreshActiveList() {
+    if (activeTab.value === 'rooms') {
+        await loadRooms()
+        return
+    }
+
+    await loadSessions()
+}
+
+async function toggleClassroomVisibility(id?: string) {
+    if (!id) return
+
+    const willHide = !hiddenClassroomIds.value.has(id)
+
+    try {
+        await CourseService.setEntityHidden('classroom', id, willHide)
+        await refreshActiveList()
+        toast.success(willHide ? t('classroom.room_hidden') : t('classroom.room_shown'))
+    } catch (e) {
+        toast.error(e as string)
+    }
+}
+
+async function toggleSessionVisibility(id?: string) {
+    if (!id) return
+
+    const willHide = !hiddenSessionIds.value.has(id)
+
+    try {
+        await CourseService.setEntityHidden('class_session', id, willHide)
+        await refreshActiveList()
+        toast.success(willHide ? t('classroom.session_hidden') : t('classroom.session_shown'))
+    } catch (e) {
+        toast.error(e as string)
+    }
 }
 
 async function saveSession() {
@@ -413,11 +480,60 @@ function toggleCourseSelection(courseId: string) {
             {{ $t('student.loading') }}
         </div>
 
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-3">
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-black text-gray-500 uppercase tracking-widest">{{ $t('classroom.display_mode') }}</span>
+                <div class="flex bg-gray-100 p-1 rounded-xl border border-gray-100">
+                    <button
+                        @click="displayMode = 'visible'"
+                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                        :class="displayMode === 'visible' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+                    >
+                        {{ $t('classroom.show_visible_only') }}
+                    </button>
+                    <button
+                        @click="displayMode = 'all'"
+                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                        :class="displayMode === 'all' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+                    >
+                        {{ $t('classroom.show_all') }}
+                    </button>
+                    <button
+                        @click="displayMode = 'hidden'"
+                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                        :class="displayMode === 'hidden' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
+                    >
+                        {{ $t('classroom.show_hidden_only') }}
+                    </button>
+                </div>
+            </div>
+
+            <div v-if="activeTab === 'sessions'" class="flex items-center gap-2 md:ml-auto w-full md:w-auto">
+                <label class="text-xs font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">{{ $t('classroom.filter_by_room') }}</label>
+                <select
+                    v-model="selectedSessionClassroomFilter"
+                    class="min-w-[200px] border-gray-300 rounded-lg text-sm font-bold text-gray-700 focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                    <option value="">{{ $t('classroom.all_rooms') }}</option>
+                    <option v-for="room in allClassrooms" :key="room.id" :value="room.id">
+                        {{ room.name }}
+                    </option>
+                </select>
+                <button
+                    v-if="selectedSessionClassroomFilter"
+                    @click="selectedSessionClassroomFilter = ''"
+                    class="px-3 py-2 rounded-lg text-xs font-black uppercase tracking-widest text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-all"
+                >
+                    {{ $t('classroom.clear_room_filter') }}
+                </button>
+            </div>
+        </div>
+
         <!-- ROOMS TAB -->
-        <div v-else-if="activeTab === 'rooms'">
+        <div v-if="!loading && activeTab === 'rooms'">
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div v-for="room in filteredClassrooms" :key="room.id"
+                <div v-for="room in classrooms" :key="room.id"
                     class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full">
 
                     <!-- Card Header -->
@@ -434,8 +550,9 @@ function toggleCourseSelection(courseId: string) {
                                     class="font-black text-xl text-gray-900 break-words group-hover:text-emerald-700 transition leading-tight">
                                     {{ room.name }}
                                 </h3>
-                                <p class="text-xs text-gray-400 font-bold uppercase tracking-widest mt-0.5">
+                                <p class="text-xs text-gray-400 font-bold uppercase tracking-widest mt-0.5 flex items-center gap-2">
                                     {{ $t('classroom.rooms_tab') }}
+                                    <span v-if="isClassroomHidden(room.id)" class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">{{ $t('classroom.hidden') }}</span>
                                 </p>
                             </div>
                         </div>
@@ -460,6 +577,18 @@ function toggleCourseSelection(courseId: string) {
                                     <path fill-rule="evenodd"
                                         d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
                                         clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <button
+                                @click="toggleClassroomVisibility(room.id)"
+                                class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
+                                :title="isClassroomHidden(room.id) ? $t('classroom.show') : $t('classroom.hide')"
+                            >
+                                <svg v-if="isClassroomHidden(room.id)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z"/>
+                                </svg>
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z" clip-rule="evenodd" />
                                 </svg>
                             </button>
                         </div>
@@ -509,7 +638,7 @@ function toggleCourseSelection(courseId: string) {
                     </div>
                 </div>
 
-                <div v-if="filteredClassrooms.length === 0"
+                <div v-if="classrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
                     }}"</span>
@@ -523,10 +652,10 @@ function toggleCourseSelection(courseId: string) {
         </div>
 
         <!-- SESSIONS TAB -->
-        <div v-else-if="activeTab === 'sessions'">
+        <div v-else-if="!loading && activeTab === 'sessions'">
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div v-for="session in filteredSessions" :key="session.id"
+                <div v-for="session in sortedSessions" :key="session.id"
                     class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full">
 
                     <!-- Card Header -->
@@ -552,6 +681,9 @@ function toggleCourseSelection(courseId: string) {
                                     <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
                                         {{ session.start_time.slice(0, 5) }}-{{ session.end_time.slice(0, 5) }}
                                     </span>
+                                    <span v-if="isSessionHidden(session.id)" class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">
+                                        {{ $t('classroom.hidden') }}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -576,6 +708,18 @@ function toggleCourseSelection(courseId: string) {
                                     <path fill-rule="evenodd"
                                         d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
                                         clip-rule="evenodd" />
+                                </svg>
+                            </button>
+                            <button
+                                @click="toggleSessionVisibility(session.id)"
+                                class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
+                                :title="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')"
+                            >
+                                <svg v-if="isSessionHidden(session.id)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z"/>
+                                </svg>
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z" clip-rule="evenodd" />
                                 </svg>
                             </button>
                         </div>
@@ -650,6 +794,11 @@ function toggleCourseSelection(courseId: string) {
                         <span>#{{ session.id?.slice(0, 8) }}</span>
                         <span>{{ session.lesson_number }} Lessons</span>
                     </div>
+                </div>
+
+                <div v-if="sortedSessions.length === 0"
+                    class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
+                    {{ $t('classroom.no_sessions') }}
                 </div>
             </div>
 
