@@ -1,224 +1,88 @@
-# Database Migration Guide
+# EduLog Database Migration Guide
 
-## 📋 Overview
+本資料夾包含 EduLog 專案的自定義資料庫 schema migration。  
+請依照檔名順序執行，避免外鍵或 trigger 依賴錯誤。
 
-This directory contains reorganized, consolidated database migrations for the EduLog system. All migrations have been reorganized by domain and include proper **Row Level Security (RLS)** policies.
+## Migration 執行順序
 
----
+1. `1000001_core_schema.sql`
+2. `1000002_academics.sql`
+3. `1000003_operations.sql`
+4. `1000004_enhance_report_versions.sql`
+5. `1000005_user_visibility_preferences.sql`
 
-## 🔢 Migration Files (Execution Order)
+## 各檔案重點
 
-### For Fresh Installations
+### 1) `1000001_core_schema.sql`
 
-Run migrations in numerical order:
+- 建立核心 helper function（如 `update_updated_at_column`）
+- 建立學生相關核心資料表（students、contacts、schools、credentials）
+- 啟用 RLS 與對應 policy / trigger
 
-1. **`00001_foundation_student_management.sql`**
-   - Core functions (update_updated_at_column)
-   - Students, Contacts, Schools, Credentials
-   - Reports (legacy)
-   - **Complete RLS policies**
+### 2) `1000002_academics.sql`
 
-2. **`00002_course_lesson_system.sql`**
-   - Courses, Lessons
-   - Classrooms, Classroom Schedules
-   - **Complete RLS policies**
+- 建立學術與排程相關資料表（courses、lessons、classrooms、class_sessions、holidays）
+- 啟用 RLS 與 trigger
 
-3. **`00003_class_session_enrollment.sql`**
-   - Class Sessions
-   - Enrollments (linking students to courses)
-   - Lesson Reports (legacy)
-   - **Complete RLS policies**
+### 3) `1000003_operations.sql`
 
-4. **`00004_occurrence_reporting_with_rls.sql`**
-   - Class Occurrences (individual class sessions)
-   - Occurrence Reports (detailed progress tracking)
-   - Report Versions (version history)
-   - **Complete RLS policies** ✅ SECURITY FIX
+- 建立營運資料表（enrollments、class_occurrences、occurrence_reports、report_versions、suspensions）
+- 建立報告版本快照 trigger
+- 啟用 RLS 與必要約束
 
----
+### 4) `1000004_enhance_report_versions.sql`
 
-### For Existing Databases (Patch)
+- 強化 `report_versions`，新增 `snapshot` 欄位（JSONB）
+- 更新版本快照邏輯，記錄更完整的歷史資料
 
-If you have an existing database with missing RLS policies:
+### 5) `1000005_user_visibility_preferences.sql`
 
-1. **`20260202_security_patch_rls.sql`** ⚠️ **CRITICAL SECURITY PATCH**
-   - Adds RLS to `class_occurrences`
-   - Adds RLS to `occurrence_reports`
-   - Adds RLS to `report_versions`
-   - Fixes `progress_letter` constraint (A-H → A-Z range support)
+- 新增 `user_entity_visibility_preferences`
+- 支援使用者對 `classroom` / `class_session` 的隱藏偏好設定
+- 啟用 RLS 與使用者自有資料存取策略
 
----
+## 執行方式
 
-## 🔐 Security Issues Fixed
+### 方法 A: Supabase Studio（建議）
 
-The following tables were **publicly accessible** without RLS:
+1. 啟動 `supabase` stack
+2. 開啟 Studio SQL Editor
+3. 依序貼上並執行上述 5 個 migration
 
-| Table | Issue | Fix |
-|-------|-------|-----|
-| `class_occurrences` | No RLS | ✅ Policy: Users manage occurrences for their class sessions |
-| `occurrence_reports` | No RLS | ✅ Policy: Users manage reports for their enrollments |
-| `report_versions` | No RLS | ✅ Policy: Users view versions for their reports |
+### 方法 B: PowerShell + Docker（Windows）
 
-### Why This Matters
+在 `supabase/` 目錄執行：
 
-Without RLS, these tables were exposed via PostgREST, allowing potential unauthorized access. **All tables are now secured.**
-
----
-
-## 🐛 Bug Fixes
-
-### Progress Letter Constraint
-
-**Before**: `CHECK (progress_letter ~ '^[A-H]$')`
-- Only supported single letters A-H
-- Did not support ranges (A-Z)
-
-**After**: `CHECK (progress_letter ~ '^[A-Z](-[A-Z])?$')`
-- ✅ Supports single letters: `A`, `B`, ..., `Z`
-- ✅ Supports ranges: `A-Z`, `A-C`, `D-F`, etc.
-
----
-
-## 📂 Schema Overview
-
-### Core Entities
-
-```
-students
-├── student_contacts (1:N)
-├── student_schools (1:N)
-├── student_credentials (1:N)
-└── enrollments (1:N)
-    └── occurrence_reports (1:N)
-
-courses
-├── lessons (1:N)
-└── enrollments (1:N)
-
-classrooms
-├── classroom_schedules (1:N)
-└── class_sessions (1:N)
-    └── class_occurrences (1:N)
-        └── occurrence_reports (1:N)
-            └── report_versions (1:N)
+```powershell
+Get-Content -Raw ./migrations/1000001_core_schema.sql | docker exec -i supabase-db psql -U postgres -d postgres
+Get-Content -Raw ./migrations/1000002_academics.sql | docker exec -i supabase-db psql -U postgres -d postgres
+Get-Content -Raw ./migrations/1000003_operations.sql | docker exec -i supabase-db psql -U postgres -d postgres
+Get-Content -Raw ./migrations/1000004_enhance_report_versions.sql | docker exec -i supabase-db psql -U postgres -d postgres
+Get-Content -Raw ./migrations/1000005_user_visibility_preferences.sql | docker exec -i supabase-db psql -U postgres -d postgres
 ```
 
-### Key Relationships
+## 驗證
 
-- **Student** enrolls in **Courses**
-- **Enrollments** link students to courses, sessions, and classrooms
-- **Class Sessions** create **Class Occurrences** (actual class instances)
-- **Occurrence Reports** track student progress per class occurrence
-- **Report Versions** maintain version history for conflict resolution
-
----
-
-## 🚀 Running Migrations
-
-### Using Supabase CLI
-
-```bash
-# Fresh installation
-cd supabase
-supabase db push
-
-# Or run individually
-psql -h <host> -U <user> -d <database> -f migrations/00001_foundation_student_management.sql
-psql -h <host> -U <user> -d <database> -f migrations/00002_course_lesson_system.sql
-psql -h <host> -U <user> -d <database> -f migrations/00003_class_session_enrollment.sql
-psql -h <host> -U <user> -d <database> -f migrations/00004_occurrence_reporting_with_rls.sql
-```
-
-### Using Supabase Dashboard
-
-1. Navigate to **SQL Editor**
-2. Copy and paste migration contents
-3. Execute in order (00001 → 00002 → 00003 → 00004)
-
-### For Existing Databases (Security Patch)
-
-```bash
-# Apply security patch
-psql -h <host> -U <user> -d <database> -f migrations/20260202_security_patch_rls.sql
-```
-
-Or via Dashboard:
-1. Go to SQL Editor
-2. Copy `20260202_security_patch_rls.sql`
-3. Execute
-
----
-
-## ✅ Verification
-
-### Verify RLS is Enabled
+### 驗證 RLS 啟用狀態
 
 ```sql
-SELECT tablename, rowsecurity 
-FROM pg_tables 
+SELECT tablename, rowsecurity
+FROM pg_tables
 WHERE schemaname = 'public'
 ORDER BY tablename;
 ```
 
-All tables should have `rowsecurity = true`.
-
-### Verify Policies Exist
+### 驗證 Policy
 
 ```sql
 SELECT tablename, policyname, cmd
-FROM pg_policies 
+FROM pg_policies
 WHERE schemaname = 'public'
 ORDER BY tablename, policyname;
 ```
 
-### Test Progress Letter Constraint
+## 注意事項
 
-```sql
--- These should work:
-INSERT INTO occurrence_reports (enrollment_id, class_occurrence_id, progress_letter) 
-VALUES ('<uuid>', '<uuid>', 'A');  -- ✅
-
-INSERT INTO occurrence_reports (enrollment_id, class_occurrence_id, progress_letter) 
-VALUES ('<uuid>', '<uuid>', 'A-Z');  -- ✅
-
--- This should fail:
-INSERT INTO occurrence_reports (enrollment_id, class_occurrence_id, progress_letter) 
-VALUES ('<uuid>', '<uuid>', 'A-H-Z');  -- ❌ Invalid format
-```
-
----
-
-## 📝 Notes
-
-### Deprecated Files (supabase_docker/migrations)
-
-The old `supabase_docker/migrations` directory contained fragmented migrations. These have been **consolidated and reorganized** into the new structure.
-
-**Old files** (reference only):
-- `20260201_consolidated_schema.sql` → Split into 00001, 00002
-- `20260201_create_course_system.sql` → Merged into 00002
-- `20260201_refine_class_system.sql` → Merged into 00003
-- `20260201_session_occurrences.sql` → Reorganized into 00004
-- `20260202_add_lesson_tracking_to_reports.sql` → Merged into 00004
-
-### What Changed
-
-1. ✅ **Proper Sequencing**: Migrations now have clear dependencies
-2. ✅ **Complete RLS**: Every table has proper security policies
-3. ✅ **Bug Fixes**: Progress letter constraint fixed
-4. ✅ **Documentation**: Comments and schema descriptions
-5. ✅ **Indexes**: Performance indexes added
-
----
-
-## 🔗 Related Documentation
-
-- [Supabase RLS Guide](https://supabase.com/docs/guides/database/postgres/row-level-security)
-- [Database Linter](https://supabase.com/docs/guides/database/database-linter)
-- [Migration Best Practices](https://supabase.com/docs/guides/cli/managing-environments)
-
----
-
-**Last Updated**: 2026-02-02  
-**Version**: 1.0.0  
-**Status**: ✅ Production Ready
+- migration 需按順序執行，不建議跳號執行。
+- 若開發環境 schema 已偏離，建議重建資料庫後重新套用 migration。
+- 正式環境變更前請先備份資料庫。
