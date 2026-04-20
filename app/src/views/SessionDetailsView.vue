@@ -25,6 +25,7 @@ const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
 const weekAnchorDate = ref(new Date())
+const isCalendarExpanded = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
@@ -172,6 +173,34 @@ async function moveWeek(offset: number) {
     await setCurrentOccurrence(sameDayOccurrence || fallbackOccurrence)
 }
 
+async function goToCurrentWeek() {
+    const today = new Date()
+    weekAnchorDate.value = today
+
+    await loadSessionOccurrences(today)
+
+    const currentSelected = todayOccurrence.value?.occurrenceDate
+        ? findOccurrenceByDate(new Date(todayOccurrence.value.occurrenceDate))
+        : null
+    const fallbackOccurrence = findClosestOccurrence(today)
+    await setCurrentOccurrence(currentSelected || fallbackOccurrence)
+}
+
+async function goToToday() {
+    const today = new Date()
+    weekAnchorDate.value = today
+
+    await loadSessionOccurrences(today)
+
+    const todayOccurrenceFromList = findOccurrenceByDate(today)
+    const fallbackOccurrence = findClosestOccurrence(today)
+    await setCurrentOccurrence(todayOccurrenceFromList || fallbackOccurrence)
+}
+
+function toggleCalendarPanel() {
+    isCalendarExpanded.value = !isCalendarExpanded.value
+}
+
 // Filtered Enrollments: Only show active students if they have a report
 const visibleEnrollments = computed(() => {
     return enrollments.value.filter(e => {
@@ -273,7 +302,7 @@ async function toggleAttendance(enrId: string) {
         reportMap.value.set(enrId, updated)
     } catch (e) {
         console.error('Failed to toggle attendance:', e)
-        toast.error(t('common.save_error') || 'Failed to save attendance')
+        toast.error(t('common.save_error'))
     } finally {
         savingMap.value.delete(enrId)
     }
@@ -386,7 +415,7 @@ async function handleConfirmRefresh() {
     } catch (e) {
         console.error(e)
         // @ts-ignore
-        toast.error(t('classroom.refresh_failed') || 'Failed to refresh schedule')
+        toast.error(t('classroom.refresh_failed'))
         showRefreshConfirm.value = false
     } finally {
         isRefreshing.value = false
@@ -514,7 +543,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
         toast.success(t('report.save_success'))
     } catch (error) {
         console.error('Failed to resolve conflict:', error)
-        toast.error(t('report.resolve_conflict_error') || 'Failed to resolve conflict')
+        toast.error(t('report.resolve_conflict_error'))
     }
 }
 </script>
@@ -568,7 +597,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                         </svg>
-                        {{ $t('classroom.room_external_link', 'Room Link') }}
+                        {{ $t('classroom.room_external_link') }}
                     </a>
                 </div>
             </div>
@@ -587,7 +616,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             <!-- Toggle Split View Action (Global or just keeps context context) -->
             <button v-if="showSplitView" @click="showSplitView = false"
                 class="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition font-bold text-sm">
-                {{ $t('common.close_split_view') || 'Close Editor' }}
+                {{ $t('common.close_split_view') }}
             </button>
         </div>
 
@@ -615,7 +644,18 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             <p class="text-xs font-bold text-gray-400">{{ displayedOccurrenceDate }}</p>
                         </div>
 
-                        <div class="flex items-center gap-2">
+                        <div class="flex items-center gap-2 flex-wrap md:justify-end">
+                            <button @click="toggleCalendarPanel"
+                                class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                <span>{{ isCalendarExpanded ? $t('classroom.hide_calendar') : $t('classroom.show_calendar') }}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+                                    :class="isCalendarExpanded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
                             <button @click="moveWeek(-1)"
                                 class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
                                 {{ $t('classroom.previous_week') }}
@@ -624,22 +664,35 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                 class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
                                 {{ $t('classroom.next_week') }}
                             </button>
+                            <button @click="goToCurrentWeek"
+                                class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-xs font-black uppercase tracking-widest">
+                                {{ $t('classroom.back_to_this_week') }}
+                            </button>
+                            <button @click="goToToday"
+                                class="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 hover:bg-emerald-100 transition-all text-xs font-black uppercase tracking-widest">
+                                {{ $t('classroom.back_to_today') }}
+                            </button>
                         </div>
                     </div>
 
                     <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">{{ weekRangeLabel }}</p>
 
-                    <OccurrenceCalendar :occurrences="sessionOccurrences" @select-occurrence="handleCalendarOccurrenceSelect" />
+                    <Transition name="fade-slide">
+                        <div v-show="isCalendarExpanded" class="max-w-4xl mx-auto w-full">
+                            <OccurrenceCalendar :occurrences="sessionOccurrences" :compact="true"
+                                @select-occurrence="handleCalendarOccurrenceSelect" />
+                        </div>
+                    </Transition>
                 </div>
 
                 <!-- Class Status Toggle (New) -->
                 <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center justify-between"
                     v-if="todayOccurrence">
                     <div>
-                        <h3 class="font-black text-gray-900">{{ $t('classroom.class_held_title') || 'Class Status' }}
+                        <h3 class="font-black text-gray-900">{{ $t('classroom.class_held_title') }}
                         </h3>
                         <p class="text-xs font-bold text-gray-400">
-                            {{ $t('classroom.class_held_subtitle') || 'Mark if the class was conducted today' }}
+                            {{ $t('classroom.class_held_subtitle') }}
                         </p>
                     </div>
 
@@ -689,7 +742,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                         <div class="flex items-center gap-4">
                             <span v-if="selectedEnrollmentIds.size > 0"
                                 class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider">
-                                {{ selectedEnrollmentIds.size }} {{ $t('common.selected') || 'Selected' }}
+                                {{ selectedEnrollmentIds.size }} {{ $t('common.selected') }}
                             </span>
                             <div class="p-2 rounded-xl bg-gray-50 text-gray-400 transition-transform duration-300"
                                 :class="{ 'rotate-180': isQuickAttendanceExpanded }">
@@ -841,7 +894,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             <div class="flex flex-col items-end gap-2 shrink-0">
                                 <span v-if="(e as any).isGuest"
                                     class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100">
-                                    {{ $t('common.rescheduled') || 'Guest' }}
+                                    {{ $t('common.rescheduled') }}
                                 </span>
                                 <span
                                     class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
@@ -936,7 +989,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                     <!-- Empty State Mobile -->
                     <div v-if="visibleEnrollments.length === 0"
                         class="flex flex-col items-center justify-center py-12 text-gray-300">
-                        <span class="font-black italic tracking-widest">No students enrolled</span>
+                        <span class="font-black italic tracking-widest">{{ $t('classroom.no_students_enrolled') }}</span>
                     </div>
                 </div>
 
@@ -1013,7 +1066,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                 <td class="px-4 py-6">
                                     <span v-if="(e as any).isGuest"
                                         class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100 mr-2">
-                                        {{ $t('common.rescheduled') || 'Rescheduled' }}
+                                        {{ $t('common.rescheduled') }}
                                     </span>
                                     <span
                                         class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border"
@@ -1044,7 +1097,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                         <button @click="toggleSplitView(e.id!)"
                                             class="p-3 rounded-2xl border border-gray-100 shadow-sm transition-all active:scale-90"
                                             :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-gray-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-100'"
-                                            :title="$t('classroom.quick_edit') || 'Quick Edit'">
+                                            :title="$t('classroom.quick_edit')">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                                 viewBox="0 0 24 24" stroke="currentColor">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1057,7 +1110,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             <tr v-if="visibleEnrollments.length === 0">
                                 <td colspan="3"
                                     class="px-8 py-20 text-center font-black italic text-gray-300 tracking-widest">
-                                    No students enrolled yet.
+                                    {{ $t('classroom.no_students_enrolled') }}
                                 </td>
                             </tr>
                         </tbody>

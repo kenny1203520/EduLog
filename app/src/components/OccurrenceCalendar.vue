@@ -1,51 +1,65 @@
 <template>
-    <div class="occurrence-calendar bg-white rounded-[2rem] shadow-sm border border-gray-100 p-8">
+    <div class="occurrence-calendar bg-white shadow-sm border border-gray-100"
+        :class="props.compact ? 'rounded-2xl p-4' : 'rounded-[2rem] p-8'">
         <!-- Header with Month Navigation -->
-        <div class="flex items-center justify-between mb-8">
+        <div class="flex items-center justify-between" :class="props.compact ? 'mb-4' : 'mb-8'">
             <button @click="previousMonth"
-                class="p-3 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all active:scale-95"
+                class="text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all active:scale-95"
+                :class="props.compact ? 'p-2' : 'p-3'"
                 :title="$t('common.prev_month')">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg :class="props.compact ? 'w-4 h-4' : 'w-6 h-6'" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" />
                 </svg>
             </button>
 
-            <h2 class="text-2xl font-black text-gray-900 tracking-tight">
+            <h2 class="font-black text-gray-900 tracking-tight" :class="props.compact ? 'text-lg' : 'text-2xl'">
                 {{ currentMonthYear }}
             </h2>
 
             <button @click="nextMonth"
-                class="p-3 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all active:scale-95"
+                class="text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all active:scale-95"
+                :class="props.compact ? 'p-2' : 'p-3'"
                 :title="$t('common.next_month')">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg :class="props.compact ? 'w-4 h-4' : 'w-6 h-6'" fill="none" stroke="currentColor"
+                    viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" />
                 </svg>
             </button>
         </div>
 
         <!-- Day Headers -->
-        <div class="grid grid-cols-7 gap-3 mb-4">
+        <div class="grid grid-cols-7" :class="props.compact ? 'gap-1 mb-2' : 'gap-3 mb-4'">
             <div v-for="day in dayHeaders" :key="day"
-                class="text-center text-[10px] font-black text-gray-400 uppercase tracking-widest py-2">
+                class="text-center text-[10px] font-black text-gray-400 uppercase tracking-widest"
+                :class="props.compact ? 'py-1' : 'py-2'">
                 {{ day }}
             </div>
         </div>
 
         <!-- Calendar Grid -->
-        <div class="grid grid-cols-7 gap-3">
-            <div v-for="(day, index) in calendarDays" :key="index" @click="selectDay(day)" :class="getDayClasses(day)"
-                class="relative aspect-square p-2 rounded-2xl cursor-pointer transition-all duration-300 border border-transparent">
+        <div class="grid grid-cols-7" :class="props.compact ? 'gap-1' : 'gap-3'">
+            <div v-for="(day, index) in calendarDays" :key="index" @click="selectDay(day)"
+                class="relative cursor-pointer transition-all duration-300 border border-transparent"
+                :class="[
+                    getDayClasses(day),
+                    props.compact ? 'min-h-[3.1rem] p-1 rounded-xl' : 'aspect-square p-2 rounded-2xl'
+                ]">
                 <!-- Day Number -->
-                <div class="text-sm font-black"
-                    :class="day.isCurrentMonth ? (day.isToday ? 'text-emerald-600' : 'text-gray-900') : 'text-gray-200'">
+                <div class="font-black"
+                    :class="[
+                        props.compact ? 'text-xs' : 'text-sm',
+                        day.isCurrentMonth ? (day.isToday ? 'text-emerald-600' : 'text-gray-900') : 'text-gray-200'
+                    ]">
                     {{ day.date.getDate() }}
                 </div>
 
                 <!-- Occurrence Indicators -->
-                <div v-if="day.occurrences.length > 0" class="mt-1 flex flex-wrap gap-1">
+                <div v-if="day.occurrences.length > 0"
+                    :class="props.compact ? 'absolute left-1 bottom-1 flex flex-wrap gap-0.5' : 'mt-1 flex flex-wrap gap-1'">
                     <div v-for="occurrence in day.occurrences.slice(0, 4)" :key="occurrence.id"
-                        :class="getOccurrenceIndicatorClass(occurrence)"
-                        class="w-2 h-2 rounded-full transition-transform hover:scale-125 shadow-sm">
+                        class="rounded-full transition-transform hover:scale-125 shadow-sm"
+                        :class="[getOccurrenceIndicatorClass(occurrence), props.compact ? 'w-1.5 h-1.5' : 'w-2 h-2']">
                     </div>
                     <div v-if="day.occurrences.length > 4" class="text-[8px] font-black text-gray-400 self-center">
                         +{{ day.occurrences.length - 4 }}
@@ -55,7 +69,7 @@
         </div>
 
         <!-- Selected Day Details -->
-        <div v-if="selectedDay && selectedDay.occurrences.length > 0"
+        <div v-if="!props.compact && selectedDay && selectedDay.occurrences.length > 0"
             class="mt-8 p-6 bg-gray-50 rounded-[1.5rem] border border-gray-100 animate-in slide-in-from-top-4 duration-300">
             <h3 class="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                 {{ formatSelectedDate(selectedDay.date) }}
@@ -110,12 +124,14 @@ interface Props {
     occurrences?: ClassOccurrence[]
     existingReportIds?: Set<string>
     occurrenceStatuses?: Record<string, string>
+    compact?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
     occurrences: () => [],
     existingReportIds: () => new Set(),
-    occurrenceStatuses: () => ({})
+    occurrenceStatuses: () => ({}),
+    compact: false
 })
 
 const emit = defineEmits<{
@@ -237,6 +253,10 @@ function nextMonth() {
 
 function selectDay(day: CalendarDay) {
     selectedDay.value = day
+
+    if (props.compact && day.occurrences.length > 0) {
+        emit('select-occurrence', day.occurrences[0])
+    }
 }
 
 function getDayClasses(day: CalendarDay) {

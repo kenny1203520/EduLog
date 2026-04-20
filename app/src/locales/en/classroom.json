@@ -10,6 +10,7 @@
     "address": "Address / Location",
     "phone": "Phone",
     "external_link": "External Link",
+    "room_external_link": "Room Link",
     "color_label": "Color Label",
     "session_name": "Session Name",
     "capacity": "Capacity",
@@ -85,5 +86,10 @@
     "teaching_day_navigation": "Teaching Day Navigation",
     "previous_week": "Previous Week",
     "next_week": "Next Week",
-    "no_teaching_day_selected": "No teaching day selected"
+    "no_teaching_day_selected": "No teaching day selected",
+    "show_calendar": "Show Calendar",
+    "hide_calendar": "Hide Calendar",
+    "back_to_this_week": "Back To This Week",
+    "back_to_today": "Back To Today",
+    "no_students_enrolled": "No students enrolled"
 }

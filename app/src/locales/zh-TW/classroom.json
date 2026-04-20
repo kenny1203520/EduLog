@@ -10,6 +10,7 @@
     "address": "地址 / 位置",
     "phone": "聯絡電話",
     "external_link": "外部連結",
+    "room_external_link": "教室連結",
     "color_label": "顏色標記",
     "session_name": "時段名稱",
     "capacity": "容納人數",
@@ -87,5 +88,10 @@
     "teaching_day_navigation": "授課日導覽",
     "previous_week": "前一週",
     "next_week": "下一週",
-    "no_teaching_day_selected": "目前沒有可用授課日"
+    "no_teaching_day_selected": "目前沒有可用授課日",
+    "show_calendar": "展開月曆",
+    "hide_calendar": "收合月曆",
+    "back_to_this_week": "回到本週",
+    "back_to_today": "回到本日",
+    "no_students_enrolled": "目前沒有學生資料"
 }
