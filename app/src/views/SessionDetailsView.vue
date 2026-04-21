@@ -1067,7 +1067,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
                             <!-- B. Current Course -->
                             <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
                                     {{ $t('classroom.current_course') }}</div>
                                 <div class="mt-1 text-sm font-bold text-slate-900 leading-snug break-words">
                                     {{ getStudentProgressSummary(e.id).currentCourse }}</div>
@@ -1075,7 +1075,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
                             <!-- C. Today Course Summary -->
                             <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
-                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
                                     {{ $t('classroom.today_course_summary') }}</div>
                                 <div class="text-[15px] font-black text-slate-900 break-words">
                                     {{ getTodayCourseSummary(e).title }}</div>
@@ -1094,7 +1094,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
                             <!-- D. Learning Snapshot -->
                             <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
-                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
                                     {{ $t('classroom.learning_snapshot') }}</div>
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="min-w-0">
@@ -1215,16 +1215,16 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                     <table class="w-full min-w-[1020px] text-left border-collapse">
                         <thead>
                             <tr class="bg-gray-50/50">
-                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center"
+                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest text-center"
                                     v-if="todayOccurrence">{{ $t('attendance.status') }}</th>
-                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.student_name') }}</th>
-                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.enrollment_status') }}</th>
-                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.today_course_summary') }}</th>
                                 <th
-                                    class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right w-[96px] xl:w-[176px]">
+                                    class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest text-right w-[96px] xl:w-[176px]">
                                     {{ $t('classroom.actions') }}</th>
                             </tr>
                         </thead>
@@ -1301,7 +1301,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
                                 <td class="px-3 lg:px-4 py-4 lg:py-6">
                                     <div class="rounded-2xl border border-slate-200 bg-white p-2 lg:p-3 space-y-2 lg:space-y-3 min-w-[220px] lg:min-w-[200px]">
-                                        <div class="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
+                                        <div class="text-[9px] lg:text-[11px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
                                             {{ $t('classroom.today_course_summary') }}</div>
                                         <div class="text-xs lg:text-sm font-black text-slate-900 break-words">
                                             {{ getTodayCourseSummary(e).title }}</div>
@@ -1318,7 +1318,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                         </div>
 
                                         <div class="border-t border-slate-100 pt-2 lg:pt-3 space-y-2">
-                                            <div class="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
+                                            <div class="text-[9px] lg:text-[11px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
                                                 {{ $t('classroom.learning_snapshot') }}</div>
 
                                             <div class="flex items-start justify-between gap-1.5 lg:gap-2">
