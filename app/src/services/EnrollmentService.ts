@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 import { OccurrenceService } from './OccurrenceService'
+import { OccurrenceReportService } from './OccurrenceReportService'
 
 /**
  * EnrollmentService handles student course enrollments with automatic report generation.
@@ -11,6 +12,40 @@ import { OccurrenceService } from './OccurrenceService'
  * - Sync updates when enrollment details change
  */
 export class EnrollmentService {
+    private static normalizeDateOnly(value: string | Date): string {
+        if (value instanceof Date) {
+            if (Number.isNaN(value.getTime())) {
+                throw new Error('Invalid date format. Please select a valid date.')
+            }
+            const y = value.getFullYear()
+            const m = String(value.getMonth() + 1).padStart(2, '0')
+            const d = String(value.getDate()).padStart(2, '0')
+            return `${y}-${m}-${d}`
+        }
+
+        if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return value
+        }
+
+        const parsed = new Date(value)
+        if (Number.isNaN(parsed.getTime())) {
+            throw new Error('Invalid date format. Please select a valid date.')
+        }
+
+        const y = parsed.getFullYear()
+        const m = String(parsed.getMonth() + 1).padStart(2, '0')
+        const d = String(parsed.getDate()).padStart(2, '0')
+        return `${y}-${m}-${d}`
+    }
+
+    private static dayOfWeekFromDateOnly(dateOnly: string): number {
+        const parts = dateOnly.split('-').map(Number)
+        const y = parts[0] || 2000
+        const m = parts[1] || 1
+        const d = parts[2] || 1
+        return new Date(y, m - 1, d).getDay()
+    }
+
     /**
      * Get all enrollments for a student with expanded relations
      */
@@ -94,6 +129,102 @@ export class EnrollmentService {
         }
 
         return new Enrollment(enrollment as EnrollmentDTO)
+    }
+
+    /**
+     * Get active enrollments as candidates for make-up classes.
+     */
+    static async getActiveEnrollmentCandidates(): Promise<Enrollment[]> {
+        const { data, error } = await supabase
+            .from('enrollments')
+            .select(`
+                *,
+                courses (subject, stage, display_name),
+                classrooms (name),
+                class_sessions (id, name, day_of_week, start_time, end_time),
+                students (name, email)
+            `)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+
+        if (error) throw new Error(`Failed to fetch active enrollments: ${error.message}`)
+
+        return (data as any[]).map(dto => new Enrollment(dto))
+    }
+
+    /**
+     * Add one enrollment to a target session occurrence for make-up class.
+     * It only creates a single occurrence report and does not change enrollment ownership.
+     */
+    static async addEnrollmentToSessionOccurrence(
+        enrollmentId: string,
+        targetSessionId: string,
+        targetDate: string
+    ): Promise<void> {
+        const normalizedTargetDate = this.normalizeDateOnly(targetDate)
+
+        const { data: enrollment, error: enrollmentError } = await supabase
+            .from('enrollments')
+            .select('id, status')
+            .eq('id', enrollmentId)
+            .single()
+
+        if (enrollmentError || !enrollment) {
+            throw new Error(`Failed to fetch enrollment: ${enrollmentError?.message || 'not found'}`)
+        }
+
+        const todayStr = this.normalizeDateOnly(new Date())
+        if (enrollment.status !== 'active' && normalizedTargetDate >= todayStr) {
+            throw new Error('Only active enrollments can join a future class.')
+        }
+
+        const { data: sessionInfo, error: sessionInfoError } = await supabase
+            .from('class_sessions')
+            .select('day_of_week')
+            .eq('id', targetSessionId)
+            .single()
+
+        if (sessionInfoError || !sessionInfo) {
+            throw new Error(`Failed to find target occurrence: ${sessionInfoError?.message || 'session not found'}`)
+        }
+
+        const selectedDayOfWeek = this.dayOfWeekFromDateOnly(normalizedTargetDate)
+        if (selectedDayOfWeek !== sessionInfo.day_of_week) {
+            throw new Error('MAKEUP_DATE_NOT_CLASS_DAY')
+        }
+
+        const target = new Date(normalizedTargetDate)
+        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch(() => {})
+
+        let { data: targetOccurrences, error: targetOccurrenceError } = await supabase
+            .from('class_occurrences')
+            .select('id, created_at')
+            .eq('class_session_id', targetSessionId)
+            .eq('occurrence_date', normalizedTargetDate)
+            .order('created_at', { ascending: false })
+
+        if (targetOccurrenceError) {
+            throw new Error(`Failed to find target occurrence: ${targetOccurrenceError.message}`)
+        }
+
+        const targetOccurrence = targetOccurrences?.[0]
+        if (!targetOccurrence?.id) {
+            throw new Error('Failed to find target occurrence: not found')
+        }
+
+        const existing = await OccurrenceReportService.getReport(enrollmentId, targetOccurrence.id)
+        if (existing) {
+            throw new Error('DUPLICATE_OCCURRENCE_REPORT')
+        }
+
+        try {
+            await OccurrenceReportService.createReport(enrollmentId, targetOccurrence.id)
+        } catch (error: any) {
+            if (error?.message?.includes('duplicate key')) {
+                throw new Error('DUPLICATE_OCCURRENCE_REPORT')
+            }
+            throw error
+        }
     }
 
     /**
@@ -197,7 +328,7 @@ export class EnrollmentService {
                 content: '',
                 version: 1,
                 is_completed: false,
-                attendance_status: 'pending'
+                attendance_status: null
             }))
 
             await supabase
@@ -402,7 +533,7 @@ export class EnrollmentService {
                     content: '',
                     version: 1,
                     is_completed: false,
-                    attendance_status: 'pending'
+                    attendance_status: null
                 })
             if (insertError) throw new Error(`Failed to create replacement report: ${insertError.message}`)
         }

@@ -73,21 +73,47 @@ export class OccurrenceReportService {
             : false
 
         // 2. Create new report
-        const newReport: Partial<OccurrenceReportDTO> = {
+        const newReport: any = {
             enrollment_id: enrollmentId,
             class_occurrence_id: occurrenceId,
             content: '',
             version: 1,
-            attendance_status: (isHoliday || isSuspended) ? 'absent' : 'pending',
             absence_reason: isSuspended ? 'suspension' : (isHoliday ? 'holiday' : undefined),
             is_completed: false // Default to false (scheduled) instead of true (present)
         }
 
-        const { data: created, error: createError } = await supabase
+        // Prefer explicit 'absent' for holiday/suspension; otherwise let DB default decide.
+        if (isHoliday || isSuspended) {
+            newReport.attendance_status = 'absent'
+        } else {
+            newReport.attendance_status = null
+        }
+
+        let { data: created, error: createError } = await supabase
             .from('occurrence_reports')
             .insert(newReport)
             .select()
             .single()
+
+        // Backward compatibility for environments whose attendance_status check differs.
+        if (createError?.message?.includes('occurrence_reports_attendance_status_check')) {
+            const retryPayload: Partial<OccurrenceReportDTO> = {
+                enrollment_id: enrollmentId,
+                class_occurrence_id: occurrenceId,
+                content: '',
+                version: 1,
+                is_completed: false
+            }
+
+            const retryResult = await supabase
+                .from('occurrence_reports')
+                .insert(retryPayload)
+                .select()
+                .single()
+
+            created = retryResult.data
+            createError = retryResult.error
+        }
 
         if (createError) throw new Error(`Failed to create report: ${createError.message}`)
 

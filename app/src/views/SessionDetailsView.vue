@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseService } from '@/services/CourseService'
+import { EnrollmentService } from '@/services/EnrollmentService'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import type { Enrollment } from '@/models/Enrollment'
@@ -36,6 +37,13 @@ const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
 const isQuickAttendanceExpanded = ref(false)
+const showAddStudentModal = ref(false)
+const isAddingStudent = ref(false)
+const makeupCandidates = ref<Enrollment[]>([])
+const makeupSearch = ref('')
+const selectedMakeupStudentId = ref<string>('')
+const selectedMakeupEnrollmentId = ref<string>('')
+const makeupJoinDate = ref(DateUtils.formatLocalDate(new Date()))
 
 // Split View State
 const showSplitView = ref(false)
@@ -262,6 +270,73 @@ const weekRangeLabel = computed(() => {
 
     return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
 })
+
+function normalizeDateInput(value: string | Date | undefined): string {
+    if (!value) {
+        return DateUtils.formatLocalDate(new Date())
+    }
+
+    if (value instanceof Date) {
+        return DateUtils.formatLocalDate(value)
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return value
+    }
+
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+        return DateUtils.formatLocalDate(new Date())
+    }
+
+    return DateUtils.formatLocalDate(parsed)
+}
+
+const filteredMakeupStudents = computed(() => {
+    const studentMap = new Map<string, { studentId: string; studentName: string; studentEmail?: string }>()
+
+    makeupCandidates.value.forEach(item => {
+        if (!item.studentId || !item.studentName) {
+            return
+        }
+        if (!studentMap.has(item.studentId)) {
+            studentMap.set(item.studentId, {
+                studentId: item.studentId,
+                studentName: item.studentName,
+                studentEmail: item.studentEmail
+            })
+        }
+    })
+
+    const students = [...studentMap.values()]
+    const keyword = makeupSearch.value.trim().toLowerCase()
+
+    if (!keyword) {
+        return students
+    }
+
+    return students.filter(student => {
+        return [student.studentName, student.studentEmail]
+            .filter(Boolean)
+            .some(text => text!.toLowerCase().includes(keyword))
+    })
+})
+
+const selectedStudentEnrollments = computed(() => {
+    if (!selectedMakeupStudentId.value) {
+        return []
+    }
+
+    return makeupCandidates.value.filter(item => item.studentId === selectedMakeupStudentId.value)
+})
+
+const selectedMakeupEnrollment = computed(() => {
+    return makeupCandidates.value.find(item => item.id === selectedMakeupEnrollmentId.value) || null
+})
+
+function handleMakeupStudentChange() {
+    selectedMakeupEnrollmentId.value = ''
+}
 
 function formatDateOnly(date: Date): string {
     return DateUtils.formatLocalDate(date)
@@ -660,6 +735,81 @@ async function closeSplitView() {
     selectedEnrollmentId.value = null
 }
 
+async function openAddStudentModal() {
+    showAddStudentModal.value = true
+    makeupSearch.value = ''
+    selectedMakeupStudentId.value = ''
+    selectedMakeupEnrollmentId.value = ''
+    makeupJoinDate.value = normalizeDateInput(todayOccurrence.value?.occurrenceDate)
+
+    try {
+        isAddingStudent.value = true
+        makeupCandidates.value = await EnrollmentService.getActiveEnrollmentCandidates()
+    } catch (error: any) {
+        toast.error(error?.message || t('classroom.add_student_load_failed'))
+        showAddStudentModal.value = false
+    } finally {
+        isAddingStudent.value = false
+    }
+}
+
+function closeAddStudentModal() {
+    showAddStudentModal.value = false
+}
+
+async function submitAddStudentToClass() {
+    if (!selectedMakeupStudentId.value || !selectedMakeupEnrollmentId.value || !makeupJoinDate.value) {
+        toast.error(t('classroom.add_student_required_fields'))
+        return
+    }
+
+    const normalizedJoinDate = normalizeDateInput(makeupJoinDate.value)
+    makeupJoinDate.value = normalizedJoinDate
+
+    const selected = selectedMakeupEnrollment.value
+    if (!selected) {
+        toast.error(t('classroom.add_student_enrollment_not_found'))
+        return
+    }
+
+    if (selected.status !== 'active' && normalizedJoinDate >= DateUtils.formatLocalDate(new Date())) {
+        toast.error(t('classroom.add_student_active_only_for_future'))
+        return
+    }
+
+    try {
+        isAddingStudent.value = true
+        await EnrollmentService.addEnrollmentToSessionOccurrence(
+            selectedMakeupEnrollmentId.value,
+            sessionId,
+            normalizedJoinDate
+        )
+
+        if (normalizeDateInput(todayOccurrence.value?.occurrenceDate) === normalizedJoinDate) {
+            await loadReportsForCurrentOccurrence()
+        }
+
+        toast.success(t('classroom.add_student_success'))
+        closeAddStudentModal()
+    } catch (error: any) {
+        if (error?.message?.includes('Invalid date format')) {
+            toast.error(t('classroom.add_student_invalid_date'))
+            return
+        }
+        if (error?.message?.includes('DUPLICATE_OCCURRENCE_REPORT')) {
+            toast.error(t('classroom.add_student_duplicate_report'))
+            return
+        }
+        if (error?.message?.includes('MAKEUP_DATE_NOT_CLASS_DAY')) {
+            toast.error(t('classroom.add_student_not_class_day'))
+            return
+        }
+        toast.error(error?.message || t('classroom.add_student_failed'))
+    } finally {
+        isAddingStudent.value = false
+    }
+}
+
 function handleEditorUpdate(content: string, enrollmentId: string) {
     const report = reportMap.value.get(enrollmentId)
     if (report) {
@@ -916,6 +1066,10 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             </div>
                         </div>
                         <div class="flex items-center gap-4">
+                            <button @click.stop="openAddStudentModal"
+                                class="px-4 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
+                                {{ $t('classroom.add_student_to_class') }}
+                            </button>
                             <span v-if="selectedEnrollmentIds.size > 0"
                                 class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider">
                                 {{ selectedEnrollmentIds.size }} {{ $t('common.selected') }}
@@ -1490,6 +1644,86 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
         <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
             :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
             :is-loading="isRefreshing" @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
+
+        <div v-if="showAddStudentModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-2xl flex flex-col w-full max-w-2xl max-h-[85vh] shadow-2xl m-4 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                    <h3 class="text-xl font-bold text-gray-900">{{ $t('classroom.add_student_modal_title') }}</h3>
+                    <button @click="closeAddStudentModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                    <p class="text-sm text-gray-500">{{ $t('classroom.add_student_modal_hint') }}</p>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_search') }}</label>
+                        <input v-model="makeupSearch" type="text" :placeholder="$t('classroom.add_student_search_placeholder')"
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_student') }}</label>
+                        <select v-model="selectedMakeupStudentId" @change="handleMakeupStudentChange"
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                            :disabled="isAddingStudent">
+                            <option value="">{{ $t('classroom.add_student_select_student_placeholder') }}</option>
+                            <option v-for="student in filteredMakeupStudents" :key="student.studentId" :value="student.studentId">
+                                {{ student.studentName }}{{ student.studentEmail ? ` (${student.studentEmail})` : '' }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_course') }}</label>
+                        <select v-model="selectedMakeupEnrollmentId"
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                            :disabled="isAddingStudent || !selectedMakeupStudentId">
+                            <option value="">{{ $t('classroom.add_student_select_course_placeholder') }}</option>
+                            <option v-for="candidate in selectedStudentEnrollments" :key="candidate.id" :value="candidate.id">
+                                {{ candidate.courseDisplayName || `${candidate.courseSubject} ${candidate.courseStage}` }}
+                                {{ candidate.classSessionName ? ` · ${candidate.classSessionName}` : '' }}
+                            </option>
+                            <option v-if="selectedMakeupStudentId && selectedStudentEnrollments.length === 0" disabled>
+                                {{ $t('classroom.add_student_no_active_courses') }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_join_date') }}</label>
+                        <input type="date" v-model="makeupJoinDate"
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" />
+                    </div>
+
+                    <div v-if="selectedMakeupEnrollment" class="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                        <p class="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2">{{ $t('classroom.add_student_selected_summary') }}</p>
+                        <p class="text-sm text-emerald-900 font-semibold">{{ selectedMakeupEnrollment.studentName }}</p>
+                        <p class="text-xs text-emerald-800 mt-1">{{ selectedMakeupEnrollment.courseDisplayName || `${selectedMakeupEnrollment.courseSubject} ${selectedMakeupEnrollment.courseStage}` }}</p>
+                        <p class="text-xs text-emerald-700 mt-1">{{ selectedMakeupEnrollment.classSessionName || $t('classroom.session') }}</p>
+                    </div>
+                </div>
+
+                <div class="px-6 py-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+                    <button @click="closeAddStudentModal"
+                        class="px-5 py-2.5 text-gray-600 hover:bg-gray-200/60 font-bold rounded-xl transition-all">
+                        {{ $t('common.cancel') }}
+                    </button>
+                    <button @click="submitAddStudentToClass"
+                        :disabled="isAddingStudent || !selectedMakeupEnrollmentId || !makeupJoinDate"
+                        class="px-8 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <svg v-if="isAddingStudent" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        {{ $t('classroom.add_student_submit') }}
+                    </button>
+                </div>
+            </div>
+        </div>
 
     </div>
 </template>
