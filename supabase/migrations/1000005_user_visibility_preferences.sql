@@ -29,23 +29,23 @@ ALTER TABLE public.user_entity_visibility_preferences ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can read their own visibility preferences"
 ON public.user_entity_visibility_preferences
 FOR SELECT
-USING (auth.uid() = user_id);
+USING ((select auth.uid()) = user_id);
 
 CREATE POLICY "Users can insert their own visibility preferences"
 ON public.user_entity_visibility_preferences
 FOR INSERT
-WITH CHECK (auth.uid() = user_id);
+WITH CHECK ((select auth.uid()) = user_id);
 
 CREATE POLICY "Users can update their own visibility preferences"
 ON public.user_entity_visibility_preferences
 FOR UPDATE
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
+USING ((select auth.uid()) = user_id)
+WITH CHECK ((select auth.uid()) = user_id);
 
 CREATE POLICY "Users can delete their own visibility preferences"
 ON public.user_entity_visibility_preferences
 FOR DELETE
-USING (auth.uid() = user_id);
+USING ((select auth.uid()) = user_id);
 
 CREATE TRIGGER update_user_entity_visibility_preferences_updated_at
 BEFORE UPDATE ON public.user_entity_visibility_preferences
