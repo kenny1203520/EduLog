@@ -811,12 +811,12 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             <span class="text-gray-500 font-black italic tracking-widest">{{ $t('student.loading') }}</span>
         </div>
 
-        <div v-else class="w-full overflow-x-auto">
+        <div v-else class="w-full">
             <div class="grid gap-6 transition-all duration-500 ease-in-out min-w-0"
-                :class="showSplitView ? 'grid-cols-1 md:grid-cols-2 md:min-w-[1220px]' : 'grid-cols-1'">
+                :class="showSplitView ? 'grid-cols-1 lg:grid-cols-[minmax(0,1fr)_450px] xl:grid-cols-[minmax(0,1fr)_560px]' : 'grid-cols-1'">
 
                 <!-- LEFT COLUMN: Student List & Stats -->
-                <div class="space-y-6 min-w-0" :class="{ 'hidden md:block md:min-w-[620px]': showSplitView }">
+                <div class="space-y-6 min-w-0" :class="{ 'hidden lg:block': showSplitView }">
                 <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
                     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                         <div>
@@ -1048,8 +1048,8 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                     </div>
                 </div>
 
-                <!-- Mobile Card List (Visible on < MD) -->
-                <div class="grid grid-cols-1 gap-4 md:hidden">
+                <!-- Responsive Card List -->
+                <div class="grid grid-cols-1 gap-4" :class="showSplitView ? '2xl:hidden' : 'xl:hidden'">
                     <div v-for="e in visibleEnrollments" :key="e.id"
                         class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
                         <div class="space-y-3">
@@ -1223,8 +1223,8 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                     </div>
                 </div>
 
-                <!-- Desktop Table List (Hidden on Mobile) -->
-                <div class="hidden md:block bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-x-auto">
+                <!-- Desktop Table List -->
+                <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-x-auto" :class="showSplitView ? 'hidden 2xl:block' : 'hidden xl:block'">
                     <table class="w-full min-w-[1020px] text-left border-collapse">
                         <thead>
                             <tr class="bg-gray-50/50">
@@ -1405,7 +1405,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
                 <!-- RIGHT COLUMN: Report Editor -->
                 <div v-if="showSplitView && selectedEnrollmentId"
-                    class="animate-in slide-in-from-right-4 duration-500 min-w-0 md:min-w-[560px]">
+                    class="animate-in slide-in-from-right-4 duration-500 min-w-0 w-full">
                     <div
                         class="sticky top-6 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 p-6 overflow-hidden">
                     <div class="flex items-center justify-between mb-6">
