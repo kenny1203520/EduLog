@@ -24,7 +24,10 @@
         "view_classrooms": "查看教室",
         "loading": "載入課表中...",
         "no_classes": "今日無排定課程",
-        "no_classes_sub": "享受您的時光或提前規劃！"
+        "no_classes_sub": "享受您的時光或提前規劃！",
+        "time_slot": "時間區段",
+        "class_name": "班級名稱",
+        "untitled_class": "未命名班級"
     },
     "pending_reports": "未完成報告",
     "missing": "缺漏",

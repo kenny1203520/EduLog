@@ -56,5 +56,11 @@
     "continue": "Continue",
     "select_all": "Select All",
     "deselect_all": "Deselect All",
-    "selected": "selected"
+    "selected": "selected",
+    "status": {
+        "scheduled": "Scheduled",
+        "completed": "Completed",
+        "cancelled": "Cancelled",
+        "rescheduled": "Rescheduled"
+    }
 }

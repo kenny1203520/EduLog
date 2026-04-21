@@ -139,7 +139,7 @@ export class OccurrenceService {
                 *,
                 class_sessions (
                     name,
-                    classrooms (name)
+                    classrooms (name, color)
                 )
             `)
             .gte('occurrence_date', this.formatDate(startDate))
@@ -163,6 +163,7 @@ export class OccurrenceService {
 
             if (dto.class_sessions?.classrooms) {
                 occ.classroomName = dto.class_sessions.classrooms.name
+                occ.classroomColor = dto.class_sessions.classrooms.color
             }
             return occ
         })
