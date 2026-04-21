@@ -43,7 +43,7 @@
                 class="relative cursor-pointer transition-all duration-300 border border-transparent"
                 :class="[
                     getDayClasses(day),
-                    props.compact ? 'min-h-[3.1rem] p-1 rounded-xl' : 'aspect-square p-2 rounded-2xl'
+                    props.compact ? 'h-12 p-1 rounded-xl overflow-hidden' : 'aspect-square p-2 rounded-2xl'
                 ]">
                 <!-- Day Number -->
                 <div class="font-black"
