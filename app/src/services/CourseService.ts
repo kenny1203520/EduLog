@@ -237,11 +237,11 @@ export class CourseService {
         `)
             .eq('class_session_id', sessionId)
             .eq('status', 'active')
+            .order('name', { foreignTable: 'students', ascending: true })
 
         if (error) throw new Error(error.message)
 
-        return {
-            data: data.map((d: any) => {
+        const mappedEnrollments = data.map((d: any) => {
                 const enrollment = new Enrollment(d)
                 if (d.students) {
                     enrollment.studentName = d.students.name
@@ -249,6 +249,15 @@ export class CourseService {
                 }
                 return enrollment
             })
+
+        mappedEnrollments.sort((a, b) => {
+            const left = a.studentName || ''
+            const right = b.studentName || ''
+            return left.localeCompare(right, 'zh-Hant')
+        })
+
+        return {
+            data: mappedEnrollments
         }
     }
 

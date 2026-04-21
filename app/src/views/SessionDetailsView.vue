@@ -166,13 +166,104 @@ function formatProgressRange(report?: OccurrenceReport | null): string {
     return range ? `${range} · ${formatProgressStatus(report)}` : formatProgressStatus(report)
 }
 
+function getReportDate(report: OccurrenceReport): Date | undefined {
+    return report.occurrenceDate || report.createdAt || report.updatedAt
+}
+
+function getReportTimestamp(report: OccurrenceReport): number {
+    const reportDate = getReportDate(report)
+    return reportDate ? reportDate.getTime() : Number.MIN_SAFE_INTEGER
+}
+
+function getNextClassDate(today: Date, classDayOfWeek?: number): Date {
+    if (classDayOfWeek === undefined) {
+        const defaultNextDay = new Date(today)
+        defaultNextDay.setDate(defaultNextDay.getDate() + 1)
+        defaultNextDay.setHours(0, 0, 0, 0)
+        return defaultNextDay
+    }
+
+    const normalizedToday = new Date(today)
+    normalizedToday.setHours(0, 0, 0, 0)
+
+    const diff = (classDayOfWeek - normalizedToday.getDay() + 7) % 7
+    const daysUntilNextClass = diff === 0 ? 7 : diff
+    const nextClassDate = new Date(normalizedToday)
+    nextClassDate.setDate(nextClassDate.getDate() + daysUntilNextClass)
+    return nextClassDate
+}
+
+function isInCurrentCycle(report: OccurrenceReport, classDayOfWeek?: number): boolean {
+    const reportDate = getReportDate(report)
+    if (!reportDate) {
+        return false
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const nextClassDate = getNextClassDate(today, classDayOfWeek)
+
+    return reportDate >= today && reportDate < nextClassDate
+}
+
+function pickHighestProgressReport(
+    reportsAtHighestLesson: OccurrenceReport[]
+): OccurrenceReport | undefined {
+    if (reportsAtHighestLesson.length === 0) {
+        return undefined
+    }
+
+    return [...reportsAtHighestLesson].sort((left, right) => {
+        const completedDiff = Number(right.isCompleted === true) - Number(left.isCompleted === true)
+        if (completedDiff !== 0) {
+            return completedDiff
+        }
+
+        return getReportTimestamp(right) - getReportTimestamp(left)
+    })[0]
+}
+
 function buildStudentProgressSummary(enrollment: Enrollment, reports: OccurrenceReport[], lessons: Lesson[]): StudentProgressSummary {
     const currentCourse = enrollment.displayName || enrollment.courseDisplayName || [enrollment.courseSubject, enrollment.courseStage].filter(Boolean).join(' ')
-    const highestLessonNumber = enrollment.lessonNumber
+    const lessonSequenceById = new Map(
+        lessons
+            .filter(lesson => !!lesson.id)
+            .map(lesson => [lesson.id as string, lesson.sequence])
+    )
+
+    const reportsWithLesson = reports.filter(report => {
+        if (!report.lessonId) {
+            return false
+        }
+
+        return lessonSequenceById.has(report.lessonId)
+    })
+
+    let highestLessonNumber: number | undefined
+    if (reportsWithLesson.length > 0) {
+        highestLessonNumber = reportsWithLesson.reduce((maxSequence, report) => {
+            const sequence = report.lessonId ? lessonSequenceById.get(report.lessonId) : undefined
+            if (sequence === undefined) {
+                return maxSequence
+            }
+            return Math.max(maxSequence, sequence)
+        }, Number.MIN_SAFE_INTEGER)
+
+        if (highestLessonNumber === Number.MIN_SAFE_INTEGER) {
+            highestLessonNumber = undefined
+        }
+    }
+
     const highestLesson = getLessonTitle(lessons, highestLessonNumber)
     const highestLessonId = lessons.find(lesson => lesson.sequence === highestLessonNumber)?.id
-    const highestReport = highestLessonId ? reports.find(report => report.lessonId === highestLessonId) : undefined
-    const latestReport = reports[0]
+    const highestLessonReports = highestLessonId
+        ? reportsWithLesson.filter(report => report.lessonId === highestLessonId)
+        : []
+    const highestReport = pickHighestProgressReport(highestLessonReports)
+
+    const reportsByOccurrenceDate = [...reports].sort((left, right) => getReportTimestamp(right) - getReportTimestamp(left))
+    const latestReport = reportsByOccurrenceDate.find(report => !isInCurrentCycle(report, enrollment.classSessionDayOfWeek)) || reportsByOccurrenceDate[0]
     const latestLesson = latestReport?.lessonId ? lessons.find(lesson => lesson.id === latestReport.lessonId) : undefined
 
     return {

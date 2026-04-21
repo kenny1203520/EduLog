@@ -553,7 +553,12 @@ export class OccurrenceReportService {
 
         const { data, error, count } = await supabase
             .from('occurrence_reports')
-            .select('*', { count: 'exact' })
+            .select(`
+                *,
+                class_occurrences!class_occurrence_id (
+                    occurrence_date
+                )
+            `, { count: 'exact' })
             .eq('enrollment_id', enrollmentId)
             .order('created_at', { ascending: false })
             .range(from, to)
@@ -561,7 +566,14 @@ export class OccurrenceReportService {
         if (error) throw new Error(error.message)
 
         return {
-            data: data.map(dto => new OccurrenceReport(dto)),
+            data: data.map((dto: any) => {
+                const occurrenceDate = dto.class_occurrences?.occurrence_date
+                const mappedDto: OccurrenceReportDTO = {
+                    ...dto,
+                    occurrence_date: occurrenceDate
+                }
+                return new OccurrenceReport(mappedDto)
+            }),
             count: count || 0
         }
     }

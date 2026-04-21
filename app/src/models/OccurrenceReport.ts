@@ -3,6 +3,8 @@
  * Supports versioning for conflict resolution and auto-save functionality.
  */
 
+import { DateUtils } from '@/utils/DateUtils'
+
 export interface OccurrenceReportDTO {
     id?: string
     enrollment_id: string
@@ -22,6 +24,7 @@ export interface OccurrenceReportDTO {
     external_link?: string
 
     version: number
+    occurrence_date?: string
     last_edited_by?: string
     last_edited_at?: string
     created_at?: string
@@ -60,6 +63,7 @@ export class OccurrenceReport {
     externalLink?: string
 
     version: number
+    occurrenceDate?: Date
     lastEditedBy?: string
     lastEditedAt?: Date
     createdAt?: Date
@@ -84,6 +88,7 @@ export class OccurrenceReport {
         this.externalLink = data.external_link
 
         this.version = data.version
+        this.occurrenceDate = DateUtils.parseLocalDate(data.occurrence_date)
         this.lastEditedBy = data.last_edited_by
         this.lastEditedAt = data.last_edited_at ? new Date(data.last_edited_at) : undefined
         this.createdAt = data.created_at ? new Date(data.created_at) : undefined
@@ -113,6 +118,7 @@ export class OccurrenceReport {
             external_link: this.externalLink,
 
             version: this.version,
+            occurrence_date: DateUtils.formatLocalDate(this.occurrenceDate),
             last_edited_by: this.lastEditedBy,
             last_edited_at: this.lastEditedAt?.toISOString(),
             created_at: this.createdAt?.toISOString(),
