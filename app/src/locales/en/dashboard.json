@@ -24,7 +24,10 @@
         "view_classrooms": "View Classrooms",
         "loading": "LOADING SCHEDULE...",
         "no_classes": "No classes scheduled today.",
-        "no_classes_sub": "Enjoy your time or plan ahead!"
+        "no_classes_sub": "Enjoy your time or plan ahead!",
+        "time_slot": "Time Slot",
+        "class_name": "Class Name",
+        "untitled_class": "Untitled Class"
     },
     "pending_reports": "Pending Reports",
     "missing": "Missing",

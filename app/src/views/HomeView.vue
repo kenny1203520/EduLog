@@ -53,18 +53,15 @@ function navigateToSession(id: string) {
 }
 
 function openReport(enrollmentId: string) {
-    // Navigate to session details with split view open?
-    // Or navigate to report editor directly if we had a route?
-    // Session details is safest.
-    // We need to know the session ID from the pending report logic... 
-    // Wait, the pending report data has occurrenceId, but session ID is needed for route.
-    // Let's verify what `getPendingReports` returns. 
-    // It returns className, etc. but we didn't include sessionId in the push.
-    // Let's assume we can get it from the enrollment...? No.
-    // We should add sessionId to getPendingReports result.
-
-    // For now, let's just go to reports list
     router.push({ name: 'lesson-reports', params: { enrollmentId } })
+}
+
+function formatDate(date: Date) {
+    return date.toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
+function formatWeekday(date: Date) {
+    return date.toLocaleDateString('zh-TW', { weekday: 'long' })
 }
 </script>
 
@@ -109,7 +106,8 @@ function openReport(enrollmentId: string) {
                 </h3>
                 <span class="text-sm font-bold text-gray-400">{{ $t('dashboard.missing_count', {
                     count:
-                    pendingReports.length }) }}</span>
+                        pendingReports.length
+                }) }}</span>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -218,42 +216,95 @@ function openReport(enrollmentId: string) {
                 <p class="text-gray-400 font-bold italic tracking-widest">{{ $t('dashboard.schedule.loading') }}</p>
             </div>
 
-            <div v-else-if="todayOccurrences.length > 0" class="divide-y divide-gray-50">
-                <div v-for="occ in todayOccurrences" :key="occ.id" @click="navigateToSession(occ.classSessionId)"
-                    class="py-8 flex items-center justify-between group cursor-pointer hover:px-4 transition-all">
-                    <div class="flex items-center gap-8">
-                        <div class="w-2 h-20 bg-emerald-500 rounded-full group-hover:scale-y-110 transition-transform">
-                        </div>
-                        <div>
-                            <div class="flex items-center gap-3 mb-2"
-                                v-if="occ.effectiveStartTime && occ.effectiveEndTime">
-                                <span
-                                    class="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-widest">
-                                    {{ occ.effectiveStartTime.slice(0, 5) }} - {{ occ.effectiveEndTime.slice(0, 5) }}
-                                </span>
-                                <span v-if="occ.classroomName"
-                                    class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                    • {{ occ.classroomName }}
-                                </span>
+            <div v-for="occ in todayOccurrences" :key="occ.id" @click="navigateToSession(occ.classSessionId)"
+                class="relative bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm hover:shadow-xl transition-all group cursor-pointer overflow-hidden">
+                <!-- Classroom Color Accent Bar -->
+                <div class="absolute top-0 left-0 w-2 h-full transition-all group-hover:w-3"
+                    :style="{ backgroundColor: occ.classroomColor || '#10b981' }"></div>
+
+                <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+                    <div class="flex flex-col md:flex-row md:items-center gap-8 flex-1">
+                        <!-- Time & Date Column -->
+                        <div class="flex flex-col shrink-0 min-w-[180px]">
+                            <div class="flex items-center gap-2 mb-1 text-emerald-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span class="text-xs font-black uppercase tracking-widest">{{
+                                    $t('dashboard.schedule.time_slot') }}</span>
                             </div>
-                            <h4
-                                class="text-2xl font-black text-gray-900 group-hover:text-emerald-700 transition-colors">
-                                {{ occ.displayString }}</h4>
+                            <p class="text-2xl font-black text-gray-900 leading-tight">
+                                {{ occ.effectiveStartTime?.slice(0, 5) }} - {{ occ.effectiveEndTime?.slice(0, 5) }}
+                            </p>
+                            <div class="flex items-center gap-2 mt-2 text-gray-400">
+                                <span class="text-sm font-bold">{{ formatDate(occ.occurrenceDate) }}</span>
+                                <span class="text-xs font-black px-2 py-0.5 bg-gray-50 rounded-lg text-gray-500">{{
+                                    formatWeekday(occ.occurrenceDate) }}</span>
+                            </div>
+                        </div>
+
+                        <!-- Divider -->
+                        <div class="hidden md:block w-px h-12 bg-gray-100"></div>
+
+                        <!-- Class & Classroom Column -->
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1 text-blue-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                                </svg>
+                                <span class="text-xs font-black uppercase tracking-widest">{{
+                                    $t('dashboard.schedule.class_name') }}</span>
+                            </div>
+                            <h4 class="text-2xl font-black text-gray-900 transition-colors mb-2">
+                                {{ occ.sessionName || $t('dashboard.schedule.untitled_class') }}
+                            </h4>
+                            <div class="flex items-center gap-3">
+                                <div v-if="occ.classroomName"
+                                    class="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-700 rounded-xl">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    </svg>
+                                    <span class="text-xs font-black">{{ occ.classroomName }}</span>
+                                </div>
+                                <span class="text-xs font-bold text-gray-400 italic">#{{ occ.id?.slice(0, 8) }}</span>
+                            </div>
                         </div>
                     </div>
-                    <div class="flex items-center gap-4 group-hover:translate-x-2 transition-transform">
+
+                    <!-- Status & Action Column -->
+                    <div
+                        class="flex items-center justify-between lg:justify-end gap-6 border-t lg:border-t-0 pt-6 lg:pt-0 border-gray-50">
                         <div class="text-right">
-                            <p class="text-xs font-black text-gray-400 uppercase tracking-widest">{{ occ.status }}</p>
+                            <span :class="[
+                                'px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest shadow-sm',
+                                occ.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
+                                    occ.status === 'cancelled' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
+                            ]">
+                                {{ $t(`common.status.${occ.status}`) || occ.status }}
+                            </span>
                         </div>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-emerald-600" fill="none"
-                            viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
-                        </svg>
+                        <div
+                            class="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-300 group-hover:bg-emerald-600 group-hover:text-white transition-all shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                                    d="M9 5l7 7-7 7" />
+                            </svg>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div v-else class="text-center py-20 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
+            <div v-if="todayOccurrences.length === 0"
+                class="text-center py-20 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
                 <div
                     class="w-16 h-16 bg-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-gray-100">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-300" fill="none"
