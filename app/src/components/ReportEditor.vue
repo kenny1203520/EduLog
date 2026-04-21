@@ -1068,16 +1068,20 @@ function handleInput() {
 
 
 function saveNow() {
-    if (props.reportId && canSave.value) {
-        autoSaveNow(localContent.value)
+    if (!props.reportId || !canSave.value) {
+        return Promise.resolve()
     }
+
+    return autoSaveNow(localContent.value)
 }
+
+defineExpose({
+    saveNow
+})
 
 // Warn before leaving with unsaved changes
 onBeforeUnmount(() => {
-    if (hasUnsavedChanges.value) {
-        saveNow()
-    }
+    void saveNow()
 })
 </script>
 

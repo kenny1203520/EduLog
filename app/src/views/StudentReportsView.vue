@@ -376,7 +376,7 @@
                     </div>
 
                     <!-- Report Editor -->
-                    <ReportEditor :key="selectedReport.id" :report-id="selectedReport.id"
+                    <ReportEditor ref="reportEditorRef" :key="selectedReport.id" :report-id="selectedReport.id"
                         :initial-version="selectedReport.version" :loading="reportLoading" :show-manual-save="true"
                         :enrollment-id="enrollmentInfo?.id" :class-occurrence-id="selectedOccurrence.id"
                         :title="$t('report.report_for_date', { date: formatOccurrenceDateTime(selectedOccurrence) })"
@@ -456,6 +456,10 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
 
+type ReportEditorExpose = {
+    saveNow: () => Promise<void>
+}
+
 const route = useRoute()
 const router = useRouter()
 const { t, locale } = useI18n()
@@ -466,6 +470,7 @@ const loading = ref(true)
 const occurrences = ref<ClassOccurrence[]>([])
 const selectedOccurrence = ref<ClassOccurrence | null>(null)
 const selectedReport = ref<OccurrenceReport | null>(null)
+const reportEditorRef = ref<ReportEditorExpose | null>(null)
 const reportLoading = ref(false)
 const showConflictModal = ref(false)
 const conflictServerVersion = ref(0)
@@ -1025,6 +1030,8 @@ async function loadOccurrences() {
 }
 
 async function selectOccurrence(occurrence: ClassOccurrence) {
+    await reportEditorRef.value?.saveNow()
+
     // Cleanup previous subscription
     if (reportSubscription) {
         supabase.removeChannel(reportSubscription)

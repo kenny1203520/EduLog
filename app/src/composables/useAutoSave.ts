@@ -52,6 +52,7 @@ export function useAutoSave(options: AutoSaveOptions) {
     
     // Debounce timer
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    let activeSavePromise: Promise<void> | null = null
 
     /**
      * Clears the existing debounce timer
@@ -68,7 +69,16 @@ export function useAutoSave(options: AutoSaveOptions) {
      */
     async function saveNow(content: string): Promise<void> {
         clearTimer()
-        
+
+        if (activeSavePromise) {
+            await activeSavePromise
+            return
+        }
+
+        if (!hasUnsavedChanges.value) {
+            return
+        }
+
         if (isSaving.value) {
             console.log('Save already in progress, skipping')
             return
@@ -77,41 +87,46 @@ export function useAutoSave(options: AutoSaveOptions) {
         isSaving.value = true
         saveError.value = null
 
-        try {
-            const result = await onSave(content)
+        activeSavePromise = (async () => {
+            try {
+                const result = await onSave(content)
 
-            if (result.conflict) {
-                // Conflict detected
-                hasUnsavedChanges.value = true
-                if (onConflict) {
-                    onConflict(result.serverReport || null)
+                if (result.conflict) {
+                    // Conflict detected
+                    hasUnsavedChanges.value = true
+                    if (onConflict) {
+                        onConflict(result.serverReport || null)
+                    }
+                } else if (result.success) {
+                    // Success
+                    lastSaved.value = new Date()
+                    hasUnsavedChanges.value = false
+                    if (onSuccess && result.newVersion) {
+                        onSuccess(result.newVersion)
+                    }
+                } else {
+                    // Error
+                    const errorMsg = 'Failed to save'
+                    saveError.value = errorMsg
+                    hasUnsavedChanges.value = true
+                    if (onError) {
+                        onError(errorMsg)
+                    }
                 }
-            } else if (result.success) {
-                // Success
-                lastSaved.value = new Date()
-                hasUnsavedChanges.value = false
-                if (onSuccess && result.newVersion) {
-                    onSuccess(result.newVersion)
-                }
-            } else {
-                // Error
-                const errorMsg = 'Failed to save'
+            } catch (error: any) {
+                const errorMsg = error.message || 'Unknown error during save'
                 saveError.value = errorMsg
                 hasUnsavedChanges.value = true
                 if (onError) {
                     onError(errorMsg)
                 }
+            } finally {
+                isSaving.value = false
+                activeSavePromise = null
             }
-        } catch (error: any) {
-            const errorMsg = error.message || 'Unknown error during save'
-            saveError.value = errorMsg
-            hasUnsavedChanges.value = true
-            if (onError) {
-                onError(errorMsg)
-            }
-        } finally {
-            isSaving.value = false
-        }
+        })()
+
+        await activeSavePromise
     }
 
     /**

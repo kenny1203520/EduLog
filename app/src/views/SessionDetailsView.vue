@@ -18,6 +18,10 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
+type ReportEditorExpose = {
+    saveNow: () => Promise<void>
+}
+
 const { t } = useI18n()
 const toast = useToast()
 
@@ -37,6 +41,7 @@ const isQuickAttendanceExpanded = ref(false)
 const showSplitView = ref(false)
 const selectedEnrollmentId = ref<string | null>(null)
 const isRefreshing = ref(false)
+const quickReportEditorRef = ref<ReportEditorExpose | null>(null)
 
 // Conflict Resolution State
 const showConflictModal = ref(false)
@@ -617,6 +622,8 @@ async function toggleClassStatus(event: any) {
 }
 
 async function toggleSplitView(enrollmentId: string) {
+    await quickReportEditorRef.value?.saveNow()
+
     if (selectedEnrollmentId.value === enrollmentId && showSplitView.value) {
         showSplitView.value = false
         selectedEnrollmentId.value = null
@@ -645,6 +652,12 @@ async function toggleSplitView(enrollmentId: string) {
                 })
         }
     }
+}
+
+async function closeSplitView() {
+    await quickReportEditorRef.value?.saveNow()
+    showSplitView.value = false
+    selectedEnrollmentId.value = null
 }
 
 function handleEditorUpdate(content: string, enrollmentId: string) {
@@ -780,7 +793,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             </button>
 
             <!-- Toggle Split View Action (Global or just keeps context context) -->
-            <button v-if="showSplitView" @click="showSplitView = false"
+            <button v-if="showSplitView" @click="closeSplitView"
                 class="px-4 py-2 bg-gray-100 text-gray-600 rounded-xl hover:bg-gray-200 transition font-bold text-sm">
                 {{ $t('common.close_split_view') }}
             </button>
@@ -1432,7 +1445,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                         </button>
                     </div>
 
-                    <ReportEditor v-if="reportMap.get(selectedEnrollmentId)" :key="selectedEnrollmentId"
+                    <ReportEditor ref="quickReportEditorRef" v-if="reportMap.get(selectedEnrollmentId)" :key="selectedEnrollmentId"
                         :report-id="reportMap.get(selectedEnrollmentId)?.id"
                         :initial-version="reportMap.get(selectedEnrollmentId)?.version"
                         :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
