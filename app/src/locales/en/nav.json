@@ -1,0 +1,29 @@
+{
+    "dashboard": "Dashboard",
+    "courses": "Courses",
+    "classrooms": "Classrooms",
+    "holidays": "Holidays",
+    "students": "Students",
+    "historical_reports": "Reports Overview",
+    "student_profile": "Student Profile",
+    "logout": "Logout",
+    "login": "Login",
+    "home": "Home",
+    "features": "Features",
+    "get_started": "Get Started",
+    "incomplete_reports": "Incomplete Reports",
+    "report_editor": "Report Editor",
+    "session_details": "Session Details",
+    "subtitle": "Tutor Report System",
+    "collapse": "Collapse Sidebar",
+    "expand": "Expand Menu",
+    "description": {
+        "dashboard": "Manage your tutor reports and teaching progress with ease on EduLog.",
+        "students": "Complete student information and learning history management.",
+        "courses": "Easily schedule courses and track every student's learning path.",
+        "classrooms": "View and manage teaching progress across all classrooms.",
+        "reports": "Edit and submit professional teaching reports for parents.",
+        "holidays": "Manage class suspensions and holiday schedules.",
+        "incomplete": "Track and finish pending reports to ensure seamless teaching."
+    }
+}
