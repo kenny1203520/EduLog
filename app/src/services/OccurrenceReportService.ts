@@ -541,6 +541,29 @@ export class OccurrenceReportService {
     }
 
     /**
+     * Gets all reports for an enrollment.
+     * Useful for progress summaries that need the latest and highest learning records.
+     */
+    static async getAllReportsByEnrollment(enrollmentId: string): Promise<OccurrenceReport[]> {
+        const pageSize = 100
+        let page = 1
+        const allReports: OccurrenceReport[] = []
+
+        while (true) {
+            const { data, count } = await this.getReportsByEnrollment(enrollmentId, page, pageSize)
+            allReports.push(...data)
+
+            if (data.length < pageSize || allReports.length >= (count || 0)) {
+                break
+            }
+
+            page += 1
+        }
+
+        return allReports
+    }
+
+    /**
      * Gets reports for specific occurrences
      * Useful for showing all student reports for a class
      */

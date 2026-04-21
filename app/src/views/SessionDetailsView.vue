@@ -5,7 +5,9 @@ import { CourseService } from '@/services/CourseService'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import type { Enrollment } from '@/models/Enrollment'
+import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
+import type { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 
 import ReportEditor from '@/components/ReportEditor.vue'
@@ -47,7 +49,196 @@ const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
 const session = ref<any>(null)
 const enrollments = ref<Enrollment[]>([])
 const courseLessons = ref<any[]>([])
+const courseLessonsByCourseId = ref<Record<string, Lesson[]>>({})
+const studentProgressSummaries = ref<Record<string, StudentProgressSummary>>({})
 const loading = ref(true)
+
+type ProgressTone = 'completed' | 'incomplete' | 'empty'
+
+interface StudentProgressSummary {
+    currentCourse: string
+    highestProgressTitle: string
+    highestProgressStatus: string
+    highestProgressTone: ProgressTone
+    latestProgressTitle: string
+    latestProgressStatus: string
+    latestProgressTone: ProgressTone
+}
+
+interface TodayCourseSummary {
+    title: string
+    chapterProgress: string
+    completionStatus: string
+    tone: ProgressTone
+    hasRecord: boolean
+}
+
+function getDefaultProgressSummary(): StudentProgressSummary {
+    return {
+        currentCourse: t('classroom.progress_no_record'),
+        highestProgressTitle: t('classroom.progress_no_record'),
+        highestProgressStatus: t('classroom.progress_no_record'),
+        highestProgressTone: 'empty',
+        latestProgressTitle: t('classroom.progress_no_record'),
+        latestProgressStatus: t('classroom.progress_no_record'),
+        latestProgressTone: 'empty'
+    }
+}
+
+function getLessonsForCourse(courseId: string): Promise<Lesson[]> {
+    const cachedLessons = courseLessonsByCourseId.value[courseId]
+    if (cachedLessons) {
+        return Promise.resolve(cachedLessons)
+    }
+
+    return CourseService.getLessonsByCourse(courseId).then(lessons => {
+        courseLessonsByCourseId.value = {
+            ...courseLessonsByCourseId.value,
+            [courseId]: lessons
+        }
+        return lessons
+    })
+}
+
+function getLessonTitle(lessons: Lesson[], sequence?: number, fallbackLessonId?: string): string {
+    if (fallbackLessonId) {
+        const byId = lessons.find(lesson => lesson.id === fallbackLessonId)
+        if (byId) {
+            return byId.title
+        }
+    }
+
+    if (sequence === undefined || sequence === null) {
+        return t('classroom.progress_no_record')
+    }
+
+    const bySequence = lessons.find(lesson => lesson.sequence === sequence)
+    if (bySequence) {
+        return bySequence.title
+    }
+
+    return `${t('report.lesson_label')} ${sequence}`
+}
+
+function formatLessonHeading(sequence: number | undefined, title: string): string {
+    if (sequence === undefined || sequence === null) {
+        return title
+    }
+
+    return `L${sequence} ${title}`
+}
+
+function formatProgressStatus(report?: OccurrenceReport | null): string {
+    if (!report) {
+        return t('classroom.progress_no_record')
+    }
+
+    return report.isCompleted ? t('classroom.progress_completed') : t('classroom.progress_incomplete')
+}
+
+function getProgressTone(report?: OccurrenceReport | null): ProgressTone {
+    if (!report) {
+        return 'empty'
+    }
+
+    return report.isCompleted ? 'completed' : 'incomplete'
+}
+
+function formatProgressRange(report?: OccurrenceReport | null): string {
+    if (!report) {
+        return t('classroom.progress_no_record')
+    }
+
+    const range = report.progressLetter ? report.progressLetter : ''
+    return range ? `${range} · ${formatProgressStatus(report)}` : formatProgressStatus(report)
+}
+
+function buildStudentProgressSummary(enrollment: Enrollment, reports: OccurrenceReport[], lessons: Lesson[]): StudentProgressSummary {
+    const currentCourse = enrollment.displayName || enrollment.courseDisplayName || [enrollment.courseSubject, enrollment.courseStage].filter(Boolean).join(' ')
+    const highestLessonNumber = enrollment.lessonNumber
+    const highestLesson = getLessonTitle(lessons, highestLessonNumber)
+    const highestLessonId = lessons.find(lesson => lesson.sequence === highestLessonNumber)?.id
+    const highestReport = highestLessonId ? reports.find(report => report.lessonId === highestLessonId) : undefined
+    const latestReport = reports[0]
+    const latestLesson = latestReport?.lessonId ? lessons.find(lesson => lesson.id === latestReport.lessonId) : undefined
+
+    return {
+        currentCourse: currentCourse || t('classroom.progress_no_record'),
+        highestProgressTitle: formatLessonHeading(highestLessonNumber, highestLesson),
+        highestProgressStatus: formatProgressRange(highestReport),
+        highestProgressTone: getProgressTone(highestReport),
+        latestProgressTitle: formatLessonHeading(latestLesson?.sequence, getLessonTitle(lessons, undefined, latestReport?.lessonId)),
+        latestProgressStatus: formatProgressRange(latestReport),
+        latestProgressTone: getProgressTone(latestReport)
+    }
+}
+
+function getProgressToneClasses(tone: ProgressTone): string {
+    switch (tone) {
+        case 'completed':
+            return 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        case 'incomplete':
+            return 'bg-rose-50 text-rose-700 border-rose-200 ring-1 ring-rose-100'
+        default:
+            return 'bg-slate-50 text-slate-500 border-slate-200'
+    }
+}
+
+function getLessonsFromEnrollment(enrollment: Enrollment): Lesson[] {
+    return courseLessonsByCourseId.value[enrollment.courseId] || []
+}
+
+function getTodayCourseSummary(enrollment: Enrollment): TodayCourseSummary {
+    const report = reportMap.value.get(enrollment.id!) as OccurrenceReport | null | undefined
+    if (!report) {
+        return {
+            title: t('classroom.no_today_course_record'),
+            chapterProgress: t('classroom.progress_no_record'),
+            completionStatus: t('classroom.progress_no_record'),
+            tone: 'empty',
+            hasRecord: false
+        }
+    }
+
+    const lessons = getLessonsFromEnrollment(enrollment)
+    const lesson = report.lessonId ? lessons.find(item => item.id === report.lessonId) : undefined
+    const lessonTitle = lesson
+        ? formatLessonHeading(lesson.sequence, lesson.title)
+        : t('classroom.progress_no_record')
+
+    return {
+        title: lessonTitle,
+        chapterProgress: report.progressLetter || t('classroom.progress_no_record'),
+        completionStatus: formatProgressStatus(report),
+        tone: getProgressTone(report),
+        hasRecord: true
+    }
+}
+
+async function loadStudentProgressSummaries(enrollmentList: Enrollment[]) {
+    const uniqueCourseIds = [...new Set(enrollmentList.map(enrollment => enrollment.courseId).filter(Boolean))]
+    await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
+
+    const summaryEntries = await Promise.all(enrollmentList.map(async enrollment => {
+        if (!enrollment.id) {
+            return [enrollment.id, getDefaultProgressSummary()] as const
+        }
+
+        const lessons = await getLessonsForCourse(enrollment.courseId)
+        const reports = await OccurrenceReportService.getAllReportsByEnrollment(enrollment.id)
+        return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons)] as const
+    }))
+
+    studentProgressSummaries.value = Object.fromEntries(summaryEntries.filter(([id]) => !!id)) as Record<string, StudentProgressSummary>
+}
+
+function getStudentProgressSummary(enrollmentId?: string): StudentProgressSummary {
+    if (!enrollmentId) {
+        return getDefaultProgressSummary()
+    }
+
+    return studentProgressSummaries.value[enrollmentId] || getDefaultProgressSummary()
+}
 
 const displayedOccurrenceDate = computed(() => {
     if (!todayOccurrence.value?.occurrenceDate) {
@@ -210,10 +401,11 @@ async function loadData() {
         const { data: allEnrollments } = await CourseService.getEnrollmentsBySession(sessionId)
         enrollments.value = allEnrollments
 
-        // 2.5 Load lessons for this course (needed for editor)
+        // 2.5 Load lessons for each course and build student progress summaries
+        await loadStudentProgressSummaries(allEnrollments)
+
         if (allEnrollments.length > 0 && allEnrollments[0]?.courseId) {
-            const lessons = await CourseService.getLessonsByCourse(allEnrollments[0].courseId)
-            courseLessons.value = lessons
+            courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
         }
 
         // 3. Find or Create Today's Occurrence
@@ -424,8 +616,6 @@ async function toggleClassStatus(event: any) {
     }
 }
 
-const lessonsCache = new Map<string, any[]>()
-
 async function toggleSplitView(enrollmentId: string) {
     if (selectedEnrollmentId.value === enrollmentId && showSplitView.value) {
         showSplitView.value = false
@@ -434,18 +624,7 @@ async function toggleSplitView(enrollmentId: string) {
         // finding the enrollment to get the courseId
         const enrollment = enrollments.value.find(e => e.id === enrollmentId)
         if (enrollment?.courseId) {
-            // Check cache first
-            if (lessonsCache.has(enrollment.courseId)) {
-                courseLessons.value = lessonsCache.get(enrollment.courseId)!
-            } else {
-                try {
-                    const lessons = await CourseService.getLessonsByCourse(enrollment.courseId)
-                    lessonsCache.set(enrollment.courseId, lessons)
-                    courseLessons.value = lessons
-                } catch (e) {
-                    console.error('Failed to load lessons for course', enrollment.courseId, e)
-                }
-            }
+            courseLessons.value = await getLessonsForCourse(enrollment.courseId)
         }
 
         selectedEnrollmentId.value = enrollmentId
@@ -619,11 +798,12 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             <span class="text-gray-500 font-black italic tracking-widest">{{ $t('student.loading') }}</span>
         </div>
 
-        <div v-else class="grid gap-6 transition-all duration-500 ease-in-out"
-            :class="showSplitView ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'">
+        <div v-else class="w-full overflow-x-auto">
+            <div class="grid gap-6 transition-all duration-500 ease-in-out min-w-0"
+                :class="showSplitView ? 'grid-cols-1 md:grid-cols-2 md:min-w-[1220px]' : 'grid-cols-1'">
 
-            <!-- LEFT COLUMN: Student List & Stats -->
-            <div class="space-y-6" :class="{ 'hidden lg:block': showSplitView }">
+                <!-- LEFT COLUMN: Student List & Stats -->
+                <div class="space-y-6 min-w-0" :class="{ 'hidden md:block md:min-w-[620px]': showSplitView }">
                 <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
                     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                         <div>
@@ -632,17 +812,6 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                         </div>
 
                         <div class="flex items-center gap-2 flex-wrap md:justify-end">
-                            <button @click="toggleCalendarPanel"
-                                class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                                <span>{{ isCalendarExpanded ? $t('classroom.hide_calendar') : $t('classroom.show_calendar') }}</span>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
-                                    :class="isCalendarExpanded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-
                             <button @click="moveWeek(-1)"
                                 class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
                                 {{ $t('classroom.previous_week') }}
@@ -654,6 +823,17 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             <button @click="moveWeek(1)"
                                 class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
                                 {{ $t('classroom.next_week') }}
+                            </button>
+
+                            <button @click="toggleCalendarPanel"
+                                class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                <span>{{ isCalendarExpanded ? $t('classroom.hide_calendar') : $t('classroom.show_calendar') }}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+                                    :class="isCalendarExpanded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
                             </button>
                         </div>
                     </div>
@@ -859,31 +1039,83 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                 <div class="grid grid-cols-1 gap-4 md:hidden">
                     <div v-for="e in visibleEnrollments" :key="e.id"
                         class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                        <!-- Header: Info & Status -->
-                        <div class="flex items-start justify-between">
-                            <div class="flex items-center gap-3">
-                                <div
-                                    class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xl shrink-0">
-                                    {{ e.studentName?.charAt(0) }}
-                                </div>
-                                <div>
-                                    <div class="font-black text-gray-900 text-lg leading-tight">{{ e.studentName }}
+                        <div class="space-y-3">
+                            <!-- A. Header -->
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div
+                                        class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xl shrink-0">
+                                        {{ e.studentName?.charAt(0) }}
                                     </div>
-                                    <div class="text-xs font-bold text-gray-400 mt-0.5">{{ e.studentEmail ||
-                                        $t('classroom.no_email') }}</div>
+                                    <div class="min-w-0">
+                                        <div class="font-black text-gray-900 text-lg leading-tight truncate">{{ e.studentName }}</div>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-col items-end gap-2 shrink-0">
+                                    <span v-if="(e as any).isGuest"
+                                        class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100">
+                                        {{ $t('common.rescheduled') }}
+                                    </span>
+                                    <span
+                                        class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
+                                        :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
+                                        {{ $t('student.internal_courses.status_' + e.status) }}
+                                    </span>
                                 </div>
                             </div>
-                            <!-- Status Badges (Stacked) -->
-                            <div class="flex flex-col items-end gap-2 shrink-0">
-                                <span v-if="(e as any).isGuest"
-                                    class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100">
-                                    {{ $t('common.rescheduled') }}
-                                </span>
-                                <span
-                                    class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
-                                    :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
-                                    {{ $t('student.internal_courses.status_' + e.status) }}
-                                </span>
+
+                            <!-- B. Current Course -->
+                            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                    {{ $t('classroom.current_course') }}</div>
+                                <div class="mt-1 text-sm font-bold text-slate-900 leading-snug break-words">
+                                    {{ getStudentProgressSummary(e.id).currentCourse }}</div>
+                            </div>
+
+                            <!-- C. Today Course Summary -->
+                            <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
+                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                    {{ $t('classroom.today_course_summary') }}</div>
+                                <div class="text-[15px] font-black text-slate-900 break-words">
+                                    {{ getTodayCourseSummary(e).title }}</div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-[11px] font-bold text-slate-500">{{ $t('classroom.chapter_progress') }}</span>
+                                    <span class="text-xs font-black text-slate-800">{{ getTodayCourseSummary(e).chapterProgress }}</span>
+                                </div>
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="text-[11px] font-bold text-slate-500">{{ $t('classroom.completion_status') }}</span>
+                                    <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-black tracking-wide"
+                                        :class="getProgressToneClasses(getTodayCourseSummary(e).tone)">
+                                        {{ getTodayCourseSummary(e).completionStatus }}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- D. Learning Snapshot -->
+                            <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
+                                <div class="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                    {{ $t('classroom.learning_snapshot') }}</div>
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="text-[11px] font-bold text-slate-500">{{ $t('classroom.highest_progress') }}</div>
+                                        <div class="text-xs font-black text-slate-900 break-words">{{ getStudentProgressSummary(e.id).highestProgressTitle }}</div>
+                                    </div>
+                                    <span class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wide"
+                                        :class="getProgressToneClasses(getStudentProgressSummary(e.id).highestProgressTone)">
+                                        {{ getStudentProgressSummary(e.id).highestProgressStatus }}
+                                    </span>
+                                </div>
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="text-[11px] font-bold text-slate-500">{{ $t('classroom.latest_progress') }}</div>
+                                        <div class="text-xs font-black text-slate-900 break-words">{{ getStudentProgressSummary(e.id).latestProgressTitle }}</div>
+                                    </div>
+                                    <span class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wide"
+                                        :class="getProgressToneClasses(getStudentProgressSummary(e.id).latestProgressTone)">
+                                        {{ getStudentProgressSummary(e.id).latestProgressStatus }}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
@@ -935,36 +1167,38 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                         </div>
 
                         <!-- Actions Grid -->
-                        <div class="grid grid-cols-3 gap-3 pt-2">
+                        <div class="space-y-2 pt-2">
+                            <div class="grid grid-cols-2 gap-3">
+                                <button @click.stop="navigateToReports(e.id!)"
+                                    class="flex items-center justify-center gap-2 p-3 rounded-2xl bg-emerald-600 text-white border border-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-100">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                        stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    </svg>
+                                    <span class="text-xs font-black tracking-wide">{{ $t('common.reports') }}</span>
+                                </button>
+
+                                <button @click.stop="toggleSplitView(e.id!)"
+                                    class="flex items-center justify-center gap-2 p-3 rounded-2xl border active:scale-95 transition-all"
+                                    :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white border-blue-700 shadow-blue-200 shadow-lg' : 'bg-blue-50 text-blue-700 border-blue-100'">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                        stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                    <span class="text-xs font-black tracking-wide">{{ $t('common.edit') }}</span>
+                                </button>
+                            </div>
+
                             <button @click.stop="navigateToProfile(e.studentId)"
-                                class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl bg-gray-50 text-gray-400 border border-gray-100 active:scale-95 transition-all">
+                                class="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 active:scale-95 transition-all">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                     stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                 </svg>
-                                <span class="text-[10px] font-bold">{{ $t('common.profile') }}</span>
-                            </button>
-
-                            <button @click.stop="navigateToReports(e.id!)"
-                                class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 active:scale-95 transition-all">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                <span class="text-[10px] font-bold">{{ $t('common.reports') }}</span>
-                            </button>
-
-                            <button @click.stop="toggleSplitView(e.id!)"
-                                class="flex flex-col items-center justify-center gap-1 p-3 rounded-2xl border active:scale-95 transition-all"
-                                :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-blue-600 border-blue-100 bg-blue-50'">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                                <span class="text-[10px] font-bold">{{ $t('common.edit') }}</span>
+                                <span class="text-xs font-bold">{{ $t('common.profile') }}</span>
                             </button>
                         </div>
                     </div>
@@ -977,18 +1211,20 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                 </div>
 
                 <!-- Desktop Table List (Hidden on Mobile) -->
-                <div class="hidden md:block bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-                    <table class="w-full text-left border-collapse">
+                <div class="hidden md:block bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-x-auto">
+                    <table class="w-full min-w-[1020px] text-left border-collapse">
                         <thead>
                             <tr class="bg-gray-50/50">
-                                <th class="px-4 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center"
+                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-center"
                                     v-if="todayOccurrence">{{ $t('attendance.status') }}</th>
-                                <th class="px-4 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.student_name') }}</th>
-                                <th class="px-4 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
                                     $t('classroom.enrollment_status') }}</th>
+                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                                    $t('classroom.today_course_summary') }}</th>
                                 <th
-                                    class="px-4 py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">
+                                    class="px-3 lg:px-4 py-4 lg:py-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right w-[96px] xl:w-[176px]">
                                     {{ $t('classroom.actions') }}</th>
                             </tr>
                         </thead>
@@ -996,7 +1232,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             <tr v-for="e in visibleEnrollments" :key="e.id"
                                 class="hover:bg-emerald-50/20 transition-colors group">
                                 <!-- Attendance Column -->
-                                <td class="px-4 py-6 text-center" v-if="todayOccurrence">
+                                <td class="px-3 lg:px-4 py-4 lg:py-6 text-center" v-if="todayOccurrence">
                                     <button type="button" @click="toggleAttendance(e.id!)"
                                         class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center mx-auto"
                                         :class="{
@@ -1033,43 +1269,87 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                     </button>
                                 </td>
 
-                                <td class="px-4 py-6">
-                                    <div class="flex items-center gap-4">
+                                <td class="px-3 lg:px-4 py-4 lg:py-6">
+                                    <div class="flex items-center gap-3 lg:gap-4">
                                         <div
-                                            class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xl">
+                                            class="w-10 lg:w-12 h-10 lg:h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-lg lg:text-xl shrink-0">
                                             {{ e.studentName?.charAt(0) }}
                                         </div>
-                                        <div>
-                                            <div class="font-black text-gray-900 text-lg">{{ e.studentName }}</div>
-                                            <div class="text-xs font-bold text-gray-400">{{ e.studentEmail ||
-                                                $t('classroom.no_email') }}</div>
+                                        <div class="min-w-0">
+                                            <div class="font-black text-gray-900 text-base lg:text-lg">{{ e.studentName }}</div>
+                                            <div class="mt-0.5 lg:mt-1 text-[9px] lg:text-[10px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-gray-400 whitespace-nowrap">
+                                                {{ $t('classroom.current_course') }}</div>
+                                            <div class="mt-0.5 lg:mt-1 text-xs lg:text-sm font-bold text-gray-700 leading-snug break-words">
+                                                {{ getStudentProgressSummary(e.id).currentCourse }}
+                                            </div>
                                         </div>
                                     </div>
                                 </td>
-                                <td class="px-4 py-6">
-                                    <span v-if="(e as any).isGuest"
-                                        class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100 mr-2">
-                                        {{ $t('common.rescheduled') }}
-                                    </span>
-                                    <span
-                                        class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border"
-                                        :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
-                                        {{ $t('student.internal_courses.status_' + e.status) }}
-                                    </span>
+                                <td class="px-3 lg:px-4 py-4 lg:py-6">
+                                    <div class="flex flex-col lg:flex-row gap-2 lg:gap-1">
+                                        <span v-if="(e as any).isGuest"
+                                            class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border bg-purple-50 text-purple-700 border-purple-100 whitespace-nowrap inline-block lg:inline">
+                                            {{ $t('common.rescheduled') }}
+                                        </span>
+                                        <span
+                                            class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border whitespace-nowrap inline-block lg:inline"
+                                            :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
+                                            {{ $t('student.internal_courses.status_' + e.status) }}
+                                        </span>
+                                    </div>
                                 </td>
-                                <td class="px-4 py-6 text-right">
-                                    <div class="flex justify-end gap-2">
-                                        <button @click="navigateToProfile(e.studentId)"
-                                            class="p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"
-                                            :title="$t('classroom.view_profile')">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                            </svg>
-                                        </button>
+
+                                <td class="px-3 lg:px-4 py-4 lg:py-6">
+                                    <div class="rounded-2xl border border-slate-200 bg-white p-2 lg:p-3 space-y-2 lg:space-y-3 min-w-[220px] lg:min-w-[200px]">
+                                        <div class="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
+                                            {{ $t('classroom.today_course_summary') }}</div>
+                                        <div class="text-xs lg:text-sm font-black text-slate-900 break-words">
+                                            {{ getTodayCourseSummary(e).title }}</div>
+                                        <div class="flex items-center justify-between gap-1.5 lg:gap-2">
+                                            <span class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{ $t('classroom.chapter_progress') }}</span>
+                                            <span class="text-[10px] lg:text-xs font-black text-slate-800 shrink-0">{{ getTodayCourseSummary(e).chapterProgress }}</span>
+                                        </div>
+                                        <div class="flex items-center justify-between gap-1.5 lg:gap-2">
+                                            <span class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{ $t('classroom.completion_status') }}</span>
+                                            <span class="inline-flex items-center rounded-full border px-2 lg:px-2.5 py-0.5 lg:py-1 text-[10px] lg:text-[11px] font-black tracking-wide shrink-0"
+                                                :class="getProgressToneClasses(getTodayCourseSummary(e).tone)">
+                                                {{ getTodayCourseSummary(e).completionStatus }}
+                                            </span>
+                                        </div>
+
+                                        <div class="border-t border-slate-100 pt-2 lg:pt-3 space-y-2">
+                                            <div class="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
+                                                {{ $t('classroom.learning_snapshot') }}</div>
+
+                                            <div class="flex items-start justify-between gap-1.5 lg:gap-2">
+                                                <div class="min-w-0">
+                                                    <div class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{ $t('classroom.highest_progress') }}</div>
+                                                    <div class="text-[11px] lg:text-xs font-black text-slate-900 break-words">{{ getStudentProgressSummary(e.id).highestProgressTitle }}</div>
+                                                </div>
+                                                <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 lg:px-2 py-0.5 text-[9px] lg:text-[10px] font-black tracking-wider lg:tracking-wide"
+                                                    :class="getProgressToneClasses(getStudentProgressSummary(e.id).highestProgressTone)">
+                                                    {{ getStudentProgressSummary(e.id).highestProgressStatus }}
+                                                </span>
+                                            </div>
+
+                                            <div class="flex items-start justify-between gap-1.5 lg:gap-2">
+                                                <div class="min-w-0">
+                                                    <div class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{ $t('classroom.latest_progress') }}</div>
+                                                    <div class="text-[11px] lg:text-xs font-black text-slate-900 break-words">{{ getStudentProgressSummary(e.id).latestProgressTitle }}</div>
+                                                </div>
+                                                <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 lg:px-2 py-0.5 text-[9px] lg:text-[10px] font-black tracking-wider lg:tracking-wide"
+                                                    :class="getProgressToneClasses(getStudentProgressSummary(e.id).latestProgressTone)">
+                                                    {{ getStudentProgressSummary(e.id).latestProgressStatus }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <td class="px-3 lg:px-4 py-4 lg:py-6 text-right align-top">
+                                    <div class="flex flex-col xl:flex-row justify-end items-end xl:items-center gap-1.5 lg:gap-2">
                                         <button @click="navigateToReports(e.id!)"
-                                            class="p-3 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-90"
+                                            class="p-2.5 xl:p-3 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-90"
                                             :title="$t('classroom.view_reports')">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                                 viewBox="0 0 24 24" stroke="currentColor">
@@ -1078,7 +1358,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                             </svg>
                                         </button>
                                         <button @click="toggleSplitView(e.id!)"
-                                            class="p-3 rounded-2xl border border-gray-100 shadow-sm transition-all active:scale-90"
+                                            class="p-2.5 xl:p-3 rounded-2xl border border-gray-100 shadow-sm transition-all active:scale-90"
                                             :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-gray-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-100'"
                                             :title="$t('classroom.quick_edit')">
                                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
@@ -1087,12 +1367,21 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                                     d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                             </svg>
                                         </button>
+                                        <button @click="navigateToProfile(e.studentId)"
+                                            class="p-2.5 xl:p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"
+                                            :title="$t('classroom.view_profile')">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
                             <tr v-if="visibleEnrollments.length === 0">
-                                <td colspan="3"
-                                    class="px-8 py-20 text-center font-black italic text-gray-300 tracking-widest">
+                                <td :colspan="todayOccurrence ? 5 : 4"
+                                    class="px-4 lg:px-8 py-12 lg:py-20 text-center font-black italic text-gray-300 tracking-widest text-xs lg:text-base">
                                     {{ $t('classroom.no_students_enrolled') }}
                                 </td>
                             </tr>
@@ -1101,10 +1390,11 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                 </div>
             </div>
 
-            <!-- RIGHT COLUMN: Report Editor -->
-            <div v-if="showSplitView && selectedEnrollmentId" class="animate-in slide-in-from-right-4 duration-500">
-                <div
-                    class="sticky top-6 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 p-6 overflow-hidden">
+                <!-- RIGHT COLUMN: Report Editor -->
+                <div v-if="showSplitView && selectedEnrollmentId"
+                    class="animate-in slide-in-from-right-4 duration-500 min-w-0 md:min-w-[560px]">
+                    <div
+                        class="sticky top-6 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 p-6 overflow-hidden">
                     <div class="flex items-center justify-between mb-6">
                         <div class="flex items-center gap-3">
                             <!-- Mobile Back Button -->
@@ -1172,6 +1462,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                     <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
                         <p class="font-bold">{{ $t('report.no_report_today') }}</p>
                         <p class="text-xs mt-1">{{ $t('report.is_student_active_hint') }}</p>
+                    </div>
                     </div>
                 </div>
             </div>
