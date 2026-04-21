@@ -303,7 +303,7 @@ function formatWeekday(date: Date) {
                 </div>
             </div>
 
-            <div v-if="todayOccurrences.length === 0"
+            <div v-if="todayOccurrences.length === 0&&loading===false"
                 class="text-center py-20 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
                 <div
                     class="w-16 h-16 bg-white rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-gray-100">
