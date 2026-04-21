@@ -173,19 +173,6 @@ async function moveWeek(offset: number) {
     await setCurrentOccurrence(sameDayOccurrence || fallbackOccurrence)
 }
 
-async function goToCurrentWeek() {
-    const today = new Date()
-    weekAnchorDate.value = today
-
-    await loadSessionOccurrences(today)
-
-    const currentSelected = todayOccurrence.value?.occurrenceDate
-        ? findOccurrenceByDate(new Date(todayOccurrence.value.occurrenceDate))
-        : null
-    const fallbackOccurrence = findClosestOccurrence(today)
-    await setCurrentOccurrence(currentSelected || fallbackOccurrence)
-}
-
 async function goToToday() {
     const today = new Date()
     weekAnchorDate.value = today
@@ -660,17 +647,13 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                 class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
                                 {{ $t('classroom.previous_week') }}
                             </button>
-                            <button @click="moveWeek(1)"
-                                class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
-                                {{ $t('classroom.next_week') }}
-                            </button>
-                            <button @click="goToCurrentWeek"
-                                class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-xs font-black uppercase tracking-widest">
-                                {{ $t('classroom.back_to_this_week') }}
-                            </button>
                             <button @click="goToToday"
                                 class="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 hover:bg-emerald-100 transition-all text-xs font-black uppercase tracking-widest">
                                 {{ $t('classroom.back_to_today') }}
+                            </button>
+                            <button @click="moveWeek(1)"
+                                class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
+                                {{ $t('classroom.next_week') }}
                             </button>
                         </div>
                     </div>
