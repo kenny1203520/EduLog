@@ -76,7 +76,8 @@ export const ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS: CopyTemplateVariableDefin
             { value: 'comma', label: 'comma' },
             { value: 'slash', label: 'slash' },
             { value: 'newline', label: 'newline' },
-            { value: 'bullet', label: 'bullet' }
+            { value: 'bullet', label: 'bullet' },
+            { value: 'space', label: 'space' }
         ]
     },
     {
@@ -88,7 +89,8 @@ export const ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS: CopyTemplateVariableDefin
             { value: 'comma', label: 'comma' },
             { value: 'slash', label: 'slash' },
             { value: 'newline', label: 'newline' },
-            { value: 'bullet', label: 'bullet' }
+            { value: 'bullet', label: 'bullet' },
+            { value: 'space', label: 'space' }
         ]
     },
     {
@@ -100,7 +102,8 @@ export const ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS: CopyTemplateVariableDefin
             { value: 'comma', label: 'comma' },
             { value: 'slash', label: 'slash' },
             { value: 'newline', label: 'newline' },
-            { value: 'bullet', label: 'bullet' }
+            { value: 'bullet', label: 'bullet' },
+            { value: 'space', label: 'space' }
         ]
     }
 ]

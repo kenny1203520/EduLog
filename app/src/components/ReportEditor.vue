@@ -29,76 +29,16 @@
                 <span class="hidden sm:inline">{{ $t('report.reference_panel.title') }}</span>
             </button>
 
-            <!-- Templates Dropdown -->
-            <div class="relative">
-                <button @click="showTemplates = !showTemplates"
-                    class="text-sm font-medium text-gray-600 hover:text-emerald-600 flex items-center gap-1 focus:outline-none"
-                    :title="$t('report.editor.templates')">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                    </svg>
-                    <span>{{ $t('report.editor.templates') }}</span>
-                </button>
-
-                <!-- Templates Menu -->
-                <div v-if="showTemplates"
-                    class="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-4">
-                    <h4 class="font-bold text-gray-800 mb-3 text-sm flex justify-between items-center">
-                        {{ $t('report.editor.templates') }}
-                        <button @click="showTemplates = false"
-                            class="text-gray-400 hover:text-gray-600">&times;</button>
-                    </h4>
-
-                    <!-- Save New -->
-                    <div class="flex flex-col gap-2 mb-4">
-                        <div class="flex gap-2">
-                            <input v-model="newTemplateName" type="text"
-                                :placeholder="$t('report.editor.template_name_placeholder')"
-                                class="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500"
-                                @keyup.enter="saveTemplate" />
-                            <button @click="saveTemplate"
-                                :disabled="!newTemplateName.trim() || !localContent || isSavingTemplate"
-                                class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap flex items-center gap-1">
-                                <svg v-if="isSavingTemplate" class="animate-spin h-3 w-3 text-white"
-                                    viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                        stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor"
-                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                                    </path>
-                                </svg>
-                                {{ $t('report.editor.save_to_template') }}
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- List -->
-                    <div class="max-h-60 overflow-y-auto space-y-2 mt-4 pt-4 border-t border-gray-100">
-                        <div v-if="savedTemplates.length === 0" class="text-xs text-gray-500 text-center py-2">
-                            {{ $t('report.editor.no_templates') }}
-                        </div>
-                        <div v-for="t in savedTemplates" :key="t.id"
-                            class="group flex items-center justify-between p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200 transition-colors">
-                            <button @click="applyTemplate(t)"
-                                class="text-sm text-gray-700 hover:text-emerald-700 text-left truncate flex-1"
-                                :title="t.content">
-                                {{ t.name }}
-                            </button>
-                            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button @click.stop="deleteTemplate(t.id)"
-                                    class="text-gray-400 hover:text-red-500 p-1 rounded" :title="$t('common.delete')">
-                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <button @click="openReportTemplateManagerModal"
+                class="text-sm font-medium text-gray-600 hover:text-emerald-600 flex items-center gap-1 focus:outline-none"
+                :title="$t('report.editor.templates')">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                </svg>
+                <span>{{ $t('report.editor.templates') }}</span>
+            </button>
 
             <!-- Save Status Indicator -->
             <div class="flex items-center gap-2 text-sm ml-auto">
@@ -489,6 +429,28 @@
             @update:template-text="courseCopyTemplateText = $event"
             @save="saveCourseCopyTemplate"
         >
+            <template #controls>
+                <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+                    <div class="flex flex-col gap-2 md:flex-row md:items-end">
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                                {{ $t('report.editor.copy_course_template_load_from') }}
+                            </label>
+                            <select v-model="selectedCourseTemplateLoadKey"
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option v-for="item in courseTemplateLoadOptions" :key="item.key" :value="item.key">
+                                    {{ item.displayLabel }}
+                                </option>
+                            </select>
+                        </div>
+                        <button @click="loadSelectedCourseTemplate"
+                            class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
+                            :disabled="!selectedCourseTemplateLoadKey">
+                            {{ $t('report.editor.copy_course_template_load_action') }}
+                        </button>
+                    </div>
+                </div>
+            </template>
             <template #variables>
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
                     <div
@@ -536,6 +498,117 @@
                 </div>
             </template>
         </CopyTemplateEditorModal>
+
+        <CopyTemplateEditorModal
+            v-model="showReportTemplateManagerModal"
+            :title="$t('report.editor.template_manager_title')"
+            :hint="$t('report.editor.template_manager_hint')"
+            :variable-title="$t('report.editor.template_manager_fields')"
+            :content-title="$t('report.editor.learning_report_label')"
+            :preview-title="$t('report.editor.template_preview_title')"
+            :preview-hint="$t('report.editor.template_preview_hint')"
+            :preview-empty="$t('report.editor.template_preview_empty')"
+            :template-text="templateDraftContent"
+            :preview-text="reportTemplatePreviewText"
+            :preview-sections="reportTemplatePreviewSections"
+            :variable-count="savedTemplates.length"
+            :is-loading="isLoadingTemplateManager"
+            :loading-text="$t('report.editor.template_manager_loading')"
+            :loading-hint="$t('report.editor.template_manager_loading_hint')"
+            :save-loading="isSavingTemplate"
+            :save-disabled="!templateDraftName.trim()"
+            :cancel-text="$t('common.cancel')"
+            :save-text="$t('report.editor.template_save_action')"
+            :saving-text="$t('report.saving')"
+            @update:template-text="templateDraftContent = $event"
+            @save="saveTemplateDraft"
+        >
+            <template #controls>
+                <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3 space-y-3">
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto] md:items-end">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                                {{ $t('report.editor.template_select_label') }}
+                            </label>
+                            <select v-model="selectedTemplateId"
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                                @change="handleTemplateSelectionChange">
+                                <option value="">{{ $t('report.editor.template_new_option') }}</option>
+                                <option v-for="t in savedTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                            </select>
+                        </div>
+                        <button @click="createNewTemplateDraft"
+                            class="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-100">
+                            {{ $t('report.editor.template_new_action') }}
+                        </button>
+                        <button @click="deleteSelectedTemplate"
+                            :disabled="!selectedTemplateId"
+                            class="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50">
+                            {{ $t('common.delete') }}
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                                {{ $t('report.editor.template_name_label') }}
+                            </label>
+                            <input v-model="templateDraftName" type="text"
+                                :placeholder="$t('report.editor.template_name_placeholder')"
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <button @click="applyTemplateDraftToReport"
+                            class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700">
+                            {{ $t('report.editor.template_apply_to_report') }}
+                        </button>
+                    </div>
+
+                    <div class="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2">
+                        <div class="grid grid-cols-1 gap-2 md:grid-cols-[200px_1fr] md:items-end">
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wide text-purple-900 mb-1">
+                                    {{ $t('report.editor.template_variable_target') }}
+                                </label>
+                                <select v-model="templateVariableTarget"
+                                    class="w-full rounded-xl border border-purple-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                    <option value="contact">{{ $t('report.editor.contact_notes_label') }}</option>
+                                    <option value="class">{{ $t('report.editor.class_notes_label') }}</option>
+                                    <option value="report">{{ $t('report.editor.learning_report_label') }}</option>
+                                </select>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button
+                                    v-for="variable in reportTemplateVariables"
+                                    :key="variable.key"
+                                    @click="insertReportTemplateVariable(variable.key)"
+                                    class="rounded-lg bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 transition hover:bg-purple-200"
+                                    :title="variable.description"
+                                >
+                                    {{ variable.token }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </template>
+
+            <template #variables>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div class="space-y-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                        <label class="text-sm font-bold text-gray-800">{{ $t('report.editor.contact_notes_label') }}</label>
+                        <textarea v-model="templateDraftContactNotes" rows="6"
+                            class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                            :placeholder="$t('report.editor.contact_notes_placeholder')"></textarea>
+                    </div>
+                    <div class="space-y-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+                        <label class="text-sm font-bold text-gray-800">{{ $t('report.editor.class_notes_label') }}</label>
+                        <textarea v-model="templateDraftClassNotes" rows="6"
+                            class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                            :placeholder="$t('report.editor.class_notes_placeholder')"></textarea>
+                    </div>
+                </div>
+            </template>
+        </CopyTemplateEditorModal>
     </div>
 </template>
 
@@ -549,7 +622,7 @@ import RatingInput from '@/components/common/RatingInput.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import { ReportTemplateService } from '@/services/ReportTemplateService'
-import { CopyTemplateService } from '@/services/CopyTemplateService'
+import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/CopyTemplateService'
 import { useToast } from 'vue-toastification'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
@@ -570,13 +643,20 @@ interface Template {
     classNotes?: string
 }
 
+type TemplateVariableTarget = 'contact' | 'class' | 'report'
+
+interface ReportTemplateVariableItem {
+    key: string
+    token: string
+    description: string
+}
+
 // Templates State
-const showTemplates = ref(false)
 const showReferencePanel = ref(false)
 const savedTemplates = ref<Template[]>([])
-const newTemplateName = ref('')
 const justCopiedCourse = ref(false)
 const isSavingTemplate = ref(false)
+const isLoadingTemplateManager = ref(false)
 const showCourseCopyTemplateModal = ref(false)
 const courseCopyTemplateText = ref(SYSTEM_COURSE_TEMPLATE)
 const isLoadingCourseCopyTemplate = ref(false)
@@ -584,6 +664,15 @@ const isSavingCourseCopyTemplate = ref(false)
 const selectedCourseTemplateModes = ref<Record<string, string>>({
     course_primary_name: 'space'
 })
+const courseTemplateLoadOptions = ref<Array<CopyTemplateLoadOption & { displayLabel: string }>>([])
+const selectedCourseTemplateLoadKey = ref('')
+const showReportTemplateManagerModal = ref(false)
+const selectedTemplateId = ref('')
+const templateDraftName = ref('')
+const templateDraftContent = ref('')
+const templateDraftContactNotes = ref('')
+const templateDraftClassNotes = ref('')
+const templateVariableTarget = ref<TemplateVariableTarget>('report')
 const toast = useToast()
 
 // Confirm Modal State
@@ -648,34 +737,97 @@ async function loadTemplates() {
     }
 }
 
-async function saveTemplate() {
-    if (!newTemplateName.value.trim() || !localContent.value.trim() || !authStore.user?.id) return
+const reportTemplateVariables = computed<ReportTemplateVariableItem[]>(() => {
+    const keys = [
+        'classroom_name',
+        'session_name',
+        'session_time',
+        'student_name',
+        'course_name',
+        'lesson',
+        'lesson_name',
+        'progress',
+        'progress_start',
+        'progress_end',
+        'is_completed'
+    ]
 
-    try {
-        isSavingTemplate.value = true
-        const newT = await ReportTemplateService.saveTemplate({
-            name: newTemplateName.value.trim(),
-            content: localContent.value,
-            contact_notes: contactNotes.value,
-            class_notes: classNotes.value,
-            instructor_id: authStore.user.id
-        })
+    return keys.map(key => ({
+        key,
+        token: formatCopyTemplateToken(key),
+        description: t(`report.editor.template_variable_descriptions.${key}`)
+    }))
+})
 
-        savedTemplates.value.push({
-            id: newT.id!,
-            name: newT.name,
-            content: newT.content,
-            contactNotes: newT.contactNotes,
-            classNotes: newT.classNotes
-        })
-        newTemplateName.value = ''
-        toast.success(t('report.editor.template_saved'))
-    } catch (e) {
-        console.error('Failed to save template', e)
-        toast.error('Failed to save template')
-    } finally {
-        isSavingTemplate.value = false
+function buildReportTemplateContext() {
+    const lesson = selectedCoursePreviewLesson.value
+    const studentName = props.initialStudentName
+        || props.student?.studentName
+        || props.student?.name
+        || props.student?.fullName
+        || ''
+    const sessionName = props.initialSessionName || ''
+    const classroomName = props.initialClassroomName || ''
+    const sessionTime = props.initialSessionTime || ''
+    const courseName = [props.courseName, props.courseDisplayName].filter(Boolean).join(' ').trim()
+
+    return {
+        classroom_name: classroomName,
+        session_name: sessionName,
+        session_time: sessionTime,
+        student_name: studentName,
+        course_name: courseName,
+        lesson: lesson?.sequence !== undefined ? String(lesson.sequence) : '',
+        lesson_name: lesson?.title || '',
+        progress: progressLetter.value || '',
+        progress_start: progressStart.value || '',
+        progress_end: progressEnd.value || '',
+        is_completed: isCompleted.value ? t('report.completed') : t('report.incomplete')
     }
+}
+
+function renderReportTemplateText(text: string): string {
+    if (!text.trim()) {
+        return ''
+    }
+    return renderCopyTemplate(text, buildReportTemplateContext()).trim()
+}
+
+const reportTemplatePreviewSections = computed(() => {
+    return [
+        {
+            title: t('report.editor.contact_notes_label'),
+            content: renderReportTemplateText(templateDraftContactNotes.value)
+        },
+        {
+            title: t('report.editor.class_notes_label'),
+            content: renderReportTemplateText(templateDraftClassNotes.value)
+        },
+        {
+            title: t('report.editor.learning_report_label'),
+            content: renderReportTemplateText(templateDraftContent.value)
+        }
+    ]
+})
+
+const reportTemplatePreviewText = computed(() => {
+    return reportTemplatePreviewSections.value
+        .map(section => `[${section.title}]\n${section.content}`)
+        .join('\n\n')
+        .trim()
+})
+
+function insertReportTemplateVariable(variable: string) {
+    const token = formatCopyTemplateToken(variable)
+    if (templateVariableTarget.value === 'contact') {
+        templateDraftContactNotes.value += token
+        return
+    }
+    if (templateVariableTarget.value === 'class') {
+        templateDraftClassNotes.value += token
+        return
+    }
+    templateDraftContent.value += token
 }
 
 const selectedCoursePreviewLesson = computed(() => {
@@ -837,7 +989,19 @@ async function openCourseCopyTemplateModal() {
 
     try {
         isLoadingCourseCopyTemplate.value = true
-        const template = await CopyTemplateService.getCourseUserDefaultTemplate()
+        const [template, options] = await Promise.all([
+            CopyTemplateService.getCourseUserDefaultTemplate(),
+            CopyTemplateService.getTemplateLoadOptions('course_copy')
+        ])
+        courseTemplateLoadOptions.value = options.map(item => ({
+            ...item,
+            displayLabel: item.label === 'system_default'
+                ? t('report.editor.copy_course_template_source_system')
+                : item.label === 'user_default'
+                    ? t('report.editor.copy_course_template_source_user_default')
+                    : item.label
+        }))
+        selectedCourseTemplateLoadKey.value = courseTemplateLoadOptions.value[0]?.key || ''
         courseCopyTemplateText.value = template || SYSTEM_COURSE_TEMPLATE
     } catch (error) {
         console.error('Failed to load course copy template', error)
@@ -845,6 +1009,15 @@ async function openCourseCopyTemplateModal() {
     } finally {
         isLoadingCourseCopyTemplate.value = false
     }
+}
+
+function loadSelectedCourseTemplate() {
+    const option = courseTemplateLoadOptions.value.find(item => item.key === selectedCourseTemplateLoadKey.value)
+    if (!option) {
+        return
+    }
+
+    courseCopyTemplateText.value = option.templateText || SYSTEM_COURSE_TEMPLATE
 }
 
 async function saveCourseCopyTemplate() {
@@ -867,42 +1040,140 @@ async function saveCourseCopyTemplate() {
     }
 }
 
-function applyTemplate(template: any) {
-    const doApply = () => {
-        localContent.value = template.content
-        if (template.contactNotes) contactNotes.value = template.contactNotes
-        if (template.classNotes) classNotes.value = template.classNotes
+function applyTemplate(template: Template) {
+    const renderedContent = renderReportTemplateText(template.content || '')
+    const renderedContactNotes = renderReportTemplateText(template.contactNotes || '')
+    const renderedClassNotes = renderReportTemplateText(template.classNotes || '')
 
-        handleInput() // Update and save
-        showTemplates.value = false
+    let changed = false
+
+    if (!localContent.value.trim() && renderedContent) {
+        localContent.value = renderedContent
+        changed = true
     }
 
-    if (localContent.value) {
-        openConfirm(
-            t('report.editor.apply_template_title', 'Apply Template'),
-            t('report.editor.apply_template_confirm', 'Are you sure? Current content will be overwritten.'),
-            doApply,
-            false // Safe action (relatively)
-        )
-    } else {
-        doApply()
+    if (!contactNotes.value.trim() && renderedContactNotes) {
+        contactNotes.value = renderedContactNotes
+        changed = true
+    }
+
+    if (!classNotes.value.trim() && renderedClassNotes) {
+        classNotes.value = renderedClassNotes
+        changed = true
+    }
+
+    if (changed) {
+        handleInput()
+    }
+
+    showReportTemplateManagerModal.value = false
+}
+
+function createNewTemplateDraft() {
+    selectedTemplateId.value = ''
+    templateDraftName.value = ''
+    templateDraftContent.value = localContent.value || ''
+    templateDraftContactNotes.value = contactNotes.value || ''
+    templateDraftClassNotes.value = classNotes.value || ''
+}
+
+function syncTemplateDraftFromSelection() {
+    const selected = savedTemplates.value.find(item => item.id === selectedTemplateId.value)
+    if (!selected) {
+        createNewTemplateDraft()
+        return
+    }
+
+    templateDraftName.value = selected.name
+    templateDraftContent.value = selected.content || ''
+    templateDraftContactNotes.value = selected.contactNotes || ''
+    templateDraftClassNotes.value = selected.classNotes || ''
+}
+
+function handleTemplateSelectionChange() {
+    syncTemplateDraftFromSelection()
+}
+
+async function openReportTemplateManagerModal() {
+    showReportTemplateManagerModal.value = true
+    try {
+        isLoadingTemplateManager.value = true
+        await loadTemplates()
+        if (savedTemplates.value.length > 0) {
+            selectedTemplateId.value = savedTemplates.value[0].id
+            syncTemplateDraftFromSelection()
+        } else {
+            createNewTemplateDraft()
+        }
+    } catch (error) {
+        console.error('Failed to open template manager', error)
+    } finally {
+        isLoadingTemplateManager.value = false
     }
 }
 
-function deleteTemplate(id: string) {
+async function saveTemplateDraft() {
+    if (!authStore.user?.id) return
+    if (!templateDraftName.value.trim()) {
+        toast.error(t('report.editor.template_name_required'))
+        return
+    }
+
+    try {
+        isSavingTemplate.value = true
+        const saved = await ReportTemplateService.saveTemplate({
+            id: selectedTemplateId.value || undefined,
+            name: templateDraftName.value.trim(),
+            content: templateDraftContent.value,
+            contact_notes: templateDraftContactNotes.value,
+            class_notes: templateDraftClassNotes.value,
+            instructor_id: authStore.user.id
+        })
+
+        await loadTemplates()
+        selectedTemplateId.value = saved.id || ''
+        syncTemplateDraftFromSelection()
+        toast.success(t('report.editor.template_saved'))
+    } catch (error) {
+        console.error('Failed to save template draft', error)
+        toast.error(t('report.editor.template_load_error'))
+    } finally {
+        isSavingTemplate.value = false
+    }
+}
+
+function applyTemplateDraftToReport() {
+    const draft: Template = {
+        id: selectedTemplateId.value || 'draft',
+        name: templateDraftName.value || t('report.editor.template_new_option'),
+        content: templateDraftContent.value,
+        contactNotes: templateDraftContactNotes.value,
+        classNotes: templateDraftClassNotes.value
+    }
+    applyTemplate(draft)
+}
+
+function deleteSelectedTemplate() {
+    const id = selectedTemplateId.value
+    if (!id) {
+        return
+    }
+
     openConfirm(
         t('report.editor.delete_template_title', 'Delete Template'),
         t('report.editor.delete_template_confirm', 'Are you sure you want to delete this template?'),
         async () => {
             try {
                 await ReportTemplateService.deleteTemplate(id)
-                savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
+                savedTemplates.value = savedTemplates.value.filter(item => item.id !== id)
+                selectedTemplateId.value = savedTemplates.value[0]?.id || ''
+                syncTemplateDraftFromSelection()
                 toast.success(t('report.editor.template_deleted') || 'Template deleted')
-            } catch (e) {
-                console.error('Failed to delete template', e)
+            } catch (error) {
+                console.error('Failed to delete template', error)
             }
         },
-        true // Dangerous
+        true
     )
 }
 
@@ -944,6 +1215,10 @@ interface Props {
     courseName?: string // 課程名稱
     courseStage?: string // 課程階段
     courseDisplayName?: string // 課程顯示名稱
+    initialClassroomName?: string // 教室名稱
+    initialSessionName?: string // 班級名稱
+    initialSessionTime?: string // 班級時段
+    initialStudentName?: string // 學生姓名
     initialStudentId?: string // 學生ID
     student?: any // 學生
     initialLessonId?: string // 課次
@@ -976,6 +1251,10 @@ const props = withDefaults(defineProps<Props>(), {
     courseName: '',
     courseStage: '',
     courseDisplayName: '',
+    initialClassroomName: '',
+    initialSessionName: '',
+    initialSessionTime: '',
+    initialStudentName: '',
     initialStudentId: '',
     initialLessonId: '',
     availableLessons: () => [],

@@ -54,7 +54,17 @@
                                     <p class="text-xs text-emerald-700/80">{{ previewHint }}</p>
                                 </div>
 
-                                <div v-if="previewText" class="flex-1 overflow-auto rounded-2xl border border-emerald-200 bg-white p-4">
+                                <div v-if="previewSections.length > 0" class="flex-1 overflow-auto rounded-2xl border border-emerald-200 bg-white p-3 space-y-3">
+                                    <div
+                                        v-for="section in previewSections"
+                                        :key="section.title"
+                                        class="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3"
+                                    >
+                                        <p class="mb-1 text-xs font-bold uppercase tracking-wide text-emerald-800">{{ section.title }}</p>
+                                        <pre class="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-slate-800">{{ section.content || previewEmpty }}</pre>
+                                    </div>
+                                </div>
+                                <div v-else-if="previewText" class="flex-1 overflow-auto rounded-2xl border border-emerald-200 bg-white p-4">
                                     <pre class="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-slate-800">{{ previewText }}</pre>
                                 </div>
                                 <div v-else class="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-emerald-300 bg-white px-4 py-6 text-center text-sm text-emerald-700">
@@ -111,6 +121,7 @@ interface Props {
     previewEmpty: string
     templateText: string
     previewText: string
+    previewSections?: Array<{ title: string; content: string }>
     variableCount: number
     isLoading?: boolean
     loadingText?: string
@@ -127,7 +138,8 @@ const props = withDefaults(defineProps<Props>(), {
     loadingText: 'Loading...',
     loadingHint: '',
     saveLoading: false,
-    saveDisabled: false
+    saveDisabled: false,
+    previewSections: () => []
 })
 
 const emit = defineEmits<{

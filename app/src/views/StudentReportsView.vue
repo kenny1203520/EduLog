@@ -383,6 +383,7 @@
                         :course-name="enrollmentInfo?.courseName || undefined"
                         :course-stage="enrollmentInfo?.courseStage || undefined"
                         :course-display-name="enrollmentInfo?.courseDisplay || undefined"
+                        :initial-student-name="enrollmentInfo?.studentName"
                         :initial-student-id="enrollmentInfo?.studentId" :initial-lesson-id="selectedReport.lessonId"
                         :available-lessons="courseLessons" :initial-report-external-link="selectedReport.externalLink"
                         :initial-is-completed="selectedReport.isCompleted"

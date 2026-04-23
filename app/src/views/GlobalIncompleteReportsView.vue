@@ -157,6 +157,7 @@
                         :title="$t('report.report_for_date', { date: formatDateTime(selectedReport) })"
                         :show-manual-save="true" :available-lessons="activeLessons"
                         :course-name="selectedReport.className" :initial-lesson-id="selectedReport.lessonId"
+                        :initial-student-name="selectedReport.studentName"
                         :initial-is-completed="selectedReport.isCompleted"
                         :initial-attendance-status="selectedReport.attendanceStatus"
                         :initial-absence-reason="selectedReport.absenceReason"

@@ -50,6 +50,8 @@ const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
 const attendanceTemplateScope = ref<'class_session' | 'user_default'>('class_session')
 const isLoadingAttendanceTemplate = ref(false)
 const isSavingAttendanceTemplate = ref(false)
+const attendanceTemplateLoadOptions = ref<Array<{ key: string; label: string; templateText: string }>>([])
+const selectedAttendanceTemplateLoadKey = ref('')
 const selectedAttendanceTemplateModes = ref<Record<string, string>>({
     present_list: 'comma',
     absent_list: 'comma',
@@ -791,6 +793,10 @@ function formatAttendanceNameList(names: string[], mode: string): string {
             return safeNames.join('\n')
         case 'bullet':
             return safeNames.map(name => `• ${name}`).join('\n')
+        case 'space':
+            return safeNames.join(' ')
+        case 'comma':
+            return safeNames.join(', ')
         default:
             return safeNames.join(', ')
     }
@@ -890,19 +896,22 @@ function buildAttendanceTemplateContext() {
                 comma: () => formatAttendanceNameList(previewNames.present_list, 'comma'),
                 slash: () => formatAttendanceNameList(previewNames.present_list, 'slash'),
                 newline: () => formatAttendanceNameList(previewNames.present_list, 'newline'),
-                bullet: () => formatAttendanceNameList(previewNames.present_list, 'bullet')
+                bullet: () => formatAttendanceNameList(previewNames.present_list, 'bullet'),
+                space: () => formatAttendanceNameList(previewNames.present_list, 'space')
             },
             absent_list: {
                 comma: () => formatAttendanceNameList(previewNames.absent_list, 'comma'),
                 slash: () => formatAttendanceNameList(previewNames.absent_list, 'slash'),
                 newline: () => formatAttendanceNameList(previewNames.absent_list, 'newline'),
-                bullet: () => formatAttendanceNameList(previewNames.absent_list, 'bullet')
+                bullet: () => formatAttendanceNameList(previewNames.absent_list, 'bullet'),
+                space: () => formatAttendanceNameList(previewNames.absent_list, 'space')
             },
             pending_list: {
                 comma: () => formatAttendanceNameList(previewNames.pending_list, 'comma'),
                 slash: () => formatAttendanceNameList(previewNames.pending_list, 'slash'),
                 newline: () => formatAttendanceNameList(previewNames.pending_list, 'newline'),
-                bullet: () => formatAttendanceNameList(previewNames.pending_list, 'bullet')
+                bullet: () => formatAttendanceNameList(previewNames.pending_list, 'bullet'),
+                space: () => formatAttendanceNameList(previewNames.pending_list, 'space')
             }
         }
     }
@@ -911,6 +920,15 @@ function buildAttendanceTemplateContext() {
 function insertAttendanceTemplateVariable(variable: string) {
     const mode = getSelectedAttendanceTemplateMode(variable)
     attendanceTemplateText.value += formatCopyTemplateToken(variable, mode)
+}
+
+function loadSelectedAttendanceTemplate() {
+    const selected = attendanceTemplateLoadOptions.value.find(item => item.key === selectedAttendanceTemplateLoadKey.value)
+    if (!selected) {
+        return
+    }
+
+    attendanceTemplateText.value = selected.templateText || SYSTEM_ATTENDANCE_TEMPLATE
 }
 
 async function openAttendanceTemplateModal() {
@@ -925,8 +943,29 @@ async function openAttendanceTemplateModal() {
 
     try {
         isLoadingAttendanceTemplate.value = true
-        const classTemplate = await CopyTemplateService.getAttendanceTemplateByScope('class_session', sessionId)
-        const userTemplate = await CopyTemplateService.getAttendanceTemplateByScope('user_default')
+        const [classTemplate, userTemplate, loadOptions] = await Promise.all([
+            CopyTemplateService.getAttendanceTemplateByScope('class_session', sessionId),
+            CopyTemplateService.getAttendanceTemplateByScope('user_default'),
+            CopyTemplateService.getTemplateLoadOptions('attendance_copy', sessionId)
+        ])
+
+        attendanceTemplateLoadOptions.value = loadOptions.map(item => {
+            let label = item.label
+            if (item.label === 'system_default') {
+                label = t('classroom.copy_template_source_system')
+            } else if (item.label === 'user_default') {
+                label = t('classroom.copy_template_source_user_default')
+            } else if (item.scopeType === 'class_session' && item.scopeEntityId === sessionId) {
+                label = `${item.label} (${t('classroom.copy_template_source_current_session')})`
+            }
+
+            return {
+                key: item.key,
+                label,
+                templateText: item.templateText
+            }
+        })
+        selectedAttendanceTemplateLoadKey.value = attendanceTemplateLoadOptions.value[0]?.key || ''
 
         if (classTemplate) {
             attendanceTemplateScope.value = 'class_session'
@@ -2041,6 +2080,10 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                 :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
                                 :course-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
                                 :course-display-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
+                                :initial-classroom-name="session?.classroom_name"
+                                :initial-session-name="session?.name"
+                                :initial-session-time="session ? `${session.start_time?.slice(0, 5) || ''}-${session.end_time?.slice(0, 5) || ''}` : ''"
+                                :initial-student-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName"
                                 :initial-student-id="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
                                 :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
                                 :available-lessons="courseLessons"
@@ -2201,18 +2244,39 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             @save="saveAttendanceTemplate"
         >
             <template #controls>
-                <div class="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
-                    <p class="text-sm font-bold text-amber-900">{{ $t('classroom.copy_template_scope') }}</p>
-                    <label class="flex items-center gap-2 text-sm text-amber-900/90">
-                        <input v-model="attendanceTemplateScope" type="radio" value="class_session"
-                            class="border-gray-300 text-emerald-600 focus:ring-emerald-500" />
-                        {{ $t('classroom.copy_template_scope_session') }}
-                    </label>
-                    <label class="flex items-center gap-2 text-sm text-amber-900/90">
-                        <input v-model="attendanceTemplateScope" type="radio" value="user_default"
-                            class="border-gray-300 text-emerald-600 focus:ring-emerald-500" />
-                        {{ $t('classroom.copy_template_scope_user') }}
-                    </label>
+                <div class="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+                    <div class="space-y-2">
+                        <p class="text-sm font-bold text-amber-900">{{ $t('classroom.copy_template_scope') }}</p>
+                        <label class="flex items-center gap-2 text-sm text-amber-900/90">
+                            <input v-model="attendanceTemplateScope" type="radio" value="class_session"
+                                class="border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                            {{ $t('classroom.copy_template_scope_session') }}
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-amber-900/90">
+                            <input v-model="attendanceTemplateScope" type="radio" value="user_default"
+                                class="border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                            {{ $t('classroom.copy_template_scope_user') }}
+                        </label>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                                {{ $t('classroom.copy_template_load_from') }}
+                            </label>
+                            <select v-model="selectedAttendanceTemplateLoadKey"
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option v-for="item in attendanceTemplateLoadOptions" :key="item.key" :value="item.key">
+                                    {{ item.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <button @click="loadSelectedAttendanceTemplate"
+                            class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
+                            :disabled="!selectedAttendanceTemplateLoadKey">
+                            {{ $t('classroom.copy_template_load_action') }}
+                        </button>
+                    </div>
                 </div>
             </template>
 
