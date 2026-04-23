@@ -82,7 +82,7 @@
         "copy_course_info": "複製課程資訊",
         "copy_course_template_settings": "課程資訊樣式設定",
         "copy_course_template_title": "課程資訊複製樣式",
-        "copy_course_template_hint": "可用雙大括號變數語法（例如 lesson_title）自定義輸出文字，儲存後會成為你的預設樣式。",
+        "copy_course_template_hint": "可用雙大括號變數語法（例如 {'{{'}lesson_title{'}}'}）自定義輸出文字，儲存後會成為你的預設樣式。",
         "copy_course_template_variables": "可用變數",
         "copy_course_template_content": "樣式內容",
         "copy_course_template_loading": "載入樣式中...",

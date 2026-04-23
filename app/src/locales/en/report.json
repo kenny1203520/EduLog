@@ -82,7 +82,7 @@
         "copy_course_info": "Copy Course Info",
         "copy_course_template_settings": "Course Copy Style",
         "copy_course_template_title": "Course Copy Template",
-        "copy_course_template_hint": "Use double-curly variable syntax (for example: lesson_title) to customize output. Saved template becomes your default style.",
+        "copy_course_template_hint": "Use double-curly variable syntax (for example: {'{{'}lesson_title{'}}'}) to customize output. Saved template becomes your default style.",
         "copy_course_template_variables": "Available Variables",
         "copy_course_template_content": "Template Content",
         "copy_course_template_loading": "Loading template...",
