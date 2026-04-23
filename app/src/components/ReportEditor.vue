@@ -154,6 +154,15 @@
                             <span v-else class="text-[10px] font-bold text-emerald-600 animate-pulse">{{
                                 $t('report.editor.copy_success_simple') }}</span>
                         </button>
+                        <button @click="openCourseCopyTemplateModal"
+                            class="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
+                            :title="$t('report.editor.copy_course_template_settings')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M11.983 5.5l1.165-2.09a1 1 0 011.733 0l1.165 2.09 2.34.414a1 1 0 01.557 1.69l-1.6 1.641.294 2.303a1 1 0 01-1.414 1.04L14 11.61l-2.223.978a1 1 0 01-1.414-1.04l.294-2.303-1.6-1.64a1 1 0 01.557-1.691l2.369-.414zM5 15h14M7 19h10" />
+                            </svg>
+                        </button>
                     </div>
                     <!-- Enrollment External Link Button -->
                     <a v-if="initialEnrollmentExternalLink" :href="initialEnrollmentExternalLink" target="_blank"
@@ -457,6 +466,76 @@
         <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
             :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
             :is-loading="confirmState.isLoading" @confirm="handleConfirmAction" @close="confirmState.isOpen = false" />
+
+        <CopyTemplateEditorModal
+            v-model="showCourseCopyTemplateModal"
+            :title="$t('report.editor.copy_course_template_title')"
+            :hint="$t('report.editor.copy_course_template_hint')"
+            :variable-title="$t('report.editor.copy_course_template_variables')"
+            :content-title="$t('report.editor.copy_course_template_content')"
+            :preview-title="$t('report.editor.copy_course_template_preview_title')"
+            :preview-hint="$t('report.editor.copy_course_template_preview_hint')"
+            :preview-empty="$t('report.editor.copy_course_template_preview_empty')"
+            :template-text="courseCopyTemplateText"
+            :preview-text="courseTemplatePreviewText"
+            :variable-count="courseTemplateVariables.length"
+            :is-loading="isLoadingCourseCopyTemplate"
+            :loading-text="$t('report.editor.copy_course_template_loading')"
+            :loading-hint="$t('report.editor.copy_course_template_loading_hint')"
+            :save-loading="isSavingCourseCopyTemplate"
+            :cancel-text="$t('common.cancel')"
+            :save-text="$t('common.save')"
+            :saving-text="$t('report.saving')"
+            @update:template-text="courseCopyTemplateText = $event"
+            @save="saveCourseCopyTemplate"
+        >
+            <template #variables>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div
+                        v-for="variable in courseTemplateVariables"
+                        :key="variable.key"
+                        class="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-bold leading-tight text-gray-900">{{ variable.label }}</p>
+                                <p class="mt-1 text-xs leading-5 text-gray-500">{{ variable.description }}</p>
+                            </div>
+                            <button
+                                @click="insertCourseTemplateVariable(variable.key)"
+                                class="shrink-0 whitespace-nowrap rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
+                                :title="variable.token"
+                            >
+                                {{ variable.token }}
+                            </button>
+                        </div>
+
+                        <div v-if="variable.modeOptions?.length" class="space-y-1">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {{ $t('report.editor.copy_course_template_variable_mode_label') }}
+                            </label>
+                            <select
+                                v-model="selectedCourseTemplateModes[variable.key]"
+                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                            >
+                                <option v-for="mode in variable.modeOptions" :key="mode.value" :value="mode.value">
+                                    {{ mode.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {{ $t('report.editor.copy_course_template_preview_title') }}
+                            </p>
+                            <p class="min-h-[3.25rem] whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+                                {{ variable.previewValue || '—' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </CopyTemplateEditorModal>
     </div>
 </template>
 
@@ -467,11 +546,19 @@ import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
+import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import { ReportTemplateService } from '@/services/ReportTemplateService'
+import { CopyTemplateService } from '@/services/CopyTemplateService'
 import { useToast } from 'vue-toastification'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import {
+    COURSE_TEMPLATE_VARIABLE_DEFINITIONS,
+    SYSTEM_COURSE_TEMPLATE,
+    formatCopyTemplateToken,
+    renderCopyTemplate
+} from '@/utils/copyTemplate'
 
 import type { Lesson } from '@/models/Course'
 
@@ -490,6 +577,13 @@ const savedTemplates = ref<Template[]>([])
 const newTemplateName = ref('')
 const justCopiedCourse = ref(false)
 const isSavingTemplate = ref(false)
+const showCourseCopyTemplateModal = ref(false)
+const courseCopyTemplateText = ref(SYSTEM_COURSE_TEMPLATE)
+const isLoadingCourseCopyTemplate = ref(false)
+const isSavingCourseCopyTemplate = ref(false)
+const selectedCourseTemplateModes = ref<Record<string, string>>({
+    course_primary_name: 'space'
+})
 const toast = useToast()
 
 // Confirm Modal State
@@ -584,6 +678,110 @@ async function saveTemplate() {
     }
 }
 
+const selectedCoursePreviewLesson = computed(() => {
+    return props.availableLessons.find(l => l.id === selectedLessonId.value) || props.availableLessons[0] || null
+})
+
+const courseTemplateVariables = computed(() => {
+    const lesson = selectedCoursePreviewLesson.value
+    const courseName = props.courseName || ''
+    const courseDisplayName = props.courseDisplayName || ''
+
+    return COURSE_TEMPLATE_VARIABLE_DEFINITIONS.map(definition => {
+        let previewValue = ''
+
+        switch (definition.key) {
+            case 'course_name':
+                previewValue = courseName || 'Course Name'
+                break
+            case 'course_display_name':
+                previewValue = courseDisplayName || 'Course Display Name'
+                break
+            case 'course_primary_name': {
+                const selectedMode = selectedCourseTemplateModes.value[definition.key] || definition.defaultMode || definition.modes?.[0]?.value || 'space'
+                previewValue = formatCoursePrimaryName(courseName, courseDisplayName, selectedMode)
+                break
+            }
+            case 'lesson_label':
+                previewValue = t('report.lesson_label')
+                break
+            case 'lesson_sequence':
+                previewValue = lesson?.sequence !== undefined ? String(lesson.sequence) : '1'
+                break
+            case 'lesson_title':
+                previewValue = lesson?.title || 'Lesson Title'
+                break
+            default:
+                previewValue = definition.key
+                break
+        }
+
+        return {
+            ...definition,
+            token: formatCopyTemplateToken(definition.key, getSelectedCourseTemplateMode(definition.key)),
+            label: t(`report.editor.copy_course_template_variable_labels.${definition.key}`),
+            description: t(`report.editor.copy_course_template_variable_descriptions.${definition.key}`),
+            previewValue,
+            modeOptions: (definition.modes || []).map(mode => ({
+                ...mode,
+                label: t(`report.editor.copy_course_template_variable_modes.${mode.value}`)
+            }))
+        }
+    })
+})
+
+const courseTemplatePreviewText = computed(() => {
+    const lesson = selectedCoursePreviewLesson.value
+    const courseName = props.courseName || ''
+    const courseDisplayName = props.courseDisplayName || ''
+    const coursePrimaryName = [courseName, courseDisplayName].filter(Boolean).join(' ').trim() || courseName || courseDisplayName || ''
+
+    const context = {
+        course_name: courseName,
+        course_display_name: courseDisplayName,
+        course_primary_name: coursePrimaryName,
+        lesson_label: t('report.lesson_label'),
+        lesson_sequence: lesson?.sequence ?? '',
+        lesson_title: lesson?.title || ''
+    }
+
+    const formatter = (mode: string) => formatCoursePrimaryName(courseName, courseDisplayName, mode)
+
+    return courseCopyTemplateText.value.trim()
+        ? renderCopyTemplate(courseCopyTemplateText.value, context, {
+            course_primary_name: {
+                space: () => formatter('space'),
+                slash: () => formatter('slash'),
+                newline: () => formatter('newline'),
+                bullet: () => formatter('bullet')
+            }
+        }).trim()
+        : ''
+})
+
+function getSelectedCourseTemplateMode(variable: string): string | undefined {
+    return selectedCourseTemplateModes.value[variable] || COURSE_TEMPLATE_VARIABLE_DEFINITIONS.find(item => item.key === variable)?.defaultMode
+}
+
+function formatCoursePrimaryName(courseName: string, courseDisplayName: string, mode: string): string {
+    const parts = [courseName, courseDisplayName].filter(Boolean)
+
+    if (parts.length === 0) {
+        return ''
+    }
+
+    switch (mode) {
+        case 'slash':
+            return parts.join(' / ')
+        case 'newline':
+            return parts.join('\n')
+        case 'bullet':
+            return parts.join(' • ')
+        default:
+            return parts.join(' ')
+    }
+}
+
 function copyCourseInfo() {
     const lesson = props.availableLessons.find(l => l.id === selectedLessonId.value)
     if (!lesson) return
@@ -591,21 +789,82 @@ function copyCourseInfo() {
     const cName = props.courseName || ''
     const dName = props.courseDisplayName || ''
 
-    // Format: [Course Name] [Display Name] Lesson [lesson_name]
-    // Note: session.name is passed as courseName, enrollment.courseDisplayName as courseDisplayName
-    let text = ''
-    if (cName && dName) {
-        text = `${cName} ${dName} Lesson ${lesson.sequence} ${lesson.title}`
-    } else if (cName || dName) {
-        text = `${cName || dName} Lesson ${lesson.sequence} ${lesson.title}`
-    } else {
-        text = `Lesson ${lesson.sequence} ${lesson.title}`
+    const coursePrimaryName = [cName, dName].filter(Boolean).join(' ').trim() || cName || dName || ''
+    const context = {
+        course_name: cName,
+        course_display_name: dName,
+        course_primary_name: coursePrimaryName,
+        lesson_label: t('report.lesson_label'),
+        lesson_sequence: lesson.sequence,
+        lesson_title: lesson.title
     }
 
-    navigator.clipboard.writeText(text).then(() => {
-        justCopiedCourse.value = true
-        setTimeout(() => { justCopiedCourse.value = false }, 2000)
-    })
+    CopyTemplateService.getEffectiveCourseTemplate()
+        .then(({ templateText }) => {
+            const text = renderCopyTemplate(templateText, context, {
+                course_primary_name: {
+                    space: () => formatCoursePrimaryName(cName, dName, 'space'),
+                    slash: () => formatCoursePrimaryName(cName, dName, 'slash'),
+                    newline: () => formatCoursePrimaryName(cName, dName, 'newline'),
+                    bullet: () => formatCoursePrimaryName(cName, dName, 'bullet')
+                }
+            }).trim()
+            const fallback = `${coursePrimaryName} Lesson ${lesson.sequence} ${lesson.title}`.trim()
+
+            return navigator.clipboard.writeText(text || fallback)
+        })
+        .then(() => {
+            justCopiedCourse.value = true
+            setTimeout(() => { justCopiedCourse.value = false }, 2000)
+        })
+        .catch(error => {
+            console.error('Failed to copy course info', error)
+            toast.error(t('report.editor.copy_course_template_copy_failed'))
+        })
+}
+
+function insertCourseTemplateVariable(variable: string) {
+    const mode = getSelectedCourseTemplateMode(variable)
+    courseCopyTemplateText.value += formatCopyTemplateToken(variable, mode)
+}
+
+async function openCourseCopyTemplateModal() {
+    showCourseCopyTemplateModal.value = true
+    courseCopyTemplateText.value = SYSTEM_COURSE_TEMPLATE
+    selectedCourseTemplateModes.value = {
+        course_primary_name: 'space'
+    }
+
+    try {
+        isLoadingCourseCopyTemplate.value = true
+        const template = await CopyTemplateService.getCourseUserDefaultTemplate()
+        courseCopyTemplateText.value = template || SYSTEM_COURSE_TEMPLATE
+    } catch (error) {
+        console.error('Failed to load course copy template', error)
+        toast.error(t('report.editor.copy_course_template_load_failed'))
+    } finally {
+        isLoadingCourseCopyTemplate.value = false
+    }
+}
+
+async function saveCourseCopyTemplate() {
+    const templateText = courseCopyTemplateText.value.trim()
+    if (!templateText) {
+        toast.error(t('report.editor.copy_course_template_empty_error'))
+        return
+    }
+
+    try {
+        isSavingCourseCopyTemplate.value = true
+        await CopyTemplateService.saveCourseTemplateAsUserDefault(templateText)
+        toast.success(t('report.editor.copy_course_template_saved'))
+        showCourseCopyTemplateModal.value = false
+    } catch (error) {
+        console.error('Failed to save course copy template', error)
+        toast.error(t('report.editor.copy_course_template_save_failed'))
+    } finally {
+        isSavingCourseCopyTemplate.value = false
+    }
 }
 
 function applyTemplate(template: any) {

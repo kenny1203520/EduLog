@@ -5,16 +5,24 @@ import { CourseService } from '@/services/CourseService'
 import { EnrollmentService } from '@/services/EnrollmentService'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { CopyTemplateService } from '@/services/CopyTemplateService'
 import type { Enrollment } from '@/models/Enrollment'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import type { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
+import {
+    ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS,
+    SYSTEM_ATTENDANCE_TEMPLATE,
+    formatCopyTemplateToken,
+    renderCopyTemplate
+} from '@/utils/copyTemplate'
 
 import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
@@ -37,6 +45,16 @@ const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
 const isQuickAttendanceExpanded = ref(false)
+const showAttendanceTemplateModal = ref(false)
+const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
+const attendanceTemplateScope = ref<'class_session' | 'user_default'>('class_session')
+const isLoadingAttendanceTemplate = ref(false)
+const isSavingAttendanceTemplate = ref(false)
+const selectedAttendanceTemplateModes = ref<Record<string, string>>({
+    present_list: 'comma',
+    absent_list: 'comma',
+    pending_list: 'comma'
+})
 const showAddStudentModal = ref(false)
 const isAddingStudent = ref(false)
 const makeupCandidates = ref<Enrollment[]>([])
@@ -728,6 +746,235 @@ function toggleSelectAll() {
     }
 }
 
+const attendanceTemplateVariables = computed(() => {
+    const previewNames = getAttendancePreviewNames()
+
+    return ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS.map(definition => {
+        const previewValue = getAttendanceVariablePreview(definition.key, previewNames)
+        return {
+            ...definition,
+            token: formatCopyTemplateToken(definition.key, getSelectedAttendanceTemplateMode(definition.key)),
+            label: t(`classroom.copy_template_variable_labels.${definition.key}`),
+            description: t(`classroom.copy_template_variable_descriptions.${definition.key}`),
+            previewValue,
+            modeOptions: (definition.modes || []).map(mode => ({
+                ...mode,
+                label: t(`classroom.copy_template_variable_modes.${mode.value}`)
+            }))
+        }
+    })
+})
+
+const attendanceTemplatePreviewText = computed(() => {
+    if (!attendanceTemplateText.value.trim()) {
+        return ''
+    }
+
+    const context = buildAttendanceTemplateContext()
+    return renderCopyTemplate(attendanceTemplateText.value, context.values, context.formatters).trim()
+})
+
+function getSelectedAttendanceTemplateMode(variable: string): string | undefined {
+    return selectedAttendanceTemplateModes.value[variable] || ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS.find(item => item.key === variable)?.defaultMode
+}
+
+function formatAttendanceNameList(names: string[], mode: string): string {
+    const safeNames = names.filter(Boolean)
+    if (safeNames.length === 0) {
+        return t('common.none')
+    }
+
+    switch (mode) {
+        case 'slash':
+            return safeNames.join(' / ')
+        case 'newline':
+            return safeNames.join('\n')
+        case 'bullet':
+            return safeNames.map(name => `• ${name}`).join('\n')
+        default:
+            return safeNames.join(', ')
+    }
+}
+
+function getAttendancePreviewNames(): Record<'present_list' | 'absent_list' | 'pending_list', string[]> {
+    const fallback = ['王小明', '陳小華', '林小美']
+
+    const grouped = {
+        present_list: [] as string[],
+        absent_list: [] as string[],
+        pending_list: [] as string[]
+    }
+
+    visibleEnrollments.value.forEach(enrollment => {
+        const report = reportMap.value.get(enrollment.id!)
+        const status = report?.attendanceStatus || 'pending'
+        const name = enrollment.studentName || ''
+        if (!name) {
+            return
+        }
+
+        if (status === 'present') {
+            grouped.present_list.push(name)
+        } else if (status === 'absent') {
+            grouped.absent_list.push(name)
+        } else {
+            grouped.pending_list.push(name)
+        }
+    })
+
+    if (grouped.present_list.length === 0 && grouped.absent_list.length === 0 && grouped.pending_list.length === 0) {
+        grouped.present_list = [...fallback.slice(0, 2)]
+        grouped.absent_list = [fallback[2]]
+        grouped.pending_list = ['待點名學生']
+    }
+
+    return grouped
+}
+
+function getAttendanceVariablePreview(variable: string, names: Record<'present_list' | 'absent_list' | 'pending_list', string[]>): string {
+    switch (variable) {
+        case 'class_info_title':
+            return t('classroom.class_info_title')
+        case 'session_name':
+            return session.value?.name || t('classroom.session')
+        case 'occurrence_date':
+            return todayOccurrence.value?.occurrenceDate
+                ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+                : t('classroom.no_teaching_day_selected')
+        case 'start_time':
+            return todayOccurrence.value?.originalStartTime?.substring(0, 5) || '10:00'
+        case 'end_time':
+            return todayOccurrence.value?.originalEndTime?.substring(0, 5) || '12:00'
+        case 'time_range':
+            return `${getAttendanceVariablePreview('start_time', names)}-${getAttendanceVariablePreview('end_time', names)}`
+        case 'present_list_label':
+            return t('classroom.present_list')
+        case 'absent_list_label':
+            return t('classroom.absent_list')
+        case 'pending_list_label':
+            return t('classroom.pending_list')
+        case 'present_list':
+            return formatAttendanceNameList(names.present_list, getSelectedAttendanceTemplateMode('present_list') || 'comma')
+        case 'absent_list':
+            return formatAttendanceNameList(names.absent_list, getSelectedAttendanceTemplateMode('absent_list') || 'comma')
+        case 'pending_list':
+            return formatAttendanceNameList(names.pending_list, getSelectedAttendanceTemplateMode('pending_list') || 'comma')
+        default:
+            return ''
+    }
+}
+
+function buildAttendanceTemplateContext() {
+    const previewNames = getAttendancePreviewNames()
+    const presentList = formatAttendanceNameList(previewNames.present_list, getSelectedAttendanceTemplateMode('present_list') || 'comma')
+    const absentList = formatAttendanceNameList(previewNames.absent_list, getSelectedAttendanceTemplateMode('absent_list') || 'comma')
+    const pendingList = formatAttendanceNameList(previewNames.pending_list, getSelectedAttendanceTemplateMode('pending_list') || 'comma')
+
+    return {
+        values: {
+            class_info_title: t('classroom.class_info_title'),
+            session_name: session.value?.name || '',
+            occurrence_date: todayOccurrence.value?.occurrenceDate ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString() : '',
+            start_time: todayOccurrence.value?.originalStartTime?.substring(0, 5) || '',
+            end_time: todayOccurrence.value?.originalEndTime?.substring(0, 5) || '',
+            time_range: `${todayOccurrence.value?.originalStartTime?.substring(0, 5) || ''}-${todayOccurrence.value?.originalEndTime?.substring(0, 5) || ''}`,
+            present_list_label: t('classroom.present_list'),
+            absent_list_label: t('classroom.absent_list'),
+            pending_list_label: t('classroom.pending_list'),
+            present_list: presentList,
+            absent_list: absentList,
+            pending_list: pendingList
+        },
+        formatters: {
+            present_list: {
+                comma: () => formatAttendanceNameList(previewNames.present_list, 'comma'),
+                slash: () => formatAttendanceNameList(previewNames.present_list, 'slash'),
+                newline: () => formatAttendanceNameList(previewNames.present_list, 'newline'),
+                bullet: () => formatAttendanceNameList(previewNames.present_list, 'bullet')
+            },
+            absent_list: {
+                comma: () => formatAttendanceNameList(previewNames.absent_list, 'comma'),
+                slash: () => formatAttendanceNameList(previewNames.absent_list, 'slash'),
+                newline: () => formatAttendanceNameList(previewNames.absent_list, 'newline'),
+                bullet: () => formatAttendanceNameList(previewNames.absent_list, 'bullet')
+            },
+            pending_list: {
+                comma: () => formatAttendanceNameList(previewNames.pending_list, 'comma'),
+                slash: () => formatAttendanceNameList(previewNames.pending_list, 'slash'),
+                newline: () => formatAttendanceNameList(previewNames.pending_list, 'newline'),
+                bullet: () => formatAttendanceNameList(previewNames.pending_list, 'bullet')
+            }
+        }
+    }
+}
+
+function insertAttendanceTemplateVariable(variable: string) {
+    const mode = getSelectedAttendanceTemplateMode(variable)
+    attendanceTemplateText.value += formatCopyTemplateToken(variable, mode)
+}
+
+async function openAttendanceTemplateModal() {
+    showAttendanceTemplateModal.value = true
+    attendanceTemplateScope.value = 'class_session'
+    attendanceTemplateText.value = SYSTEM_ATTENDANCE_TEMPLATE
+    selectedAttendanceTemplateModes.value = {
+        present_list: 'comma',
+        absent_list: 'comma',
+        pending_list: 'comma'
+    }
+
+    try {
+        isLoadingAttendanceTemplate.value = true
+        const classTemplate = await CopyTemplateService.getAttendanceTemplateByScope('class_session', sessionId)
+        const userTemplate = await CopyTemplateService.getAttendanceTemplateByScope('user_default')
+
+        if (classTemplate) {
+            attendanceTemplateScope.value = 'class_session'
+            attendanceTemplateText.value = classTemplate
+            return
+        }
+
+        if (userTemplate) {
+            attendanceTemplateScope.value = 'user_default'
+            attendanceTemplateText.value = userTemplate
+            return
+        }
+
+        attendanceTemplateText.value = SYSTEM_ATTENDANCE_TEMPLATE
+    } catch (error) {
+        console.error('Failed to load attendance copy template', error)
+        toast.error(t('classroom.copy_template_load_failed'))
+    } finally {
+        isLoadingAttendanceTemplate.value = false
+    }
+}
+
+async function saveAttendanceTemplate() {
+    const templateText = attendanceTemplateText.value.trim()
+    if (!templateText) {
+        toast.error(t('classroom.copy_template_empty_error'))
+        return
+    }
+
+    try {
+        isSavingAttendanceTemplate.value = true
+        if (attendanceTemplateScope.value === 'class_session') {
+            await CopyTemplateService.saveAttendanceTemplateForSession(sessionId, templateText)
+            toast.success(t('classroom.copy_template_saved_session'))
+        } else {
+            await CopyTemplateService.saveAttendanceTemplateAsUserDefault(templateText)
+            toast.success(t('classroom.copy_template_saved_user'))
+        }
+
+        showAttendanceTemplateModal.value = false
+    } catch (error) {
+        console.error('Failed to save attendance copy template', error)
+        toast.error(t('classroom.copy_template_save_failed'))
+    } finally {
+        isSavingAttendanceTemplate.value = false
+    }
+}
+
 async function copyAttendanceInfo() {
     if (!todayOccurrence.value || !session.value) return
 
@@ -753,13 +1000,25 @@ async function copyAttendanceInfo() {
     const absentList = formatList('absent')
     const pendingList = formatList('pending')
 
-    const text = `${t('classroom.class_info_title')}\n` +
-        `${session.value.name} (${date} ${time})\n\n` +
-        `${t('classroom.present_list')}: ${presentList}\n` +
-        `${t('classroom.absent_list')}: ${absentList}\n` +
-        `${t('classroom.pending_list')}: ${pendingList}`
+    const context = {
+        class_info_title: t('classroom.class_info_title'),
+        session_name: session.value.name || '',
+        occurrence_date: date,
+        start_time: startTime,
+        end_time: endTime,
+        time_range: time,
+        present_list_label: t('classroom.present_list'),
+        absent_list_label: t('classroom.absent_list'),
+        pending_list_label: t('classroom.pending_list'),
+        present_list: presentList,
+        absent_list: absentList,
+        pending_list: pendingList
+    }
 
     try {
+        const { templateText } = await CopyTemplateService.getEffectiveAttendanceTemplate(sessionId)
+        const text = renderCopyTemplate(templateText, context, buildAttendanceTemplateContext().formatters).trim()
+
         await navigator.clipboard.writeText(text)
         toast.success(t('classroom.copy_success'))
     } catch (err) {
@@ -1143,6 +1402,16 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                     stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                </svg>
+                            </button>
+
+                            <button @click="openAttendanceTemplateModal"
+                                class="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                :title="$t('classroom.copy_template_settings')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M11.983 5.5l1.165-2.09a1 1 0 011.733 0l1.165 2.09 2.34.414a1 1 0 01.557 1.69l-1.6 1.641.294 2.303a1 1 0 01-1.414 1.04L14 11.61l-2.223.978a1 1 0 01-1.414-1.04l.294-2.303-1.6-1.64a1 1 0 01.557-1.691l2.369-.414zM5 15h14M7 19h10" />
                                 </svg>
                             </button>
 
@@ -1908,6 +2177,92 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                 </div>
             </div>
         </div>
+
+        <CopyTemplateEditorModal
+            v-model="showAttendanceTemplateModal"
+            :title="$t('classroom.copy_template_title')"
+            :hint="$t('classroom.copy_template_hint')"
+            :variable-title="$t('classroom.copy_template_variables')"
+            :content-title="$t('classroom.copy_template_content')"
+            :preview-title="$t('classroom.copy_template_preview_title')"
+            :preview-hint="$t('classroom.copy_template_preview_hint')"
+            :preview-empty="$t('classroom.copy_template_preview_empty')"
+            :template-text="attendanceTemplateText"
+            :preview-text="attendanceTemplatePreviewText"
+            :variable-count="attendanceTemplateVariables.length"
+            :is-loading="isLoadingAttendanceTemplate"
+            :loading-text="$t('classroom.copy_template_loading')"
+            :loading-hint="$t('classroom.copy_template_loading_hint')"
+            :save-loading="isSavingAttendanceTemplate"
+            :cancel-text="$t('common.cancel')"
+            :save-text="$t('common.save')"
+            :saving-text="$t('common.saving')"
+            @update:template-text="attendanceTemplateText = $event"
+            @save="saveAttendanceTemplate"
+        >
+            <template #controls>
+                <div class="space-y-2 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+                    <p class="text-sm font-bold text-amber-900">{{ $t('classroom.copy_template_scope') }}</p>
+                    <label class="flex items-center gap-2 text-sm text-amber-900/90">
+                        <input v-model="attendanceTemplateScope" type="radio" value="class_session"
+                            class="border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                        {{ $t('classroom.copy_template_scope_session') }}
+                    </label>
+                    <label class="flex items-center gap-2 text-sm text-amber-900/90">
+                        <input v-model="attendanceTemplateScope" type="radio" value="user_default"
+                            class="border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                        {{ $t('classroom.copy_template_scope_user') }}
+                    </label>
+                </div>
+            </template>
+
+            <template #variables>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div
+                        v-for="variable in attendanceTemplateVariables"
+                        :key="variable.key"
+                        class="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-bold text-gray-900 leading-tight">{{ variable.label }}</p>
+                                <p class="mt-1 text-xs leading-5 text-gray-500">{{ variable.description }}</p>
+                            </div>
+                            <button
+                                @click="insertAttendanceTemplateVariable(variable.key)"
+                                class="shrink-0 whitespace-nowrap rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
+                                :title="variable.token"
+                            >
+                                {{ variable.token }}
+                            </button>
+                        </div>
+
+                        <div v-if="variable.modeOptions?.length" class="space-y-1">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {{ $t('classroom.copy_template_variable_mode_label') }}
+                            </label>
+                            <select
+                                v-model="selectedAttendanceTemplateModes[variable.key]"
+                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                            >
+                                <option v-for="mode in variable.modeOptions" :key="mode.value" :value="mode.value">
+                                    {{ mode.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {{ $t('classroom.copy_template_preview_title') }}
+                            </p>
+                            <p class="min-h-[3.25rem] whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+                                {{ variable.previewValue || '—' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </CopyTemplateEditorModal>
 
     </div>
 </template>
