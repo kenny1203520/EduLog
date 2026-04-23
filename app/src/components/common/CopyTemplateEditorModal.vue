@@ -31,7 +31,46 @@
                             <slot name="variables" />
                         </div>
 
-                        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <div v-if="editableFields.length > 0" class="space-y-4">
+                            <div
+                                v-for="(field, index) in editableFields"
+                                :key="field.id"
+                                class="grid grid-cols-1 gap-3 lg:grid-cols-2"
+                            >
+                                <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
+                                    <div class="mb-2 flex items-center justify-between gap-3">
+                                        <label class="block text-sm font-bold text-blue-900">{{ field.label }}</label>
+                                        <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
+                                    </div>
+                                    <textarea
+                                        :ref="el => setTextareaRef(field.id, el)"
+                                        :value="field.content"
+                                        rows="6"
+                                        :class="[
+                                            'w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 font-mono text-sm leading-6 outline-none focus:ring-2 focus:ring-emerald-500',
+                                            focusedFieldId === field.id ? 'ring-2 ring-emerald-500' : ''
+                                        ]"
+                                        @input="onFieldInput(field.id, $event)"
+                                        @focus="focusedFieldId = field.id"
+                                    ></textarea>
+                                </div>
+
+                                <div class="flex flex-col rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
+                                    <div class="mb-3 shrink-0">
+                                        <div class="mb-1 flex items-center justify-between gap-3">
+                                            <p class="text-sm font-bold text-emerald-900">{{ field.label }}</p>
+                                            <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Preview</span>
+                                        </div>
+                                        <p class="text-xs text-emerald-700/80">{{ previewHint }}</p>
+                                    </div>
+                                    <div class="flex-1 overflow-auto rounded-2xl border border-emerald-200 bg-white p-4">
+                                        <pre class="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-slate-800">{{ getPairPreview(index) || previewEmpty }}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-2">
                             <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
                                 <div class="mb-2 flex items-center justify-between gap-3">
                                     <label class="block text-sm font-bold text-blue-900">{{ contentTitle }}</label>
@@ -75,6 +114,12 @@
                     </div>
                 </div>
 
+                <!-- Tooltip Preview -->
+                <div v-if="showVariableTooltip" class="fixed z-[71] rounded-lg bg-gray-900 px-3 py-2 text-sm text-white shadow-xl" :style="tooltipStyle">
+                    <div class="font-mono text-xs">{{ tooltipContent }}</div>
+                    <div class="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 transform bg-gray-900"></div>
+                </div>
+
                 <div v-if="isLoading" class="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-white/70 backdrop-blur-[1px]">
                     <div class="flex flex-col items-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-lg">
                         <svg class="h-8 w-8 animate-spin text-emerald-600" viewBox="0 0 24 24" fill="none">
@@ -110,17 +155,25 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+
+interface EditableField {
+    id: string
+    label: string
+    content: string
+}
+
 interface Props {
     modelValue: boolean
     title: string
     hint: string
     variableTitle: string
-    contentTitle: string
+    contentTitle?: string
     previewTitle: string
     previewHint: string
     previewEmpty: string
-    templateText: string
-    previewText: string
+    templateText?: string
+    previewText?: string
     previewSections?: Array<{ title: string; content: string }>
     variableCount: number
     isLoading?: boolean
@@ -131,6 +184,8 @@ interface Props {
     cancelText: string
     saveText: string
     savingText: string
+    editableFields?: EditableField[]
+    variablePreview?: Record<string, string>
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -139,21 +194,88 @@ const props = withDefaults(defineProps<Props>(), {
     loadingHint: '',
     saveLoading: false,
     saveDisabled: false,
-    previewSections: () => []
+    previewSections: () => [],
+    editableFields: () => [],
+    variablePreview: () => ({})
 })
 
 const emit = defineEmits<{
     'update:modelValue': [value: boolean]
     'update:templateText': [value: string]
+    'update:editableFieldsContent': [fields: EditableField[]]
+    'insertVariable': [fieldId: string, variable: string]
     save: []
 }>()
 
+// State
+const focusedFieldId = ref<string | null>(null)
+const textareaRefs = ref<Record<string, HTMLTextAreaElement>>({})
+const showVariableTooltip = ref(false)
+const tooltipContent = ref('')
+const tooltipStyle = ref<Record<string, string>>({ top: '0px', left: '0px' })
+
+// Methods
 function closeModal() {
     emit('update:modelValue', false)
+}
+
+function setTextareaRef(fieldId: string, el: any) {
+    if (el) {
+        textareaRefs.value[fieldId] = el
+    }
+}
+
+function onFieldInput(fieldId: string, event: Event) {
+    const target = event.target as HTMLTextAreaElement
+    const updatedFields = props.editableFields?.map(f => 
+        f.id === fieldId ? { ...f, content: target.value } : f
+    ) || []
+    emit('update:editableFieldsContent', updatedFields)
 }
 
 function onTemplateInput(event: Event) {
     const target = event.target as HTMLTextAreaElement
     emit('update:templateText', target.value)
 }
+
+function insertVariableAtFocus(variable: string) {
+    if (focusedFieldId.value) {
+        emit('insertVariable', focusedFieldId.value, variable)
+    }
+}
+
+function showVariablePreview(variable: string, event: MouseEvent) {
+    const value = props.variablePreview?.[variable] ?? ''
+    const displayValue = value.trim() ? value : '-'
+    const target = event.currentTarget as HTMLElement | null
+    if (!target) {
+        return
+    }
+
+    const rect = target.getBoundingClientRect()
+    tooltipContent.value = `{{${variable}}} = ${displayValue}`
+    tooltipStyle.value = {
+        top: `${rect.bottom + 8}px`,
+        left: `${rect.left + rect.width / 2}px`,
+        transform: 'translateX(-50%)'
+    }
+    showVariableTooltip.value = true
+}
+
+function hideVariablePreview() {
+    showVariableTooltip.value = false
+}
+
+function getPairPreview(index: number): string {
+    return props.previewSections?.[index]?.content ?? ''
+}
+
+
+
+// Expose methods for use in parent
+defineExpose({
+    insertVariableAtFocus,
+    showVariablePreview,
+    hideVariablePreview
+})
 </script>

@@ -500,18 +500,17 @@
         </CopyTemplateEditorModal>
 
         <CopyTemplateEditorModal
+            ref="reportTemplateModal"
             v-model="showReportTemplateManagerModal"
             :title="$t('report.editor.template_manager_title')"
             :hint="$t('report.editor.template_manager_hint')"
             :variable-title="$t('report.editor.template_manager_fields')"
-            :content-title="$t('report.editor.learning_report_label')"
             :preview-title="$t('report.editor.template_preview_title')"
             :preview-hint="$t('report.editor.template_preview_hint')"
             :preview-empty="$t('report.editor.template_preview_empty')"
-            :template-text="templateDraftContent"
             :preview-text="reportTemplatePreviewText"
             :preview-sections="reportTemplatePreviewSections"
-            :variable-count="savedTemplates.length"
+            :variable-count="reportTemplateVariables.length"
             :is-loading="isLoadingTemplateManager"
             :loading-text="$t('report.editor.template_manager_loading')"
             :loading-hint="$t('report.editor.template_manager_loading_hint')"
@@ -520,7 +519,10 @@
             :cancel-text="$t('common.cancel')"
             :save-text="$t('report.editor.template_save_action')"
             :saving-text="$t('report.saving')"
-            @update:template-text="templateDraftContent = $event"
+            :editable-fields="reportTemplateEditableFields"
+            :variable-preview="reportTemplateVariablePreview"
+            @update:editable-fields-content="onEditableFieldsUpdate"
+            @insert-variable="insertReportTemplateVariable"
             @save="saveTemplateDraft"
         >
             <template #controls>
@@ -564,49 +566,26 @@
                     </div>
 
                     <div class="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2">
-                        <div class="grid grid-cols-1 gap-2 md:grid-cols-[200px_1fr] md:items-end">
-                            <div>
-                                <label class="block text-xs font-bold uppercase tracking-wide text-purple-900 mb-1">
-                                    {{ $t('report.editor.template_variable_target') }}
-                                </label>
-                                <select v-model="templateVariableTarget"
-                                    class="w-full rounded-xl border border-purple-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
-                                    <option value="contact">{{ $t('report.editor.contact_notes_label') }}</option>
-                                    <option value="class">{{ $t('report.editor.class_notes_label') }}</option>
-                                    <option value="report">{{ $t('report.editor.learning_report_label') }}</option>
-                                </select>
-                            </div>
-                            <div class="flex flex-wrap gap-2">
-                                <button
-                                    v-for="variable in reportTemplateVariables"
-                                    :key="variable.key"
-                                    @click="insertReportTemplateVariable(variable.key)"
-                                    class="rounded-lg bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 transition hover:bg-purple-200"
-                                    :title="variable.description"
-                                >
-                                    {{ variable.token }}
-                                </button>
-                            </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                v-for="variable in reportTemplateVariables"
+                                :key="variable.key"
+                                @click="insertVariableToFocusedField(variable.key)"
+                                @mouseenter="handleTemplateVariableMouseEnter(variable.key, $event)"
+                                @mouseleave="handleTemplateVariableMouseLeave"
+                                class="relative rounded-lg bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 transition hover:bg-purple-200"
+                                :title="variable.description"
+                            >
+                                {{ variable.token }}
+                            </button>
                         </div>
+                        <p class="text-xs text-purple-700">{{ $t('report.editor.template_variable_auto_insert_hint', '點擊上方欄位後，點擊變數即可插入') }}</p>
                     </div>
                 </div>
             </template>
 
             <template #variables>
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div class="space-y-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-                        <label class="text-sm font-bold text-gray-800">{{ $t('report.editor.contact_notes_label') }}</label>
-                        <textarea v-model="templateDraftContactNotes" rows="6"
-                            class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                            :placeholder="$t('report.editor.contact_notes_placeholder')"></textarea>
-                    </div>
-                    <div class="space-y-2 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-                        <label class="text-sm font-bold text-gray-800">{{ $t('report.editor.class_notes_label') }}</label>
-                        <textarea v-model="templateDraftClassNotes" rows="6"
-                            class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                            :placeholder="$t('report.editor.class_notes_placeholder')"></textarea>
-                    </div>
-                </div>
+                <!-- Variables section can be empty as we're using inline variable buttons in controls -->
             </template>
         </CopyTemplateEditorModal>
     </div>
@@ -643,8 +622,6 @@ interface Template {
     classNotes?: string
 }
 
-type TemplateVariableTarget = 'contact' | 'class' | 'report'
-
 interface ReportTemplateVariableItem {
     key: string
     token: string
@@ -667,12 +644,13 @@ const selectedCourseTemplateModes = ref<Record<string, string>>({
 const courseTemplateLoadOptions = ref<Array<CopyTemplateLoadOption & { displayLabel: string }>>([])
 const selectedCourseTemplateLoadKey = ref('')
 const showReportTemplateManagerModal = ref(false)
+const reportTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
 const selectedTemplateId = ref('')
 const templateDraftName = ref('')
 const templateDraftContent = ref('')
 const templateDraftContactNotes = ref('')
 const templateDraftClassNotes = ref('')
-const templateVariableTarget = ref<TemplateVariableTarget>('report')
+
 const toast = useToast()
 
 // Confirm Modal State
@@ -817,18 +795,73 @@ const reportTemplatePreviewText = computed(() => {
         .trim()
 })
 
-function insertReportTemplateVariable(variable: string) {
+// Variable preview mapping for tooltip display
+const reportTemplateVariablePreview = computed<Record<string, string>>(() => {
+    const context = buildReportTemplateContext()
+    return Object.entries(context).reduce((acc, [key, value]) => {
+        acc[key] = String(value || '')
+        return acc
+    }, {} as Record<string, string>)
+})
+
+// Editable fields structure for multi-field modal
+const reportTemplateEditableFields = computed<Array<{ id: string; label: string; content: string }>>(() => {
+    return [
+        {
+            id: 'contact',
+            label: t('report.editor.contact_notes_label'),
+            content: templateDraftContactNotes.value
+        },
+        {
+            id: 'class',
+            label: t('report.editor.class_notes_label'),
+            content: templateDraftClassNotes.value
+        },
+        {
+            id: 'report',
+            label: t('report.editor.learning_report_label'),
+            content: templateDraftContent.value
+        }
+    ]
+})
+
+function insertReportTemplateVariable(fieldId: string, variable: string) {
     const token = formatCopyTemplateToken(variable)
-    if (templateVariableTarget.value === 'contact') {
+    if (fieldId === 'contact') {
         templateDraftContactNotes.value += token
         return
     }
-    if (templateVariableTarget.value === 'class') {
+    if (fieldId === 'class') {
         templateDraftClassNotes.value += token
         return
     }
     templateDraftContent.value += token
 }
+
+function insertVariableToFocusedField(variable: string) {
+    reportTemplateModal.value?.insertVariableAtFocus?.(variable)
+}
+
+function handleTemplateVariableMouseEnter(variable: string, event: MouseEvent) {
+    reportTemplateModal.value?.showVariablePreview?.(variable, event)
+}
+
+function handleTemplateVariableMouseLeave() {
+    reportTemplateModal.value?.hideVariablePreview?.()
+}
+
+function onEditableFieldsUpdate(fields: Array<{ id: string; label: string; content: string }>) {
+    fields.forEach(field => {
+        if (field.id === 'contact') {
+            templateDraftContactNotes.value = field.content
+        } else if (field.id === 'class') {
+            templateDraftClassNotes.value = field.content
+        } else if (field.id === 'report') {
+            templateDraftContent.value = field.content
+        }
+    })
+}
+
 
 const selectedCoursePreviewLesson = computed(() => {
     return props.availableLessons.find(l => l.id === selectedLessonId.value) || props.availableLessons[0] || null
