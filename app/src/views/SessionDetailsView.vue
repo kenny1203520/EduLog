@@ -319,7 +319,10 @@ function getTodayCourseSummary(enrollment: Enrollment): TodayCourseSummary {
     }
 }
 
-async function loadStudentProgressSummaries(enrollmentList: Enrollment[]) {
+async function loadStudentProgressSummaries(
+    enrollmentList: Enrollment[],
+    mode: 'replace' | 'merge' = 'replace'
+) {
     const uniqueCourseIds = [...new Set(enrollmentList.map(enrollment => enrollment.courseId).filter(Boolean))]
     await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
 
@@ -333,7 +336,17 @@ async function loadStudentProgressSummaries(enrollmentList: Enrollment[]) {
         return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons)] as const
     }))
 
-    studentProgressSummaries.value = Object.fromEntries(summaryEntries.filter(([id]) => !!id)) as Record<string, StudentProgressSummary>
+    const nextSummaries = Object.fromEntries(summaryEntries.filter(([id]) => !!id)) as Record<string, StudentProgressSummary>
+
+    if (mode === 'merge') {
+        studentProgressSummaries.value = {
+            ...studentProgressSummaries.value,
+            ...nextSummaries
+        }
+        return
+    }
+
+    studentProgressSummaries.value = nextSummaries
 }
 
 function getStudentProgressSummary(enrollmentId?: string): StudentProgressSummary {
@@ -491,15 +504,21 @@ async function loadReportsForCurrentOccurrence() {
     if (guestEnrollmentIds.length > 0) {
         const guestPromises = guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!))
         const guests = await Promise.all(guestPromises)
+        const addedGuests: Enrollment[] = []
 
         guests.forEach(guest => {
             if (guest) {
                 ; (guest as any).isGuest = true
                 if (!enrollments.value.find(e => e.id === guest.id)) {
                     enrollments.value.push(guest)
+                    addedGuests.push(guest)
                 }
             }
         })
+
+        if (addedGuests.length > 0) {
+            await loadStudentProgressSummaries(addedGuests, 'merge')
+        }
     }
 
     for (const enr of enrollments.value) {
@@ -564,6 +583,7 @@ async function loadData() {
         loading.value = true
         // Reset maps to avoid stale or merged data
         reportMap.value = new Map()
+        studentProgressSummaries.value = {}
 
         // 1. Get session details
         session.value = await CourseService.getSessionDetails(sessionId)
