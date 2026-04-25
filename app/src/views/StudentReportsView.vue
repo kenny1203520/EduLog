@@ -311,6 +311,19 @@
                                 <p class="text-sm font-bold text-gray-800">{{ enrollmentInfo.sessionName || '-' }}</p>
                             </div>
                         </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">{{ $t('student.internal_courses.status') }}</p>
+                                <p class="text-sm font-bold text-gray-800">{{ $t('student.internal_courses.status_' + (enrollmentInfo.status || 'active')) }}</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -487,9 +500,11 @@ const enrollmentInfo = ref<{
     courseDisplay?: string,
     classroomName?: string,
     sessionName?: string,
+    status?: string,
     externalLink?: string,
     studentId?: string
 } | null>(null)
+const isEnrollmentActive = ref(false)
 const courseLessons = ref<any[]>([])
 let reportSubscription: RealtimeChannel | null = null
 
@@ -804,9 +819,11 @@ async function loadOccurrences() {
             courseDisplay: enrollment.courseDisplayName,
             classroomName: enrollment.classroomName,
             sessionName: enrollment.classSessionName,
+            status: enrollment.status,
             externalLink: enrollment.externalLink,
             studentId: enrollment.studentId
         }
+        isEnrollmentActive.value = enrollment.status === 'active'
 
         // 2. Load lessons for this course (needed for editor)
         if (enrollment.courseId) {
@@ -1012,13 +1029,13 @@ async function loadOccurrences() {
                 const latestPast = sortedPast[0]
 
                 if (latestPast) {
-                    await selectOccurrence(latestPast)
+                    await selectOccurrence(latestPast, { allowCreatePrompt: isEnrollmentActive.value })
                 }
             } else if (futureOccurrences.length > 0) {
                 // Only if no past history at all (new student?), revert to earliest upcoming
                 const earliestFuture = futureOccurrences[0]
                 if (earliestFuture) {
-                    await selectOccurrence(earliestFuture)
+                    await selectOccurrence(earliestFuture, { allowCreatePrompt: isEnrollmentActive.value })
                 }
             }
         }
@@ -1030,7 +1047,10 @@ async function loadOccurrences() {
     }
 }
 
-async function selectOccurrence(occurrence: ClassOccurrence) {
+async function selectOccurrence(
+    occurrence: ClassOccurrence,
+    options: { allowCreatePrompt?: boolean } = {}
+) {
     await reportEditorRef.value?.saveNow()
 
     // Cleanup previous subscription
@@ -1042,6 +1062,7 @@ async function selectOccurrence(occurrence: ClassOccurrence) {
     selectedOccurrence.value = occurrence
     try {
         reportLoading.value = true
+        const allowCreatePrompt = options.allowCreatePrompt ?? true
         // Get or create report for this occurrence
         const enrollmentId = route.params.enrollmentId as string
         if (!enrollmentId || !occurrence.id) return
@@ -1050,15 +1071,17 @@ async function selectOccurrence(occurrence: ClassOccurrence) {
         const hasExistingReport = allReports.value.some(r => r.class_occurrence_id === occurrence.id)
 
         // Create explicit Create method for manual creation
-        if (!hasExistingReport) {
+        if (!hasExistingReport && allowCreatePrompt) {
             // Store pending occurrence and show modal
             pendingOccurrence.value = occurrence
             showCreateConfirm.value = true
             return
-        } else {
+        } else if (hasExistingReport) {
             // Just fetch existing
             const report = await OccurrenceReportService.getReport(enrollmentId, occurrence.id)
             selectedReport.value = report
+        } else {
+            selectedReport.value = null
         }
 
         const currentReportId = selectedReport.value?.id

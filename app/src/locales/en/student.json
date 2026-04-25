@@ -109,6 +109,7 @@
         "delete_enrollment": "Delete Course",
         "edit_enrollment_title": "Edit Course Enrollment",
         "status_active": "Active",
+        "status_trial": "Trial",
         "status_completed": "Completed",
         "status_dropped": "Dropped",
         "session_optional": "Class Session",
@@ -142,7 +143,14 @@
         "transfer_mode_permanent": "Permanent Transfer (Future)",
         "transfer_mode_single": "Single Lesson (Make-up)",
         "transfer_original_date": "Lesson to Reschedule",
-        "transfer_target_date": "New Class Date"
+        "transfer_target_date": "New Class Date",
+        "enrollment_report_count": "How many reports to create",
+        "enrollment_report_count_hint": "Defaults to the course lesson count. You can adjust how many upcoming reports are created.",
+        "trial_to_active_title": "Convert Trial to Active",
+        "trial_to_active_message": "Set the total number of reports for this enrollment, including existing trial reports.",
+        "target_total_reports": "Total report count",
+        "target_total_reports_hint": "The system only creates the missing count and keeps existing trial reports.",
+        "trial_to_active_confirm": "Confirm Conversion"
     },
     "credentials": {
         "title": "Credentials",

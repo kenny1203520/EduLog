@@ -217,8 +217,14 @@ const availableClassrooms = ref<Classroom[]>([])
 const availableSessions = ref<ClassSessionDTO[]>([])
 const isEnrollModalOpen = ref(false)
 const newEnrollment = ref<Partial<EnrollmentDTO>>({ status: 'active' })
+const enrollmentGenerateCount = ref(1)
 const selectedSessionDetails = ref<any>(null)
 const classroomSearchTerm = ref('')
+
+const showActivateTrialModal = ref(false)
+const activateTrialTargetReportCount = ref(1)
+const pendingEnrollmentUpdate = ref<{ id: string, updates: Partial<EnrollmentDTO> } | null>(null)
+const previousEnrollmentStatus = ref<EnrollmentDTO['status'] | null>(null)
 
 const filteredSessions = computed(() => {
     if (!newEnrollment.value.course_id) return []
@@ -248,6 +254,12 @@ const filteredClassrooms = computed(() => {
     )
 })
 
+function getCourseLessonCount(courseId?: string): number {
+    if (!courseId) return 1
+    const selectedCourse = availableCourses.value.find(course => course.id === courseId)
+    return Math.max(1, selectedCourse?.lessons?.length || 1)
+}
+
 // Watch Session Selection to Fetch Details
 watch(() => newEnrollment.value.class_session_id, async (sessionId) => {
     if (!sessionId) {
@@ -267,6 +279,10 @@ watch(() => newEnrollment.value.class_session_id, async (sessionId) => {
         console.error('Failed to fetch session details:', e)
         selectedSessionDetails.value = null
     }
+})
+
+watch(() => newEnrollment.value.course_id, (courseId) => {
+    enrollmentGenerateCount.value = getCourseLessonCount(courseId)
 })
 
 async function fetchEnrollments() {
@@ -292,6 +308,7 @@ async function openEnrollModal() {
         start_date: new Date().toISOString().split('T')[0],
         lesson_number: 1
     }
+    enrollmentGenerateCount.value = 1
 }
 
 async function enrollStudent() {
@@ -301,6 +318,8 @@ async function enrollStudent() {
         await EnrollmentService.create({
             ...newEnrollment.value,
             student_id: studentId.value
+        }, {
+            targetReportCount: enrollmentGenerateCount.value
         })
         await fetchEnrollments()
         isEnrollModalOpen.value = false
@@ -318,6 +337,7 @@ const editEnrollmentForm = ref<Partial<EnrollmentDTO>>({})
 
 async function startEditEnrollment(enr: Enrollment) {
     editingEnrollmentId.value = enr.id!
+    previousEnrollmentStatus.value = enr.status as EnrollmentDTO['status']
     editEnrollmentForm.value = {
         course_id: enr.courseId,
         classroom_id: enr.classroomId,
@@ -348,16 +368,63 @@ async function startEditEnrollment(enr: Enrollment) {
 function cancelEditEnrollment() {
     editingEnrollmentId.value = null
     editEnrollmentForm.value = {}
+    previousEnrollmentStatus.value = null
+    pendingEnrollmentUpdate.value = null
+    showActivateTrialModal.value = false
+}
+
+async function executeEnrollmentUpdate(
+    enrollmentId: string,
+    updates: Partial<EnrollmentDTO>,
+    targetTotalReports?: number
+) {
+    await EnrollmentService.update(enrollmentId, updates, { targetTotalReports })
+    await fetchEnrollments()
+    cancelEditEnrollment()
+    toast.success(t('common.save_success'))
+}
+
+async function confirmTrialToActiveTransition() {
+    if (!pendingEnrollmentUpdate.value) return
+
+    try {
+        isModifying.value = true
+        await executeEnrollmentUpdate(
+            pendingEnrollmentUpdate.value.id,
+            pendingEnrollmentUpdate.value.updates,
+            activateTrialTargetReportCount.value
+        )
+    } catch (e) {
+        console.error(e)
+        toast.error('Failed to update enrollment')
+    } finally {
+        isModifying.value = false
+        showActivateTrialModal.value = false
+        pendingEnrollmentUpdate.value = null
+    }
 }
 
 async function saveEnrollment() {
     if (!editingEnrollmentId.value) return
+
+    const nextStatus = editEnrollmentForm.value.status as EnrollmentDTO['status'] | undefined
+    const shouldPromptTrialToActive =
+        previousEnrollmentStatus.value === 'trial' &&
+        nextStatus === 'active'
+
+    if (shouldPromptTrialToActive) {
+        pendingEnrollmentUpdate.value = {
+            id: editingEnrollmentId.value,
+            updates: { ...editEnrollmentForm.value }
+        }
+        activateTrialTargetReportCount.value = getCourseLessonCount(editEnrollmentForm.value.course_id)
+        showActivateTrialModal.value = true
+        return
+    }
+
     try {
         isModifying.value = true
-        await CourseService.updateEnrollment(editingEnrollmentId.value, editEnrollmentForm.value)
-        await fetchEnrollments()
-        cancelEditEnrollment()
-        toast.success(t('common.save_success'))
+        await executeEnrollmentUpdate(editingEnrollmentId.value, editEnrollmentForm.value)
     } catch (e) {
         console.error(e)
         toast.error('Failed to update enrollment')
@@ -1618,10 +1685,11 @@ function copyToClipboard(text: string) {
                                         <span class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide"
                                             :class="{
                                                 'bg-emerald-100 text-emerald-700': enr.status === 'active',
+                                                'bg-amber-100 text-amber-700': enr.status === 'trial',
                                                 'bg-blue-100 text-blue-700': enr.status === 'completed',
                                                 'bg-gray-100 text-gray-500': enr.status === 'dropped'
                                             }">
-                                            {{ enr.status }}
+                                            {{ $t('student.internal_courses.status_' + enr.status) }}
                                         </span>
                                     </div>
                                     <div class="flex flex-wrap items-center gap-3 text-sm text-gray-600">
@@ -1767,6 +1835,8 @@ function copyToClipboard(text: string) {
                                         <select v-model="editEnrollmentForm.status"
                                             class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
+                                            </option>
+                                            <option value="trial">{{ $t('student.internal_courses.status_trial') }}
                                             </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
                                             }}</option>
@@ -1999,6 +2069,8 @@ function copyToClipboard(text: string) {
                                             class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all bg-white">
                                             <option value="active">{{ $t('student.internal_courses.status_active') }}
                                             </option>
+                                            <option value="trial">{{ $t('student.internal_courses.status_trial') }}
+                                            </option>
                                             <option value="completed">{{ $t('student.internal_courses.status_completed')
                                             }}</option>
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
@@ -2040,6 +2112,15 @@ function copyToClipboard(text: string) {
                                         </svg>
                                     </div>
                                 </div>
+
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                                        $t('student.internal_courses.enrollment_report_count') }}</label>
+                                    <input type="number" min="1" v-model.number="enrollmentGenerateCount"
+                                        class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all" />
+                                    <p class="mt-1 text-xs text-gray-400">{{
+                                        $t('student.internal_courses.enrollment_report_count_hint') }}</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2062,6 +2143,32 @@ function copyToClipboard(text: string) {
                                 </path>
                             </svg>
                             {{ $t('student.internal_courses.add_btn') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="showActivateTrialModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl m-4">
+                    <h3 class="text-xl font-bold text-gray-900 mb-3">{{
+                        $t('student.internal_courses.trial_to_active_title') }}</h3>
+                    <p class="text-sm text-gray-600 mb-4">{{
+                        $t('student.internal_courses.trial_to_active_message') }}</p>
+                    <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                        $t('student.internal_courses.target_total_reports') }}</label>
+                    <input type="number" min="1" v-model.number="activateTrialTargetReportCount"
+                        class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all" />
+                    <p class="mt-1 text-xs text-gray-400">{{
+                        $t('student.internal_courses.target_total_reports_hint') }}</p>
+
+                    <div class="mt-6 flex justify-end gap-3">
+                        <button @click="showActivateTrialModal = false"
+                            class="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-semibold transition-colors">
+                            {{ $t('common.cancel') }}
+                        </button>
+                        <button @click="confirmTrialToActiveTransition" :disabled="isModifying"
+                            class="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50">
+                            {{ $t('student.internal_courses.trial_to_active_confirm') }}
                         </button>
                     </div>
                 </div>

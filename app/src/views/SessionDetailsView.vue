@@ -1652,7 +1652,11 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                         </span>
                                         <span
                                             class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
-                                            :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
+                                            :class="e.status === 'active'
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                : (e.status === 'trial'
+                                                    ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                    : 'bg-gray-50 text-gray-400 border-gray-200')">
                                             {{ $t('student.internal_courses.status_' + e.status) }}
                                         </span>
                                     </div>
@@ -1907,7 +1911,11 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                             </span>
                                             <span
                                                 class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border whitespace-nowrap inline-block lg:inline"
-                                                :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
+                                                :class="e.status === 'active'
+                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                    : (e.status === 'trial'
+                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                        : 'bg-gray-50 text-gray-400 border-gray-200')">
                                                 {{ $t('student.internal_courses.status_' + e.status) }}
                                             </span>
                                         </div>

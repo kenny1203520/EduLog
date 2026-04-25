@@ -3,6 +3,14 @@ import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 import { OccurrenceService } from './OccurrenceService'
 import { OccurrenceReportService } from './OccurrenceReportService'
 
+type EnrollmentCreateOptions = {
+    targetReportCount?: number
+}
+
+type EnrollmentUpdateOptions = {
+    targetTotalReports?: number
+}
+
 /**
  * EnrollmentService handles student course enrollments with automatic report generation.
  * 
@@ -84,7 +92,10 @@ export class EnrollmentService {
     /**
      * Create a new enrollment and automatically generate reports for all upcoming class sessions
      */
-    static async create(enrollmentData: Partial<EnrollmentDTO>): Promise<Enrollment> {
+    static async create(
+        enrollmentData: Partial<EnrollmentDTO>,
+        options: EnrollmentCreateOptions = {}
+    ): Promise<Enrollment> {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
 
@@ -124,7 +135,10 @@ export class EnrollmentService {
                 enrollment.class_session_id,
                 enrollment.start_date || new Date().toISOString().split('T')[0],
                 enrollment.course_id,
-                enrollment.lesson_number || 1
+                enrollment.lesson_number || 1,
+                {
+                    targetReportCount: options.targetReportCount
+                }
             )
         }
 
@@ -231,9 +245,23 @@ export class EnrollmentService {
      * Update an existing enrollment
      * Handles class transfers and classroom updates
      */
-    static async update(enrollmentId: string, updates: Partial<EnrollmentDTO>): Promise<Enrollment> {
+    static async update(
+        enrollmentId: string,
+        updates: Partial<EnrollmentDTO>,
+        options: EnrollmentUpdateOptions = {}
+    ): Promise<Enrollment> {
         // Note: Class transfer is handled by transferClass() method for better control
         // over historical data preservation.
+
+        const { data: existing, error: existingError } = await supabase
+            .from('enrollments')
+            .select('id, status, class_session_id, course_id, start_date, lesson_number')
+            .eq('id', enrollmentId)
+            .single()
+
+        if (existingError || !existing) {
+            throw new Error(`Failed to fetch enrollment before update: ${existingError?.message || 'not found'}`)
+        }
         
         // Update the enrollment
         const { data: updated, error: updateError } = await supabase
@@ -249,6 +277,33 @@ export class EnrollmentService {
             .single()
 
         if (updateError) throw new Error(`Failed to update enrollment: ${updateError.message}`)
+
+        const previousStatus = existing.status
+        const nextStatus = updated.status
+
+        if (
+            previousStatus === 'trial' &&
+            nextStatus === 'active' &&
+            updated.id &&
+            updated.class_session_id &&
+            updated.course_id
+        ) {
+            await this.ensureEnrollmentReportsTarget(
+                updated.id,
+                updated.class_session_id,
+                updated.course_id,
+                updated.start_date || new Date().toISOString().split('T')[0],
+                updated.lesson_number || 1,
+                options.targetTotalReports
+            )
+        }
+
+        if (previousStatus !== 'dropped' && nextStatus === 'dropped' && updated.id) {
+            await this.deleteDroppedPendingEmptyReports(updated.id)
+            if (updated.class_session_id) {
+                await OccurrenceService.syncSessionOccurrences(updated.class_session_id, 'all').catch(() => {})
+            }
+        }
 
         return new Enrollment(updated as EnrollmentDTO)
     }
@@ -294,15 +349,22 @@ export class EnrollmentService {
         sessionId: string,
         startDate: string,
         courseId: string,
-        startLesson: number
+        startLesson: number,
+        options: {
+            targetReportCount?: number
+            skipExisting?: boolean
+        } = {}
     ): Promise<void> {
         // 1. Get lesson count for this course
         const { data: lessons } = await supabase
             .from('lessons')
             .select('id')
             .eq('course_id', courseId)
-        
-        const lessonCount = ((lessons && lessons.length > 0) ? lessons.length : 15) - startLesson + 1
+
+        const fallbackLessonCount = ((lessons && lessons.length > 0) ? lessons.length : 15) - startLesson + 1
+        const lessonCount = options.targetReportCount !== undefined
+            ? Math.max(1, Math.floor(options.targetReportCount))
+            : Math.max(1, fallbackLessonCount)
         
         // 2. Ensure occurrences exist
         const start = new Date(startDate)
@@ -311,18 +373,44 @@ export class EnrollmentService {
         
         await OccurrenceService.generateOccurrences(sessionId, start, endDate).catch(() => {})
         
-        // 3. Fetch exactly N future occurrences starting from startDate
+        // 3. Fetch future occurrences starting from startDate
+        const fetchLimit = options.skipExisting ? lessonCount * 4 : lessonCount
         const { data: occurrences } = await supabase
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', sessionId)
             .gte('occurrence_date', startDate)
             .order('occurrence_date', { ascending: true })
-            .limit(lessonCount)
+            .limit(fetchLimit)
 
         if (occurrences && occurrences.length > 0) {
+            let targetOccurrences = occurrences.slice(0, lessonCount)
+
+            if (options.skipExisting) {
+                const occurrenceIds = occurrences
+                    .map(occ => occ.id)
+                    .filter((id): id is string => Boolean(id))
+
+                if (occurrenceIds.length > 0) {
+                    const { data: existingReports } = await supabase
+                        .from('occurrence_reports')
+                        .select('class_occurrence_id')
+                        .eq('enrollment_id', enrollmentId)
+                        .in('class_occurrence_id', occurrenceIds)
+
+                    const existingOccurrenceIds = new Set((existingReports || []).map(r => r.class_occurrence_id))
+                    targetOccurrences = occurrences
+                        .filter(occ => !existingOccurrenceIds.has(occ.id))
+                        .slice(0, lessonCount)
+                }
+            }
+
+            if (targetOccurrences.length === 0) {
+                return
+            }
+
             // 4. Batch create reports
-            const reports = occurrences.map(occ => ({
+            const reports = targetOccurrences.map(occ => ({
                 enrollment_id: enrollmentId,
                 class_occurrence_id: occ.id,
                 content: '',
@@ -334,6 +422,85 @@ export class EnrollmentService {
             await supabase
                 .from('occurrence_reports')
                 .insert(reports)
+        }
+    }
+
+    private static async ensureEnrollmentReportsTarget(
+        enrollmentId: string,
+        sessionId: string,
+        courseId: string,
+        startDate: string,
+        startLesson: number,
+        targetTotalReports?: number
+    ): Promise<void> {
+        if (!targetTotalReports || targetTotalReports <= 0) {
+            return
+        }
+
+        const { count: existingReportCount } = await supabase
+            .from('occurrence_reports')
+            .select('*', { count: 'exact', head: true })
+            .eq('enrollment_id', enrollmentId)
+
+        const additionalCount = Math.max((targetTotalReports || 0) - (existingReportCount || 0), 0)
+        if (additionalCount <= 0) {
+            return
+        }
+
+        const normalizedStartDate = this.normalizeDateOnly(startDate)
+        const today = this.normalizeDateOnly(new Date())
+        const generationStartDate = normalizedStartDate < today ? today : normalizedStartDate
+
+        await this.generateReportsForSession(
+            enrollmentId,
+            sessionId,
+            generationStartDate,
+            courseId,
+            startLesson,
+            {
+                targetReportCount: additionalCount,
+                skipExisting: true
+            }
+        )
+    }
+
+    private static isBlankText(value: unknown): boolean {
+        if (value === null || value === undefined) return true
+        if (typeof value !== 'string') return false
+        return value.trim().length === 0
+    }
+
+    private static async deleteDroppedPendingEmptyReports(enrollmentId: string): Promise<void> {
+        const { data: reports, error } = await supabase
+            .from('occurrence_reports')
+            .select('id, is_completed, attendance_status, content, class_notes, contact_notes, progress_letter, lesson_id')
+            .eq('enrollment_id', enrollmentId)
+            .eq('is_completed', false)
+            .eq('attendance_status', 'pending')
+
+        if (error) {
+            throw new Error(`Failed to fetch reports for dropped cleanup: ${error.message}`)
+        }
+
+        const deletableIds = (reports || [])
+            .filter(report => this.isBlankText(report.content))
+            .filter(report => this.isBlankText(report.class_notes))
+            .filter(report => this.isBlankText(report.contact_notes))
+            .filter(report => this.isBlankText(report.progress_letter))
+            .filter(report => report.lesson_id === null || report.lesson_id === undefined)
+            .map(report => report.id)
+
+        if (deletableIds.length === 0) {
+            return
+        }
+
+        const { error: deleteError } = await supabase
+            .from('occurrence_reports')
+            .delete()
+            .in('id', deletableIds)
+
+        if (deleteError) {
+            throw new Error(`Failed to clean dropped enrollment reports: ${deleteError.message}`)
         }
     }
 
