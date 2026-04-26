@@ -5,7 +5,9 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { StudentService } from '@/services/StudentService'
-import { CourseService } from '@/services/CourseService'
+import { CourseCatalogService } from '@/services/CourseCatalogService'
+import { ClassroomService } from '@/services/ClassroomService'
+import { SessionService } from '@/services/SessionService'
 import { EnrollmentService } from '@/services/EnrollmentService'
 import { Course } from '@/models/Course'
 import { Classroom, type ClassSessionDTO } from '@/models/Classroom'
@@ -270,7 +272,7 @@ watch(() => newEnrollment.value.class_session_id, async (sessionId) => {
 
     try {
         // Fetch session details including classroom info and enrollment count
-        selectedSessionDetails.value = await CourseService.getSessionDetails(sessionId)
+        selectedSessionDetails.value = await SessionService.getSessionDetails(sessionId)
 
         // Auto-set classroom from session
         if (selectedSessionDetails.value.classroom_id) {
@@ -306,9 +308,9 @@ async function openEnrollModal() {
     isEnrollModalOpen.value = true
     // Fetch all data needed (with large page size to get all)
     const [coursesRes, roomsRes, sessionsRes] = await Promise.all([
-        CourseService.getCourses(1, 1000),
-        CourseService.getClassrooms(1, 1000),
-        CourseService.getClassSessions(1, 1000)
+        CourseCatalogService.getCourses(1, 1000),
+        ClassroomService.getClassrooms(1, 1000),
+        SessionService.getClassSessions(1, 1000)
     ])
     availableCourses.value = coursesRes.data
     availableClassrooms.value = roomsRes.data
@@ -364,9 +366,9 @@ async function startEditEnrollment(enr: Enrollment) {
     if (availableCourses.value.length === 0) {
         try {
             const [coursesRes, roomsRes, sessionsRes] = await Promise.all([
-                CourseService.getCourses(1, 1000),
-                CourseService.getClassrooms(1, 1000),
-                CourseService.getClassSessions(1, 1000)
+                CourseCatalogService.getCourses(1, 1000),
+                ClassroomService.getClassrooms(1, 1000),
+                SessionService.getClassSessions(1, 1000)
             ])
             availableCourses.value = coursesRes.data
             availableClassrooms.value = roomsRes.data
@@ -707,7 +709,7 @@ async function openTransferModal(enr: Enrollment) {
 
     // Fetch sessions for this course
     try {
-        const { data } = await CourseService.getClassSessions(1, 1000)
+        const { data } = await SessionService.getClassSessions(1, 1000)
         // Filter for same course but different session
         itemTransferSessions.value = data.filter(s =>
             s.course_ids.includes(enr.courseId)

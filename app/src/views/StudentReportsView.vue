@@ -461,6 +461,7 @@ import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { CourseCatalogService } from '@/services/CourseCatalogService'
 import { CourseService } from '@/services/CourseService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
@@ -827,7 +828,7 @@ async function loadOccurrences() {
 
         // 2. Load lessons for this course (needed for editor)
         if (enrollment.courseId) {
-            const lessons = await CourseService.getLessonsByCourse(enrollment.courseId)
+            const lessons = await CourseCatalogService.getLessonsByCourse(enrollment.courseId)
             courseLessons.value = lessons
         }
 

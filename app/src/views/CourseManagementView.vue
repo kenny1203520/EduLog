@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue' // Added watch
-import { CourseService } from '@/services/CourseService'
+import { CourseCatalogService } from '@/services/CourseCatalogService'
 import { Course, Lesson, type CourseDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
@@ -102,7 +102,7 @@ onMounted(async () => {
 async function fetchCourses() {
     try {
         loading.value = true
-        const res = await CourseService.getCourses(pagination.value.page, pagination.value.perPage)
+        const res = await CourseCatalogService.getCourses(pagination.value.page, pagination.value.perPage)
         courses.value = res.data
         pagination.value.total = res.count
     } catch (e) {
@@ -139,10 +139,10 @@ async function saveCourse() {
         isSaving.value = true
         if (editingCourse.value && editingCourse.value.id) {
             // Update
-            await CourseService.updateCourse(editingCourse.value.id, courseForm.value)
+            await CourseCatalogService.updateCourse(editingCourse.value.id, courseForm.value)
         } else {
             // Create
-            await CourseService.createCourse(courseForm.value)
+            await CourseCatalogService.createCourse(courseForm.value)
         }
         await fetchCourses()
         iscreateModalOpen.value = false
@@ -185,14 +185,14 @@ async function saveLesson(courseId: string) {
         isSaving.value = true
         if (editingLessonId.value) {
             // Update
-            await CourseService.updateLesson(editingLessonId.value, {
+            await CourseCatalogService.updateLesson(editingLessonId.value, {
                 title: lessonForm.value.title,
                 sequence: lessonForm.value.sequence
             })
             editingLessonId.value = null
         } else {
             // Create
-            await CourseService.createLesson({
+            await CourseCatalogService.createLesson({
                 course_id: courseId,
                 title: lessonForm.value.title,
                 sequence: lessonForm.value.sequence
@@ -218,7 +218,7 @@ function cancelLessonEdit() {
 async function deleteCourse(id: string) {
     openConfirm(t('course.confirm_delete'), async () => {
         try {
-            await CourseService.deleteCourse(id)
+            await CourseCatalogService.deleteCourse(id)
             await fetchCourses()
             toast.success(t('course.delete_success') || 'Course deleted successfully')
         } catch (e) {
@@ -230,7 +230,7 @@ async function deleteCourse(id: string) {
 async function deleteLesson(id: string) {
     openConfirm(t('course.lesson_confirm_delete'), async () => {
         try {
-            await CourseService.deleteLesson(id)
+            await CourseCatalogService.deleteLesson(id)
             await fetchCourses()
             toast.success(t('course.lesson_delete_success') || 'Lesson deleted successfully')
         } catch (e) {

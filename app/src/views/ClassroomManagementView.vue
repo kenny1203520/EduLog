@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CourseService } from '@/services/CourseService'
+import { CourseCatalogService } from '@/services/CourseCatalogService'
+import { ClassroomService } from '@/services/ClassroomService'
+import { SessionService } from '@/services/SessionService'
+import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/OccurrenceService'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import { Course } from '@/models/Course'
@@ -118,7 +121,7 @@ async function loadData() {
             loadRooms(),
             loadSessions(),
             loadAllRooms(),
-            CourseService.getCourses().then(res => { courses.value = res.data })
+            CourseCatalogService.getCourses().then(res => { courses.value = res.data })
         ])
     } catch (e) {
         console.error(e)
@@ -128,7 +131,7 @@ async function loadData() {
 }
 
 async function loadRooms() {
-    const res = await CourseService.getClassrooms(
+    const res = await ClassroomService.getClassrooms(
         roomsPagination.value.page,
         roomsPagination.value.perPage,
         searchQuery.value,
@@ -138,11 +141,11 @@ async function loadRooms() {
     roomsPagination.value.total = res.count
 
     const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
-    hiddenClassroomIds.value = await CourseService.getHiddenEntityIds('classroom', roomIds)
+    hiddenClassroomIds.value = await VisibilityPreferenceService.getHiddenEntityIds('classroom', roomIds)
 }
 
 async function loadSessions() {
-    const res = await CourseService.getClassSessions(
+    const res = await SessionService.getClassSessions(
         sessionsPagination.value.page,
         sessionsPagination.value.perPage,
         searchQuery.value,
@@ -153,11 +156,11 @@ async function loadSessions() {
     sessionsPagination.value.total = res.count
 
     const sessionIds = sessions.value.map(session => session.id).filter((id): id is string => Boolean(id))
-    hiddenSessionIds.value = await CourseService.getHiddenEntityIds('class_session', sessionIds)
+    hiddenSessionIds.value = await VisibilityPreferenceService.getHiddenEntityIds('class_session', sessionIds)
 }
 
 async function loadAllRooms() {
-    const res = await CourseService.getClassrooms(1, 1000)
+    const res = await ClassroomService.getClassrooms(1, 1000)
     allClassrooms.value = res.data
 }
 
@@ -236,9 +239,9 @@ async function saveClassroom() {
     try {
         isSavingRoom.value = true
         if (editingClassroom.value?.id) {
-            await CourseService.updateClassroom(editingClassroom.value.id, newClassroom.value)
+            await ClassroomService.updateClassroom(editingClassroom.value.id, newClassroom.value)
         } else {
-            await CourseService.createClassroom(newClassroom.value)
+            await ClassroomService.createClassroom(newClassroom.value)
         }
         await Promise.all([loadRooms(), loadAllRooms()])
         closeRoomModal()
@@ -271,7 +274,7 @@ function closeRoomModal() {
 async function deleteClassroom(id: string) {
     openConfirm(t('classroom.confirm_delete_room'), async () => {
         try {
-            await CourseService.deleteClassroom(id)
+            await ClassroomService.deleteClassroom(id)
             await Promise.all([loadRooms(), loadAllRooms()])
             toast.success(t('classroom.room_delete_success') || 'Room deleted successfully')
         } catch (e) {
@@ -303,7 +306,7 @@ async function toggleClassroomVisibility(id?: string) {
     const willHide = !hiddenClassroomIds.value.has(id)
 
     try {
-        await CourseService.setEntityHidden('classroom', id, willHide)
+        await VisibilityPreferenceService.setEntityHidden('classroom', id, willHide)
         await refreshActiveList()
         toast.success(willHide ? t('classroom.room_hidden') : t('classroom.room_shown'))
     } catch (e) {
@@ -317,7 +320,7 @@ async function toggleSessionVisibility(id?: string) {
     const willHide = !hiddenSessionIds.value.has(id)
 
     try {
-        await CourseService.setEntityHidden('class_session', id, willHide)
+        await VisibilityPreferenceService.setEntityHidden('class_session', id, willHide)
         await refreshActiveList()
         toast.success(willHide ? t('classroom.session_hidden') : t('classroom.session_shown'))
     } catch (e) {
@@ -335,11 +338,11 @@ async function saveSession() {
     try {
         isSavingSession.value = true
         if (editingSession.value?.id) {
-            await CourseService.updateClassSession(editingSession.value.id, payload)
+            await SessionService.updateClassSession(editingSession.value.id, payload)
             // Sync occurrences if the schedule might have changed
             await OccurrenceService.syncSessionOccurrences(editingSession.value.id).catch(console.error)
         } else {
-            const session = await CourseService.createClassSession(payload)
+            const session = await SessionService.createClassSession(payload)
             // Generate occurrences for new sessions
             const startDate = new Date()
             const endDate = new Date()
@@ -386,7 +389,7 @@ function navigateToSession(id: string) {
 async function deleteSession(id: string) {
     openConfirm(t('classroom.confirm_delete_session'), async () => {
         try {
-            await CourseService.deleteClassSession(id)
+            await SessionService.deleteClassSession(id)
             await loadSessions()
             toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
         } catch (e) {

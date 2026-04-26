@@ -223,7 +223,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { OccurrenceReportService } from '@/services/OccurrenceReportService'
-import { CourseService } from '@/services/CourseService'
+import { CourseCatalogService } from '@/services/CourseCatalogService'
+import { ClassroomService } from '@/services/ClassroomService'
+import { SessionService } from '@/services/SessionService'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -289,9 +291,9 @@ function switchTab(tab: 'peer' | 'history') {
 async function loadFilterOptions() {
     try {
         const [crs, cls, sessions] = await Promise.all([
-            CourseService.getCourses(1, 1000),
-            CourseService.getClassrooms(1, 1000),
-            CourseService.getClassSessions(1, 1000)
+            CourseCatalogService.getCourses(1, 1000),
+            ClassroomService.getClassrooms(1, 1000),
+            SessionService.getClassSessions(1, 1000)
         ])
         courses.value = crs.data
         classrooms.value = cls.data

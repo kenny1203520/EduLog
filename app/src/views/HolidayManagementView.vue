@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { HolidayService } from '@/services/HolidayService'
-import { CourseService } from '@/services/CourseService'
+import { ClassroomService } from '@/services/ClassroomService'
+import { SessionService } from '@/services/SessionService'
 import { Holiday } from '@/models/Holiday'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
@@ -43,8 +44,8 @@ onMounted(async () => {
 async function loadAuxData() {
     try {
         const [roomsRes, sessionsRes] = await Promise.all([
-            CourseService.getClassrooms(1, 1000),
-            CourseService.getClassSessions(1, 1000)
+            ClassroomService.getClassrooms(1, 1000),
+            SessionService.getClassSessions(1, 1000)
         ])
         classrooms.value = roomsRes.data
         sessions.value = sessionsRes.data

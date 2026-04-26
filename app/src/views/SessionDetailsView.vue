@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { CourseCatalogService } from '@/services/CourseCatalogService'
+import { SessionService } from '@/services/SessionService'
 import { CourseService } from '@/services/CourseService'
 import { EnrollmentService } from '@/services/EnrollmentService'
 import { OccurrenceService } from '@/services/OccurrenceService'
@@ -124,7 +126,7 @@ function getLessonsForCourse(courseId: string): Promise<Lesson[]> {
         return Promise.resolve(cachedLessons)
     }
 
-    return CourseService.getLessonsByCourse(courseId).then(lessons => {
+    return CourseCatalogService.getLessonsByCourse(courseId).then(lessons => {
         courseLessonsByCourseId.value = {
             ...courseLessonsByCourseId.value,
             [courseId]: lessons
@@ -606,7 +608,7 @@ async function loadData() {
         studentProgressSummaries.value = {}
 
         // 1. Get session details
-        session.value = await CourseService.getSessionDetails(sessionId)
+        session.value = await SessionService.getSessionDetails(sessionId)
 
         // 2. Get all students enrolled in this session
         const { data: allEnrollments } = await CourseService.getEnrollmentsBySession(sessionId)
