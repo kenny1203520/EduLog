@@ -225,6 +225,7 @@ const showActivateTrialModal = ref(false)
 const activateTrialTargetReportCount = ref(1)
 const pendingEnrollmentUpdate = ref<{ id: string, updates: Partial<EnrollmentDTO> } | null>(null)
 const previousEnrollmentStatus = ref<EnrollmentDTO['status'] | null>(null)
+const isCreateTrialStatus = computed(() => newEnrollment.value.status === 'trial')
 
 const filteredSessions = computed(() => {
     if (!newEnrollment.value.course_id) return []
@@ -285,6 +286,17 @@ watch(() => newEnrollment.value.course_id, (courseId) => {
     enrollmentGenerateCount.value = getCourseLessonCount(courseId)
 })
 
+watch(() => newEnrollment.value.status, (status) => {
+    if (status === 'trial') {
+        enrollmentGenerateCount.value = 1
+        return
+    }
+
+    if (newEnrollment.value.course_id) {
+        enrollmentGenerateCount.value = getCourseLessonCount(newEnrollment.value.course_id)
+    }
+})
+
 async function fetchEnrollments() {
     if (!studentId.value) return
     enrollments.value = await EnrollmentService.getByStudentId(studentId.value)
@@ -305,8 +317,7 @@ async function openEnrollModal() {
     newEnrollment.value = {
         student_id: studentId.value,
         status: 'active',
-        start_date: new Date().toISOString().split('T')[0],
-        lesson_number: 1
+        start_date: new Date().toISOString().split('T')[0]
     }
     enrollmentGenerateCount.value = 1
 }
@@ -315,11 +326,15 @@ async function enrollStudent() {
     if (!newEnrollment.value.course_id) return
     try {
         isModifying.value = true
+        const targetReportCount = isCreateTrialStatus.value
+            ? 1
+            : Math.max(1, Math.floor(enrollmentGenerateCount.value || 1))
+
         await EnrollmentService.create({
             ...newEnrollment.value,
             student_id: studentId.value
         }, {
-            targetReportCount: enrollmentGenerateCount.value
+            targetReportCount
         })
         await fetchEnrollments()
         isEnrollModalOpen.value = false
@@ -340,11 +355,8 @@ async function startEditEnrollment(enr: Enrollment) {
     previousEnrollmentStatus.value = enr.status as EnrollmentDTO['status']
     editEnrollmentForm.value = {
         course_id: enr.courseId,
-        classroom_id: enr.classroomId,
-        class_session_id: enr.classSessionId,
         status: enr.status as any,
         start_date: enr.startDate,
-        lesson_number: enr.lessonNumber,
         external_link: enr.externalLink
     }
 
@@ -408,11 +420,11 @@ async function saveEnrollment() {
     if (!editingEnrollmentId.value) return
 
     const nextStatus = editEnrollmentForm.value.status as EnrollmentDTO['status'] | undefined
-    const shouldPromptTrialToActive =
-        previousEnrollmentStatus.value === 'trial' &&
+    const shouldPromptToActive =
+        previousEnrollmentStatus.value !== 'active' &&
         nextStatus === 'active'
 
-    if (shouldPromptTrialToActive) {
+    if (shouldPromptToActive) {
         pendingEnrollmentUpdate.value = {
             id: editingEnrollmentId.value,
             updates: { ...editEnrollmentForm.value }
@@ -432,20 +444,6 @@ async function saveEnrollment() {
         isModifying.value = false
     }
 }
-
-// Filtered sessions for edit form
-const editFilteredSessions = computed(() => {
-    if (!editEnrollmentForm.value.course_id) return []
-
-    let sessions = availableSessions.value.filter(s => s.course_ids?.includes(editEnrollmentForm.value.course_id!))
-
-    // Further filter by classroom if selected
-    if (editEnrollmentForm.value.classroom_id) {
-        sessions = sessions.filter(s => s.classroom_id === editEnrollmentForm.value.classroom_id)
-    }
-
-    return sessions
-})
 
 
 async function removeEnrollment(id: string) {
@@ -1711,15 +1709,6 @@ function copyToClipboard(text: string) {
                                             </svg>
                                             {{ enr.classSessionName }} {{ enr.formattedSchedule }}
                                         </span>
-                                        <span v-if="enr.lessonNumber"
-                                            class="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-200 text-blue-700">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                            {{ $t('student.internal_courses.lesson_label') }} {{ enr.lessonNumber }}
-                                        </span>
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -1797,38 +1786,12 @@ function copyToClipboard(text: string) {
                                     </select>
                                 </div>
 
-                                <!-- 2. Classroom -->
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
-                                        $t('student.internal_courses.classroom_optional') }}</label>
-                                    <select v-model="editEnrollmentForm.classroom_id"
-                                        class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                                        <option :value="undefined">{{ $t('student.internal_courses.none_option') }}
-                                        </option>
-                                        <option v-for="r in availableClassrooms" :key="r.id" :value="r.id">
-                                            {{ r.name }}
-                                        </option>
-                                    </select>
+                                <div class="rounded-lg border border-blue-200 bg-white/70 p-3 text-xs text-blue-700">
+                                    教室與班級不可在此編輯，請使用「{{ $t('student.internal_courses.transfer_btn') }}」。
                                 </div>
 
-                                <!-- 3. Session -->
-                                <div>
-                                    <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
-                                        $t('student.internal_courses.session_optional') }}</label>
-                                    <select v-model="editEnrollmentForm.class_session_id"
-                                        class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                                        <option :value="undefined">{{ $t('student.internal_courses.none_option') }}
-                                        </option>
-                                        <option v-for="s in editFilteredSessions" :key="s.id" :value="s.id">
-                                            {{ s.name }} ({{ s.day_of_week !== undefined ?
-                                                $t(`classroom.days.${s.day_of_week}`) : '' }} {{
-                                                s.start_time?.slice(0, 5) }})
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div class="grid grid-cols-2 gap-3">
-                                    <!-- 4. Status -->
+                                <div class="grid grid-cols-1 gap-3">
+                                    <!-- 2. Status -->
                                     <div>
                                         <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
                                             $t('student.internal_courses.status') }}</label>
@@ -1844,16 +1807,9 @@ function copyToClipboard(text: string) {
                                             </option>
                                         </select>
                                     </div>
-                                    <!-- 5. Lesson Number -->
-                                    <div>
-                                        <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
-                                            $t('student.internal_courses.lesson_number') }}</label>
-                                        <input type="number" v-model.number="editEnrollmentForm.lesson_number"
-                                            class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
-                                    </div>
                                 </div>
 
-                                <!-- 6. Start Date -->
+                                <!-- 3. Start Date -->
                                 <div>
                                     <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
                                         $t('student.internal_courses.start_date') }}</label>
@@ -1861,7 +1817,7 @@ function copyToClipboard(text: string) {
                                         class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
                                 </div>
 
-                                <!-- 7. External Link -->
+                                <!-- 4. External Link -->
                                 <div class="col-span-2">
                                     <label class="text-xs font-semibold text-gray-600 mb-1 block">{{
                                         $t('student.internal_courses.external_link') || 'Company Report Overview URL'
@@ -2060,8 +2016,8 @@ function copyToClipboard(text: string) {
                                     </div>
                                 </div>
 
-                                <!-- 4. Configuration Grid -->
-                                <div class="grid grid-cols-2 gap-6 pt-2">
+                                <!-- 4. Configuration -->
+                                <div class="grid grid-cols-1 gap-6 pt-2">
                                     <div>
                                         <label class="block text-sm font-bold text-gray-700 mb-2">{{
                                             $t('student.internal_courses.status') }}</label>
@@ -2076,12 +2032,6 @@ function copyToClipboard(text: string) {
                                             <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}
                                             </option>
                                         </select>
-                                    </div>
-                                    <div>
-                                        <label class="block text-sm font-bold text-gray-700 mb-2">{{
-                                            $t('student.internal_courses.lesson_number') }}</label>
-                                        <input type="number" v-model.number="newEnrollment.lesson_number"
-                                            class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all" />
                                     </div>
                                 </div>
 
@@ -2117,9 +2067,13 @@ function copyToClipboard(text: string) {
                                     <label class="block text-sm font-bold text-gray-700 mb-2">{{
                                         $t('student.internal_courses.enrollment_report_count') }}</label>
                                     <input type="number" min="1" v-model.number="enrollmentGenerateCount"
-                                        class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all" />
+                                        :disabled="isCreateTrialStatus"
+                                        class="w-full border-gray-300 rounded-xl focus:ring-emerald-500 focus:border-emerald-500 shadow-sm transition-all disabled:bg-gray-100 disabled:text-gray-500" />
                                     <p class="mt-1 text-xs text-gray-400">{{
                                         $t('student.internal_courses.enrollment_report_count_hint') }}</p>
+                                    <p v-if="isCreateTrialStatus" class="mt-1 text-xs text-amber-600 font-semibold">
+                                        {{ $t('student.internal_courses.status_trial') }}：固定建立 1 堂
+                                    </p>
                                 </div>
                             </div>
                         </div>

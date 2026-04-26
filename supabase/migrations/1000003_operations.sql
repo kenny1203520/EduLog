@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS public.occurrence_reports (
     lesson_id uuid,
     is_completed boolean DEFAULT true,
     progress_letter character varying CHECK (progress_letter::text ~ '^[A-Z](-[A-Z])?$'::text),
-    attendance_status character varying DEFAULT 'pending'::character varying CHECK (
+    attendance_status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (
         attendance_status::text = ANY (
             ARRAY ['present'::character varying::text, 'absent'::character varying::text, 'pending'::character varying::text]
         )

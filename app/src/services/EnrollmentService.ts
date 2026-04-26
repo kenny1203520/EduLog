@@ -135,7 +135,6 @@ export class EnrollmentService {
                 enrollment.class_session_id,
                 enrollment.start_date || new Date().toISOString().split('T')[0],
                 enrollment.course_id,
-                enrollment.lesson_number || 1,
                 {
                     targetReportCount: options.targetReportCount
                 }
@@ -282,7 +281,7 @@ export class EnrollmentService {
         const nextStatus = updated.status
 
         if (
-            previousStatus === 'trial' &&
+            previousStatus !== 'active' &&
             nextStatus === 'active' &&
             updated.id &&
             updated.class_session_id &&
@@ -293,7 +292,6 @@ export class EnrollmentService {
                 updated.class_session_id,
                 updated.course_id,
                 updated.start_date || new Date().toISOString().split('T')[0],
-                updated.lesson_number || 1,
                 options.targetTotalReports
             )
         }
@@ -349,7 +347,6 @@ export class EnrollmentService {
         sessionId: string,
         startDate: string,
         courseId: string,
-        startLesson: number,
         options: {
             targetReportCount?: number
             skipExisting?: boolean
@@ -361,7 +358,7 @@ export class EnrollmentService {
             .select('id')
             .eq('course_id', courseId)
 
-        const fallbackLessonCount = ((lessons && lessons.length > 0) ? lessons.length : 15) - startLesson + 1
+        const fallbackLessonCount = (lessons && lessons.length > 0) ? lessons.length : 15
         const lessonCount = options.targetReportCount !== undefined
             ? Math.max(1, Math.floor(options.targetReportCount))
             : Math.max(1, fallbackLessonCount)
@@ -430,7 +427,6 @@ export class EnrollmentService {
         sessionId: string,
         courseId: string,
         startDate: string,
-        startLesson: number,
         targetTotalReports?: number
     ): Promise<void> {
         if (!targetTotalReports || targetTotalReports <= 0) {
@@ -456,7 +452,6 @@ export class EnrollmentService {
             sessionId,
             generationStartDate,
             courseId,
-            startLesson,
             {
                 targetReportCount: additionalCount,
                 skipExisting: true
