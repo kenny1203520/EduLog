@@ -297,7 +297,7 @@ export class SuspensionService {
         await supabase
             .from('occurrence_reports')
             .update({
-                absence_reason: null
+                absence_reason: 'pending', // Clear the suspension reason but mark as pending for manual review
                 // We keep is_completed as false maybe? Users should manually resume.
                 // But generally reverting to 'present' is risky if they were absent for other reasons.
                 // Safest is to just clear the 'suspension' reason.

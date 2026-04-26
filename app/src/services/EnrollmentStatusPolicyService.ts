@@ -140,7 +140,7 @@ export class EnrollmentStatusPolicyService {
                 content: '',
                 version: 1,
                 is_completed: false,
-                attendance_status: null
+                attendance_status: 'pending'
             }))
 
             await supabase

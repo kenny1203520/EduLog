@@ -27,7 +27,8 @@ export class ReportCommandService {
                 class_occurrence_id: occurrenceId,
                 content: '',
                 version: 1,
-                is_completed: false
+                is_completed: false,
+                attendance_status: 'pending'
             }
 
             const retryResult = await supabase

@@ -1,7 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { Enrollment } from '@/models/Enrollment'
 import { OccurrenceService } from './OccurrenceService'
-import { EnrollmentTransferSupportService } from './EnrollmentTransferSupportService'
+import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
+import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 
 export class EnrollmentTransferService {
     static async transferClass(
@@ -10,20 +11,20 @@ export class EnrollmentTransferService {
         originalLastDate: string,
         transferDate: string
     ): Promise<Enrollment> {
-        const enrollment = await EnrollmentTransferSupportService.getEnrollmentSessionInfo(enrollmentId)
+        const enrollment = await EnrollmentTransferQueryService.getEnrollmentSessionInfo(enrollmentId)
         const oldSessionId = enrollment.class_session_id
-        const reportsToMigrate = await EnrollmentTransferSupportService.getReportsToMigrate(
+        const reportsToMigrate = await EnrollmentTransferQueryService.getReportsToMigrate(
             enrollmentId,
             oldSessionId,
             originalLastDate
         )
-        const lessonCount = await EnrollmentTransferSupportService.getLessonCount(enrollment.course_id, 12)
+        const lessonCount = await EnrollmentTransferQueryService.getLessonCount(enrollment.course_id, 12)
         const start = new Date(transferDate)
-        const endDate = EnrollmentTransferSupportService.buildTransferEndDate(transferDate, lessonCount)
+        const endDate = EnrollmentTransferToolService.buildTransferEndDate(transferDate, lessonCount)
 
         await OccurrenceService.generateOccurrences(newSessionId, start, endDate).catch(() => {})
 
-        const newOccurrences = await EnrollmentTransferSupportService.getTargetOccurrences(newSessionId, transferDate)
+        const newOccurrences = await EnrollmentTransferQueryService.getTargetOccurrences(newSessionId, transferDate)
 
         const sortedReports = [...reportsToMigrate].sort((a, b) => {
             const dateA = new Date(a.class_occurrence[0]?.occurrence_date).getTime()
@@ -66,7 +67,7 @@ export class EnrollmentTransferService {
 
         if (updateError) throw new Error(`Failed to update enrollment: ${updateError.message}`)
 
-        await EnrollmentTransferSupportService.syncSessionPair(oldSessionId, newSessionId)
+        await EnrollmentTransferToolService.syncSessionPair(oldSessionId, newSessionId)
 
         return new Enrollment(updated)
     }
@@ -85,7 +86,7 @@ export class EnrollmentTransferService {
 
         if (enrollError) throw new Error(`Failed to fetch enrollment: ${enrollError.message}`)
 
-        const originalOccId = await EnrollmentTransferSupportService.getTargetOccurrenceId(
+        const originalOccId = await EnrollmentTransferQueryService.getTargetOccurrenceId(
             enrollment.class_session_id,
             originalDate
         )
@@ -106,7 +107,7 @@ export class EnrollmentTransferService {
         const tDate = new Date(targetDate)
         await OccurrenceService.generateOccurrences(targetSessionId, tDate, tDate).catch(() => {})
 
-        const targetOccId = await EnrollmentTransferSupportService.getTargetOccurrenceId(
+        const targetOccId = await EnrollmentTransferQueryService.getTargetOccurrenceId(
             targetSessionId,
             targetDate
         )
@@ -129,11 +130,11 @@ export class EnrollmentTransferService {
                     content: '',
                     version: 1,
                     is_completed: false,
-                    attendance_status: null
+                    attendance_status: 'pending'
                 })
             if (insertError) throw new Error(`Failed to create replacement report: ${insertError.message}`)
         }
 
-        await EnrollmentTransferSupportService.syncSessionPair(enrollment.class_session_id, targetSessionId)
+        await EnrollmentTransferToolService.syncSessionPair(enrollment.class_session_id, targetSessionId)
     }
 }

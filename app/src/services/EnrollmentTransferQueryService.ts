@@ -10,7 +10,7 @@ export type TransferMigrationRow = {
     }>
 }
 
-export class EnrollmentTransferSupportService {
+export class EnrollmentTransferQueryService {
     static async getEnrollmentSessionInfo(enrollmentId: string): Promise<{ class_session_id: string | null; course_id: string }> {
         const { data, error } = await supabase
             .from('enrollments')
@@ -59,13 +59,6 @@ export class EnrollmentTransferSupportService {
         return (lessons && lessons.length > 0) ? lessons.length : fallbackCount
     }
 
-    static buildTransferEndDate(startDate: string, lessonCount: number): Date {
-        const start = new Date(startDate)
-        const endDate = new Date(start)
-        endDate.setDate(endDate.getDate() + (lessonCount * 7))
-        return endDate
-    }
-
     static async getTargetOccurrences(sessionId: string, targetDate: string): Promise<Array<{ id: string }>> {
         const { data, error } = await supabase
             .from('class_occurrences')
@@ -94,17 +87,5 @@ export class EnrollmentTransferSupportService {
         }
 
         return data.id
-    }
-
-    static async syncSessionPair(oldSessionId: string | null, newSessionId: string): Promise<void> {
-        if (oldSessionId) {
-            await import('./OccurrenceService').then(({ OccurrenceService }) =>
-                OccurrenceService.syncSessionOccurrences(oldSessionId).catch(() => {})
-            )
-        }
-
-        await import('./OccurrenceService').then(({ OccurrenceService }) =>
-            OccurrenceService.syncSessionOccurrences(newSessionId).catch(() => {})
-        )
     }
 }

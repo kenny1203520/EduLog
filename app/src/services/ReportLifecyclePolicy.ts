@@ -42,7 +42,7 @@ export class ReportLifecyclePolicy {
         if (isHoliday || isSuspended) {
             payload.attendance_status = 'absent'
         } else {
-            payload.attendance_status = null as any
+            payload.attendance_status = 'pending'
         }
 
         return payload
