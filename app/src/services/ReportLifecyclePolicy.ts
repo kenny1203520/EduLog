@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
-import { EnrollmentProgressService } from './EnrollmentProgressService'
+import { EnrollmentProgressService } from './enrollment/EnrollmentProgressService'
 import { OccurrenceService } from './OccurrenceService'
 import { HolidayService } from './HolidayService'
 import { SuspensionService } from './SuspensionService'

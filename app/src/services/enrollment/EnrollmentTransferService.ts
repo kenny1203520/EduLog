@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Enrollment } from '@/models/Enrollment'
-import { OccurrenceService } from './OccurrenceService'
+import { OccurrenceService } from '../OccurrenceService'
 import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 

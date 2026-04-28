@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { OccurrenceService } from './OccurrenceService'
+import { OccurrenceService } from '../OccurrenceService'
 
 export class EnrollmentStatusPolicyService {
     static async ensureEnrollmentReportsTarget(

@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Student, type StudentDTO } from '@/models/Student'
-import { EnrollmentService } from './EnrollmentService'
+import { EnrollmentService } from './enrollment/EnrollmentService'
 
 /**
  * Command service for students

@@ -4,7 +4,7 @@ import {
     type OccurrenceReportDTO,
     type SaveReportResult
 } from '@/models/OccurrenceReport'
-import { EnrollmentProgressService } from './EnrollmentProgressService'
+import { EnrollmentProgressService } from './enrollment/EnrollmentProgressService'
 import { ReportLifecyclePolicy } from './ReportLifecyclePolicy'
 import { ReportQueryService } from './ReportQueryService'
 
