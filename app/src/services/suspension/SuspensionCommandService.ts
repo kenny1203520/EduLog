@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Suspension, type SuspensionDTO } from '@/models/Suspension'
-import { SuspensionPolicyService } from '../SuspensionPolicyService'
+import { SuspensionPolicyService } from './SuspensionPolicyService'
 
 export class SuspensionCommandService {
     static async createSuspension(enrollmentId: string, startDate: string, endDate: string | null, reason?: string): Promise<Suspension> {

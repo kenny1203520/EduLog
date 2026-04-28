@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
-import { OccurrenceQueryService } from '../OccurrenceQueryService'
+import { OccurrenceQueryService } from './OccurrenceQueryService'
 
 export class OccurrenceCommandService {
     private static generateOccurrenceDates(

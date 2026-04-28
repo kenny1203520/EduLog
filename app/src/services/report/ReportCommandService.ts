@@ -5,8 +5,8 @@ import {
     type SaveReportResult
 } from '@/models/OccurrenceReport'
 import { EnrollmentProgressService } from '../enrollment/EnrollmentProgressService'
-import { ReportLifecyclePolicy } from '../ReportLifecyclePolicy'
-import { ReportQueryService } from '../ReportQueryService'
+import { ReportLifecyclePolicy } from './ReportLifecyclePolicy'
+import { ReportQueryService } from './ReportQueryService'
 
 export class ReportCommandService {
     static async createReport(
