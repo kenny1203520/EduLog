@@ -2,7 +2,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
-import { ClassroomService } from '@/services/ClassroomService'
+import { ClassroomService } from '@/services/Classroom/ClassroomService'
 import { SessionService } from '@/services/SessionService'
 import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'

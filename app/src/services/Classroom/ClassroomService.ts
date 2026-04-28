@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Classroom, type ClassroomDTO, type ClassroomScheduleDTO } from '@/models/Classroom'
-import { VisibilityPreferenceService } from './VisibilityPreferenceService'
+import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
 
 export type ClassroomVisibilityFilterMode = 'all' | 'visible' | 'hidden'
 
