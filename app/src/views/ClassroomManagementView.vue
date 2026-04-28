@@ -75,6 +75,10 @@ const hiddenClassroomIds = ref<Set<string>>(new Set())
 const hiddenSessionIds = ref<Set<string>>(new Set())
 const teachersList = ref<any[]>([])
 const selectedTeacherIds = ref<Set<string>>(new Set())
+const teacherSearchQuery = ref('')
+const teacherFilterStatus = ref<'all' | 'linked' | 'unlinked'>('all')
+const teacherSortField = ref<'name' | 'email' | 'account'>('name')
+const teacherSortDirection = ref<'asc' | 'desc'>('asc')
 const roomsPagination = ref({ page: 1, perPage: 10, total: 0 })
 const sessionsPagination = ref({ page: 1, perPage: 10, total: 0 })
 
@@ -238,6 +242,47 @@ const sortedSessions = computed(() => {
     })
 })
 
+const filteredTeachers = computed(() => {
+    const query = teacherSearchQuery.value.trim().toLowerCase()
+
+    return teachersList.value.filter((teacher) => {
+        const accountStatus = teacher.user_id ? 'linked' : 'unlinked'
+
+        if (teacherFilterStatus.value !== 'all' && teacherFilterStatus.value !== accountStatus) {
+            return false
+        }
+
+        if (!query) return true
+
+        const haystack = [teacher.name, teacher.email, teacher.phone, teacher.address, teacher.bio]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+
+        return haystack.includes(query)
+    })
+})
+
+const visibleTeachers = computed(() => {
+    const rankByAccount = (teacher: any) => (teacher.user_id ? 1 : 0)
+
+    return [...filteredTeachers.value].sort((left, right) => {
+        let comparison = 0
+
+        if (teacherSortField.value === 'account') {
+            comparison = rankByAccount(left) - rankByAccount(right)
+        } else {
+            const leftValue = String(left[teacherSortField.value] ?? '')
+            const rightValue = String(right[teacherSortField.value] ?? '')
+            comparison = leftValue.localeCompare(rightValue)
+        }
+
+        return teacherSortDirection.value === 'asc' ? comparison : -comparison
+    })
+})
+
+const selectedTeacherCount = computed(() => selectedTeacherIds.value.size)
+
 const roomOptions = computed(() => allClassrooms.value.map(c => ({
     label: c.name + (c.address ? ` (${c.address})` : ''),
     value: c.id
@@ -382,13 +427,33 @@ async function saveSession() {
 async function openEditSession(session: ClassSessionDTO) {
     editingSession.value = session
     newSession.value = { ...session }
+    resetTeacherPickerState()
     // Load assigned teachers for this session
     try {
         const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
         selectedTeacherIds.value = new Set(assignedTeachers.map(t => t.id!))
     } catch (e) {
         console.error('Failed to load session teachers:', e)
-        selectedTeacherIds.value = new Set()
+        clearTeacherSelection()
+    }
+    isCreateSessionModalOpen.value = true
+}
+
+function openCreateSessionModal() {
+    resetTeacherPickerState()
+    clearTeacherSelection()
+    editingSession.value = null
+    newSession.value = {
+        name: '',
+        classroom_id: '',
+        course_ids: [],
+        day_of_week: 1,
+        start_time: '10:00',
+        end_time: '12:00',
+        capacity: 10,
+        lesson_number: 1,
+        external_link: '',
+        user_id: undefined
     }
     isCreateSessionModalOpen.value = true
 }
@@ -396,7 +461,8 @@ async function openEditSession(session: ClassSessionDTO) {
 function closeSessionModal() {
     isCreateSessionModalOpen.value = false
     editingSession.value = null
-    selectedTeacherIds.value = new Set()
+    clearTeacherSelection()
+    resetTeacherPickerState()
     newSession.value = {
         name: '',
         classroom_id: '',
@@ -443,6 +509,48 @@ function toggleCourseSelection(courseId: string) {
     } else {
         newSession.value.course_ids = [...list, courseId]
     }
+}
+
+function resetTeacherPickerState() {
+    teacherSearchQuery.value = ''
+    teacherFilterStatus.value = 'all'
+    teacherSortField.value = 'name'
+    teacherSortDirection.value = 'asc'
+}
+
+function isTeacherSelected(teacherId?: string) {
+    return !!teacherId && selectedTeacherIds.value.has(teacherId)
+}
+
+function toggleTeacherSelection(teacherId?: string, checked = false) {
+    if (!teacherId) return
+
+    const next = new Set(selectedTeacherIds.value)
+    if (checked) {
+        next.add(teacherId)
+    } else {
+        next.delete(teacherId)
+    }
+    selectedTeacherIds.value = next
+}
+
+function selectVisibleTeachers(checked: boolean) {
+    const next = new Set(selectedTeacherIds.value)
+
+    visibleTeachers.value.forEach((teacher: any) => {
+        if (!teacher.id) return
+        if (checked) {
+            next.add(teacher.id)
+        } else {
+            next.delete(teacher.id)
+        }
+    })
+
+    selectedTeacherIds.value = next
+}
+
+function clearTeacherSelection() {
+    selectedTeacherIds.value = new Set()
 }
 </script>
 
@@ -495,7 +603,7 @@ function toggleCourseSelection(courseId: string) {
                 class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto">
                 <span class="text-xl leading-none">+</span> {{ $t('classroom.add_room') }}
             </button>
-            <button v-else @click="isCreateSessionModalOpen = true"
+            <button v-else @click="openCreateSessionModal"
                 class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto">
                 <span class="text-xl leading-none">+</span> {{ $t('classroom.add_session') }}
             </button>
@@ -986,17 +1094,86 @@ function toggleCourseSelection(courseId: string) {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.teacher') || 'Teacher' }}</label>
-                        <div class="space-y-2 border border-gray-300 rounded-lg p-3 bg-white max-h-48 overflow-y-auto">
-                            <div v-if="teachersList.length === 0" class="text-gray-500 text-sm py-2">{{ $t('common.no_data') || 'No teachers available' }}</div>
-                            <div v-for="teacher in teachersList" :key="teacher.id" class="flex items-center">
+                        <div class="space-y-4 border border-gray-300 rounded-xl p-4 bg-white">
+                            <div class="grid gap-3 lg:grid-cols-[minmax(0,1.3fr)_auto_auto] lg:items-end">
+                                <div>
+                                    <label class="block text-xs font-bold uppercase tracking-widest text-gray-500 mb-1.5">{{ $t('classroom.teacher_search_label') }}</label>
+                                    <input
+                                        v-model="teacherSearchQuery"
+                                        type="text"
+                                        :placeholder="$t('classroom.teacher_search_placeholder')"
+                                        class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold uppercase tracking-widest text-gray-500 mb-1.5">{{ $t('classroom.teacher_filter_label') }}</label>
+                                    <select
+                                        v-model="teacherFilterStatus"
+                                        class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
+                                        <option value="all">{{ $t('classroom.teacher_filter_all') }}</option>
+                                        <option value="linked">{{ $t('classroom.teacher_filter_linked') }}</option>
+                                        <option value="unlinked">{{ $t('classroom.teacher_filter_unlinked') }}</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label class="block text-xs font-bold uppercase tracking-widest text-gray-500 mb-1.5">{{ $t('classroom.teacher_sort_label') }}</label>
+                                    <div class="flex gap-2">
+                                        <select
+                                            v-model="teacherSortField"
+                                            class="min-w-0 flex-1 border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
+                                            <option value="name">{{ $t('classroom.teacher_sort_name') }}</option>
+                                            <option value="email">{{ $t('classroom.teacher_sort_email') }}</option>
+                                            <option value="account">{{ $t('classroom.teacher_sort_account') }}</option>
+                                        </select>
+                                        <button
+                                            @click="teacherSortDirection = teacherSortDirection === 'asc' ? 'desc' : 'asc'"
+                                            class="px-3 py-2 rounded-lg border border-gray-300 text-sm font-semibold text-gray-600 hover:bg-gray-50 whitespace-nowrap">
+                                            {{ teacherSortDirection === 'asc' ? '↑' : '↓' }}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex flex-col gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    {{ $t('classroom.teacher_picker_summary', { total: visibleTeachers.length, selected: selectedTeacherCount }) }}
+                                </div>
+                                <button
+                                    v-if="selectedTeacherCount > 0"
+                                    @click="clearTeacherSelection"
+                                    class="font-semibold text-emerald-600 hover:text-emerald-700">
+                                    {{ $t('classroom.teacher_picker_clear_selection') }}
+                                </button>
+                            </div>
+
+                            <div class="flex items-center gap-2 border-b border-gray-100 pb-3">
+                                <input
+                                    type="checkbox"
+                                    :checked="visibleTeachers.length > 0 && visibleTeachers.every(teacher => isTeacherSelected(teacher.id))"
+                                    @change="selectVisibleTeachers(($event.target as HTMLInputElement).checked)"
+                                    class="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
+                                <span class="text-sm text-gray-600">{{ $t('classroom.teacher_select_visible') }}</span>
+                            </div>
+
+                            <div v-if="visibleTeachers.length === 0" class="text-gray-500 text-sm py-2">
+                                {{ teacherSearchQuery || teacherFilterStatus !== 'all' ? $t('classroom.teacher_no_results') : ($t('common.no_data') || 'No teachers available') }}
+                            </div>
+                            <div v-for="teacher in visibleTeachers" :key="teacher.id" class="flex items-center">
                                 <input
                                     type="checkbox"
                                     :id="`teacher-${teacher.id}`"
-                                    :checked="selectedTeacherIds.has(teacher.id!)"
-                                    @change="($event.target as HTMLInputElement).checked ? selectedTeacherIds.add(teacher.id!) : selectedTeacherIds.delete(teacher.id!)"
+                                    :checked="isTeacherSelected(teacher.id)"
+                                    @change="toggleTeacherSelection(teacher.id, ($event.target as HTMLInputElement).checked)"
                                     class="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                                 <label :for="`teacher-${teacher.id}`" class="ml-2 text-sm text-gray-700 cursor-pointer flex-1">
-                                    {{ teacher.name || teacher.email }}
+                                    <span class="font-medium">{{ teacher.name || teacher.email }}</span>
+                                    <span class="ml-2 text-xs text-gray-400">{{ teacher.email }}</span>
+                                    <span
+                                        :class="teacher.user_id ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'"
+                                        class="ml-2 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold">
+                                        {{ teacher.user_id ? $t('teacher.linked_account') : $t('teacher.unlinked_account') }}
+                                    </span>
                                 </label>
                             </div>
                         </div>

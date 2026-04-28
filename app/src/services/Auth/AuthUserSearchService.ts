@@ -11,13 +11,16 @@ export class AuthUserSearchService {
     /**
      * Search Supabase Auth users by email fragment.
      */
-    static async searchUsersByEmail(query: string): Promise<AuthUserSearchResultDTO[]> {
+    static async searchUsersByEmail(query: string, options?: { onlyUnlinked?: boolean }): Promise<AuthUserSearchResultDTO[]> {
         const normalizedQuery = query.trim()
 
         if (!normalizedQuery) return []
 
+        const payload: any = { query: normalizedQuery }
+        if (options?.onlyUnlinked) payload.only_unlinked = true
+
         const { data, error } = await supabase.functions.invoke('user-search', {
-            body: { query: normalizedQuery }
+            body: payload
         })
 
         if (error) throw new Error(error.message)

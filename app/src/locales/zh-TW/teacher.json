@@ -55,6 +55,7 @@
   "user_search_empty": "請先輸入 email 關鍵字。",
   "user_search_select": "帶入 UUID",
   "user_search_selected": "已選取 {email} 的 UUID",
+  "filter_unlinked": "只顯示尚未綁定的帳號",
   "name_placeholder": "輸入教師姓名",
   "email_placeholder": "輸入電子郵件",
   "phone_placeholder": "輸入電話號碼",

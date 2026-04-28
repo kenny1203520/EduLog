@@ -48,6 +48,7 @@ serve(async (req: Request) => {
   }
 
   const query = (payload.query ?? '').trim().toLowerCase()
+  const onlyUnlinked = Boolean((payload as any).only_unlinked || (payload as any).onlyUnlinked)
 
   if (!query) {
     return new Response(JSON.stringify({ users: [] }), {
@@ -95,6 +96,34 @@ serve(async (req: Request) => {
     }
 
     if (pageUsers.length < pageSize) break
+  }
+
+  // If requested, filter out users that are already linked in the teachers table
+  if (onlyUnlinked) {
+    try {
+      const { data: teacherRows, error: teacherErr } = await client
+        .from('teachers')
+        .select('user_id')
+
+      if (teacherErr) {
+        return new Response(JSON.stringify({ error: teacherErr.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const linkedIds = new Set<string>((teacherRows ?? []).map((r: any) => r.user_id).filter(Boolean))
+      const filtered = users.filter((u) => !linkedIds.has(u.id))
+      return new Response(JSON.stringify({ users: filtered.slice(0, 20) }), {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    } catch (err) {
+      return new Response(JSON.stringify({ error: String(err) }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   return new Response(JSON.stringify({ users: users.slice(0, 20) }), {

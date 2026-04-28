@@ -55,6 +55,7 @@
   "user_search_empty": "Enter an email keyword first.",
   "user_search_select": "Use UUID",
   "user_search_selected": "Selected UUID for {email}",
+  "filter_unlinked": "Only show accounts not linked to teachers",
   "name_placeholder": "Enter teacher name",
   "email_placeholder": "Enter email address",
   "phone_placeholder": "Enter phone number",

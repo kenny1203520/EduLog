@@ -33,6 +33,7 @@ const userSearchQuery = ref('')
 const userSearchResults = ref<AuthUserSearchResultDTO[]>([])
 const isSearchingUsers = ref(false)
 const userSearchMessage = ref('')
+const userSearchOnlyUnlinked = ref(true)
 
 const form = ref<Partial<TeacherDTO>>({
     user_id: '',
@@ -198,7 +199,7 @@ async function searchUsersByEmail() {
     try {
         isSearchingUsers.value = true
         userSearchMessage.value = ''
-        userSearchResults.value = await AuthUserSearchService.searchUsersByEmail(query)
+        userSearchResults.value = await AuthUserSearchService.searchUsersByEmail(query, { onlyUnlinked: userSearchOnlyUnlinked.value })
 
         if (userSearchResults.value.length === 0) {
             userSearchMessage.value = t('teacher.user_search_no_results', { query })
@@ -678,14 +679,20 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                                     class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
                                     @keydown.enter.prevent="searchUsersByEmail" />
                             </div>
+                            <div class="flex items-center gap-3">
+                                <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+                                    <input type="checkbox" v-model="userSearchOnlyUnlinked" class="h-4 w-4 rounded border-slate-300 text-emerald-600" />
+                                    <span>{{ t('teacher.filter_unlinked') }}</span>
+                                </label>
 
-                            <button
-                                @click="searchUsersByEmail"
-                                :disabled="isSearchingUsers"
-                                class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
-                                <span v-if="isSearchingUsers" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                                {{ isSearchingUsers ? t('teacher.user_search_loading') : t('teacher.user_search_button') }}
-                            </button>
+                                <button
+                                    @click="searchUsersByEmail"
+                                    :disabled="isSearchingUsers"
+                                    class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
+                                    <span v-if="isSearchingUsers" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                                    {{ isSearchingUsers ? t('teacher.user_search_loading') : t('teacher.user_search_button') }}
+                                </button>
+                            </div>
                         </div>
 
                         <p class="mt-2 text-sm text-slate-500">
