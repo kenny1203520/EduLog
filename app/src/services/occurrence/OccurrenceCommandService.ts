@@ -52,7 +52,8 @@ export class OccurrenceCommandService {
             occurrence_date: this.formatDate(date),
             status: 'scheduled',
             original_start_time: (session as any).start_time,
-            original_end_time: (session as any).end_time
+            original_end_time: (session as any).end_time,
+            is_conducted: false
         }))
 
         const { data, error } = await supabase

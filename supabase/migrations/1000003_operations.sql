@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS public.class_occurrences (
     notes text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    is_conducted boolean DEFAULT true,
+    is_conducted boolean NOT NULL DEFAULT true,
     CONSTRAINT class_occurrences_pkey PRIMARY KEY (id),
     CONSTRAINT class_occurrences_class_session_id_fkey FOREIGN KEY (class_session_id) REFERENCES public.class_sessions(id)
 );

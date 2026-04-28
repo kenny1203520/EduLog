@@ -26,8 +26,9 @@ onMounted(async () => {
         const end = new Date(today.setHours(23, 59, 59, 999))
 
         const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
-        todayOccurrences.value = data
-        stats.value.todayClasses = data.length
+        const visible = (data || []).filter(d => d.isConducted === true)
+        todayOccurrences.value = visible
+        stats.value.todayClasses = visible.length
     } catch (e) {
         console.error(e)
     } finally {

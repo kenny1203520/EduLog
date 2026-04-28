@@ -54,7 +54,7 @@ export class ClassOccurrence {
         this.actualStartTime = data.actual_start_time
         this.actualEndTime = data.actual_end_time
         this.notes = data.notes
-        this.isConducted = data.is_conducted ?? true
+        this.isConducted = data.is_conducted ?? false
         this.createdAt = data.created_at ? new Date(data.created_at) : undefined
         this.updatedAt = data.updated_at ? new Date(data.updated_at) : undefined
     }

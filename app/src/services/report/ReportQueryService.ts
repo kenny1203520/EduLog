@@ -341,7 +341,8 @@ export class ReportQueryService {
     }
 
     static async getGlobalIncompleteReports(): Promise<any[]> {
-        const now = new Date()
+        // Use date-only comparison (YYYY-MM-DD) to match DB date column
+        const todayStr = new Date().toISOString().split('T')[0]
 
         const { data, error } = await supabase
             .from('occurrence_reports')
@@ -355,24 +356,24 @@ export class ReportQueryService {
                 updated_at,
                 enrollment_id,
                 class_occurrence_id,
-                enrollments!inner (
+                enrollments (
                     id,
                     student_id,
                     course_id,
-                    students!inner (
+                    students (
                         id,
                         name
                     )
                 ),
-                class_occurrence:class_occurrences!inner (
+                class_occurrences!inner (
                     id,
                     occurrence_date,
                     original_start_time,
                     actual_start_time,
-                    class_session:class_sessions!inner (
+                    class_sessions (
                         id,
                         name,
-                        classroom:classrooms (
+                        classrooms (
                             id,
                             name
                         )
@@ -380,8 +381,8 @@ export class ReportQueryService {
                 )
             `)
             .eq('attendance_status', 'present')
-            .lte('class_occurrence.occurrence_date', now.toISOString())
-            .order('class_occurrence(occurrence_date)', { ascending: false })
+            .lte('class_occurrences.occurrence_date', todayStr)
+            .order('class_occurrences(occurrence_date)', { ascending: false })
 
         if (error) throw new Error(`Failed to fetch incomplete reports: ${error.message}`)
 
@@ -392,23 +393,43 @@ export class ReportQueryService {
                 const hasLesson = !!row.lesson_id
                 return !(hasContent && hasLesson)
             })
-            .map(r => ({
-                reportId: (r as any).id,
-                enrollmentId: (r as any).enrollment_id,
-                occurrenceId: (r as any).class_occurrence_id,
-                studentName: (r as any).enrollments?.students?.[0]?.name || 'Unknown',
-                courseId: (r as any).enrollments?.course_id,
-                className: (r as any).class_occurrence?.class_session?.[0]?.name || '-',
-                classroomName: (r as any).class_occurrence?.class_session?.[0]?.classroom?.name || '-',
-                occurrenceDate: (r as any).class_occurrence?.occurrence_date,
-                content: (r as any).content || '',
-                hasLesson: !!(r as any).lesson_id,
-                hasContent: hasContentSafe((r as any).content),
-                version: (r as any).version,
-                attendanceStatus: (r as any).attendance_status,
-                updatedAt: (r as any).updated_at,
-                isCompleted: (r as any).is_completed
-            }))
+            .map(r => {
+                const row: any = r
+                const classOcc = row.class_occurrences || {}
+                const classSession = Array.isArray(classOcc.class_sessions) 
+                    ? classOcc.class_sessions[0] 
+                    : classOcc.class_sessions || {}
+                const classroom = Array.isArray(classSession.classrooms)
+                    ? classSession.classrooms[0]
+                    : classSession.classrooms || {}
+                const students = Array.isArray(row.enrollments?.students)
+                    ? row.enrollments.students
+                    : [row.enrollments?.students].filter(Boolean)
+                const student = students[0]
+                const hasContent = hasContentSafe(row.content)
+                const hasLesson = !!row.lesson_id
+
+                return {
+                    id: row.id,
+                    reportId: row.id,
+                    enrollmentId: row.enrollment_id,
+                    occurrenceId: row.class_occurrence_id,
+                    studentName: student?.name || row.enrollments?.students?.name || 'Unknown',
+                    courseId: row.enrollments?.course_id,
+                    className: classSession?.name || '-',
+                    classroomName: classroom?.name || '-',
+                    date: classOcc.occurrence_date,
+                    startTime: classOcc.actual_start_time || classOcc.original_start_time || undefined,
+                    content: row.content || '',
+                    lessonId: row.lesson_id || null,
+                    missingContent: !hasContent,
+                    missingLesson: !hasLesson,
+                    version: row.version,
+                    attendanceStatus: row.attendance_status,
+                    updatedAt: row.updated_at,
+                    isCompleted: row.is_completed
+                }
+            })
     }
 }
 
