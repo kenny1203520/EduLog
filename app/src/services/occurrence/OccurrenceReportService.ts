@@ -4,8 +4,8 @@ import {
     ReportVersion,
     type SaveReportResult
 } from '@/models/OccurrenceReport'
-import { ReportCommandService } from './ReportCommandService'
-import { ReportQueryService } from './ReportQueryService'
+import { ReportCommandService } from '../ReportCommandService'
+import { ReportQueryService } from '../ReportQueryService'
 
 /**
  * Backward-compatible facade for report operations.

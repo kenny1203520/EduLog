@@ -187,7 +187,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 // import { LessonService } from '@/services/LessonService' // Removed: file not found
 import ReportEditor from '@/components/ReportEditor.vue'
 import { useI18n } from 'vue-i18n'

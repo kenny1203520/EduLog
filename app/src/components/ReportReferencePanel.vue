@@ -222,7 +222,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
-import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/CourseCatalogService'
 import { ClassroomService } from '@/services/ClassroomService'
 import { SessionService } from '@/services/SessionService'

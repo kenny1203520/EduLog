@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { DateUtils } from '@/utils/DateUtils'
-import { OccurrenceCommandService } from './OccurrenceCommandService'
+import { OccurrenceCommandService } from './occurrence/OccurrenceCommandService'
 
 export class OccurrenceSyncService {
     private static formatDate(date: Date): string {

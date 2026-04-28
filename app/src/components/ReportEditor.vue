@@ -595,7 +595,7 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAutoSave } from '@/composables/useAutoSave'
-import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'

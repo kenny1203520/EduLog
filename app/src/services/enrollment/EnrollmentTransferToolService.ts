@@ -1,4 +1,4 @@
-import { OccurrenceService } from '../OccurrenceService'
+import { OccurrenceService } from '../occurrence/OccurrenceService'
 
 export class EnrollmentTransferToolService {
     static buildTransferEndDate(startDate: string, lessonCount: number): Date {

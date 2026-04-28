@@ -2,8 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { OccurrenceService } from '@/services/OccurrenceService'
-import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 
 useI18n()

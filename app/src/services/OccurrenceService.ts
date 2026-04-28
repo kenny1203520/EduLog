@@ -1,6 +1,6 @@
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
-import { OccurrenceCommandService } from './OccurrenceCommandService'
-import { OccurrenceQueryService } from './OccurrenceQueryService'
+import { OccurrenceCommandService } from './occurrence/OccurrenceCommandService'
+import { OccurrenceQueryService } from './occurrence/OccurrenceQueryService'
 import { OccurrenceSyncService } from './OccurrenceSyncService'
 
 /**
