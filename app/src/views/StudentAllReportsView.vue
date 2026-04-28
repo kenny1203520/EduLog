@@ -83,7 +83,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseService } from '@/services/CourseService'
-import { StudentService } from '@/services/StudentService'
+import { StudentService } from '@/services/student/StudentService'
 import { Enrollment } from '@/models/Enrollment'
 import { Student } from '@/models/Student'
 

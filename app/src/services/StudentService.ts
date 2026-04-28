@@ -1,6 +1,6 @@
 import { Student, type StudentDTO } from '@/models/Student'
-import { StudentCommandService } from './StudentCommandService'
-import { StudentQueryService } from './StudentQueryService'
+import { StudentCommandService } from './student/StudentCommandService'
+import { StudentQueryService } from './student/StudentQueryService'
 
 /**
  * Backward-compatible facade for student operations.
