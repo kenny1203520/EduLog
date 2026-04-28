@@ -9,6 +9,10 @@ import {
     type TeacherDTO,
     type TeacherStatisticsDTO
 } from '@/services/teacher/TeacherService'
+import {
+    AuthUserSearchService,
+    type AuthUserSearchResultDTO
+} from '@/services/Auth/AuthUserSearchService'
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -25,6 +29,10 @@ const pendingDeleteCount = ref(0)
 const isModalOpen = ref(false)
 const isSaving = ref(false)
 const editingTeacher = ref<TeacherDTO | null>(null)
+const userSearchQuery = ref('')
+const userSearchResults = ref<AuthUserSearchResultDTO[]>([])
+const isSearchingUsers = ref(false)
+const userSearchMessage = ref('')
 
 const form = ref<Partial<TeacherDTO>>({
     user_id: '',
@@ -136,6 +144,7 @@ function createEmptyForm(): Partial<TeacherDTO> {
 function openCreateModal() {
     editingTeacher.value = null
     form.value = createEmptyForm()
+    resetUserSearchState()
     isModalOpen.value = true
 }
 
@@ -151,6 +160,7 @@ function openEditModal(teacher: TeacherDTO) {
         address: teacher.address ?? '',
         bio: teacher.bio ?? ''
     }
+    resetUserSearchState()
     isModalOpen.value = true
 }
 
@@ -158,6 +168,14 @@ function closeModal() {
     isModalOpen.value = false
     editingTeacher.value = null
     form.value = createEmptyForm()
+    resetUserSearchState()
+}
+
+function resetUserSearchState() {
+    userSearchQuery.value = ''
+    userSearchResults.value = []
+    userSearchMessage.value = ''
+    isSearchingUsers.value = false
 }
 
 function isValidEmail(email: string) {
@@ -166,6 +184,38 @@ function isValidEmail(email: string) {
 
 function isValidUuid(value: string) {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+async function searchUsersByEmail() {
+    const query = userSearchQuery.value.trim()
+
+    if (!query) {
+        userSearchResults.value = []
+        userSearchMessage.value = t('teacher.user_search_empty')
+        return
+    }
+
+    try {
+        isSearchingUsers.value = true
+        userSearchMessage.value = ''
+        userSearchResults.value = await AuthUserSearchService.searchUsersByEmail(query)
+
+        if (userSearchResults.value.length === 0) {
+            userSearchMessage.value = t('teacher.user_search_no_results', { query })
+        }
+    } catch (error) {
+        console.error(error)
+        userSearchResults.value = []
+        userSearchMessage.value = (error as Error).message || t('teacher.user_search_failed')
+    } finally {
+        isSearchingUsers.value = false
+    }
+}
+
+function applyUserSearchResult(result: AuthUserSearchResultDTO) {
+    form.value.user_id = result.id
+    userSearchQuery.value = result.email
+    userSearchMessage.value = t('teacher.user_search_selected', { email: result.email })
 }
 
 function preparePayload(): Partial<TeacherDTO> {
@@ -615,6 +665,57 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                         {{ t('teacher.user_id_hint') }}
                     </div>
 
+                    <div class="mb-6 rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm">
+                        <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
+                            <div class="flex-1">
+                                <label class="mb-2 block text-sm font-semibold text-slate-700">
+                                    {{ t('teacher.user_search_label') }}
+                                </label>
+                                <input
+                                    v-model="userSearchQuery"
+                                    type="email"
+                                    :placeholder="t('teacher.user_search_placeholder')"
+                                    class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
+                                    @keydown.enter.prevent="searchUsersByEmail" />
+                            </div>
+
+                            <button
+                                @click="searchUsersByEmail"
+                                :disabled="isSearchingUsers"
+                                class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
+                                <span v-if="isSearchingUsers" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                                {{ isSearchingUsers ? t('teacher.user_search_loading') : t('teacher.user_search_button') }}
+                            </button>
+                        </div>
+
+                        <p class="mt-2 text-sm text-slate-500">
+                            {{ t('teacher.user_search_hint') }}
+                        </p>
+
+                        <p v-if="userSearchMessage" class="mt-3 text-sm text-slate-600">
+                            {{ userSearchMessage }}
+                        </p>
+
+                        <div v-if="userSearchResults.length > 0" class="mt-4 space-y-2">
+                            <div
+                                v-for="result in userSearchResults"
+                                :key="result.id"
+                                class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <div class="text-sm font-semibold text-slate-900">{{ result.email }}</div>
+                                    <div class="mt-1 text-xs text-slate-500 break-all">
+                                        {{ result.id }}
+                                    </div>
+                                </div>
+                                <button
+                                    @click="applyUserSearchResult(result)"
+                                    class="inline-flex items-center justify-center rounded-xl border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50">
+                                    {{ t('teacher.user_search_select') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="grid gap-5 md:grid-cols-2">
                         <div>
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
@@ -717,7 +818,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                         :disabled="isSaving"
                         class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
                         <span v-if="isSaving" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                        {{ isSaving ? t('teacher.saving') : t('common.save') }}
+                        {{ isSaving ? t('common.saving') : t('common.save') }}
                     </button>
                 </div>
             </div>
