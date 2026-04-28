@@ -82,6 +82,12 @@ const router = createRouter({
           name: 'holidays',
           component: () => import('@/views/HolidayManagementView.vue'),
           meta: { title: 'nav.holidays', description: 'nav.description.holidays' }
+        },
+        {
+          path: 'teachers',
+          name: 'teachers',
+          component: () => import('@/views/TeacherManagementView.vue'),
+          meta: { title: 'nav.teachers', description: 'nav.description.teachers' }
         }
       ]
     },

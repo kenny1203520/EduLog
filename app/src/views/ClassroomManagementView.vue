@@ -6,6 +6,7 @@ import { ClassroomService } from '@/services/Classroom/ClassroomService'
 import { SessionService } from '@/services/Session/SessionService'
 import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { TeacherService } from '@/services/teacher/TeacherService'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
@@ -72,8 +73,8 @@ const searchQuery = ref('')
 const allClassrooms = ref<Classroom[]>([]) // For Dropdown
 const hiddenClassroomIds = ref<Set<string>>(new Set())
 const hiddenSessionIds = ref<Set<string>>(new Set())
-
-// Pagination state
+const teachersList = ref<any[]>([])
+const selectedTeacherIds = ref<Set<string>>(new Set())
 const roomsPagination = ref({ page: 1, perPage: 10, total: 0 })
 const sessionsPagination = ref({ page: 1, perPage: 10, total: 0 })
 
@@ -100,6 +101,14 @@ const newSession = ref<Partial<ClassSessionDTO>>({
 })
 const editingSession = ref<ClassSessionDTO | null>(null)
 
+async function loadTeachers() {
+    try {
+        teachersList.value = await TeacherService.getAllTeachers()
+    } catch (e) {
+        console.error('Failed to load teachers:', e)
+    }
+}
+
 const days = [
     { value: 0, label: 'Sun' },
     { value: 1, label: 'Mon' },
@@ -121,6 +130,7 @@ async function loadData() {
             loadRooms(),
             loadSessions(),
             loadAllRooms(),
+            loadTeachers(),
             CourseCatalogService.getCourses().then(res => { courses.value = res.data })
         ])
     } catch (e) {
@@ -337,17 +347,25 @@ async function saveSession() {
 
     try {
         isSavingSession.value = true
+        let sessionId: string
         if (editingSession.value?.id) {
             await SessionService.updateClassSession(editingSession.value.id, payload)
+            sessionId = editingSession.value.id
             // Sync occurrences if the schedule might have changed
             await OccurrenceService.syncSessionOccurrences(editingSession.value.id).catch(console.error)
         } else {
             const session = await SessionService.createClassSession(payload)
+            sessionId = session.id!
             // Generate occurrences for new sessions
             const startDate = new Date()
             const endDate = new Date()
             endDate.setMonth(endDate.getMonth() + 3)
             await OccurrenceService.generateOccurrences(session.id!, startDate, endDate)
+        }
+
+        // Assign teachers to the session
+        if (selectedTeacherIds.value.size > 0) {
+            await TeacherService.assignTeachersToSession(sessionId, Array.from(selectedTeacherIds.value))
         }
 
         await loadSessions()
@@ -360,15 +378,24 @@ async function saveSession() {
     }
 }
 
-function openEditSession(session: ClassSessionDTO) {
+async function openEditSession(session: ClassSessionDTO) {
     editingSession.value = session
     newSession.value = { ...session }
+    // Load assigned teachers for this session
+    try {
+        const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
+        selectedTeacherIds.value = new Set(assignedTeachers.map(t => t.id!))
+    } catch (e) {
+        console.error('Failed to load session teachers:', e)
+        selectedTeacherIds.value = new Set()
+    }
     isCreateSessionModalOpen.value = true
 }
 
 function closeSessionModal() {
     isCreateSessionModalOpen.value = false
     editingSession.value = null
+    selectedTeacherIds.value = new Set()
     newSession.value = {
         name: '',
         classroom_id: '',
@@ -378,7 +405,8 @@ function closeSessionModal() {
         end_time: '12:00',
         capacity: 10,
         lesson_number: 1,
-        external_link: ''
+        external_link: '',
+        user_id: undefined
     }
 }
 
@@ -951,6 +979,24 @@ function toggleCourseSelection(courseId: string) {
                                 <span class="text-sm text-gray-700">{{ c.subject }} <span class="text-gray-400">- {{
                                     c.stage }}{{ c.displayNameValue ? ` (${c.displayNameValue})` : ''
                                         }}</span></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.teacher') || 'Teacher' }}</label>
+                        <div class="space-y-2 border border-gray-300 rounded-lg p-3 bg-white max-h-48 overflow-y-auto">
+                            <div v-if="teachersList.length === 0" class="text-gray-500 text-sm py-2">{{ $t('common.no_data') || 'No teachers available' }}</div>
+                            <div v-for="teacher in teachersList" :key="teacher.id" class="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    :id="`teacher-${teacher.id}`"
+                                    :checked="selectedTeacherIds.has(teacher.id!)"
+                                    @change="($event.target as HTMLInputElement).checked ? selectedTeacherIds.add(teacher.id!) : selectedTeacherIds.delete(teacher.id!)"
+                                    class="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
+                                <label :for="`teacher-${teacher.id}`" class="ml-2 text-sm text-gray-700 cursor-pointer flex-1">
+                                    {{ teacher.name || teacher.email }}
+                                </label>
                             </div>
                         </div>
                     </div>

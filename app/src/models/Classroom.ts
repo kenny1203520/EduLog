@@ -19,6 +19,7 @@ export interface ClassSessionDTO {
     end_time: string
     capacity: number
     lesson_number?: number
+    user_id?: string // Teacher ID
     created_at?: string
     updated_at?: string
     external_link?: string
