@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { HolidayService } from '@/services/HolidayService'
+import { HolidayService } from '@/services/holiday/HolidayService'
 import { ClassroomService } from '@/services/ClassroomService'
 import { SessionService } from '@/services/SessionService'
 import { Holiday } from '@/models/Holiday'

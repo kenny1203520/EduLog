@@ -1,6 +1,6 @@
 import { Holiday, type HolidayDTO } from '@/models/Holiday'
-import { HolidayCommandService } from './HolidayCommandService'
-import { HolidayQueryService } from './HolidayQueryService'
+import { HolidayCommandService } from './holiday/HolidayCommandService'
+import { HolidayQueryService } from './holiday/HolidayQueryService'
 
 /**
  * Backward-compatible facade for holiday operations.
