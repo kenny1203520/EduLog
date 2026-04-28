@@ -1,7 +1,7 @@
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
 import { OccurrenceCommandService } from './OccurrenceCommandService'
 import { OccurrenceQueryService } from './OccurrenceQueryService'
-import { OccurrenceSyncService } from '../OccurrenceSyncService'
+import { OccurrenceSyncService } from './OccurrenceSyncService'
 
 /**
  * Backward-compatible facade for class occurrence operations.
