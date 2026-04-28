@@ -2,7 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
-import { SessionService } from '@/services/SessionService'
+import { SessionService } from '@/services/Session/SessionService'
 import { CourseService } from '@/services/Course/CourseService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'

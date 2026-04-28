@@ -225,7 +225,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
 import { ClassroomService } from '@/services/Classroom/ClassroomService'
-import { SessionService } from '@/services/SessionService'
+import { SessionService } from '@/services/Session/SessionService'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()

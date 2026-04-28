@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { ClassSessionDTO } from '@/models/Classroom'
-import { VisibilityPreferenceService } from './VisibilityPreferenceService'
+import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
 
 export type SessionVisibilityFilterMode = 'all' | 'visible' | 'hidden'
 
