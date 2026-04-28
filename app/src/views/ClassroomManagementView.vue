@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CourseCatalogService } from '@/services/CourseCatalogService'
+import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
 import { ClassroomService } from '@/services/ClassroomService'
 import { SessionService } from '@/services/SessionService'
 import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue' // Added watch
-import { CourseCatalogService } from '@/services/CourseCatalogService'
+import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
 import { Course, Lesson, type CourseDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'

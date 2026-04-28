@@ -223,7 +223,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
-import { CourseCatalogService } from '@/services/CourseCatalogService'
+import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
 import { ClassroomService } from '@/services/ClassroomService'
 import { SessionService } from '@/services/SessionService'
 import { useI18n } from 'vue-i18n'
