@@ -3,7 +3,7 @@ import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { EnrollmentProgressService } from '../enrollment/EnrollmentProgressService'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { HolidayService } from '../holiday/HolidayService'
-import { SuspensionService } from '../SuspensionService'
+import { SuspensionService } from '../suspension/SuspensionService'
 
 export class ReportLifecyclePolicy {
     static async buildInitialReportPayload(enrollmentId: string, occurrenceId: string): Promise<Partial<OccurrenceReportDTO>> {
