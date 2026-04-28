@@ -6,6 +6,7 @@ import { SessionService } from '@/services/Session/SessionService'
 import { CourseService } from '@/services/Course/CourseService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
 import type { Enrollment } from '@/models/Enrollment'
@@ -1096,13 +1097,24 @@ async function toggleClassStatus(event: any) {
     if (!todayOccurrence.value) return
     const isHeld = event.target.checked
 
+    const auth = useAuthStore()
+    const userId = auth.user?.id
+    if (!userId) {
+        event.target.checked = !isHeld
+        return
+    }
+
     try {
+        const existing = todayOccurrence.value.teacherAttendance || {}
+        const updatedAttendance = { ...existing, [userId]: isHeld }
+
         const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
-            is_conducted: isHeld
+            teacher_attendance: updatedAttendance
         })
-        todayOccurrence.value.isConducted = updated.isConducted
+
+        todayOccurrence.value.teacherAttendance = updated.teacherAttendance || updatedAttendance
     } catch (e) {
-        console.error('Failed to update class status:', e)
+        console.error('Failed to update teacher attendance:', e)
         event.target.checked = !isHeld
     }
 }

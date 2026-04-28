@@ -47,13 +47,37 @@ export class OccurrenceCommandService {
         const dayOfWeek = (session as any).day_of_week
         const occurrenceDates = this.generateOccurrenceDates(dayOfWeek, startDate, endDate)
 
+        // Determine default teacher ids: prefer last existing occurrence's teachers, otherwise use session owner
+        let defaultTeacherIds: string[] = []
+        try {
+            const startStr = this.formatDate(startDate)
+            const { data: lastOcc }: any = await supabase
+                .from('class_occurrences')
+                .select('teacher_ids')
+                .eq('class_session_id', sessionId)
+                .lt('occurrence_date', startStr)
+                .order('occurrence_date', { ascending: false })
+                .limit(1)
+
+            if (lastOcc && lastOcc.length > 0 && lastOcc[0].teacher_ids) {
+                defaultTeacherIds = lastOcc[0].teacher_ids
+            } else if ((session as any).user_id) {
+                defaultTeacherIds = [(session as any).user_id]
+            }
+        } catch (e) {
+            // fallback
+            if ((session as any).user_id) defaultTeacherIds = [(session as any).user_id]
+        }
+
         const occurrences: Partial<ClassOccurrenceDTO>[] = occurrenceDates.map(date => ({
             class_session_id: sessionId,
             occurrence_date: this.formatDate(date),
             status: 'scheduled',
             original_start_time: (session as any).start_time,
             original_end_time: (session as any).end_time,
-            is_conducted: false
+            is_conducted: false,
+            teacher_ids: defaultTeacherIds,
+            teacher_attendance: defaultTeacherIds.reduce((acc: any, id: string) => { acc[id] = true; return acc }, {})
         }))
 
         const { data, error } = await supabase

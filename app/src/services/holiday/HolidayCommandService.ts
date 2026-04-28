@@ -97,8 +97,8 @@ export class HolidayCommandService {
         if (!occurrences || occurrences.length === 0) return
         const occurrenceIds = occurrences.map(o => o.id)
 
-        // 2. Update reports
-        const { error } = await supabase
+        // 2. Update reports: mark all affected reports as absent for the holiday
+        const { error: reportError } = await supabase
             .from('occurrence_reports')
             .update({
                 attendance_status: 'absent',
@@ -106,10 +106,19 @@ export class HolidayCommandService {
                 is_completed: false
             })
             .in('class_occurrence_id', occurrenceIds)
-            .or('content.eq.,content.is.null')
 
-        if (error) {
-            console.error('Failed to sync reports for holiday:', error)
+        if (reportError) {
+            console.error('Failed to sync reports for holiday:', reportError)
+        }
+
+        // 3. Mark occurrences as not conducted
+        const { error: occError } = await supabase
+            .from('class_occurrences')
+            .update({ is_conducted: false })
+            .in('id', occurrenceIds)
+
+        if (occError) {
+            console.error('Failed to mark occurrences as not conducted for holiday:', occError)
         }
     }
 }

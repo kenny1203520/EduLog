@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
+import { useAuthStore } from '@/stores/useAuthStore'
 
 useI18n()
 
@@ -26,7 +27,15 @@ onMounted(async () => {
         const end = new Date(today.setHours(23, 59, 59, 999))
 
         const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
-        const visible = (data || []).filter(d => d.isConducted === true)
+        const auth = useAuthStore()
+        const userId = auth.user?.id
+        // Visible if current user is marked attending for this occurrence; fallback to isConducted
+        const visible = (data || []).filter(d => {
+            if (userId && d.teacherAttendance && Object.prototype.hasOwnProperty.call(d.teacherAttendance, userId)) {
+                return d.teacherAttendance[userId] === true
+            }
+            return d.isConducted === true
+        })
         todayOccurrences.value = visible
         stats.value.todayClasses = visible.length
     } catch (e) {
