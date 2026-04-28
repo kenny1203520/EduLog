@@ -78,6 +78,8 @@
     "copy_template_load_failed": "載入點名樣式失敗",
     "copy_template_save_failed": "儲存點名樣式失敗",
     "copy_template_empty_error": "樣式內容不可為空",
+    "teacher": "教師",
+    "teachers": "教師",
         "copy_template_preview_title": "最終預覽",
         "copy_template_preview_hint": "右側會即時顯示目前樣式套用後的內容。",
         "copy_template_preview_empty": "尚未輸入樣式內容，預覽會顯示系統預設範本。",

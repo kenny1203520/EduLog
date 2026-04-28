@@ -351,21 +351,22 @@ async function saveSession() {
         if (editingSession.value?.id) {
             await SessionService.updateClassSession(editingSession.value.id, payload)
             sessionId = editingSession.value.id
-            // Sync occurrences if the schedule might have changed
-            await OccurrenceService.syncSessionOccurrences(editingSession.value.id).catch(console.error)
         } else {
             const session = await SessionService.createClassSession(payload)
             sessionId = session.id!
+        }
+
+        await TeacherService.replaceTeachersForSession(sessionId, Array.from(selectedTeacherIds.value))
+
+        if (editingSession.value?.id) {
+            // Sync occurrences if the schedule might have changed
+            await OccurrenceService.syncSessionOccurrences(editingSession.value.id).catch(console.error)
+        } else {
             // Generate occurrences for new sessions
             const startDate = new Date()
             const endDate = new Date()
             endDate.setMonth(endDate.getMonth() + 3)
-            await OccurrenceService.generateOccurrences(session.id!, startDate, endDate)
-        }
-
-        // Assign teachers to the session
-        if (selectedTeacherIds.value.size > 0) {
-            await TeacherService.assignTeachersToSession(sessionId, Array.from(selectedTeacherIds.value))
+            await OccurrenceService.generateOccurrences(sessionId, startDate, endDate)
         }
 
         await loadSessions()

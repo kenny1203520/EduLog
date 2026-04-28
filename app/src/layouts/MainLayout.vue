@@ -147,6 +147,19 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
+                <router-link to="/dashboard/teachers" @click="isSidebarOpen = false"
+                    class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
+                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    <div class="flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 20h5v-1a7 7 0 00-7-7h-1m-6 8h12m-6-8a4 4 0 100-8 4 4 0 000 8zm-5 8a7 7 0 0114 0v1H6v-1z" />
+                        </svg>
+                        {{ $t('nav.teachers') }}
+                    </div>
+                </router-link>
+
                 <router-link to="/dashboard/reports/incomplete" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">

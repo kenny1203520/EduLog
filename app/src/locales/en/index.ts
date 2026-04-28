@@ -9,6 +9,7 @@ import classroom from './classroom.json'
 import course from './course.json'
 import holiday from './holiday.json'
 import attendance from './attendance.json'
+import teacher from './teacher.json'
 
 export default {
   nav,
@@ -21,5 +22,6 @@ export default {
   classroom,
   course,
   holiday,
-  attendance
+  attendance,
+  teacher
 }

@@ -2,6 +2,7 @@
     "dashboard": "儀表板",
     "courses": "課程管理",
     "classrooms": "教室管理",
+    "teachers": "教師管理",
     "holidays": "休假日管理",
     "students": "學生列表",
     "historical_reports": "報告總覽",
@@ -22,6 +23,7 @@
         "students": "全面管理您的學生資訊與學習紀錄。",
         "courses": "輕鬆排程課程，追蹤每位學生的學習路徑。",
         "classrooms": "檢視並管理所有教室的教學進度。",
+        "teachers": "管理教師資料、帳號與班級指派。",
         "reports": "編輯並提交專業的教學報告，即時回饋家長。",
         "holidays": "管理班級停課與節日安排。",
         "incomplete": "追蹤尚未完成的教學報告，確保教學不中斷。"

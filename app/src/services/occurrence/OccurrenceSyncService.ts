@@ -30,6 +30,8 @@ export class OccurrenceSyncService {
                 actual_start_time,
                 actual_end_time,
                 is_conducted,
+                teacher_ids,
+                teacher_attendance,
                 occurrence_reports (
                     id,
                     content,
@@ -56,7 +58,9 @@ export class OccurrenceSyncService {
 
             const hasManualData = (occ.notes && occ.notes.trim() !== '') ||
                 occ.actual_start_time ||
-                occ.is_conducted !== null
+                occ.is_conducted !== null ||
+                (Array.isArray(occ.teacher_ids) && occ.teacher_ids.length > 0) ||
+                (occ.teacher_attendance && Object.keys(occ.teacher_attendance).length > 0)
 
             const reports = occ.occurrence_reports || []
             let hasTrueRealReport = false

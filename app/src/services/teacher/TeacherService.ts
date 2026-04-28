@@ -2,14 +2,40 @@ import { supabase } from '@/lib/supabase'
 
 export interface TeacherDTO {
     id?: string
-    user_id: string
+    user_id?: string | null
     name: string
     email: string
-    phone?: string
-    address?: string
-    bio?: string
+    phone?: string | null
+    birthday?: string | null
+    gov_id?: string | null
+    address?: string | null
+    bio?: string | null
     created_at?: string
     updated_at?: string
+}
+
+export interface TeacherStatisticsDTO {
+    totalTeachers: number
+    linkedAccounts: number
+    unlinkedAccounts: number
+    completeProfiles: number
+    teachersWithBirthday: number
+    teachersWithGovId: number
+}
+
+type TeacherUpsertDTO = Omit<TeacherDTO, 'id' | 'created_at' | 'updated_at'>
+
+function normalizeTeacherPayload(payload: Partial<TeacherUpsertDTO>): Partial<TeacherUpsertDTO> {
+    const normalized: Partial<TeacherUpsertDTO> = { ...payload }
+
+    ;(['user_id', 'phone', 'birthday', 'gov_id', 'address', 'bio'] as const).forEach((key) => {
+        const value = normalized[key]
+        if (value === '') {
+            normalized[key] = null
+        }
+    })
+
+    return normalized
 }
 
 export class TeacherService {
@@ -62,7 +88,9 @@ export class TeacherService {
         return data as TeacherDTO
     }
 
-    static async getTeacherByUserId(userId: string): Promise<TeacherDTO | null> {
+    static async getTeacherByUserId(userId: string | null | undefined): Promise<TeacherDTO | null> {
+        if (!userId) return null
+
         const { data, error } = await supabase
             .from('teachers')
             .select('*')
@@ -76,10 +104,10 @@ export class TeacherService {
         return data as TeacherDTO
     }
 
-    static async createTeacher(teacher: Omit<TeacherDTO, 'id' | 'created_at' | 'updated_at'>): Promise<TeacherDTO> {
+    static async createTeacher(teacher: TeacherUpsertDTO): Promise<TeacherDTO> {
         const { data, error } = await supabase
             .from('teachers')
-            .insert([teacher])
+            .insert([normalizeTeacherPayload(teacher)])
             .select()
             .single()
 
@@ -89,11 +117,11 @@ export class TeacherService {
 
     static async updateTeacher(
         id: string,
-        updates: Partial<Omit<TeacherDTO, 'id' | 'user_id' | 'created_at' | 'updated_at'>>
+        updates: Partial<Omit<TeacherDTO, 'id' | 'created_at' | 'updated_at'>>
     ): Promise<TeacherDTO> {
         const { data, error } = await supabase
             .from('teachers')
-            .update(updates)
+            .update(normalizeTeacherPayload(updates))
             .eq('id', id)
             .select()
             .single()
@@ -109,6 +137,30 @@ export class TeacherService {
             .eq('id', id)
 
         if (error) throw new Error(`Failed to delete teacher: ${error.message}`)
+    }
+
+    static getTeacherStatistics(teachers: TeacherDTO[]): TeacherStatisticsDTO {
+        const totalTeachers = teachers.length
+        const linkedAccounts = teachers.filter(teacher => !!teacher.user_id).length
+        const unlinkedAccounts = totalTeachers - linkedAccounts
+        const completeProfiles = teachers.filter(teacher => Boolean(teacher.name && teacher.email)).length
+        const teachersWithBirthday = teachers.filter(teacher => Boolean(teacher.birthday)).length
+        const teachersWithGovId = teachers.filter(teacher => Boolean(teacher.gov_id)).length
+
+        return {
+            totalTeachers,
+            linkedAccounts,
+            unlinkedAccounts,
+            completeProfiles,
+            teachersWithBirthday,
+            teachersWithGovId
+        }
+    }
+
+    static async bulkDeleteTeachers(ids: string[]): Promise<void> {
+        for (const id of ids) {
+            await this.deleteTeacher(id)
+        }
     }
 
     // Session-teacher relationships
@@ -151,11 +203,25 @@ export class TeacherService {
         return Array.from(teacherMap.values())
     }
 
+    static async replaceTeachersForSession(
+        sessionId: string,
+        teacherIds: string[],
+        effectiveFrom: string = new Date().toISOString().split('T')[0]
+    ): Promise<void> {
+        await this.clearSessionTeachers(sessionId)
+
+        if (teacherIds.length === 0) return
+
+        await this.assignTeachersToSession(sessionId, teacherIds, effectiveFrom)
+    }
+
     static async assignTeachersToSession(
         sessionId: string,
         teacherIds: string[],
         effectiveFrom: string = new Date().toISOString().split('T')[0]
     ): Promise<void> {
+        if (teacherIds.length === 0) return
+
         const records = teacherIds.map(teacherId => ({
             class_session_id: sessionId,
             teacher_id: teacherId,
@@ -167,6 +233,15 @@ export class TeacherService {
             .upsert(records, { onConflict: 'class_session_id,teacher_id,effective_from' })
 
         if (error) throw new Error(`Failed to assign teachers: ${error.message}`)
+    }
+
+    static async clearSessionTeachers(sessionId: string): Promise<void> {
+        const { error } = await supabase
+            .from('class_session_teachers')
+            .delete()
+            .eq('class_session_id', sessionId)
+
+        if (error) throw new Error(`Failed to clear session teachers: ${error.message}`)
     }
 
     static async removeTeacherFromSession(sessionId: string, teacherId: string): Promise<void> {

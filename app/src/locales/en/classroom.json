@@ -78,6 +78,8 @@
     "copy_template_load_failed": "Failed to load attendance template",
     "copy_template_save_failed": "Failed to save attendance template",
     "copy_template_empty_error": "Template content cannot be empty",
+    "teacher": "Teacher",
+    "teachers": "Teachers",
         "copy_template_preview_title": "Final Preview",
         "copy_template_preview_hint": "The right side updates live with the result of the current template.",
         "copy_template_preview_empty": "No template content yet. The preview will show the system default template.",

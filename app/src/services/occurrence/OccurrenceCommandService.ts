@@ -47,7 +47,8 @@ export class OccurrenceCommandService {
         const dayOfWeek = (session as any).day_of_week
         const occurrenceDates = this.generateOccurrenceDates(dayOfWeek, startDate, endDate)
 
-        // Determine default teacher ids: prefer last existing occurrence's teachers, otherwise use session owner
+        // Determine default teacher ids: prefer last existing occurrence's teachers,
+        // then the session roster, and finally the session owner.
         let defaultTeacherIds: string[] = []
         try {
             const startStr = this.formatDate(startDate)
@@ -61,8 +62,22 @@ export class OccurrenceCommandService {
 
             if (lastOcc && lastOcc.length > 0 && lastOcc[0].teacher_ids) {
                 defaultTeacherIds = lastOcc[0].teacher_ids
-            } else if ((session as any).user_id) {
-                defaultTeacherIds = [(session as any).user_id]
+            } else {
+                const { data: sessionTeachers, error: sessionTeachersError } = await supabase
+                    .from('class_session_teachers')
+                    .select('teacher_id, effective_from')
+                    .eq('class_session_id', sessionId)
+                    .lte('effective_from', startStr)
+                    .order('effective_from', { ascending: false })
+
+                if (sessionTeachersError) throw sessionTeachersError
+
+                const teacherIds = Array.from(new Set((sessionTeachers || []).map((row: any) => row.teacher_id).filter(Boolean)))
+                if (teacherIds.length > 0) {
+                    defaultTeacherIds = teacherIds
+                } else if ((session as any).user_id) {
+                    defaultTeacherIds = [(session as any).user_id]
+                }
             }
         } catch (e) {
             // fallback
