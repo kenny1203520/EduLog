@@ -20,6 +20,8 @@ export interface ClassSessionDTO {
     capacity: number
     lesson_number?: number
     user_id?: string // Teacher ID
+    start_date: string
+    end_date?: string | null
     created_at?: string
     updated_at?: string
     external_link?: string

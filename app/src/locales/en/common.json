@@ -64,5 +64,8 @@
         "rescheduled": "Rescheduled"
     },
     "search_teacher": "Search teacher...",
-    "save_error": "Failed to save"
+    "save_error": "Failed to save",
+    "clear": "Clear",
+    "start_date": "Start Date",
+    "end_date": "End Date"
 }

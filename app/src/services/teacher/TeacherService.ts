@@ -164,11 +164,13 @@ export class TeacherService {
     }
 
     // Session-teacher relationships
-    static async getSessionTeachers(sessionId: string, onDate?: string): Promise<TeacherDTO[]> {
+    static async getSessionTeachers(sessionId: string, onDate?: string): Promise<(TeacherDTO & { effective_from: string, effective_to: string | null })[]> {
         let query = supabase
             .from('class_session_teachers')
             .select(`
                 teacher_id,
+                effective_from,
+                effective_to,
                 teachers (
                     id,
                     user_id,
@@ -185,6 +187,8 @@ export class TeacherService {
 
         if (onDate) {
             query = query.lte('effective_from', onDate)
+            // Ideally we also check effective_to >= onDate or effective_to is null
+            // but for simplicity we filter in memory below
         }
 
         const { data, error } = await query
@@ -192,40 +196,51 @@ export class TeacherService {
 
         if (error) throw new Error(error.message)
 
-        // Deduplicate teachers (get the most recent assignment for each teacher)
-        const teacherMap = new Map<string, TeacherDTO>()
+        // Map and optionally filter by effective_to
+        const results: (TeacherDTO & { effective_from: string, effective_to: string | null })[] = []
+        const teacherMap = new Map<string, boolean>()
+
         ;(data as any[] || []).forEach(row => {
             if (row.teachers && !teacherMap.has(row.teachers.id)) {
-                teacherMap.set(row.teachers.id, row.teachers as TeacherDTO)
+                // If onDate is provided, check effective_to
+                if (onDate && row.effective_to && row.effective_to < onDate) {
+                    return // Teacher assignment expired before onDate
+                }
+                
+                teacherMap.set(row.teachers.id, true)
+                results.push({
+                    ...(row.teachers as TeacherDTO),
+                    effective_from: row.effective_from,
+                    effective_to: row.effective_to
+                })
             }
         })
 
-        return Array.from(teacherMap.values())
+        return results
     }
 
     static async replaceTeachersForSession(
         sessionId: string,
-        teacherIds: string[],
-        effectiveFrom: string = new Date().toISOString().split('T')[0]
+        teachers: { teacher_id: string, effective_from: string, effective_to?: string | null }[]
     ): Promise<void> {
         await this.clearSessionTeachers(sessionId)
 
-        if (teacherIds.length === 0) return
+        if (teachers.length === 0) return
 
-        await this.assignTeachersToSession(sessionId, teacherIds, effectiveFrom)
+        await this.assignTeachersToSession(sessionId, teachers)
     }
 
     static async assignTeachersToSession(
         sessionId: string,
-        teacherIds: string[],
-        effectiveFrom: string = new Date().toISOString().split('T')[0]
+        teachers: { teacher_id: string, effective_from: string, effective_to?: string | null }[]
     ): Promise<void> {
-        if (teacherIds.length === 0) return
+        if (teachers.length === 0) return
 
-        const records = teacherIds.map(teacherId => ({
+        const records = teachers.map(t => ({
             class_session_id: sessionId,
-            teacher_id: teacherId,
-            effective_from: effectiveFrom
+            teacher_id: t.teacher_id,
+            effective_from: t.effective_from,
+            effective_to: t.effective_to || null
         }))
 
         const { error } = await supabase

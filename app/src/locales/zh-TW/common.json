@@ -64,5 +64,8 @@
         "rescheduled": "已調課"
     },
     "search_teacher": "搜尋教師...",
-    "save_error": "儲存失敗"
+    "save_error": "儲存失敗",
+    "clear": "清除",
+    "start_date": "開始日期",
+    "end_date": "結束日期"
 }

@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
 import { OccurrenceQueryService } from './OccurrenceQueryService'
 import { HolidayService } from '../holiday/HolidayService'
+import { TeacherService } from '../teacher/TeacherService'
 
 export class OccurrenceCommandService {
     private static generateOccurrenceDates(
@@ -45,56 +46,66 @@ export class OccurrenceCommandService {
 
         if (sessionError) throw new Error(`Failed to fetch session: ${sessionError.message}`)
 
-        const dayOfWeek = (session as any).day_of_week
-        const occurrenceDates = this.generateOccurrenceDates(dayOfWeek, startDate, endDate)
-
-        // Determine default teacher ids: prefer last existing occurrence's teachers,
-        // then the session roster, and finally the session owner.
-        let defaultTeacherIds: string[] = []
-        try {
-            const startStr = this.formatDate(startDate)
-            const { data: lastOcc }: any = await supabase
-                .from('class_occurrences')
-                .select('teacher_ids')
-                .eq('class_session_id', sessionId)
-                .lt('occurrence_date', startStr)
-                .order('occurrence_date', { ascending: false })
-                .limit(1)
-
-            if (lastOcc && lastOcc.length > 0 && lastOcc[0].teacher_ids) {
-                defaultTeacherIds = lastOcc[0].teacher_ids
-            } else {
-                const { data: sessionTeachers, error: sessionTeachersError } = await supabase
-                    .from('class_session_teachers')
-                    .select('teacher_id, effective_from')
-                    .eq('class_session_id', sessionId)
-                    .lte('effective_from', startStr)
-                    .order('effective_from', { ascending: false })
-
-                if (sessionTeachersError) throw sessionTeachersError
-
-                const teacherIds = Array.from(new Set((sessionTeachers || []).map((row: any) => row.teacher_id).filter(Boolean)))
-                if (teacherIds.length > 0) {
-                    defaultTeacherIds = teacherIds
-                } else if ((session as any).user_id) {
-                    defaultTeacherIds = [(session as any).user_id]
-                }
+        let effectiveStartDate = startDate
+        if (session.start_date) {
+            const sessionStart = new Date(session.start_date)
+            if (effectiveStartDate < sessionStart) {
+                effectiveStartDate = sessionStart
             }
-        } catch (e) {
-            // fallback
-            if ((session as any).user_id) defaultTeacherIds = [(session as any).user_id]
         }
 
-        const occurrences: Partial<ClassOccurrenceDTO>[] = occurrenceDates.map(date => ({
-            class_session_id: sessionId,
-            occurrence_date: this.formatDate(date),
-            status: 'scheduled',
-            original_start_time: (session as any).start_time,
-            original_end_time: (session as any).end_time,
-            is_conducted: true,
-            teacher_ids: defaultTeacherIds,
-            teacher_attendance: defaultTeacherIds.reduce((acc: any, id: string) => { acc[id] = true; return acc }, {})
-        }))
+        let effectiveEndDate = endDate
+        if (session.end_date) {
+            const sessionEnd = new Date(session.end_date)
+            // Ensure sessionEnd is at the end of the day to avoid missing occurrences on the exact end_date
+            sessionEnd.setHours(23, 59, 59, 999)
+            if (effectiveEndDate > sessionEnd) {
+                effectiveEndDate = sessionEnd
+            }
+        }
+
+        if (effectiveStartDate > effectiveEndDate) return []
+
+        const dayOfWeek = (session as any).day_of_week
+        const occurrenceDates = this.generateOccurrenceDates(dayOfWeek, effectiveStartDate, effectiveEndDate)
+
+        // Fetch all session teachers with their effective periods
+        let sessionTeachers: any[] = []
+        try {
+            sessionTeachers = await TeacherService.getSessionTeachers(sessionId)
+        } catch (e) {
+            console.error('Failed to fetch session teachers for occurrence generation:', e)
+        }
+
+        const occurrences: Partial<ClassOccurrenceDTO>[] = occurrenceDates.map(date => {
+            const dateStr = this.formatDate(date)
+            
+            // Find teachers active on this date
+            const activeTeachers = sessionTeachers.filter(st => {
+                const effectiveFrom = st.effective_from
+                const effectiveTo = st.effective_to
+                if (dateStr < effectiveFrom) return false
+                if (effectiveTo && dateStr > effectiveTo) return false
+                return true
+            })
+            
+            let teacherIds = activeTeachers.map(t => t.id)
+            // Fallback to session owner if no teachers assigned
+            if (teacherIds.length === 0 && (session as any).user_id) {
+                teacherIds = [(session as any).user_id]
+            }
+
+            return {
+                class_session_id: sessionId,
+                occurrence_date: dateStr,
+                status: 'scheduled',
+                original_start_time: (session as any).start_time,
+                original_end_time: (session as any).end_time,
+                is_conducted: true,
+                teacher_ids: teacherIds,
+                teacher_attendance: teacherIds.reduce((acc: any, id: string) => { acc[id] = true; return acc }, {})
+            }
+        })
 
         const { data, error } = await supabase
             .from('class_occurrences')

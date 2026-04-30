@@ -207,5 +207,8 @@
     "add_student_duplicate_report": "A report already exists for this student course on the selected date",
     "add_student_not_class_day": "The selected date is not a teaching day for this class. Please choose a teaching day",
     "no_teachers_assigned": "No teachers assigned",
-    "manage_teachers": "Manage Teachers"
+    "manage_teachers": "Manage Teachers",
+    "long_term_hint": "Leave empty for long-term session",
+    "default_teacher": "Default",
+    "temp_teacher": "Temporary"
 }

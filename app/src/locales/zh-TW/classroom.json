@@ -207,5 +207,8 @@
     "add_student_duplicate_report": "該學生課程在這個日期已經有報告，無法重複建立",
     "add_student_not_class_day": "所選日期不是該班級的授課日，請改選授課日",
     "no_teachers_assigned": "尚未指派教師",
-    "manage_teachers": "管理教師"
+    "manage_teachers": "管理教師",
+    "long_term_hint": "若為常態班級請留空",
+    "default_teacher": "常態授課",
+    "temp_teacher": "批次代課"
 }
