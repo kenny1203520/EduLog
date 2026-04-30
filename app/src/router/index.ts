@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, type RouteLocationNormalized, type NavigationGuardNext } from 'vue-router'
+import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
 import LoginView from '@/views/LoginView.vue'
 import i18n from '@/i18n'
@@ -99,7 +99,7 @@ const router = createRouter({
 })
 
 // Navigation Guard
-router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormalized, next: NavigationGuardNext) => {
+router.beforeEach(async (to: RouteLocationNormalized) => {
   const authStore = useAuthStore()
   
   // Wait for auth init if not ready
@@ -108,12 +108,14 @@ router.beforeEach(async (to: RouteLocationNormalized, _from: RouteLocationNormal
   }
 
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    next('/login')
-  } else if (to.path === '/login' && authStore.isAuthenticated) {
-    next('/dashboard')
-  } else {
-    next()
+    return '/login'
   }
+  
+  if (to.path === '/login' && authStore.isAuthenticated) {
+    return '/dashboard'
+  }
+
+  return true
 })
 
 // Dynamic Title & SEO Metadata Guard
