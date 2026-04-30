@@ -1172,10 +1172,15 @@ async function toggleIsConducted(event: any) {
         })
 
         todayOccurrence.value.isConducted = updated.isConducted ?? isHeld
-    } catch (e) {
+    } catch (e: any) {
         console.error('Failed to update class status:', e)
         event.target.checked = !isHeld
-        toast.error((e as Error).message || t('common.save_error') || 'Failed to save')
+        const msg = e.message || ''
+        if (msg.includes('Cannot set is_conducted=true')) {
+            toast.error(t('report.error.cannot_set_conducted_during_holiday'))
+        } else {
+            toast.error(t('common.save_error'))
+        }
     }
 }
 
@@ -1206,10 +1211,15 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
         })
 
         todayOccurrence.value.teacherAttendance = updated.teacherAttendance || updatedAttendance
-    } catch (e) {
+    } catch (e: any) {
         console.error('Failed to update teacher attendance:', e)
         event.target.checked = !isPresent
-        toast.error((e as Error).message || t('common.save_error') || 'Failed to save')
+        const msg = e.message || ''
+        if (msg.includes('Cannot set teacher attendance to present')) {
+            toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
+        } else {
+            toast.error(t('common.save_error'))
+        }
     }
 }
 
@@ -1435,9 +1445,14 @@ async function saveOccurrenceTeachers() {
         await loadOccurrenceTeachers()
         showTeacherEditModal.value = false
         toast.success(t('common.save_success'))
-    } catch (e) {
+    } catch (e: any) {
         console.error('Failed to save teachers:', e)
-        toast.error(t('common.save_error'))
+        const msg = e.message || ''
+        if (msg.includes('Cannot set teacher attendance to present')) {
+            toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
+        } else {
+            toast.error(t('common.save_error'))
+        }
     } finally {
         isSavingTeachers.value = false
     }
