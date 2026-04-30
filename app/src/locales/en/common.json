@@ -62,5 +62,7 @@
         "completed": "Completed",
         "cancelled": "Cancelled",
         "rescheduled": "Rescheduled"
-    }
+    },
+    "search_teacher": "Search teacher...",
+    "save_error": "Failed to save"
 }

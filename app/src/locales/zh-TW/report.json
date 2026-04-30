@@ -16,6 +16,8 @@
     "no_reports_available": "無報告可用",
     "no_reports_available_desc": "此時段尚無任何課堂紀錄。",
     "save_success": "報告已成功儲存",
+    "save_error": "儲存報告失敗",
+    "resolve_conflict_error": "解決衝突失敗",
     "select_course_to_view": "選擇一個課程以檢視其學習報告",
     "report_for_date": "課程報告: {date}",
     "load_error": "無法載入未完成報告列表",
@@ -248,5 +250,9 @@
         "content": "學習報告"
     },
     "no_report_today": "今天找不到該學生的報告紀錄。",
-    "is_student_active_hint": "該學員目前是否為在學狀態？"
+    "is_student_active_hint": "該學員目前是否為在學狀態？",
+    "error": {
+        "cannot_set_conducted_during_holiday": "國定假期期間無法將課程設為已進行",
+        "cannot_set_teacher_present_during_holiday": "國定假期期間無法將教師設為出席"
+    }
 }

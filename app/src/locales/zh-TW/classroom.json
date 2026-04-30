@@ -54,6 +54,7 @@
     "refresh_schedule": "重新整理課表",
     "refresh_schedule_hint": "這將刪除未填寫報告的未來課堂並重新生成",
     "refresh_success": "課表已成功重新整理",
+    "refresh_failed": "重整授課表失敗",
     "refresh_confirm": "確定要重新整理課表嗎？這將刪除所有未填寫報告的未來課堂並根據目前的設定重新生成。",
     "session": "班級時段",
     "class_info": "班級資訊",
@@ -204,5 +205,7 @@
     "add_student_active_only_for_future": "僅進行中的課程可加入未來班級",
     "add_student_invalid_date": "日期格式錯誤，請重新選擇日期",
     "add_student_duplicate_report": "該學生課程在這個日期已經有報告，無法重複建立",
-    "add_student_not_class_day": "所選日期不是該班級的授課日，請改選授課日"
+    "add_student_not_class_day": "所選日期不是該班級的授課日，請改選授課日",
+    "no_teachers_assigned": "尚未指派教師",
+    "manage_teachers": "管理教師"
 }

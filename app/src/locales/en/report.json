@@ -16,6 +16,8 @@
     "no_reports_available": "No reports available",
     "no_reports_available_desc": "There are no class records for this session.",
     "save_success": "Report saved successfully",
+    "save_error": "Failed to save report",
+    "resolve_conflict_error": "Failed to resolve conflict",
     "select_course_to_view": "Select a course to view its learning reports",
     "report_for_date": "Report for {date}",
     "load_error": "Failed to load incomplete reports",
@@ -248,5 +250,9 @@
         "content": "Learning Report"
     },
     "no_report_today": "No report found for today.",
-    "is_student_active_hint": "Is this student active?"
+    "is_student_active_hint": "Is this student active?",
+    "error": {
+        "cannot_set_conducted_during_holiday": "Cannot mark class as conducted during a holiday period.",
+        "cannot_set_teacher_present_during_holiday": "Cannot mark teacher as present during a holiday period."
+    }
 }

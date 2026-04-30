@@ -1349,7 +1349,7 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
 }
 
 function handleSaveError(error: string) {
-    toast.error(`Failed to save report: ${error}`)
+    toast.error(`${t('report.save_error')}: ${error}`)
 }
 
 function handleConflict(serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO) {

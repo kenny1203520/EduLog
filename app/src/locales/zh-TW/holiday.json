@@ -13,5 +13,6 @@
     "scope_global": "全校 (所有班級)",
     "scope_classroom": "特定教室",
     "scope_session": "特定班級 (Session)",
-    "target_label": "對象名稱"
+    "target_label": "對象名稱",
+    "save_success": "假期儲存成功"
 }

@@ -13,5 +13,6 @@
     "scope_global": "All Classes (Global)",
     "scope_classroom": "Specific Classroom",
     "scope_session": "Specific Session",
-    "target_label": "Target Name"
+    "target_label": "Target Name",
+    "save_success": "Holiday saved successfully"
 }

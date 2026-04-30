@@ -62,5 +62,7 @@
         "completed": "已完成",
         "cancelled": "已取消",
         "rescheduled": "已調課"
-    }
+    },
+    "search_teacher": "搜尋教師...",
+    "save_error": "儲存失敗"
 }
