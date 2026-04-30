@@ -186,7 +186,24 @@
                 <label class="block text-sm font-medium text-gray-700 mb-2">
                     {{ $t('report.editor.absence_reason_label') }} <span class="text-red-600">*</span>
                 </label>
-                <select v-model="absenceReason"
+                
+                <!-- System-managed absence reason (read-only) -->
+                <div v-if="isSystemManagedAbsence" class="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div class="flex-1">
+                        <p class="text-sm font-semibold text-amber-800">
+                            {{ getSystemManagedAbsenceLabel() }}
+                        </p>
+                        <p class="text-xs text-amber-700 mt-1">
+                            {{ $t('report.editor.system_managed_absence_notice', 'This absence is managed by the system and cannot be modified.') }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- User-selectable absence reason -->
+                <select v-else v-model="absenceReason"
                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     :class="showAbsenceError ? 'border-red-300 bg-red-50' : 'border-gray-300'">
                     <option value="">{{ $t('report.editor.select_reason') }}</option>
@@ -202,9 +219,6 @@
                         $t('report.editor.absence_reasons.reason_not_provided') }}</option>
                     <option :value="$t('report.editor.absence_reasons.travel_abroad')">{{
                         $t('report.editor.absence_reasons.travel_abroad') }}</option>
-                    <option v-if="absenceReason === $t('report.editor.absence_reasons.holiday')"
-                        :value="$t('report.editor.absence_reasons.holiday')">{{
-                            $t('report.editor.absence_reasons.holiday') }}</option>
                     <option :value="$t('report.editor.absence_reasons.family_ceremony')">{{
                         $t('report.editor.absence_reasons.family_ceremony') }}</option>
                     <option :value="$t('report.editor.absence_reasons.school_activity')">{{
@@ -212,7 +226,7 @@
                     <option :value="$t('report.editor.absence_reasons.other')">{{
                         $t('report.editor.absence_reasons.other') }}</option>
                 </select>
-                <p v-if="showAbsenceError" class="mt-1 text-sm text-red-600">{{
+                <p v-if="showAbsenceError && !isSystemManagedAbsence" class="mt-1 text-sm text-red-600">{{
                     $t('report.editor.absence_reason_required') }}</p>
             </div>
         </div>
@@ -1349,9 +1363,25 @@ const progressLetter = computed(() => {
     return ''
 })
 
+// Check if absence reason is system-managed (holiday or suspension)
+const isSystemManagedAbsence = computed(() => {
+    const reason = absenceReason.value?.toLowerCase() || ''
+    return reason === 'holiday' || reason === 'suspension'
+})
+
+const getSystemManagedAbsenceLabel = () => {
+    const reason = absenceReason.value?.toLowerCase() || ''
+    if (reason === 'holiday') {
+        return `${t('report.editor.absence_reasons.holiday')} (系統管理)`
+    } else if (reason === 'suspension') {
+        return `${t('report.editor.absence_reasons.suspension')} (系統管理)`
+    }
+    return absenceReason.value
+}
+
 // Validation
 const showAbsenceError = computed(() => {
-    return attendanceStatus.value === 'absent' && !absenceReason.value
+    return attendanceStatus.value === 'absent' && !absenceReason.value && !isSystemManagedAbsence.value
 })
 
 const canSave = computed(() => {

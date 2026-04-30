@@ -73,10 +73,10 @@ export class HolidayCommandService {
      * Synchronizes existing reports within a holiday range.
      */
     private static async syncReportsForHoliday(holiday: Holiday): Promise<void> {
-        // 1. Find all occurrences in range and scope
+        // 1. Find all occurrences in range and scope (fetch full details including teacher_ids)
         let query = supabase
             .from('class_occurrences')
-            .select('id')
+            .select('id, teacher_ids')
             .gte('occurrence_date', holiday.startDate)
             .lte('occurrence_date', holiday.endDate)
 
@@ -111,14 +111,24 @@ export class HolidayCommandService {
             console.error('Failed to sync reports for holiday:', reportError)
         }
 
-        // 3. Mark occurrences as not conducted
-        const { error: occError } = await supabase
-            .from('class_occurrences')
-            .update({ is_conducted: false })
-            .in('id', occurrenceIds)
+        // 3. Mark occurrences as not conducted and disable all teacher attendance
+        for (const occ of occurrences) {
+            const teacherAttendance = (occ.teacher_ids || []).reduce((acc: any, teacherId: string) => {
+                acc[teacherId] = false
+                return acc
+            }, {})
 
-        if (occError) {
-            console.error('Failed to mark occurrences as not conducted for holiday:', occError)
+            const { error: updateError } = await supabase
+                .from('class_occurrences')
+                .update({
+                    is_conducted: false,
+                    teacher_attendance: teacherAttendance
+                })
+                .eq('id', occ.id)
+
+            if (updateError) {
+                console.error(`Failed to update occurrence ${occ.id} for holiday:`, updateError)
+            }
         }
     }
 }

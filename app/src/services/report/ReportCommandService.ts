@@ -98,6 +98,26 @@ export class ReportCommandService {
             }
         }
 
+        // Guard: if absence_reason is system-managed (holiday or suspension),
+        // reject attempts to change it or the attendance status
+        const isSystemManaged = serverReport.absence_reason === 'holiday' || serverReport.absence_reason === 'suspension'
+        if (isSystemManaged && detailedData) {
+            if (detailedData.attendanceStatus !== undefined && detailedData.attendanceStatus !== serverReport.attendance_status) {
+                return {
+                    success: false,
+                    conflict: false,
+                    message: `Cannot modify attendance status: This report is managed by the system (${serverReport.absence_reason}).`
+                }
+            }
+            if (detailedData.absenceReason !== undefined && detailedData.absenceReason !== serverReport.absence_reason) {
+                return {
+                    success: false,
+                    conflict: false,
+                    message: `Cannot modify absence reason: This report is managed by the system (${serverReport.absence_reason}).`
+                }
+            }
+        }
+
         const newVersion = currentVersion + 1
 
         const updateData: any = {
@@ -205,6 +225,22 @@ export class ReportCommandService {
 
         if (versionError || !version) throw new Error(`Failed to fetch version: ${versionError?.message}`)
 
+        // Guard: check if current report is system-managed
+        const { data: current } = await supabase
+            .from('occurrence_reports')
+            .select('version, absence_reason')
+            .eq('id', reportId)
+            .single()
+
+        const isSystemManaged = current?.absence_reason === 'holiday' || current?.absence_reason === 'suspension'
+        if (isSystemManaged && version.snapshot) {
+            const snap = version.snapshot
+            // If the version would restore a different absence_reason, reject
+            if (snap.absence_reason !== current.absence_reason) {
+                throw new Error(`Cannot restore version: This report is managed by the system (${current.absence_reason}) and its absence reason cannot be modified.`)
+            }
+        }
+
         let updatePayload: any = {}
 
         if (version.snapshot) {
@@ -227,12 +263,6 @@ export class ReportCommandService {
                 content: version.content
             }
         }
-
-        const { data: current } = await supabase
-            .from('occurrence_reports')
-            .select('version')
-            .eq('id', reportId)
-            .single()
 
         const newVersion = (current?.version || 0) + 1
 
@@ -264,6 +294,14 @@ export class ReportCommandService {
             .single()
 
         if (fetchError) throw new Error(`Failed to fetch report: ${fetchError.message}`)
+
+        // Guard: if current report is system-managed, reject attempts to change it
+        const isSystemManaged = current.absence_reason === 'holiday' || current.absence_reason === 'suspension'
+        if (isSystemManaged) {
+            if (resolvedReport.absence_reason !== current.absence_reason) {
+                throw new Error(`Cannot resolve conflict: This report is managed by the system (${current.absence_reason}) and its attendance/absence cannot be modified.`)
+            }
+        }
 
         const newVersion = current.version + 1
 

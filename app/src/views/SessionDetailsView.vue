@@ -9,6 +9,7 @@ import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
+import { HolidayService } from '@/services/holiday/HolidayService'
 import type { Enrollment } from '@/models/Enrollment'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
@@ -48,6 +49,7 @@ const sessionOccurrences = ref<ClassOccurrence[]>([])
 const sessionTeachers = ref<TeacherDTO[]>([])
 const weekAnchorDate = ref(new Date())
 const isCalendarExpanded = ref(false)
+const isOccurrenceInHoliday = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
@@ -603,6 +605,17 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
 
     if (occurrence?.occurrenceDate) {
         weekAnchorDate.value = new Date(occurrence.occurrenceDate)
+
+        // Check if occurrence is within a holiday period
+        try {
+            const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
+                ? occurrence.occurrenceDate.toISOString().split('T')[0]
+                : occurrence.occurrenceDate
+            isOccurrenceInHoliday.value = await HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId)
+        } catch (e) {
+            console.error('Failed to check holiday status:', e)
+            isOccurrenceInHoliday.value = false
+        }
     }
 
     await Promise.all([
@@ -1146,6 +1159,13 @@ async function toggleIsConducted(event: any) {
     if (!todayOccurrence.value) return
     const isHeld = event.target.checked
 
+    // Guard: check if occurrence is in a holiday period
+    if (isOccurrenceInHoliday.value && isHeld) {
+        event.target.checked = false
+        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot mark class as conducted during a holiday period.'))
+        return
+    }
+
     try {
         const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
             is_conducted: isHeld
@@ -1155,7 +1175,7 @@ async function toggleIsConducted(event: any) {
     } catch (e) {
         console.error('Failed to update class status:', e)
         event.target.checked = !isHeld
-        toast.error(t('common.save_error') || 'Failed to save')
+        toast.error((e as Error).message || t('common.save_error') || 'Failed to save')
     }
 }
 
@@ -1170,6 +1190,13 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
     if (!todayOccurrence.value || !teacherId) return
     const isPresent = event.target.checked
 
+    // Guard: check if occurrence is in a holiday period
+    if (isOccurrenceInHoliday.value && isPresent) {
+        event.target.checked = false
+        toast.error(t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot mark teacher as present during a holiday period.'))
+        return
+    }
+
     try {
         const existing = todayOccurrence.value.teacherAttendance || {}
         const updatedAttendance = { ...existing, [teacherId]: isPresent }
@@ -1182,7 +1209,7 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
     } catch (e) {
         console.error('Failed to update teacher attendance:', e)
         event.target.checked = !isPresent
-        toast.error(t('common.save_error') || 'Failed to save')
+        toast.error((e as Error).message || t('common.save_error') || 'Failed to save')
     }
 }
 
@@ -1585,12 +1612,14 @@ async function saveOccurrenceTeachers() {
                                 </svg>
                             </button>
 
-                            <label class="relative inline-flex items-center cursor-pointer" :title="$t('classroom.class_held') || 'Class Held'">
+                            <label class="relative inline-flex items-center cursor-pointer" :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : ($t('classroom.class_held') || 'Class Held')" :class="{ 'opacity-50 cursor-not-allowed': isOccurrenceInHoliday }">
                                 <input type="checkbox" 
                                     :checked="todayOccurrence && todayOccurrence.isConducted"
+                                    :disabled="isOccurrenceInHoliday"
                                     @change="toggleIsConducted($event)" class="sr-only peer">
                                 <div
-                                    class="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
+                                    :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
+                                    class="w-14 h-7 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
                                 </div>
                             </label>
                         </div>
@@ -1632,9 +1661,9 @@ async function saveOccurrenceTeachers() {
                                     </div>
                                 </div>
                                 
-                                <label class="relative inline-flex items-center cursor-pointer ml-2" :class="{'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id}" :title="auth.user?.id !== teacher.user_id ? '只能更改自己的出缺席' : ''">
-                                    <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)" :disabled="auth.user?.id !== teacher.user_id" @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
-                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                <label class="relative inline-flex items-center cursor-pointer ml-2" :class="{'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id || isOccurrenceInHoliday}" :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : (auth.user?.id !== teacher.user_id ? '只能更改自己的出缺席' : '')">
+                                    <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)" :disabled="auth.user?.id !== teacher.user_id || isOccurrenceInHoliday" @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
+                                    <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'" class="w-11 h-6 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
                                     </div>
                                 </label>
                             </div>

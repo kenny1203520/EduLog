@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
 import { OccurrenceQueryService } from './OccurrenceQueryService'
+import { HolidayService } from '../holiday/HolidayService'
 
 export class OccurrenceCommandService {
     private static generateOccurrenceDates(
@@ -109,6 +110,31 @@ export class OccurrenceCommandService {
         occurrenceId: string,
         updates: Partial<ClassOccurrenceDTO>
     ): Promise<ClassOccurrence> {
+        // Guard: check if occurrence is within a holiday period
+        const occurrence = await OccurrenceQueryService.getOccurrenceById(occurrenceId)
+        const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
+            ? occurrence.occurrenceDate.toISOString().split('T')[0]
+            : occurrence.occurrenceDate
+        const isHoliday = await HolidayService.isHoliday(
+            occurrenceDateStr,
+            undefined,
+            occurrence.classSessionId
+        )
+
+        if (isHoliday) {
+            // If marked as holiday, reject attempts to set is_conducted=true or any teacher_attendance=true
+            if (updates.is_conducted === true) {
+                throw new Error('Cannot set is_conducted=true for an occurrence during a holiday period.')
+            }
+
+            if (updates.teacher_attendance) {
+                const hasAnyTrueAttendance = Object.values(updates.teacher_attendance).some(v => v === true)
+                if (hasAnyTrueAttendance) {
+                    throw new Error('Cannot set teacher attendance to present (true) for an occurrence during a holiday period.')
+                }
+            }
+        }
+
         const { data, error } = await supabase
             .from('class_occurrences')
             .update(updates)
