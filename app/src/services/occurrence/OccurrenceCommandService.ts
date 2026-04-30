@@ -90,7 +90,7 @@ export class OccurrenceCommandService {
             status: 'scheduled',
             original_start_time: (session as any).start_time,
             original_end_time: (session as any).end_time,
-            is_conducted: false,
+            is_conducted: true,
             teacher_ids: defaultTeacherIds,
             teacher_attendance: defaultTeacherIds.reduce((acc: any, id: string) => { acc[id] = true; return acc }, {})
         }))
