@@ -14,6 +14,8 @@ import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import type { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
+import { TeacherService } from '@/services/teacher/TeacherService'
+import type { TeacherDTO } from '@/services/teacher/TeacherService'
 import {
     ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_ATTENDANCE_TEMPLATE,
@@ -39,9 +41,11 @@ const toast = useToast()
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
+const sessionTeachers = ref<TeacherDTO[]>([])
 const weekAnchorDate = ref(new Date())
 const isCalendarExpanded = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
@@ -615,6 +619,9 @@ async function loadData() {
         const { data: allEnrollments } = await CourseService.getEnrollmentsBySession(sessionId)
         enrollments.value = allEnrollments
 
+        // 2.1 Load session teachers
+        sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+
         // 2.5 Load lessons for each course and build student progress summaries
         await loadStudentProgressSummaries(allEnrollments)
 
@@ -652,14 +659,6 @@ async function loadData() {
 onMounted(() => {
     loadData()
 })
-
-function navigateToProfile(studentId: string) {
-    router.push({ name: 'student-profile', params: { id: studentId } })
-}
-
-function navigateToReports(enrollmentId: string) {
-    router.push({ name: 'lesson-reports', params: { enrollmentId } })
-}
 
 // Attendance & Rating Handlers
 async function toggleAttendance(enrId: string) {
@@ -1093,20 +1092,37 @@ async function handleConfirmRefresh() {
     }
 }
 
-async function toggleClassStatus(event: any) {
+async function toggleIsConducted(event: any) {
     if (!todayOccurrence.value) return
     const isHeld = event.target.checked
 
-    const auth = useAuthStore()
-    const userId = auth.user?.id
-    if (!userId) {
+    try {
+        const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
+            is_conducted: isHeld
+        })
+
+        todayOccurrence.value.isConducted = updated.isConducted ?? isHeld
+    } catch (e) {
+        console.error('Failed to update class status:', e)
         event.target.checked = !isHeld
-        return
+        toast.error(t('common.save_error') || 'Failed to save')
     }
+}
+
+function isTeacherPresent(teacherId: string | undefined, userId: string | null | undefined): boolean {
+    if (!teacherId || !todayOccurrence.value?.teacherAttendance) return false
+    // Fallback checks for backward compatibility if user_id was stored as key
+    if (userId && todayOccurrence.value.teacherAttendance[userId]) return true
+    return !!todayOccurrence.value.teacherAttendance[teacherId]
+}
+
+async function toggleTeacherAttendance(teacherId: string | undefined, event: any) {
+    if (!todayOccurrence.value || !teacherId) return
+    const isPresent = event.target.checked
 
     try {
         const existing = todayOccurrence.value.teacherAttendance || {}
-        const updatedAttendance = { ...existing, [userId]: isHeld }
+        const updatedAttendance = { ...existing, [teacherId]: isPresent }
 
         const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
             teacher_attendance: updatedAttendance
@@ -1115,7 +1131,8 @@ async function toggleClassStatus(event: any) {
         todayOccurrence.value.teacherAttendance = updated.teacherAttendance || updatedAttendance
     } catch (e) {
         console.error('Failed to update teacher attendance:', e)
-        event.target.checked = !isHeld
+        event.target.checked = !isPresent
+        toast.error(t('common.save_error') || 'Failed to save')
     }
 }
 
@@ -1304,7 +1321,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
     <div class="space-y-8 animate-in fade-in duration-500">
         <!-- Header -->
         <div class="flex items-center gap-4">
-            <button @click="router.back()"
+            <button @click="router.push({ name: 'classrooms' })"
                 class="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-100 transition-all shadow-sm active:scale-90">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
@@ -1468,14 +1485,51 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                 </svg>
                             </button>
 
-                            <label class="relative inline-flex items-center cursor-pointer" :title="$t('classroom.attendance_status') || 'Your attendance for this class'">
+                            <label class="relative inline-flex items-center cursor-pointer" :title="$t('classroom.class_held') || 'Class Held'">
                                 <input type="checkbox" 
-                                    :checked="todayOccurrence && (todayOccurrence.teacherAttendance ? Object.values(todayOccurrence.teacherAttendance).some(v => v === true) : false)"
-                                    @change="toggleClassStatus($event)" class="sr-only peer">
+                                    :checked="todayOccurrence && todayOccurrence.isConducted"
+                                    @change="toggleIsConducted($event)" class="sr-only peer">
                                 <div
                                     class="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
                                 </div>
                             </label>
+                        </div>
+                    </div>
+
+                    <!-- Teacher Attendance Section -->
+                    <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4" v-if="todayOccurrence && sessionTeachers.length > 0">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') || '教師出席紀錄' }}</h3>
+                                <p class="text-xs font-bold text-gray-400">
+                                    {{ $t('classroom.teacher_attendance_subtitle') || '註記您的出缺席狀態' }}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-4 mt-2">
+                            <div v-for="teacher in sessionTeachers" :key="teacher.id"
+                                class="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100 transition-colors"
+                                :class="{ 'border-emerald-200 bg-emerald-50/50': isTeacherPresent(teacher.id, teacher.user_id) }">
+                                
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold"
+                                     :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'">
+                                    {{ teacher.name.charAt(0) }}
+                                </div>
+                                <div class="flex-1 pr-2">
+                                    <div class="font-bold text-gray-900">{{ teacher.name }}</div>
+                                    <div class="text-[10px] uppercase font-black tracking-widest"
+                                         :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'text-emerald-600' : 'text-gray-400'">
+                                        {{ isTeacherPresent(teacher.id, teacher.user_id) ? ($t('attendance.present') || '已出席') : ($t('attendance.absent') || '未出席') }}
+                                    </div>
+                                </div>
+                                
+                                <label class="relative inline-flex items-center cursor-pointer ml-2" :class="{'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id}" :title="auth.user?.id !== teacher.user_id ? '只能更改自己的出缺席' : ''">
+                                    <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)" :disabled="auth.user?.id !== teacher.user_id" @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                    </div>
+                                </label>
+                            </div>
                         </div>
                     </div>
 
@@ -1791,15 +1845,15 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                             <!-- Actions Grid -->
                             <div class="space-y-2 pt-2">
                                 <div class="grid grid-cols-2 gap-3">
-                                    <button @click.stop="navigateToReports(e.id!)"
-                                        class="flex items-center justify-center gap-2 p-3 rounded-2xl bg-emerald-600 text-white border border-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-100">
+                                    <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: e.id! } }"
+                                        class="inline-flex items-center justify-center gap-2 p-3 rounded-2xl bg-emerald-600 text-white border border-emerald-700 no-underline active:scale-95 transition-all shadow-lg shadow-emerald-100">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                         </svg>
                                         <span class="text-xs font-black tracking-wide">{{ $t('common.reports') }}</span>
-                                    </button>
+                                    </router-link>
 
                                     <button @click.stop="toggleSplitView(e.id!)"
                                         class="flex items-center justify-center gap-2 p-3 rounded-2xl border active:scale-95 transition-all"
@@ -1813,15 +1867,15 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                     </button>
                                 </div>
 
-                                <button @click.stop="navigateToProfile(e.studentId)"
-                                    class="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 active:scale-95 transition-all">
+                                <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
+                                    class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 no-underline active:scale-95 transition-all">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                     </svg>
                                     <span class="text-xs font-bold">{{ $t('common.profile') }}</span>
-                                </button>
+                                </router-link>
                             </div>
                         </div>
 
@@ -2006,7 +2060,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                     <td class="px-3 lg:px-4 py-4 lg:py-6 text-right align-top">
                                         <div
                                             class="flex flex-col xl:flex-row justify-end items-end xl:items-center gap-1.5 lg:gap-2">
-                                            <button @click="navigateToReports(e.id!)"
+                                            <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: e.id! } }"
                                                 class="p-2.5 xl:p-3 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-90"
                                                 :title="$t('classroom.view_reports')">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
@@ -2015,7 +2069,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                                         stroke-width="2"
                                                         d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                                 </svg>
-                                            </button>
+                                            </router-link>
                                             <button @click="toggleSplitView(e.id!)"
                                                 class="p-2.5 xl:p-3 rounded-2xl border border-gray-100 shadow-sm transition-all active:scale-90"
                                                 :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-gray-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-100'"
@@ -2027,7 +2081,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                                         d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                 </svg>
                                             </button>
-                                            <button @click="navigateToProfile(e.studentId)"
+                                            <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
                                                 class="p-2.5 xl:p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"
                                                 :title="$t('classroom.view_profile')">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
@@ -2036,7 +2090,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                                         stroke-width="2"
                                                         d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                                 </svg>
-                                            </button>
+                                            </router-link>
                                         </div>
                                     </td>
                                 </tr>

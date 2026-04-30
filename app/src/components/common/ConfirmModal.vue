@@ -16,14 +16,22 @@ const emit = defineEmits<{
     (e: 'close'): void
 }>()
 
+function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+        emit('close')
+    }
+}
+
 // Prevent scrolling when modal is open
 onMounted(() => {
     if (props.isOpen) {
         document.body.style.overflow = 'hidden'
     }
+    document.addEventListener('keydown', handleKeydown)
 })
 
 onUnmounted(() => {
+    document.removeEventListener('keydown', handleKeydown)
     document.body.style.overflow = ''
 })
 </script>

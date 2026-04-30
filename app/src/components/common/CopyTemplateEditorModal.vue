@@ -155,7 +155,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 interface EditableField {
     id: string
@@ -207,6 +207,12 @@ const emit = defineEmits<{
     save: []
 }>()
 
+function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+        closeModal()
+    }
+}
+
 // State
 const focusedFieldId = ref<string | null>(null)
 const textareaRefs = ref<Record<string, HTMLTextAreaElement>>({})
@@ -218,6 +224,14 @@ const tooltipStyle = ref<Record<string, string>>({ top: '0px', left: '0px' })
 function closeModal() {
     emit('update:modelValue', false)
 }
+
+onMounted(() => {
+    document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+    document.removeEventListener('keydown', handleKeydown)
+})
 
 function setTextareaRef(fieldId: string, el: any) {
     if (el) {

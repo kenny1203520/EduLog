@@ -444,13 +444,13 @@
             :title="$t('report.editor.confirm_create_report_title', 'Create New Report?')"
             :message="$t('report.editor.confirm_create_report', 'This class has no report yet. A new one will be created.')"
             :confirm-text="$t('common.continue')" :is-loading="isCreatingReport" @confirm="handleConfirmCreate"
-            @close="showCreateConfirm = false" />
+            @close="handleCancelCreate" />
 
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { supabase } from '@/lib/supabase'
@@ -513,6 +513,55 @@ let reportSubscription: RealtimeChannel | null = null
 const showCreateConfirm = ref(false)
 const isCreatingReport = ref(false)
 const pendingOccurrence = ref<ClassOccurrence | null>(null)
+const pendingSelectionState = ref<{
+    occurrence: ClassOccurrence | null
+    report: OccurrenceReport | null
+    scrollY: number
+} | null>(null)
+
+function clearReportSubscription() {
+    if (reportSubscription) {
+        supabase.removeChannel(reportSubscription)
+        reportSubscription = null
+    }
+}
+
+function subscribeToReport(reportId: string | null) {
+    clearReportSubscription()
+
+    if (!reportId) return
+
+    reportSubscription = supabase
+        .channel(`report-${reportId}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'occurrence_reports',
+                filter: `id=eq.${reportId}`
+            },
+            (payload) => {
+                handleRealtimeUpdate(payload)
+            }
+        )
+        .subscribe()
+}
+
+async function restorePendingSelection() {
+    const snapshot = pendingSelectionState.value
+    pendingSelectionState.value = null
+    pendingOccurrence.value = null
+    showCreateConfirm.value = false
+
+    if (!snapshot) return
+
+    selectedOccurrence.value = snapshot.occurrence
+    selectedReport.value = snapshot.report
+    await nextTick()
+    window.scrollTo({ top: snapshot.scrollY, behavior: 'auto' })
+    subscribeToReport(snapshot.report?.id ?? null)
+}
 
 async function handleConfirmCreate() {
     if (!pendingOccurrence.value) return
@@ -536,6 +585,8 @@ async function handleConfirmCreate() {
             }
             allReports.value.push(newReportDetail as any)
         }
+        pendingSelectionState.value = null
+        pendingOccurrence.value = null
         showCreateConfirm.value = false
     } catch (e) {
         console.error('Failed to create report', e)
@@ -1054,11 +1105,13 @@ async function selectOccurrence(
 ) {
     await reportEditorRef.value?.saveNow()
 
-    // Cleanup previous subscription
-    if (reportSubscription) {
-        supabase.removeChannel(reportSubscription)
-        reportSubscription = null
+    const previousSelectionState = {
+        occurrence: selectedOccurrence.value,
+        report: selectedReport.value,
+        scrollY: window.scrollY
     }
+
+    clearReportSubscription()
 
     selectedOccurrence.value = occurrence
     try {
@@ -1075,6 +1128,7 @@ async function selectOccurrence(
         if (!hasExistingReport && allowCreatePrompt) {
             // Store pending occurrence and show modal
             pendingOccurrence.value = occurrence
+            pendingSelectionState.value = previousSelectionState
             showCreateConfirm.value = true
             return
         } else if (hasExistingReport) {
@@ -1086,31 +1140,19 @@ async function selectOccurrence(
         }
 
         const currentReportId = selectedReport.value?.id
+        pendingSelectionState.value = null
 
-        // Subscribe to Realtime changes for this report
-        if (currentReportId) {
-            reportSubscription = supabase
-                .channel(`report-${currentReportId}`)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'occurrence_reports',
-                        filter: `id=eq.${currentReportId}`
-                    },
-                    (payload) => {
-                        handleRealtimeUpdate(payload)
-                    }
-                )
-                .subscribe()
-        }
+        subscribeToReport(currentReportId ?? null)
 
     } catch (error) {
         console.error('Failed to load report:', error)
     } finally {
         reportLoading.value = false
     }
+}
+
+async function handleCancelCreate() {
+    await restorePendingSelection()
 }
 
 function handleRealtimeUpdate(payload: any) {

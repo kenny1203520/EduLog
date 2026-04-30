@@ -160,6 +160,8 @@
     "clear_room_filter": "清除教室篩選",
     "quick_attendance_title": "快速點名",
     "quick_attendance_subtitle": "選擇學生以進行批次出席狀態更新",
+    "teacher_attendance_title": "教師出席紀錄",
+    "teacher_attendance_subtitle": "註記您的出缺席狀態",
     "current_course": "目前課程",
     "today_course_summary": "當日課程摘要",
     "learning_snapshot": "學習快照",
