@@ -72,6 +72,14 @@ const selectedMakeupStudentId = ref<string>('')
 const selectedMakeupEnrollmentId = ref<string>('')
 const makeupJoinDate = ref(DateUtils.formatLocalDate(new Date()))
 
+// Teacher Management State
+const occurrenceTeachers = ref<TeacherDTO[]>([])
+const allTeachersList = ref<TeacherDTO[]>([])
+const showTeacherEditModal = ref(false)
+const teacherSearchQuery = ref('')
+const selectedTeacherIds = ref<Set<string>>(new Set())
+const isSavingTeachers = ref(false)
+
 // Split View State
 const showSplitView = ref(false)
 const selectedEnrollmentId = ref<string | null>(null)
@@ -453,6 +461,16 @@ const filteredMakeupStudents = computed(() => {
     })
 })
 
+const filteredTeachers = computed(() => {
+    const query = teacherSearchQuery.value.trim().toLowerCase()
+    if (!query) return allTeachersList.value
+
+    return allTeachersList.value.filter(t => 
+        t.name.toLowerCase().includes(query) || 
+        t.email.toLowerCase().includes(query)
+    )
+})
+
 const selectedStudentEnrollments = computed(() => {
     if (!selectedMakeupStudentId.value) {
         return []
@@ -555,6 +573,31 @@ async function loadReportsForCurrentOccurrence() {
     }
 }
 
+async function loadOccurrenceTeachers() {
+    if (!todayOccurrence.value) {
+        occurrenceTeachers.value = []
+        selectedTeacherIds.value = new Set()
+        return
+    }
+
+    const teacherIds = todayOccurrence.value.teacherIds || []
+    selectedTeacherIds.value = new Set(teacherIds)
+
+    if (teacherIds.length === 0) {
+        occurrenceTeachers.value = []
+        return
+    }
+
+    // Use cached allTeachersList if available, otherwise fetch specifically
+    if (allTeachersList.value.length > 0) {
+        occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
+    } else {
+        const { data } = await TeacherService.getTeachers(1, 1000)
+        allTeachersList.value = data
+        occurrenceTeachers.value = data.filter(t => t.id && selectedTeacherIds.value.has(t.id))
+    }
+}
+
 async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
     todayOccurrence.value = occurrence
 
@@ -562,7 +605,10 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
         weekAnchorDate.value = new Date(occurrence.occurrenceDate)
     }
 
-    await loadReportsForCurrentOccurrence()
+    await Promise.all([
+        loadReportsForCurrentOccurrence(),
+        loadOccurrenceTeachers()
+    ])
 }
 
 async function handleCalendarOccurrenceSelect(occurrence: ClassOccurrence) {
@@ -621,6 +667,10 @@ async function loadData() {
 
         // 2.1 Load session teachers
         sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        
+        // Load all teachers once for the picker
+        const { data: allTeachers } = await TeacherService.getTeachers(1, 1000)
+        allTeachersList.value = allTeachers
 
         // 2.5 Load lessons for each course and build student progress summaries
         await loadStudentProgressSummaries(allEnrollments)
@@ -1315,6 +1365,56 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
         toast.error(t('report.resolve_conflict_error'))
     }
 }
+
+function openTeacherEditModal() {
+    if (!todayOccurrence.value) return
+    teacherSearchQuery.value = ''
+    selectedTeacherIds.value = new Set(todayOccurrence.value.teacherIds || [])
+    showTeacherEditModal.value = true
+}
+
+function toggleTeacherSelection(teacherId: string) {
+    if (selectedTeacherIds.value.has(teacherId)) {
+        selectedTeacherIds.value.delete(teacherId)
+    } else {
+        selectedTeacherIds.value.add(teacherId)
+    }
+}
+
+async function saveOccurrenceTeachers() {
+    if (!todayOccurrence.value) return
+
+    try {
+        isSavingTeachers.value = true
+        const newTeacherIds = Array.from(selectedTeacherIds.value)
+        
+        // Sync teacher attendance JSON
+        const existingAttendance = todayOccurrence.value.teacherAttendance || {}
+        const newAttendance: Record<string, boolean> = {}
+        
+        newTeacherIds.forEach(id => {
+            // Keep existing status if present, otherwise default to true (present)
+            newAttendance[id] = existingAttendance[id] !== undefined ? existingAttendance[id] : true
+        })
+
+        const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
+            teacher_ids: newTeacherIds,
+            teacher_attendance: newAttendance
+        })
+
+        todayOccurrence.value.teacherIds = updated.teacherIds
+        todayOccurrence.value.teacherAttendance = updated.teacherAttendance
+        
+        await loadOccurrenceTeachers()
+        showTeacherEditModal.value = false
+        toast.success(t('common.save_success'))
+    } catch (e) {
+        console.error('Failed to save teachers:', e)
+        toast.error(t('common.save_error'))
+    } finally {
+        isSavingTeachers.value = false
+    }
+}
 </script>
 
 <template>
@@ -1497,7 +1597,7 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                     </div>
 
                     <!-- Teacher Attendance Section -->
-                    <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4" v-if="todayOccurrence && sessionTeachers.length > 0">
+                    <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4" v-if="todayOccurrence">
                         <div class="flex items-center justify-between">
                             <div>
                                 <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') || '教師出席紀錄' }}</h3>
@@ -1505,10 +1605,18 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                     {{ $t('classroom.teacher_attendance_subtitle') || '註記您的出缺席狀態' }}
                                 </p>
                             </div>
+                            
+                            <button @click="openTeacherEditModal"
+                                class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                                </svg>
+                                {{ $t('common.edit') }}
+                            </button>
                         </div>
 
-                        <div class="flex flex-wrap gap-4 mt-2">
-                            <div v-for="teacher in sessionTeachers" :key="teacher.id"
+                        <div v-if="occurrenceTeachers.length > 0" class="flex flex-wrap gap-4 mt-2">
+                            <div v-for="teacher in occurrenceTeachers" :key="teacher.id"
                                 class="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100 transition-colors"
                                 :class="{ 'border-emerald-200 bg-emerald-50/50': isTeacherPresent(teacher.id, teacher.user_id) }">
                                 
@@ -1530,6 +1638,9 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                     </div>
                                 </label>
                             </div>
+                        </div>
+                        <div v-else class="text-center py-6 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{ $t('classroom.no_teachers_assigned') || '尚未指派教師' }}</p>
                         </div>
                     </div>
 
@@ -2404,6 +2515,88 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                 </div>
             </template>
         </CopyTemplateEditorModal>
+
+        <!-- Teacher Selection Modal -->
+        <Transition name="fade">
+            <div v-if="showTeacherEditModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="showTeacherEditModal = false"></div>
+                
+                <div class="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+                    <!-- Header -->
+                    <div class="p-8 border-b border-gray-50 flex items-center justify-between shrink-0">
+                        <div>
+                            <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('classroom.manage_teachers') || '管理教師' }}</h2>
+                            <p class="text-sm font-bold text-gray-400 mt-1">{{ displayedOccurrenceDate }}</p>
+                        </div>
+                        <button @click="showTeacherEditModal = false" class="p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Search Bar -->
+                    <div class="p-6 bg-gray-50/50 border-b border-gray-50">
+                        <div class="flex items-center gap-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                            <div class="pl-3 text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <input v-model="teacherSearchQuery" type="text" :placeholder="$t('common.search_teacher') || '搜尋教師...'"
+                                class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
+                        </div>
+                    </div>
+
+                    <!-- Teacher List -->
+                    <div class="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
+                        <div v-for="teacher in filteredTeachers" :key="teacher.id"
+                            @click="toggleTeacherSelection(teacher.id!)"
+                            class="flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer group"
+                            :class="selectedTeacherIds.has(teacher.id!) ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100 hover:border-emerald-100 hover:bg-emerald-50/10'">
+                            
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg transition-transform group-hover:scale-110"
+                                     :class="selectedTeacherIds.has(teacher.id!) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'">
+                                    {{ teacher.name.charAt(0) }}
+                                </div>
+                                <div>
+                                    <div class="font-black text-gray-900">{{ teacher.name }}</div>
+                                    <div class="text-xs font-bold text-gray-400">{{ teacher.email || teacher.phone || 'No contact info' }}</div>
+                                </div>
+                            </div>
+
+                            <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all"
+                                 :class="selectedTeacherIds.has(teacher.id!) ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100' : 'border-gray-200 text-transparent'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div v-if="filteredTeachers.length === 0" class="text-center py-12 text-gray-400">
+                            <p class="font-bold italic">{{ $t('common.no_results') }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="p-8 border-t border-gray-50 flex items-center gap-4 shrink-0">
+                        <button @click="showTeacherEditModal = false"
+                            class="flex-1 px-6 py-4 rounded-2xl bg-gray-50 text-gray-500 font-black uppercase tracking-widest text-sm hover:bg-gray-100 transition-all active:scale-95">
+                            {{ $t('common.cancel') }}
+                        </button>
+                        <button @click="saveOccurrenceTeachers" :disabled="isSavingTeachers"
+                            class="flex-1 px-6 py-4 rounded-2xl bg-emerald-600 text-white font-black uppercase tracking-widest text-sm hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center justify-center gap-2">
+                            <svg v-if="isSavingTeachers" class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            {{ isSavingTeachers ? $t('common.saving') : $t('common.save') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Transition>
 
     </div>
 </template>
