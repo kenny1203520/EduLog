@@ -89,7 +89,7 @@ export class OccurrenceCommandService {
                 return true
             })
             
-            let teacherIds = activeTeachers.map(t => t.id)
+            let teacherIds = [...new Set(activeTeachers.map(t => t.id))]
             // Fallback to session owner if no teachers assigned
             if (teacherIds.length === 0 && (session as any).user_id) {
                 teacherIds = [(session as any).user_id]

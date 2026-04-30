@@ -46,7 +46,7 @@ const auth = useAuthStore()
 const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
-const sessionTeachers = ref<TeacherDTO[]>([])
+const sessionTeachers = ref<(TeacherDTO & { effective_from: string; effective_to: string | null })[]>([])
 const weekAnchorDate = ref(new Date())
 const isCalendarExpanded = ref(false)
 const isOccurrenceInHoliday = ref(false)
@@ -582,22 +582,42 @@ async function loadOccurrenceTeachers() {
         return
     }
 
-    const teacherIds = todayOccurrence.value.teacherIds || []
-    selectedTeacherIds.value = new Set(teacherIds)
+    // Refresh session teachers to get latest intervals
+    sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
 
-    if (teacherIds.length === 0) {
-        occurrenceTeachers.value = []
-        return
+    const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
+    
+    // Find teachers active on this date from the plan
+    const activeAssignments = sessionTeachers.value.filter(st => {
+        if (dateStr < st.effective_from) return false
+        if (st.effective_to && dateStr > st.effective_to) return false
+        return true
+    })
+
+    const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(id => !!id))] as string[]
+    
+    // Current "Reality" is still teacherIds in the occurrence, 
+    // but we should probably sync if they differ and it's a fresh view
+    const currentTeacherIds = todayOccurrence.value.teacherIds || []
+    
+    // If the occurrence has no teachers yet (freshly generated), or if we want to sync
+    // For now, let's trust the Plan for displaying assignments in the editor, 
+    // but keep occurrenceTeachers based on the Reality for attendance.
+    
+    selectedTeacherIds.value = new Set(currentTeacherIds)
+
+    if (currentTeacherIds.length === 0 && planTeacherIds.length > 0) {
+        // Auto-sync if reality is empty but plan has teachers
+        selectedTeacherIds.value = new Set(planTeacherIds)
+        await saveOccurrenceTeachers(false) // silent sync
     }
 
-    // Use cached allTeachersList if available, otherwise fetch specifically
-    if (allTeachersList.value.length > 0) {
-        occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
-    } else {
+    if (allTeachersList.value.length === 0) {
         const { data } = await TeacherService.getTeachers(1, 1000)
         allTeachersList.value = data
-        occurrenceTeachers.value = data.filter(t => t.id && selectedTeacherIds.value.has(t.id))
     }
+    
+    occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
 }
 
 async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
@@ -1418,7 +1438,7 @@ function toggleTeacherSelection(teacherId: string) {
     }
 }
 
-async function saveOccurrenceTeachers() {
+async function saveOccurrenceTeachers(showToast = true) {
     if (!todayOccurrence.value) return
 
     try {
@@ -1430,7 +1450,6 @@ async function saveOccurrenceTeachers() {
         const newAttendance: Record<string, boolean> = {}
         
         newTeacherIds.forEach(id => {
-            // Keep existing status if present, otherwise default to true (present)
             newAttendance[id] = existingAttendance[id] !== undefined ? existingAttendance[id] : true
         })
 
@@ -1442,21 +1461,73 @@ async function saveOccurrenceTeachers() {
         todayOccurrence.value.teacherIds = updated.teacherIds
         todayOccurrence.value.teacherAttendance = updated.teacherAttendance
         
-        await loadOccurrenceTeachers()
+        // No need to reload all session teachers here, just update occurrenceTeachers
+        occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
+        
         showTeacherEditModal.value = false
-        toast.success(t('common.save_success'))
+        if (showToast) toast.success(t('common.save_success'))
     } catch (e: any) {
         console.error('Failed to save teachers:', e)
-        const msg = e.message || ''
-        if (msg.includes('Cannot set teacher attendance to present')) {
-            toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
-        } else {
-            toast.error(t('common.save_error'))
-        }
+        if (showToast) toast.error(t('common.save_error'))
     } finally {
         isSavingTeachers.value = false
     }
 }
+
+async function addTeacherForToday(teacher: TeacherDTO) {
+    if (!todayOccurrence.value || !teacher.id) return
+    
+    try {
+        isSavingTeachers.value = true
+        const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
+        
+        // 1. Add to Plan (class_session_teachers)
+        await TeacherService.assignTeacherForDate(sessionId, teacher.id, dateStr)
+        
+        // 2. Add to Reality (teacher_ids)
+        selectedTeacherIds.value.add(teacher.id)
+        await saveOccurrenceTeachers(false)
+        
+        // 3. Refresh Plan View
+        sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        
+        toast.success(t('common.save_success'))
+    } catch (e) {
+        console.error('Failed to add teacher for today:', e)
+        toast.error(t('common.save_error'))
+    } finally {
+        isSavingTeachers.value = false
+    }
+}
+
+async function removeAssignment(teacherId: string, effectiveFrom: string) {
+    if (!confirm(t('common.confirm_delete'))) return
+    
+    try {
+        isSavingTeachers.value = true
+        // 1. Remove from Plan
+        await TeacherService.removeTeacherAssignment(sessionId, teacherId, effectiveFrom)
+        
+        // 2. Remove from Reality for this occurrence if it matches
+        const dateStr = todayOccurrence.value ? DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) : ''
+        if (effectiveFrom === dateStr) {
+             selectedTeacherIds.value.delete(teacherId)
+             await saveOccurrenceTeachers(false)
+        }
+        
+        // 3. Refresh
+        sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        await loadOccurrenceTeachers()
+        
+        toast.success(t('common.save_success'))
+    } catch (e) {
+        console.error('Failed to remove assignment:', e)
+        toast.error(t('common.save_error'))
+    } finally {
+        isSavingTeachers.value = false
+    }
+}
+
 </script>
 
 <template>
@@ -2579,29 +2650,73 @@ async function saveOccurrenceTeachers() {
                         </button>
                     </div>
 
+                    <!-- Current Schedule Section -->
+                    <div class="px-6 py-4 border-b border-gray-50 bg-emerald-50/30">
+                        <h4 class="text-xs font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center justify-between">
+                            {{ $t('classroom.teaching_schedule') }}
+                            <router-link :to="{ name: 'classrooms', query: { edit: sessionId } }" class="text-[10px] font-bold text-emerald-600 hover:underline">
+                                {{ $t('classroom.master_schedule_link') }}
+                            </router-link>
+                        </h4>
+                        <div class="space-y-2">
+                            <div v-for="st in sessionTeachers.filter(st => {
+                                if (!todayOccurrence) return false;
+                                const ds = DateUtils.formatLocalDate(todayOccurrence.occurrenceDate);
+                                return ds >= st.effective_from && (!st.effective_to || ds <= st.effective_to);
+                            })" :key="st.id + st.effective_from" 
+                                class="flex items-center justify-between p-3 rounded-xl bg-white border border-emerald-100 shadow-sm">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-xs">
+                                        {{ st.name.charAt(0) }}
+                                    </div>
+                                    <div>
+                                        <div class="text-sm font-black text-gray-900">{{ st.name }}</div>
+                                        <div class="text-[10px] font-bold text-gray-400">
+                                            {{ st.effective_to ? `${st.effective_from} ~ ${st.effective_to}` : `${st.effective_from} ~ ${$t('classroom.default_teacher')}` }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button @click="st.id && removeAssignment(st.id, st.effective_from)"
+                                    class="p-2 text-gray-300 hover:text-rose-500 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div v-if="!sessionTeachers.some(st => {
+                                if (!todayOccurrence) return false;
+                                const ds = DateUtils.formatLocalDate(todayOccurrence.occurrenceDate);
+                                return ds >= st.effective_from && (!st.effective_to || ds <= st.effective_to);
+                            })" class="text-center py-4 text-xs font-bold text-gray-400 italic">
+                                {{ $t('classroom.no_teachers_assigned') }}
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Search Bar -->
                     <div class="p-6 bg-gray-50/50 border-b border-gray-50">
+                        <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+                            {{ $t('classroom.one_day_assignment') }}
+                        </h4>
                         <div class="flex items-center gap-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
                             <div class="pl-3 text-gray-400">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
                             </div>
-                            <input v-model="teacherSearchQuery" type="text" :placeholder="$t('common.search_teacher') || '搜尋教師...'"
+                            <input v-model="teacherSearchQuery" type="text" :placeholder="$t('common.search_teacher')"
                                 class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
                         </div>
                     </div>
 
                     <!-- Teacher List -->
-                    <div class="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar">
+                    <div class="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar min-h-[300px]">
                         <div v-for="teacher in filteredTeachers" :key="teacher.id"
-                            @click="toggleTeacherSelection(teacher.id!)"
-                            class="flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer group"
-                            :class="selectedTeacherIds.has(teacher.id!) ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100 hover:border-emerald-100 hover:bg-emerald-50/10'">
+                            @click="addTeacherForToday(teacher)"
+                            class="flex items-center justify-between p-4 rounded-2xl border bg-white border-gray-100 hover:border-emerald-100 hover:bg-emerald-50/10 transition-all cursor-pointer group">
                             
                             <div class="flex items-center gap-4">
-                                <div class="w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg transition-transform group-hover:scale-110"
-                                     :class="selectedTeacherIds.has(teacher.id!) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'">
+                                <div class="w-12 h-12 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center font-black text-lg transition-transform group-hover:scale-110 group-hover:bg-emerald-100 group-hover:text-emerald-700">
                                     {{ teacher.name.charAt(0) }}
                                 </div>
                                 <div>
@@ -2610,10 +2725,9 @@ async function saveOccurrenceTeachers() {
                                 </div>
                             </div>
 
-                            <div class="w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all"
-                                 :class="selectedTeacherIds.has(teacher.id!) ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100' : 'border-gray-200 text-transparent'">
+                            <div class="w-8 h-8 rounded-full border-2 border-gray-200 text-transparent flex items-center justify-center transition-all group-hover:border-emerald-500 group-hover:bg-emerald-500 group-hover:text-white">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
                                 </svg>
                             </div>
                         </div>
@@ -2627,15 +2741,7 @@ async function saveOccurrenceTeachers() {
                     <div class="p-8 border-t border-gray-50 flex items-center gap-4 shrink-0">
                         <button @click="showTeacherEditModal = false"
                             class="flex-1 px-6 py-4 rounded-2xl bg-gray-50 text-gray-500 font-black uppercase tracking-widest text-sm hover:bg-gray-100 transition-all active:scale-95">
-                            {{ $t('common.cancel') }}
-                        </button>
-                        <button @click="saveOccurrenceTeachers" :disabled="isSavingTeachers"
-                            class="flex-1 px-6 py-4 rounded-2xl bg-emerald-600 text-white font-black uppercase tracking-widest text-sm hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100 disabled:opacity-50 flex items-center justify-center gap-2">
-                            <svg v-if="isSavingTeachers" class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            {{ isSavingTeachers ? $t('common.saving') : $t('common.save') }}
+                            {{ $t('common.close') }}
                         </button>
                     </div>
                 </div>

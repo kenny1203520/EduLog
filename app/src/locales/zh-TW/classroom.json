@@ -210,5 +210,9 @@
     "manage_teachers": "管理教師",
     "long_term_hint": "若為常態班級請留空",
     "default_teacher": "常態授課",
-    "temp_teacher": "批次代課"
+    "temp_teacher": "批次代課",
+    "teaching_schedule": "授課排程",
+    "add_teacher_assignment": "新增教師授課期程",
+    "one_day_assignment": "單日臨時授課",
+    "master_schedule_link": "調整班級總體排程"
 }

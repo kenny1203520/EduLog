@@ -210,5 +210,9 @@
     "manage_teachers": "Manage Teachers",
     "long_term_hint": "Leave empty for long-term session",
     "default_teacher": "Default",
-    "temp_teacher": "Temporary"
+    "temp_teacher": "Temporary",
+    "teaching_schedule": "Teaching Schedule",
+    "add_teacher_assignment": "Add Teacher Assignment",
+    "one_day_assignment": "One-day Assignment",
+    "master_schedule_link": "Manage Overall Schedule"
 }

@@ -198,16 +198,14 @@ export class TeacherService {
 
         // Map and optionally filter by effective_to
         const results: (TeacherDTO & { effective_from: string, effective_to: string | null })[] = []
-        const teacherMap = new Map<string, boolean>()
 
         ;(data as any[] || []).forEach(row => {
-            if (row.teachers && !teacherMap.has(row.teachers.id)) {
+            if (row.teachers) {
                 // If onDate is provided, check effective_to
                 if (onDate && row.effective_to && row.effective_to < onDate) {
                     return // Teacher assignment expired before onDate
                 }
                 
-                teacherMap.set(row.teachers.id, true)
                 results.push({
                     ...(row.teachers as TeacherDTO),
                     effective_from: row.effective_from,
@@ -242,12 +240,35 @@ export class TeacherService {
             effective_from: t.effective_from,
             effective_to: t.effective_to || null
         }))
-
         const { error } = await supabase
             .from('class_session_teachers')
-            .upsert(records, { onConflict: 'class_session_id,teacher_id,effective_from' })
+            .insert(records)
 
         if (error) throw new Error(`Failed to assign teachers: ${error.message}`)
+    }
+
+    static async assignTeacherForDate(sessionId: string, teacherId: string, date: string): Promise<void> {
+        const { error } = await supabase
+            .from('class_session_teachers')
+            .upsert({
+                class_session_id: sessionId,
+                teacher_id: teacherId,
+                effective_from: date,
+                effective_to: date
+            }, { onConflict: 'class_session_id,teacher_id,effective_from' })
+
+        if (error) throw new Error(`Failed to assign teacher for date: ${error.message}`)
+    }
+
+    static async removeTeacherAssignment(sessionId: string, teacherId: string, effectiveFrom: string): Promise<void> {
+        const { error } = await supabase
+            .from('class_session_teachers')
+            .delete()
+            .eq('class_session_id', sessionId)
+            .eq('teacher_id', teacherId)
+            .eq('effective_from', effectiveFrom)
+
+        if (error) throw new Error(`Failed to remove teacher assignment: ${error.message}`)
     }
 
     static async clearSessionTeachers(sessionId: string): Promise<void> {
