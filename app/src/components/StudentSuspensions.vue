@@ -216,7 +216,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import { SuspensionService } from '@/services/SuspensionService'
+import { SuspensionService } from '@/services/suspension/SuspensionService'
 import type { Suspension } from '@/models/Suspension'
 import { DateUtils } from '@/utils/DateUtils'
 import ConfirmModal from './common/ConfirmModal.vue'

@@ -1,8 +1,8 @@
 -- ==========================================
--- Core Schema: Foundation & Student Management
+-- Core Schema: Foundation & Student Management & Teacher Management
 -- ==========================================
--- Consolidates: Students, Contacts, Schools, Credentials
--- Date: 2026-02-05
+-- Consolidates: Students, Contacts, Schools, Credentials, Teachers
+-- Date: 2026-05-01
 -- Dependencies: None (must run first)
 -- 1. Enable Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -144,3 +144,39 @@ CREATE POLICY "Enable all access for authenticated users" ON public.student_cred
 -- Trigger
 CREATE TRIGGER update_student_credentials_updated_at BEFORE
 UPDATE ON public.student_credentials FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+-- ==========================================
+-- 8. Teachers
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.teachers (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+    name text NOT NULL,
+    user_id uuid UNIQUE,
+    gov_id text,
+    email text NOT NULL,
+    phone text,
+    address text,
+    birthday date,
+    bio text,
+    CONSTRAINT teachers_pkey PRIMARY KEY (id),
+    CONSTRAINT teachers_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_teachers_gov_id_unique
+ON public.teachers (gov_id)
+WHERE gov_id IS NOT NULL;
+
+-- RLS
+ALTER TABLE public.teachers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for authenticated users" ON public.teachers FOR ALL USING (
+    (
+        select auth.role()
+    ) = 'authenticated'
+) WITH CHECK (
+    (
+        select auth.role()
+    ) = 'authenticated'
+);
+-- Trigger
+CREATE TRIGGER update_teachers_updated_at BEFORE
+UPDATE ON public.teachers FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();

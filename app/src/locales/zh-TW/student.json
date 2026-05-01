@@ -109,6 +109,7 @@
         "delete_enrollment": "刪除課程",
         "edit_enrollment_title": "編輯課程註冊",
         "status_active": "進行中",
+        "status_trial": "試聽",
         "status_completed": "已完成",
         "status_dropped": "已退選",
         "session_optional": "班級時段",
@@ -142,7 +143,14 @@
         "transfer_mode_permanent": "永久調課 (包含未來)",
         "transfer_mode_single": "單堂調課 (補課)",
         "transfer_original_date": "原定上課日",
-        "transfer_target_date": "補課日期"
+        "transfer_target_date": "補課日期",
+        "enrollment_report_count": "報名幾節課",
+        "enrollment_report_count_hint": "預設為該課程課次數量，可自行調整要先建立的課堂紀錄份數。",
+        "trial_to_active_title": "試聽轉為進行中",
+        "trial_to_active_message": "請設定此 enrollment 的報告總份數（包含試聽期間已存在的報告）。",
+        "target_total_reports": "報告總份數",
+        "target_total_reports_hint": "系統只會補足缺少的份數，既有試聽報告會保留。",
+        "trial_to_active_confirm": "確認轉為進行中"
     },
     "credentials": {
         "title": "帳戶與密碼",

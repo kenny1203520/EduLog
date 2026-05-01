@@ -1,0 +1,155 @@
+import {
+    OccurrenceReport,
+    type OccurrenceReportDTO,
+    ReportVersion,
+    type SaveReportResult
+} from '@/models/OccurrenceReport'
+import { ReportCommandService } from '../report/ReportCommandService'
+import { ReportQueryService } from '../report/ReportQueryService'
+
+/**
+ * Backward-compatible facade for report operations.
+ * Internal responsibilities are split into command/query/policy services.
+ */
+export class OccurrenceReportService {
+    static async getReport(
+        enrollmentId: string,
+        occurrenceId: string
+    ): Promise<OccurrenceReport | null> {
+        return ReportQueryService.getReport(enrollmentId, occurrenceId)
+    }
+
+    static async createReport(
+        enrollmentId: string,
+        occurrenceId: string
+    ): Promise<OccurrenceReport> {
+        return ReportCommandService.createReport(enrollmentId, occurrenceId)
+    }
+
+    static async getOrCreateReport(
+        enrollmentId: string,
+        occurrenceId: string
+    ): Promise<OccurrenceReport> {
+        return ReportCommandService.getOrCreateReport(enrollmentId, occurrenceId)
+    }
+
+    static async saveReport(
+        reportId: string,
+        currentVersion: number,
+        userId?: string,
+        detailedData?: {
+            lessonId?: string
+            isCompleted?: boolean
+            progressLetter?: string
+            attendanceStatus?: 'present' | 'absent' | 'pending'
+            absenceReason?: string
+            classParticipation?: number
+            classroomBehavior?: number
+            contactNotes?: string
+            classNotes?: string
+            content: string,
+            externalLink?: string
+        }
+    ): Promise<SaveReportResult> {
+        return ReportCommandService.saveReport(reportId, currentVersion, userId, detailedData)
+    }
+
+    static async getReportVersions(reportId: string): Promise<ReportVersion[]> {
+        return ReportQueryService.getReportVersions(reportId)
+    }
+
+    static async restoreReportVersion(
+        reportId: string,
+        versionId: string,
+        userId?: string
+    ): Promise<OccurrenceReport> {
+        return ReportCommandService.restoreReportVersion(reportId, versionId, userId)
+    }
+
+    static async resolveConflict(
+        reportId: string,
+        resolvedReport: OccurrenceReportDTO,
+        userId?: string
+    ): Promise<OccurrenceReport> {
+        return ReportCommandService.resolveConflict(reportId, resolvedReport, userId)
+    }
+
+    static async getReportsByEnrollment(
+        enrollmentId: string,
+        page: number = 1,
+        perPage: number = 50
+    ): Promise<{ data: OccurrenceReport[], count: number }> {
+        return ReportQueryService.getReportsByEnrollment(enrollmentId, page, perPage)
+    }
+
+    static async getAllReportsByEnrollment(enrollmentId: string): Promise<OccurrenceReport[]> {
+        return ReportQueryService.getAllReportsByEnrollment(enrollmentId)
+    }
+
+    static async getReportsByOccurrence(
+        occurrenceId: string
+    ): Promise<OccurrenceReport[]> {
+        return ReportQueryService.getReportsByOccurrence(occurrenceId)
+    }
+
+    static async getReportById(reportId: string): Promise<OccurrenceReport> {
+        return ReportQueryService.getReportById(reportId)
+    }
+
+    static async deleteReportAndRevertProgress(reportId: string): Promise<void> {
+        return ReportCommandService.deleteReportAndRevertProgress(reportId)
+    }
+
+    static async deleteReport(reportId: string): Promise<void> {
+        return ReportCommandService.deleteReport(reportId)
+    }
+
+    static async createReportsForOccurrence(
+        occurrenceId: string
+    ): Promise<OccurrenceReport[]> {
+        return ReportCommandService.createReportsForOccurrence(occurrenceId)
+    }
+
+    static async getReportsWithDetails(
+        enrollmentId: string
+    ): Promise<any[]> {
+        return ReportQueryService.getReportsWithDetails(enrollmentId)
+    }
+
+    static async getPendingReports(): Promise<any[]> {
+        return ReportQueryService.getPendingReports()
+    }
+
+    static async getReportsByLesson(
+        lessonId: string,
+        params: {
+            excludeReportId?: string,
+            page?: number,
+            pageSize?: number,
+            classroomId?: string,
+            sessionId?: string,
+            sortBy?: 'asc' | 'desc',
+            search?: string
+        } = {}
+    ): Promise<{ data: any[], count: number }> {
+        return ReportQueryService.getReportsByLesson(lessonId, params)
+    }
+
+    static async getReportsByStudent(
+        studentId: string,
+        params: {
+            excludeReportId?: string,
+            page?: number,
+            pageSize?: number,
+            courseId?: string,
+            sortBy?: 'asc' | 'desc',
+            search?: string
+        } = {}
+    ): Promise<{ data: any[], count: number }> {
+        return ReportQueryService.getReportsByStudent(studentId, params)
+    }
+
+    static async getGlobalIncompleteReports(): Promise<any[]> {
+        return ReportQueryService.getGlobalIncompleteReports()
+    }
+}

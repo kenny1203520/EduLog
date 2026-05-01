@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CourseService } from '@/services/CourseService'
-import { OccurrenceService } from '@/services/OccurrenceService'
+import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
+import { ClassroomService } from '@/services/Classroom/ClassroomService'
+import { SessionService } from '@/services/Session/SessionService'
+import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
+import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { TeacherService } from '@/services/teacher/TeacherService'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
@@ -69,8 +73,19 @@ const searchQuery = ref('')
 const allClassrooms = ref<Classroom[]>([]) // For Dropdown
 const hiddenClassroomIds = ref<Set<string>>(new Set())
 const hiddenSessionIds = ref<Set<string>>(new Set())
+const teachersList = ref<any[]>([])
 
-// Pagination state
+interface SessionTeacherConfig {
+    teacher_id: string
+    effective_from: string
+    effective_to?: string | null
+}
+const selectedTeacherConfigs = ref<SessionTeacherConfig[]>([])
+
+const teacherSearchQuery = ref('')
+const teacherFilterStatus = ref<'all' | 'linked' | 'unlinked'>('all')
+const teacherSortField = ref<'name' | 'email' | 'account'>('name')
+const teacherSortDirection = ref<'asc' | 'desc'>('asc')
 const roomsPagination = ref({ page: 1, perPage: 10, total: 0 })
 const sessionsPagination = ref({ page: 1, perPage: 10, total: 0 })
 
@@ -97,6 +112,14 @@ const newSession = ref<Partial<ClassSessionDTO>>({
 })
 const editingSession = ref<ClassSessionDTO | null>(null)
 
+async function loadTeachers() {
+    try {
+        teachersList.value = await TeacherService.getAllTeachers()
+    } catch (e) {
+        console.error('Failed to load teachers:', e)
+    }
+}
+
 const days = [
     { value: 0, label: 'Sun' },
     { value: 1, label: 'Mon' },
@@ -118,7 +141,8 @@ async function loadData() {
             loadRooms(),
             loadSessions(),
             loadAllRooms(),
-            CourseService.getCourses().then(res => { courses.value = res.data })
+            loadTeachers(),
+            CourseCatalogService.getCourses().then(res => { courses.value = res.data })
         ])
     } catch (e) {
         console.error(e)
@@ -128,7 +152,7 @@ async function loadData() {
 }
 
 async function loadRooms() {
-    const res = await CourseService.getClassrooms(
+    const res = await ClassroomService.getClassrooms(
         roomsPagination.value.page,
         roomsPagination.value.perPage,
         searchQuery.value,
@@ -138,11 +162,11 @@ async function loadRooms() {
     roomsPagination.value.total = res.count
 
     const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
-    hiddenClassroomIds.value = await CourseService.getHiddenEntityIds('classroom', roomIds)
+    hiddenClassroomIds.value = await VisibilityPreferenceService.getHiddenEntityIds('classroom', roomIds)
 }
 
 async function loadSessions() {
-    const res = await CourseService.getClassSessions(
+    const res = await SessionService.getClassSessions(
         sessionsPagination.value.page,
         sessionsPagination.value.perPage,
         searchQuery.value,
@@ -153,11 +177,11 @@ async function loadSessions() {
     sessionsPagination.value.total = res.count
 
     const sessionIds = sessions.value.map(session => session.id).filter((id): id is string => Boolean(id))
-    hiddenSessionIds.value = await CourseService.getHiddenEntityIds('class_session', sessionIds)
+    hiddenSessionIds.value = await VisibilityPreferenceService.getHiddenEntityIds('class_session', sessionIds)
 }
 
 async function loadAllRooms() {
-    const res = await CourseService.getClassrooms(1, 1000)
+    const res = await ClassroomService.getClassrooms(1, 1000)
     allClassrooms.value = res.data
 }
 
@@ -225,6 +249,52 @@ const sortedSessions = computed(() => {
     })
 })
 
+const filteredTeachers = computed(() => {
+    const query = teacherSearchQuery.value.trim().toLowerCase()
+
+    return teachersList.value.filter((teacher) => {
+        const accountStatus = teacher.user_id ? 'linked' : 'unlinked'
+
+        if (teacherFilterStatus.value !== 'all' && teacherFilterStatus.value !== accountStatus) {
+            return false
+        }
+
+        if (!query) return true
+
+        const haystack = [teacher.name, teacher.email, teacher.phone, teacher.address, teacher.bio]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+
+        return haystack.includes(query)
+    })
+})
+
+const visibleTeachers = computed(() => {
+    const rankByAccount = (teacher: any) => (teacher.user_id ? 1 : 0)
+
+    return [...filteredTeachers.value].sort((left, right) => {
+        let comparison = 0
+
+        if (teacherSortField.value === 'account') {
+            comparison = rankByAccount(left) - rankByAccount(right)
+        } else {
+            const leftValue = String(left[teacherSortField.value] ?? '')
+            const rightValue = String(right[teacherSortField.value] ?? '')
+            comparison = leftValue.localeCompare(rightValue)
+        }
+
+        return teacherSortDirection.value === 'asc' ? comparison : -comparison
+    })
+})
+
+const selectedTeacherCount = computed(() => selectedTeacherConfigs.value.length)
+
+const teacherOptions = computed(() => teachersList.value.map(t => ({
+    label: t.name + (t.email ? ` (${t.email})` : ''),
+    value: t.id
+})))
+
 const roomOptions = computed(() => allClassrooms.value.map(c => ({
     label: c.name + (c.address ? ` (${c.address})` : ''),
     value: c.id
@@ -236,9 +306,9 @@ async function saveClassroom() {
     try {
         isSavingRoom.value = true
         if (editingClassroom.value?.id) {
-            await CourseService.updateClassroom(editingClassroom.value.id, newClassroom.value)
+            await ClassroomService.updateClassroom(editingClassroom.value.id, newClassroom.value)
         } else {
-            await CourseService.createClassroom(newClassroom.value)
+            await ClassroomService.createClassroom(newClassroom.value)
         }
         await Promise.all([loadRooms(), loadAllRooms()])
         closeRoomModal()
@@ -271,7 +341,7 @@ function closeRoomModal() {
 async function deleteClassroom(id: string) {
     openConfirm(t('classroom.confirm_delete_room'), async () => {
         try {
-            await CourseService.deleteClassroom(id)
+            await ClassroomService.deleteClassroom(id)
             await Promise.all([loadRooms(), loadAllRooms()])
             toast.success(t('classroom.room_delete_success') || 'Room deleted successfully')
         } catch (e) {
@@ -303,7 +373,7 @@ async function toggleClassroomVisibility(id?: string) {
     const willHide = !hiddenClassroomIds.value.has(id)
 
     try {
-        await CourseService.setEntityHidden('classroom', id, willHide)
+        await VisibilityPreferenceService.setEntityHidden('classroom', id, willHide)
         await refreshActiveList()
         toast.success(willHide ? t('classroom.room_hidden') : t('classroom.room_shown'))
     } catch (e) {
@@ -317,7 +387,7 @@ async function toggleSessionVisibility(id?: string) {
     const willHide = !hiddenSessionIds.value.has(id)
 
     try {
-        await CourseService.setEntityHidden('class_session', id, willHide)
+        await VisibilityPreferenceService.setEntityHidden('class_session', id, willHide)
         await refreshActiveList()
         toast.success(willHide ? t('classroom.session_hidden') : t('classroom.session_shown'))
     } catch (e) {
@@ -331,40 +401,71 @@ async function saveSession() {
     if (!payload.classroom_id) {
         payload.classroom_id = null
     }
+    if (!payload.end_date) {
+        payload.end_date = null
+    }
 
     try {
         isSavingSession.value = true
+        let sessionId: string
         if (editingSession.value?.id) {
-            await CourseService.updateClassSession(editingSession.value.id, payload)
-            // Sync occurrences if the schedule might have changed
-            await OccurrenceService.syncSessionOccurrences(editingSession.value.id).catch(console.error)
+            await SessionService.updateClassSession(editingSession.value.id, payload)
+            sessionId = editingSession.value.id
         } else {
-            const session = await CourseService.createClassSession(payload)
+            const session = await SessionService.createClassSession(payload)
+            sessionId = session.id!
+        }
+
+        await TeacherService.replaceTeachersForSession(sessionId, selectedTeacherConfigs.value.filter(c => c.teacher_id))
+
+        if (editingSession.value?.id) {
+            // Sync occurrences if the schedule might have changed
+            // This will create occurrences for the entire defined interval
+            const genStart = new Date(payload.start_date || new Date())
+            const genEnd = payload.end_date ? new Date(payload.end_date) : new Date()
+            if (!payload.end_date) {
+                genEnd.setMonth(genEnd.getMonth() + 6)
+            }
+            await OccurrenceService.generateOccurrences(sessionId, genStart, genEnd).catch(console.error)
+        } else {
             // Generate occurrences for new sessions
-            const startDate = new Date()
-            const endDate = new Date()
-            endDate.setMonth(endDate.getMonth() + 3)
-            await OccurrenceService.generateOccurrences(session.id!, startDate, endDate)
+            const genStart = new Date(payload.start_date || new Date())
+            const genEnd = payload.end_date ? new Date(payload.end_date) : new Date()
+            if (!payload.end_date) {
+                genEnd.setMonth(genEnd.getMonth() + 6)
+            }
+            await OccurrenceService.generateOccurrences(sessionId, genStart, genEnd)
         }
 
         await loadSessions()
         closeSessionModal()
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
-    } catch (e) {
-        toast.error(e as string)
+    } catch (e: any) {
+        toast.error(e.message || String(e))
     } finally {
         isSavingSession.value = false
     }
 }
 
-function openEditSession(session: ClassSessionDTO) {
+async function openEditSession(session: ClassSessionDTO) {
     editingSession.value = session
     newSession.value = { ...session }
+    try {
+        const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
+        selectedTeacherConfigs.value = assignedTeachers.map(t => ({
+            teacher_id: t.id!,
+            effective_from: t.effective_from,
+            effective_to: t.effective_to
+        }))
+    } catch (e) {
+        console.error('Failed to load session teachers:', e)
+        clearTeacherSelection()
+    }
     isCreateSessionModalOpen.value = true
 }
 
-function closeSessionModal() {
-    isCreateSessionModalOpen.value = false
+function openCreateSessionModal() {
+    clearTeacherSelection()
     editingSession.value = null
     newSession.value = {
         name: '',
@@ -375,7 +476,29 @@ function closeSessionModal() {
         end_time: '12:00',
         capacity: 10,
         lesson_number: 1,
-        external_link: ''
+        external_link: '',
+        user_id: undefined,
+        start_date: new Date().toISOString().split('T')[0],
+        end_date: null
+    }
+    isCreateSessionModalOpen.value = true
+}
+
+function closeSessionModal() {
+    isCreateSessionModalOpen.value = false
+    editingSession.value = null
+    clearTeacherSelection()
+    newSession.value = {
+        name: '',
+        classroom_id: '',
+        course_ids: [],
+        day_of_week: 1,
+        start_time: '10:00',
+        end_time: '12:00',
+        capacity: 10,
+        lesson_number: 1,
+        external_link: '',
+        user_id: undefined
     }
 }
 
@@ -386,7 +509,7 @@ function navigateToSession(id: string) {
 async function deleteSession(id: string) {
     openConfirm(t('classroom.confirm_delete_session'), async () => {
         try {
-            await CourseService.deleteClassSession(id)
+            await SessionService.deleteClassSession(id)
             await loadSessions()
             toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
         } catch (e) {
@@ -411,6 +534,22 @@ function toggleCourseSelection(courseId: string) {
     } else {
         newSession.value.course_ids = [...list, courseId]
     }
+}
+
+function addTeacherAssignment() {
+    selectedTeacherConfigs.value.push({
+        teacher_id: '',
+        effective_from: newSession.value.start_date || new Date().toISOString().split('T')[0],
+        effective_to: null
+    })
+}
+
+function removeTeacherAssignment(index: number) {
+    selectedTeacherConfigs.value.splice(index, 1)
+}
+
+function clearTeacherSelection() {
+    selectedTeacherConfigs.value = []
 }
 </script>
 
@@ -463,7 +602,7 @@ function toggleCourseSelection(courseId: string) {
                 class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto">
                 <span class="text-xl leading-none">+</span> {{ $t('classroom.add_room') }}
             </button>
-            <button v-else @click="isCreateSessionModalOpen = true"
+            <button v-else @click="openCreateSessionModal"
                 class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto">
                 <span class="text-xl leading-none">+</span> {{ $t('classroom.add_session') }}
             </button>
@@ -893,12 +1032,30 @@ function toggleCourseSelection(courseId: string) {
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{
                             $t('student.internal_courses.lesson_number') }}</label>
                         <input type="number" v-model.number="newSession.lesson_number"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"
                             placeholder="1">
+                    </div> -->
+
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.start_date', 'Start Date') }} <span class="text-red-500">*</span></label>
+                        <input type="date" v-model="newSession.start_date" required
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-1.5">
+                            <label class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date', 'End Date') }}</label>
+                            <button v-if="newSession.end_date" @click="newSession.end_date = null" class="text-[10px] text-gray-400 hover:text-red-500 font-medium uppercase tracking-wider transition-colors">
+                                {{ $t('common.clear', 'Clear') }}
+                            </button>
+                        </div>
+                        <input type="date" v-model="newSession.end_date"
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('classroom.long_term_hint', 'Leave empty for long-term session') }}</p>
                     </div>
 
                     <div class="md:col-span-2">
@@ -949,6 +1106,52 @@ function toggleCourseSelection(courseId: string) {
                                     c.stage }}{{ c.displayNameValue ? ` (${c.displayNameValue})` : ''
                                         }}</span></span>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.teaching_schedule') || 'Teaching Schedule' }}</label>
+                        <div class="space-y-3">
+                            <div v-for="(config, index) in selectedTeacherConfigs" :key="index" class="p-3 border border-gray-200 rounded-xl bg-gray-50/50 space-y-3">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="flex-1">
+                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{ $t('classroom.teacher') }}</label>
+                                        <SearchableSelect 
+                                            v-model="config.teacher_id" 
+                                            :options="teacherOptions" 
+                                            :placeholder="$t('classroom.teacher_search_placeholder')" />
+                                    </div>
+                                    <button @click="removeTeacherAssignment(index)" class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
+                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{ $t('common.start_date') }}</label>
+                                        <input type="date" v-model="config.effective_from" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center justify-between mb-1">
+                                            <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                                                {{ $t('common.end_date') }}
+                                                <span v-if="!config.effective_to" class="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{{ $t('classroom.default_teacher') }}</span>
+                                            </label>
+                                            <button v-if="config.effective_to" @click="config.effective_to = null" class="text-[9px] text-gray-400 hover:text-red-500 font-bold uppercase transition-colors">
+                                                {{ $t('common.clear') }}
+                                            </button>
+                                        </div>
+                                        <input type="date" v-model="config.effective_to" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
+                                    </div>
+                                </div>
+                            </div>
+                            <button @click="addTeacherAssignment" class="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50/30 transition-all flex items-center justify-center gap-2">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                </svg>
+                                {{ $t('classroom.add_teacher_assignment') || 'Add Teacher Assignment' }}
+                            </button>
                         </div>
                     </div>
                 </div>

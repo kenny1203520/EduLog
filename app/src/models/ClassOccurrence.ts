@@ -19,6 +19,8 @@ export interface ClassOccurrenceDTO {
     actual_end_time?: string // HH:MM:SS
     notes?: string
     is_conducted?: boolean // Default true
+    teacher_ids?: string[]
+    teacher_attendance?: Record<string, boolean>
     created_at?: string
     updated_at?: string
 }
@@ -37,6 +39,8 @@ export class ClassOccurrence {
     actualEndTime?: string
     notes?: string
     isConducted: boolean
+    teacherIds: string[]
+    teacherAttendance: Record<string, boolean>
     createdAt?: Date
     updatedAt?: Date
     classroomName?: string
@@ -54,7 +58,9 @@ export class ClassOccurrence {
         this.actualStartTime = data.actual_start_time
         this.actualEndTime = data.actual_end_time
         this.notes = data.notes
-        this.isConducted = data.is_conducted ?? true
+        this.isConducted = data.is_conducted ?? false
+        this.teacherIds = data.teacher_ids || []
+        this.teacherAttendance = data.teacher_attendance || {}
         this.createdAt = data.created_at ? new Date(data.created_at) : undefined
         this.updatedAt = data.updated_at ? new Date(data.updated_at) : undefined
     }
@@ -73,6 +79,9 @@ export class ClassOccurrence {
             actual_start_time: this.actualStartTime,
             actual_end_time: this.actualEndTime,
             notes: this.notes,
+            is_conducted: this.isConducted,
+            teacher_ids: this.teacherIds,
+            teacher_attendance: this.teacherAttendance,
             created_at: this.createdAt?.toISOString(),
             updated_at: this.updatedAt?.toISOString()
         }

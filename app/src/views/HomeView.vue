@@ -2,9 +2,11 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { OccurrenceService } from '@/services/OccurrenceService'
-import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
+import { useAuthStore } from '@/stores/useAuthStore'
+import { TeacherService } from '@/services/teacher/TeacherService'
 
 useI18n()
 
@@ -26,8 +28,33 @@ onMounted(async () => {
         const end = new Date(today.setHours(23, 59, 59, 999))
 
         const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
-        todayOccurrences.value = data
-        stats.value.todayClasses = data.length
+        const auth = useAuthStore()
+        const userId = auth.user?.id
+        
+        // Fetch teacher profile if logged in
+        const teacherProfile = userId ? await TeacherService.getTeacherByUserId(userId) : null
+        const teacherId = teacherProfile?.id
+
+        // Visible if:
+        // 1. Current user is assigned to the occurrence (teacherId is in teacherIds)
+        // 2. Teacher is marked attending (teacherAttendance[teacherId] is true)
+        // 3. Class is conducted (isConducted is true)
+        const visible = (data || []).filter(d => {
+            // Must be conducted
+            if (d.isConducted !== true) return false
+
+            // If we have a teacher profile, filter by assignment and attendance
+            if (teacherId) {
+                const isAssigned = d.teacherIds?.includes(teacherId)
+                const isAttending = d.teacherAttendance && d.teacherAttendance[teacherId] === true
+                return isAssigned && isAttending
+            }
+
+            // If no teacher profile is linked to this user, don't show any classes
+            return false
+        })
+        todayOccurrences.value = visible
+        stats.value.todayClasses = visible.length
     } catch (e) {
         console.error(e)
     } finally {

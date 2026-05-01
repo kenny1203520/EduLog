@@ -1,19 +1,34 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CourseService } from '@/services/CourseService'
-import { OccurrenceService } from '@/services/OccurrenceService'
-import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
+import { SessionService } from '@/services/Session/SessionService'
+import { CourseService } from '@/services/Course/CourseService'
+import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
+import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { useAuthStore } from '@/stores/useAuthStore'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
+import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
+import { HolidayService } from '@/services/holiday/HolidayService'
 import type { Enrollment } from '@/models/Enrollment'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import type { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
+import { TeacherService } from '@/services/teacher/TeacherService'
+import type { TeacherDTO } from '@/services/teacher/TeacherService'
+import {
+    ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS,
+    SYSTEM_ATTENDANCE_TEMPLATE,
+    formatCopyTemplateToken,
+    renderCopyTemplate
+} from '@/utils/copyTemplate'
 
 import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
@@ -27,15 +42,45 @@ const toast = useToast()
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
+const sessionTeachers = ref<(TeacherDTO & { effective_from: string; effective_to: string | null })[]>([])
 const weekAnchorDate = ref(new Date())
 const isCalendarExpanded = ref(false)
+const isOccurrenceInHoliday = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
 const isQuickAttendanceExpanded = ref(false)
+const showAttendanceTemplateModal = ref(false)
+const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
+const attendanceTemplateScope = ref<'class_session' | 'user_default'>('class_session')
+const isLoadingAttendanceTemplate = ref(false)
+const isSavingAttendanceTemplate = ref(false)
+const attendanceTemplateLoadOptions = ref<Array<{ key: string; label: string; templateText: string }>>([])
+const selectedAttendanceTemplateLoadKey = ref('')
+const selectedAttendanceTemplateModes = ref<Record<string, string>>({
+    present_list: 'comma',
+    absent_list: 'comma',
+    pending_list: 'comma'
+})
+const showAddStudentModal = ref(false)
+const isAddingStudent = ref(false)
+const makeupCandidates = ref<Enrollment[]>([])
+const makeupSearch = ref('')
+const selectedMakeupStudentId = ref<string>('')
+const selectedMakeupEnrollmentId = ref<string>('')
+const makeupJoinDate = ref(DateUtils.formatLocalDate(new Date()))
+
+// Teacher Management State
+const occurrenceTeachers = ref<TeacherDTO[]>([])
+const allTeachersList = ref<TeacherDTO[]>([])
+const showTeacherEditModal = ref(false)
+const teacherSearchQuery = ref('')
+const selectedTeacherIds = ref<Set<string>>(new Set())
+const isSavingTeachers = ref(false)
 
 // Split View State
 const showSplitView = ref(false)
@@ -96,7 +141,7 @@ function getLessonsForCourse(courseId: string): Promise<Lesson[]> {
         return Promise.resolve(cachedLessons)
     }
 
-    return CourseService.getLessonsByCourse(courseId).then(lessons => {
+    return CourseCatalogService.getLessonsByCourse(courseId).then(lessons => {
         courseLessonsByCourseId.value = {
             ...courseLessonsByCourseId.value,
             [courseId]: lessons
@@ -158,13 +203,104 @@ function formatProgressRange(report?: OccurrenceReport | null): string {
     return range ? `${range} · ${formatProgressStatus(report)}` : formatProgressStatus(report)
 }
 
+function getReportDate(report: OccurrenceReport): Date | undefined {
+    return report.occurrenceDate || report.createdAt || report.updatedAt
+}
+
+function getReportTimestamp(report: OccurrenceReport): number {
+    const reportDate = getReportDate(report)
+    return reportDate ? reportDate.getTime() : Number.MIN_SAFE_INTEGER
+}
+
+function getNextClassDate(today: Date, classDayOfWeek?: number): Date {
+    if (classDayOfWeek === undefined) {
+        const defaultNextDay = new Date(today)
+        defaultNextDay.setDate(defaultNextDay.getDate() + 1)
+        defaultNextDay.setHours(0, 0, 0, 0)
+        return defaultNextDay
+    }
+
+    const normalizedToday = new Date(today)
+    normalizedToday.setHours(0, 0, 0, 0)
+
+    const diff = (classDayOfWeek - normalizedToday.getDay() + 7) % 7
+    const daysUntilNextClass = diff === 0 ? 7 : diff
+    const nextClassDate = new Date(normalizedToday)
+    nextClassDate.setDate(nextClassDate.getDate() + daysUntilNextClass)
+    return nextClassDate
+}
+
+function isInCurrentCycle(report: OccurrenceReport, classDayOfWeek?: number): boolean {
+    const reportDate = getReportDate(report)
+    if (!reportDate) {
+        return false
+    }
+
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const nextClassDate = getNextClassDate(today, classDayOfWeek)
+
+    return reportDate >= today && reportDate < nextClassDate
+}
+
+function pickHighestProgressReport(
+    reportsAtHighestLesson: OccurrenceReport[]
+): OccurrenceReport | undefined {
+    if (reportsAtHighestLesson.length === 0) {
+        return undefined
+    }
+
+    return [...reportsAtHighestLesson].sort((left, right) => {
+        const completedDiff = Number(right.isCompleted === true) - Number(left.isCompleted === true)
+        if (completedDiff !== 0) {
+            return completedDiff
+        }
+
+        return getReportTimestamp(right) - getReportTimestamp(left)
+    })[0]
+}
+
 function buildStudentProgressSummary(enrollment: Enrollment, reports: OccurrenceReport[], lessons: Lesson[]): StudentProgressSummary {
     const currentCourse = enrollment.displayName || enrollment.courseDisplayName || [enrollment.courseSubject, enrollment.courseStage].filter(Boolean).join(' ')
-    const highestLessonNumber = enrollment.lessonNumber
+    const lessonSequenceById = new Map(
+        lessons
+            .filter(lesson => !!lesson.id)
+            .map(lesson => [lesson.id as string, lesson.sequence])
+    )
+
+    const reportsWithLesson = reports.filter(report => {
+        if (!report.lessonId) {
+            return false
+        }
+
+        return lessonSequenceById.has(report.lessonId)
+    })
+
+    let highestLessonNumber: number | undefined
+    if (reportsWithLesson.length > 0) {
+        highestLessonNumber = reportsWithLesson.reduce((maxSequence, report) => {
+            const sequence = report.lessonId ? lessonSequenceById.get(report.lessonId) : undefined
+            if (sequence === undefined) {
+                return maxSequence
+            }
+            return Math.max(maxSequence, sequence)
+        }, Number.MIN_SAFE_INTEGER)
+
+        if (highestLessonNumber === Number.MIN_SAFE_INTEGER) {
+            highestLessonNumber = undefined
+        }
+    }
+
     const highestLesson = getLessonTitle(lessons, highestLessonNumber)
     const highestLessonId = lessons.find(lesson => lesson.sequence === highestLessonNumber)?.id
-    const highestReport = highestLessonId ? reports.find(report => report.lessonId === highestLessonId) : undefined
-    const latestReport = reports[0]
+    const highestLessonReports = highestLessonId
+        ? reportsWithLesson.filter(report => report.lessonId === highestLessonId)
+        : []
+    const highestReport = pickHighestProgressReport(highestLessonReports)
+
+    const reportsByOccurrenceDate = [...reports].sort((left, right) => getReportTimestamp(right) - getReportTimestamp(left))
+    const latestReport = reportsByOccurrenceDate.find(report => !isInCurrentCycle(report, enrollment.classSessionDayOfWeek)) || reportsByOccurrenceDate[0]
     const latestLesson = latestReport?.lessonId ? lessons.find(lesson => lesson.id === latestReport.lessonId) : undefined
 
     return {
@@ -220,7 +356,10 @@ function getTodayCourseSummary(enrollment: Enrollment): TodayCourseSummary {
     }
 }
 
-async function loadStudentProgressSummaries(enrollmentList: Enrollment[]) {
+async function loadStudentProgressSummaries(
+    enrollmentList: Enrollment[],
+    mode: 'replace' | 'merge' = 'replace'
+) {
     const uniqueCourseIds = [...new Set(enrollmentList.map(enrollment => enrollment.courseId).filter(Boolean))]
     await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
 
@@ -234,7 +373,17 @@ async function loadStudentProgressSummaries(enrollmentList: Enrollment[]) {
         return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons)] as const
     }))
 
-    studentProgressSummaries.value = Object.fromEntries(summaryEntries.filter(([id]) => !!id)) as Record<string, StudentProgressSummary>
+    const nextSummaries = Object.fromEntries(summaryEntries.filter(([id]) => !!id)) as Record<string, StudentProgressSummary>
+
+    if (mode === 'merge') {
+        studentProgressSummaries.value = {
+            ...studentProgressSummaries.value,
+            ...nextSummaries
+        }
+        return
+    }
+
+    studentProgressSummaries.value = nextSummaries
 }
 
 function getStudentProgressSummary(enrollmentId?: string): StudentProgressSummary {
@@ -262,6 +411,83 @@ const weekRangeLabel = computed(() => {
 
     return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
 })
+
+function normalizeDateInput(value: string | Date | undefined): string {
+    if (!value) {
+        return DateUtils.formatLocalDate(new Date())
+    }
+
+    if (value instanceof Date) {
+        return DateUtils.formatLocalDate(value)
+    }
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return value
+    }
+
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) {
+        return DateUtils.formatLocalDate(new Date())
+    }
+
+    return DateUtils.formatLocalDate(parsed)
+}
+
+const filteredMakeupStudents = computed(() => {
+    const studentMap = new Map<string, { studentId: string; studentName: string; studentEmail?: string }>()
+
+    makeupCandidates.value.forEach(item => {
+        if (!item.studentId || !item.studentName) {
+            return
+        }
+        if (!studentMap.has(item.studentId)) {
+            studentMap.set(item.studentId, {
+                studentId: item.studentId,
+                studentName: item.studentName,
+                studentEmail: item.studentEmail
+            })
+        }
+    })
+
+    const students = [...studentMap.values()]
+    const keyword = makeupSearch.value.trim().toLowerCase()
+
+    if (!keyword) {
+        return students
+    }
+
+    return students.filter(student => {
+        return [student.studentName, student.studentEmail]
+            .filter(Boolean)
+            .some(text => text!.toLowerCase().includes(keyword))
+    })
+})
+
+const filteredTeachers = computed(() => {
+    const query = teacherSearchQuery.value.trim().toLowerCase()
+    if (!query) return allTeachersList.value
+
+    return allTeachersList.value.filter(t => 
+        t.name.toLowerCase().includes(query) || 
+        t.email.toLowerCase().includes(query)
+    )
+})
+
+const selectedStudentEnrollments = computed(() => {
+    if (!selectedMakeupStudentId.value) {
+        return []
+    }
+
+    return makeupCandidates.value.filter(item => item.studentId === selectedMakeupStudentId.value)
+})
+
+const selectedMakeupEnrollment = computed(() => {
+    return makeupCandidates.value.find(item => item.id === selectedMakeupEnrollmentId.value) || null
+})
+
+function handleMakeupStudentChange() {
+    selectedMakeupEnrollmentId.value = ''
+}
 
 function formatDateOnly(date: Date): string {
     return DateUtils.formatLocalDate(date)
@@ -325,15 +551,21 @@ async function loadReportsForCurrentOccurrence() {
     if (guestEnrollmentIds.length > 0) {
         const guestPromises = guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!))
         const guests = await Promise.all(guestPromises)
+        const addedGuests: Enrollment[] = []
 
         guests.forEach(guest => {
             if (guest) {
-                ;(guest as any).isGuest = true
+                ; (guest as any).isGuest = true
                 if (!enrollments.value.find(e => e.id === guest.id)) {
                     enrollments.value.push(guest)
+                    addedGuests.push(guest)
                 }
             }
         })
+
+        if (addedGuests.length > 0) {
+            await loadStudentProgressSummaries(addedGuests, 'merge')
+        }
     }
 
     for (const enr of enrollments.value) {
@@ -343,14 +575,73 @@ async function loadReportsForCurrentOccurrence() {
     }
 }
 
+async function loadOccurrenceTeachers() {
+    if (!todayOccurrence.value) {
+        occurrenceTeachers.value = []
+        selectedTeacherIds.value = new Set()
+        return
+    }
+
+    // Refresh session teachers to get latest intervals
+    sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+
+    const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
+    
+    // Find teachers active on this date from the plan
+    const activeAssignments = sessionTeachers.value.filter(st => {
+        if (dateStr < st.effective_from) return false
+        if (st.effective_to && dateStr > st.effective_to) return false
+        return true
+    })
+
+    const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(id => !!id))] as string[]
+    
+    // Current "Reality" is still teacherIds in the occurrence, 
+    // but we should probably sync if they differ and it's a fresh view
+    const currentTeacherIds = todayOccurrence.value.teacherIds || []
+    
+    // If the occurrence has no teachers yet (freshly generated), or if we want to sync
+    // For now, let's trust the Plan for displaying assignments in the editor, 
+    // but keep occurrenceTeachers based on the Reality for attendance.
+    
+    selectedTeacherIds.value = new Set(currentTeacherIds)
+
+    if (currentTeacherIds.length === 0 && planTeacherIds.length > 0) {
+        // Auto-sync if reality is empty but plan has teachers
+        selectedTeacherIds.value = new Set(planTeacherIds)
+        await saveOccurrenceTeachers(false) // silent sync
+    }
+
+    if (allTeachersList.value.length === 0) {
+        const { data } = await TeacherService.getTeachers(1, 1000)
+        allTeachersList.value = data
+    }
+    
+    occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
+}
+
 async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
     todayOccurrence.value = occurrence
 
     if (occurrence?.occurrenceDate) {
         weekAnchorDate.value = new Date(occurrence.occurrenceDate)
+
+        // Check if occurrence is within a holiday period
+        try {
+            const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
+                ? occurrence.occurrenceDate.toISOString().split('T')[0]
+                : occurrence.occurrenceDate
+            isOccurrenceInHoliday.value = await HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId)
+        } catch (e) {
+            console.error('Failed to check holiday status:', e)
+            isOccurrenceInHoliday.value = false
+        }
     }
 
-    await loadReportsForCurrentOccurrence()
+    await Promise.all([
+        loadReportsForCurrentOccurrence(),
+        loadOccurrenceTeachers()
+    ])
 }
 
 async function handleCalendarOccurrenceSelect(occurrence: ClassOccurrence) {
@@ -398,13 +689,21 @@ async function loadData() {
         loading.value = true
         // Reset maps to avoid stale or merged data
         reportMap.value = new Map()
+        studentProgressSummaries.value = {}
 
         // 1. Get session details
-        session.value = await CourseService.getSessionDetails(sessionId)
+        session.value = await SessionService.getSessionDetails(sessionId)
 
         // 2. Get all students enrolled in this session
         const { data: allEnrollments } = await CourseService.getEnrollmentsBySession(sessionId)
         enrollments.value = allEnrollments
+
+        // 2.1 Load session teachers
+        sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        
+        // Load all teachers once for the picker
+        const { data: allTeachers } = await TeacherService.getTeachers(1, 1000)
+        allTeachersList.value = allTeachers
 
         // 2.5 Load lessons for each course and build student progress summaries
         await loadStudentProgressSummaries(allEnrollments)
@@ -443,14 +742,6 @@ async function loadData() {
 onMounted(() => {
     loadData()
 })
-
-function navigateToProfile(studentId: string) {
-    router.push({ name: 'student-profile', params: { id: studentId } })
-}
-
-function navigateToReports(enrollmentId: string) {
-    router.push({ name: 'lesson-reports', params: { enrollmentId } })
-}
 
 // Attendance & Rating Handlers
 async function toggleAttendance(enrId: string) {
@@ -542,6 +833,272 @@ function toggleSelectAll() {
     }
 }
 
+const attendanceTemplateVariables = computed(() => {
+    const previewNames = getAttendancePreviewNames()
+
+    return ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS.map(definition => {
+        const previewValue = getAttendanceVariablePreview(definition.key, previewNames)
+        return {
+            ...definition,
+            token: formatCopyTemplateToken(definition.key, getSelectedAttendanceTemplateMode(definition.key)),
+            label: t(`classroom.copy_template_variable_labels.${definition.key}`),
+            description: t(`classroom.copy_template_variable_descriptions.${definition.key}`),
+            previewValue,
+            modeOptions: (definition.modes || []).map(mode => ({
+                ...mode,
+                label: t(`classroom.copy_template_variable_modes.${mode.value}`)
+            }))
+        }
+    })
+})
+
+const attendanceTemplatePreviewText = computed(() => {
+    if (!attendanceTemplateText.value.trim()) {
+        return ''
+    }
+
+    const context = buildAttendanceTemplateContext()
+    return renderCopyTemplate(attendanceTemplateText.value, context.values, context.formatters).trim()
+})
+
+function getSelectedAttendanceTemplateMode(variable: string): string | undefined {
+    return selectedAttendanceTemplateModes.value[variable] || ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS.find(item => item.key === variable)?.defaultMode
+}
+
+function formatAttendanceNameList(names: string[], mode: string): string {
+    const safeNames = names.filter(Boolean)
+    if (safeNames.length === 0) {
+        return t('common.none')
+    }
+
+    switch (mode) {
+        case 'slash':
+            return safeNames.join(' / ')
+        case 'newline':
+            return safeNames.join('\n')
+        case 'bullet':
+            return safeNames.map(name => `• ${name}`).join('\n')
+        case 'space':
+            return safeNames.join(' ')
+        case 'comma':
+            return safeNames.join(', ')
+        default:
+            return safeNames.join(', ')
+    }
+}
+
+function getAttendancePreviewNames(): Record<'present_list' | 'absent_list' | 'pending_list', string[]> {
+    const fallback = ['王小明', '陳小華', '林小美']
+
+    const grouped = {
+        present_list: [] as string[],
+        absent_list: [] as string[],
+        pending_list: [] as string[]
+    }
+
+    visibleEnrollments.value.forEach(enrollment => {
+        const report = reportMap.value.get(enrollment.id!)
+        const status = report?.attendanceStatus || 'pending'
+        const name = enrollment.studentName || ''
+        if (!name) {
+            return
+        }
+
+        if (status === 'present') {
+            grouped.present_list.push(name)
+        } else if (status === 'absent') {
+            grouped.absent_list.push(name)
+        } else {
+            grouped.pending_list.push(name)
+        }
+    })
+
+    if (grouped.present_list.length === 0 && grouped.absent_list.length === 0 && grouped.pending_list.length === 0) {
+        grouped.present_list = [...fallback.slice(0, 2)]
+        grouped.absent_list = [fallback[2]]
+        grouped.pending_list = ['待點名學生']
+    }
+
+    return grouped
+}
+
+function getAttendanceVariablePreview(variable: string, names: Record<'present_list' | 'absent_list' | 'pending_list', string[]>): string {
+    switch (variable) {
+        case 'class_info_title':
+            return t('classroom.class_info_title')
+        case 'session_name':
+            return session.value?.name || t('classroom.session')
+        case 'occurrence_date':
+            return todayOccurrence.value?.occurrenceDate
+                ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+                : t('classroom.no_teaching_day_selected')
+        case 'start_time':
+            return todayOccurrence.value?.originalStartTime?.substring(0, 5) || '10:00'
+        case 'end_time':
+            return todayOccurrence.value?.originalEndTime?.substring(0, 5) || '12:00'
+        case 'time_range':
+            return `${getAttendanceVariablePreview('start_time', names)}-${getAttendanceVariablePreview('end_time', names)}`
+        case 'present_list_label':
+            return t('classroom.present_list')
+        case 'absent_list_label':
+            return t('classroom.absent_list')
+        case 'pending_list_label':
+            return t('classroom.pending_list')
+        case 'present_list':
+            return formatAttendanceNameList(names.present_list, getSelectedAttendanceTemplateMode('present_list') || 'comma')
+        case 'absent_list':
+            return formatAttendanceNameList(names.absent_list, getSelectedAttendanceTemplateMode('absent_list') || 'comma')
+        case 'pending_list':
+            return formatAttendanceNameList(names.pending_list, getSelectedAttendanceTemplateMode('pending_list') || 'comma')
+        default:
+            return ''
+    }
+}
+
+function buildAttendanceTemplateContext() {
+    const previewNames = getAttendancePreviewNames()
+    const presentList = formatAttendanceNameList(previewNames.present_list, getSelectedAttendanceTemplateMode('present_list') || 'comma')
+    const absentList = formatAttendanceNameList(previewNames.absent_list, getSelectedAttendanceTemplateMode('absent_list') || 'comma')
+    const pendingList = formatAttendanceNameList(previewNames.pending_list, getSelectedAttendanceTemplateMode('pending_list') || 'comma')
+
+    return {
+        values: {
+            class_info_title: t('classroom.class_info_title'),
+            session_name: session.value?.name || '',
+            occurrence_date: todayOccurrence.value?.occurrenceDate ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString() : '',
+            start_time: todayOccurrence.value?.originalStartTime?.substring(0, 5) || '',
+            end_time: todayOccurrence.value?.originalEndTime?.substring(0, 5) || '',
+            time_range: `${todayOccurrence.value?.originalStartTime?.substring(0, 5) || ''}-${todayOccurrence.value?.originalEndTime?.substring(0, 5) || ''}`,
+            present_list_label: t('classroom.present_list'),
+            absent_list_label: t('classroom.absent_list'),
+            pending_list_label: t('classroom.pending_list'),
+            present_list: presentList,
+            absent_list: absentList,
+            pending_list: pendingList
+        },
+        formatters: {
+            present_list: {
+                comma: () => formatAttendanceNameList(previewNames.present_list, 'comma'),
+                slash: () => formatAttendanceNameList(previewNames.present_list, 'slash'),
+                newline: () => formatAttendanceNameList(previewNames.present_list, 'newline'),
+                bullet: () => formatAttendanceNameList(previewNames.present_list, 'bullet'),
+                space: () => formatAttendanceNameList(previewNames.present_list, 'space')
+            },
+            absent_list: {
+                comma: () => formatAttendanceNameList(previewNames.absent_list, 'comma'),
+                slash: () => formatAttendanceNameList(previewNames.absent_list, 'slash'),
+                newline: () => formatAttendanceNameList(previewNames.absent_list, 'newline'),
+                bullet: () => formatAttendanceNameList(previewNames.absent_list, 'bullet'),
+                space: () => formatAttendanceNameList(previewNames.absent_list, 'space')
+            },
+            pending_list: {
+                comma: () => formatAttendanceNameList(previewNames.pending_list, 'comma'),
+                slash: () => formatAttendanceNameList(previewNames.pending_list, 'slash'),
+                newline: () => formatAttendanceNameList(previewNames.pending_list, 'newline'),
+                bullet: () => formatAttendanceNameList(previewNames.pending_list, 'bullet'),
+                space: () => formatAttendanceNameList(previewNames.pending_list, 'space')
+            }
+        }
+    }
+}
+
+function insertAttendanceTemplateVariable(variable: string) {
+    const mode = getSelectedAttendanceTemplateMode(variable)
+    attendanceTemplateText.value += formatCopyTemplateToken(variable, mode)
+}
+
+function loadSelectedAttendanceTemplate() {
+    const selected = attendanceTemplateLoadOptions.value.find(item => item.key === selectedAttendanceTemplateLoadKey.value)
+    if (!selected) {
+        return
+    }
+
+    attendanceTemplateText.value = selected.templateText || SYSTEM_ATTENDANCE_TEMPLATE
+}
+
+async function openAttendanceTemplateModal() {
+    showAttendanceTemplateModal.value = true
+    attendanceTemplateScope.value = 'class_session'
+    attendanceTemplateText.value = SYSTEM_ATTENDANCE_TEMPLATE
+    selectedAttendanceTemplateModes.value = {
+        present_list: 'comma',
+        absent_list: 'comma',
+        pending_list: 'comma'
+    }
+
+    try {
+        isLoadingAttendanceTemplate.value = true
+        const [classTemplate, userTemplate, loadOptions] = await Promise.all([
+            CopyTemplateService.getAttendanceTemplateByScope('class_session', sessionId),
+            CopyTemplateService.getAttendanceTemplateByScope('user_default'),
+            CopyTemplateService.getTemplateLoadOptions('attendance_copy', sessionId)
+        ])
+
+        attendanceTemplateLoadOptions.value = loadOptions.map(item => {
+            let label = item.label
+            if (item.label === 'system_default') {
+                label = t('classroom.copy_template_source_system')
+            } else if (item.label === 'user_default') {
+                label = t('classroom.copy_template_source_user_default')
+            } else if (item.scopeType === 'class_session' && item.scopeEntityId === sessionId) {
+                label = `${item.label} (${t('classroom.copy_template_source_current_session')})`
+            }
+
+            return {
+                key: item.key,
+                label,
+                templateText: item.templateText
+            }
+        })
+        selectedAttendanceTemplateLoadKey.value = attendanceTemplateLoadOptions.value[0]?.key || ''
+
+        if (classTemplate) {
+            attendanceTemplateScope.value = 'class_session'
+            attendanceTemplateText.value = classTemplate
+            return
+        }
+
+        if (userTemplate) {
+            attendanceTemplateScope.value = 'user_default'
+            attendanceTemplateText.value = userTemplate
+            return
+        }
+
+        attendanceTemplateText.value = SYSTEM_ATTENDANCE_TEMPLATE
+    } catch (error) {
+        console.error('Failed to load attendance copy template', error)
+        toast.error(t('classroom.copy_template_load_failed'))
+    } finally {
+        isLoadingAttendanceTemplate.value = false
+    }
+}
+
+async function saveAttendanceTemplate() {
+    const templateText = attendanceTemplateText.value.trim()
+    if (!templateText) {
+        toast.error(t('classroom.copy_template_empty_error'))
+        return
+    }
+
+    try {
+        isSavingAttendanceTemplate.value = true
+        if (attendanceTemplateScope.value === 'class_session') {
+            await CopyTemplateService.saveAttendanceTemplateForSession(sessionId, templateText)
+            toast.success(t('classroom.copy_template_saved_session'))
+        } else {
+            await CopyTemplateService.saveAttendanceTemplateAsUserDefault(templateText)
+            toast.success(t('classroom.copy_template_saved_user'))
+        }
+
+        showAttendanceTemplateModal.value = false
+    } catch (error) {
+        console.error('Failed to save attendance copy template', error)
+        toast.error(t('classroom.copy_template_save_failed'))
+    } finally {
+        isSavingAttendanceTemplate.value = false
+    }
+}
+
 async function copyAttendanceInfo() {
     if (!todayOccurrence.value || !session.value) return
 
@@ -567,13 +1124,25 @@ async function copyAttendanceInfo() {
     const absentList = formatList('absent')
     const pendingList = formatList('pending')
 
-    const text = `${t('classroom.class_info_title')}\n` +
-        `${session.value.name} (${date} ${time})\n\n` +
-        `${t('classroom.present_list')}: ${presentList}\n` +
-        `${t('classroom.absent_list')}: ${absentList}\n` +
-        `${t('classroom.pending_list')}: ${pendingList}`
+    const context = {
+        class_info_title: t('classroom.class_info_title'),
+        session_name: session.value.name || '',
+        occurrence_date: date,
+        start_time: startTime,
+        end_time: endTime,
+        time_range: time,
+        present_list_label: t('classroom.present_list'),
+        absent_list_label: t('classroom.absent_list'),
+        pending_list_label: t('classroom.pending_list'),
+        present_list: presentList,
+        absent_list: absentList,
+        pending_list: pendingList
+    }
 
     try {
+        const { templateText } = await CopyTemplateService.getEffectiveAttendanceTemplate(sessionId)
+        const text = renderCopyTemplate(templateText, context, buildAttendanceTemplateContext().formatters).trim()
+
         await navigator.clipboard.writeText(text)
         toast.success(t('classroom.copy_success'))
     } catch (err) {
@@ -606,18 +1175,71 @@ async function handleConfirmRefresh() {
     }
 }
 
-async function toggleClassStatus(event: any) {
+async function toggleIsConducted(event: any) {
     if (!todayOccurrence.value) return
     const isHeld = event.target.checked
+
+    // Guard: check if occurrence is in a holiday period
+    if (isOccurrenceInHoliday.value && isHeld) {
+        event.target.checked = false
+        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot mark class as conducted during a holiday period.'))
+        return
+    }
 
     try {
         const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
             is_conducted: isHeld
         })
-        todayOccurrence.value.isConducted = updated.isConducted
-    } catch (e) {
+
+        todayOccurrence.value.isConducted = updated.isConducted ?? isHeld
+    } catch (e: any) {
         console.error('Failed to update class status:', e)
         event.target.checked = !isHeld
+        const msg = e.message || ''
+        if (msg.includes('Cannot set is_conducted=true')) {
+            toast.error(t('report.error.cannot_set_conducted_during_holiday'))
+        } else {
+            toast.error(t('common.save_error'))
+        }
+    }
+}
+
+function isTeacherPresent(teacherId: string | undefined, userId: string | null | undefined): boolean {
+    if (!teacherId || !todayOccurrence.value?.teacherAttendance) return false
+    // Fallback checks for backward compatibility if user_id was stored as key
+    if (userId && todayOccurrence.value.teacherAttendance[userId]) return true
+    return !!todayOccurrence.value.teacherAttendance[teacherId]
+}
+
+async function toggleTeacherAttendance(teacherId: string | undefined, event: any) {
+    if (!todayOccurrence.value || !teacherId) return
+    const isPresent = event.target.checked
+
+    // Guard: check if occurrence is in a holiday period
+    if (isOccurrenceInHoliday.value && isPresent) {
+        event.target.checked = false
+        toast.error(t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot mark teacher as present during a holiday period.'))
+        return
+    }
+
+    try {
+        const existing = todayOccurrence.value.teacherAttendance || {}
+        const updatedAttendance = { ...existing, [teacherId]: isPresent }
+
+        const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
+            teacher_attendance: updatedAttendance
+        })
+
+        todayOccurrence.value.teacherAttendance = updated.teacherAttendance || updatedAttendance
+    } catch (e: any) {
+        console.error('Failed to update teacher attendance:', e)
+        event.target.checked = !isPresent
+        const msg = e.message || ''
+        if (msg.includes('Cannot set teacher attendance to present')) {
+            toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
+        } else {
+            toast.error(t('common.save_error'))
+        }
     }
 }
 
@@ -660,6 +1282,81 @@ async function closeSplitView() {
     selectedEnrollmentId.value = null
 }
 
+async function openAddStudentModal() {
+    showAddStudentModal.value = true
+    makeupSearch.value = ''
+    selectedMakeupStudentId.value = ''
+    selectedMakeupEnrollmentId.value = ''
+    makeupJoinDate.value = normalizeDateInput(todayOccurrence.value?.occurrenceDate)
+
+    try {
+        isAddingStudent.value = true
+        makeupCandidates.value = await EnrollmentService.getActiveEnrollmentCandidates()
+    } catch (error: any) {
+        toast.error(error?.message || t('classroom.add_student_load_failed'))
+        showAddStudentModal.value = false
+    } finally {
+        isAddingStudent.value = false
+    }
+}
+
+function closeAddStudentModal() {
+    showAddStudentModal.value = false
+}
+
+async function submitAddStudentToClass() {
+    if (!selectedMakeupStudentId.value || !selectedMakeupEnrollmentId.value || !makeupJoinDate.value) {
+        toast.error(t('classroom.add_student_required_fields'))
+        return
+    }
+
+    const normalizedJoinDate = normalizeDateInput(makeupJoinDate.value)
+    makeupJoinDate.value = normalizedJoinDate
+
+    const selected = selectedMakeupEnrollment.value
+    if (!selected) {
+        toast.error(t('classroom.add_student_enrollment_not_found'))
+        return
+    }
+
+    if (selected.status !== 'active' && normalizedJoinDate >= DateUtils.formatLocalDate(new Date())) {
+        toast.error(t('classroom.add_student_active_only_for_future'))
+        return
+    }
+
+    try {
+        isAddingStudent.value = true
+        await EnrollmentService.addEnrollmentToSessionOccurrence(
+            selectedMakeupEnrollmentId.value,
+            sessionId,
+            normalizedJoinDate
+        )
+
+        if (normalizeDateInput(todayOccurrence.value?.occurrenceDate) === normalizedJoinDate) {
+            await loadReportsForCurrentOccurrence()
+        }
+
+        toast.success(t('classroom.add_student_success'))
+        closeAddStudentModal()
+    } catch (error: any) {
+        if (error?.message?.includes('Invalid date format')) {
+            toast.error(t('classroom.add_student_invalid_date'))
+            return
+        }
+        if (error?.message?.includes('DUPLICATE_OCCURRENCE_REPORT')) {
+            toast.error(t('classroom.add_student_duplicate_report'))
+            return
+        }
+        if (error?.message?.includes('MAKEUP_DATE_NOT_CLASS_DAY')) {
+            toast.error(t('classroom.add_student_not_class_day'))
+            return
+        }
+        toast.error(error?.message || t('classroom.add_student_failed'))
+    } finally {
+        isAddingStudent.value = false
+    }
+}
+
 function handleEditorUpdate(content: string, enrollmentId: string) {
     const report = reportMap.value.get(enrollmentId)
     if (report) {
@@ -682,7 +1379,7 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
 }
 
 function handleSaveError(error: string) {
-    toast.error(`Failed to save report: ${error}`)
+    toast.error(`${t('report.save_error')}: ${error}`)
 }
 
 function handleConflict(serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO) {
@@ -725,13 +1422,119 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
         toast.error(t('report.resolve_conflict_error'))
     }
 }
+
+function openTeacherEditModal() {
+    if (!todayOccurrence.value) return
+    teacherSearchQuery.value = ''
+    selectedTeacherIds.value = new Set(todayOccurrence.value.teacherIds || [])
+    showTeacherEditModal.value = true
+}
+
+function toggleTeacherSelection(teacherId: string) {
+    if (selectedTeacherIds.value.has(teacherId)) {
+        selectedTeacherIds.value.delete(teacherId)
+    } else {
+        selectedTeacherIds.value.add(teacherId)
+    }
+}
+
+async function saveOccurrenceTeachers(showToast = true) {
+    if (!todayOccurrence.value) return
+
+    try {
+        isSavingTeachers.value = true
+        const newTeacherIds = Array.from(selectedTeacherIds.value)
+        
+        // Sync teacher attendance JSON
+        const existingAttendance = todayOccurrence.value.teacherAttendance || {}
+        const newAttendance: Record<string, boolean> = {}
+        
+        newTeacherIds.forEach(id => {
+            newAttendance[id] = existingAttendance[id] !== undefined ? existingAttendance[id] : true
+        })
+
+        const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
+            teacher_ids: newTeacherIds,
+            teacher_attendance: newAttendance
+        })
+
+        todayOccurrence.value.teacherIds = updated.teacherIds
+        todayOccurrence.value.teacherAttendance = updated.teacherAttendance
+        
+        // No need to reload all session teachers here, just update occurrenceTeachers
+        occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
+        
+        showTeacherEditModal.value = false
+        if (showToast) toast.success(t('common.save_success'))
+    } catch (e: any) {
+        console.error('Failed to save teachers:', e)
+        if (showToast) toast.error(t('common.save_error'))
+    } finally {
+        isSavingTeachers.value = false
+    }
+}
+
+async function addTeacherForToday(teacher: TeacherDTO) {
+    if (!todayOccurrence.value || !teacher.id) return
+    
+    try {
+        isSavingTeachers.value = true
+        const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
+        
+        // 1. Add to Plan (class_session_teachers)
+        await TeacherService.assignTeacherForDate(sessionId, teacher.id, dateStr)
+        
+        // 2. Add to Reality (teacher_ids)
+        selectedTeacherIds.value.add(teacher.id)
+        await saveOccurrenceTeachers(false)
+        
+        // 3. Refresh Plan View
+        sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        
+        toast.success(t('common.save_success'))
+    } catch (e) {
+        console.error('Failed to add teacher for today:', e)
+        toast.error(t('common.save_error'))
+    } finally {
+        isSavingTeachers.value = false
+    }
+}
+
+async function removeAssignment(teacherId: string, effectiveFrom: string) {
+    if (!confirm(t('common.confirm_delete'))) return
+    
+    try {
+        isSavingTeachers.value = true
+        // 1. Remove from Plan
+        await TeacherService.removeTeacherAssignment(sessionId, teacherId, effectiveFrom)
+        
+        // 2. Remove from Reality for this occurrence if it matches
+        const dateStr = todayOccurrence.value ? DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) : ''
+        if (effectiveFrom === dateStr) {
+             selectedTeacherIds.value.delete(teacherId)
+             await saveOccurrenceTeachers(false)
+        }
+        
+        // 3. Refresh
+        sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        await loadOccurrenceTeachers()
+        
+        toast.success(t('common.save_success'))
+    } catch (e) {
+        console.error('Failed to remove assignment:', e)
+        toast.error(t('common.save_error'))
+    } finally {
+        isSavingTeachers.value = false
+    }
+}
+
 </script>
 
 <template>
     <div class="space-y-8 animate-in fade-in duration-500">
         <!-- Header -->
         <div class="flex items-center gap-4">
-            <button @click="router.back()"
+            <button @click="router.push({ name: 'classrooms' })"
                 class="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-100 transition-all shadow-sm active:scale-90">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
@@ -817,444 +1620,426 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 
                 <!-- LEFT COLUMN: Student List & Stats -->
                 <div class="space-y-6 min-w-0" :class="{ 'hidden lg:block': showSplitView }">
-                <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
-                    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                        <div>
-                            <h3 class="font-black text-gray-900">{{ $t('classroom.teaching_day_navigation') }}</h3>
-                            <p class="text-xs font-bold text-gray-400">{{ displayedOccurrenceDate }}</p>
-                        </div>
-
-                        <div class="flex items-center gap-2 flex-wrap md:justify-end">
-                            <button @click="moveWeek(-1)"
-                                class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
-                                {{ $t('classroom.previous_week') }}
-                            </button>
-                            <button @click="goToToday"
-                                class="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 hover:bg-emerald-100 transition-all text-xs font-black uppercase tracking-widest">
-                                {{ $t('classroom.back_to_today') }}
-                            </button>
-                            <button @click="moveWeek(1)"
-                                class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
-                                {{ $t('classroom.next_week') }}
-                            </button>
-
-                            <button @click="toggleCalendarPanel"
-                                class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                                <span>{{ isCalendarExpanded ? $t('classroom.hide_calendar') : $t('classroom.show_calendar') }}</span>
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
-                                    :class="isCalendarExpanded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-
-                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">{{ weekRangeLabel }}</p>
-
-                    <Transition name="fade-slide">
-                        <div v-show="isCalendarExpanded" class="max-w-4xl mx-auto w-full">
-                            <OccurrenceCalendar :occurrences="sessionOccurrences" :compact="true"
-                                @select-occurrence="handleCalendarOccurrenceSelect" />
-                        </div>
-                    </Transition>
-                </div>
-
-                <!-- Class Status Toggle (New) -->
-                <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center justify-between"
-                    v-if="todayOccurrence">
-                    <div>
-                        <h3 class="font-black text-gray-900">{{ $t('classroom.class_held_title') }}
-                        </h3>
-                        <p class="text-xs font-bold text-gray-400">
-                            {{ $t('classroom.class_held_subtitle') }}
-                        </p>
-                    </div>
-
-                    <div class="flex items-center gap-4">
-                        <button @click="copyAttendanceInfo"
-                            class="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
-                            :title="$t('classroom.copy_attendance')">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
-                            </svg>
-                        </button>
-
-                        <label class="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" :checked="todayOccurrence.isConducted"
-                                @change="toggleClassStatus($event)" class="sr-only peer">
-                            <div
-                                class="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Quick Attendance Block (Refined & Collapsible) -->
-                <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden"
-                    v-if="todayOccurrence">
-                    <!-- Header (Always Visible) -->
-                    <div class="p-6 md:p-8 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
-                        @click="isQuickAttendanceExpanded = !isQuickAttendanceExpanded">
-                        <div class="flex items-center gap-4">
-                            <div class="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                            </div>
+                    <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
+                        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                             <div>
-                                <h3 class="font-black text-xl text-gray-900">{{ $t('classroom.quick_attendance_title')
-                                    }}</h3>
-                                <p class="text-xs font-bold text-gray-400">
-                                    {{ $t('classroom.quick_attendance_subtitle') }}
-                                </p>
+                                <h3 class="font-black text-gray-900">{{ $t('classroom.teaching_day_navigation') }}</h3>
+                                <p class="text-xs font-bold text-gray-400">{{ displayedOccurrenceDate }}</p>
+                            </div>
+
+                            <div class="flex items-center gap-2 flex-wrap md:justify-end">
+                                <button @click="moveWeek(-1)"
+                                    class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
+                                    {{ $t('classroom.previous_week') }}
+                                </button>
+                                <button @click="goToToday"
+                                    class="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 hover:bg-emerald-100 transition-all text-xs font-black uppercase tracking-widest">
+                                    {{ $t('classroom.back_to_today') }}
+                                </button>
+                                <button @click="moveWeek(1)"
+                                    class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
+                                    {{ $t('classroom.next_week') }}
+                                </button>
+
+                                <button @click="toggleCalendarPanel"
+                                    class="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                                    <span>{{ isCalendarExpanded ? $t('classroom.hide_calendar') :
+                                        $t('classroom.show_calendar') }}</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+                                        :class="isCalendarExpanded ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24"
+                                        stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                            d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
                             </div>
                         </div>
+
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">{{ weekRangeLabel }}
+                        </p>
+
+                        <Transition name="fade-slide">
+                            <div v-show="isCalendarExpanded" class="max-w-4xl mx-auto w-full">
+                                <OccurrenceCalendar :occurrences="sessionOccurrences" :compact="true"
+                                    @select-occurrence="handleCalendarOccurrenceSelect" />
+                            </div>
+                        </Transition>
+                    </div>
+
+                    <!-- Class Status Toggle (New) -->
+                    <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center justify-between"
+                        v-if="todayOccurrence">
+                        <div>
+                            <h3 class="font-black text-gray-900">{{ $t('classroom.class_held_title') }}
+                            </h3>
+                            <p class="text-xs font-bold text-gray-400">
+                                {{ $t('classroom.class_held_subtitle') }}
+                            </p>
+                        </div>
+
                         <div class="flex items-center gap-4">
-                            <span v-if="selectedEnrollmentIds.size > 0"
-                                class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider">
-                                {{ selectedEnrollmentIds.size }} {{ $t('common.selected') }}
-                            </span>
-                            <div class="p-2 rounded-xl bg-gray-50 text-gray-400 transition-transform duration-300"
-                                :class="{ 'rotate-180': isQuickAttendanceExpanded }">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Expandable Content -->
-                    <div v-show="isQuickAttendanceExpanded"
-                        class="px-6 md:px-8 pb-8 pt-2 space-y-8 border-t border-gray-50">
-                        <!-- Batch Action Buttons -->
-                        <div class="flex items-center gap-3">
-                            <button @click="batchSetAttendance('present')" :disabled="selectedEnrollmentIds.size === 0"
-                                class="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100/50">
-                                {{ $t('attendance.present') }}
-                            </button>
-                            <button @click="batchSetAttendance('absent')" :disabled="selectedEnrollmentIds.size === 0"
-                                class="flex-1 px-6 py-4 bg-red-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-700 transition-all active:scale-95 shadow-lg shadow-red-100/50">
-                                {{ $t('attendance.absent') }}
-                            </button>
-                        </div>
-
-                        <div class="space-y-4">
-                            <!-- Select All Toggle -->
-                            <div class="flex items-center justify-between">
-                                <button @click="toggleSelectAll"
-                                    class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all active:scale-95"
-                                    :class="selectedEnrollmentIds.size === visibleEnrollments.length && visibleEnrollments.length > 0
-                                        ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-200'
-                                        : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'">
-                                    {{ selectedEnrollmentIds.size === visibleEnrollments.length &&
-                                        visibleEnrollments.length > 0 ? $t('common.deselect_all') : $t('common.select_all')
-                                    }}
-                                </button>
-                                <span class="text-[10px] font-black text-gray-300 uppercase tracking-widest">{{
-                                    visibleEnrollments.length }} {{ $t('common.total') }}</span>
-                            </div>
-
-                            <!-- Student Grid (Optimized for Visibility) -->
-                            <div
-                                class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
-                                <button v-for="e in visibleEnrollments" :key="e.id"
-                                    @click="toggleEnrollmentSelection(e.id!)"
-                                    class="px-5 py-4 rounded-2xl border transition-all active:scale-95 flex items-center justify-between gap-3 group ring-offset-2 relative overflow-hidden"
-                                    :class="[
-                                        selectedEnrollmentIds.has(e.id!)
-                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xl shadow-emerald-100 ring-2 ring-emerald-500'
-                                            : 'bg-white text-gray-700 border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/20'
-                                    ]">
-                                    <div class="flex items-center gap-3 min-w-0 z-10">
-                                        <!-- Status Indicator Dot -->
-                                        <div class="w-3 h-3 rounded-full shrink-0 shadow-sm border-2 border-white"
-                                            :class="{
-                                                'bg-emerald-400': reportMap.get(e.id!)?.attendanceStatus === 'present',
-                                                'bg-red-400': reportMap.get(e.id!)?.attendanceStatus === 'absent',
-                                                'bg-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
-                                            }"></div>
-
-                                        <span class="font-black text-base truncate">{{ e.studentName }}</span>
-                                    </div>
-
-                                    <!-- Checkmark for selection -->
-                                    <div class="shrink-0 z-10 transition-all duration-300 transform"
-                                        :class="selectedEnrollmentIds.has(e.id!) ? 'scale-100 opacity-100' : 'scale-50 opacity-0'">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-emerald-100"
-                                            viewBox="0 0 20 20" fill="currentColor">
-                                            <path fill-rule="evenodd"
-                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                clip-rule="evenodd" />
-                                        </svg>
-                                    </div>
-
-                                    <!-- Subtle Background Pattern for Selected -->
-                                    <div v-if="selectedEnrollmentIds.has(e.id!)"
-                                        class="absolute -right-4 -bottom-4 text-white/5 transform rotate-12">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20" fill="currentColor"
-                                            viewBox="0 0 24 24">
-                                            <path
-                                                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                                        </svg>
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Stats Bar (Conditional or Compact in Split View?) -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6" v-if="!showSplitView">
-                    <div
-                        class="bg-emerald-600 p-8 rounded-[2.5rem] text-white shadow-xl shadow-emerald-100 flex items-center justify-between">
-                        <div>
-                            <h4 class="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-2">{{
-                                $t('classroom.total_students') }}</h4>
-                            <p class="text-5xl font-black tracking-tighter">{{ visibleEnrollments.length }}</p>
-                        </div>
-                        <div class="bg-white/20 p-4 rounded-3xl">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
-                        </div>
-                    </div>
-                    <div v-if="session"
-                        class="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2 flex items-center gap-12">
-                        <div>
-                            <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">{{
-                                $t('classroom.capacity_utilization') }}</h4>
-                            <div class="flex items-end gap-3">
-                                <p class="text-4xl font-black text-gray-900 tracking-tighter">{{
-                                    Math.round((visibleEnrollments.length / (session?.capacity || 1)) * 100) }}%</p>
-                                <p class="text-xs font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
-                                    $t('classroom.capacity') }}</p>
-                            </div>
-                        </div>
-                        <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                            <div class="h-full bg-emerald-500 rounded-full transition-all duration-1000"
-                                :style="{ width: `${(visibleEnrollments.length / (session?.capacity || 1)) * 100}%` }">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Responsive Card List -->
-                <div class="grid grid-cols-1 gap-4" :class="showSplitView ? '2xl:hidden' : 'xl:hidden'">
-                    <div v-for="e in visibleEnrollments" :key="e.id"
-                        class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                        <div class="space-y-3">
-                            <!-- A. Header -->
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="flex items-center gap-3 min-w-0">
-                                    <div
-                                        class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xl shrink-0">
-                                        {{ e.studentName?.charAt(0) }}
-                                    </div>
-                                    <div class="min-w-0">
-                                        <div class="font-black text-gray-900 text-lg leading-tight truncate">{{ e.studentName }}</div>
-                                    </div>
-                                </div>
-
-                                <div class="flex flex-col items-end gap-2 shrink-0">
-                                    <span v-if="(e as any).isGuest"
-                                        class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100">
-                                        {{ $t('common.rescheduled') }}
-                                    </span>
-                                    <span
-                                        class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
-                                        :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
-                                        {{ $t('student.internal_courses.status_' + e.status) }}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- B. Current Course -->
-                            <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                                <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
-                                    {{ $t('classroom.current_course') }}</div>
-                                <div class="mt-1 text-sm font-bold text-slate-900 leading-snug break-words">
-                                    {{ getStudentProgressSummary(e.id).currentCourse }}</div>
-                            </div>
-
-                            <!-- C. Today Course Summary -->
-                            <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
-                                <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
-                                    {{ $t('classroom.today_course_summary') }}</div>
-                                <div class="text-[15px] font-black text-slate-900 break-words">
-                                    {{ getTodayCourseSummary(e).title }}</div>
-                                <div class="flex items-center justify-between gap-2">
-                                    <span class="text-[11px] font-bold text-slate-500">{{ $t('classroom.chapter_progress') }}</span>
-                                    <span class="text-xs font-black text-slate-800">{{ getTodayCourseSummary(e).chapterProgress }}</span>
-                                </div>
-                                <div class="flex items-center justify-between gap-2">
-                                    <span class="text-[11px] font-bold text-slate-500">{{ $t('classroom.completion_status') }}</span>
-                                    <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-black tracking-wide"
-                                        :class="getProgressToneClasses(getTodayCourseSummary(e).tone)">
-                                        {{ getTodayCourseSummary(e).completionStatus }}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <!-- D. Learning Snapshot -->
-                            <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
-                                <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
-                                    {{ $t('classroom.learning_snapshot') }}</div>
-                                <div class="flex items-start justify-between gap-2">
-                                    <div class="min-w-0">
-                                        <div class="text-[11px] font-bold text-slate-500">{{ $t('classroom.highest_progress') }}</div>
-                                        <div class="text-xs font-black text-slate-900 break-words">{{ getStudentProgressSummary(e.id).highestProgressTitle }}</div>
-                                    </div>
-                                    <span class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wide"
-                                        :class="getProgressToneClasses(getStudentProgressSummary(e.id).highestProgressTone)">
-                                        {{ getStudentProgressSummary(e.id).highestProgressStatus }}
-                                    </span>
-                                </div>
-                                <div class="flex items-start justify-between gap-2">
-                                    <div class="min-w-0">
-                                        <div class="text-[11px] font-bold text-slate-500">{{ $t('classroom.latest_progress') }}</div>
-                                        <div class="text-xs font-black text-slate-900 break-words">{{ getStudentProgressSummary(e.id).latestProgressTitle }}</div>
-                                    </div>
-                                    <span class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wide"
-                                        :class="getProgressToneClasses(getStudentProgressSummary(e.id).latestProgressTone)">
-                                        {{ getStudentProgressSummary(e.id).latestProgressStatus }}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <hr class="border-gray-50">
-
-                        <!-- Attendance Row -->
-                        <div class="flex items-center justify-between" v-if="todayOccurrence">
-                            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
-                                $t('attendance.status') }}</span>
-                            <div class="flex items-center gap-3">
-                                <span class="text-sm font-bold transition-colors"
-                                    :class="reportMap.get(e.id!)?.attendanceStatus === 'present' ? 'text-emerald-600' : 'text-gray-400'">
-                                    {{ reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' +
-                                        reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending') }}
-                                </span>
-                                <button type="button" @click="toggleAttendance(e.id!)"
-                                    class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center"
-                                    :class="{
-                                        'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
-                                        'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
-                                        'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
-                                    }" :title="$t('attendance.status')" :disabled="savingMap.has(e.id!)">
-                                    <!-- Present Icon (Check) -->
-                                    <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
-                                        xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
-                                        fill="currentColor">
-                                        <path fill-rule="evenodd"
-                                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                            clip-rule="evenodd" />
-                                    </svg>
-
-                                    <!-- Absent Icon (X) -->
-                                    <svg v-else-if="reportMap.get(e.id!)?.attendanceStatus === 'absent'"
-                                        xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
-                                        fill="currentColor">
-                                        <path fill-rule="evenodd"
-                                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                            clip-rule="evenodd" />
-                                    </svg>
-
-                                    <!-- Pending Icon (Circle/Question) -->
-                                    <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Actions Grid -->
-                        <div class="space-y-2 pt-2">
-                            <div class="grid grid-cols-2 gap-3">
-                                <button @click.stop="navigateToReports(e.id!)"
-                                    class="flex items-center justify-center gap-2 p-3 rounded-2xl bg-emerald-600 text-white border border-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-100">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                        stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    <span class="text-xs font-black tracking-wide">{{ $t('common.reports') }}</span>
-                                </button>
-
-                                <button @click.stop="toggleSplitView(e.id!)"
-                                    class="flex items-center justify-center gap-2 p-3 rounded-2xl border active:scale-95 transition-all"
-                                    :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white border-blue-700 shadow-blue-200 shadow-lg' : 'bg-blue-50 text-blue-700 border-blue-100'">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                        stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                    </svg>
-                                    <span class="text-xs font-black tracking-wide">{{ $t('common.edit') }}</span>
-                                </button>
-                            </div>
-
-                            <button @click.stop="navigateToProfile(e.studentId)"
-                                class="w-full flex items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 active:scale-95 transition-all">
+                            <button @click="copyAttendanceInfo"
+                                class="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
+                                :title="$t('classroom.copy_attendance')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                     stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                                 </svg>
-                                <span class="text-xs font-bold">{{ $t('common.profile') }}</span>
                             </button>
+
+                            <button @click="openAttendanceTemplateModal"
+                                class="p-2 rounded-full bg-gray-50 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                :title="$t('classroom.copy_template_settings')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M11.983 5.5l1.165-2.09a1 1 0 011.733 0l1.165 2.09 2.34.414a1 1 0 01.557 1.69l-1.6 1.641.294 2.303a1 1 0 01-1.414 1.04L14 11.61l-2.223.978a1 1 0 01-1.414-1.04l.294-2.303-1.6-1.64a1 1 0 01.557-1.691l2.369-.414zM5 15h14M7 19h10" />
+                                </svg>
+                            </button>
+
+                            <label class="relative inline-flex items-center cursor-pointer" :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : ($t('classroom.class_held') || 'Class Held')" :class="{ 'opacity-50 cursor-not-allowed': isOccurrenceInHoliday }">
+                                <input type="checkbox" 
+                                    :checked="todayOccurrence && todayOccurrence.isConducted"
+                                    :disabled="isOccurrenceInHoliday"
+                                    @change="toggleIsConducted($event)" class="sr-only peer">
+                                <div
+                                    :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
+                                    class="w-14 h-7 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
+                                </div>
+                            </label>
                         </div>
                     </div>
 
-                    <!-- Empty State Mobile -->
-                    <div v-if="visibleEnrollments.length === 0"
-                        class="flex flex-col items-center justify-center py-12 text-gray-300">
-                        <span class="font-black italic tracking-widest">{{ $t('classroom.no_students_enrolled') }}</span>
-                    </div>
-                </div>
+                    <!-- Teacher Attendance Section -->
+                    <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4" v-if="todayOccurrence">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') || '教師出席紀錄' }}</h3>
+                                <p class="text-xs font-bold text-gray-400">
+                                    {{ $t('classroom.teacher_attendance_subtitle') || '註記您的出缺席狀態' }}
+                                </p>
+                            </div>
+                            
+                            <button @click="openTeacherEditModal"
+                                class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                                </svg>
+                                {{ $t('common.edit') }}
+                            </button>
+                        </div>
 
-                <!-- Desktop Table List -->
-                <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-x-auto" :class="showSplitView ? 'hidden 2xl:block' : 'hidden xl:block'">
-                    <table class="w-full min-w-[1020px] text-left border-collapse">
-                        <thead>
-                            <tr class="bg-gray-50/50">
-                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest text-center"
-                                    v-if="todayOccurrence">{{ $t('attendance.status') }}</th>
-                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">{{
-                                    $t('classroom.student_name') }}</th>
-                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">{{
-                                    $t('classroom.enrollment_status') }}</th>
-                                <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">{{
-                                    $t('classroom.today_course_summary') }}</th>
-                                <th
-                                    class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest text-right w-[96px] xl:w-[176px]">
-                                    {{ $t('classroom.actions') }}</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-50">
-                            <tr v-for="e in visibleEnrollments" :key="e.id"
-                                class="hover:bg-emerald-50/20 transition-colors group">
-                                <!-- Attendance Column -->
-                                <td class="px-3 lg:px-4 py-4 lg:py-6 text-center" v-if="todayOccurrence">
+                        <div v-if="occurrenceTeachers.length > 0" class="flex flex-wrap gap-4 mt-2">
+                            <div v-for="teacher in occurrenceTeachers" :key="teacher.id"
+                                class="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100 transition-colors"
+                                :class="{ 'border-emerald-200 bg-emerald-50/50': isTeacherPresent(teacher.id, teacher.user_id) }">
+                                
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold"
+                                     :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'">
+                                    {{ teacher.name.charAt(0) }}
+                                </div>
+                                <div class="flex-1 pr-2">
+                                    <div class="font-bold text-gray-900">{{ teacher.name }}</div>
+                                    <div class="text-[10px] uppercase font-black tracking-widest"
+                                         :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'text-emerald-600' : 'text-gray-400'">
+                                        {{ isTeacherPresent(teacher.id, teacher.user_id) ? ($t('attendance.present') || '已出席') : ($t('attendance.absent') || '未出席') }}
+                                    </div>
+                                </div>
+                                
+                                <label class="relative inline-flex items-center cursor-pointer ml-2" :class="{'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id || isOccurrenceInHoliday}" :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : (auth.user?.id !== teacher.user_id ? '只能更改自己的出缺席' : '')">
+                                    <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)" :disabled="auth.user?.id !== teacher.user_id || isOccurrenceInHoliday" @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
+                                    <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'" class="w-11 h-6 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        <div v-else class="text-center py-6 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{ $t('classroom.no_teachers_assigned') || '尚未指派教師' }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Quick Attendance Block (Refined & Collapsible) -->
+                    <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden"
+                        v-if="todayOccurrence">
+                        <!-- Header (Always Visible) -->
+                        <div class="p-6 md:p-8 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
+                            @click="isQuickAttendanceExpanded = !isQuickAttendanceExpanded">
+                            <div class="flex items-center gap-4">
+                                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <h3 class="font-black text-xl text-gray-900">{{
+                                        $t('classroom.quick_attendance_title')
+                                    }}</h3>
+                                    <p class="text-xs font-bold text-gray-400">
+                                        {{ $t('classroom.quick_attendance_subtitle') }}
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <button @click.stop="openAddStudentModal"
+                                    class="px-4 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
+                                    {{ $t('classroom.add_student_to_class') }}
+                                </button>
+                                <span v-if="selectedEnrollmentIds.size > 0"
+                                    class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                                    {{ selectedEnrollmentIds.size }} {{ $t('common.selected') }}
+                                </span>
+                                <div class="p-2 rounded-xl bg-gray-50 text-gray-400 transition-transform duration-300"
+                                    :class="{ 'rotate-180': isQuickAttendanceExpanded }">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
+                                            d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Expandable Content -->
+                        <div v-show="isQuickAttendanceExpanded"
+                            class="px-6 md:px-8 pb-8 pt-2 space-y-8 border-t border-gray-50">
+                            <!-- Batch Action Buttons -->
+                            <div class="flex items-center gap-3">
+                                <button @click="batchSetAttendance('present')"
+                                    :disabled="selectedEnrollmentIds.size === 0"
+                                    class="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100/50">
+                                    {{ $t('attendance.present') }}
+                                </button>
+                                <button @click="batchSetAttendance('absent')"
+                                    :disabled="selectedEnrollmentIds.size === 0"
+                                    class="flex-1 px-6 py-4 bg-red-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-700 transition-all active:scale-95 shadow-lg shadow-red-100/50">
+                                    {{ $t('attendance.absent') }}
+                                </button>
+                            </div>
+
+                            <div class="space-y-4">
+                                <!-- Select All Toggle -->
+                                <div class="flex items-center justify-between">
+                                    <button @click="toggleSelectAll"
+                                        class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all active:scale-95"
+                                        :class="selectedEnrollmentIds.size === visibleEnrollments.length && visibleEnrollments.length > 0
+                                            ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-200'
+                                            : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'">
+                                        {{ selectedEnrollmentIds.size === visibleEnrollments.length &&
+                                            visibleEnrollments.length > 0 ? $t('common.deselect_all') :
+                                            $t('common.select_all')
+                                        }}
+                                    </button>
+                                    <span class="text-[10px] font-black text-gray-300 uppercase tracking-widest">{{
+                                        visibleEnrollments.length }} {{ $t('common.total') }}</span>
+                                </div>
+
+                                <!-- Student Grid (Optimized for Visibility) -->
+                                <div
+                                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
+                                    <button v-for="e in visibleEnrollments" :key="e.id"
+                                        @click="toggleEnrollmentSelection(e.id!)"
+                                        class="px-5 py-4 rounded-2xl border transition-all active:scale-95 flex items-center justify-between gap-3 group ring-offset-2 relative overflow-hidden"
+                                        :class="[
+                                            selectedEnrollmentIds.has(e.id!)
+                                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xl shadow-emerald-100 ring-2 ring-emerald-500'
+                                                : 'bg-white text-gray-700 border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/20'
+                                        ]">
+                                        <div class="flex items-center gap-3 min-w-0 z-10">
+                                            <!-- Status Indicator Dot -->
+                                            <div class="w-3 h-3 rounded-full shrink-0 shadow-sm border-2 border-white"
+                                                :class="{
+                                                    'bg-emerald-400': reportMap.get(e.id!)?.attendanceStatus === 'present',
+                                                    'bg-red-400': reportMap.get(e.id!)?.attendanceStatus === 'absent',
+                                                    'bg-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
+                                                }"></div>
+
+                                            <span class="font-black text-base truncate">{{ e.studentName }}</span>
+                                        </div>
+
+                                        <!-- Checkmark for selection -->
+                                        <div class="shrink-0 z-10 transition-all duration-300 transform"
+                                            :class="selectedEnrollmentIds.has(e.id!) ? 'scale-100 opacity-100' : 'scale-50 opacity-0'">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-emerald-100"
+                                                viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd"
+                                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                    clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+
+                                        <!-- Subtle Background Pattern for Selected -->
+                                        <div v-if="selectedEnrollmentIds.has(e.id!)"
+                                            class="absolute -right-4 -bottom-4 text-white/5 transform rotate-12">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20"
+                                                fill="currentColor" viewBox="0 0 24 24">
+                                                <path
+                                                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                                            </svg>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats Bar (Conditional or Compact in Split View?) -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6" v-if="!showSplitView">
+                        <div
+                            class="bg-emerald-600 p-8 rounded-[2.5rem] text-white shadow-xl shadow-emerald-100 flex items-center justify-between">
+                            <div>
+                                <h4 class="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-2">{{
+                                    $t('classroom.total_students') }}</h4>
+                                <p class="text-5xl font-black tracking-tighter">{{ visibleEnrollments.length }}</p>
+                            </div>
+                            <div class="bg-white/20 p-4 rounded-3xl">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div v-if="session"
+                            class="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2 flex items-center gap-12">
+                            <div>
+                                <h4 class="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-2">{{
+                                    $t('classroom.capacity_utilization') }}</h4>
+                                <div class="flex items-end gap-3">
+                                    <p class="text-4xl font-black text-gray-900 tracking-tighter">{{
+                                        Math.round((visibleEnrollments.length / (session?.capacity || 1)) * 100) }}%</p>
+                                    <p class="text-xs font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
+                                        $t('classroom.capacity') }}</p>
+                                </div>
+                            </div>
+                            <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-emerald-500 rounded-full transition-all duration-1000"
+                                    :style="{ width: `${(visibleEnrollments.length / (session?.capacity || 1)) * 100}%` }">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Responsive Card List -->
+                    <div class="grid grid-cols-1 gap-4" :class="showSplitView ? '2xl:hidden' : 'xl:hidden'">
+                        <div v-for="e in visibleEnrollments" :key="e.id"
+                            class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
+                            <div class="space-y-3">
+                                <!-- A. Header -->
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="flex items-center gap-3 min-w-0">
+                                        <div
+                                            class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xl shrink-0">
+                                            {{ e.studentName?.charAt(0) }}
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="font-black text-gray-900 text-lg leading-tight truncate">{{
+                                                e.studentName }}</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex flex-col items-end gap-2 shrink-0">
+                                        <span v-if="(e as any).isGuest"
+                                            class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100">
+                                            {{ $t('common.rescheduled') }}
+                                        </span>
+                                        <span
+                                            class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
+                                            :class="e.status === 'active'
+                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                : (e.status === 'trial'
+                                                    ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                    : 'bg-gray-50 text-gray-400 border-gray-200')">
+                                            {{ $t('student.internal_courses.status_' + e.status) }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- B. Current Course -->
+                                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                                    <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                        {{ $t('classroom.current_course') }}</div>
+                                    <div class="mt-1 text-sm font-bold text-slate-900 leading-snug break-words">
+                                        {{ getStudentProgressSummary(e.id).currentCourse }}</div>
+                                </div>
+
+                                <!-- C. Today Course Summary -->
+                                <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
+                                    <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                        {{ $t('classroom.today_course_summary') }}</div>
+                                    <div class="text-[15px] font-black text-slate-900 break-words">
+                                        {{ getTodayCourseSummary(e).title }}</div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-[11px] font-bold text-slate-500">{{
+                                            $t('classroom.chapter_progress') }}</span>
+                                        <span class="text-xs font-black text-slate-800">{{
+                                            getTodayCourseSummary(e).chapterProgress }}</span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="text-[11px] font-bold text-slate-500">{{
+                                            $t('classroom.completion_status') }}</span>
+                                        <span
+                                            class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-black tracking-wide"
+                                            :class="getProgressToneClasses(getTodayCourseSummary(e).tone)">
+                                            {{ getTodayCourseSummary(e).completionStatus }}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <!-- D. Learning Snapshot -->
+                                <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
+                                    <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
+                                        {{ $t('classroom.learning_snapshot') }}</div>
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div class="min-w-0">
+                                            <div class="text-[11px] font-bold text-slate-500">{{
+                                                $t('classroom.highest_progress') }}</div>
+                                            <div class="text-xs font-black text-slate-900 break-words">{{
+                                                getStudentProgressSummary(e.id).highestProgressTitle }}</div>
+                                        </div>
+                                        <span
+                                            class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wide"
+                                            :class="getProgressToneClasses(getStudentProgressSummary(e.id).highestProgressTone)">
+                                            {{ getStudentProgressSummary(e.id).highestProgressStatus }}
+                                        </span>
+                                    </div>
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div class="min-w-0">
+                                            <div class="text-[11px] font-bold text-slate-500">{{
+                                                $t('classroom.latest_progress') }}</div>
+                                            <div class="text-xs font-black text-slate-900 break-words">{{
+                                                getStudentProgressSummary(e.id).latestProgressTitle }}</div>
+                                        </div>
+                                        <span
+                                            class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wide"
+                                            :class="getProgressToneClasses(getStudentProgressSummary(e.id).latestProgressTone)">
+                                            {{ getStudentProgressSummary(e.id).latestProgressStatus }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <hr class="border-gray-50">
+
+                            <!-- Attendance Row -->
+                            <div class="flex items-center justify-between" v-if="todayOccurrence">
+                                <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
+                                    $t('attendance.status') }}</span>
+                                <div class="flex items-center gap-3">
+                                    <span class="text-sm font-bold transition-colors"
+                                        :class="reportMap.get(e.id!)?.attendanceStatus === 'present' ? 'text-emerald-600' : 'text-gray-400'">
+                                        {{ reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' +
+                                            reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending') }}
+                                    </span>
                                     <button type="button" @click="toggleAttendance(e.id!)"
-                                        class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center mx-auto"
+                                        class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center"
                                         :class="{
                                             'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
                                             'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
                                             'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
-                                        }"
-                                        :title="$t('attendance.status') + ': ' + (reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' + reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending'))"
-                                        :disabled="savingMap.has(e.id!)">
+                                        }" :title="$t('attendance.status')" :disabled="savingMap.has(e.id!)">
                                         <!-- Present Icon (Check) -->
                                         <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
                                             xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
@@ -1280,202 +2065,354 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                                                 d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                     </button>
-                                </td>
+                                </div>
+                            </div>
 
-                                <td class="px-3 lg:px-4 py-4 lg:py-6">
-                                    <div class="flex items-center gap-3 lg:gap-4">
-                                        <div
-                                            class="w-10 lg:w-12 h-10 lg:h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-lg lg:text-xl shrink-0">
-                                            {{ e.studentName?.charAt(0) }}
-                                        </div>
-                                        <div class="min-w-0">
-                                            <div class="font-black text-gray-900 text-base lg:text-lg">{{ e.studentName }}</div>
-                                            <div class="mt-0.5 lg:mt-1 text-[9px] lg:text-[10px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-gray-400 whitespace-nowrap">
-                                                {{ $t('classroom.current_course') }}</div>
-                                            <div class="mt-0.5 lg:mt-1 text-xs lg:text-sm font-bold text-gray-700 leading-snug break-words">
-                                                {{ getStudentProgressSummary(e.id).currentCourse }}
+                            <!-- Actions Grid -->
+                            <div class="space-y-2 pt-2">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: e.id! } }"
+                                        class="inline-flex items-center justify-center gap-2 p-3 rounded-2xl bg-emerald-600 text-white border border-emerald-700 no-underline active:scale-95 transition-all shadow-lg shadow-emerald-100">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        </svg>
+                                        <span class="text-xs font-black tracking-wide">{{ $t('common.reports') }}</span>
+                                    </router-link>
+
+                                    <button @click.stop="toggleSplitView(e.id!)"
+                                        class="flex items-center justify-center gap-2 p-3 rounded-2xl border active:scale-95 transition-all"
+                                        :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white border-blue-700 shadow-blue-200 shadow-lg' : 'bg-blue-50 text-blue-700 border-blue-100'">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                        </svg>
+                                        <span class="text-xs font-black tracking-wide">{{ $t('common.edit') }}</span>
+                                    </button>
+                                </div>
+
+                                <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
+                                    class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 no-underline active:scale-95 transition-all">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                    <span class="text-xs font-bold">{{ $t('common.profile') }}</span>
+                                </router-link>
+                            </div>
+                        </div>
+
+                        <!-- Empty State Mobile -->
+                        <div v-if="visibleEnrollments.length === 0"
+                            class="flex flex-col items-center justify-center py-12 text-gray-300">
+                            <span class="font-black italic tracking-widest">{{ $t('classroom.no_students_enrolled')
+                            }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Desktop Table List -->
+                    <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-x-auto"
+                        :class="showSplitView ? 'hidden 2xl:block' : 'hidden xl:block'">
+                        <table class="w-full min-w-[1020px] text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50/50">
+                                    <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest text-center"
+                                        v-if="todayOccurrence">{{ $t('attendance.status') }}</th>
+                                    <th
+                                        class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">
+                                        {{
+                                            $t('classroom.student_name') }}</th>
+                                    <th
+                                        class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">
+                                        {{
+                                            $t('classroom.enrollment_status') }}</th>
+                                    <th
+                                        class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">
+                                        {{
+                                            $t('classroom.today_course_summary') }}</th>
+                                    <th
+                                        class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest text-right w-[96px] xl:w-[176px]">
+                                        {{ $t('classroom.actions') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-50">
+                                <tr v-for="e in visibleEnrollments" :key="e.id"
+                                    class="hover:bg-emerald-50/20 transition-colors group">
+                                    <!-- Attendance Column -->
+                                    <td class="px-3 lg:px-4 py-4 lg:py-6 text-center" v-if="todayOccurrence">
+                                        <button type="button" @click="toggleAttendance(e.id!)"
+                                            class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center mx-auto"
+                                            :class="{
+                                                'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
+                                                'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
+                                                'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
+                                            }"
+                                            :title="$t('attendance.status') + ': ' + (reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' + reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending'))"
+                                            :disabled="savingMap.has(e.id!)">
+                                            <!-- Present Icon (Check) -->
+                                            <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
+                                                xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
+                                                fill="currentColor">
+                                                <path fill-rule="evenodd"
+                                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                    clip-rule="evenodd" />
+                                            </svg>
+
+                                            <!-- Absent Icon (X) -->
+                                            <svg v-else-if="reportMap.get(e.id!)?.attendanceStatus === 'absent'"
+                                                xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
+                                                fill="currentColor">
+                                                <path fill-rule="evenodd"
+                                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                                                    clip-rule="evenodd" />
+                                            </svg>
+
+                                            <!-- Pending Icon (Circle/Question) -->
+                                            <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+                                                viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                        </button>
+                                    </td>
+
+                                    <td class="px-3 lg:px-4 py-4 lg:py-6">
+                                        <div class="flex items-center gap-3 lg:gap-4">
+                                            <div
+                                                class="w-10 lg:w-12 h-10 lg:h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-lg lg:text-xl shrink-0">
+                                                {{ e.studentName?.charAt(0) }}
+                                            </div>
+                                            <div class="min-w-0">
+                                                <div class="font-black text-gray-900 text-base lg:text-lg">{{
+                                                    e.studentName }}</div>
+                                                <div
+                                                    class="mt-0.5 lg:mt-1 text-[9px] lg:text-[10px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-gray-400 whitespace-nowrap">
+                                                    {{ $t('classroom.current_course') }}</div>
+                                                <div
+                                                    class="mt-0.5 lg:mt-1 text-xs lg:text-sm font-bold text-gray-700 leading-snug break-words">
+                                                    {{ getStudentProgressSummary(e.id).currentCourse }}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </td>
-                                <td class="px-3 lg:px-4 py-4 lg:py-6">
-                                    <div class="flex flex-col lg:flex-row gap-2 lg:gap-1">
-                                        <span v-if="(e as any).isGuest"
-                                            class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border bg-purple-50 text-purple-700 border-purple-100 whitespace-nowrap inline-block lg:inline">
-                                            {{ $t('common.rescheduled') }}
-                                        </span>
-                                        <span
-                                            class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border whitespace-nowrap inline-block lg:inline"
-                                            :class="e.status === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-gray-50 text-gray-400 border-gray-200'">
-                                            {{ $t('student.internal_courses.status_' + e.status) }}
-                                        </span>
-                                    </div>
-                                </td>
-
-                                <td class="px-3 lg:px-4 py-4 lg:py-6">
-                                    <div class="rounded-2xl border border-slate-200 bg-white p-2 lg:p-3 space-y-2 lg:space-y-3 min-w-[220px] lg:min-w-[200px]">
-                                        <div class="text-[9px] lg:text-[11px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
-                                            {{ $t('classroom.today_course_summary') }}</div>
-                                        <div class="text-xs lg:text-sm font-black text-slate-900 break-words">
-                                            {{ getTodayCourseSummary(e).title }}</div>
-                                        <div class="flex items-center justify-between gap-1.5 lg:gap-2">
-                                            <span class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{ $t('classroom.chapter_progress') }}</span>
-                                            <span class="text-[10px] lg:text-xs font-black text-slate-800 shrink-0">{{ getTodayCourseSummary(e).chapterProgress }}</span>
-                                        </div>
-                                        <div class="flex items-center justify-between gap-1.5 lg:gap-2">
-                                            <span class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{ $t('classroom.completion_status') }}</span>
-                                            <span class="inline-flex items-center rounded-full border px-2 lg:px-2.5 py-0.5 lg:py-1 text-[10px] lg:text-[11px] font-black tracking-wide shrink-0"
-                                                :class="getProgressToneClasses(getTodayCourseSummary(e).tone)">
-                                                {{ getTodayCourseSummary(e).completionStatus }}
+                                    </td>
+                                    <td class="px-3 lg:px-4 py-4 lg:py-6">
+                                        <div class="flex flex-col lg:flex-row gap-2 lg:gap-1">
+                                            <span v-if="(e as any).isGuest"
+                                                class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border bg-purple-50 text-purple-700 border-purple-100 whitespace-nowrap inline-block lg:inline">
+                                                {{ $t('common.rescheduled') }}
+                                            </span>
+                                            <span
+                                                class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border whitespace-nowrap inline-block lg:inline"
+                                                :class="e.status === 'active'
+                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                                                    : (e.status === 'trial'
+                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
+                                                        : 'bg-gray-50 text-gray-400 border-gray-200')">
+                                                {{ $t('student.internal_courses.status_' + e.status) }}
                                             </span>
                                         </div>
+                                    </td>
 
-                                        <div class="border-t border-slate-100 pt-2 lg:pt-3 space-y-2">
-                                            <div class="text-[9px] lg:text-[11px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
-                                                {{ $t('classroom.learning_snapshot') }}</div>
-
-                                            <div class="flex items-start justify-between gap-1.5 lg:gap-2">
-                                                <div class="min-w-0">
-                                                    <div class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{ $t('classroom.highest_progress') }}</div>
-                                                    <div class="text-[11px] lg:text-xs font-black text-slate-900 break-words">{{ getStudentProgressSummary(e.id).highestProgressTitle }}</div>
-                                                </div>
-                                                <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 lg:px-2 py-0.5 text-[9px] lg:text-[10px] font-black tracking-wider lg:tracking-wide"
-                                                    :class="getProgressToneClasses(getStudentProgressSummary(e.id).highestProgressTone)">
-                                                    {{ getStudentProgressSummary(e.id).highestProgressStatus }}
+                                    <td class="px-3 lg:px-4 py-4 lg:py-6">
+                                        <div
+                                            class="rounded-2xl border border-slate-200 bg-white p-2 lg:p-3 space-y-2 lg:space-y-3 min-w-[220px] lg:min-w-[200px]">
+                                            <div
+                                                class="text-[9px] lg:text-[11px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
+                                                {{ $t('classroom.today_course_summary') }}</div>
+                                            <div class="text-xs lg:text-sm font-black text-slate-900 break-words">
+                                                {{ getTodayCourseSummary(e).title }}</div>
+                                            <div class="flex items-center justify-between gap-1.5 lg:gap-2">
+                                                <span class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{
+                                                    $t('classroom.chapter_progress') }}</span>
+                                                <span
+                                                    class="text-[10px] lg:text-xs font-black text-slate-800 shrink-0">{{
+                                                        getTodayCourseSummary(e).chapterProgress }}</span>
+                                            </div>
+                                            <div class="flex items-center justify-between gap-1.5 lg:gap-2">
+                                                <span class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{
+                                                    $t('classroom.completion_status') }}</span>
+                                                <span
+                                                    class="inline-flex items-center rounded-full border px-2 lg:px-2.5 py-0.5 lg:py-1 text-[10px] lg:text-[11px] font-black tracking-wide shrink-0"
+                                                    :class="getProgressToneClasses(getTodayCourseSummary(e).tone)">
+                                                    {{ getTodayCourseSummary(e).completionStatus }}
                                                 </span>
                                             </div>
 
-                                            <div class="flex items-start justify-between gap-1.5 lg:gap-2">
-                                                <div class="min-w-0">
-                                                    <div class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{ $t('classroom.latest_progress') }}</div>
-                                                    <div class="text-[11px] lg:text-xs font-black text-slate-900 break-words">{{ getStudentProgressSummary(e.id).latestProgressTitle }}</div>
+                                            <div class="border-t border-slate-100 pt-2 lg:pt-3 space-y-2">
+                                                <div
+                                                    class="text-[9px] lg:text-[11px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
+                                                    {{ $t('classroom.learning_snapshot') }}</div>
+
+                                                <div class="flex items-start justify-between gap-1.5 lg:gap-2">
+                                                    <div class="min-w-0">
+                                                        <div
+                                                            class="text-[10px] lg:text-[11px] font-bold text-slate-500">
+                                                            {{ $t('classroom.highest_progress') }}</div>
+                                                        <div
+                                                            class="text-[11px] lg:text-xs font-black text-slate-900 break-words">
+                                                            {{ getStudentProgressSummary(e.id).highestProgressTitle }}
+                                                        </div>
+                                                    </div>
+                                                    <span
+                                                        class="shrink-0 inline-flex items-center rounded-full border px-1.5 lg:px-2 py-0.5 text-[9px] lg:text-[10px] font-black tracking-wider lg:tracking-wide"
+                                                        :class="getProgressToneClasses(getStudentProgressSummary(e.id).highestProgressTone)">
+                                                        {{ getStudentProgressSummary(e.id).highestProgressStatus }}
+                                                    </span>
                                                 </div>
-                                                <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 lg:px-2 py-0.5 text-[9px] lg:text-[10px] font-black tracking-wider lg:tracking-wide"
-                                                    :class="getProgressToneClasses(getStudentProgressSummary(e.id).latestProgressTone)">
-                                                    {{ getStudentProgressSummary(e.id).latestProgressStatus }}
-                                                </span>
+
+                                                <div class="flex items-start justify-between gap-1.5 lg:gap-2">
+                                                    <div class="min-w-0">
+                                                        <div
+                                                            class="text-[10px] lg:text-[11px] font-bold text-slate-500">
+                                                            {{ $t('classroom.latest_progress') }}</div>
+                                                        <div
+                                                            class="text-[11px] lg:text-xs font-black text-slate-900 break-words">
+                                                            {{ getStudentProgressSummary(e.id).latestProgressTitle }}
+                                                        </div>
+                                                    </div>
+                                                    <span
+                                                        class="shrink-0 inline-flex items-center rounded-full border px-1.5 lg:px-2 py-0.5 text-[9px] lg:text-[10px] font-black tracking-wider lg:tracking-wide"
+                                                        :class="getProgressToneClasses(getStudentProgressSummary(e.id).latestProgressTone)">
+                                                        {{ getStudentProgressSummary(e.id).latestProgressStatus }}
+                                                    </span>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </td>
+                                    </td>
 
-                                <td class="px-3 lg:px-4 py-4 lg:py-6 text-right align-top">
-                                    <div class="flex flex-col xl:flex-row justify-end items-end xl:items-center gap-1.5 lg:gap-2">
-                                        <button @click="navigateToReports(e.id!)"
-                                            class="p-2.5 xl:p-3 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-90"
-                                            :title="$t('classroom.view_reports')">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                            </svg>
-                                        </button>
-                                        <button @click="toggleSplitView(e.id!)"
-                                            class="p-2.5 xl:p-3 rounded-2xl border border-gray-100 shadow-sm transition-all active:scale-90"
-                                            :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-gray-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-100'"
-                                            :title="$t('classroom.quick_edit')">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                            </svg>
-                                        </button>
-                                        <button @click="navigateToProfile(e.studentId)"
-                                            class="p-2.5 xl:p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"
-                                            :title="$t('classroom.view_profile')">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                            <tr v-if="visibleEnrollments.length === 0">
-                                <td :colspan="todayOccurrence ? 5 : 4"
-                                    class="px-4 lg:px-8 py-12 lg:py-20 text-center font-black italic text-gray-300 tracking-widest text-xs lg:text-base">
-                                    {{ $t('classroom.no_students_enrolled') }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                                    <td class="px-3 lg:px-4 py-4 lg:py-6 text-right align-top">
+                                        <div
+                                            class="flex flex-col xl:flex-row justify-end items-end xl:items-center gap-1.5 lg:gap-2">
+                                            <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: e.id! } }"
+                                                class="p-2.5 xl:p-3 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-90"
+                                                :title="$t('classroom.view_reports')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                    viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                                </svg>
+                                            </router-link>
+                                            <button @click="toggleSplitView(e.id!)"
+                                                class="p-2.5 xl:p-3 rounded-2xl border border-gray-100 shadow-sm transition-all active:scale-90"
+                                                :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-gray-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-100'"
+                                                :title="$t('classroom.quick_edit')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                    viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                </svg>
+                                            </button>
+                                            <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
+                                                class="p-2.5 xl:p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"
+                                                :title="$t('classroom.view_profile')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                    viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                            </router-link>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr v-if="visibleEnrollments.length === 0">
+                                    <td :colspan="todayOccurrence ? 5 : 4"
+                                        class="px-4 lg:px-8 py-12 lg:py-20 text-center font-black italic text-gray-300 tracking-widest text-xs lg:text-base">
+                                        {{ $t('classroom.no_students_enrolled') }}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
 
                 <!-- RIGHT COLUMN: Report Editor -->
                 <div v-if="showSplitView && selectedEnrollmentId"
                     class="animate-in slide-in-from-right-4 duration-500 min-w-0 w-full">
-                    <div
-                        class="sticky top-6 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 p-6 overflow-hidden">
-                    <div class="flex items-center justify-between mb-6">
-                        <div class="flex items-center gap-3">
-                            <!-- Mobile Back Button -->
-                            <button @click="showSplitView = false"
-                                class="lg:hidden p-2 -ml-2 text-gray-400 hover:text-gray-600 rounded-full">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    <div class="sticky top-20 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 flex flex-col overflow-hidden"
+                        style="max-height: calc(100vh - 7rem);">
+                        <!-- Header: Fixed at top of sticky box -->
+                        <div
+                            class="flex items-center justify-between p-6 pb-4 shrink-0 bg-white z-20 border-b border-gray-50 shadow-sm shadow-gray-50/20">
+                            <div class="flex items-center gap-4 min-w-0">
+                                <!-- Avatar and Name -->
+                                <div
+                                    class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl shrink-0 shadow-lg shadow-emerald-100">
+                                    {{visibleEnrollments.find(e => e.id ===
+                                        selectedEnrollmentId)?.studentName?.charAt(0)}}
+                                </div>
+                                <div class="min-w-0">
+                                    <div class="font-black text-gray-900 text-xl leading-tight truncate">
+                                        {{visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName}}
+                                    </div>
+                                    <div class="flex items-center gap-1.5 mt-1">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                        <div class="text-[11px] font-black uppercase tracking-widest text-emerald-600">
+                                            {{ displayedOccurrenceDate }}
+                                            <span v-if="todayOccurrence?.effectiveStartTime"
+                                                class="ml-1 text-emerald-600">
+                                                {{ todayOccurrence.effectiveStartTime.slice(0, 5) }}-{{
+                                                todayOccurrence.effectiveEndTime?.slice(0, 5) }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button @click="closeSplitView"
+                                class="w-10 h-10 rounded-xl bg-gray-50 text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all flex items-center justify-center group active:scale-90">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                     stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M15 19l-7-7 7-7" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
-                            <div
-                                class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">
-                                {{enrollments.find(e => e.id === selectedEnrollmentId)?.studentName?.charAt(0)}}
-                            </div>
-                            <div>
-                                <h3 class="font-black text-gray-900">{{enrollments.find(e => e.id ===
-                                    selectedEnrollmentId)?.studentName}}</h3>
-                                <p class="text-xs font-bold text-gray-400">
-                                    {{ todayOccurrence?.occurrenceDate ? new
-                                        Date(todayOccurrence?.occurrenceDate).toLocaleDateString() : 'Today' }}
-                                    <span v-if="todayOccurrence?.effectiveStartTime" class="ml-1 text-emerald-600">
-                                        {{ todayOccurrence.effectiveStartTime.slice(0, 5) }}
-                                    </span>
-                                </p>
+                        </div>
+
+                        <!-- Scrollable Body -->
+                        <div class="flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar bg-gray-50/30">
+                            <ReportEditor ref="quickReportEditorRef" v-if="reportMap.get(selectedEnrollmentId)"
+                                :key="selectedEnrollmentId" :report-id="reportMap.get(selectedEnrollmentId)?.id"
+                                :initial-version="reportMap.get(selectedEnrollmentId)?.version"
+                                :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
+                                :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
+                                :course-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
+                                :course-display-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
+                                :initial-classroom-name="session?.classroom_name"
+                                :initial-session-name="session?.name"
+                                :initial-session-time="session ? `${session.start_time?.slice(0, 5) || ''}-${session.end_time?.slice(0, 5) || ''}` : ''"
+                                :initial-student-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName"
+                                :initial-student-id="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
+                                :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
+                                :available-lessons="courseLessons"
+                                :initial-report-external-link="reportMap.get(selectedEnrollmentId)?.externalLink"
+                                :initial-is-completed="reportMap.get(selectedEnrollmentId)?.isCompleted"
+                                :initial-progress-start="reportMap.get(selectedEnrollmentId)?.progressStart"
+                                :initial-progress-end="reportMap.get(selectedEnrollmentId)?.progressEnd"
+                                :initial-attendance-status="reportMap.get(selectedEnrollmentId)?.attendanceStatus"
+                                :initial-absence-reason="reportMap.get(selectedEnrollmentId)?.absenceReason"
+                                :initial-class-participation="parseFloat(reportMap.get(selectedEnrollmentId)?.classParticipation || '0')"
+                                :initial-classroom-behavior="parseFloat(reportMap.get(selectedEnrollmentId)?.classroomBehavior || '0')"
+                                :initial-contact-notes="reportMap.get(selectedEnrollmentId)?.contactNotes"
+                                :initial-class-notes="reportMap.get(selectedEnrollmentId)?.classNotes"
+                                :initial-content="reportMap.get(selectedEnrollmentId)?.content"
+                                :initial-enrollment-external-link="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
+                                @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
+                                @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
+                                @save-success="handleSaveSuccess($event, selectedEnrollmentId!)"
+                                @save-error="handleSaveError" @conflict="handleConflict"
+                                class="h-full border-none shadow-none rounded-none" />
+
+                            <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
+                                <p class="font-bold">{{ $t('report.no_report_today') }}</p>
+                                <p class="text-xs mt-1">{{ $t('report.is_student_active_hint') }}</p>
                             </div>
                         </div>
-                        <button @click="showSplitView = false" class="p-2 hover:bg-gray-100 rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" viewBox="0 0 20 20"
-                                fill="currentColor">
-                                <path fill-rule="evenodd"
-                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                    clip-rule="evenodd" />
-                            </svg>
-                        </button>
-                    </div>
-
-                    <ReportEditor ref="quickReportEditorRef" v-if="reportMap.get(selectedEnrollmentId)" :key="selectedEnrollmentId"
-                        :report-id="reportMap.get(selectedEnrollmentId)?.id"
-                        :initial-version="reportMap.get(selectedEnrollmentId)?.version"
-                        :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
-                        :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
-                        :course-name="enrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + enrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
-                        :course-display-name="enrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
-                        :initial-student-id="enrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
-                        :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
-                        :available-lessons="courseLessons"
-                        :initial-report-external-link="reportMap.get(selectedEnrollmentId)?.externalLink"
-                        :initial-is-completed="reportMap.get(selectedEnrollmentId)?.isCompleted"
-                        :initial-progress-start="reportMap.get(selectedEnrollmentId)?.progressStart"
-                        :initial-progress-end="reportMap.get(selectedEnrollmentId)?.progressEnd"
-                        :initial-attendance-status="reportMap.get(selectedEnrollmentId)?.attendanceStatus"
-                        :initial-absence-reason="reportMap.get(selectedEnrollmentId)?.absenceReason"
-                        :initial-class-participation="parseFloat(reportMap.get(selectedEnrollmentId)?.classParticipation || '0')"
-                        :initial-classroom-behavior="parseFloat(reportMap.get(selectedEnrollmentId)?.classroomBehavior || '0')"
-                        :initial-contact-notes="reportMap.get(selectedEnrollmentId)?.contactNotes"
-                        :initial-class-notes="reportMap.get(selectedEnrollmentId)?.classNotes"
-                        :initial-content="reportMap.get(selectedEnrollmentId)?.content"
-                        :initial-enrollment-external-link="enrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
-                        @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
-                        @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
-                        @save-success="handleSaveSuccess($event, selectedEnrollmentId!)" @save-error="handleSaveError"
-                        @conflict="handleConflict" class="h-full border-none shadow-none rounded-none" />
-
-                    <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
-                        <p class="font-bold">{{ $t('report.no_report_today') }}</p>
-                        <p class="text-xs mt-1">{{ $t('report.is_student_active_hint') }}</p>
-                    </div>
                     </div>
                 </div>
             </div>
@@ -1491,5 +2428,361 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
             :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
             :is-loading="isRefreshing" @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
 
+        <div v-if="showAddStudentModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div
+                class="bg-white rounded-2xl flex flex-col w-full max-w-2xl max-h-[85vh] shadow-2xl m-4 overflow-hidden">
+                <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                    <h3 class="text-xl font-bold text-gray-900">{{ $t('classroom.add_student_modal_title') }}</h3>
+                    <button @click="closeAddStudentModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-6 space-y-5">
+                    <p class="text-sm text-gray-500">{{ $t('classroom.add_student_modal_hint') }}</p>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_search')
+                        }}</label>
+                        <input v-model="makeupSearch" type="text"
+                            :placeholder="$t('classroom.add_student_search_placeholder')"
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" />
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_student')
+                        }}</label>
+                        <select v-model="selectedMakeupStudentId" @change="handleMakeupStudentChange"
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                            :disabled="isAddingStudent">
+                            <option value="">{{ $t('classroom.add_student_select_student_placeholder') }}</option>
+                            <option v-for="student in filteredMakeupStudents" :key="student.studentId"
+                                :value="student.studentId">
+                                {{ student.studentName }}{{ student.studentEmail ? ` (${student.studentEmail})` : '' }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_course')
+                        }}</label>
+                        <select v-model="selectedMakeupEnrollmentId"
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                            :disabled="isAddingStudent || !selectedMakeupStudentId">
+                            <option value="">{{ $t('classroom.add_student_select_course_placeholder') }}</option>
+                            <option v-for="candidate in selectedStudentEnrollments" :key="candidate.id"
+                                :value="candidate.id">
+                                {{ candidate.courseDisplayName || `${candidate.courseSubject} ${candidate.courseStage}`
+                                }}
+                                {{ candidate.classSessionName ? ` · ${candidate.classSessionName}` : '' }}
+                            </option>
+                            <option v-if="selectedMakeupStudentId && selectedStudentEnrollments.length === 0" disabled>
+                                {{ $t('classroom.add_student_no_active_courses') }}
+                            </option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-700 mb-2">{{
+                            $t('classroom.add_student_join_date') }}</label>
+                        <input type="date" v-model="makeupJoinDate"
+                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none" />
+                    </div>
+
+                    <div v-if="selectedMakeupEnrollment" class="bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+                        <p class="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2">{{
+                            $t('classroom.add_student_selected_summary') }}</p>
+                        <p class="text-sm text-emerald-900 font-semibold">{{ selectedMakeupEnrollment.studentName }}</p>
+                        <p class="text-xs text-emerald-800 mt-1">{{ selectedMakeupEnrollment.courseDisplayName ||
+                            `${selectedMakeupEnrollment.courseSubject} ${selectedMakeupEnrollment.courseStage}` }}</p>
+                        <p class="text-xs text-emerald-700 mt-1">{{ selectedMakeupEnrollment.classSessionName ||
+                            $t('classroom.session') }}</p>
+                    </div>
+                </div>
+
+                <div class="px-6 py-5 border-t border-gray-100 flex justify-end gap-3 bg-gray-50/50">
+                    <button @click="closeAddStudentModal"
+                        class="px-5 py-2.5 text-gray-600 hover:bg-gray-200/60 font-bold rounded-xl transition-all">
+                        {{ $t('common.cancel') }}
+                    </button>
+                    <button @click="submitAddStudentToClass"
+                        :disabled="isAddingStudent || !selectedMakeupEnrollmentId || !makeupJoinDate"
+                        class="px-8 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <svg v-if="isAddingStudent" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        {{ $t('classroom.add_student_submit') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <CopyTemplateEditorModal
+            v-model="showAttendanceTemplateModal"
+            :title="$t('classroom.copy_template_title')"
+            :hint="$t('classroom.copy_template_hint')"
+            :variable-title="$t('classroom.copy_template_variables')"
+            :content-title="$t('classroom.copy_template_content')"
+            :preview-title="$t('classroom.copy_template_preview_title')"
+            :preview-hint="$t('classroom.copy_template_preview_hint')"
+            :preview-empty="$t('classroom.copy_template_preview_empty')"
+            :template-text="attendanceTemplateText"
+            :preview-text="attendanceTemplatePreviewText"
+            :variable-count="attendanceTemplateVariables.length"
+            :is-loading="isLoadingAttendanceTemplate"
+            :loading-text="$t('classroom.copy_template_loading')"
+            :loading-hint="$t('classroom.copy_template_loading_hint')"
+            :save-loading="isSavingAttendanceTemplate"
+            :cancel-text="$t('common.cancel')"
+            :save-text="$t('common.save')"
+            :saving-text="$t('common.saving')"
+            @update:template-text="attendanceTemplateText = $event"
+            @save="saveAttendanceTemplate"
+        >
+            <template #controls>
+                <div class="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+                    <div class="space-y-2">
+                        <p class="text-sm font-bold text-amber-900">{{ $t('classroom.copy_template_scope') }}</p>
+                        <label class="flex items-center gap-2 text-sm text-amber-900/90">
+                            <input v-model="attendanceTemplateScope" type="radio" value="class_session"
+                                class="border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                            {{ $t('classroom.copy_template_scope_session') }}
+                        </label>
+                        <label class="flex items-center gap-2 text-sm text-amber-900/90">
+                            <input v-model="attendanceTemplateScope" type="radio" value="user_default"
+                                class="border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                            {{ $t('classroom.copy_template_scope_user') }}
+                        </label>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                                {{ $t('classroom.copy_template_load_from') }}
+                            </label>
+                            <select v-model="selectedAttendanceTemplateLoadKey"
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option v-for="item in attendanceTemplateLoadOptions" :key="item.key" :value="item.key">
+                                    {{ item.label }}
+                                </option>
+                            </select>
+                        </div>
+                        <button @click="loadSelectedAttendanceTemplate"
+                            class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
+                            :disabled="!selectedAttendanceTemplateLoadKey">
+                            {{ $t('classroom.copy_template_load_action') }}
+                        </button>
+                    </div>
+                </div>
+            </template>
+
+            <template #variables>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div
+                        v-for="variable in attendanceTemplateVariables"
+                        :key="variable.key"
+                        class="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-bold text-gray-900 leading-tight">{{ variable.label }}</p>
+                                <p class="mt-1 text-xs leading-5 text-gray-500">{{ variable.description }}</p>
+                            </div>
+                            <button
+                                @click="insertAttendanceTemplateVariable(variable.key)"
+                                class="shrink-0 whitespace-nowrap rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
+                                :title="variable.token"
+                            >
+                                {{ variable.token }}
+                            </button>
+                        </div>
+
+                        <div v-if="variable.modeOptions?.length" class="space-y-1">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {{ $t('classroom.copy_template_variable_mode_label') }}
+                            </label>
+                            <select
+                                v-model="selectedAttendanceTemplateModes[variable.key]"
+                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                            >
+                                <option v-for="mode in variable.modeOptions" :key="mode.value" :value="mode.value">
+                                    {{ mode.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {{ $t('classroom.copy_template_preview_title') }}
+                            </p>
+                            <p class="min-h-[3.25rem] whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+                                {{ variable.previewValue || '—' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </CopyTemplateEditorModal>
+
+        <!-- Teacher Selection Modal -->
+        <Transition name="fade">
+            <div v-if="showTeacherEditModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="showTeacherEditModal = false"></div>
+                
+                <div class="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+                    <!-- Header -->
+                    <div class="p-8 border-b border-gray-50 flex items-center justify-between shrink-0">
+                        <div>
+                            <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('classroom.manage_teachers') || '管理教師' }}</h2>
+                            <p class="text-sm font-bold text-gray-400 mt-1">{{ displayedOccurrenceDate }}</p>
+                        </div>
+                        <button @click="showTeacherEditModal = false" class="p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Current Schedule Section -->
+                    <div class="px-6 py-4 border-b border-gray-50 bg-emerald-50/30">
+                        <h4 class="text-xs font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center justify-between">
+                            {{ $t('classroom.teaching_schedule') }}
+                            <router-link :to="{ name: 'classrooms', query: { edit: sessionId } }" class="text-[10px] font-bold text-emerald-600 hover:underline">
+                                {{ $t('classroom.master_schedule_link') }}
+                            </router-link>
+                        </h4>
+                        <div class="space-y-2">
+                            <div v-for="st in sessionTeachers.filter(st => {
+                                if (!todayOccurrence) return false;
+                                const ds = DateUtils.formatLocalDate(todayOccurrence.occurrenceDate);
+                                return ds >= st.effective_from && (!st.effective_to || ds <= st.effective_to);
+                            })" :key="st.id + st.effective_from" 
+                                class="flex items-center justify-between p-3 rounded-xl bg-white border border-emerald-100 shadow-sm">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-xs">
+                                        {{ st.name.charAt(0) }}
+                                    </div>
+                                    <div>
+                                        <div class="text-sm font-black text-gray-900">{{ st.name }}</div>
+                                        <div class="text-[10px] font-bold text-gray-400">
+                                            {{ st.effective_to ? `${st.effective_from} ~ ${st.effective_to}` : `${st.effective_from} ~ ${$t('classroom.default_teacher')}` }}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button @click="st.id && removeAssignment(st.id, st.effective_from)"
+                                    class="p-2 text-gray-300 hover:text-rose-500 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                            <div v-if="!sessionTeachers.some(st => {
+                                if (!todayOccurrence) return false;
+                                const ds = DateUtils.formatLocalDate(todayOccurrence.occurrenceDate);
+                                return ds >= st.effective_from && (!st.effective_to || ds <= st.effective_to);
+                            })" class="text-center py-4 text-xs font-bold text-gray-400 italic">
+                                {{ $t('classroom.no_teachers_assigned') }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Search Bar -->
+                    <div class="p-6 bg-gray-50/50 border-b border-gray-50">
+                        <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+                            {{ $t('classroom.one_day_assignment') }}
+                        </h4>
+                        <div class="flex items-center gap-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                            <div class="pl-3 text-gray-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </div>
+                            <input v-model="teacherSearchQuery" type="text" :placeholder="$t('common.search_teacher')"
+                                class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
+                        </div>
+                    </div>
+
+                    <!-- Teacher List -->
+                    <div class="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar min-h-[300px]">
+                        <div v-for="teacher in filteredTeachers" :key="teacher.id"
+                            @click="addTeacherForToday(teacher)"
+                            class="flex items-center justify-between p-4 rounded-2xl border bg-white border-gray-100 hover:border-emerald-100 hover:bg-emerald-50/10 transition-all cursor-pointer group">
+                            
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center font-black text-lg transition-transform group-hover:scale-110 group-hover:bg-emerald-100 group-hover:text-emerald-700">
+                                    {{ teacher.name.charAt(0) }}
+                                </div>
+                                <div>
+                                    <div class="font-black text-gray-900">{{ teacher.name }}</div>
+                                    <div class="text-xs font-bold text-gray-400">{{ teacher.email || teacher.phone || 'No contact info' }}</div>
+                                </div>
+                            </div>
+
+                            <div class="w-8 h-8 rounded-full border-2 border-gray-200 text-transparent flex items-center justify-center transition-all group-hover:border-emerald-500 group-hover:bg-emerald-500 group-hover:text-white">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                        </div>
+
+                        <div v-if="filteredTeachers.length === 0" class="text-center py-12 text-gray-400">
+                            <p class="font-bold italic">{{ $t('common.no_results') }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="p-8 border-t border-gray-50 flex items-center gap-4 shrink-0">
+                        <button @click="showTeacherEditModal = false"
+                            class="flex-1 px-6 py-4 rounded-2xl bg-gray-50 text-gray-500 font-black uppercase tracking-widest text-sm hover:bg-gray-100 transition-all active:scale-95">
+                            {{ $t('common.close') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Transition>
+
     </div>
 </template>
+
+<style scoped>
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #cbd5e1;
+}
+
+/* For Firefox */
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #e2e8f0 transparent;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+    transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+    opacity: 0;
+    transform: translateY(-10px);
+}
+</style>

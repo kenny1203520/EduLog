@@ -368,7 +368,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { Lesson } from '@/models/Course'
@@ -387,6 +387,12 @@ const emit = defineEmits<{
     'close': []
     'resolve': [resolvedReport: OccurrenceReportDTO, strategy: string]
 }>()
+
+function handleKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+        close()
+    }
+}
 
 // State
 const selectedStrategy = ref<'keep-local' | 'keep-server' | 'manual'>('manual')
@@ -548,6 +554,14 @@ watch(() => props.localReport, (newReport) => {
     if (newReport && (selectedStrategy.value === 'manual' || selectedStrategy.value === 'keep-local')) {
         mergedReport.value = { ...newReport }
     }
+})
+
+onMounted(() => {
+    document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+    document.removeEventListener('keydown', handleKeydown)
 })
 
 // Methods

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { StudentService } from '@/services/StudentService'
+import { StudentService } from '@/services/student/StudentService'
 import { Student } from '@/models/Student'
 
 export const useStudentStore = defineStore('student', () => {

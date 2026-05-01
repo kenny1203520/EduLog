@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS public.enrollments (
     classroom_id uuid,
     status text DEFAULT 'active'::text CHECK (
         status = ANY (
-            ARRAY ['active'::text, 'completed'::text, 'dropped'::text]
+            ARRAY ['active'::text, 'completed'::text, 'dropped'::text, 'trial'::text]
         )
     ),
     user_id uuid NOT NULL DEFAULT auth.uid(),
@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS public.class_occurrences (
             ARRAY ['scheduled'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'rescheduled'::character varying]::text []
         )
     ),
+    teacher_ids uuid[] DEFAULT ARRAY[]::uuid[],
+    teacher_attendance jsonb DEFAULT '{}'::jsonb,
     original_start_time time without time zone,
     original_end_time time without time zone,
     actual_start_time time without time zone,
@@ -64,7 +66,7 @@ CREATE TABLE IF NOT EXISTS public.class_occurrences (
     notes text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    is_conducted boolean DEFAULT true,
+    is_conducted boolean NOT NULL DEFAULT true,
     CONSTRAINT class_occurrences_pkey PRIMARY KEY (id),
     CONSTRAINT class_occurrences_class_session_id_fkey FOREIGN KEY (class_session_id) REFERENCES public.class_sessions(id)
 );
@@ -102,7 +104,7 @@ CREATE TABLE IF NOT EXISTS public.occurrence_reports (
     lesson_id uuid,
     is_completed boolean DEFAULT true,
     progress_letter character varying CHECK (progress_letter::text ~ '^[A-Z](-[A-Z])?$'::text),
-    attendance_status character varying DEFAULT 'pending'::character varying CHECK (
+    attendance_status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (
         attendance_status::text = ANY (
             ARRAY ['present'::character varying::text, 'absent'::character varying::text, 'pending'::character varying::text]
         )

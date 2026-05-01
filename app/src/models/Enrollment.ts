@@ -5,7 +5,7 @@ export interface EnrollmentDTO {
     course_id: string
     classroom_id?: string
     class_session_id?: string
-    status: 'active' | 'completed' | 'dropped'
+    status: 'active' | 'completed' | 'dropped' | 'trial'
     start_date?: string
     lesson_number?: number
     external_link?: string

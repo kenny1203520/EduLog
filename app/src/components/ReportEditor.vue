@@ -29,76 +29,16 @@
                 <span class="hidden sm:inline">{{ $t('report.reference_panel.title') }}</span>
             </button>
 
-            <!-- Templates Dropdown -->
-            <div class="relative">
-                <button @click="showTemplates = !showTemplates"
-                    class="text-sm font-medium text-gray-600 hover:text-emerald-600 flex items-center gap-1 focus:outline-none"
-                    :title="$t('report.editor.templates')">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                    </svg>
-                    <span>{{ $t('report.editor.templates') }}</span>
-                </button>
-
-                <!-- Templates Menu -->
-                <div v-if="showTemplates"
-                    class="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-4">
-                    <h4 class="font-bold text-gray-800 mb-3 text-sm flex justify-between items-center">
-                        {{ $t('report.editor.templates') }}
-                        <button @click="showTemplates = false"
-                            class="text-gray-400 hover:text-gray-600">&times;</button>
-                    </h4>
-
-                    <!-- Save New -->
-                    <div class="flex flex-col gap-2 mb-4">
-                        <div class="flex gap-2">
-                            <input v-model="newTemplateName" type="text"
-                                :placeholder="$t('report.editor.template_name_placeholder')"
-                                class="flex-1 text-xs px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-500"
-                                @keyup.enter="saveTemplate" />
-                            <button @click="saveTemplate"
-                                :disabled="!newTemplateName.trim() || !localContent || isSavingTemplate"
-                                class="bg-emerald-600 text-white text-xs px-3 py-1.5 rounded hover:bg-emerald-700 disabled:opacity-50 whitespace-nowrap flex items-center gap-1">
-                                <svg v-if="isSavingTemplate" class="animate-spin h-3 w-3 text-white"
-                                    viewBox="0 0 24 24">
-                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                        stroke-width="4"></circle>
-                                    <path class="opacity-75" fill="currentColor"
-                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                                    </path>
-                                </svg>
-                                {{ $t('report.editor.save_to_template') }}
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- List -->
-                    <div class="max-h-60 overflow-y-auto space-y-2 mt-4 pt-4 border-t border-gray-100">
-                        <div v-if="savedTemplates.length === 0" class="text-xs text-gray-500 text-center py-2">
-                            {{ $t('report.editor.no_templates') }}
-                        </div>
-                        <div v-for="t in savedTemplates" :key="t.id"
-                            class="group flex items-center justify-between p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200 transition-colors">
-                            <button @click="applyTemplate(t)"
-                                class="text-sm text-gray-700 hover:text-emerald-700 text-left truncate flex-1"
-                                :title="t.content">
-                                {{ t.name }}
-                            </button>
-                            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button @click.stop="deleteTemplate(t.id)"
-                                    class="text-gray-400 hover:text-red-500 p-1 rounded" :title="$t('common.delete')">
-                                    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <button @click="openReportTemplateManagerModal"
+                class="text-sm font-medium text-gray-600 hover:text-emerald-600 flex items-center gap-1 focus:outline-none"
+                :title="$t('report.editor.templates')">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                </svg>
+                <span>{{ $t('report.editor.templates') }}</span>
+            </button>
 
             <!-- Save Status Indicator -->
             <div class="flex items-center gap-2 text-sm ml-auto">
@@ -153,6 +93,15 @@
                             </svg>
                             <span v-else class="text-[10px] font-bold text-emerald-600 animate-pulse">{{
                                 $t('report.editor.copy_success_simple') }}</span>
+                        </button>
+                        <button @click="openCourseCopyTemplateModal"
+                            class="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
+                            :title="$t('report.editor.copy_course_template_settings')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M11.983 5.5l1.165-2.09a1 1 0 011.733 0l1.165 2.09 2.34.414a1 1 0 01.557 1.69l-1.6 1.641.294 2.303a1 1 0 01-1.414 1.04L14 11.61l-2.223.978a1 1 0 01-1.414-1.04l.294-2.303-1.6-1.64a1 1 0 01.557-1.691l2.369-.414zM5 15h14M7 19h10" />
+                            </svg>
                         </button>
                     </div>
                     <!-- Enrollment External Link Button -->
@@ -237,7 +186,24 @@
                 <label class="block text-sm font-medium text-gray-700 mb-2">
                     {{ $t('report.editor.absence_reason_label') }} <span class="text-red-600">*</span>
                 </label>
-                <select v-model="absenceReason"
+                
+                <!-- System-managed absence reason (read-only) -->
+                <div v-if="isSystemManagedAbsence" class="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div class="flex-1">
+                        <p class="text-sm font-semibold text-amber-800">
+                            {{ getSystemManagedAbsenceLabel() }}
+                        </p>
+                        <p class="text-xs text-amber-700 mt-1">
+                            {{ $t('report.editor.system_managed_absence_notice', 'This absence is managed by the system and cannot be modified.') }}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- User-selectable absence reason -->
+                <select v-else v-model="absenceReason"
                     class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
                     :class="showAbsenceError ? 'border-red-300 bg-red-50' : 'border-gray-300'">
                     <option value="">{{ $t('report.editor.select_reason') }}</option>
@@ -253,9 +219,6 @@
                         $t('report.editor.absence_reasons.reason_not_provided') }}</option>
                     <option :value="$t('report.editor.absence_reasons.travel_abroad')">{{
                         $t('report.editor.absence_reasons.travel_abroad') }}</option>
-                    <option v-if="absenceReason === $t('report.editor.absence_reasons.holiday')"
-                        :value="$t('report.editor.absence_reasons.holiday')">{{
-                            $t('report.editor.absence_reasons.holiday') }}</option>
                     <option :value="$t('report.editor.absence_reasons.family_ceremony')">{{
                         $t('report.editor.absence_reasons.family_ceremony') }}</option>
                     <option :value="$t('report.editor.absence_reasons.school_activity')">{{
@@ -263,7 +226,7 @@
                     <option :value="$t('report.editor.absence_reasons.other')">{{
                         $t('report.editor.absence_reasons.other') }}</option>
                 </select>
-                <p v-if="showAbsenceError" class="mt-1 text-sm text-red-600">{{
+                <p v-if="showAbsenceError && !isSystemManagedAbsence" class="mt-1 text-sm text-red-600">{{
                     $t('report.editor.absence_reason_required') }}</p>
             </div>
         </div>
@@ -457,6 +420,188 @@
         <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
             :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
             :is-loading="confirmState.isLoading" @confirm="handleConfirmAction" @close="confirmState.isOpen = false" />
+
+        <CopyTemplateEditorModal
+            v-model="showCourseCopyTemplateModal"
+            :title="$t('report.editor.copy_course_template_title')"
+            :hint="$t('report.editor.copy_course_template_hint')"
+            :variable-title="$t('report.editor.copy_course_template_variables')"
+            :content-title="$t('report.editor.copy_course_template_content')"
+            :preview-title="$t('report.editor.copy_course_template_preview_title')"
+            :preview-hint="$t('report.editor.copy_course_template_preview_hint')"
+            :preview-empty="$t('report.editor.copy_course_template_preview_empty')"
+            :template-text="courseCopyTemplateText"
+            :preview-text="courseTemplatePreviewText"
+            :variable-count="courseTemplateVariables.length"
+            :is-loading="isLoadingCourseCopyTemplate"
+            :loading-text="$t('report.editor.copy_course_template_loading')"
+            :loading-hint="$t('report.editor.copy_course_template_loading_hint')"
+            :save-loading="isSavingCourseCopyTemplate"
+            :cancel-text="$t('common.cancel')"
+            :save-text="$t('common.save')"
+            :saving-text="$t('report.saving')"
+            @update:template-text="courseCopyTemplateText = $event"
+            @save="saveCourseCopyTemplate"
+        >
+            <template #controls>
+                <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+                    <div class="flex flex-col gap-2 md:flex-row md:items-end">
+                        <div class="flex-1">
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                                {{ $t('report.editor.copy_course_template_load_from') }}
+                            </label>
+                            <select v-model="selectedCourseTemplateLoadKey"
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
+                                <option v-for="item in courseTemplateLoadOptions" :key="item.key" :value="item.key">
+                                    {{ item.displayLabel }}
+                                </option>
+                            </select>
+                        </div>
+                        <button @click="loadSelectedCourseTemplate"
+                            class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
+                            :disabled="!selectedCourseTemplateLoadKey">
+                            {{ $t('report.editor.copy_course_template_load_action') }}
+                        </button>
+                    </div>
+                </div>
+            </template>
+            <template #variables>
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    <div
+                        v-for="variable in courseTemplateVariables"
+                        :key="variable.key"
+                        class="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
+                    >
+                        <div class="flex items-start justify-between gap-3">
+                            <div>
+                                <p class="text-sm font-bold leading-tight text-gray-900">{{ variable.label }}</p>
+                                <p class="mt-1 text-xs leading-5 text-gray-500">{{ variable.description }}</p>
+                            </div>
+                            <button
+                                @click="insertCourseTemplateVariable(variable.key)"
+                                class="shrink-0 whitespace-nowrap rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
+                                :title="variable.token"
+                            >
+                                {{ variable.token }}
+                            </button>
+                        </div>
+
+                        <div v-if="variable.modeOptions?.length" class="space-y-1">
+                            <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {{ $t('report.editor.copy_course_template_variable_mode_label') }}
+                            </label>
+                            <select
+                                v-model="selectedCourseTemplateModes[variable.key]"
+                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                            >
+                                <option v-for="mode in variable.modeOptions" :key="mode.value" :value="mode.value">
+                                    {{ mode.label }}
+                                </option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                {{ $t('report.editor.copy_course_template_preview_title') }}
+                            </p>
+                            <p class="min-h-[3.25rem] whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+                                {{ variable.previewValue || '—' }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </template>
+        </CopyTemplateEditorModal>
+
+        <CopyTemplateEditorModal
+            ref="reportTemplateModal"
+            v-model="showReportTemplateManagerModal"
+            :title="$t('report.editor.template_manager_title')"
+            :hint="$t('report.editor.template_manager_hint')"
+            :variable-title="$t('report.editor.template_manager_fields')"
+            :preview-title="$t('report.editor.template_preview_title')"
+            :preview-hint="$t('report.editor.template_preview_hint')"
+            :preview-empty="$t('report.editor.template_preview_empty')"
+            :preview-text="reportTemplatePreviewText"
+            :preview-sections="reportTemplatePreviewSections"
+            :variable-count="reportTemplateVariables.length"
+            :is-loading="isLoadingTemplateManager"
+            :loading-text="$t('report.editor.template_manager_loading')"
+            :loading-hint="$t('report.editor.template_manager_loading_hint')"
+            :save-loading="isSavingTemplate"
+            :save-disabled="!templateDraftName.trim()"
+            :cancel-text="$t('common.cancel')"
+            :save-text="$t('report.editor.template_save_action')"
+            :saving-text="$t('report.saving')"
+            :editable-fields="reportTemplateEditableFields"
+            :variable-preview="reportTemplateVariablePreview"
+            @update:editable-fields-content="onEditableFieldsUpdate"
+            @insert-variable="insertReportTemplateVariable"
+            @save="saveTemplateDraft"
+        >
+            <template #controls>
+                <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3 space-y-3">
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto] md:items-end">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                                {{ $t('report.editor.template_select_label') }}
+                            </label>
+                            <select v-model="selectedTemplateId"
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                                @change="handleTemplateSelectionChange">
+                                <option value="">{{ $t('report.editor.template_new_option') }}</option>
+                                <option v-for="t in savedTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                            </select>
+                        </div>
+                        <button @click="createNewTemplateDraft"
+                            class="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-100">
+                            {{ $t('report.editor.template_new_action') }}
+                        </button>
+                        <button @click="deleteSelectedTemplate"
+                            :disabled="!selectedTemplateId"
+                            class="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50">
+                            {{ $t('common.delete') }}
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto] md:items-end">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
+                                {{ $t('report.editor.template_name_label') }}
+                            </label>
+                            <input v-model="templateDraftName" type="text"
+                                :placeholder="$t('report.editor.template_name_placeholder')"
+                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+                        </div>
+                        <button @click="applyTemplateDraftToReport"
+                            class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700">
+                            {{ $t('report.editor.template_apply_to_report') }}
+                        </button>
+                    </div>
+
+                    <div class="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2">
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                v-for="variable in reportTemplateVariables"
+                                :key="variable.key"
+                                @click="insertVariableToFocusedField(variable.key)"
+                                @mouseenter="handleTemplateVariableMouseEnter(variable.key, $event)"
+                                @mouseleave="handleTemplateVariableMouseLeave"
+                                class="relative rounded-lg bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 transition hover:bg-purple-200"
+                                :title="variable.description"
+                            >
+                                {{ variable.token }}
+                            </button>
+                        </div>
+                        <p class="text-xs text-purple-700">{{ $t('report.editor.template_variable_auto_insert_hint', '點擊上方欄位後，點擊變數即可插入') }}</p>
+                    </div>
+                </div>
+            </template>
+
+            <template #variables>
+                <!-- Variables section can be empty as we're using inline variable buttons in controls -->
+            </template>
+        </CopyTemplateEditorModal>
     </div>
 </template>
 
@@ -464,14 +609,22 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAutoSave } from '@/composables/useAutoSave'
-import { OccurrenceReportService } from '@/services/OccurrenceReportService'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
+import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
-import { ReportTemplateService } from '@/services/ReportTemplateService'
+import { ReportTemplateService } from '@/services/report/ReportTemplateService'
+import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy_template/CopyTemplateService'
 import { useToast } from 'vue-toastification'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import {
+    COURSE_TEMPLATE_VARIABLE_DEFINITIONS,
+    SYSTEM_COURSE_TEMPLATE,
+    formatCopyTemplateToken,
+    renderCopyTemplate
+} from '@/utils/copyTemplate'
 
 import type { Lesson } from '@/models/Course'
 
@@ -483,13 +636,35 @@ interface Template {
     classNotes?: string
 }
 
+interface ReportTemplateVariableItem {
+    key: string
+    token: string
+    description: string
+}
+
 // Templates State
-const showTemplates = ref(false)
 const showReferencePanel = ref(false)
 const savedTemplates = ref<Template[]>([])
-const newTemplateName = ref('')
 const justCopiedCourse = ref(false)
 const isSavingTemplate = ref(false)
+const isLoadingTemplateManager = ref(false)
+const showCourseCopyTemplateModal = ref(false)
+const courseCopyTemplateText = ref(SYSTEM_COURSE_TEMPLATE)
+const isLoadingCourseCopyTemplate = ref(false)
+const isSavingCourseCopyTemplate = ref(false)
+const selectedCourseTemplateModes = ref<Record<string, string>>({
+    course_primary_name: 'space'
+})
+const courseTemplateLoadOptions = ref<Array<CopyTemplateLoadOption & { displayLabel: string }>>([])
+const selectedCourseTemplateLoadKey = ref('')
+const showReportTemplateManagerModal = ref(false)
+const reportTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
+const selectedTemplateId = ref('')
+const templateDraftName = ref('')
+const templateDraftContent = ref('')
+const templateDraftContactNotes = ref('')
+const templateDraftClassNotes = ref('')
+
 const toast = useToast()
 
 // Confirm Modal State
@@ -554,33 +729,255 @@ async function loadTemplates() {
     }
 }
 
-async function saveTemplate() {
-    if (!newTemplateName.value.trim() || !localContent.value.trim() || !authStore.user?.id) return
+const reportTemplateVariables = computed<ReportTemplateVariableItem[]>(() => {
+    const keys = [
+        'classroom_name',
+        'session_name',
+        'session_time',
+        'student_name',
+        'course_name',
+        'lesson',
+        'lesson_name',
+        'progress',
+        'progress_start',
+        'progress_end',
+        'is_completed'
+    ]
 
-    try {
-        isSavingTemplate.value = true
-        const newT = await ReportTemplateService.saveTemplate({
-            name: newTemplateName.value.trim(),
-            content: localContent.value,
-            contact_notes: contactNotes.value,
-            class_notes: classNotes.value,
-            instructor_id: authStore.user.id
-        })
+    return keys.map(key => ({
+        key,
+        token: formatCopyTemplateToken(key),
+        description: t(`report.editor.template_variable_descriptions.${key}`)
+    }))
+})
 
-        savedTemplates.value.push({
-            id: newT.id!,
-            name: newT.name,
-            content: newT.content,
-            contactNotes: newT.contactNotes,
-            classNotes: newT.classNotes
-        })
-        newTemplateName.value = ''
-        toast.success(t('report.editor.template_saved'))
-    } catch (e) {
-        console.error('Failed to save template', e)
-        toast.error('Failed to save template')
-    } finally {
-        isSavingTemplate.value = false
+function buildReportTemplateContext() {
+    const lesson = selectedCoursePreviewLesson.value
+    const studentName = props.initialStudentName
+        || props.student?.studentName
+        || props.student?.name
+        || props.student?.fullName
+        || ''
+    const sessionName = props.initialSessionName || ''
+    const classroomName = props.initialClassroomName || ''
+    const sessionTime = props.initialSessionTime || ''
+    const courseName = [props.courseName, props.courseDisplayName].filter(Boolean).join(' ').trim()
+
+    return {
+        classroom_name: classroomName,
+        session_name: sessionName,
+        session_time: sessionTime,
+        student_name: studentName,
+        course_name: courseName,
+        lesson: lesson?.sequence !== undefined ? String(lesson.sequence) : '',
+        lesson_name: lesson?.title || '',
+        progress: progressLetter.value || '',
+        progress_start: progressStart.value || '',
+        progress_end: progressEnd.value || '',
+        is_completed: isCompleted.value ? t('report.completed') : t('report.incomplete')
+    }
+}
+
+function renderReportTemplateText(text: string): string {
+    if (!text.trim()) {
+        return ''
+    }
+    return renderCopyTemplate(text, buildReportTemplateContext()).trim()
+}
+
+const reportTemplatePreviewSections = computed(() => {
+    return [
+        {
+            title: t('report.editor.contact_notes_label'),
+            content: renderReportTemplateText(templateDraftContactNotes.value)
+        },
+        {
+            title: t('report.editor.class_notes_label'),
+            content: renderReportTemplateText(templateDraftClassNotes.value)
+        },
+        {
+            title: t('report.editor.learning_report_label'),
+            content: renderReportTemplateText(templateDraftContent.value)
+        }
+    ]
+})
+
+const reportTemplatePreviewText = computed(() => {
+    return reportTemplatePreviewSections.value
+        .map(section => `[${section.title}]\n${section.content}`)
+        .join('\n\n')
+        .trim()
+})
+
+// Variable preview mapping for tooltip display
+const reportTemplateVariablePreview = computed<Record<string, string>>(() => {
+    const context = buildReportTemplateContext()
+    return Object.entries(context).reduce((acc, [key, value]) => {
+        acc[key] = String(value || '')
+        return acc
+    }, {} as Record<string, string>)
+})
+
+// Editable fields structure for multi-field modal
+const reportTemplateEditableFields = computed<Array<{ id: string; label: string; content: string }>>(() => {
+    return [
+        {
+            id: 'contact',
+            label: t('report.editor.contact_notes_label'),
+            content: templateDraftContactNotes.value
+        },
+        {
+            id: 'class',
+            label: t('report.editor.class_notes_label'),
+            content: templateDraftClassNotes.value
+        },
+        {
+            id: 'report',
+            label: t('report.editor.learning_report_label'),
+            content: templateDraftContent.value
+        }
+    ]
+})
+
+function insertReportTemplateVariable(fieldId: string, variable: string) {
+    const token = formatCopyTemplateToken(variable)
+    if (fieldId === 'contact') {
+        templateDraftContactNotes.value += token
+        return
+    }
+    if (fieldId === 'class') {
+        templateDraftClassNotes.value += token
+        return
+    }
+    templateDraftContent.value += token
+}
+
+function insertVariableToFocusedField(variable: string) {
+    reportTemplateModal.value?.insertVariableAtFocus?.(variable)
+}
+
+function handleTemplateVariableMouseEnter(variable: string, event: MouseEvent) {
+    reportTemplateModal.value?.showVariablePreview?.(variable, event)
+}
+
+function handleTemplateVariableMouseLeave() {
+    reportTemplateModal.value?.hideVariablePreview?.()
+}
+
+function onEditableFieldsUpdate(fields: Array<{ id: string; label: string; content: string }>) {
+    fields.forEach(field => {
+        if (field.id === 'contact') {
+            templateDraftContactNotes.value = field.content
+        } else if (field.id === 'class') {
+            templateDraftClassNotes.value = field.content
+        } else if (field.id === 'report') {
+            templateDraftContent.value = field.content
+        }
+    })
+}
+
+
+const selectedCoursePreviewLesson = computed(() => {
+    return props.availableLessons.find(l => l.id === selectedLessonId.value) || props.availableLessons[0] || null
+})
+
+const courseTemplateVariables = computed(() => {
+    const lesson = selectedCoursePreviewLesson.value
+    const courseName = props.courseName || ''
+    const courseDisplayName = props.courseDisplayName || ''
+
+    return COURSE_TEMPLATE_VARIABLE_DEFINITIONS.map(definition => {
+        let previewValue = ''
+
+        switch (definition.key) {
+            case 'course_name':
+                previewValue = courseName || 'Course Name'
+                break
+            case 'course_display_name':
+                previewValue = courseDisplayName || 'Course Display Name'
+                break
+            case 'course_primary_name': {
+                const selectedMode = selectedCourseTemplateModes.value[definition.key] || definition.defaultMode || definition.modes?.[0]?.value || 'space'
+                previewValue = formatCoursePrimaryName(courseName, courseDisplayName, selectedMode)
+                break
+            }
+            case 'lesson_label':
+                previewValue = t('report.lesson_label')
+                break
+            case 'lesson_sequence':
+                previewValue = lesson?.sequence !== undefined ? String(lesson.sequence) : '1'
+                break
+            case 'lesson_title':
+                previewValue = lesson?.title || 'Lesson Title'
+                break
+            default:
+                previewValue = definition.key
+                break
+        }
+
+        return {
+            ...definition,
+            token: formatCopyTemplateToken(definition.key, getSelectedCourseTemplateMode(definition.key)),
+            label: t(`report.editor.copy_course_template_variable_labels.${definition.key}`),
+            description: t(`report.editor.copy_course_template_variable_descriptions.${definition.key}`),
+            previewValue,
+            modeOptions: (definition.modes || []).map(mode => ({
+                ...mode,
+                label: t(`report.editor.copy_course_template_variable_modes.${mode.value}`)
+            }))
+        }
+    })
+})
+
+const courseTemplatePreviewText = computed(() => {
+    const lesson = selectedCoursePreviewLesson.value
+    const courseName = props.courseName || ''
+    const courseDisplayName = props.courseDisplayName || ''
+    const coursePrimaryName = [courseName, courseDisplayName].filter(Boolean).join(' ').trim() || courseName || courseDisplayName || ''
+
+    const context = {
+        course_name: courseName,
+        course_display_name: courseDisplayName,
+        course_primary_name: coursePrimaryName,
+        lesson_label: t('report.lesson_label'),
+        lesson_sequence: lesson?.sequence ?? '',
+        lesson_title: lesson?.title || ''
+    }
+
+    const formatter = (mode: string) => formatCoursePrimaryName(courseName, courseDisplayName, mode)
+
+    return courseCopyTemplateText.value.trim()
+        ? renderCopyTemplate(courseCopyTemplateText.value, context, {
+            course_primary_name: {
+                space: () => formatter('space'),
+                slash: () => formatter('slash'),
+                newline: () => formatter('newline'),
+                bullet: () => formatter('bullet')
+            }
+        }).trim()
+        : ''
+})
+
+function getSelectedCourseTemplateMode(variable: string): string | undefined {
+    return selectedCourseTemplateModes.value[variable] || COURSE_TEMPLATE_VARIABLE_DEFINITIONS.find(item => item.key === variable)?.defaultMode
+}
+
+function formatCoursePrimaryName(courseName: string, courseDisplayName: string, mode: string): string {
+    const parts = [courseName, courseDisplayName].filter(Boolean)
+
+    if (parts.length === 0) {
+        return ''
+    }
+
+    switch (mode) {
+        case 'slash':
+            return parts.join(' / ')
+        case 'newline':
+            return parts.join('\n')
+        case 'bullet':
+            return parts.join(' • ')
+        default:
+            return parts.join(' ')
     }
 }
 
@@ -591,59 +988,239 @@ function copyCourseInfo() {
     const cName = props.courseName || ''
     const dName = props.courseDisplayName || ''
 
-    // Format: [Course Name] [Display Name] Lesson [lesson_name]
-    // Note: session.name is passed as courseName, enrollment.courseDisplayName as courseDisplayName
-    let text = ''
-    if (cName && dName) {
-        text = `${cName} ${dName} Lesson ${lesson.sequence} ${lesson.title}`
-    } else if (cName || dName) {
-        text = `${cName || dName} Lesson ${lesson.sequence} ${lesson.title}`
-    } else {
-        text = `Lesson ${lesson.sequence} ${lesson.title}`
+    const coursePrimaryName = [cName, dName].filter(Boolean).join(' ').trim() || cName || dName || ''
+    const context = {
+        course_name: cName,
+        course_display_name: dName,
+        course_primary_name: coursePrimaryName,
+        lesson_label: t('report.lesson_label'),
+        lesson_sequence: lesson.sequence,
+        lesson_title: lesson.title
     }
 
-    navigator.clipboard.writeText(text).then(() => {
-        justCopiedCourse.value = true
-        setTimeout(() => { justCopiedCourse.value = false }, 2000)
-    })
+    CopyTemplateService.getEffectiveCourseTemplate()
+        .then(({ templateText }) => {
+            const text = renderCopyTemplate(templateText, context, {
+                course_primary_name: {
+                    space: () => formatCoursePrimaryName(cName, dName, 'space'),
+                    slash: () => formatCoursePrimaryName(cName, dName, 'slash'),
+                    newline: () => formatCoursePrimaryName(cName, dName, 'newline'),
+                    bullet: () => formatCoursePrimaryName(cName, dName, 'bullet')
+                }
+            }).trim()
+            const fallback = `${coursePrimaryName} Lesson ${lesson.sequence} ${lesson.title}`.trim()
+
+            return navigator.clipboard.writeText(text || fallback)
+        })
+        .then(() => {
+            justCopiedCourse.value = true
+            setTimeout(() => { justCopiedCourse.value = false }, 2000)
+        })
+        .catch(error => {
+            console.error('Failed to copy course info', error)
+            toast.error(t('report.editor.copy_course_template_copy_failed'))
+        })
 }
 
-function applyTemplate(template: any) {
-    const doApply = () => {
-        localContent.value = template.content
-        if (template.contactNotes) contactNotes.value = template.contactNotes
-        if (template.classNotes) classNotes.value = template.classNotes
+function insertCourseTemplateVariable(variable: string) {
+    const mode = getSelectedCourseTemplateMode(variable)
+    courseCopyTemplateText.value += formatCopyTemplateToken(variable, mode)
+}
 
-        handleInput() // Update and save
-        showTemplates.value = false
+async function openCourseCopyTemplateModal() {
+    showCourseCopyTemplateModal.value = true
+    courseCopyTemplateText.value = SYSTEM_COURSE_TEMPLATE
+    selectedCourseTemplateModes.value = {
+        course_primary_name: 'space'
     }
 
-    if (localContent.value) {
-        openConfirm(
-            t('report.editor.apply_template_title', 'Apply Template'),
-            t('report.editor.apply_template_confirm', 'Are you sure? Current content will be overwritten.'),
-            doApply,
-            false // Safe action (relatively)
-        )
-    } else {
-        doApply()
+    try {
+        isLoadingCourseCopyTemplate.value = true
+        const [template, options] = await Promise.all([
+            CopyTemplateService.getCourseUserDefaultTemplate(),
+            CopyTemplateService.getTemplateLoadOptions('course_copy')
+        ])
+        courseTemplateLoadOptions.value = options.map(item => ({
+            ...item,
+            displayLabel: item.label === 'system_default'
+                ? t('report.editor.copy_course_template_source_system')
+                : item.label === 'user_default'
+                    ? t('report.editor.copy_course_template_source_user_default')
+                    : item.label
+        }))
+        selectedCourseTemplateLoadKey.value = courseTemplateLoadOptions.value[0]?.key || ''
+        courseCopyTemplateText.value = template || SYSTEM_COURSE_TEMPLATE
+    } catch (error) {
+        console.error('Failed to load course copy template', error)
+        toast.error(t('report.editor.copy_course_template_load_failed'))
+    } finally {
+        isLoadingCourseCopyTemplate.value = false
     }
 }
 
-function deleteTemplate(id: string) {
+function loadSelectedCourseTemplate() {
+    const option = courseTemplateLoadOptions.value.find(item => item.key === selectedCourseTemplateLoadKey.value)
+    if (!option) {
+        return
+    }
+
+    courseCopyTemplateText.value = option.templateText || SYSTEM_COURSE_TEMPLATE
+}
+
+async function saveCourseCopyTemplate() {
+    const templateText = courseCopyTemplateText.value.trim()
+    if (!templateText) {
+        toast.error(t('report.editor.copy_course_template_empty_error'))
+        return
+    }
+
+    try {
+        isSavingCourseCopyTemplate.value = true
+        await CopyTemplateService.saveCourseTemplateAsUserDefault(templateText)
+        toast.success(t('report.editor.copy_course_template_saved'))
+        showCourseCopyTemplateModal.value = false
+    } catch (error) {
+        console.error('Failed to save course copy template', error)
+        toast.error(t('report.editor.copy_course_template_save_failed'))
+    } finally {
+        isSavingCourseCopyTemplate.value = false
+    }
+}
+
+function applyTemplate(template: Template) {
+    const renderedContent = renderReportTemplateText(template.content || '')
+    const renderedContactNotes = renderReportTemplateText(template.contactNotes || '')
+    const renderedClassNotes = renderReportTemplateText(template.classNotes || '')
+
+    let changed = false
+
+    if (!localContent.value.trim() && renderedContent) {
+        localContent.value = renderedContent
+        changed = true
+    }
+
+    if (!contactNotes.value.trim() && renderedContactNotes) {
+        contactNotes.value = renderedContactNotes
+        changed = true
+    }
+
+    if (!classNotes.value.trim() && renderedClassNotes) {
+        classNotes.value = renderedClassNotes
+        changed = true
+    }
+
+    if (changed) {
+        handleInput()
+    }
+
+    showReportTemplateManagerModal.value = false
+}
+
+function createNewTemplateDraft() {
+    selectedTemplateId.value = ''
+    templateDraftName.value = ''
+    templateDraftContent.value = localContent.value || ''
+    templateDraftContactNotes.value = contactNotes.value || ''
+    templateDraftClassNotes.value = classNotes.value || ''
+}
+
+function syncTemplateDraftFromSelection() {
+    const selected = savedTemplates.value.find(item => item.id === selectedTemplateId.value)
+    if (!selected) {
+        createNewTemplateDraft()
+        return
+    }
+
+    templateDraftName.value = selected.name
+    templateDraftContent.value = selected.content || ''
+    templateDraftContactNotes.value = selected.contactNotes || ''
+    templateDraftClassNotes.value = selected.classNotes || ''
+}
+
+function handleTemplateSelectionChange() {
+    syncTemplateDraftFromSelection()
+}
+
+async function openReportTemplateManagerModal() {
+    showReportTemplateManagerModal.value = true
+    try {
+        isLoadingTemplateManager.value = true
+        await loadTemplates()
+        if (savedTemplates.value.length > 0) {
+            selectedTemplateId.value = savedTemplates.value[0].id
+            syncTemplateDraftFromSelection()
+        } else {
+            createNewTemplateDraft()
+        }
+    } catch (error) {
+        console.error('Failed to open template manager', error)
+    } finally {
+        isLoadingTemplateManager.value = false
+    }
+}
+
+async function saveTemplateDraft() {
+    if (!authStore.user?.id) return
+    if (!templateDraftName.value.trim()) {
+        toast.error(t('report.editor.template_name_required'))
+        return
+    }
+
+    try {
+        isSavingTemplate.value = true
+        const saved = await ReportTemplateService.saveTemplate({
+            id: selectedTemplateId.value || undefined,
+            name: templateDraftName.value.trim(),
+            content: templateDraftContent.value,
+            contact_notes: templateDraftContactNotes.value,
+            class_notes: templateDraftClassNotes.value,
+            instructor_id: authStore.user.id
+        })
+
+        await loadTemplates()
+        selectedTemplateId.value = saved.id || ''
+        syncTemplateDraftFromSelection()
+        toast.success(t('report.editor.template_saved'))
+    } catch (error) {
+        console.error('Failed to save template draft', error)
+        toast.error(t('report.editor.template_load_error'))
+    } finally {
+        isSavingTemplate.value = false
+    }
+}
+
+function applyTemplateDraftToReport() {
+    const draft: Template = {
+        id: selectedTemplateId.value || 'draft',
+        name: templateDraftName.value || t('report.editor.template_new_option'),
+        content: templateDraftContent.value,
+        contactNotes: templateDraftContactNotes.value,
+        classNotes: templateDraftClassNotes.value
+    }
+    applyTemplate(draft)
+}
+
+function deleteSelectedTemplate() {
+    const id = selectedTemplateId.value
+    if (!id) {
+        return
+    }
+
     openConfirm(
         t('report.editor.delete_template_title', 'Delete Template'),
         t('report.editor.delete_template_confirm', 'Are you sure you want to delete this template?'),
         async () => {
             try {
                 await ReportTemplateService.deleteTemplate(id)
-                savedTemplates.value = savedTemplates.value.filter(t => t.id !== id)
+                savedTemplates.value = savedTemplates.value.filter(item => item.id !== id)
+                selectedTemplateId.value = savedTemplates.value[0]?.id || ''
+                syncTemplateDraftFromSelection()
                 toast.success(t('report.editor.template_deleted') || 'Template deleted')
-            } catch (e) {
-                console.error('Failed to delete template', e)
+            } catch (error) {
+                console.error('Failed to delete template', error)
             }
         },
-        true // Dangerous
+        true
     )
 }
 
@@ -685,6 +1262,10 @@ interface Props {
     courseName?: string // 課程名稱
     courseStage?: string // 課程階段
     courseDisplayName?: string // 課程顯示名稱
+    initialClassroomName?: string // 教室名稱
+    initialSessionName?: string // 班級名稱
+    initialSessionTime?: string // 班級時段
+    initialStudentName?: string // 學生姓名
     initialStudentId?: string // 學生ID
     student?: any // 學生
     initialLessonId?: string // 課次
@@ -717,6 +1298,10 @@ const props = withDefaults(defineProps<Props>(), {
     courseName: '',
     courseStage: '',
     courseDisplayName: '',
+    initialClassroomName: '',
+    initialSessionName: '',
+    initialSessionTime: '',
+    initialStudentName: '',
     initialStudentId: '',
     initialLessonId: '',
     availableLessons: () => [],
@@ -778,9 +1363,25 @@ const progressLetter = computed(() => {
     return ''
 })
 
+// Check if absence reason is system-managed (holiday or suspension)
+const isSystemManagedAbsence = computed(() => {
+    const reason = absenceReason.value?.toLowerCase() || ''
+    return reason === 'holiday' || reason === 'suspension'
+})
+
+const getSystemManagedAbsenceLabel = () => {
+    const reason = absenceReason.value?.toLowerCase() || ''
+    if (reason === 'holiday') {
+        return `${t('report.editor.absence_reasons.holiday')} (系統管理)`
+    } else if (reason === 'suspension') {
+        return `${t('report.editor.absence_reasons.suspension')} (系統管理)`
+    }
+    return absenceReason.value
+}
+
 // Validation
 const showAbsenceError = computed(() => {
-    return attendanceStatus.value === 'absent' && !absenceReason.value
+    return attendanceStatus.value === 'absent' && !absenceReason.value && !isSystemManagedAbsence.value
 })
 
 const canSave = computed(() => {

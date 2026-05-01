@@ -311,6 +311,19 @@
                                 <p class="text-sm font-bold text-gray-800">{{ enrollmentInfo.sessionName || '-' }}</p>
                             </div>
                         </div>
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="text-xs text-gray-500">{{ $t('student.internal_courses.status') }}</p>
+                                <p class="text-sm font-bold text-gray-800">{{ $t('student.internal_courses.status_' + (enrollmentInfo.status || 'active')) }}</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -383,6 +396,7 @@
                         :course-name="enrollmentInfo?.courseName || undefined"
                         :course-stage="enrollmentInfo?.courseStage || undefined"
                         :course-display-name="enrollmentInfo?.courseDisplay || undefined"
+                        :initial-student-name="enrollmentInfo?.studentName"
                         :initial-student-id="enrollmentInfo?.studentId" :initial-lesson-id="selectedReport.lessonId"
                         :available-lessons="courseLessons" :initial-report-external-link="selectedReport.externalLink"
                         :initial-is-completed="selectedReport.isCompleted"
@@ -430,13 +444,13 @@
             :title="$t('report.editor.confirm_create_report_title', 'Create New Report?')"
             :message="$t('report.editor.confirm_create_report', 'This class has no report yet. A new one will be created.')"
             :confirm-text="$t('common.continue')" :is-loading="isCreatingReport" @confirm="handleConfirmCreate"
-            @close="showCreateConfirm = false" />
+            @close="handleCancelCreate" />
 
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { supabase } from '@/lib/supabase'
@@ -445,12 +459,13 @@ import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import { OccurrenceService } from '@/services/OccurrenceService'
-import { OccurrenceReportService } from '@/services/OccurrenceReportService'
-import { CourseService } from '@/services/CourseService'
+import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
+import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
+import { CourseService } from '@/services/Course/CourseService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
-import { SuspensionService } from '@/services/SuspensionService'
+import { SuspensionService } from '@/services/suspension/SuspensionService'
 import { Suspension } from '@/models/Suspension'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
@@ -486,9 +501,11 @@ const enrollmentInfo = ref<{
     courseDisplay?: string,
     classroomName?: string,
     sessionName?: string,
+    status?: string,
     externalLink?: string,
     studentId?: string
 } | null>(null)
+const isEnrollmentActive = ref(false)
 const courseLessons = ref<any[]>([])
 let reportSubscription: RealtimeChannel | null = null
 
@@ -496,6 +513,55 @@ let reportSubscription: RealtimeChannel | null = null
 const showCreateConfirm = ref(false)
 const isCreatingReport = ref(false)
 const pendingOccurrence = ref<ClassOccurrence | null>(null)
+const pendingSelectionState = ref<{
+    occurrence: ClassOccurrence | null
+    report: OccurrenceReport | null
+    scrollY: number
+} | null>(null)
+
+function clearReportSubscription() {
+    if (reportSubscription) {
+        supabase.removeChannel(reportSubscription)
+        reportSubscription = null
+    }
+}
+
+function subscribeToReport(reportId: string | null) {
+    clearReportSubscription()
+
+    if (!reportId) return
+
+    reportSubscription = supabase
+        .channel(`report-${reportId}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'occurrence_reports',
+                filter: `id=eq.${reportId}`
+            },
+            (payload) => {
+                handleRealtimeUpdate(payload)
+            }
+        )
+        .subscribe()
+}
+
+async function restorePendingSelection() {
+    const snapshot = pendingSelectionState.value
+    pendingSelectionState.value = null
+    pendingOccurrence.value = null
+    showCreateConfirm.value = false
+
+    if (!snapshot) return
+
+    selectedOccurrence.value = snapshot.occurrence
+    selectedReport.value = snapshot.report
+    await nextTick()
+    window.scrollTo({ top: snapshot.scrollY, behavior: 'auto' })
+    subscribeToReport(snapshot.report?.id ?? null)
+}
 
 async function handleConfirmCreate() {
     if (!pendingOccurrence.value) return
@@ -519,6 +585,8 @@ async function handleConfirmCreate() {
             }
             allReports.value.push(newReportDetail as any)
         }
+        pendingSelectionState.value = null
+        pendingOccurrence.value = null
         showCreateConfirm.value = false
     } catch (e) {
         console.error('Failed to create report', e)
@@ -803,13 +871,15 @@ async function loadOccurrences() {
             courseDisplay: enrollment.courseDisplayName,
             classroomName: enrollment.classroomName,
             sessionName: enrollment.classSessionName,
+            status: enrollment.status,
             externalLink: enrollment.externalLink,
             studentId: enrollment.studentId
         }
+        isEnrollmentActive.value = enrollment.status === 'active'
 
         // 2. Load lessons for this course (needed for editor)
         if (enrollment.courseId) {
-            const lessons = await CourseService.getLessonsByCourse(enrollment.courseId)
+            const lessons = await CourseCatalogService.getLessonsByCourse(enrollment.courseId)
             courseLessons.value = lessons
         }
 
@@ -1011,13 +1081,13 @@ async function loadOccurrences() {
                 const latestPast = sortedPast[0]
 
                 if (latestPast) {
-                    await selectOccurrence(latestPast)
+                    await selectOccurrence(latestPast, { allowCreatePrompt: isEnrollmentActive.value })
                 }
             } else if (futureOccurrences.length > 0) {
                 // Only if no past history at all (new student?), revert to earliest upcoming
                 const earliestFuture = futureOccurrences[0]
                 if (earliestFuture) {
-                    await selectOccurrence(earliestFuture)
+                    await selectOccurrence(earliestFuture, { allowCreatePrompt: isEnrollmentActive.value })
                 }
             }
         }
@@ -1029,18 +1099,24 @@ async function loadOccurrences() {
     }
 }
 
-async function selectOccurrence(occurrence: ClassOccurrence) {
+async function selectOccurrence(
+    occurrence: ClassOccurrence,
+    options: { allowCreatePrompt?: boolean } = {}
+) {
     await reportEditorRef.value?.saveNow()
 
-    // Cleanup previous subscription
-    if (reportSubscription) {
-        supabase.removeChannel(reportSubscription)
-        reportSubscription = null
+    const previousSelectionState = {
+        occurrence: selectedOccurrence.value,
+        report: selectedReport.value,
+        scrollY: window.scrollY
     }
+
+    clearReportSubscription()
 
     selectedOccurrence.value = occurrence
     try {
         reportLoading.value = true
+        const allowCreatePrompt = options.allowCreatePrompt ?? true
         // Get or create report for this occurrence
         const enrollmentId = route.params.enrollmentId as string
         if (!enrollmentId || !occurrence.id) return
@@ -1049,43 +1125,34 @@ async function selectOccurrence(occurrence: ClassOccurrence) {
         const hasExistingReport = allReports.value.some(r => r.class_occurrence_id === occurrence.id)
 
         // Create explicit Create method for manual creation
-        if (!hasExistingReport) {
+        if (!hasExistingReport && allowCreatePrompt) {
             // Store pending occurrence and show modal
             pendingOccurrence.value = occurrence
+            pendingSelectionState.value = previousSelectionState
             showCreateConfirm.value = true
             return
-        } else {
+        } else if (hasExistingReport) {
             // Just fetch existing
             const report = await OccurrenceReportService.getReport(enrollmentId, occurrence.id)
             selectedReport.value = report
+        } else {
+            selectedReport.value = null
         }
 
         const currentReportId = selectedReport.value?.id
+        pendingSelectionState.value = null
 
-        // Subscribe to Realtime changes for this report
-        if (currentReportId) {
-            reportSubscription = supabase
-                .channel(`report-${currentReportId}`)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'UPDATE',
-                        schema: 'public',
-                        table: 'occurrence_reports',
-                        filter: `id=eq.${currentReportId}`
-                    },
-                    (payload) => {
-                        handleRealtimeUpdate(payload)
-                    }
-                )
-                .subscribe()
-        }
+        subscribeToReport(currentReportId ?? null)
 
     } catch (error) {
         console.error('Failed to load report:', error)
     } finally {
         reportLoading.value = false
     }
+}
+
+async function handleCancelCreate() {
+    await restorePendingSelection()
 }
 
 function handleRealtimeUpdate(payload: any) {

@@ -59,10 +59,11 @@
                 class="capitalize font-semibold" 
                 :class="{
                   'text-emerald-600': enrollment.status === 'active',
-                  'text-gray-400': enrollment.status !== 'active'
+                  'text-amber-600': enrollment.status === 'trial',
+                  'text-gray-400': enrollment.status !== 'active' && enrollment.status !== 'trial'
                 }"
               >
-                {{ enrollment.status }}
+                {{ $t('student.internal_courses.status_' + enrollment.status) }}
               </span>
             </div>
           </div>
@@ -81,8 +82,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CourseService } from '@/services/CourseService'
-import { StudentService } from '@/services/StudentService'
+import { CourseService } from '@/services/Course/CourseService'
+import { StudentService } from '@/services/student/StudentService'
 import { Enrollment } from '@/models/Enrollment'
 import { Student } from '@/models/Student'
 

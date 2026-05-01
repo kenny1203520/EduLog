@@ -2,6 +2,7 @@
     "dashboard": "Dashboard",
     "courses": "Courses",
     "classrooms": "Classrooms",
+    "teachers": "Teachers",
     "holidays": "Holidays",
     "students": "Students",
     "historical_reports": "Reports Overview",
@@ -22,6 +23,7 @@
         "students": "Complete student information and learning history management.",
         "courses": "Easily schedule courses and track every student's learning path.",
         "classrooms": "View and manage teaching progress across all classrooms.",
+        "teachers": "Manage teacher profiles, accounts, and class assignments.",
         "reports": "Edit and submit professional teaching reports for parents.",
         "holidays": "Manage class suspensions and holiday schedules.",
         "incomplete": "Track and finish pending reports to ensure seamless teaching."

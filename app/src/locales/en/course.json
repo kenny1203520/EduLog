@@ -29,5 +29,6 @@
     "select_course_sub": "Choose a course from the list to manage its lessons and content.",
     "save_success": "Saved successfully",
     "delete_success": "Deleted successfully",
-    "confirm_delete": "Are you sure you want to delete this course?"
+    "confirm_delete": "Are you sure you want to delete this course?",
+    "no_courses": "No courses found"
 }
