@@ -82,10 +82,6 @@ interface SessionTeacherConfig {
 }
 const selectedTeacherConfigs = ref<SessionTeacherConfig[]>([])
 
-const teacherSearchQuery = ref('')
-const teacherFilterStatus = ref<'all' | 'linked' | 'unlinked'>('all')
-const teacherSortField = ref<'name' | 'email' | 'account'>('name')
-const teacherSortDirection = ref<'asc' | 'desc'>('asc')
 const roomsPagination = ref({ page: 1, perPage: 10, total: 0 })
 const sessionsPagination = ref({ page: 1, perPage: 10, total: 0 })
 
@@ -249,46 +245,7 @@ const sortedSessions = computed(() => {
     })
 })
 
-const filteredTeachers = computed(() => {
-    const query = teacherSearchQuery.value.trim().toLowerCase()
 
-    return teachersList.value.filter((teacher) => {
-        const accountStatus = teacher.user_id ? 'linked' : 'unlinked'
-
-        if (teacherFilterStatus.value !== 'all' && teacherFilterStatus.value !== accountStatus) {
-            return false
-        }
-
-        if (!query) return true
-
-        const haystack = [teacher.name, teacher.email, teacher.phone, teacher.address, teacher.bio]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase()
-
-        return haystack.includes(query)
-    })
-})
-
-const visibleTeachers = computed(() => {
-    const rankByAccount = (teacher: any) => (teacher.user_id ? 1 : 0)
-
-    return [...filteredTeachers.value].sort((left, right) => {
-        let comparison = 0
-
-        if (teacherSortField.value === 'account') {
-            comparison = rankByAccount(left) - rankByAccount(right)
-        } else {
-            const leftValue = String(left[teacherSortField.value] ?? '')
-            const rightValue = String(right[teacherSortField.value] ?? '')
-            comparison = leftValue.localeCompare(rightValue)
-        }
-
-        return teacherSortDirection.value === 'asc' ? comparison : -comparison
-    })
-})
-
-const selectedTeacherCount = computed(() => selectedTeacherConfigs.value.length)
 
 const teacherOptions = computed(() => teachersList.value.map(t => ({
     label: t.name + (t.email ? ` (${t.email})` : ''),
