@@ -6,6 +6,7 @@ import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { useAuthStore } from '@/stores/useAuthStore'
+import { TeacherService } from '@/services/teacher/TeacherService'
 
 useI18n()
 
@@ -29,12 +30,28 @@ onMounted(async () => {
         const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
         const auth = useAuthStore()
         const userId = auth.user?.id
-        // Visible if current user is marked attending for this occurrence; fallback to isConducted
+        
+        // Fetch teacher profile if logged in
+        const teacherProfile = userId ? await TeacherService.getTeacherByUserId(userId) : null
+        const teacherId = teacherProfile?.id
+
+        // Visible if:
+        // 1. Current user is assigned to the occurrence (teacherId is in teacherIds)
+        // 2. Teacher is marked attending (teacherAttendance[teacherId] is true)
+        // 3. Class is conducted (isConducted is true)
         const visible = (data || []).filter(d => {
-            if (userId && d.teacherAttendance && Object.prototype.hasOwnProperty.call(d.teacherAttendance, userId)) {
-                return d.teacherAttendance[userId] === true
+            // Must be conducted
+            if (d.isConducted !== true) return false
+
+            // If we have a teacher profile, filter by assignment and attendance
+            if (teacherId) {
+                const isAssigned = d.teacherIds?.includes(teacherId)
+                const isAttending = d.teacherAttendance && d.teacherAttendance[teacherId] === true
+                return isAssigned && isAttending
             }
-            return d.isConducted === true
+
+            // If no teacher profile is linked to this user, don't show any classes
+            return false
         })
         todayOccurrences.value = visible
         stats.value.todayClasses = visible.length

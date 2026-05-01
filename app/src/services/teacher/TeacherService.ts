@@ -95,10 +95,9 @@ export class TeacherService {
             .from('teachers')
             .select('*')
             .eq('user_id', userId)
-            .single()
+            .maybeSingle()
 
         if (error) {
-            if (error.code === 'PGRST116') return null // No rows
             throw new Error(error.message)
         }
         return data as TeacherDTO
