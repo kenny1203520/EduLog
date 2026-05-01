@@ -31,6 +31,8 @@
     "contact_book": "Contact Book",
     "progress": "Progress",
     "completed": "Completed",
+    "incomplete_reports": "Incomplete Reports",
+    "select_to_complete": "Select to complete",
     "incomplete_reports_title": "Incomplete Reports",
     "incomplete_reports_subtitle": "Review and complete missing reports across all students.",
     "incomplete_reports_desc": "You have {count} report(s) needing attention",

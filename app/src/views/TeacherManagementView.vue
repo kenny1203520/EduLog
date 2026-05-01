@@ -271,9 +271,15 @@ async function saveTeacher() {
 
         await loadTeachers()
         closeModal()
-    } catch (error) {
+    } catch (error: any) {
         console.error(error)
-        toast.error((error as Error).message || t('teacher.save_failed') || 'Failed to save teacher')
+        let message = error.message || t('teacher.save_failed') || 'Failed to save teacher'
+        
+        if (message.includes('teachers_user_id_key')) {
+            message = t('teacher.error_duplicate_user')
+        }
+        
+        toast.error(message)
     } finally {
         isSaving.value = false
     }

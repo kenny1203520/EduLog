@@ -73,5 +73,6 @@
   "validation_required": "請填寫姓名與 Email",
   "validation_email": "請輸入有效的 Email",
   "validation_user_id": "系統帳號 ID 必須是有效的 UUID",
-  "validation_gov_id": "身分證號長度不可超過 20 個字元"
+  "validation_gov_id": "身分證號長度不可超過 20 個字元",
+  "error_duplicate_user": "此系統帳號已綁定至其他教師"
 }

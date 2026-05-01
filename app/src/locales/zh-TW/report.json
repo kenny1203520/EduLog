@@ -31,6 +31,8 @@
     "contact_book": "聯絡簿",
     "progress": "進度",
     "completed": "已完成",
+    "incomplete_reports": "未完成報告",
+    "select_to_complete": "請選擇以補完",
     "incomplete_reports_title": "未完成報告列表",
     "incomplete_reports_subtitle": "檢視並補全所有學生的漏寫報告。",
     "incomplete_reports_desc": "您有 {count} 份報告需要處理",

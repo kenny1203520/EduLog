@@ -73,5 +73,6 @@
   "validation_required": "Please fill in name and email",
   "validation_email": "Please enter a valid email address",
   "validation_user_id": "System account ID must be a valid UUID",
-  "validation_gov_id": "ID number must be 20 characters or fewer"
+  "validation_gov_id": "ID number must be 20 characters or fewer",
+  "error_duplicate_user": "This system account is already linked to another teacher"
 }
