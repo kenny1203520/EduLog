@@ -1,9 +1,9 @@
 -- ==========================================
 -- Academics Schema: Courses & Scheduling
 -- ==========================================
--- Consolidates: Courses, Lessons, Classrooms, Classroom Schedules, Class Sessions, Holidays
--- Date: 2026-02-05
--- Dependencies: 20240101000001_core_schema.sql
+-- Consolidates: Courses, Lessons, Classrooms, Classroom Schedules, Class Sessions, Class Session Teachers, Holidays
+-- Date: 2026-05-01
+-- Dependencies: 1000001_core_schema.sql
 -- ==========================================
 -- 1. Courses
 -- ==========================================
@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS public.class_sessions (
     updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
     name text NOT NULL,
     classroom_id uuid,
-    course_ids ARRAY DEFAULT '{}'::uuid [],
+    course_ids uuid[] DEFAULT '{}',
     day_of_week integer CHECK (
         day_of_week >= 0
         AND day_of_week <= 6
@@ -145,6 +145,8 @@ CREATE TABLE IF NOT EXISTS public.class_sessions (
     user_id uuid NOT NULL DEFAULT auth.uid(),
     lesson_number integer,
     external_link text,
+    start_date date NOT NULL DEFAULT CURRENT_DATE,
+    end_date date,
     CONSTRAINT class_sessions_pkey PRIMARY KEY (id),
     CONSTRAINT class_sessions_classroom_id_fkey FOREIGN KEY (classroom_id) REFERENCES public.classrooms(id),
     CONSTRAINT class_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
@@ -164,7 +166,34 @@ CREATE POLICY "Enable all access for authenticated users" ON public.class_sessio
 CREATE TRIGGER update_class_sessions_updated_at BEFORE
 UPDATE ON public.class_sessions FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
 -- ==========================================
--- 6. Holidays
+-- 6. Class Session Teachers
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.class_session_teachers (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    class_session_id uuid NOT NULL,
+    teacher_id uuid NOT NULL,
+    effective_from date NOT NULL DEFAULT CURRENT_DATE,
+    effective_to date,
+    created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT class_session_teachers_pkey PRIMARY KEY (id),
+    CONSTRAINT class_session_teachers_class_session_id_fkey FOREIGN KEY (class_session_id) REFERENCES public.class_sessions(id) ON DELETE CASCADE,
+    CONSTRAINT class_session_teachers_teacher_id_fkey FOREIGN KEY (teacher_id) REFERENCES public.teachers(id) ON DELETE CASCADE,
+    CONSTRAINT class_session_teachers_unique_session_teacher UNIQUE (class_session_id, teacher_id, effective_from)
+);
+-- Index
+CREATE INDEX IF NOT EXISTS idx_class_session_teachers_class_session_id ON public.class_session_teachers(class_session_id);
+CREATE INDEX IF NOT EXISTS idx_class_session_teachers_teacher_id ON public.class_session_teachers(teacher_id);
+-- RLS
+ALTER TABLE public.class_session_teachers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Enable all access for authenticated users" ON public.class_session_teachers 
+    FOR ALL USING ((select auth.role()) = 'authenticated')
+    WITH CHECK ((select auth.role()) = 'authenticated');
+-- Trigger
+CREATE TRIGGER update_class_session_teachers_updated_at BEFORE UPDATE ON public.class_session_teachers 
+    FOR EACH ROW EXECUTE PROCEDURE update_updated_at_column();
+-- ==========================================
+-- 7. Holidays
 -- ==========================================
 CREATE TABLE IF NOT EXISTS public.holidays (
     id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -173,8 +202,8 @@ CREATE TABLE IF NOT EXISTS public.holidays (
     updated_at timestamp with time zone DEFAULT now(),
     start_date date NOT NULL DEFAULT CURRENT_DATE,
     end_date date NOT NULL DEFAULT CURRENT_DATE,
-    classroom_ids ARRAY DEFAULT '{}'::uuid [],
-    class_session_ids ARRAY DEFAULT '{}'::uuid [],
+    classroom_ids uuid[] DEFAULT '{}',
+    class_session_ids uuid[] DEFAULT '{}',
     CONSTRAINT holidays_pkey PRIMARY KEY (id)
 );
 -- RLS

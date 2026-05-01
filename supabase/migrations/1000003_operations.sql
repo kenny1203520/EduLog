@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS public.class_occurrences (
             ARRAY ['scheduled'::character varying, 'completed'::character varying, 'cancelled'::character varying, 'rescheduled'::character varying]::text []
         )
     ),
+    teacher_ids uuid[] DEFAULT ARRAY[]::uuid[],
+    teacher_attendance jsonb DEFAULT '{}'::jsonb,
     original_start_time time without time zone,
     original_end_time time without time zone,
     actual_start_time time without time zone,
