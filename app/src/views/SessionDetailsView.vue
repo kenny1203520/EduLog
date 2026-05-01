@@ -1430,13 +1430,7 @@ function openTeacherEditModal() {
     showTeacherEditModal.value = true
 }
 
-function toggleTeacherSelection(teacherId: string) {
-    if (selectedTeacherIds.value.has(teacherId)) {
-        selectedTeacherIds.value.delete(teacherId)
-    } else {
-        selectedTeacherIds.value.add(teacherId)
-    }
-}
+
 
 async function saveOccurrenceTeachers(showToast = true) {
     if (!todayOccurrence.value) return
