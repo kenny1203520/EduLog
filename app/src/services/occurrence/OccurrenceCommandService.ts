@@ -77,6 +77,21 @@ export class OccurrenceCommandService {
             console.error('Failed to fetch session teachers for occurrence generation:', e)
         }
 
+        // Fetch existing occurrences to preserve attendance status
+        const { data: existingOccs } = await supabase
+            .from('class_occurrences')
+            .select('occurrence_date, teacher_attendance')
+            .eq('class_session_id', sessionId)
+            .gte('occurrence_date', this.formatDate(effectiveStartDate))
+            .lte('occurrence_date', this.formatDate(effectiveEndDate))
+
+        const existingAttendanceMap: Record<string, any> = {}
+        if (existingOccs) {
+            existingOccs.forEach(occ => {
+                existingAttendanceMap[occ.occurrence_date] = occ.teacher_attendance || {}
+            })
+        }
+
         const occurrences: Partial<ClassOccurrenceDTO>[] = occurrenceDates.map(date => {
             const dateStr = this.formatDate(date)
             
@@ -95,6 +110,20 @@ export class OccurrenceCommandService {
                 teacherIds = [(session as any).user_id]
             }
 
+            // Merge with existing attendance if it exists
+            const existingAttendance = existingAttendanceMap[dateStr] || {}
+            const updatedAttendance: any = {}
+
+            teacherIds.forEach((id: string) => {
+                if (existingAttendance.hasOwnProperty(id)) {
+                    // Preserve existing status (true/false)
+                    updatedAttendance[id] = existingAttendance[id]
+                } else {
+                    // New teacher for this occurrence, default to present (true)
+                    updatedAttendance[id] = true
+                }
+            })
+
             return {
                 class_session_id: sessionId,
                 occurrence_date: dateStr,
@@ -103,7 +132,7 @@ export class OccurrenceCommandService {
                 original_end_time: (session as any).end_time,
                 is_conducted: true,
                 teacher_ids: teacherIds,
-                teacher_attendance: teacherIds.reduce((acc: any, id: string) => { acc[id] = true; return acc }, {})
+                teacher_attendance: updatedAttendance
             }
         })
 
