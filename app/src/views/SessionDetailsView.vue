@@ -521,10 +521,10 @@ function findLatestOccurrenceBeforeOrOn(date: Date): ClassOccurrence | null {
 
 async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
     const rangeStart = new Date(anchorDate)
-    rangeStart.setDate(rangeStart.getDate() - 42)
+    rangeStart.setFullYear(rangeStart.getFullYear() - 1)
 
     const rangeEnd = new Date(anchorDate)
-    rangeEnd.setDate(rangeEnd.getDate() + 42)
+    rangeEnd.setFullYear(rangeEnd.getFullYear() + 1)
 
     sessionOccurrences.value = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
 }

@@ -688,23 +688,15 @@ const allReportDisplay = computed(() => {
         } else {
             // Check suspension status
             // Use formatDate to ensure we use the local date string (YYYY-MM-DD) and avoid UTC shift issues
-            const dateStr = occ.formatDate(occ.occurrenceDate)
-            const isSuspended = suspensions.value.some(s => {
-                const start = s.startDate
-                const end = s.endDate
-                if (end) {
-                    return dateStr >= start && dateStr <= end
-                }
-                return dateStr >= start
-            })
-
             // Placeholder for missing report
+            const status = occurrenceStatuses.value[occ.id!] || 'scheduled'
+
             return {
                 id: null,
                 occurrenceId: occ.id,
                 date: occ.occurrenceDate,
                 startTime: occ.effectiveStartTime || '',
-                status: isSuspended ? 'cancelled' : (occ.status === 'completed' ? 'present' : (occ.status === 'cancelled' ? 'absent' : 'bookable')),
+                status: status,
                 content: '',
                 classNotes: '',
                 version: 0,
@@ -742,9 +734,46 @@ const existingReportIds = computed(() => {
 const occurrenceStatuses = computed(() => {
     const statusMap: Record<string, string> = {}
 
+    // Configuration for "Add Scheduled" button range
+    const N = 30 // Days buffer
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // Find first and last occurrence dates in current list (for range restriction)
+    let firstOccDate: Date | null = null
+    let lastOccDate: Date | null = null
+    if (occurrences.value.length > 0) {
+        firstOccDate = occurrences.value[0].occurrenceDate
+        lastOccDate = occurrences.value[occurrences.value.length - 1].occurrenceDate
+    }
+
+    // Range Calculation (User's Final Formula):
+    // D_start (Start): Earliest occurrence in enrollment
+    // D_end (End): Today's date
+    // Range: [D_start - N days, D_end + N days]
+    const D_start = firstOccDate ? new Date(firstOccDate) : new Date(today)
+    const D_end = new Date(today)
+
+    const rangeStart = new Date(D_start)
+    rangeStart.setDate(rangeStart.getDate() - N)
+
+    const rangeEnd = new Date(D_end)
+    rangeEnd.setDate(rangeEnd.getDate() + N)
+
     // 1. Initial base statuses from occurrences
     occurrences.value.forEach(occ => {
-        statusMap[occ.id!] = occ.status
+        // Check suspension status
+        const dateStr = occ.formatDate(occ.occurrenceDate)
+        const isSuspended = suspensions.value.some(s => {
+            const start = s.startDate
+            const end = s.endDate
+            if (end) {
+                return dateStr >= start && dateStr <= end
+            }
+            return dateStr >= start
+        })
+
+        statusMap[occ.id!] = isSuspended ? 'cancelled' : occ.status
     })
 
     // 2. Overwrite with granular report-level status
@@ -759,12 +788,23 @@ const occurrenceStatuses = computed(() => {
         }
     })
 
-    // 3. Mark as bookable if no report AND it's scheduled
+    // 3. Mark as bookable if no report AND it's scheduled AND within allowed range
+    // User logic: enrollment.startDate - N -> today -> lastOccurrence + N
     occurrences.value.forEach(occ => {
         if (!statusMap[occ.id!] || statusMap[occ.id!] === 'scheduled') {
             const hasReport = allReports.value.some(r => r.class_occurrence_id === occ.id)
             if (!hasReport && occ.status === 'scheduled') {
-                statusMap[occ.id!] = 'bookable'
+                const occDate = new Date(occ.occurrenceDate)
+                occDate.setHours(0, 0, 0, 0)
+
+                let inRange = true
+                if (occDate < rangeStart || occDate > rangeEnd) {
+                    inRange = false
+                }
+
+                if (inRange) {
+                    statusMap[occ.id!] = 'bookable'
+                }
             }
         }
     })
@@ -921,11 +961,11 @@ async function loadOccurrences() {
         if (enrollment.classSessionId) {
             const today = new Date()
             const startDate = new Date(today)
-            // Fix: Look back 6 months to cover recent history that might not have reports yet
-            startDate.setDate(startDate.getDate() - 180)
+            // Fix: Increase fetch range to 5 years back to ensure the absolute beginning of history is captured
+            startDate.setFullYear(startDate.getFullYear() - 5)
 
             const endDate = new Date(today)
-            endDate.setDate(endDate.getDate() + 180) // 6 months forward
+            endDate.setFullYear(endDate.getFullYear() + 1) // 1 year forward
 
             // Collect all session IDs: Current + Historical
             // This ensures we see schedule gaps for previous classes too (if reports exist)
@@ -955,10 +995,10 @@ async function loadOccurrences() {
                 }
 
                 // If last scheduled date is "too soon" OR if we have very active occurrences (gap detection)
-                // We check if "Last Date" is less than "Today + 30 Days"
+                // We check if "Last Date" is less than "Today + 90 Days" to provide a larger buffer for booking
                 const today = new Date()
                 const thresholdDate = new Date(today)
-                thresholdDate.setDate(thresholdDate.getDate() + 30)
+                thresholdDate.setDate(thresholdDate.getDate() + 90)
 
                 // Robustness: If we have very few occurrences in this huge window, strictly backfill.
                 // Or if the schedule cuts off early.
