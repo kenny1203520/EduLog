@@ -741,10 +741,8 @@ const occurrenceStatuses = computed(() => {
 
     // Find first and last occurrence dates in current list (for range restriction)
     let firstOccDate: Date | null = null
-    let lastOccDate: Date | null = null
     if (occurrences.value.length > 0) {
         firstOccDate = occurrences.value[0].occurrenceDate
-        lastOccDate = occurrences.value[occurrences.value.length - 1].occurrenceDate
     }
 
     // Range Calculation (User's Final Formula):
