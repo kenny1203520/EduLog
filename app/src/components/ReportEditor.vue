@@ -223,6 +223,8 @@
                         $t('report.editor.absence_reasons.family_ceremony') }}</option>
                     <option :value="$t('report.editor.absence_reasons.school_activity')">{{
                         $t('report.editor.absence_reasons.school_activity') }}</option>
+                    <option :value="$t('report.editor.absence_reasons.suspension')">{{
+                        $t('report.editor.absence_reasons.suspension') }}</option>
                     <option :value="$t('report.editor.absence_reasons.other')">{{
                         $t('report.editor.absence_reasons.other') }}</option>
                 </select>
