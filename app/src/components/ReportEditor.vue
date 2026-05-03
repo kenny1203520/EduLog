@@ -223,6 +223,8 @@
                         $t('report.editor.absence_reasons.family_ceremony') }}</option>
                     <option :value="$t('report.editor.absence_reasons.school_activity')">{{
                         $t('report.editor.absence_reasons.school_activity') }}</option>
+                    <option :value="$t('report.editor.absence_reasons.suspension')">{{
+                        $t('report.editor.absence_reasons.suspension') }}</option>
                     <option :value="$t('report.editor.absence_reasons.other')">{{
                         $t('report.editor.absence_reasons.other') }}</option>
                 </select>
@@ -625,6 +627,7 @@ import {
     formatCopyTemplateToken,
     renderCopyTemplate
 } from '@/utils/copyTemplate'
+import { copyToClipboard } from '@/utils/clipboard'
 
 import type { Lesson } from '@/models/Course'
 
@@ -1010,11 +1013,15 @@ function copyCourseInfo() {
             }).trim()
             const fallback = `${coursePrimaryName} Lesson ${lesson.sequence} ${lesson.title}`.trim()
 
-            return navigator.clipboard.writeText(text || fallback)
+            return copyToClipboard(text || fallback)
         })
-        .then(() => {
-            justCopiedCourse.value = true
-            setTimeout(() => { justCopiedCourse.value = false }, 2000)
+        .then((success) => {
+            if (success) {
+                justCopiedCourse.value = true
+                setTimeout(() => { justCopiedCourse.value = false }, 2000)
+            } else {
+                toast.error(t('report.editor.copy_course_template_copy_failed'))
+            }
         })
         .catch(error => {
             console.error('Failed to copy course info', error)

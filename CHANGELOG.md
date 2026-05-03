@@ -1,0 +1,67 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.1.1] - 2026-05-03
+
+### Added
+- Implementation of report editor component with i18n support.
+- Student report view integration for viewing historical data.
+- Cross-browser clipboard utility integrated into `SessionDetailsView`.
+
+### Changed
+- Refactored `OccurrenceCalendar` and `BaseCalendar` components for improved date handling and UI consistency.
+- Optimization of `OccurrenceCommandService` for more robust class occurrence management.
+
+### Fixed
+- Removal of unused `lastOccDate` variable in occurrence status calculation.
+
+## [1.1.0] - 2026-05-02
+
+### Added
+- `ClassroomManagementView` and `SessionDetailsView` for centralized resource administration.
+- English and Traditional Chinese localization for the report management system.
+- Teacher management functionality including search, selection, and attendance tracking.
+- Teaching schedule management and enhanced teacher assignment handling.
+- User search functionality by email in `TeacherManagementView`.
+- Holiday management in attendance and reporting systems.
+- Support for start and end dates in class sessions and teacher assignments.
+
+### Changed
+- Upgraded Supabase and added custom Kong entrypoint for JWT handling.
+- Major refactor of the service architecture, organizing services into dedicated domain directories (Auth, Classroom, Course, Holiday, Occurrence, Report, Session, Student, Suspension).
+- Refactored core services to follow the Command and Query responsibility segregation (CQRS) pattern.
+- Enhanced localization support across courses, reports, and teachers.
+
+### Fixed
+- Improved error handling for duplicate users in teacher management.
+- Enhanced validation and error messages for attendance updates during holidays.
+
+## [1.0.1] - 2026-04-21
+
+### Added
+- Status and classroom details to class occurrences.
+- Course progress and summary features.
+- Teaching day navigation to session details view.
+- Customizable attendance and course copy templates.
+
+### Changed
+- Improved responsive layout in `SessionDetailsView` for better mobile usability.
+- Enhanced auto-save functionality in `ReportEditor`.
+- Updated `OccurrenceCalendar` component for compact view and improved navigation.
+- Increased font sizes and improved readability in `SessionDetailsView`.
+
+### Fixed
+- Row Level Security (RLS) policies for visibility preferences.
+- Fixed display condition for "no occurrences found" message.
+
+## [1.0.0] - 2026-04-16
+
+### Added
+- Initial release of EduLog.
+- Core learning report management and synchronization.
+- Real-time student attendance tracking.
+- Supabase backend integration with real-time sync capabilities.

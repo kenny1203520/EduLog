@@ -23,6 +23,7 @@ import {
     formatCopyTemplateToken,
     renderCopyTemplate
 } from '@/utils/copyTemplate'
+import { copyToClipboard } from '@/utils/clipboard'
 
 import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
@@ -521,10 +522,10 @@ function findLatestOccurrenceBeforeOrOn(date: Date): ClassOccurrence | null {
 
 async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
     const rangeStart = new Date(anchorDate)
-    rangeStart.setDate(rangeStart.getDate() - 42)
+    rangeStart.setFullYear(rangeStart.getFullYear() - 1)
 
     const rangeEnd = new Date(anchorDate)
-    rangeEnd.setDate(rangeEnd.getDate() + 42)
+    rangeEnd.setFullYear(rangeEnd.getFullYear() + 1)
 
     sessionOccurrences.value = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
 }
@@ -1143,8 +1144,12 @@ async function copyAttendanceInfo() {
         const { templateText } = await CopyTemplateService.getEffectiveAttendanceTemplate(sessionId)
         const text = renderCopyTemplate(templateText, context, buildAttendanceTemplateContext().formatters).trim()
 
-        await navigator.clipboard.writeText(text)
-        toast.success(t('classroom.copy_success'))
+        const success = await copyToClipboard(text)
+        if (success) {
+            toast.success(t('classroom.copy_success'))
+        } else {
+            toast.error('Failed to copy to clipboard')
+        }
     } catch (err) {
         console.error('Failed to copy: ', err)
         toast.error('Failed to copy to clipboard')

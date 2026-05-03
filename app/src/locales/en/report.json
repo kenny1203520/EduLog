@@ -159,6 +159,7 @@
             "is_completed": "Completed Status"
         },
         "attendance_title": "Attendance Status",
+        "system_managed_absence_notice": "This absence is managed by the system (e.g., leave or suspension records) and cannot be modified directly.",
         "present": "Present",
         "absent": "Absent",
         "absence_reason_label": "Absence Reason",
@@ -174,6 +175,7 @@
             "holiday": "Holiday",
             "family_ceremony": "Family Ceremony",
             "school_activity": "School Activity",
+            "suspension": "Suspension",
             "other": "Other Reason"
         },
         "progress_label": "Progress Record",
