@@ -596,6 +596,23 @@
                             </button>
                         </div>
                         <p class="text-xs text-purple-700">{{ $t('report.editor.template_variable_auto_insert_hint', '點擊上方欄位後，點擊變數即可插入') }}</p>
+
+                        <!-- Variable Mode Selectors -->
+                        <div v-if="reportTemplateVariables.some(v => v.modes?.length)" class="mt-2 pt-2 border-t border-purple-200/50">
+                            <div class="flex flex-wrap gap-4">
+                                <div v-for="variable in reportTemplateVariables.filter(v => v.modes?.length)" :key="variable.key" class="space-y-1">
+                                    <label class="block text-[10px] font-bold uppercase tracking-wider text-purple-900/60">
+                                        {{ variable.label }} {{ $t('report.editor.copy_course_template_variable_mode_label') }}
+                                    </label>
+                                    <select v-model="selectedReportTemplateModes[variable.key]"
+                                        class="rounded-lg border border-purple-200 bg-white/80 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-emerald-500">
+                                        <option v-for="mode in variable.modes" :key="mode.value" :value="mode.value">
+                                            {{ $t(`report.editor.copy_course_template_variable_modes.${mode.value}`) }}
+                                        </option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </template>
@@ -644,7 +661,9 @@ interface Template {
 interface ReportTemplateVariableItem {
     key: string
     token: string
+    label: string
     description: string
+    modes?: Array<{ value: string; label: string }>
 }
 
 // Templates State
@@ -669,6 +688,9 @@ const templateDraftName = ref('')
 const templateDraftContent = ref('')
 const templateDraftContactNotes = ref('')
 const templateDraftClassNotes = ref('')
+const selectedReportTemplateModes = ref<Record<string, string>>({
+    lesson: 'arabic'
+})
 
 const toast = useToast()
 
@@ -756,7 +778,8 @@ const reportTemplateVariables = computed<ReportTemplateVariableItem[]>(() => {
             
         return {
             key,
-            token: formatCopyTemplateToken(key),
+            token: formatCopyTemplateToken(key, selectedReportTemplateModes.value[key]),
+            label: t(`report.editor.template_variable_descriptions.${key}`),
             description: t(`report.editor.template_variable_descriptions.${key}`),
             ...definition
         }
@@ -828,7 +851,12 @@ const reportTemplatePreviewText = computed(() => {
 const reportTemplateVariablePreview = computed<Record<string, string>>(() => {
     const context = buildReportTemplateContext()
     return Object.entries(context).reduce((acc, [key, value]) => {
-        acc[key] = String(value || '')
+        const mode = selectedReportTemplateModes.value[key]
+        if (mode) {
+            acc[key] = formatNumber(value, mode)
+        } else {
+            acc[key] = String(value || '')
+        }
         return acc
     }, {} as Record<string, string>)
 })
@@ -855,7 +883,8 @@ const reportTemplateEditableFields = computed<Array<{ id: string; label: string;
 })
 
 function insertReportTemplateVariable(fieldId: string, variable: string) {
-    const token = formatCopyTemplateToken(variable)
+    const mode = selectedReportTemplateModes.value[variable]
+    const token = formatCopyTemplateToken(variable, mode)
     if (fieldId === 'contact') {
         templateDraftContactNotes.value += token
         return
