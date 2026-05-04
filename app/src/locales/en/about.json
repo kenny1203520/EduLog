@@ -1,11 +1,13 @@
 {
-  "title": "About EduLog",
-  "version": "Version",
-  "description": "EduLog is a professional tutor report management system designed to simplify teaching records and progress tracking.",
-  "developer": "Developer",
-  "contact": "Contact Support",
-  "changelog": "Changelog",
-  "changelog_subtitle": "System updates and feature improvements",
-  "resources": "Resources & Links",
-  "copyright": "© 2026 EduLog. All rights reserved."
+    "title": "About EduLog",
+    "version": "Version",
+    "description": "EduLog is a professional tutor report management system designed to simplify teaching records and progress tracking.",
+    "developer": "Developer",
+    "contact": "Contact Support",
+    "changelog": "Changelog",
+    "changelog_subtitle": "System updates and feature improvements",
+    "resources": "Resources & Links",
+    "github": "GitHub Source Code",
+    "docker": "Docker Image",
+    "copyright": "© 2026 EduLog. All rights reserved."
 }
