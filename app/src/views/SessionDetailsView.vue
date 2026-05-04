@@ -1100,7 +1100,7 @@ async function saveAttendanceTemplate() {
     }
 }
 
-async function copyAttendanceInfo() {
+function copyAttendanceInfo() {
     if (!todayOccurrence.value || !session.value) return
 
     const date = new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
@@ -1140,20 +1140,21 @@ async function copyAttendanceInfo() {
         pending_list: pendingList
     }
 
-    try {
-        const { templateText } = await CopyTemplateService.getEffectiveAttendanceTemplate(sessionId)
-        const text = renderCopyTemplate(templateText, context, buildAttendanceTemplateContext().formatters).trim()
+    const copyPromise = CopyTemplateService.getEffectiveAttendanceTemplate(sessionId)
+        .then(({ templateText }) => {
+            return renderCopyTemplate(templateText, context, buildAttendanceTemplateContext().formatters).trim()
+        })
 
-        const success = await copyToClipboard(text)
+    copyToClipboard(copyPromise).then(success => {
         if (success) {
             toast.success(t('classroom.copy_success'))
         } else {
             toast.error('Failed to copy to clipboard')
         }
-    } catch (err) {
+    }).catch(err => {
         console.error('Failed to copy: ', err)
         toast.error('Failed to copy to clipboard')
-    }
+    })
 }
 
 // Refresh Schedule Logic

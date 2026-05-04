@@ -16,6 +16,7 @@ import { useEmailValidation } from '@/composables/useEmailValidation'
 import StudentSuspensions from '@/components/StudentSuspensions.vue'
 import { supabase } from '@/lib/supabase'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 
 const route = useRoute()
 const router = useRouter()
@@ -999,14 +1000,15 @@ function togglePasswordVisibility(id: string) {
 }
 
 // --- Clipboard Utils ---
-function copyToClipboard(text: string) {
+// --- Clipboard Utils ---
+async function copyToClipboard(text: string) {
     if (!text) return
-    navigator.clipboard.writeText(text).then(() => {
+    const success = await copyToClipboardUtil(text)
+    if (success) {
         toast.success(t('common.copy_success'))
-    }).catch(err => {
-        console.error('Failed to copy: ', err)
+    } else {
         toast.error('Failed to copy to clipboard')
-    })
+    }
 }
 
 // --- Date Picker Helper removed (using native inputs) ---

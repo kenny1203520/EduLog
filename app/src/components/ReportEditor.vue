@@ -1001,7 +1001,7 @@ function copyCourseInfo() {
         lesson_title: lesson.title
     }
 
-    CopyTemplateService.getEffectiveCourseTemplate()
+    const copyPromise = CopyTemplateService.getEffectiveCourseTemplate()
         .then(({ templateText }) => {
             const text = renderCopyTemplate(templateText, context, {
                 course_primary_name: {
@@ -1012,9 +1012,10 @@ function copyCourseInfo() {
                 }
             }).trim()
             const fallback = `${coursePrimaryName} Lesson ${lesson.sequence} ${lesson.title}`.trim()
-
-            return copyToClipboard(text || fallback)
+            return text || fallback
         })
+
+    copyToClipboard(copyPromise)
         .then((success) => {
             if (success) {
                 justCopiedCourse.value = true

@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
+import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -52,11 +53,11 @@ function navigateToReports(id: string) {
     router.push({ name: 'student-all-reports', params: { id } })
 }
 
-function copyToClipboard(text: string) {
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(() => {
-            toast.success(t('common.copy_success'))
-        })
+async function copyToClipboard(text: string) {
+    if (!text) return
+    const success = await copyToClipboardUtil(text)
+    if (success) {
+        toast.success(t('common.copy_success'))
     }
 }
 </script>
