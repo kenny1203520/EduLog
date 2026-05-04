@@ -94,6 +94,12 @@ const router = createRouter({
           name: 'about',
           component: () => import('@/views/AboutView.vue'),
           meta: { title: 'nav.about', description: 'nav.about' }
+        },
+        {
+          path: 'about/changelog',
+          name: 'changelog',
+          component: () => import('@/views/ChangelogView.vue'),
+          meta: { title: 'about.changelog', description: 'about.changelog_subtitle' }
         }
       ]
     },

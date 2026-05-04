@@ -56,7 +56,7 @@ const version = __APP_VERSION__
                 <h2 class="text-lg font-bold text-gray-900">{{ $t('about.resources') }}</h2>
             </div>
             <div class="divide-y divide-gray-50">
-                <a href="#" class="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
+                <router-link to="/dashboard/about/changelog" class="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
                     <div class="flex items-center gap-3">
                         <div class="p-2 bg-emerald-50 text-emerald-600 rounded-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -68,7 +68,7 @@ const version = __APP_VERSION__
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400 group-hover:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                     </svg>
-                </a>
+                </router-link>
                 <a href="mailto:support@kenny945.tk" class="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
                     <div class="flex items-center gap-3">
                         <div class="p-2 bg-orange-50 text-orange-600 rounded-lg">

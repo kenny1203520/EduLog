@@ -11,6 +11,7 @@ import holiday from './holiday.json'
 import attendance from './attendance.json'
 import teacher from './teacher.json'
 import about from './about.json'
+import changelog from './changelog.json'
 
 export default {
   nav,
@@ -25,5 +26,6 @@ export default {
   holiday,
   attendance,
   teacher,
-  about
+  about,
+  changelog
 }

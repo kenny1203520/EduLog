@@ -215,7 +215,6 @@ async function handleLogout() {
         </aside>
 
         <!-- Main Content -->
-        <!-- Main Content -->
         <main class="flex-1 overflow-auto bg-gray-50 pt-16 lg:pt-0 relative transition-all duration-300">
             <!-- Desktop Toggle Bar (Sticky) -->
             <div class="hidden lg:flex sticky top-0 z-20 px-8 py-4 bg-gray-50/90 backdrop-blur-sm items-center gap-2">
