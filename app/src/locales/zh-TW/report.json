@@ -118,7 +118,11 @@
             "slash": "斜線分隔",
             "newline": "換行分隔",
             "bullet": "項目符號分隔",
-            "space": "空白分隔"
+            "space": "空白分隔",
+            "arabic": "阿拉伯數字 (1, 2, 3)",
+            "roman": "羅馬數字 (I, II, III)",
+            "chinese": "中文數字 (一, 二, 三)",
+            "formal": "正體中文數字 (壹, 貳, 參)"
         },
         "copy_course_template_variable_descriptions": {
             "course_name": "課程名稱。",
@@ -209,7 +213,6 @@
         "delete_report_confirm": "確定要刪除此報告嗎？刪除後，學生的課程進度將會自動更新（若此報告是最後一次上課紀錄，進度將會退回）。",
         "delete_success": "報告已刪除",
         "confirm_create_report": "此課堂尚未建立報告，點選後將會自動為學生建立一份新的報告。確定要繼續嗎？",
-        "confirm_create_report_title": "建立新報告？",
         "create_error": "建立報告失敗"
     },
     "conflict": {

@@ -118,7 +118,11 @@
             "slash": "Slash separated",
             "newline": "New line separated",
             "bullet": "Bullet separated",
-            "space": "Space separated"
+            "space": "Space separated",
+            "arabic": "Arabic Numerals (1, 2, 3)",
+            "roman": "Roman Numerals (I, II, III)",
+            "chinese": "Chinese Numerals (一, 二, 三)",
+            "formal": "Formal Chinese Numerals (壹, 貳, 參)"
         },
         "copy_course_template_variable_descriptions": {
             "course_name": "Course name.",

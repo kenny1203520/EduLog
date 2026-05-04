@@ -625,9 +625,11 @@ import {
     COURSE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_COURSE_TEMPLATE,
     formatCopyTemplateToken,
-    renderCopyTemplate
+    renderCopyTemplate,
+    createNumberFormatters
 } from '@/utils/copyTemplate'
 import { copyToClipboard } from '@/utils/clipboard'
+import { formatNumber } from '@/utils/numberFormatting'
 
 import type { Lesson } from '@/models/Course'
 
@@ -747,11 +749,18 @@ const reportTemplateVariables = computed<ReportTemplateVariableItem[]>(() => {
         'is_completed'
     ]
 
-    return keys.map(key => ({
-        key,
-        token: formatCopyTemplateToken(key),
-        description: t(`report.editor.template_variable_descriptions.${key}`)
-    }))
+    return keys.map(key => {
+        const definition = key === 'lesson' 
+            ? { modes: [{ value: 'arabic', label: 'arabic' }, { value: 'roman', label: 'roman' }, { value: 'chinese', label: 'chinese' }, { value: 'formal', label: 'formal' }] }
+            : {}
+            
+        return {
+            key,
+            token: formatCopyTemplateToken(key),
+            description: t(`report.editor.template_variable_descriptions.${key}`),
+            ...definition
+        }
+    })
 })
 
 function buildReportTemplateContext() {
@@ -785,7 +794,10 @@ function renderReportTemplateText(text: string): string {
     if (!text.trim()) {
         return ''
     }
-    return renderCopyTemplate(text, buildReportTemplateContext()).trim()
+    const formatters = {
+        lesson: createNumberFormatters('lesson')
+    }
+    return renderCopyTemplate(text, buildReportTemplateContext(), formatters).trim()
 }
 
 const reportTemplatePreviewSections = computed(() => {
@@ -907,9 +919,11 @@ const courseTemplateVariables = computed(() => {
             case 'lesson_label':
                 previewValue = t('report.lesson_label')
                 break
-            case 'lesson_sequence':
-                previewValue = lesson?.sequence !== undefined ? String(lesson.sequence) : '1'
+            case 'lesson_sequence': {
+                const selectedMode = selectedCourseTemplateModes.value[definition.key] || definition.defaultMode || 'arabic'
+                previewValue = formatNumber(lesson?.sequence, selectedMode) || '1'
                 break
+            }
             case 'lesson_title':
                 previewValue = lesson?.title || 'Lesson Title'
                 break
@@ -956,7 +970,8 @@ const courseTemplatePreviewText = computed(() => {
                 slash: () => formatter('slash'),
                 newline: () => formatter('newline'),
                 bullet: () => formatter('bullet')
-            }
+            },
+            lesson_sequence: createNumberFormatters('lesson_sequence')
         }).trim()
         : ''
 })
@@ -1009,7 +1024,8 @@ function copyCourseInfo() {
                     slash: () => formatCoursePrimaryName(cName, dName, 'slash'),
                     newline: () => formatCoursePrimaryName(cName, dName, 'newline'),
                     bullet: () => formatCoursePrimaryName(cName, dName, 'bullet')
-                }
+                },
+                lesson_sequence: createNumberFormatters('lesson_sequence')
             }).trim()
             const fallback = `${coursePrimaryName} Lesson ${lesson.sequence} ${lesson.title}`.trim()
             return text || fallback
