@@ -8,6 +8,8 @@ const router = useRouter()
 const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
 
+const version = __APP_VERSION__
+
 async function handleLogout() {
     await auth.signOut()
     router.push('/login')
@@ -172,6 +174,19 @@ async function handleLogout() {
                         {{ $t('nav.incomplete_reports') }}
                     </div>
                 </router-link>
+
+                <router-link to="/dashboard/about" @click="isSidebarOpen = false"
+                    class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
+                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    <div class="flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {{ $t('nav.about') }}
+                    </div>
+                </router-link>
             </nav>
 
             <div class="p-4 border-t">
@@ -193,6 +208,9 @@ async function handleLogout() {
                     </svg>
                     {{ $t('nav.logout') }}
                 </button>
+                <div class="mt-4 text-center">
+                    <p class="text-[10px] text-gray-400 font-medium tracking-widest uppercase">v{{ version }}</p>
+                </div>
             </div>
         </aside>
 

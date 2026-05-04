@@ -8,6 +8,7 @@
     "historical_reports": "Reports Overview",
     "student_profile": "Student Profile",
     "logout": "Logout",
+    "about": "About System",
     "login": "Login",
     "home": "Home",
     "features": "Features",
@@ -26,6 +27,7 @@
         "teachers": "Manage teacher profiles, accounts, and class assignments.",
         "reports": "Edit and submit professional teaching reports for parents.",
         "holidays": "Manage class suspensions and holiday schedules.",
+        "about": "Learn about EduLog system information and versions.",
         "incomplete": "Track and finish pending reports to ensure seamless teaching."
     }
 }

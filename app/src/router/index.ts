@@ -88,6 +88,12 @@ const router = createRouter({
           name: 'teachers',
           component: () => import('@/views/TeacherManagementView.vue'),
           meta: { title: 'nav.teachers', description: 'nav.description.teachers' }
+        },
+        {
+          path: 'about',
+          name: 'about',
+          component: () => import('@/views/AboutView.vue'),
+          meta: { title: 'nav.about', description: 'nav.about' }
         }
       ]
     },
