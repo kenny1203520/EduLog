@@ -145,13 +145,6 @@
                     </a>
                 </div>
             </div>
-            <div class="flex items-end">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" v-model="isCompleted"
-                        class="w-5 h-5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500" />
-                    <span class="text-sm font-medium text-gray-700">{{ $t('report.editor.lesson_completed') }}</span>
-                </label>
-            </div>
         </div>
 
         <!-- Attendance Section -->
@@ -239,6 +232,14 @@
             <label class="block text-sm font-medium text-gray-700 mb-3">
                 {{ $t('report.editor.progress_label') }}
             </label>
+
+            <div class="mb-4">
+                <label class="flex items-center gap-2 cursor-pointer w-fit">
+                    <input type="checkbox" v-model="isCompleted"
+                        class="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500" />
+                    <span class="text-sm font-medium text-gray-700">{{ $t('report.editor.lesson_completed') }}</span>
+                </label>
+            </div>
 
             <div class="grid grid-cols-2 gap-4">
                 <!-- Start Progress -->
