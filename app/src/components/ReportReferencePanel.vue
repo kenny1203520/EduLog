@@ -106,27 +106,30 @@
                 <div v-else v-for="report in reports" :key="report.id"
                     class="bg-white rounded-xl border shadow-sm overflow-hidden border-gray-200">
                     <!-- Card Header -->
-                    <div class="px-5 py-4 bg-white border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                    <div
+                        class="px-5 py-4 bg-white border-b flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                         <div class="flex-1 min-w-0">
-                            <div class="text-base font-black text-gray-900 truncate tracking-tight">
-                                {{ formatHeader(report) }}
+                            <div class="flex items-center gap-3">
+                                <div class="text-base font-black text-gray-900 truncate tracking-tight">
+                                    {{ formatHeader(report) }}
+                                </div>
                             </div>
                             <div class="flex items-center gap-2 mt-1">
                                 <span
                                     class="text-[10px] font-black uppercase tracking-widest bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-lg border border-indigo-100">
                                     {{ formatDate(report) }}
                                 </span>
-                                <span v-if="getReportProgress(report)"
-                                    class="text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg border border-emerald-100">
-                                    {{ getReportProgress(report) }}
-                                </span>
                                 <span v-if="report.is_completed"
-                                    class="text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg border border-blue-100">
+                                    class="text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg border border-blue-100 whitespace-nowrap">
                                     {{ $t('report.completed') }}
                                 </span>
                                 <span v-else
-                                    class="text-[10px] font-black uppercase tracking-widest bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg border border-amber-100">
+                                    class="text-[10px] font-black uppercase tracking-widest bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg border border-amber-100 whitespace-nowrap">
                                     {{ $t('report.incomplete') }}
+                                </span>
+                                <span v-if="getReportProgress(report)"
+                                    class="text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg border border-emerald-100">
+                                    {{ getReportProgress(report) }}
                                 </span>
                             </div>
                         </div>
@@ -182,7 +185,7 @@
                     <div class="flex items-center gap-2">
                         <span class="text-xs text-gray-400 whitespace-nowrap">{{
                             $t('report.reference_panel.items_per_page')
-                            }}</span>
+                        }}</span>
                         <select v-model="pageSize" class="text-xs border rounded p-1 bg-gray-50 focus:ring-indigo-500"
                             @change="handlePageSizeChange">
                             <option :value="10">10</option>
@@ -394,7 +397,11 @@ function formatDate(report: any) {
 }
 
 function getReportProgress(report: any) {
-    return report.progress_letter || ''
+    if (report.progress_letter) return report.progress_letter
+    if (report.progress_start && report.progress_end) {
+        return `${report.progress_start}-${report.progress_end}`
+    }
+    return report.progress_start || report.progress_end || ''
 }
 
 function formatHeader(report: any) {
