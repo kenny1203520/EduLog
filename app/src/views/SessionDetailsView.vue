@@ -213,36 +213,22 @@ function getReportTimestamp(report: OccurrenceReport): number {
     return reportDate ? reportDate.getTime() : Number.MIN_SAFE_INTEGER
 }
 
-function getNextClassDate(today: Date, classDayOfWeek?: number): Date {
-    if (classDayOfWeek === undefined) {
-        const defaultNextDay = new Date(today)
-        defaultNextDay.setDate(defaultNextDay.getDate() + 1)
-        defaultNextDay.setHours(0, 0, 0, 0)
-        return defaultNextDay
-    }
+function getCycleStart(date: Date, classDayOfWeek?: number): Date {
+    const d = new Date(date)
+    d.setHours(0, 0, 0, 0)
+    if (classDayOfWeek === undefined) return d
 
-    const normalizedToday = new Date(today)
-    normalizedToday.setHours(0, 0, 0, 0)
-
-    const diff = (classDayOfWeek - normalizedToday.getDay() + 7) % 7
-    const daysUntilNextClass = diff === 0 ? 7 : diff
-    const nextClassDate = new Date(normalizedToday)
-    nextClassDate.setDate(nextClassDate.getDate() + daysUntilNextClass)
-    return nextClassDate
+    const currentDay = d.getDay()
+    const diff = (currentDay - classDayOfWeek + 7) % 7
+    d.setDate(d.getDate() - diff)
+    return d
 }
 
-function isInCurrentCycle(report: OccurrenceReport, classDayOfWeek?: number): boolean {
-    const reportDate = getReportDate(report)
-    if (!reportDate) {
-        return false
-    }
-
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const nextClassDate = getNextClassDate(today, classDayOfWeek)
-
-    return reportDate >= today && reportDate < nextClassDate
+function getCycleEnd(date: Date, classDayOfWeek?: number): Date {
+    const start = getCycleStart(date, classDayOfWeek)
+    const end = new Date(start)
+    end.setDate(end.getDate() + 7)
+    return end
 }
 
 function pickHighestProgressReport(
@@ -253,16 +239,26 @@ function pickHighestProgressReport(
     }
 
     return [...reportsAtHighestLesson].sort((left, right) => {
+        // 1. Completion status takes priority
         const completedDiff = Number(right.isCompleted === true) - Number(left.isCompleted === true)
         if (completedDiff !== 0) {
             return completedDiff
         }
 
+        // 2. Further progress letter (end progress or start if no end)
+        const endR = right.progressEnd || right.progressStart || ''
+        const endL = left.progressEnd || left.progressStart || ''
+        const progressDiff = endR.localeCompare(endL)
+        if (progressDiff !== 0) {
+            return progressDiff
+        }
+
+        // 3. Most recent record as final tie-break
         return getReportTimestamp(right) - getReportTimestamp(left)
     })[0]
 }
 
-function buildStudentProgressSummary(enrollment: Enrollment, reports: OccurrenceReport[], lessons: Lesson[]): StudentProgressSummary {
+function buildStudentProgressSummary(enrollment: Enrollment, reports: OccurrenceReport[], lessons: Lesson[], referenceDate: Date = new Date()): StudentProgressSummary {
     const currentCourse = enrollment.displayName || enrollment.courseDisplayName || [enrollment.courseSubject, enrollment.courseStage].filter(Boolean).join(' ')
     const lessonSequenceById = new Map(
         lessons
@@ -270,7 +266,16 @@ function buildStudentProgressSummary(enrollment: Enrollment, reports: Occurrence
             .map(lesson => [lesson.id as string, lesson.sequence])
     )
 
-    const reportsWithLesson = reports.filter(report => {
+    const cycleStart = getCycleStart(referenceDate, enrollment.classSessionDayOfWeek)
+    const cycleEnd = getCycleEnd(referenceDate, enrollment.classSessionDayOfWeek)
+
+    // Filter reports for context: only include those up to the end of the selected week
+    const contextualReports = reports.filter(report => {
+        const reportDate = getReportDate(report)
+        return reportDate ? reportDate < cycleEnd : false
+    })
+
+    const reportsWithLesson = contextualReports.filter(report => {
         if (!report.lessonId) {
             return false
         }
@@ -300,18 +305,26 @@ function buildStudentProgressSummary(enrollment: Enrollment, reports: Occurrence
         : []
     const highestReport = pickHighestProgressReport(highestLessonReports)
 
-    const reportsByOccurrenceDate = [...reports].sort((left, right) => getReportTimestamp(right) - getReportTimestamp(left))
-    const latestReport = reportsByOccurrenceDate.find(report => !isInCurrentCycle(report, enrollment.classSessionDayOfWeek)) || reportsByOccurrenceDate[0]
-    const latestLesson = latestReport?.lessonId ? lessons.find(lesson => lesson.id === latestReport.lessonId) : undefined
+    const reportsByOccurrenceDate = [...contextualReports].sort((left, right) => getReportTimestamp(right) - getReportTimestamp(left))
+    
+    // Find last attended report before the selected week
+    const historicalReports = reportsByOccurrenceDate.filter(report => {
+        const reportDate = getReportDate(report)
+        return reportDate ? reportDate < cycleStart : false
+    })
+    const latestAttendedReport = historicalReports.find(report => report.attendanceStatus === 'present')
+    const latestLesson = latestAttendedReport?.lessonId ? lessons.find(lesson => lesson.id === latestAttendedReport.lessonId) : undefined
 
     return {
         currentCourse: currentCourse || t('classroom.progress_no_record'),
         highestProgressTitle: formatLessonHeading(highestLessonNumber, highestLesson),
         highestProgressStatus: formatProgressRange(highestReport),
         highestProgressTone: getProgressTone(highestReport),
-        latestProgressTitle: formatLessonHeading(latestLesson?.sequence, getLessonTitle(lessons, undefined, latestReport?.lessonId)),
-        latestProgressStatus: formatProgressRange(latestReport),
-        latestProgressTone: getProgressTone(latestReport)
+        latestProgressTitle: latestAttendedReport 
+            ? formatLessonHeading(latestLesson?.sequence, getLessonTitle(lessons, undefined, latestAttendedReport?.lessonId))
+            : t('classroom.progress_no_record'),
+        latestProgressStatus: formatProgressRange(latestAttendedReport),
+        latestProgressTone: getProgressTone(latestAttendedReport)
     }
 }
 
@@ -359,7 +372,8 @@ function getTodayCourseSummary(enrollment: Enrollment): TodayCourseSummary {
 
 async function loadStudentProgressSummaries(
     enrollmentList: Enrollment[],
-    mode: 'replace' | 'merge' = 'replace'
+    mode: 'replace' | 'merge' = 'replace',
+    referenceDate: Date = todayOccurrence.value?.occurrenceDate || new Date()
 ) {
     const uniqueCourseIds = [...new Set(enrollmentList.map(enrollment => enrollment.courseId).filter(Boolean))]
     await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
@@ -371,7 +385,7 @@ async function loadStudentProgressSummaries(
 
         const lessons = await getLessonsForCourse(enrollment.courseId)
         const reports = await OccurrenceReportService.getAllReportsByEnrollment(enrollment.id)
-        return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons)] as const
+        return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons, referenceDate)] as const
     }))
 
     const nextSummaries = Object.fromEntries(summaryEntries.filter(([id]) => !!id)) as Record<string, StudentProgressSummary>
@@ -565,7 +579,7 @@ async function loadReportsForCurrentOccurrence() {
         })
 
         if (addedGuests.length > 0) {
-            await loadStudentProgressSummaries(addedGuests, 'merge')
+            await loadStudentProgressSummaries(addedGuests, 'merge', todayOccurrence.value.occurrenceDate)
         }
     }
 
@@ -641,7 +655,8 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
 
     await Promise.all([
         loadReportsForCurrentOccurrence(),
-        loadOccurrenceTeachers()
+        loadOccurrenceTeachers(),
+        loadStudentProgressSummaries(enrollments.value)
     ])
 }
 
@@ -706,8 +721,7 @@ async function loadData() {
         const { data: allTeachers } = await TeacherService.getTeachers(1, 1000)
         allTeachersList.value = allTeachers
 
-        // 2.5 Load lessons for each course and build student progress summaries
-        await loadStudentProgressSummaries(allEnrollments)
+        // 2.5 Summaries will be loaded in setCurrentOccurrence
 
         if (allEnrollments.length > 0 && allEnrollments[0]?.courseId) {
             courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
