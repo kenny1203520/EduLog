@@ -356,6 +356,13 @@ export class ReportQueryService {
                 updated_at,
                 enrollment_id,
                 class_occurrence_id,
+                progress_letter,
+                absence_reason,
+                class_participation,
+                classroom_behavior,
+                contact_notes,
+                class_notes,
+                external_link,
                 enrollments (
                     id,
                     student_id,
@@ -369,7 +376,9 @@ export class ReportQueryService {
                     id,
                     occurrence_date,
                     original_start_time,
+                    original_end_time,
                     actual_start_time,
+                    actual_end_time,
                     class_sessions (
                         id,
                         name,
@@ -391,7 +400,11 @@ export class ReportQueryService {
                 const row: any = r
                 const hasContent = row.content && row.content.trim().length > 0
                 const hasLesson = !!row.lesson_id
-                return !(hasContent && hasLesson)
+                const hasProgress = row.is_completed || !!row.progress_letter
+                const hasParticipation = row.class_participation != null
+                const hasBehavior = row.classroom_behavior != null
+
+                return !(hasContent && hasLesson && hasProgress && hasParticipation && hasBehavior)
             })
             .map(r => {
                 const row: any = r
@@ -408,6 +421,9 @@ export class ReportQueryService {
                 const student = students[0]
                 const hasContent = hasContentSafe(row.content)
                 const hasLesson = !!row.lesson_id
+                const hasProgress = row.is_completed || !!row.progress_letter
+                const hasParticipation = row.class_participation != null
+                const hasBehavior = row.classroom_behavior != null
 
                 return {
                     id: row.id,
@@ -420,14 +436,25 @@ export class ReportQueryService {
                     classroomName: classroom?.name || '-',
                     date: classOcc.occurrence_date,
                     startTime: classOcc.actual_start_time || classOcc.original_start_time || undefined,
+                    endTime: classOcc.actual_end_time || classOcc.original_end_time || undefined,
                     content: row.content || '',
                     lessonId: row.lesson_id || null,
                     missingContent: !hasContent,
                     missingLesson: !hasLesson,
+                    missingProgress: !hasProgress,
+                    missingParticipation: !hasParticipation,
+                    missingBehavior: !hasBehavior,
                     version: row.version,
                     attendanceStatus: row.attendance_status,
+                    absenceReason: row.absence_reason,
+                    classParticipation: row.class_participation,
+                    classroomBehavior: row.classroom_behavior,
+                    contactNotes: row.contact_notes,
+                    classNotes: row.class_notes,
+                    externalLink: row.external_link,
                     updatedAt: row.updated_at,
-                    isCompleted: row.is_completed
+                    isCompleted: row.is_completed,
+                    fullStudent: student || null
                 }
             })
     }

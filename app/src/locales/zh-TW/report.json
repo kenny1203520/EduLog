@@ -41,6 +41,9 @@
     "no_incomplete_reports": "目前沒有未完成報告。",
     "missing_content": "內容未填",
     "missing_unit": "課次未選",
+    "missing_progress": "進度未填",
+    "missing_participation": "參與度未填",
+    "missing_behavior": "秩序未填",
     "select_incomplete_to_edit": "請從左側選擇一份未完成報告開始編輯",
     "report_id": "報告編號",
     "reference_panel": {

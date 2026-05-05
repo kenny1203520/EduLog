@@ -41,6 +41,9 @@
     "no_incomplete_reports": "No incomplete reports found.",
     "missing_content": "Missing Content",
     "missing_unit": "Missing Unit",
+    "missing_progress": "Missing Progress",
+    "missing_participation": "Missing Participation",
+    "missing_behavior": "Missing Behavior",
     "select_incomplete_to_edit": "Select a report to start editing",
     "report_id": "Report ID",
     "reference_panel": {
