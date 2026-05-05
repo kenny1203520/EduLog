@@ -26,9 +26,11 @@
                 <div class="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
                     {{ incompleteReports.length }} {{ $t('common.items') }}
                 </div>
-                <button @click="loadReports"
+                <button @click="requestRefresh"
                     class="text-emerald-600 hover:text-emerald-700 p-2 rounded-full hover:bg-emerald-50 transition"
-                    :title="$t('common.refresh')">
+                    :class="{ 'animate-spin opacity-50 pointer-events-none': isRefreshing }"
+                    :disabled="isRefreshing"
+                    :title="$t('report.refresh_all')">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -37,6 +39,11 @@
                 </button>
             </div>
         </div>
+
+        <!-- Confirm Modal for Full Refresh -->
+        <ConfirmModal :is-open="showRefreshConfirm" :title="$t('report.refresh_all')"
+            :message="$t('report.refresh_all_confirm')" :confirm-text="$t('common.refresh')"
+            @confirm="handleRefreshConfirm" @close="showRefreshConfirm = false" />
 
         <div class="flex-1 min-h-0 flex relative overflow-hidden">
             <!-- Left Pane: Report List -->
@@ -51,8 +58,10 @@
                             $t('report.incomplete_reports') }}</h2>
                         <p class="text-xs text-gray-400 font-medium mt-0.5">{{ $t('report.select_to_complete') }}</p>
                     </div>
-                    <button @click="loadReports"
+                    <button @click="loadReports(false)"
                         class="p-2 rounded-full hover:bg-white transition text-gray-400 hover:text-emerald-600 active:scale-95"
+                        :class="{ 'animate-spin opacity-50 pointer-events-none': loading }"
+                        :disabled="loading"
                         :title="$t('common.refresh')">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -214,7 +223,7 @@
                     <!-- Scrollable Editor Area -->
                     <div
                         class="flex-1 overflow-y-auto rounded-[2.5rem] bg-white shadow-2xl shadow-gray-200/50 border border-gray-100/50 relative min-h-0 custom-scrollbar">
-                        <ReportEditor :key="selectedReport.id" :report-id="selectedReport.id"
+                        <ReportEditor :key="selectedReport.id + '-' + editorRefreshKey" :report-id="selectedReport.id"
                             :initial-content="selectedReport.content" :initial-version="selectedReport.version"
                             :loading="editorLoading"
                             :title="$t('report.report_for_date', { date: formatDateTime(selectedReport) })"
@@ -231,6 +240,19 @@
                             :initial-report-external-link="selectedReport.externalLink"
                             :initial-student-id="selectedReport.fullStudent?.id" @save-success="handleSaveSuccess"
                             @save-error="handleSaveError" class="!rounded-none !shadow-none !border-none" />
+
+                        <!-- Loading Overlay for Editor -->
+                        <div v-if="editorLoading"
+                            class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[2px] transition-all duration-300">
+                            <svg class="animate-spin h-12 w-12 text-emerald-500 mb-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            <p class="text-sm font-black text-gray-400 uppercase tracking-[0.2em] animate-pulse">
+                                {{ $t('common.loading') }}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -255,6 +277,7 @@ import { ref, onMounted } from 'vue'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 // import { LessonService } from '@/services/LessonService' // Removed: file not found
 import ReportEditor from '@/components/ReportEditor.vue'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 
@@ -262,17 +285,25 @@ const { locale, t } = useI18n()
 const toast = useToast()
 
 const loading = ref(true)
+const isRefreshing = ref(false)
+const showRefreshConfirm = ref(false)
+const editorRefreshKey = ref(0)
 const incompleteReports = ref<any[]>([])
 const selectedReport = ref<any>(null)
 const editorLoading = ref(false)
 const activeLessons = ref<any[]>([]) // Lessons for dropdown
 
-async function loadReports() {
+async function loadReports(refreshEditor = true) {
     loading.value = true
+    if (refreshEditor) {
+        isRefreshing.value = true
+        editorLoading.value = true
+    }
+    
     try {
         const raw = await OccurrenceReportService.getGlobalIncompleteReports()
         // Normalize fields to view expectations
-        incompleteReports.value = (raw || []).map((r: any) => ({
+        const normalized = (raw || []).map((r: any) => ({
             id: r.id || r.reportId,
             reportId: r.reportId || r.id,
             enrollmentId: r.enrollmentId,
@@ -304,32 +335,48 @@ async function loadReports() {
             fullStudent: r.fullStudent
         }))
 
+        incompleteReports.value = normalized
+
         // Auto-select first if none selected
-        if (!selectedReport.value && incompleteReports.value.length > 0) {
-            selectReport(incompleteReports.value[0])
+        if (!selectedReport.value && normalized.length > 0) {
+            selectReport(normalized[0])
+        } else if (selectedReport.value) {
+            // Re-sync selected report with new data from list
+            const found = normalized.find(r => r.id === selectedReport.value.id)
+            if (found) {
+                selectedReport.value = found
+                if (refreshEditor) {
+                    editorRefreshKey.value++
+                }
+            } else {
+                selectedReport.value = null
+            }
+        }
+
+        if (refreshEditor) {
+            toast.success(t('report.refresh_success') || 'Refreshed successfully')
         }
     } catch (err) {
         console.error(err)
         toast.error(t('report.load_error'))
     } finally {
         loading.value = false
+        isRefreshing.value = false
     }
+}
+
+function requestRefresh() {
+    showRefreshConfirm.value = true
+}
+
+async function handleRefreshConfirm() {
+    showRefreshConfirm.value = false
+    await loadReports(true)
 }
 
 async function selectReport(report: any) {
     if (selectedReport.value?.id === report.id) return
-
     selectedReport.value = report
-    activeLessons.value = [] // Clear immediately to prevent selection mismatch
-    editorLoading.value = true
-
-    try {
-        // Lessons will be fetched by the watcher on selectedReport
-    } catch (e) {
-        console.error(e)
-    } finally {
-        editorLoading.value = false
-    }
 }
 
 // Watch for selection and fetch lessons
@@ -339,10 +386,12 @@ import { supabase } from '@/lib/supabase'
 watch(selectedReport, async (newVal) => {
     if (!newVal || !newVal.courseId) {
         activeLessons.value = []
+        editorLoading.value = false
         return
     }
 
     // Fetch course lessons using courseId from report
+    editorLoading.value = true
     try {
         const { data: lessons, error } = await supabase
             .from('lessons')
@@ -355,6 +404,8 @@ watch(selectedReport, async (newVal) => {
     } catch (e) {
         console.error('Failed to load lessons for report context', e)
         activeLessons.value = []
+    } finally {
+        editorLoading.value = false
     }
 })
 

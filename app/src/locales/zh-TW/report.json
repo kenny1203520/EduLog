@@ -265,5 +265,8 @@
     "error": {
         "cannot_set_conducted_during_holiday": "國定假期期間無法將課程設為已進行",
         "cannot_set_teacher_present_during_holiday": "國定假期期間無法將教師設為出席"
-    }
+    },
+    "refresh_all": "重新整理全部",
+    "refresh_all_confirm": "確定要重新整理全部嗎？這將重新整理目前列表並重新載入編輯器內容，未儲存的變更將會遺失。",
+    "refresh_success": "重新整理成功"
 }
