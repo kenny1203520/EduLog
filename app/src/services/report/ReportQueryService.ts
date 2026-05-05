@@ -375,7 +375,3 @@ export class ReportQueryService {
     }
 
 }
-
-function hasContentSafe(content?: string | null): boolean {
-    return !!content && content.trim().length > 0
-}

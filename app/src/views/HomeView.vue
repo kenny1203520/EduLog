@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
@@ -9,8 +8,6 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { StudentService } from '@/services/student/StudentService'
 import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
-
-const { locale } = useI18n()
 
 const router = useRouter()
 const stats = ref({
@@ -124,15 +121,6 @@ function navigateToGlobalIncomplete() {
     router.push({ name: 'incomplete-reports' })
 }
 
-function formatDate(date: Date | string) {
-    const d = new Date(date)
-    return d.toLocaleDateString(locale.value, { year: 'numeric', month: '2-digit', day: '2-digit' })
-}
-
-function formatWeekday(date: Date | string) {
-    const d = new Date(date)
-    return d.toLocaleDateString(locale.value, { weekday: 'long' })
-}
 </script>
 
 <template>
