@@ -263,6 +263,8 @@
                             :initial-classroom-behavior="selectedReport.classroomBehavior"
                             :initial-contact-notes="selectedReport.contactNotes"
                             :initial-class-notes="selectedReport.classNotes"
+                            :initial-progress-start="selectedReport.progressStart"
+                            :initial-progress-end="selectedReport.progressEnd"
                             :initial-report-external-link="selectedReport.externalLink"
                             :initial-student-id="selectedReport.fullStudent?.id" @save-success="handleSaveSuccess"
                             @save-error="handleSaveError" class="!rounded-none !shadow-none !border-none" />
@@ -330,37 +332,51 @@ async function loadReports(refreshEditor = true) {
     try {
         const raw = await OccurrenceReportService.getGlobalIncompleteReports()
         // Normalize fields to view expectations
-        const normalized = (raw || []).map((r: any) => ({
-            id: r.id || r.reportId,
-            reportId: r.reportId || r.id,
-            enrollmentId: r.enrollmentId,
-            occurrenceId: r.occurrenceId,
-            studentName: r.studentName || (r.fullStudent?.name) || 'Unknown',
-            courseId: r.courseId,
-            className: r.className || r.sessionName || '-',
-            classroomName: r.classroomName || '-',
-            date: r.date || r.occurrenceDate,
-            startTime: r.startTime || r.effectiveStartTime,
-            endTime: r.endTime || r.effectiveEndTime,
-            content: r.content || '',
-            lessonId: r.lessonId || r.lesson_id || null,
-            missingContent: typeof r.missingContent === 'boolean' ? r.missingContent : !(r.content && r.content.trim().length > 0),
-            missingLesson: typeof r.missingLesson === 'boolean' ? r.missingLesson : !r.lessonId,
-            missingProgress: r.missingProgress,
-            missingParticipation: r.missingParticipation,
-            missingBehavior: r.missingBehavior,
-            version: r.version,
-            attendanceStatus: r.attendanceStatus || r.attendance_status,
-            absenceReason: r.absenceReason || r.absence_reason,
-            classParticipation: r.classParticipation || r.class_participation,
-            classroomBehavior: r.classroomBehavior || r.classroom_behavior,
-            contactNotes: r.contactNotes || r.contact_notes,
-            classNotes: r.classNotes || r.class_notes,
-            externalLink: r.externalLink || r.external_link,
-            updatedAt: r.updatedAt || r.updated_at,
-            isCompleted: r.isCompleted || r.is_completed,
-            fullStudent: r.fullStudent
-        }))
+        const normalized = (raw || []).map((r: any) => {
+            const progress = r.progressLetter || r.progress_letter || ''
+            let start = ''
+            let end = ''
+            if (progress && typeof progress === 'string') {
+                const parts = progress.split('-')
+                start = parts[0] || ''
+                end = parts[1] || ''
+            }
+            
+            return {
+                id: r.id || r.reportId,
+                reportId: r.reportId || r.id,
+                enrollmentId: r.enrollmentId,
+                occurrenceId: r.occurrenceId,
+                studentName: r.studentName || (r.fullStudent?.name) || 'Unknown',
+                courseId: r.courseId,
+                className: r.className || r.sessionName || '-',
+                classroomName: r.classroomName || '-',
+                date: r.date || r.occurrenceDate,
+                startTime: r.startTime || r.effectiveStartTime,
+                endTime: r.endTime || r.effectiveEndTime,
+                content: r.content || '',
+                lessonId: r.lessonId || r.lesson_id || null,
+                missingContent: typeof r.missingContent === 'boolean' ? r.missingContent : !(r.content && r.content.trim().length > 0),
+                missingLesson: typeof r.missingLesson === 'boolean' ? r.missingLesson : !r.lessonId,
+                missingProgress: r.missingProgress,
+                missingParticipation: r.missingParticipation,
+                missingBehavior: r.missingBehavior,
+                version: r.version,
+                attendanceStatus: r.attendanceStatus || r.attendance_status,
+                absenceReason: r.absenceReason || r.absence_reason,
+                classParticipation: r.classParticipation || r.class_participation,
+                classroomBehavior: r.classroomBehavior || r.classroom_behavior,
+                contactNotes: r.contactNotes || r.contact_notes,
+                classNotes: r.classNotes || r.class_notes,
+                progressLetter: progress,
+                progressStart: start,
+                progressEnd: end,
+                externalLink: r.externalLink || r.external_link,
+                updatedAt: r.updatedAt || r.updated_at,
+                isCompleted: r.isCompleted || r.is_completed,
+                fullStudent: r.fullStudent
+            }
+        })
 
         incompleteReports.value = normalized
 

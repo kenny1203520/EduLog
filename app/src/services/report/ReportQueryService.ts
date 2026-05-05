@@ -231,6 +231,7 @@ export class ReportQueryService {
                     externalLink: report.external_link,
                     updatedAt: report.updated_at,
                     isCompleted: report.is_completed,
+                    progressLetter: report.progress_letter,
                     fullStudent: student,
                     isMissing: false
                 })
