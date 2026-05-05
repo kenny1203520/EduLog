@@ -67,5 +67,6 @@
     "save_error": "儲存失敗",
     "clear": "清除",
     "start_date": "開始日期",
-    "end_date": "結束日期"
+    "end_date": "結束日期",
+    "font_size": "字體大小"
 }

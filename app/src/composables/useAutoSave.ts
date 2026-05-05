@@ -53,6 +53,7 @@ export function useAutoSave(options: AutoSaveOptions) {
     // Debounce timer
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
     let activeSavePromise: Promise<void> | null = null
+    let isDirtyWhileSaving = false
 
     /**
      * Clears the existing debounce timer
@@ -86,6 +87,7 @@ export function useAutoSave(options: AutoSaveOptions) {
 
         isSaving.value = true
         saveError.value = null
+        isDirtyWhileSaving = false
 
         activeSavePromise = (async () => {
             try {
@@ -98,9 +100,11 @@ export function useAutoSave(options: AutoSaveOptions) {
                         onConflict(result.serverReport || null)
                     }
                 } else if (result.success) {
-                    // Success
+                    // Success - only reset if no changes occurred DURING the save
                     lastSaved.value = new Date()
-                    hasUnsavedChanges.value = false
+                    if (!isDirtyWhileSaving) {
+                        hasUnsavedChanges.value = false
+                    }
                     if (onSuccess && result.newVersion) {
                         onSuccess(result.newVersion)
                     }
@@ -135,6 +139,12 @@ export function useAutoSave(options: AutoSaveOptions) {
      */
     function triggerAutoSave(content: string): void {
         hasUnsavedChanges.value = true
+        
+        // If we are currently saving, mark it as dirty so it doesn't reset after save
+        if (isSaving.value) {
+            isDirtyWhileSaving = true
+        }
+
         clearTimer()
 
         debounceTimer = setTimeout(() => {

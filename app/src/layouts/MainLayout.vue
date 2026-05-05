@@ -2,9 +2,11 @@
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 const auth = useAuthStore()
 const router = useRouter()
+const preferences = usePreferencesStore()
 const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
 
@@ -80,6 +82,23 @@ async function handleLogout() {
                     <button @click="$i18n.locale = 'en'"
                         :class="{ 'bg-white shadow text-emerald-600': $i18n.locale === 'en', 'text-gray-500 hover:text-gray-700': $i18n.locale !== 'en' }"
                         class="px-3 py-1.5 rounded transition flex-1">English</button>
+                </div>
+            </div>
+
+            <!-- Font Size Switcher in Sidebar -->
+            <div class="px-6 py-2">
+                <div class="flex items-center justify-between bg-gray-100 rounded-xl p-1 gap-1 select-none">
+                    <button @click="preferences.adjustGlobalScale(-preferences.STEP)"
+                        class="w-10 h-10 flex items-center justify-center rounded-lg bg-white shadow-sm text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 transition-all font-bold text-sm">
+                        -A
+                    </button>
+                    <div class="flex-1 text-center">
+                        <span class="text-xs font-bold text-emerald-600">{{ preferences.globalFontScale }}%</span>
+                    </div>
+                    <button @click="preferences.adjustGlobalScale(preferences.STEP)"
+                        class="w-10 h-10 flex items-center justify-center rounded-lg bg-white shadow-sm text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 transition-all font-bold text-sm">
+                        +A
+                    </button>
                 </div>
             </div>
 

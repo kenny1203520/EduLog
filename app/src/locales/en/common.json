@@ -67,5 +67,6 @@
     "save_error": "Failed to save",
     "clear": "Clear",
     "start_date": "Start Date",
-    "end_date": "End Date"
+    "end_date": "End Date",
+    "font_size": "Font Size"
 }

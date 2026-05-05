@@ -29,6 +29,7 @@
                 <span class="hidden sm:inline">{{ $t('report.reference_panel.title') }}</span>
             </button>
 
+
             <button @click="openReportTemplateManagerModal"
                 class="text-sm font-medium text-gray-600 hover:text-emerald-600 flex items-center gap-1 focus:outline-none"
                 :title="$t('report.editor.templates')">
@@ -349,6 +350,23 @@
             </div>
         </div>
 
+        <!-- Editor Font Size Stepper -->
+        <div class="flex items-center gap-4 mb-4 justify-end">
+            <div class="flex items-center gap-1 bg-gray-50 border border-gray-100 rounded-xl p-1 shadow-sm select-none">
+                <button @click="preferences.adjustEditorScale(-preferences.STEP)"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 transition-all font-bold text-xs shadow-sm">
+                    -A
+                </button>
+                <div class="px-3 min-w-[3.5rem] text-center">
+                    <span class="text-xs font-bold text-emerald-600">{{ preferences.editorFontScale }}%</span>
+                </div>
+                <button @click="preferences.adjustEditorScale(preferences.STEP)"
+                    class="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 transition-all font-bold text-xs shadow-sm">
+                    +A
+                </button>
+            </div>
+        </div>
+
         <!-- Contact Notes -->
         <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
@@ -360,6 +378,7 @@
             </label>
             <textarea v-model="contactNotes" rows="2"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"
+                :style="{ fontSize: `${preferences.editorFontScale}%` }"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"></textarea>
         </div>
 
@@ -374,7 +393,8 @@
                 <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
             </label>
             <textarea v-model="classNotes" rows="4"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y font-mono text-sm"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y font-mono"
+                :style="{ fontSize: `${preferences.editorFontScale}%` }"
                 :placeholder="$t('report.editor.class_notes_placeholder')"></textarea>
         </div>
 
@@ -398,8 +418,9 @@
             <textarea v-model="localContent" @input="handleInput"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
-                class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono text-sm"
-                :class="{ 'bg-gray-50': props.disabled, 'opacity-50': props.disabled }" />
+                class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono"
+                :class="{ 'bg-gray-50': props.disabled, 'opacity-50': props.disabled }"
+                :style="{ fontSize: `${preferences.editorFontScale}%` }" />
         </div>
 
         <!-- Error Display -->
@@ -635,6 +656,7 @@ import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import { ReportTemplateService } from '@/services/report/ReportTemplateService'
 import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy_template/CopyTemplateService'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useToast } from 'vue-toastification'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
@@ -692,6 +714,7 @@ const selectedReportTemplateModes = ref<Record<string, string>>({
     lesson: 'arabic'
 })
 
+const preferences = usePreferencesStore()
 const toast = useToast()
 
 // Confirm Modal State
