@@ -120,6 +120,14 @@
                                     class="text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg border border-emerald-100">
                                     {{ getReportProgress(report) }}
                                 </span>
+                                <span v-if="report.is_completed"
+                                    class="text-[10px] font-black uppercase tracking-widest bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg border border-blue-100">
+                                    {{ $t('report.completed') }}
+                                </span>
+                                <span v-else
+                                    class="text-[10px] font-black uppercase tracking-widest bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg border border-amber-100">
+                                    {{ $t('report.incomplete') }}
+                                </span>
                             </div>
                         </div>
                         <button @click="copyContent(report.content)"

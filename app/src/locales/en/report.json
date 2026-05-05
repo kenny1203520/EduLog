@@ -44,6 +44,7 @@
     "missing_progress": "Missing Progress",
     "missing_participation": "Missing Participation",
     "missing_behavior": "Missing Behavior",
+    "not_created": "Not Created",
     "select_incomplete_to_edit": "Select a report to start editing",
     "report_id": "Report ID",
     "reference_panel": {

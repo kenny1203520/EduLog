@@ -1,33 +1,33 @@
 <template>
-    <div class="absolute inset-0 flex flex-col bg-gray-50 overflow-hidden">
+    <div class="flex flex-col bg-gray-50 overflow-hidden h-[calc(100dvh-4rem)] lg:h-[calc(100vh-5rem)] -m-4 lg:-mx-8 lg:-mb-8 lg:-mt-14 relative">
         <!-- Header -->
         <div
-            class="flex-none p-6 bg-white shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] flex justify-between items-center z-20">
-            <div class="flex items-center gap-4">
+            class="flex-none p-4 sm:p-6 bg-white shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] flex justify-between items-center z-20">
+            <div class="flex items-center gap-3 sm:gap-4">
                 <div
-                    class="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 shadow-inner">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                    class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                 </div>
                 <div>
-                    <h1 class="text-2xl font-black text-gray-900 tracking-tight">
+                    <h1 class="text-lg sm:text-2xl font-black text-gray-900 tracking-tight leading-tight">
                         {{ $t('report.incomplete_reports_title') }}
                     </h1>
-                    <p class="text-xs font-medium text-gray-400 mt-0.5">
+                    <p class="text-[10px] sm:text-xs font-medium text-gray-400 mt-0.5 line-clamp-1">
                         {{ $t('report.incomplete_reports_subtitle') }}
                     </p>
                 </div>
             </div>
 
-            <div class="flex items-center gap-4">
-                <div class="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1.5 rounded-lg">
+            <div class="flex items-center gap-2 sm:gap-4">
+                <div class="text-[10px] sm:text-sm font-bold text-gray-500 bg-gray-100 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg whitespace-nowrap">
                     {{ incompleteReports.length }} {{ $t('common.items') }}
                 </div>
                 <button @click="requestRefresh"
-                    class="text-emerald-600 hover:text-emerald-700 p-2 rounded-full hover:bg-emerald-50 transition"
+                    class="text-emerald-600 hover:text-emerald-700 p-1.5 sm:p-2 rounded-full hover:bg-emerald-50 transition"
                     :class="{ 'animate-spin opacity-50 pointer-events-none': isRefreshing }"
                     :disabled="isRefreshing"
                     :title="$t('report.refresh_all')">
@@ -146,7 +146,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleTimeString([], {
+                            {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }} {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleTimeString([], {
                                 hour:
                                     '2-digit', minute: '2-digit'
                             }) }}
@@ -161,60 +161,60 @@
                 <div v-if="selectedReport" class="flex-1 flex flex-col max-w-5xl mx-auto w-full h-full min-h-0">
                     <!-- Context Banner -->
                     <div
-                        class="bg-white p-6 sm:p-5 rounded-[2rem] sm:rounded-3xl shadow-xl shadow-gray-200/40 border border-gray-100/50 mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-4 shrink-0">
-                        <div class="flex items-center gap-5">
+                        class="bg-white p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xl shadow-gray-200/40 border border-gray-100/50 mb-4 sm:mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 animate-in fade-in slide-in-from-bottom-4 shrink-0">
+                        <div class="flex items-center gap-3 sm:gap-5">
                             <!-- Back Button (Mobile) -->
                             <button @click="selectedReport = null"
-                                class="sm:hidden p-3 -ml-2 text-gray-400 hover:text-emerald-600 rounded-2xl active:bg-gray-100 transition-all duration-300">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                class="sm:hidden p-2 -ml-1 text-gray-400 hover:text-emerald-600 rounded-xl active:bg-gray-100 transition-all duration-300">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                     stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                         d="M15 19l-7-7 7-7" />
                                 </svg>
                             </button>
                             <div
-                                class="text-center bg-gray-50 p-3 rounded-3xl border border-gray-100 min-w-[90px] shadow-inner">
-                                <div class="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{{
+                                class="text-center bg-gray-50 p-2 sm:p-3 rounded-2xl sm:rounded-3xl border border-gray-100 min-w-[70px] sm:min-w-[90px] shadow-inner">
+                                <div class="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-tighter">{{
                                     formatWeekday(selectedReport.date) }}</div>
-                                <div class="text-3xl font-black text-gray-900 leading-none my-1">{{ new
+                                <div class="text-xl sm:text-3xl font-black text-gray-900 leading-none my-0.5 sm:my-1">{{ new
                                     Date(selectedReport.date).getDate()
                                     }}</div>
                                 <div v-if="selectedReport.startTime"
-                                    class="text-[10px] font-bold text-emerald-600 whitespace-nowrap">
+                                    class="text-[8px] sm:text-[10px] font-bold text-emerald-600 whitespace-nowrap">
                                     {{ formatTimeRange(selectedReport.startTime, selectedReport.endTime) }}
                                 </div>
                             </div>
-                            <div class="flex-1">
-                                <div class="flex items-center gap-3">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 sm:gap-3">
                                     <h3
-                                        class="font-black text-xl sm:text-lg text-gray-900 tracking-tight line-clamp-1 break-words">
+                                        class="font-black text-base sm:text-lg text-gray-900 tracking-tight truncate">
                                         {{ selectedReport.studentName }}</h3>
                                     <router-link v-if="selectedReport.fullStudent?.id"
                                         :to="`/dashboard/students/${selectedReport.fullStudent.id}`" target="_blank"
-                                        class="text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 p-2 rounded-xl transition-all shrink-0 shadow-sm shadow-emerald-100/50"
+                                        class="text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 p-1.5 rounded-lg transition-all shrink-0 shadow-sm"
                                         title="開啟學生個人資料">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                                 d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                         </svg>
                                     </router-link>
                                 </div>
-                                <div class="text-sm font-medium text-gray-400 flex items-center gap-2 flex-wrap mt-1.5">
-                                    <span class="bg-gray-100 px-2 py-0.5 rounded-lg">{{ selectedReport.className
+                                <div class="text-[11px] sm:text-sm font-medium text-gray-400 flex items-center gap-1.5 sm:gap-2 flex-wrap mt-1">
+                                    <span class="bg-gray-100 px-1.5 py-0.5 rounded-md truncate max-w-[120px]">{{ selectedReport.className
                                         }}</span>
-                                    <span v-if="selectedReport.classroomName" class="flex items-center gap-1.5">
+                                    <span v-if="selectedReport.classroomName" class="flex items-center gap-1">
                                         <div class="w-1 h-1 rounded-full bg-gray-300"></div>
-                                        <span class="text-gray-400">{{ selectedReport.classroomName }}</span>
+                                        <span class="text-gray-400 truncate max-w-[80px]">{{ selectedReport.classroomName }}</span>
                                     </span>
                                 </div>
                             </div>
                         </div>
-                        <div class="text-left sm:text-right sm:flex-shrink-0">
-                            <div class="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-2 px-1">{{
+                        <div class="hidden sm:block text-right flex-shrink-0">
+                            <div class="text-[10px] text-gray-400 font-black uppercase tracking-[0.2em] mb-1 px-1">{{
                                 $t('report.report_id') }}</div>
                             <div
-                                class="font-mono text-gray-400 text-[10px] select-all bg-gray-50 px-4 py-2 rounded-2xl inline-block border border-gray-100 shadow-inner">
+                                class="font-mono text-gray-400 text-[10px] select-all bg-gray-50 px-3 py-1.5 rounded-xl inline-block border border-gray-100 shadow-inner">
                                 #{{ selectedReport.id.slice(0, 8) }}
                             </div>
                         </div>

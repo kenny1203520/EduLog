@@ -44,6 +44,7 @@
     "missing_progress": "進度未填",
     "missing_participation": "參與度未填",
     "missing_behavior": "秩序未填",
+    "not_created": "尚未建立",
     "select_incomplete_to_edit": "請從左側選擇一份未完成報告開始編輯",
     "report_id": "報告編號",
     "reference_panel": {
@@ -215,6 +216,7 @@
         "delete_report_title": "刪除報告",
         "delete_report_confirm": "確定要刪除此報告嗎？刪除後，學生的課程進度將會自動更新（若此報告是最後一次上課紀錄，進度將會退回）。",
         "delete_success": "報告已刪除",
+        "confirm_create_report_title": "建立新報告",
         "confirm_create_report": "此課堂尚未建立報告，點選後將會自動為學生建立一份新的報告。確定要繼續嗎？",
         "create_error": "建立報告失敗"
     },

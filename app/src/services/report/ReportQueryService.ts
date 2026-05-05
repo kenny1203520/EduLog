@@ -135,76 +135,109 @@ export class ReportQueryService {
     }
 
     static async getPendingReports(): Promise<any[]> {
-        const thirtyDaysAgo = new Date()
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-        const dateStr = thirtyDaysAgo.toISOString().split('T')[0]
+        const results = await this.fetchIncompleteReportsInternal(90)
+        return results.map(r => ({
+            id: r.id,
+            studentName: r.studentName,
+            date: r.date,
+            className: r.className,
+            classroom: r.classroomName,
+            occurrenceId: r.occurrenceId,
+            enrollmentId: r.enrollmentId,
+            isMissing: false,
+            reportId: r.id
+        }))
+    }
 
-        const { data: occurrences, error: occError } = await supabase
-            .from('class_occurrences')
+    static async getGlobalIncompleteReports(): Promise<any[]> {
+        return this.fetchIncompleteReportsInternal(90)
+    }
+
+    private static async fetchIncompleteReportsInternal(daysBack: number): Promise<any[]> {
+        const startDate = new Date()
+        startDate.setDate(startDate.getDate() - daysBack)
+        const dateStr = startDate.toISOString().split('T')[0]
+        const todayStr = new Date().toISOString().split('T')[0]
+
+        // Fetch reports with attendance_status = 'present'
+        // Join with everything needed to determine incompleteness and show details
+        const { data, error } = await supabase
+            .from('occurrence_reports')
             .select(`
-                id, occurrence_date, is_conducted,
-                class_sessions (
-                    id, name,
-                    classrooms (name),
-                    enrollments (
-                        id, student_id, status,
-                        students (name)
+                *,
+                enrollments!inner (
+                    id, student_id, course_id, status,
+                    students (id, name)
+                ),
+                class_occurrences!inner (
+                    id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, is_conducted, status,
+                    class_sessions (
+                        id, name,
+                        classrooms (id, name)
                     )
                 )
             `)
-            .eq('is_conducted', true)
-            .gte('occurrence_date', dateStr)
-            .lte('occurrence_date', new Date().toISOString().split('T')[0])
+            .eq('attendance_status', 'present')
+            .gte('class_occurrences.occurrence_date', dateStr)
+            .lte('class_occurrences.occurrence_date', todayStr)
 
-        if (occError) throw new Error(`Failed to fetch pending reports: ${occError.message}`)
-        if (!occurrences) return []
+        if (error) throw new Error(`Failed to fetch incomplete reports: ${error.message}`)
+        if (!data) return []
 
-        const pending: any[] = []
-        const occurrenceIds = occurrences.map(o => o.id)
-        if (occurrenceIds.length === 0) return []
+        const results: any[] = []
+        for (const report of data) {
+            // Check incompleteness based on user's rules:
+            // 課堂秩序、課程參與、課次、進度紀錄(如果完整完成則可以省略)、學習報告 以上任一位完成則為缺失
+            const hasContent = !!(report.content && report.content.trim().length > 0)
+            const hasLesson = !!report.lesson_id
+            const hasProgress = report.is_completed || !!(report.progress_letter && report.progress_letter.trim())
+            const hasParticipation = report.class_participation != null
+            const hasBehavior = report.classroom_behavior != null
 
-        const { data: reports } = await supabase
-            .from('occurrence_reports')
-            .select('id, enrollment_id, class_occurrence_id, is_completed, attendance_status, content, lesson_id, progress_letter')
-            .in('class_occurrence_id', occurrenceIds)
+            const isIncomplete = !(hasContent && hasLesson && hasProgress && hasParticipation && hasBehavior)
+            
+            if (isIncomplete) {
+                const occ = report.class_occurrences
+                const session = Array.isArray(occ.class_sessions) ? occ.class_sessions[0] : occ.class_sessions
+                const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
+                const student = Array.isArray(report.enrollments?.students) ? report.enrollments.students[0] : report.enrollments?.students
 
-        const reportLookup = new Map<string, any>()
-        reports?.forEach(r => {
-            reportLookup.set(`${r.enrollment_id}_${r.class_occurrence_id}`, r)
-        })
-
-        for (const occ of occurrences) {
-            const session = (occ as any).class_sessions
-            if (!session || !session.enrollments) continue
-
-            for (const enr of session.enrollments) {
-                if (enr.status !== 'active') continue
-
-                const key = `${enr.id}_${occ.id}`
-                const report = reportLookup.get(key)
-
-                if (report && report.attendance_status === 'present') {
-                    const hasRange = report.progress_letter && report.progress_letter.includes('-')
-                    const isProgressDone = report.is_completed || hasRange
-                    const hasContent = report.content && report.content.trim().length > 0
-
-                    if (!isProgressDone && !hasContent) {
-                        pending.push({
-                            id: report.id,
-                            studentName: enr.students?.name || 'Unknown',
-                            date: occ.occurrence_date,
-                            className: session.name,
-                            classroom: session.classrooms?.name,
-                            occurrenceId: occ.id,
-                            enrollmentId: enr.id,
-                            isMissing: true
-                        })
-                    }
-                }
+                results.push({
+                    id: report.id,
+                    reportId: report.id,
+                    enrollmentId: report.enrollment_id,
+                    occurrenceId: report.class_occurrence_id,
+                    studentName: student?.name || 'Unknown',
+                    courseId: report.enrollments?.course_id,
+                    className: session?.name || '-',
+                    classroomName: classroom?.name || '-',
+                    date: occ.occurrence_date,
+                    startTime: occ.actual_start_time || occ.original_start_time || undefined,
+                    endTime: occ.actual_end_time || occ.original_end_time || undefined,
+                    content: report.content || '',
+                    lessonId: report.lesson_id,
+                    missingContent: !hasContent,
+                    missingLesson: !hasLesson,
+                    missingProgress: !hasProgress,
+                    missingParticipation: !hasParticipation,
+                    missingBehavior: !hasBehavior,
+                    version: report.version,
+                    attendanceStatus: report.attendance_status,
+                    absenceReason: report.absence_reason,
+                    classParticipation: report.class_participation,
+                    classroomBehavior: report.classroom_behavior,
+                    contactNotes: report.contact_notes,
+                    classNotes: report.class_notes,
+                    externalLink: report.external_link,
+                    updatedAt: report.updated_at,
+                    isCompleted: report.is_completed,
+                    fullStudent: student,
+                    isMissing: false
+                })
             }
         }
 
-        return pending.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        return results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     }
 
     static async getReportsByLesson(
@@ -340,124 +373,6 @@ export class ReportQueryService {
         return { data: data || [], count: count || 0 }
     }
 
-    static async getGlobalIncompleteReports(): Promise<any[]> {
-        // Use date-only comparison (YYYY-MM-DD) to match DB date column
-        const todayStr = new Date().toISOString().split('T')[0]
-
-        const { data, error } = await supabase
-            .from('occurrence_reports')
-            .select(`
-                id,
-                content,
-                lesson_id,
-                attendance_status,
-                is_completed,
-                version,
-                updated_at,
-                enrollment_id,
-                class_occurrence_id,
-                progress_letter,
-                absence_reason,
-                class_participation,
-                classroom_behavior,
-                contact_notes,
-                class_notes,
-                external_link,
-                enrollments (
-                    id,
-                    student_id,
-                    course_id,
-                    students (
-                        id,
-                        name
-                    )
-                ),
-                class_occurrences!inner (
-                    id,
-                    occurrence_date,
-                    original_start_time,
-                    original_end_time,
-                    actual_start_time,
-                    actual_end_time,
-                    class_sessions (
-                        id,
-                        name,
-                        classrooms (
-                            id,
-                            name
-                        )
-                    )
-                )
-            `)
-            .eq('attendance_status', 'present')
-            .lte('class_occurrences.occurrence_date', todayStr)
-            .order('class_occurrences(occurrence_date)', { ascending: false })
-
-        if (error) throw new Error(`Failed to fetch incomplete reports: ${error.message}`)
-
-        return (data || [])
-            .filter(r => {
-                const row: any = r
-                const hasContent = row.content && row.content.trim().length > 0
-                const hasLesson = !!row.lesson_id
-                const hasProgress = row.is_completed || !!row.progress_letter
-                const hasParticipation = row.class_participation != null
-                const hasBehavior = row.classroom_behavior != null
-
-                return !(hasContent && hasLesson && hasProgress && hasParticipation && hasBehavior)
-            })
-            .map(r => {
-                const row: any = r
-                const classOcc = row.class_occurrences || {}
-                const classSession = Array.isArray(classOcc.class_sessions) 
-                    ? classOcc.class_sessions[0] 
-                    : classOcc.class_sessions || {}
-                const classroom = Array.isArray(classSession.classrooms)
-                    ? classSession.classrooms[0]
-                    : classSession.classrooms || {}
-                const students = Array.isArray(row.enrollments?.students)
-                    ? row.enrollments.students
-                    : [row.enrollments?.students].filter(Boolean)
-                const student = students[0]
-                const hasContent = hasContentSafe(row.content)
-                const hasLesson = !!row.lesson_id
-                const hasProgress = row.is_completed || !!row.progress_letter
-                const hasParticipation = row.class_participation != null
-                const hasBehavior = row.classroom_behavior != null
-
-                return {
-                    id: row.id,
-                    reportId: row.id,
-                    enrollmentId: row.enrollment_id,
-                    occurrenceId: row.class_occurrence_id,
-                    studentName: student?.name || row.enrollments?.students?.name || 'Unknown',
-                    courseId: row.enrollments?.course_id,
-                    className: classSession?.name || '-',
-                    classroomName: classroom?.name || '-',
-                    date: classOcc.occurrence_date,
-                    startTime: classOcc.actual_start_time || classOcc.original_start_time || undefined,
-                    endTime: classOcc.actual_end_time || classOcc.original_end_time || undefined,
-                    content: row.content || '',
-                    lessonId: row.lesson_id || null,
-                    missingContent: !hasContent,
-                    missingLesson: !hasLesson,
-                    missingProgress: !hasProgress,
-                    missingParticipation: !hasParticipation,
-                    missingBehavior: !hasBehavior,
-                    version: row.version,
-                    attendanceStatus: row.attendance_status,
-                    absenceReason: row.absence_reason,
-                    classParticipation: row.class_participation,
-                    classroomBehavior: row.classroom_behavior,
-                    contactNotes: row.contact_notes,
-                    classNotes: row.class_notes,
-                    externalLink: row.external_link,
-                    updatedAt: row.updated_at,
-                    isCompleted: row.is_completed,
-                    fullStudent: student || null
-                }
-            })
-    }
 }
 
 function hasContentSafe(content?: string | null): boolean {
