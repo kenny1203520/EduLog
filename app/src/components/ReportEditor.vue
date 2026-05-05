@@ -1681,7 +1681,6 @@ watch([
     classNotes,
     reportExternalLink
 ], () => {
-    if (isInitializing.value) return
     handleInput()
 })
 
@@ -1691,10 +1690,10 @@ const isInitializing = ref(false)
 watch(() => props.reportId, () => {
     isInitializing.value = true
     reset()
-    // Allow time for props to propagate to local state
+    // 給予極短時間讓 props 傳遞到 local state
     setTimeout(() => {
         isInitializing.value = false
-    }, 800)
+    }, 50)
 }, { immediate: true })
 
 // Stay in initializing state while parent is loading
@@ -1702,16 +1701,20 @@ watch(() => props.loading, (newLoading) => {
     if (newLoading) {
         isInitializing.value = true
     } else {
-        // When done loading, give it a moment to stabilize
+        // 當載入完成後，給予極短時間穩定狀態
         setTimeout(() => {
             isInitializing.value = false
-        }, 500)
+        }, 50)
     }
 })
 
 // Methods
 function handleInput() {
-    if (isInitializing.value) return
+    if (isInitializing.value) {
+        // 如果正在初始化（從 props 同步中），我們不觸發自動儲存
+        // 這樣可以避免載入報告時立即觸發儲存任務
+        return
+    }
 
     // Trigger auto-save with all data
     // We need to pass the external link to the parent via emit or just trust the triggerAutoSave

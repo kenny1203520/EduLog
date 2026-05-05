@@ -54,6 +54,7 @@ export function useAutoSave(options: AutoSaveOptions) {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
     let activeSavePromise: Promise<void> | null = null
     let isDirtyWhileSaving = false
+    let saveRequestCounter = 0
 
     /**
      * Clears the existing debounce timer
@@ -71,17 +72,19 @@ export function useAutoSave(options: AutoSaveOptions) {
     async function saveNow(content: string): Promise<void> {
         clearTimer()
 
+        const currentRequestId = ++saveRequestCounter
+
         if (activeSavePromise) {
+            isDirtyWhileSaving = true
             await activeSavePromise
-            return
+            
+            // 如果在等待期間有更新的儲存請求進來，放棄當前的請求
+            if (currentRequestId !== saveRequestCounter) {
+                return
+            }
         }
 
         if (!hasUnsavedChanges.value) {
-            return
-        }
-
-        if (isSaving.value) {
-            console.log('Save already in progress, skipping')
             return
         }
 
@@ -94,14 +97,13 @@ export function useAutoSave(options: AutoSaveOptions) {
                 const result = await onSave(content)
 
                 if (result.conflict) {
-                    // Conflict detected
                     hasUnsavedChanges.value = true
                     if (onConflict) {
                         onConflict(result.serverReport || null)
                     }
                 } else if (result.success) {
-                    // Success - only reset if no changes occurred DURING the save
                     lastSaved.value = new Date()
+                    // 只有在儲存期間沒有新變動時，才重置 hasUnsavedChanges
                     if (!isDirtyWhileSaving) {
                         hasUnsavedChanges.value = false
                     }
@@ -109,7 +111,6 @@ export function useAutoSave(options: AutoSaveOptions) {
                         onSuccess(result.newVersion)
                     }
                 } else {
-                    // Error
                     const errorMsg = 'Failed to save'
                     saveError.value = errorMsg
                     hasUnsavedChanges.value = true
