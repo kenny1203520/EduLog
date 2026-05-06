@@ -44,7 +44,7 @@ const version = __APP_VERSION__
                     </div>
                     <div>
                         <h3 class="text-sm font-medium text-gray-500">{{ $t('about.developer') }}</h3>
-                        <p class="text-xl font-bold text-gray-900">Kenny</p>
+                        <a href="https://github.com/kenny1203520" target="_blank" class="text-xl font-bold text-gray-900">Kenny</a>
                     </div>
                 </div>
             </div>
