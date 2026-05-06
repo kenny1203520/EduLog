@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { HolidayService } from '@/services/holiday/HolidayService'
-import { ClassroomService } from '@/services/Classroom/ClassroomService'
-import { SessionService } from '@/services/Session/SessionService'
+import { ClassroomService } from '@/services/classroom/ClassroomService'
+import { SessionService } from '@/services/session/SessionService'
 import { Holiday } from '@/models/Holiday'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'

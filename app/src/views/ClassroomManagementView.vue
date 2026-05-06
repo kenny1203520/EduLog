@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
-import { ClassroomService } from '@/services/Classroom/ClassroomService'
-import { SessionService } from '@/services/Session/SessionService'
+import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { ClassroomService } from '@/services/classroom/ClassroomService'
+import { SessionService } from '@/services/session/SessionService'
 import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
@@ -576,7 +576,7 @@ function clearTeacherSelection() {
             class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-3">
             <div class="flex items-center gap-2">
                 <span class="text-xs font-black text-gray-500 uppercase tracking-widest">{{ $t('classroom.display_mode')
-                    }}</span>
+                }}</span>
                 <div class="flex bg-gray-100 p-1 rounded-xl border border-gray-100">
                     <button @click="displayMode = 'visible'"
                         class="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all"
@@ -739,7 +739,7 @@ function clearTeacherSelection() {
                 <div v-if="classrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
-                        }}"</span>
+                    }}"</span>
                 </div>
             </div>
 
@@ -839,7 +839,7 @@ function clearTeacherSelection() {
                                 </svg>
                             </div>
                             <span class="text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!)
-                            }}</span>
+                                }}</span>
                         </div>
 
                         <!-- Capacity Info -->
@@ -918,32 +918,32 @@ function clearTeacherSelection() {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
-                        }}</label>
+                            }}</label>
                         <input v-model="newClassroom.external_link"
                             :placeholder="$t('classroom.external_link_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                        }}</label>
+                            }}</label>
                         <input type="color" v-model="newClassroom.color"
                             class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                     </div>
@@ -976,7 +976,7 @@ function clearTeacherSelection() {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
-                        }}</label>
+                            }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -990,7 +990,7 @@ function clearTeacherSelection() {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
-                        }}</label>
+                            }}</label>
                         <input type="number" v-model="newSession.capacity"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -1025,7 +1025,7 @@ function clearTeacherSelection() {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
-                        }}</label>
+                            }}</label>
                         <input v-model="newSession.external_link"
                             :placeholder="$t('classroom.external_link_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
@@ -1033,7 +1033,7 @@ function clearTeacherSelection() {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                        }}</label>
+                            }}</label>
                         <div class="flex flex-wrap gap-2">
                             <select v-model="newSession.day_of_week"
                                 class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">

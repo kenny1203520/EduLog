@@ -1,13 +1,15 @@
 <template>
-    <div class="flex flex-col bg-gray-50 overflow-hidden h-[calc(100dvh-4rem)] lg:h-[calc(100vh-5rem)] -m-4 lg:-mx-8 lg:-mb-8 relative">
+    <div
+        class="flex flex-col bg-gray-50 overflow-hidden h-[calc(100dvh-4rem)] lg:h-[calc(100vh-5rem)] -m-4 lg:-mx-8 lg:-mb-8 relative">
         <!-- Header -->
-        <div class="flex-none bg-white shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] z-20">
+        <div
+            class="flex-none bg-white shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07),0_10px_20px_-2px_rgba(0,0,0,0.04)] z-20">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
                 <div class="flex items-center gap-3 sm:gap-4">
                     <div
                         class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 shadow-inner">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 sm:h-6 sm:w-6" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
@@ -23,14 +25,14 @@
                 </div>
 
                 <div class="flex items-center gap-2 sm:gap-4">
-                    <div class="text-[10px] sm:text-sm font-bold text-gray-500 bg-gray-100 px-2 sm:px-3 py-1.5 rounded-lg whitespace-nowrap">
+                    <div
+                        class="text-[10px] sm:text-sm font-bold text-gray-500 bg-gray-100 px-2 sm:px-3 py-1.5 rounded-lg whitespace-nowrap">
                         {{ incompleteReports.length }} {{ $t('common.items') }}
                     </div>
                     <button @click="requestRefresh"
                         class="text-emerald-600 hover:text-emerald-700 p-1.5 sm:p-2 rounded-full hover:bg-emerald-50 transition"
                         :class="{ 'animate-spin opacity-50 pointer-events-none': isRefreshing }"
-                        :disabled="isRefreshing"
-                        :title="$t('report.refresh_all')">
+                        :disabled="isRefreshing" :title="$t('report.refresh_all')">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -49,9 +51,9 @@
         <div class="flex-1 min-h-0 flex relative overflow-hidden">
             <!-- Left Pane: Report List -->
             <div class="w-full md:w-1/3 md:min-w-[360px] md:max-w-md bg-white flex flex-col h-full z-10 transition-all duration-300 border-r border-gray-100 min-h-0"
-                :class="{ 
+                :class="{
                     'hidden md:flex': selectedReport,
-                    'md:!w-0 md:!min-w-0 md:!max-w-0 md:opacity-0 md:pointer-events-none md:-translate-x-full': isSidebarCollapsed 
+                    'md:!w-0 md:!min-w-0 md:!max-w-0 md:opacity-0 md:pointer-events-none md:-translate-x-full': isSidebarCollapsed
                 }">
 
                 <!-- List Header with Action Buttons -->
@@ -65,8 +67,7 @@
                     <div class="flex items-center gap-2">
                         <button @click="loadReports(false)"
                             class="p-2 rounded-full hover:bg-white transition text-gray-400 hover:text-emerald-600 active:scale-95"
-                            :class="{ 'animate-spin opacity-50 pointer-events-none': loading }"
-                            :disabled="loading"
+                            :class="{ 'animate-spin opacity-50 pointer-events-none': loading }" :disabled="loading"
                             :title="$t('common.refresh')">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                 stroke="currentColor">
@@ -80,7 +81,8 @@
                             :title="$t('nav.collapse')">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                 stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                             </svg>
                         </button>
                     </div>
@@ -132,7 +134,7 @@
                                 report.className }}</span>
                             <span v-if="report.classroomName" class="text-gray-400">•</span>
                             <span v-if="report.classroomName" class="text-gray-600 break-words">{{ report.classroomName
-                                }}</span>
+                            }}</span>
                         </div>
 
                         <div class="flex gap-1.5 flex-wrap">
@@ -161,9 +163,12 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) }} {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleTimeString([], {
-                                hour:
-                                    '2-digit', minute: '2-digit'
+                            {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleDateString(undefined, {
+                                month:
+                            'short', day: 'numeric' }) }} {{ new Date(report.updatedAt ||
+                                report.lastEditedAt).toLocaleTimeString([], {
+                                    hour:
+                                        '2-digit', minute: '2-digit'
                             }) }}
                         </div>
                     </div>
@@ -182,8 +187,8 @@
                                 <!-- Back Button (Mobile) -->
                                 <button @click="selectedReport = null"
                                     class="sm:hidden p-2 -ml-1 text-gray-400 hover:text-emerald-600 rounded-xl active:bg-gray-100 transition-all duration-300">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                        stroke="currentColor">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
                                             d="M15 19l-7-7 7-7" />
                                     </svg>
@@ -192,18 +197,22 @@
                                 <button v-if="isSidebarCollapsed" @click="isSidebarCollapsed = false"
                                     class="hidden md:flex p-2 -ml-1 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-all duration-300 shadow-sm border border-emerald-100"
                                     :title="$t('nav.expand')">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                                        stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                            d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                                     </svg>
                                 </button>
                             </div>
                             <div
                                 class="text-center bg-gray-50 p-2 sm:p-3 rounded-2xl sm:rounded-3xl border border-gray-100 min-w-[70px] sm:min-w-[90px] shadow-inner">
-                                <div class="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-tighter">{{
-                                    formatWeekday(selectedReport.date) }}</div>
-                                <div class="text-xl sm:text-3xl font-black text-gray-900 leading-none my-0.5 sm:my-1">{{ new
-                                    Date(selectedReport.date).getDate()
+                                <div
+                                    class="text-[8px] sm:text-[10px] font-black text-gray-400 uppercase tracking-tighter">
+                                    {{
+                                        formatWeekday(selectedReport.date) }}</div>
+                                <div class="text-xl sm:text-3xl font-black text-gray-900 leading-none my-0.5 sm:my-1">{{
+                                    new
+                                        Date(selectedReport.date).getDate()
                                     }}</div>
                                 <div v-if="selectedReport.startTime"
                                     class="text-[8px] sm:text-[10px] font-bold text-emerald-600 whitespace-nowrap">
@@ -212,8 +221,7 @@
                             </div>
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center gap-2 sm:gap-3">
-                                    <h3
-                                        class="font-black text-base sm:text-lg text-gray-900 tracking-tight truncate">
+                                    <h3 class="font-black text-base sm:text-lg text-gray-900 tracking-tight truncate">
                                         {{ selectedReport.studentName }}</h3>
                                     <router-link v-if="selectedReport.fullStudent?.id"
                                         :to="`/dashboard/students/${selectedReport.fullStudent.id}`" target="_blank"
@@ -226,12 +234,15 @@
                                         </svg>
                                     </router-link>
                                 </div>
-                                <div class="text-[11px] sm:text-sm font-medium text-gray-400 flex items-center gap-1.5 sm:gap-2 flex-wrap mt-1">
-                                    <span class="bg-gray-100 px-1.5 py-0.5 rounded-md truncate max-w-[120px]">{{ selectedReport.className
+                                <div
+                                    class="text-[11px] sm:text-sm font-medium text-gray-400 flex items-center gap-1.5 sm:gap-2 flex-wrap mt-1">
+                                    <span class="bg-gray-100 px-1.5 py-0.5 rounded-md truncate max-w-[120px]">{{
+                                        selectedReport.className
                                         }}</span>
                                     <span v-if="selectedReport.classroomName" class="flex items-center gap-1">
                                         <div class="w-1 h-1 rounded-full bg-gray-300"></div>
-                                        <span class="text-gray-400 truncate max-w-[80px]">{{ selectedReport.classroomName }}</span>
+                                        <span class="text-gray-400 truncate max-w-[80px]">{{
+                                            selectedReport.classroomName }}</span>
                                     </span>
                                 </div>
                             </div>
@@ -274,7 +285,8 @@
                         <div v-if="editorLoading"
                             class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[2px] transition-all duration-300">
                             <svg class="animate-spin h-12 w-12 text-emerald-500 mb-4" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4" />
                                 <path class="opacity-75" fill="currentColor"
                                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                             </svg>
@@ -329,7 +341,7 @@ async function loadReports(refreshEditor = true) {
         isRefreshing.value = true
         editorLoading.value = true
     }
-    
+
     try {
         const raw = await OccurrenceReportService.getGlobalIncompleteReports()
         // Normalize fields to view expectations
@@ -342,7 +354,7 @@ async function loadReports(refreshEditor = true) {
                 start = parts[0] || ''
                 end = parts[1] || ''
             }
-            
+
             return {
                 id: r.id || r.reportId,
                 reportId: r.reportId || r.id,
@@ -488,9 +500,9 @@ async function handleSaveSuccess(updatedReport: any) {
     }
 }
 
-function handleReportRestored(restoredReport: any) {
-    toast.success(t('report.editor.restore_success', '回檔成功'))
-    
+function handleReportRestored() {
+    toast.success(t('report.editor.restore_success'))
+
     // Refresh the list to reflect restored data and recalculate completeness
     loadReports(true)
 }

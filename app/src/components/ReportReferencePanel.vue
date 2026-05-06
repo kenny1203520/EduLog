@@ -359,9 +359,9 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
-import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
-import { ClassroomService } from '@/services/Classroom/ClassroomService'
-import { SessionService } from '@/services/Session/SessionService'
+import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { ClassroomService } from '@/services/classroom/ClassroomService'
+import { SessionService } from '@/services/session/SessionService'
 import { useI18n } from 'vue-i18n'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 

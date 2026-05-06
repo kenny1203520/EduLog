@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
-import { SessionService } from '@/services/Session/SessionService'
-import { CourseService } from '@/services/Course/CourseService'
+import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { SessionService } from '@/services/session/SessionService'
+import { CourseService } from '@/services/course/CourseService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -306,7 +306,7 @@ function buildStudentProgressSummary(enrollment: Enrollment, reports: Occurrence
     const highestReport = pickHighestProgressReport(highestLessonReports)
 
     const reportsByOccurrenceDate = [...contextualReports].sort((left, right) => getReportTimestamp(right) - getReportTimestamp(left))
-    
+
     // Find last attended report before the selected week
     const historicalReports = reportsByOccurrenceDate.filter(report => {
         const reportDate = getReportDate(report)
@@ -320,7 +320,7 @@ function buildStudentProgressSummary(enrollment: Enrollment, reports: Occurrence
         highestProgressTitle: formatLessonHeading(highestLessonNumber, highestLesson),
         highestProgressStatus: formatProgressRange(highestReport),
         highestProgressTone: getProgressTone(highestReport),
-        latestProgressTitle: latestAttendedReport 
+        latestProgressTitle: latestAttendedReport
             ? formatLessonHeading(latestLesson?.sequence, getLessonTitle(lessons, undefined, latestAttendedReport?.lessonId))
             : t('classroom.progress_no_record'),
         latestProgressStatus: formatProgressRange(latestAttendedReport),
@@ -482,8 +482,8 @@ const filteredTeachers = computed(() => {
     const query = teacherSearchQuery.value.trim().toLowerCase()
     if (!query) return allTeachersList.value
 
-    return allTeachersList.value.filter(t => 
-        t.name.toLowerCase().includes(query) || 
+    return allTeachersList.value.filter(t =>
+        t.name.toLowerCase().includes(query) ||
         t.email.toLowerCase().includes(query)
     )
 })
@@ -601,7 +601,7 @@ async function loadOccurrenceTeachers() {
     sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
 
     const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
-    
+
     // Find teachers active on this date from the plan
     const activeAssignments = sessionTeachers.value.filter(st => {
         if (dateStr < st.effective_from) return false
@@ -610,15 +610,15 @@ async function loadOccurrenceTeachers() {
     })
 
     const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(id => !!id))] as string[]
-    
+
     // Current "Reality" is still teacherIds in the occurrence, 
     // but we should probably sync if they differ and it's a fresh view
     const currentTeacherIds = todayOccurrence.value.teacherIds || []
-    
+
     // If the occurrence has no teachers yet (freshly generated), or if we want to sync
     // For now, let's trust the Plan for displaying assignments in the editor, 
     // but keep occurrenceTeachers based on the Reality for attendance.
-    
+
     selectedTeacherIds.value = new Set(currentTeacherIds)
 
     if (currentTeacherIds.length === 0 && planTeacherIds.length > 0) {
@@ -631,7 +631,7 @@ async function loadOccurrenceTeachers() {
         const { data } = await TeacherService.getTeachers(1, 1000)
         allTeachersList.value = data
     }
-    
+
     occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
 }
 
@@ -716,7 +716,7 @@ async function loadData() {
 
         // 2.1 Load session teachers
         sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
-        
+
         // Load all teachers once for the picker
         const { data: allTeachers } = await TeacherService.getTeachers(1, 1000)
         allTeachersList.value = allTeachers
@@ -1464,11 +1464,11 @@ async function saveOccurrenceTeachers(showToast = true) {
     try {
         isSavingTeachers.value = true
         const newTeacherIds = Array.from(selectedTeacherIds.value)
-        
+
         // Sync teacher attendance JSON
         const existingAttendance = todayOccurrence.value.teacherAttendance || {}
         const newAttendance: Record<string, boolean> = {}
-        
+
         newTeacherIds.forEach(id => {
             newAttendance[id] = existingAttendance[id] !== undefined ? existingAttendance[id] : true
         })
@@ -1480,10 +1480,10 @@ async function saveOccurrenceTeachers(showToast = true) {
 
         todayOccurrence.value.teacherIds = updated.teacherIds
         todayOccurrence.value.teacherAttendance = updated.teacherAttendance
-        
+
         // No need to reload all session teachers here, just update occurrenceTeachers
         occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
-        
+
         showTeacherEditModal.value = false
         if (showToast) toast.success(t('common.save_success'))
     } catch (e: any) {
@@ -1496,21 +1496,21 @@ async function saveOccurrenceTeachers(showToast = true) {
 
 async function addTeacherForToday(teacher: TeacherDTO) {
     if (!todayOccurrence.value || !teacher.id) return
-    
+
     try {
         isSavingTeachers.value = true
         const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
-        
+
         // 1. Add to Plan (class_session_teachers)
         await TeacherService.assignTeacherForDate(sessionId, teacher.id, dateStr)
-        
+
         // 2. Add to Reality (teacher_ids)
         selectedTeacherIds.value.add(teacher.id)
         await saveOccurrenceTeachers(false)
-        
+
         // 3. Refresh Plan View
         sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
-        
+
         toast.success(t('common.save_success'))
     } catch (e) {
         console.error('Failed to add teacher for today:', e)
@@ -1522,23 +1522,23 @@ async function addTeacherForToday(teacher: TeacherDTO) {
 
 async function removeAssignment(teacherId: string, effectiveFrom: string) {
     if (!confirm(t('common.confirm_delete'))) return
-    
+
     try {
         isSavingTeachers.value = true
         // 1. Remove from Plan
         await TeacherService.removeTeacherAssignment(sessionId, teacherId, effectiveFrom)
-        
+
         // 2. Remove from Reality for this occurrence if it matches
         const dateStr = todayOccurrence.value ? DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) : ''
         if (effectiveFrom === dateStr) {
-             selectedTeacherIds.value.delete(teacherId)
-             await saveOccurrenceTeachers(false)
+            selectedTeacherIds.value.delete(teacherId)
+            await saveOccurrenceTeachers(false)
         }
-        
+
         // 3. Refresh
         sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
         await loadOccurrenceTeachers()
-        
+
         toast.success(t('common.save_success'))
     } catch (e) {
         console.error('Failed to remove assignment:', e)
@@ -1718,13 +1718,13 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 </svg>
                             </button>
 
-                            <label class="relative inline-flex items-center cursor-pointer" :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : ($t('classroom.class_held') || 'Class Held')" :class="{ 'opacity-50 cursor-not-allowed': isOccurrenceInHoliday }">
-                                <input type="checkbox" 
-                                    :checked="todayOccurrence && todayOccurrence.isConducted"
-                                    :disabled="isOccurrenceInHoliday"
-                                    @change="toggleIsConducted($event)" class="sr-only peer">
-                                <div
-                                    :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
+                            <label class="relative inline-flex items-center cursor-pointer"
+                                :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : ($t('classroom.class_held') || 'Class Held')"
+                                :class="{ 'opacity-50 cursor-not-allowed': isOccurrenceInHoliday }">
+                                <input type="checkbox" :checked="todayOccurrence && todayOccurrence.isConducted"
+                                    :disabled="isOccurrenceInHoliday" @change="toggleIsConducted($event)"
+                                    class="sr-only peer">
+                                <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
                                     class="w-14 h-7 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-500">
                                 </div>
                             </label>
@@ -1732,19 +1732,23 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     </div>
 
                     <!-- Teacher Attendance Section -->
-                    <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4" v-if="todayOccurrence">
+                    <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4"
+                        v-if="todayOccurrence">
                         <div class="flex items-center justify-between">
                             <div>
-                                <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') || '教師出席紀錄' }}</h3>
+                                <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') ||
+                                    '教師出席紀錄' }}</h3>
                                 <p class="text-xs font-bold text-gray-400">
                                     {{ $t('classroom.teacher_attendance_subtitle') || '註記您的出缺席狀態' }}
                                 </p>
                             </div>
-                            
+
                             <button @click="openTeacherEditModal"
                                 class="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M12 4v16m8-8H4" />
                                 </svg>
                                 {{ $t('common.edit') }}
                             </button>
@@ -1754,28 +1758,36 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <div v-for="teacher in occurrenceTeachers" :key="teacher.id"
                                 class="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100 transition-colors"
                                 :class="{ 'border-emerald-200 bg-emerald-50/50': isTeacherPresent(teacher.id, teacher.user_id) }">
-                                
+
                                 <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold"
-                                     :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'">
+                                    :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'">
                                     {{ teacher.name.charAt(0) }}
                                 </div>
                                 <div class="flex-1 pr-2">
                                     <div class="font-bold text-gray-900">{{ teacher.name }}</div>
                                     <div class="text-[10px] uppercase font-black tracking-widest"
-                                         :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'text-emerald-600' : 'text-gray-400'">
-                                        {{ isTeacherPresent(teacher.id, teacher.user_id) ? ($t('attendance.present') || '已出席') : ($t('attendance.absent') || '未出席') }}
+                                        :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'text-emerald-600' : 'text-gray-400'">
+                                        {{ isTeacherPresent(teacher.id, teacher.user_id) ? ($t('attendance.present') ||
+                                            '已出席') : ($t('attendance.absent') || '未出席') }}
                                     </div>
                                 </div>
-                                
-                                <label class="relative inline-flex items-center cursor-pointer ml-2" :class="{'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id || isOccurrenceInHoliday}" :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : (auth.user?.id !== teacher.user_id ? '只能更改自己的出缺席' : '')">
-                                    <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)" :disabled="auth.user?.id !== teacher.user_id || isOccurrenceInHoliday" @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
-                                    <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'" class="w-11 h-6 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+
+                                <label class="relative inline-flex items-center cursor-pointer ml-2"
+                                    :class="{ 'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id || isOccurrenceInHoliday }"
+                                    :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : (auth.user?.id !== teacher.user_id ? '只能更改自己的出缺席' : '')">
+                                    <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)"
+                                        :disabled="auth.user?.id !== teacher.user_id || isOccurrenceInHoliday"
+                                        @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
+                                    <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
+                                        class="w-11 h-6 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
                                     </div>
                                 </label>
                             </div>
                         </div>
-                        <div v-else class="text-center py-6 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
-                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{ $t('classroom.no_teachers_assigned') || '尚未指派教師' }}</p>
+                        <div v-else
+                            class="text-center py-6 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+                            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
+                                $t('classroom.no_teachers_assigned') || '尚未指派教師' }}</p>
                         </div>
                     </div>
 
@@ -2306,7 +2318,8 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     <td class="px-3 lg:px-4 py-4 lg:py-6 text-right align-top">
                                         <div
                                             class="flex flex-col xl:flex-row justify-end items-end xl:items-center gap-1.5 lg:gap-2">
-                                            <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: e.id! } }"
+                                            <router-link
+                                                :to="{ name: 'lesson-reports', params: { enrollmentId: e.id! } }"
                                                 class="p-2.5 xl:p-3 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-90"
                                                 :title="$t('classroom.view_reports')">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
@@ -2377,7 +2390,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                             <span v-if="todayOccurrence?.effectiveStartTime"
                                                 class="ml-1 text-emerald-600">
                                                 {{ todayOccurrence.effectiveStartTime.slice(0, 5) }}-{{
-                                                todayOccurrence.effectiveEndTime?.slice(0, 5) }}
+                                                    todayOccurrence.effectiveEndTime?.slice(0, 5) }}
                                             </span>
                                         </div>
                                     </div>
@@ -2403,8 +2416,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
                                 :course-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
                                 :course-display-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
-                                :initial-classroom-name="session?.classroom_name"
-                                :initial-session-name="session?.name"
+                                :initial-classroom-name="session?.classroom_name" :initial-session-name="session?.name"
                                 :initial-session-time="session ? `${session.start_time?.slice(0, 5) || ''}-${session.end_time?.slice(0, 5) || ''}` : ''"
                                 :initial-student-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName"
                                 :initial-student-id="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
@@ -2426,8 +2438,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
                                 @save-success="handleSaveSuccess($event, selectedEnrollmentId!)"
                                 @save-error="handleSaveError" @conflict="handleConflict"
-                                @restored="handleReportRestored"
-                                class="h-full border-none shadow-none rounded-none" />
+                                @restored="handleReportRestored" class="h-full border-none shadow-none rounded-none" />
 
                             <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
                                 <p class="font-bold">{{ $t('report.no_report_today') }}</p>
@@ -2545,28 +2556,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
             </div>
         </div>
 
-        <CopyTemplateEditorModal
-            v-model="showAttendanceTemplateModal"
-            :title="$t('classroom.copy_template_title')"
-            :hint="$t('classroom.copy_template_hint')"
-            :variable-title="$t('classroom.copy_template_variables')"
+        <CopyTemplateEditorModal v-model="showAttendanceTemplateModal" :title="$t('classroom.copy_template_title')"
+            :hint="$t('classroom.copy_template_hint')" :variable-title="$t('classroom.copy_template_variables')"
             :content-title="$t('classroom.copy_template_content')"
             :preview-title="$t('classroom.copy_template_preview_title')"
             :preview-hint="$t('classroom.copy_template_preview_hint')"
-            :preview-empty="$t('classroom.copy_template_preview_empty')"
-            :template-text="attendanceTemplateText"
-            :preview-text="attendanceTemplatePreviewText"
-            :variable-count="attendanceTemplateVariables.length"
-            :is-loading="isLoadingAttendanceTemplate"
-            :loading-text="$t('classroom.copy_template_loading')"
-            :loading-hint="$t('classroom.copy_template_loading_hint')"
-            :save-loading="isSavingAttendanceTemplate"
-            :cancel-text="$t('common.cancel')"
-            :save-text="$t('common.save')"
-            :saving-text="$t('common.saving')"
-            @update:template-text="attendanceTemplateText = $event"
-            @save="saveAttendanceTemplate"
-        >
+            :preview-empty="$t('classroom.copy_template_preview_empty')" :template-text="attendanceTemplateText"
+            :preview-text="attendanceTemplatePreviewText" :variable-count="attendanceTemplateVariables.length"
+            :is-loading="isLoadingAttendanceTemplate" :loading-text="$t('classroom.copy_template_loading')"
+            :loading-hint="$t('classroom.copy_template_loading_hint')" :save-loading="isSavingAttendanceTemplate"
+            :cancel-text="$t('common.cancel')" :save-text="$t('common.save')" :saving-text="$t('common.saving')"
+            @update:template-text="attendanceTemplateText = $event" @save="saveAttendanceTemplate">
             <template #controls>
                 <div class="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
                     <div class="space-y-2">
@@ -2606,21 +2606,16 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
             <template #variables>
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div
-                        v-for="variable in attendanceTemplateVariables"
-                        :key="variable.key"
-                        class="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                    >
+                    <div v-for="variable in attendanceTemplateVariables" :key="variable.key"
+                        class="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-sm font-bold text-gray-900 leading-tight">{{ variable.label }}</p>
                                 <p class="mt-1 text-xs leading-5 text-gray-500">{{ variable.description }}</p>
                             </div>
-                            <button
-                                @click="insertAttendanceTemplateVariable(variable.key)"
+                            <button @click="insertAttendanceTemplateVariable(variable.key)"
                                 class="shrink-0 whitespace-nowrap rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
-                                :title="variable.token"
-                            >
+                                :title="variable.token">
                                 {{ variable.token }}
                             </button>
                         </div>
@@ -2629,10 +2624,8 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                                 {{ $t('classroom.copy_template_variable_mode_label') }}
                             </label>
-                            <select
-                                v-model="selectedAttendanceTemplateModes[variable.key]"
-                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
-                            >
+                            <select v-model="selectedAttendanceTemplateModes[variable.key]"
+                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500">
                                 <option v-for="mode in variable.modeOptions" :key="mode.value" :value="mode.value">
                                     {{ mode.label }}
                                 </option>
@@ -2643,7 +2636,8 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                                 {{ $t('classroom.copy_template_preview_title') }}
                             </p>
-                            <p class="min-h-[3.25rem] whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+                            <p
+                                class="min-h-[3.25rem] whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
                                 {{ variable.previewValue || '—' }}
                             </p>
                         </div>
@@ -2655,27 +2649,36 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
         <!-- Teacher Selection Modal -->
         <Transition name="fade">
             <div v-if="showTeacherEditModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="showTeacherEditModal = false"></div>
-                
-                <div class="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
+                <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" @click="showTeacherEditModal = false">
+                </div>
+
+                <div
+                    class="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">
                     <!-- Header -->
                     <div class="p-8 border-b border-gray-50 flex items-center justify-between shrink-0">
                         <div>
-                            <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('classroom.manage_teachers') || '管理教師' }}</h2>
+                            <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{
+                                $t('classroom.manage_teachers') ||
+                                '管理教師' }}</h2>
                             <p class="text-sm font-bold text-gray-400 mt-1">{{ displayedOccurrenceDate }}</p>
                         </div>
-                        <button @click="showTeacherEditModal = false" class="p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" />
+                        <button @click="showTeacherEditModal = false"
+                            class="p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-gray-900 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                    d="M6 18L18 6M6 6l12 12" />
                             </svg>
                         </button>
                     </div>
 
                     <!-- Current Schedule Section -->
                     <div class="px-6 py-4 border-b border-gray-50 bg-emerald-50/30">
-                        <h4 class="text-xs font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center justify-between">
+                        <h4
+                            class="text-xs font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center justify-between">
                             {{ $t('classroom.teaching_schedule') }}
-                            <router-link :to="{ name: 'classrooms', query: { edit: sessionId } }" class="text-[10px] font-bold text-emerald-600 hover:underline">
+                            <router-link :to="{ name: 'classrooms', query: { edit: sessionId } }"
+                                class="text-[10px] font-bold text-emerald-600 hover:underline">
                                 {{ $t('classroom.master_schedule_link') }}
                             </router-link>
                         </h4>
@@ -2684,23 +2687,27 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 if (!todayOccurrence) return false;
                                 const ds = DateUtils.formatLocalDate(todayOccurrence.occurrenceDate);
                                 return ds >= st.effective_from && (!st.effective_to || ds <= st.effective_to);
-                            })" :key="st.id + st.effective_from" 
+                            })" :key="st.id + st.effective_from"
                                 class="flex items-center justify-between p-3 rounded-xl bg-white border border-emerald-100 shadow-sm">
                                 <div class="flex items-center gap-3">
-                                    <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-xs">
+                                    <div
+                                        class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-black text-xs">
                                         {{ st.name.charAt(0) }}
                                     </div>
                                     <div>
                                         <div class="text-sm font-black text-gray-900">{{ st.name }}</div>
                                         <div class="text-[10px] font-bold text-gray-400">
-                                            {{ st.effective_to ? `${st.effective_from} ~ ${st.effective_to}` : `${st.effective_from} ~ ${$t('classroom.default_teacher')}` }}
+                                            {{ st.effective_to ? `${st.effective_from} ~ ${st.effective_to}` :
+                                                `${st.effective_from} ~ ${$t('classroom.default_teacher')}` }}
                                         </div>
                                     </div>
                                 </div>
                                 <button @click="st.id && removeAssignment(st.id, st.effective_from)"
                                     class="p-2 text-gray-300 hover:text-rose-500 transition-colors">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                     </svg>
                                 </button>
                             </div>
@@ -2719,10 +2726,13 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <h4 class="text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
                             {{ $t('classroom.one_day_assignment') }}
                         </h4>
-                        <div class="flex items-center gap-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                        <div
+                            class="flex items-center gap-4 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
                             <div class="pl-3 text-gray-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
                             </div>
                             <input v-model="teacherSearchQuery" type="text" :placeholder="$t('common.search_teacher')"
@@ -2732,23 +2742,29 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
                     <!-- Teacher List -->
                     <div class="flex-1 overflow-y-auto p-6 space-y-3 custom-scrollbar min-h-[300px]">
-                        <div v-for="teacher in filteredTeachers" :key="teacher.id"
-                            @click="addTeacherForToday(teacher)"
+                        <div v-for="teacher in filteredTeachers" :key="teacher.id" @click="addTeacherForToday(teacher)"
                             class="flex items-center justify-between p-4 rounded-2xl border bg-white border-gray-100 hover:border-emerald-100 hover:bg-emerald-50/10 transition-all cursor-pointer group">
-                            
+
                             <div class="flex items-center gap-4">
-                                <div class="w-12 h-12 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center font-black text-lg transition-transform group-hover:scale-110 group-hover:bg-emerald-100 group-hover:text-emerald-700">
+                                <div
+                                    class="w-12 h-12 rounded-2xl bg-gray-100 text-gray-400 flex items-center justify-center font-black text-lg transition-transform group-hover:scale-110 group-hover:bg-emerald-100 group-hover:text-emerald-700">
                                     {{ teacher.name.charAt(0) }}
                                 </div>
                                 <div>
                                     <div class="font-black text-gray-900">{{ teacher.name }}</div>
-                                    <div class="text-xs font-bold text-gray-400">{{ teacher.email || teacher.phone || 'No contact info' }}</div>
+                                    <div class="text-xs font-bold text-gray-400">{{ teacher.email || teacher.phone ||
+                                        'No
+                                        contact info' }}</div>
                                 </div>
                             </div>
 
-                            <div class="w-8 h-8 rounded-full border-2 border-gray-200 text-transparent flex items-center justify-center transition-all group-hover:border-emerald-500 group-hover:bg-emerald-500 group-hover:text-white">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                            <div
+                                class="w-8 h-8 rounded-full border-2 border-gray-200 text-transparent flex items-center justify-center transition-all group-hover:border-emerald-500 group-hover:bg-emerald-500 group-hover:text-white">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20"
+                                    fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                                        clip-rule="evenodd" />
                                 </svg>
                             </div>
                         </div>

@@ -12,7 +12,7 @@ import {
 import {
     AuthUserSearchService,
     type AuthUserSearchResultDTO
-} from '@/services/Auth/AuthUserSearchService'
+} from '@/services/auth/AuthUserSearchService'
 
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 
@@ -282,11 +282,11 @@ async function saveTeacher() {
     } catch (error: any) {
         console.error(error)
         let message = error.message || t('teacher.save_failed') || 'Failed to save teacher'
-        
+
         if (message.includes('teachers_user_id_key')) {
             message = t('teacher.error_duplicate_user')
         }
-        
+
         toast.error(message)
     } finally {
         isSaving.value = false
@@ -405,7 +405,8 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
         <div class="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
             <div class="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                 <div class="max-w-3xl">
-                    <p class="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">{{ t('nav.teachers') }}</p>
+                    <p class="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">{{ t('nav.teachers')
+                        }}</p>
                     <h1 class="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
                         {{ t('teacher.management_title') }}
                     </h1>
@@ -415,15 +416,12 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                 </div>
 
                 <div class="flex flex-wrap gap-3">
-                    <button
-                        @click="openCreateModal"
+                    <button @click="openCreateModal"
                         class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 hover:shadow-xl hover:shadow-emerald-600/25">
                         <span class="text-lg leading-none">+</span>
                         {{ t('teacher.add_teacher') }}
                     </button>
-                    <button
-                        v-if="selectedCount > 0"
-                        @click="openBatchDeleteConfirm"
+                    <button v-if="selectedCount > 0" @click="openBatchDeleteConfirm"
                         class="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-5 py-3 text-sm font-semibold text-rose-600 shadow-sm transition hover:border-rose-300 hover:bg-rose-50">
                         {{ t('teacher.bulk_delete') }} ({{ selectedCount }})
                     </button>
@@ -469,16 +467,14 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                 </div>
             </div>
 
-            <div class="rounded-3xl border border-slate-200 bg-white/95 p-5 shadow-sm shadow-slate-200/60 backdrop-blur">
+            <div
+                class="rounded-3xl border border-slate-200 bg-white/95 p-5 shadow-sm shadow-slate-200/60 backdrop-blur">
                 <div class="grid gap-4 xl:grid-cols-[1fr_auto_auto] xl:items-end">
                     <div>
                         <label class="mb-2 block text-sm font-semibold text-slate-700">
                             {{ t('teacher.search_label') }}
                         </label>
-                        <input
-                            v-model="searchQuery"
-                            type="text"
-                            :placeholder="t('teacher.search_placeholder')"
+                        <input v-model="searchQuery" type="text" :placeholder="t('teacher.search_placeholder')"
                             class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                     </div>
 
@@ -486,16 +482,10 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                         <label class="mb-2 block text-sm font-semibold text-slate-700">
                             {{ t('teacher.sort_label') }}
                         </label>
-                        <BaseDropdown 
-                            v-model="sortField" 
-                            :options="sortOptions"
-                            theme="emerald"
-                            class="w-full"
-                        />
+                        <BaseDropdown v-model="sortField" :options="sortOptions" theme="emerald" class="w-full" />
                     </div>
 
-                    <button
-                        @click="cycleSort(sortField)"
+                    <button @click="cycleSort(sortField)"
                         class="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700">
                         <span v-if="sortDirection === 'asc'">↑</span>
                         <span v-else>↓</span>
@@ -503,7 +493,8 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                     </button>
                 </div>
 
-                <div v-if="selectedCount > 0" class="mt-5 flex flex-col gap-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between">
+                <div v-if="selectedCount > 0"
+                    class="mt-5 flex flex-col gap-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                         {{ t('teacher.selected_count', { count: selectedCount }) }}
                     </div>
@@ -513,67 +504,74 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                 </div>
             </div>
 
-            <div v-if="loading" class="mt-8 flex justify-center rounded-3xl border border-slate-200 bg-white/90 py-16 shadow-sm">
+            <div v-if="loading"
+                class="mt-8 flex justify-center rounded-3xl border border-slate-200 bg-white/90 py-16 shadow-sm">
                 <div class="flex items-center gap-3 text-slate-500">
-                    <span class="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent"></span>
+                    <span
+                        class="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent"></span>
                     {{ t('teacher.loading') }}
                 </div>
             </div>
 
-            <div v-else-if="pagedTeachers.length > 0" class="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
+            <div v-else-if="pagedTeachers.length > 0"
+                class="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-slate-200">
                         <thead class="bg-slate-50/90">
                             <tr>
                                 <th class="px-4 py-4 text-left">
-                                    <input
-                                        type="checkbox"
-                                        :checked="pageSelected"
+                                    <input type="checkbox" :checked="pageSelected"
                                         @change="togglePageSelection(($event.target as HTMLInputElement).checked)"
                                         class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
                                 </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700" @click="cycleSort('name')">
+                                <th
+                                    class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700"
+                                        @click="cycleSort('name')">
                                         {{ t('teacher.name_label') }}
                                     </button>
                                 </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700" @click="cycleSort('email')">
+                                <th
+                                    class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700"
+                                        @click="cycleSort('email')">
                                         {{ t('teacher.account_label') }}
                                     </button>
                                 </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                                <th
+                                    class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
                                     {{ t('teacher.contact_label') }}
                                 </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                                <th
+                                    class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
                                     {{ t('teacher.profile_label') }}
                                 </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700" @click="cycleSort('created_at')">
+                                <th
+                                    class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700"
+                                        @click="cycleSort('created_at')">
                                         {{ t('teacher.created_at_label') }}
                                     </button>
                                 </th>
-                                <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                                <th
+                                    class="px-4 py-4 text-right text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
                                     {{ t('teacher.actions') }}
                                 </th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100 bg-white">
-                            <tr
-                                v-for="teacher in pagedTeachers"
-                                :key="teacher.id"
+                            <tr v-for="teacher in pagedTeachers" :key="teacher.id"
                                 class="transition hover:bg-slate-50/80">
                                 <td class="px-4 py-4 align-top">
-                                    <input
-                                        v-if="teacher.id"
-                                        type="checkbox"
+                                    <input v-if="teacher.id" type="checkbox"
                                         :checked="selectedTeacherIds.has(teacher.id)"
                                         @change="toggleTeacherSelection(teacher.id, ($event.target as HTMLInputElement).checked)"
                                         class="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
                                 </td>
                                 <td class="px-4 py-4 align-top">
                                     <div class="flex items-start gap-3">
-                                        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 font-bold text-white shadow-md shadow-emerald-500/25">
+                                        <div
+                                            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 font-bold text-white shadow-md shadow-emerald-500/25">
                                             {{ teacher.name?.charAt(0)?.toUpperCase() || 'T' }}
                                         </div>
                                         <div class="min-w-0">
@@ -593,7 +591,8 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                                         <span
                                             :class="teacher.user_id ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
                                             class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold">
-                                            {{ teacher.user_id ? t('teacher.linked_account') : t('teacher.unlinked_account') }}
+                                            {{ teacher.user_id ? t('teacher.linked_account') :
+                                            t('teacher.unlinked_account') }}
                                         </span>
                                     </div>
                                 </td>
@@ -611,13 +610,11 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                                 </td>
                                 <td class="px-4 py-4 align-top text-right">
                                     <div class="inline-flex items-center gap-2">
-                                        <button
-                                            @click="openEditModal(teacher)"
+                                        <button @click="openEditModal(teacher)"
                                             class="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50">
                                             {{ t('common.edit') }}
                                         </button>
-                                        <button
-                                            @click="openDeleteConfirm(teacher)"
+                                        <button @click="openDeleteConfirm(teacher)"
                                             class="rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-50">
                                             {{ t('common.delete') }}
                                         </button>
@@ -629,33 +626,30 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                 </div>
             </div>
 
-            <div v-else class="mt-8 rounded-3xl border border-dashed border-slate-300 bg-white/90 px-6 py-16 text-center shadow-sm">
-                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 text-2xl font-black">
+            <div v-else
+                class="mt-8 rounded-3xl border border-dashed border-slate-300 bg-white/90 px-6 py-16 text-center shadow-sm">
+                <div
+                    class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 text-2xl font-black">
                     T
                 </div>
                 <h2 class="mt-6 text-xl font-bold text-slate-900">{{ t('teacher.no_data') }}</h2>
                 <p class="mt-2 text-sm text-slate-500">
                     {{ searchQuery ? t('teacher.no_search_results') : t('teacher.no_data_hint') }}
                 </p>
-                <button
-                    @click="openCreateModal"
+                <button @click="openCreateModal"
                     class="mt-6 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700">
                     {{ t('teacher.add_teacher') }}
                 </button>
             </div>
 
             <div v-if="!loading && totalPages > 1" class="mt-8 flex justify-center">
-                <Pagination
-                    :modelValue="pagination.page"
-                    :perPage="pagination.perPage"
-                    :totalItems="sortedTeachers.length"
-                    @update:modelValue="pagination.page = $event"
+                <Pagination :modelValue="pagination.page" :perPage="pagination.perPage"
+                    :totalItems="sortedTeachers.length" @update:modelValue="pagination.page = $event"
                     @update:perPage="pagination.perPage = $event; pagination.page = 1" />
             </div>
         </div>
 
-        <div
-            v-if="isModalOpen"
+        <div v-if="isModalOpen"
             class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
             <div class="w-full max-w-4xl overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-slate-950/20">
                 <div class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
@@ -667,15 +661,18 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             {{ editingTeacher ? t('teacher.edit_teacher_hint') : t('teacher.add_teacher_hint') }}
                         </p>
                     </div>
-                    <button @click="closeModal" class="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+                    <button @click="closeModal"
+                        class="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
                         <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
                 <div class="max-h-[78vh] overflow-y-auto px-6 py-6">
-                    <div class="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    <div
+                        class="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                         {{ t('teacher.user_id_hint') }}
                     </div>
 
@@ -685,25 +682,24 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                                 <label class="mb-2 block text-sm font-semibold text-slate-700">
                                     {{ t('teacher.user_search_label') }}
                                 </label>
-                                <input
-                                    v-model="userSearchQuery"
-                                    type="email"
+                                <input v-model="userSearchQuery" type="email"
                                     :placeholder="t('teacher.user_search_placeholder')"
                                     class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
                                     @keydown.enter.prevent="searchUsersByEmail" />
                             </div>
                             <div class="flex items-center gap-3">
                                 <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-                                    <input type="checkbox" v-model="userSearchOnlyUnlinked" class="h-4 w-4 rounded border-slate-300 text-emerald-600" />
+                                    <input type="checkbox" v-model="userSearchOnlyUnlinked"
+                                        class="h-4 w-4 rounded border-slate-300 text-emerald-600" />
                                     <span>{{ t('teacher.filter_unlinked') }}</span>
                                 </label>
 
-                                <button
-                                    @click="searchUsersByEmail"
-                                    :disabled="isSearchingUsers"
+                                <button @click="searchUsersByEmail" :disabled="isSearchingUsers"
                                     class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
-                                    <span v-if="isSearchingUsers" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                                    {{ isSearchingUsers ? t('teacher.user_search_loading') : t('teacher.user_search_button') }}
+                                    <span v-if="isSearchingUsers"
+                                        class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                                    {{ isSearchingUsers ? t('teacher.user_search_loading') :
+                                    t('teacher.user_search_button') }}
                                 </button>
                             </div>
                         </div>
@@ -717,9 +713,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                         </p>
 
                         <div v-if="userSearchResults.length > 0" class="mt-4 space-y-2">
-                            <div
-                                v-for="result in userSearchResults"
-                                :key="result.id"
+                            <div v-for="result in userSearchResults" :key="result.id"
                                 class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <div class="text-sm font-semibold text-slate-900">{{ result.email }}</div>
@@ -727,8 +721,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                                         {{ result.id }}
                                     </div>
                                 </div>
-                                <button
-                                    @click="applyUserSearchResult(result)"
+                                <button @click="applyUserSearchResult(result)"
                                     class="inline-flex items-center justify-center rounded-xl border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50">
                                     {{ t('teacher.user_search_select') }}
                                 </button>
@@ -741,10 +734,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.user_id_label') }}
                             </label>
-                            <input
-                                v-model="form.user_id"
-                                type="text"
-                                :placeholder="t('teacher.user_id_placeholder')"
+                            <input v-model="form.user_id" type="text" :placeholder="t('teacher.user_id_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -752,10 +742,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.name_label') }} <span class="text-rose-500">*</span>
                             </label>
-                            <input
-                                v-model="form.name"
-                                type="text"
-                                :placeholder="t('teacher.name_placeholder')"
+                            <input v-model="form.name" type="text" :placeholder="t('teacher.name_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -763,10 +750,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.email_label') }} <span class="text-rose-500">*</span>
                             </label>
-                            <input
-                                v-model="form.email"
-                                type="email"
-                                :placeholder="t('teacher.email_placeholder')"
+                            <input v-model="form.email" type="email" :placeholder="t('teacher.email_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -774,10 +758,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.phone_label') }}
                             </label>
-                            <input
-                                v-model="form.phone"
-                                type="tel"
-                                :placeholder="t('teacher.phone_placeholder')"
+                            <input v-model="form.phone" type="tel" :placeholder="t('teacher.phone_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -785,9 +766,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.birthday_label') }}
                             </label>
-                            <input
-                                v-model="form.birthday"
-                                type="date"
+                            <input v-model="form.birthday" type="date"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -795,10 +774,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.gov_id_label') }}
                             </label>
-                            <input
-                                v-model="form.gov_id"
-                                type="text"
-                                maxlength="20"
+                            <input v-model="form.gov_id" type="text" maxlength="20"
                                 :placeholder="t('teacher.gov_id_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
@@ -807,10 +783,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.address_label') }}
                             </label>
-                            <input
-                                v-model="form.address"
-                                type="text"
-                                :placeholder="t('teacher.address_placeholder')"
+                            <input v-model="form.address" type="text" :placeholder="t('teacher.address_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -818,40 +791,29 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.bio_label') }}
                             </label>
-                            <textarea
-                                v-model="form.bio"
-                                rows="4"
-                                :placeholder="t('teacher.bio_placeholder')"
+                            <textarea v-model="form.bio" rows="4" :placeholder="t('teacher.bio_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"></textarea>
                         </div>
                     </div>
                 </div>
 
                 <div class="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-5">
-                    <button
-                        @click="closeModal"
+                    <button @click="closeModal"
                         class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
                         {{ t('common.cancel') }}
                     </button>
-                    <button
-                        @click="saveTeacher"
-                        :disabled="isSaving"
+                    <button @click="saveTeacher" :disabled="isSaving"
                         class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
-                        <span v-if="isSaving" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                        <span v-if="isSaving"
+                            class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                         {{ isSaving ? t('common.saving') : t('common.save') }}
                     </button>
                 </div>
             </div>
         </div>
 
-        <ConfirmModal
-            :is-open="confirmModal.isOpen"
-            :title="confirmModal.title"
-            :message="confirmModal.message"
-            :confirm-text="confirmModal.confirmText"
-            :is-dangerous="confirmModal.isDangerous"
-            :is-loading="confirmModal.isLoading"
-            @confirm="handleConfirm"
-            @close="confirmModal.isOpen = false" />
+        <ConfirmModal :is-open="confirmModal.isOpen" :title="confirmModal.title" :message="confirmModal.message"
+            :confirm-text="confirmModal.confirmText" :is-dangerous="confirmModal.isDangerous"
+            :is-loading="confirmModal.isLoading" @confirm="handleConfirm" @close="confirmModal.isOpen = false" />
     </div>
 </template>
