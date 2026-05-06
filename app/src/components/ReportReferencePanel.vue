@@ -147,32 +147,70 @@
 
                     <!-- Secondary Info (Notes) -->
                     <div class="px-4 py-2 bg-gray-50/50 border-b grid grid-cols-1 gap-2 border-gray-100">
-                        <div v-if="report.contact_notes" class="flex gap-2">
-                            <span
-                                class="text-[10px] items-center py-0.5 px-1.5 rounded-md bg-blue-100 text-blue-800 font-bold whitespace-nowrap self-start">📞
-                                {{ $t('report.reference_panel.contact') }}</span>
-                            <p class="text-[11px] text-gray-600 italic line-clamp-2">
-                                {{ report.contact_notes }}
-                            </p>
+                        <div v-if="report.contact_notes" class="flex flex-col gap-1 relative"
+                             :class="shouldShowToggle(report.contact_notes, 'notes') ? (isExpanded(report.id, 'contact') ? 'pb-8' : 'pb-6') : ''">
+                            <div class="flex gap-2">
+                                <span class="text-[10px] items-center py-0.5 px-1.5 rounded-md bg-blue-100 text-blue-800 font-bold whitespace-nowrap self-start">📞
+                                    {{ $t('report.reference_panel.contact') }}</span>
+                                <p class="text-[11px] text-gray-600 italic leading-relaxed"
+                                   :class="(shouldShowToggle(report.contact_notes, 'notes') && !isExpanded(report.id, 'contact')) ? 'line-clamp-2' : ''">
+                                    {{ report.contact_notes }}
+                                </p>
+                            </div>
+                            <!-- Toggle for Contact -->
+                            <div v-if="shouldShowToggle(report.contact_notes, 'notes')"
+                                 class="absolute bottom-0 right-0">
+                                <button @click="toggleExpanded(report.id, 'contact')" class="text-[9px] font-black text-blue-600 hover:text-blue-800 flex items-center gap-0.5 bg-blue-50/50 px-2 py-0.5 rounded-lg border border-blue-100">
+                                    {{ isExpanded(report.id, 'contact') ? $t('common.show_less') : $t('common.show_more') }}
+                                    <svg class="w-2.5 h-2.5 transition-transform duration-300" :class="isExpanded(report.id, 'contact') ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
-                        <div v-if="report.class_notes" class="flex gap-2">
-                            <span
-                                class="text-[10px] items-center py-0.5 px-1.5 rounded-md bg-purple-100 text-purple-800 font-bold whitespace-nowrap self-start">📝
-                                {{ $t('report.reference_panel.class_notes') }}</span>
-                            <p class="text-[11px] text-gray-600 italic line-clamp-2">
-                                {{ report.class_notes }}
-                            </p>
+
+                        <div v-if="report.class_notes" class="flex flex-col gap-1 relative"
+                             :class="shouldShowToggle(report.class_notes, 'notes') ? (isExpanded(report.id, 'class') ? 'pb-8' : 'pb-6') : ''">
+                            <div class="flex gap-2">
+                                <span class="text-[10px] items-center py-0.5 px-1.5 rounded-md bg-purple-100 text-purple-800 font-bold whitespace-nowrap self-start">📝
+                                    {{ $t('report.reference_panel.class_notes') }}</span>
+                                <p class="text-[11px] text-gray-600 italic leading-relaxed"
+                                   :class="(shouldShowToggle(report.class_notes, 'notes') && !isExpanded(report.id, 'class')) ? 'line-clamp-2' : ''">
+                                    {{ report.class_notes }}
+                                </p>
+                            </div>
+                            <!-- Toggle for Class -->
+                            <div v-if="shouldShowToggle(report.class_notes, 'notes')"
+                                 class="absolute bottom-0 right-0">
+                                <button @click="toggleExpanded(report.id, 'class')" class="text-[9px] font-black text-purple-600 hover:text-purple-800 flex items-center gap-0.5 bg-purple-50/50 px-2 py-0.5 rounded-lg border border-purple-100">
+                                    {{ isExpanded(report.id, 'class') ? $t('common.show_less') : $t('common.show_more') }}
+                                    <svg class="w-2.5 h-2.5 transition-transform duration-300" :class="isExpanded(report.id, 'class') ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Main Content -->
                     <div class="p-4 bg-white relative group">
-                        <div
-                            class="text-sm text-gray-700 whitespace-pre-wrap font-mono line-clamp-[12] leading-relaxed">
+                        <div class="text-sm text-gray-700 whitespace-pre-wrap font-mono leading-relaxed transition-all duration-300"
+                             :class="shouldShowToggle(report.content, 'content') ? (isExpanded(report.id, 'content') ? 'pb-12' : 'line-clamp-[12] max-h-[320px] overflow-hidden pb-16') : ''">
                             {{ report.content }}
                         </div>
-                        <div
-                            class="absolute bottom-1 right-2 text-[8px] text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                        
+                        <!-- Toggle for Content -->
+                        <div v-if="shouldShowToggle(report.content, 'content')"
+                             :class="isExpanded(report.id, 'content') ? 'mt-4 flex justify-center' : 'absolute bottom-0 left-0 right-0 p-3 flex justify-center bg-gradient-to-t from-white via-white/95 to-transparent pt-12'">
+                            <button @click="toggleExpanded(report.id, 'content')" class="px-4 py-1.5 bg-gray-50 border border-gray-200 rounded-full shadow-sm text-[10px] font-black text-gray-600 hover:bg-gray-100 transition-all active:scale-95 flex items-center gap-1.5">
+                                {{ isExpanded(report.id, 'content') ? $t('common.show_less') : $t('common.show_more') }}
+                                <svg class="w-3 h-3 transition-transform duration-300" :class="isExpanded(report.id, 'content') ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div class="absolute bottom-1 right-2 text-[8px] text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                             ID: {{ report.id.substring(0, 8) }}
                         </div>
                     </div>
@@ -265,6 +303,28 @@ const filterClassroom = ref('')
 const filterSession = ref('')
 const filterCourse = ref('')
 const sortBy = ref<'asc' | 'desc'>('desc')
+
+// Expansion State
+const expandedStates = ref<Record<string, boolean>>({})
+
+function toggleExpanded(reportId: string, field: string = 'all') {
+    const key = `${reportId}-${field}`
+    expandedStates.value[key] = !expandedStates.value[key]
+}
+
+function isExpanded(reportId: string, field: string = 'all') {
+    return expandedStates.value[`${reportId}-${field}`] || false
+}
+
+function shouldShowToggle(content: string | null | undefined, type: 'notes' | 'content'): boolean {
+    if (!content) return false
+    const lines = content.split('\n').length
+    if (type === 'notes' && lines > 3) return true
+    if (type === 'content' && lines > 12) return true
+    if (type === 'notes' && content.length > 100) return true
+    if (type === 'content' && content.length > 400) return true
+    return false
+}
 
 // Lookups
 const classrooms = ref<any[]>([])
