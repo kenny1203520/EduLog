@@ -61,9 +61,10 @@ export class OccurrenceReportService {
     static async restoreReportVersion(
         reportId: string,
         versionId: string,
-        userId?: string
+        userId?: string,
+        currentVersion?: number
     ): Promise<OccurrenceReport> {
-        return ReportCommandService.restoreReportVersion(reportId, versionId, userId)
+        return ReportCommandService.restoreReportVersion(reportId, versionId, userId, currentVersion)
     }
 
     static async resolveConflict(

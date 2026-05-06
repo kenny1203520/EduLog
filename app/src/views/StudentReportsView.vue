@@ -410,6 +410,7 @@
                         :initial-class-notes="selectedReport.classNotes" :initial-content="selectedReport.content"
                         :initial-enrollment-external-link="enrollmentInfo?.externalLink"
                         @save-success="handleSaveSuccess" @save-error="handleSaveError" @conflict="handleConflict"
+                        @restored="handleReportRestored"
                         @deleted="handleDeleted" />
                 </div>
 
@@ -1223,6 +1224,15 @@ function handleSaveSuccess(newVersion: number) {
     toast.success(t('report.save_success'))
     switchToListView() // Refresh list view data
     viewMode.value = 'calendar' // But keep calendar active
+}
+
+function handleReportRestored(restoredReport: OccurrenceReportDTO) {
+    if (selectedReport.value) {
+        selectedReport.value = new OccurrenceReport(restoredReport)
+    }
+    toast.success(t('report.editor.restore_success', '回檔成功'))
+    switchToListView()
+    viewMode.value = 'calendar'
 }
 
 function handleSaveError(error: string) {

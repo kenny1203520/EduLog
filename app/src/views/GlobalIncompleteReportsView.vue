@@ -267,7 +267,8 @@
                             :initial-progress-end="selectedReport.progressEnd"
                             :initial-report-external-link="selectedReport.externalLink"
                             :initial-student-id="selectedReport.fullStudent?.id" @save-success="handleSaveSuccess"
-                            @save-error="handleSaveError" class="!rounded-none !shadow-none !border-none" />
+                            @save-error="handleSaveError" @restored="handleReportRestored"
+                            class="!rounded-none !shadow-none !border-none" />
 
                         <!-- Loading Overlay for Editor -->
                         <div v-if="editorLoading"
@@ -485,6 +486,13 @@ async function handleSaveSuccess(updatedReport: any) {
             selectedReport.value = { ...selectedReport.value, ...item }
         }
     }
+}
+
+function handleReportRestored(restoredReport: any) {
+    toast.success(t('report.editor.restore_success', '回檔成功'))
+    
+    // Refresh the list to reflect restored data and recalculate completeness
+    loadReports(true)
 }
 
 function handleSaveError(msg: string) {

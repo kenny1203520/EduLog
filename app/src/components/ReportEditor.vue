@@ -30,6 +30,16 @@
             </button>
 
 
+            <button @click="showVersionHistoryModal = true"
+                class="text-sm font-medium text-gray-600 hover:text-blue-600 flex items-center gap-1 focus:outline-none"
+                :title="$t('report.editor.version_history_title', '版本紀錄')">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span class="hidden sm:inline">{{ $t('report.editor.version_history', '版本紀錄') }}</span>
+            </button>
+
             <button @click="openReportTemplateManagerModal"
                 class="text-sm font-medium text-gray-600 hover:text-emerald-600 flex items-center gap-1 focus:outline-none"
                 :title="$t('report.editor.templates')">
@@ -643,6 +653,15 @@
                 <!-- Variables section can be empty as we're using inline variable buttons in controls -->
             </template>
         </CopyTemplateEditorModal>
+
+        <ReportVersionHistoryModal 
+            v-if="props.reportId"
+            v-model:is-open="showVersionHistoryModal"
+            :report-id="props.reportId"
+            :current-version="version"
+            :available-lessons="availableLessons"
+            @restored="handleReportRestored"
+        />
     </div>
 </template>
 
@@ -655,6 +674,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
+import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
 import { ReportTemplateService } from '@/services/report/ReportTemplateService'
 import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy_template/CopyTemplateService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -691,6 +711,7 @@ interface ReportTemplateVariableItem {
 
 // Templates State
 const showReferencePanel = ref(false)
+const showVersionHistoryModal = ref(false)
 const savedTemplates = ref<Template[]>([])
 const justCopiedCourse = ref(false)
 const isSavingTemplate = ref(false)
@@ -1266,7 +1287,19 @@ async function saveTemplateDraft() {
     }
 }
 
-function applyTemplateDraftToReport() {
+async function applyTemplateDraftToReport() {
+    if (props.reportId) {
+        try {
+            const serverReport = await OccurrenceReportService.getReportById(props.reportId)
+            if (serverReport.version !== version.value) {
+                toast.error(t('report.editor.restore_conflict_error', '版本衝突：已有其他使用者修改了此報告。請先重新載入取得最新版本。'))
+                return
+            }
+        } catch (e) {
+            console.error('Failed to check version before applying template', e)
+        }
+    }
+
     const draft: Template = {
         id: selectedTemplateId.value || 'draft',
         name: templateDraftName.value || t('report.editor.template_new_option'),
@@ -1405,6 +1438,7 @@ const emit = defineEmits<{
     'save-error': [error: string]
     'conflict': [serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO]
     'deleted': []
+    'restored': [report: OccurrenceReportDTO]
 }>()
 
 const authStore = useAuthStore()
@@ -1754,6 +1788,28 @@ function saveNow() {
     }
 
     return autoSaveNow(localContent.value)
+}
+
+function handleReportRestored(report: OccurrenceReportDTO) {
+    version.value = report.version
+    localContent.value = report.content || ''
+    selectedLessonId.value = report.lesson_id || ''
+    isCompleted.value = report.is_completed ?? false
+    progressStart.value = report.progress_letter ? report.progress_letter.split('-')[0] : ''
+    progressEnd.value = report.progress_letter && report.progress_letter.includes('-') ? report.progress_letter.split('-')[1] : ''
+    attendanceStatus.value = report.attendance_status as any
+    absenceReason.value = report.absence_reason || ''
+    classParticipation.value = report.class_participation ?? 0
+    classroomBehavior.value = report.classroom_behavior ?? 0
+    contactNotes.value = report.contact_notes || ''
+    classNotes.value = report.class_notes || ''
+    reportExternalLink.value = report.external_link || ''
+
+    // Emit the event to parent
+    emit('restored', report)
+    
+    // Clear unsaved changes flag
+    reset()
 }
 
 defineExpose({

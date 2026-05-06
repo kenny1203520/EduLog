@@ -13,7 +13,7 @@ import { HolidayService } from '@/services/holiday/HolidayService'
 import type { Enrollment } from '@/models/Enrollment'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
-import type { OccurrenceReport } from '@/models/OccurrenceReport'
+import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import type { TeacherDTO } from '@/services/teacher/TeacherService'
@@ -1398,6 +1398,12 @@ function handleSaveSuccess(version: number, enrollmentId: string) {
     }
 }
 
+function handleReportRestored(restoredReport: OccurrenceReportDTO) {
+    if (selectedEnrollmentId.value) {
+        reportMap.value.set(selectedEnrollmentId.value, new OccurrenceReport(restoredReport))
+    }
+}
+
 function handleSaveError(error: string) {
     toast.error(`${t('report.save_error')}: ${error}`)
 }
@@ -2420,6 +2426,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
                                 @save-success="handleSaveSuccess($event, selectedEnrollmentId!)"
                                 @save-error="handleSaveError" @conflict="handleConflict"
+                                @restored="handleReportRestored"
                                 class="h-full border-none shadow-none rounded-none" />
 
                             <div v-else class="flex flex-col items-center justify-center py-20 text-gray-400">
