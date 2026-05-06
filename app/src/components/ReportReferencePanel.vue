@@ -107,7 +107,7 @@
                                     </svg>
                                 </button>
                                 <div v-if="openDropdown === 'classroom'"
-                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
+                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white/70 backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
                                     <div @click="filterClassroom = ''; handleClassroomChange(); closeAllDropdowns()"
                                         class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
                                         :class="!filterClassroom ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'">
@@ -138,7 +138,7 @@
                                     </svg>
                                 </button>
                                 <div v-if="openDropdown === 'session'"
-                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
+                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white/70 backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
                                     <div @click="filterSession = ''; refreshData(); closeAllDropdowns()"
                                         class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
                                         :class="!filterSession ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'">
@@ -170,7 +170,7 @@
                                     </svg>
                                 </button>
                                 <div v-if="openDropdown === 'course'"
-                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
+                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white/70 backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
                                     <div @click="filterCourse = ''; refreshData(); closeAllDropdowns()"
                                         class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
                                         :class="!filterCourse ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'">
@@ -203,7 +203,7 @@
                                 </svg>
                             </button>
                             <div v-if="openDropdown === 'sort'"
-                                class="absolute right-0 w-48 mt-2 p-1.5 bg-white backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
+                                class="absolute left-0 sm:left-auto sm:right-0 w-48 mt-2 p-1.5 bg-white backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
                                 <div @click="sortBy = 'desc'; refreshData(); closeAllDropdowns()"
                                     class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center justify-between"
                                     :class="sortBy === 'desc' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'">
