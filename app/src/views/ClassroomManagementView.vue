@@ -16,6 +16,8 @@ import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 
+import BaseDropdown from '@/components/common/BaseDropdown.vue'
+
 const { t } = useI18n()
 const toast = useToast()
 const router = useRouter()
@@ -24,6 +26,11 @@ type DisplayMode = 'visible' | 'all' | 'hidden'
 
 const displayMode = ref<DisplayMode>('visible')
 const selectedSessionClassroomFilter = ref('')
+
+const classroomOptions = computed(() => [
+    { label: t('classroom.all_rooms'), value: '' },
+    ...allClassrooms.value.map(r => ({ label: r.name, value: r.id }))
+])
 
 // Generic Confirm Modal State
 const genericConfirm = ref({
@@ -565,6 +572,44 @@ function clearTeacherSelection() {
             </button>
         </div>
 
+        <div
+            class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-3">
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-black text-gray-500 uppercase tracking-widest">{{ $t('classroom.display_mode')
+                    }}</span>
+                <div class="flex bg-gray-100 p-1 rounded-xl border border-gray-100">
+                    <button @click="displayMode = 'visible'"
+                        class="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all"
+                        :class="displayMode === 'visible' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                        {{ $t('classroom.show_visible_only') }}
+                    </button>
+                    <button @click="displayMode = 'all'"
+                        class="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all"
+                        :class="displayMode === 'all' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                        {{ $t('classroom.show_all') }}
+                    </button>
+                    <button @click="displayMode = 'hidden'"
+                        class="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-widest transition-all"
+                        :class="displayMode === 'hidden' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+                        {{ $t('classroom.show_hidden_only') }}
+                    </button>
+                </div>
+            </div>
+
+            <div v-if="activeTab === 'sessions'" class="flex items-center gap-2 md:ml-auto w-full md:w-auto relative">
+                <label class="text-xs font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">{{
+                    $t('classroom.filter_by_room') }}</label>
+
+                <BaseDropdown v-model="selectedSessionClassroomFilter" :options="classroomOptions" theme="emerald"
+                    class="min-w-[240px]" />
+
+                <button v-if="selectedSessionClassroomFilter" @click="selectedSessionClassroomFilter = ''"
+                    class="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all border border-transparent hover:border-red-100">
+                    {{ $t('classroom.clear_room_filter') }}
+                </button>
+            </div>
+        </div>
+
         <div v-if="loading" class="text-center text-gray-500 py-10">
             <svg class="animate-spin h-8 w-8 mx-auto mb-3 text-emerald-500" xmlns="http://www.w3.org/2000/svg"
                 fill="none" viewBox="0 0 24 24">
@@ -574,55 +619,6 @@ function clearTeacherSelection() {
                 </path>
             </svg>
             {{ $t('student.loading') }}
-        </div>
-
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-3">
-            <div class="flex items-center gap-2">
-                <span class="text-xs font-black text-gray-500 uppercase tracking-widest">{{ $t('classroom.display_mode') }}</span>
-                <div class="flex bg-gray-100 p-1 rounded-xl border border-gray-100">
-                    <button
-                        @click="displayMode = 'visible'"
-                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                        :class="displayMode === 'visible' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
-                    >
-                        {{ $t('classroom.show_visible_only') }}
-                    </button>
-                    <button
-                        @click="displayMode = 'all'"
-                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                        :class="displayMode === 'all' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
-                    >
-                        {{ $t('classroom.show_all') }}
-                    </button>
-                    <button
-                        @click="displayMode = 'hidden'"
-                        class="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
-                        :class="displayMode === 'hidden' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'"
-                    >
-                        {{ $t('classroom.show_hidden_only') }}
-                    </button>
-                </div>
-            </div>
-
-            <div v-if="activeTab === 'sessions'" class="flex items-center gap-2 md:ml-auto w-full md:w-auto">
-                <label class="text-xs font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">{{ $t('classroom.filter_by_room') }}</label>
-                <select
-                    v-model="selectedSessionClassroomFilter"
-                    class="min-w-[200px] border-gray-300 rounded-lg text-sm font-bold text-gray-700 focus:ring-emerald-500 focus:border-emerald-500"
-                >
-                    <option value="">{{ $t('classroom.all_rooms') }}</option>
-                    <option v-for="room in allClassrooms" :key="room.id" :value="room.id">
-                        {{ room.name }}
-                    </option>
-                </select>
-                <button
-                    v-if="selectedSessionClassroomFilter"
-                    @click="selectedSessionClassroomFilter = ''"
-                    class="px-3 py-2 rounded-lg text-xs font-black uppercase tracking-widest text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-all"
-                >
-                    {{ $t('classroom.clear_room_filter') }}
-                </button>
-            </div>
         </div>
 
         <!-- ROOMS TAB -->
@@ -646,9 +642,12 @@ function clearTeacherSelection() {
                                     class="font-black text-xl text-gray-900 break-words group-hover:text-emerald-700 transition leading-tight">
                                     {{ room.name }}
                                 </h3>
-                                <p class="text-xs text-gray-400 font-bold uppercase tracking-widest mt-0.5 flex items-center gap-2">
+                                <p
+                                    class="text-xs text-gray-400 font-bold uppercase tracking-widest mt-0.5 flex items-center gap-2">
                                     {{ $t('classroom.rooms_tab') }}
-                                    <span v-if="isClassroomHidden(room.id)" class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">{{ $t('classroom.hidden') }}</span>
+                                    <span v-if="isClassroomHidden(room.id)"
+                                        class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">{{
+                                            $t('classroom.hidden') }}</span>
                                 </p>
                             </div>
                         </div>
@@ -675,16 +674,19 @@ function clearTeacherSelection() {
                                         clip-rule="evenodd" />
                                 </svg>
                             </button>
-                            <button
-                                @click="toggleClassroomVisibility(room.id)"
+                            <button @click="toggleClassroomVisibility(room.id)"
                                 class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
-                                :title="isClassroomHidden(room.id) ? $t('classroom.show') : $t('classroom.hide')"
-                            >
-                                <svg v-if="isClassroomHidden(room.id)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z"/>
+                                :title="isClassroomHidden(room.id) ? $t('classroom.show') : $t('classroom.hide')">
+                                <svg v-if="isClassroomHidden(room.id)" xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path
+                                        d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z" />
                                 </svg>
-                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z" clip-rule="evenodd" />
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
+                                    fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z"
+                                        clip-rule="evenodd" />
                                 </svg>
                             </button>
                         </div>
@@ -737,7 +739,7 @@ function clearTeacherSelection() {
                 <div v-if="classrooms.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
-                    }}"</span>
+                        }}"</span>
                 </div>
             </div>
 
@@ -770,14 +772,15 @@ function clearTeacherSelection() {
                                 </h3>
                                 <div class="flex items-center gap-2 mt-0.5">
                                     <span
-                                        class="text-[10px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-widest"
+                                        class="text-[12px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-widest"
                                         :style="{ backgroundColor: `${getDayColor(session.day_of_week)}10`, color: getDayColor(session.day_of_week), borderColor: `${getDayColor(session.day_of_week)}30` }">
                                         {{ getDayLabel(session.day_of_week) }}
                                     </span>
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    <span class="text-[12px] font-black text-gray-400 uppercase tracking-widest">
                                         {{ session.start_time.slice(0, 5) }}-{{ session.end_time.slice(0, 5) }}
                                     </span>
-                                    <span v-if="isSessionHidden(session.id)" class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">
+                                    <span v-if="isSessionHidden(session.id)"
+                                        class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">
                                         {{ $t('classroom.hidden') }}
                                     </span>
                                 </div>
@@ -806,16 +809,19 @@ function clearTeacherSelection() {
                                         clip-rule="evenodd" />
                                 </svg>
                             </button>
-                            <button
-                                @click="toggleSessionVisibility(session.id)"
+                            <button @click="toggleSessionVisibility(session.id)"
                                 class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
-                                :title="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')"
-                            >
-                                <svg v-if="isSessionHidden(session.id)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z"/>
+                                :title="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')">
+                                <svg v-if="isSessionHidden(session.id)" xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path
+                                        d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z" />
                                 </svg>
-                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z" clip-rule="evenodd" />
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
+                                    fill="currentColor">
+                                    <path fill-rule="evenodd"
+                                        d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z"
+                                        clip-rule="evenodd" />
                                 </svg>
                             </button>
                         </div>
@@ -833,7 +839,7 @@ function clearTeacherSelection() {
                                 </svg>
                             </div>
                             <span class="text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!)
-                                }}</span>
+                            }}</span>
                         </div>
 
                         <!-- Capacity Info -->
@@ -912,32 +918,32 @@ function clearTeacherSelection() {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
-                            }}</label>
+                        }}</label>
                         <input v-model="newClassroom.external_link"
                             :placeholder="$t('classroom.external_link_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                            }}</label>
+                        }}</label>
                         <input type="color" v-model="newClassroom.color"
                             class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
                     </div>
@@ -970,7 +976,7 @@ function clearTeacherSelection() {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
-                            }}</label>
+                        }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -984,7 +990,7 @@ function clearTeacherSelection() {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.capacity')
-                            }}</label>
+                        }}</label>
                         <input type="number" v-model="newSession.capacity"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -998,26 +1004,28 @@ function clearTeacherSelection() {
                     </div> -->
 
                     <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.start_date', 'Start Date') }} <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.start_date') }}
+                            <span class="text-red-500">*</span></label>
                         <input type="date" v-model="newSession.start_date" required
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
 
                     <div>
                         <div class="flex items-center justify-between mb-1.5">
-                            <label class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date', 'End Date') }}</label>
-                            <button v-if="newSession.end_date" @click="newSession.end_date = null" class="text-[10px] text-gray-400 hover:text-red-500 font-medium uppercase tracking-wider transition-colors">
+                            <label class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date') }}</label>
+                            <button v-if="newSession.end_date" @click="newSession.end_date = null"
+                                class="text-[10px] text-gray-400 hover:text-red-500 font-medium uppercase tracking-wider transition-colors">
                                 {{ $t('common.clear', 'Clear') }}
                             </button>
                         </div>
                         <input type="date" v-model="newSession.end_date"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                        <p class="text-xs text-gray-500 mt-1">{{ $t('classroom.long_term_hint', 'Leave empty for long-term session') }}</p>
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('classroom.long_term_hint') }}</p>
                     </div>
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
-                            }}</label>
+                        }}</label>
                         <input v-model="newSession.external_link"
                             :placeholder="$t('classroom.external_link_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
@@ -1025,7 +1033,7 @@ function clearTeacherSelection() {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
-                            }}</label>
+                        }}</label>
                         <div class="flex flex-wrap gap-2">
                             <select v-model="newSession.day_of_week"
                                 class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
@@ -1067,45 +1075,59 @@ function clearTeacherSelection() {
                     </div>
 
                     <div class="md:col-span-2">
-                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.teaching_schedule') || 'Teaching Schedule' }}</label>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{
+                            $t('classroom.teaching_schedule') || 'Teaching Schedule' }}</label>
                         <div class="space-y-3">
-                            <div v-for="(config, index) in selectedTeacherConfigs" :key="index" class="p-3 border border-gray-200 rounded-xl bg-gray-50/50 space-y-3">
+                            <div v-for="(config, index) in selectedTeacherConfigs" :key="index"
+                                class="p-3 border border-gray-200 rounded-xl bg-gray-50/50 space-y-3">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex-1">
-                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{ $t('classroom.teacher') }}</label>
-                                        <SearchableSelect 
-                                            v-model="config.teacher_id" 
-                                            :options="teacherOptions" 
+                                        <label
+                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
+                                                $t('classroom.teacher') }}</label>
+                                        <SearchableSelect v-model="config.teacher_id" :options="teacherOptions"
                                             :placeholder="$t('classroom.teacher_search_placeholder')" />
                                     </div>
-                                    <button @click="removeTeacherAssignment(index)" class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
+                                    <button @click="removeTeacherAssignment(index)"
+                                        class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                         </svg>
                                     </button>
                                 </div>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
-                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{ $t('common.start_date') }}</label>
-                                        <input type="date" v-model="config.effective_from" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
+                                        <label
+                                            class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
+                                                $t('common.start_date') }}</label>
+                                        <input type="date" v-model="config.effective_from"
+                                            class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
                                     </div>
                                     <div>
                                         <div class="flex items-center justify-between mb-1">
-                                            <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                                            <label
+                                                class="block text-[10px] font-bold uppercase tracking-wider text-gray-500">
                                                 {{ $t('common.end_date') }}
-                                                <span v-if="!config.effective_to" class="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{{ $t('classroom.default_teacher') }}</span>
+                                                <span v-if="!config.effective_to"
+                                                    class="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{{
+                                                        $t('classroom.default_teacher') }}</span>
                                             </label>
-                                            <button v-if="config.effective_to" @click="config.effective_to = null" class="text-[9px] text-gray-400 hover:text-red-500 font-bold uppercase transition-colors">
+                                            <button v-if="config.effective_to" @click="config.effective_to = null"
+                                                class="text-[9px] text-gray-400 hover:text-red-500 font-bold uppercase transition-colors">
                                                 {{ $t('common.clear') }}
                                             </button>
                                         </div>
-                                        <input type="date" v-model="config.effective_to" class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
+                                        <input type="date" v-model="config.effective_to"
+                                            class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
                                     </div>
                                 </div>
                             </div>
-                            <button @click="addTeacherAssignment" class="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50/30 transition-all flex items-center justify-center gap-2">
+                            <button @click="addTeacherAssignment"
+                                class="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50/30 transition-all flex items-center justify-center gap-2">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 4v16m8-8H4" />
                                 </svg>
                                 {{ $t('classroom.add_teacher_assignment') || 'Add Teacher Assignment' }}
                             </button>

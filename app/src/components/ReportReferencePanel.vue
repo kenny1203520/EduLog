@@ -86,146 +86,24 @@
 
                     <!-- Contextual Filters & Sort -->
                     <div class="flex flex-wrap gap-2 sm:gap-3">
-                        <!-- Custom Dropdown Overlay (to close when clicking outside) -->
-                        <div v-if="openDropdown" class="fixed inset-0 z-40" @click="closeAllDropdowns"></div>
-
                         <template v-if="activeTab === 'peer'">
-                            <!-- Classroom Dropdown -->
-                            <div class="flex-1 min-w-[140px] relative">
-                                <button @click="openDropdown = openDropdown === 'classroom' ? null : 'classroom'"
-                                    class="w-full flex items-center justify-between gap-2 text-xs font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all">
-                                    <span class="truncate"
-                                        :class="filterClassroom ? 'text-indigo-600' : 'text-gray-400'">
-                                        {{ selectedClassroomName || $t('report.reference_panel.filter_by_classroom') }}
-                                    </span>
-                                    <svg xmlns="http://www.w3.org/2000/svg"
-                                        class="h-3.5 w-3.5 transition-transform duration-300"
-                                        :class="openDropdown === 'classroom' ? 'rotate-180' : ''" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                            d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-                                <div v-if="openDropdown === 'classroom'"
-                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white/70 backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
-                                    <div @click="filterClassroom = ''; handleClassroomChange(); closeAllDropdowns()"
-                                        class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
-                                        :class="!filterClassroom ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'">
-                                        {{ $t('report.reference_panel.filter_by_classroom') }}
-                                    </div>
-                                    <div v-for="c in classrooms" :key="c.id"
-                                        @click="filterClassroom = c.id; handleClassroomChange(); closeAllDropdowns()"
-                                        class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
-                                        :class="filterClassroom === c.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'">
-                                        {{ c.name }}
-                                    </div>
-                                </div>
-                            </div>
+                            <BaseDropdown v-model="filterClassroom" :options="classroomOptions"
+                                :placeholder="$t('report.reference_panel.filter_by_classroom')" theme="indigo"
+                                class="flex-1 min-w-[140px]" @change="handleClassroomChange" />
 
-                            <!-- Session Dropdown -->
-                            <div class="flex-1 min-w-[140px] relative">
-                                <button @click="openDropdown = openDropdown === 'session' ? null : 'session'"
-                                    class="w-full flex items-center justify-between gap-2 text-xs font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all">
-                                    <span class="truncate" :class="filterSession ? 'text-indigo-600' : 'text-gray-400'">
-                                        {{ selectedSessionName || $t('report.reference_panel.filter_by_session') }}
-                                    </span>
-                                    <svg xmlns="http://www.w3.org/2000/svg"
-                                        class="h-3.5 w-3.5 transition-transform duration-300"
-                                        :class="openDropdown === 'session' ? 'rotate-180' : ''" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                            d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-                                <div v-if="openDropdown === 'session'"
-                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white/70 backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
-                                    <div @click="filterSession = ''; refreshData(); closeAllDropdowns()"
-                                        class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
-                                        :class="!filterSession ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'">
-                                        {{ $t('report.reference_panel.filter_by_session') }}
-                                    </div>
-                                    <div v-for="s in filteredSessions" :key="s.id"
-                                        @click="filterSession = s.id; refreshData(); closeAllDropdowns()"
-                                        class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
-                                        :class="filterSession === s.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'">
-                                        {{ s.name }}
-                                    </div>
-                                </div>
-                            </div>
+                            <BaseDropdown v-model="filterSession" :options="sessionOptions"
+                                :placeholder="$t('report.reference_panel.filter_by_session')" theme="indigo"
+                                class="flex-1 min-w-[140px]" @change="refreshData" />
                         </template>
+
                         <template v-else>
-                            <!-- Course Dropdown -->
-                            <div class="flex-1 min-w-[140px] relative">
-                                <button @click="openDropdown = openDropdown === 'course' ? null : 'course'"
-                                    class="w-full flex items-center justify-between gap-2 text-xs font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all">
-                                    <span class="truncate" :class="filterCourse ? 'text-indigo-600' : 'text-gray-400'">
-                                        {{ selectedCourseName || $t('report.reference_panel.filter_by_course') }}
-                                    </span>
-                                    <svg xmlns="http://www.w3.org/2000/svg"
-                                        class="h-3.5 w-3.5 transition-transform duration-300"
-                                        :class="openDropdown === 'course' ? 'rotate-180' : ''" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                            d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-                                <div v-if="openDropdown === 'course'"
-                                    class="absolute left-0 right-0 mt-2 p-1.5 bg-white/70 backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 max-h-60 overflow-y-auto no-scrollbar animate-in fade-in zoom-in-95 duration-200">
-                                    <div @click="filterCourse = ''; refreshData(); closeAllDropdowns()"
-                                        class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
-                                        :class="!filterCourse ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:bg-gray-50 hover:text-gray-600'">
-                                        {{ $t('report.reference_panel.filter_by_course') }}
-                                    </div>
-                                    <div v-for="c in courses" :key="c.id"
-                                        @click="filterCourse = c.id; refreshData(); closeAllDropdowns()"
-                                        class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors"
-                                        :class="filterCourse === c.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'">
-                                        {{ c.display_name || c.subject }}
-                                    </div>
-                                </div>
-                            </div>
+                            <BaseDropdown v-model="filterCourse" :options="courseOptions"
+                                :placeholder="$t('report.reference_panel.filter_by_course')" theme="indigo"
+                                class="flex-1 min-w-[140px]" @change="refreshData" />
                         </template>
 
-                        <!-- Sort Dropdown -->
-                        <div class="w-32 relative">
-                            <button @click="openDropdown = openDropdown === 'sort' ? null : 'sort'"
-                                class="w-full flex items-center justify-between gap-2 text-xs font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 focus:ring-4 focus:ring-indigo-500/10 shadow-sm transition-all">
-                                <span class="text-indigo-600">
-                                    {{ sortBy === 'desc' ? $t('report.reference_panel.newest') :
-                                        $t('report.reference_panel.oldest') }}
-                                </span>
-                                <svg xmlns="http://www.w3.org/2000/svg"
-                                    class="h-3.5 w-3.5 transition-transform duration-300"
-                                    :class="openDropdown === 'sort' ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                            <div v-if="openDropdown === 'sort'"
-                                class="absolute left-0 sm:left-auto sm:right-0 w-48 mt-2 p-1.5 bg-white backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-200">
-                                <div @click="sortBy = 'desc'; refreshData(); closeAllDropdowns()"
-                                    class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center justify-between"
-                                    :class="sortBy === 'desc' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'">
-                                    {{ $t('report.reference_panel.newest') }}
-                                    <svg v-if="sortBy === 'desc'" class="w-3.5 h-3.5" fill="none" stroke="currentColor"
-                                        viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M5 13l4 4L19 7" />
-                                    </svg>
-                                </div>
-                                <div @click="sortBy = 'asc'; refreshData(); closeAllDropdowns()"
-                                    class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center justify-between"
-                                    :class="sortBy === 'asc' ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'">
-                                    {{ $t('report.reference_panel.oldest') }}
-                                    <svg v-if="sortBy === 'asc'" class="w-3.5 h-3.5" fill="none" stroke="currentColor"
-                                        viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M5 13l4 4L19 7" />
-                                    </svg>
-                                </div>
-                            </div>
-                        </div>
+                        <BaseDropdown v-model="sortBy" :options="sortOptions" theme="indigo" align="auto"
+                            class="flex-1 min-w-[120px]" menuWidthClass="w-48" @change="refreshData" />
                     </div>
                 </div>
 
@@ -272,7 +150,7 @@
                                         <svg class="w-2.5 h-2.5 sm:w-3 sm:h-3 text-indigo-500" fill="none"
                                             stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2-2v12a2 2 0 002 2z" />
                                         </svg>
                                         <span
                                             class="text-[9px] sm:text-[10px] font-black text-gray-600 uppercase tracking-widest">
@@ -420,32 +298,14 @@
                     class="shrink-0 px-4 py-3 sm:px-6 sm:py-5 border-t border-indigo-50/50 bg-white/90 backdrop-blur-md flex flex-col gap-3 sm:gap-4 shadow-[0_-20px_50px_rgba(0,0,0,0.04)] relative z-40">
                     <div class="flex items-center justify-between gap-3">
                         <div
-                            class="flex items-center gap-2 sm:gap-2.5 bg-gray-50 p-1 rounded-lg sm:rounded-xl border border-gray-100 flex-1 min-w-0 relative">
+                            class="bg-gray-50 p-1 rounded-lg sm:rounded-xl border border-gray-100 flex-1 min-w-0 flex items-center gap-2">
                             <span
-                                class="text-[10px] sm:text-[12px] font-black text-gray-400 uppercase tracking-widest pl-2 truncate">{{
-                                    $t('report.reference_panel.items_per_page')
-                                }}</span>
-                            <button @click="openDropdown = openDropdown === 'pageSize' ? null : 'pageSize'"
-                                class="text-[10px] sm:text-[11px] font-black px-2 py-1 bg-white text-gray-900 rounded-lg shadow-sm border border-gray-100 flex items-center gap-1">
-                                {{ pageSize }}
-                                <svg xmlns="http://www.w3.org/2000/svg"
-                                    class="w-3 h-3 transition-transform duration-300"
-                                    :class="openDropdown === 'pageSize' ? 'rotate-180' : ''" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-                            <!-- Dropdown Menu -->
-                            <div v-if="openDropdown === 'pageSize'"
-                                class="absolute bottom-full left-0 right-0 mb-2 p-1.5 bg-white backdrop-blur-xl border border-indigo-50 rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                                <div v-for="size in [10, 20, 50]" :key="size"
-                                    @click="pageSize = size; handlePageSizeChange(); closeAllDropdowns()"
-                                    class="px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition-colors"
-                                    :class="pageSize === size ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-50'">
-                                    {{ size }}
-                                </div>
-                            </div>
+                                class="text-[10px] sm:text-[12px] font-black text-gray-400 uppercase tracking-widest pl-2 truncate">
+                                {{ $t('report.reference_panel.items_per_page') }}
+                            </span>
+                            <BaseDropdown v-model="pageSize" :options="pageSizeOptions" theme="indigo"
+                                widthClass="w-16 sm:w-20" menuWidthClass="w-24 sm:w-32"
+                                @change="handlePageSizeChange" />
                         </div>
                         <div
                             class="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-indigo-50/50 rounded-lg sm:rounded-xl border border-indigo-100/50 shrink-0">
@@ -497,14 +357,42 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
 import { ClassroomService } from '@/services/Classroom/ClassroomService'
 import { SessionService } from '@/services/Session/SessionService'
 import { useI18n } from 'vue-i18n'
+import BaseDropdown from '@/components/common/BaseDropdown.vue'
 
 const { t } = useI18n()
+
+// Computed Options for BaseDropdown
+const classroomOptions = computed(() => [
+    { label: t('report.reference_panel.filter_by_classroom'), value: '' },
+    ...classrooms.value.map(c => ({ label: c.name, value: c.id }))
+])
+
+const sessionOptions = computed(() => [
+    { label: t('report.reference_panel.filter_by_session'), value: '' },
+    ...filteredSessions.value.map(s => ({ label: s.name, value: s.id }))
+])
+
+const courseOptions = computed(() => [
+    { label: t('report.reference_panel.filter_by_course'), value: '' },
+    ...courses.value.map(c => ({ label: c.display_name || c.subject, value: c.id }))
+])
+
+const sortOptions = computed(() => [
+    { label: t('report.reference_panel.newest'), value: 'desc' },
+    { label: t('report.reference_panel.oldest'), value: 'asc' }
+])
+
+const pageSizeOptions = [
+    { label: '10', value: 10 },
+    { label: '20', value: 20 },
+    { label: '50', value: 50 }
+]
 
 const props = defineProps<{
     show: boolean
@@ -530,27 +418,6 @@ const filterClassroom = ref('')
 const filterSession = ref('')
 const filterCourse = ref('')
 const sortBy = ref<'asc' | 'desc'>('desc')
-
-// Dropdown state
-const openDropdown = ref<string | null>(null)
-
-function closeAllDropdowns() {
-    openDropdown.value = null
-}
-
-const selectedClassroomName = computed(() => {
-    return classrooms.value.find(c => c.id === filterClassroom.value)?.name || ''
-})
-
-const selectedSessionName = computed(() => {
-    return allSessions.value.find(s => s.id === filterSession.value)?.name || ''
-})
-
-const selectedCourseName = computed(() => {
-    const c = courses.value.find(c => c.id === filterCourse.value)
-    if (!c) return ''
-    return c.display_name || c.subject
-})
 
 // Expansion State
 const expandedStates = ref<Record<string, boolean>>({})
@@ -589,7 +456,18 @@ const filteredSessions = computed(() => {
 // Lifecycle
 onMounted(async () => {
     await loadFilterOptions()
+    window.addEventListener('keydown', handleKeyDown)
 })
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeyDown)
+})
+
+function handleKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && props.show) {
+        emit('close')
+    }
+}
 
 // Watch panel visibility
 watch(() => props.show, (newVal) => {
@@ -734,4 +612,3 @@ function copyContent(content: string) {
     emit('copy', content)
 }
 </script>
-  

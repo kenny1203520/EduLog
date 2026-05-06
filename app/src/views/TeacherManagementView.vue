@@ -14,6 +14,8 @@ import {
     type AuthUserSearchResultDTO
 } from '@/services/Auth/AuthUserSearchService'
 
+import BaseDropdown from '@/components/common/BaseDropdown.vue'
+
 const { t, locale } = useI18n()
 const toast = useToast()
 
@@ -25,6 +27,12 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 const pagination = ref({ page: 1, perPage: 8 })
 const selectedTeacherIds = ref<Set<string>>(new Set())
 const pendingDeleteCount = ref(0)
+
+const sortOptions = computed(() => [
+    { label: t('teacher.sort_name'), value: 'name' },
+    { label: t('teacher.sort_email'), value: 'email' },
+    { label: t('teacher.sort_created_at'), value: 'created_at' }
+])
 
 const isModalOpen = ref(false)
 const isSaving = ref(false)
@@ -478,13 +486,12 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                         <label class="mb-2 block text-sm font-semibold text-slate-700">
                             {{ t('teacher.sort_label') }}
                         </label>
-                        <select
-                            v-model="sortField"
-                            class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100">
-                            <option value="name">{{ t('teacher.sort_name') }}</option>
-                            <option value="email">{{ t('teacher.sort_email') }}</option>
-                            <option value="created_at">{{ t('teacher.sort_created_at') }}</option>
-                        </select>
+                        <BaseDropdown 
+                            v-model="sortField" 
+                            :options="sortOptions"
+                            theme="emerald"
+                            class="w-full"
+                        />
                     </div>
 
                     <button
