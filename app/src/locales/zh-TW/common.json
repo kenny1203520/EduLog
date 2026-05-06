@@ -68,5 +68,7 @@
     "clear": "清除",
     "start_date": "開始日期",
     "end_date": "結束日期",
-    "font_size": "字體大小"
+    "font_size": "字體大小",
+    "show_more": "顯示更多",
+    "show_less": "減少顯示"
 }

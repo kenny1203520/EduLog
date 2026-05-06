@@ -166,6 +166,7 @@
             "progress_end": "章節進度（結束）",
             "is_completed": "是否完整完成"
         },
+        "template_variable_auto_insert_hint": "點擊上方欄位後，點擊變數即可插入",
         "attendance_title": "出席狀況",
         "system_managed_absence_notice": "此缺席狀態由系統管理（如請假或停課紀錄），不可直接修改。",
         "present": "出席",

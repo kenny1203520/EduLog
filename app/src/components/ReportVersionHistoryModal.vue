@@ -74,7 +74,7 @@
                                         class="flex flex-col items-center justify-center w-10 h-10 rounded-xl bg-gray-900 text-white shadow-sm">
                                         <span class="text-[8px] font-black opacity-60 leading-none">VER</span>
                                         <span class="text-sm font-black leading-none mt-0.5">{{ version.version
-                                            }}</span>
+                                        }}</span>
                                     </div>
                                     <div class="flex flex-col">
                                         <span class="text-sm font-bold text-gray-900">{{ version.createdAt ?
@@ -114,7 +114,9 @@
                                             <p class="text-xs font-bold"
                                                 :class="version.snapshot.attendance_status === 'present' ? 'text-emerald-600' : 'text-rose-500'">
                                                 {{ version.snapshot.attendance_status === 'present' ?
-                                                    $t('report.editor.present') : $t('report.editor.absent') }}
+                                                    $t('report.editor.present') : $t('report.editor.absent') +
+                                                    `(${version.snapshot.absence_reason ? version.snapshot.absence_reason :
+                                                        '-'})` }}
                                             </p>
                                         </div>
                                     </div>
@@ -159,13 +161,73 @@
                                     </div>
                                 </div>
 
-                                <!-- Content Preview -->
-                                <div class="bg-gray-50/80 rounded-xl p-5 border border-gray-100/50">
-                                    <p
-                                        class="text-sm text-gray-600 line-clamp-5 leading-relaxed whitespace-pre-wrap font-medium italic">
-                                        {{ (version.snapshot.content || version.content) ||
-                                            $t('report.editor.empty_content') }}
-                                    </p>
+                                <!-- Detailed Previews -->
+                                <div class="space-y-4">
+                                    <!-- Contact Notes -->
+                                    <div v-if="version.id" class="bg-amber-50/50 rounded-xl p-4 border border-amber-100/50 transition-all duration-300 relative group"
+                                         :class="shouldShowToggle(version.snapshot.contact_notes, 'notes') 
+                                            ? (isExpanded(version.id, 'contact') ? 'pb-4' : 'max-h-[120px] overflow-hidden pb-12') 
+                                            : 'pb-4'">
+                                        <span class="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-2 block">{{ $t('report.editor.contact_notes_label') }}</span>
+                                        <p class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap"
+                                           :class="(shouldShowToggle(version.snapshot.contact_notes, 'notes') && !isExpanded(version.id, 'contact')) ? 'line-clamp-3' : ''">
+                                            {{ version.snapshot.contact_notes || $t('report.editor.empty_content') }}
+                                        </p>
+                                        <!-- Individual Toggle for Contact -->
+                                        <div v-if="shouldShowToggle(version.snapshot.contact_notes, 'notes')"
+                                             :class="isExpanded(version.id, 'contact') ? 'mt-4 flex justify-center' : 'absolute bottom-0 left-0 right-0 p-2 flex justify-center bg-gradient-to-t from-amber-50/95 to-transparent pt-8'">
+                                            <button @click="toggleExpanded(version.id!, 'contact')" class="px-3 py-1 bg-white border border-amber-200 rounded-full text-[9px] font-black text-amber-700 hover:bg-amber-100 transition-all active:scale-95 flex items-center gap-1 shadow-sm">
+                                                {{ isExpanded(version.id!, 'contact') ? $t('common.show_less') : $t('common.show_more') }}
+                                                <svg class="w-2.5 h-2.5 transition-transform duration-300" :class="isExpanded(version.id!, 'contact') ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Class Notes -->
+                                    <div v-if="version.id" class="bg-blue-50/50 rounded-xl p-4 border border-blue-100/50 transition-all duration-300 relative group"
+                                         :class="shouldShowToggle(version.snapshot.class_notes, 'notes')
+                                            ? (isExpanded(version.id, 'class') ? 'pb-4' : 'max-h-[120px] overflow-hidden pb-12')
+                                            : 'pb-4'">
+                                        <span class="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-2 block">{{ $t('report.editor.class_notes_label') }}</span>
+                                        <p class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap"
+                                           :class="(shouldShowToggle(version.snapshot.class_notes, 'notes') && !isExpanded(version.id, 'class')) ? 'line-clamp-3' : ''">
+                                            {{ version.snapshot.class_notes || $t('report.editor.empty_content') }}
+                                        </p>
+                                        <!-- Individual Toggle for Class -->
+                                        <div v-if="shouldShowToggle(version.snapshot.class_notes, 'notes')"
+                                             :class="isExpanded(version.id, 'class') ? 'mt-4 flex justify-center' : 'absolute bottom-0 left-0 right-0 p-2 flex justify-center bg-gradient-to-t from-blue-50/90 to-transparent pt-8'">
+                                            <button @click="toggleExpanded(version.id!, 'class')" class="px-3 py-1 bg-white border border-blue-200 rounded-full text-[9px] font-black text-blue-700 hover:bg-blue-100 transition-all active:scale-95 flex items-center gap-1 shadow-sm">
+                                                {{ isExpanded(version.id!, 'class') ? $t('common.show_less') : $t('common.show_more') }}
+                                                <svg class="w-2.5 h-2.5 transition-transform duration-300" :class="isExpanded(version.id!, 'class') ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Main Content -->
+                                    <div v-if="version.id" class="bg-gray-50/80 rounded-xl p-4 border border-gray-100/50 transition-all duration-300 relative group"
+                                         :class="shouldShowToggle(version.snapshot.content || version.content, 'content')
+                                            ? (isExpanded(version.id, 'content') ? 'pb-4' : 'max-h-[180px] overflow-hidden pb-14')
+                                            : 'pb-4'">
+                                        <span class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 block">{{ $t('report.fields.content') }}</span>
+                                        <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium"
+                                           :class="(shouldShowToggle(version.snapshot.content || version.content, 'content') && !isExpanded(version.id, 'content')) ? 'line-clamp-6' : ''">
+                                            {{ (version.snapshot.content || version.content) || $t('report.editor.empty_content') }}
+                                        </p>
+                                        <!-- Individual Toggle for Content -->
+                                        <div v-if="shouldShowToggle(version.snapshot.content || version.content, 'content')"
+                                             :class="isExpanded(version.id, 'content') ? 'mt-4 flex justify-center' : 'absolute bottom-0 left-0 right-0 p-3 flex justify-center bg-gradient-to-t from-gray-50 to-transparent pt-10'">
+                                            <button @click="toggleExpanded(version.id!, 'content')" class="px-4 py-1.5 bg-white border border-gray-200 rounded-full shadow-sm text-[10px] font-black text-gray-600 hover:bg-gray-50 transition-all active:scale-95 flex items-center gap-1.5">
+                                                {{ isExpanded(version.id!, 'content') ? $t('common.show_less') : $t('common.show_more') }}
+                                                <svg class="w-3 h-3 transition-transform duration-300" :class="isExpanded(version.id!, 'content') ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -244,12 +306,37 @@ const isLoading = ref(false)
 const isRestoring = ref(false)
 const selectedVersion = ref<ReportVersion | null>(null)
 
+const expandedStates = ref<Record<string, boolean>>({})
 const confirmState = ref({
     isOpen: false,
     title: '',
     message: '',
     isLoading: false
 })
+
+function toggleExpanded(versionId: string, field: string = 'all') {
+    const key = `${versionId}-${field}`
+    expandedStates.value[key] = !expandedStates.value[key]
+}
+
+function isExpanded(versionId: string, field: string = 'all') {
+    return expandedStates.value[`${versionId}-${field}`] || false
+}
+
+function shouldShowToggle(content: string | null | undefined, type: 'notes' | 'content'): boolean {
+    if (!content) return false
+    
+    const lines = content.split('\n').length
+    // 判斷行數
+    if (type === 'notes' && lines > 3) return true
+    if (type === 'content' && lines > 6) return true
+    
+    // 判斷概略長度 (聯絡欄容器較窄，閾值設低一點；主內容較寬，設高一點)
+    if (type === 'notes' && content.length > 100) return true
+    if (type === 'content' && content.length > 250) return true
+    
+    return false
+}
 
 watch(() => props.isOpen, async (newVal) => {
     if (newVal && props.reportId) {

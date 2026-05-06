@@ -166,6 +166,7 @@
             "progress_end": "Chapter Progress (End)",
             "is_completed": "Completed Status"
         },
+        "template_variable_auto_insert_hint": "Click a field above, then click a variable to insert",
         "attendance_title": "Attendance Status",
         "system_managed_absence_notice": "This absence is managed by the system (e.g., leave or suspension records) and cannot be modified directly.",
         "present": "Present",

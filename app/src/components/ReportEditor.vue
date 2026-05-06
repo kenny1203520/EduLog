@@ -32,12 +32,13 @@
 
             <button @click="showVersionHistoryModal = true"
                 class="text-sm font-medium text-gray-600 hover:text-blue-600 flex items-center gap-1 focus:outline-none"
-                :title="$t('report.editor.version_history_title', '版本紀錄')">
+                :title="$t('report.editor.version_history_title')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span class="hidden sm:inline">{{ $t('report.editor.version_history', '版本紀錄') }}</span>
+                <span class="hidden sm:inline">{{ $t('report.editor.version_history') }}</span>
             </button>
 
             <button @click="openReportTemplateManagerModal"
@@ -48,7 +49,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
                 </svg>
-                <span>{{ $t('report.editor.templates') }}</span>
+                <span class="hidden sm:inline">{{ $t('report.editor.templates') }}</span>
             </button>
 
             <!-- Save Status Indicator -->
@@ -75,13 +76,13 @@
             <!-- Delete Button -->
             <button v-if="props.reportId" @click="handleDeleteReport"
                 class="text-sm font-medium text-red-500 hover:text-red-700 flex items-center gap-1 focus:outline-none"
-                :title="$t('report.editor.delete_report', 'Delete Report')">
+                :title="$t('report.editor.delete_report')">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                     stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
-                <span class="hidden sm:inline">{{ $t('report.editor.delete_report', 'Delete Report') }}</span>
+                <span class="hidden sm:inline">{{ $t('report.editor.delete_report') }}</span>
             </button>
         </div>
 
@@ -190,18 +191,22 @@
                 <label class="block text-sm font-medium text-gray-700 mb-2">
                     {{ $t('report.editor.absence_reason_label') }} <span class="text-red-600">*</span>
                 </label>
-                
+
                 <!-- System-managed absence reason (read-only) -->
-                <div v-if="isSystemManagedAbsence" class="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div v-if="isSystemManagedAbsence"
+                    class="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-amber-600" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div class="flex-1">
                         <p class="text-sm font-semibold text-amber-800">
                             {{ getSystemManagedAbsenceLabel() }}
                         </p>
                         <p class="text-xs text-amber-700 mt-1">
-                            {{ $t('report.editor.system_managed_absence_notice', 'This absence is managed by the system and cannot be modified.') }}
+                            {{ $t('report.editor.system_managed_absence_notice',
+                                'This absence is managed by the system and cannot be modified.') }}
                         </p>
                     </div>
                 </div>
@@ -419,7 +424,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                        }}</span>
+                    }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -455,8 +460,7 @@
             :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
             :is-loading="confirmState.isLoading" @confirm="handleConfirmAction" @close="confirmState.isOpen = false" />
 
-        <CopyTemplateEditorModal
-            v-model="showCourseCopyTemplateModal"
+        <CopyTemplateEditorModal v-model="showCourseCopyTemplateModal"
             :title="$t('report.editor.copy_course_template_title')"
             :hint="$t('report.editor.copy_course_template_hint')"
             :variable-title="$t('report.editor.copy_course_template_variables')"
@@ -464,19 +468,13 @@
             :preview-title="$t('report.editor.copy_course_template_preview_title')"
             :preview-hint="$t('report.editor.copy_course_template_preview_hint')"
             :preview-empty="$t('report.editor.copy_course_template_preview_empty')"
-            :template-text="courseCopyTemplateText"
-            :preview-text="courseTemplatePreviewText"
-            :variable-count="courseTemplateVariables.length"
-            :is-loading="isLoadingCourseCopyTemplate"
+            :template-text="courseCopyTemplateText" :preview-text="courseTemplatePreviewText"
+            :variable-count="courseTemplateVariables.length" :is-loading="isLoadingCourseCopyTemplate"
             :loading-text="$t('report.editor.copy_course_template_loading')"
             :loading-hint="$t('report.editor.copy_course_template_loading_hint')"
-            :save-loading="isSavingCourseCopyTemplate"
-            :cancel-text="$t('common.cancel')"
-            :save-text="$t('common.save')"
-            :saving-text="$t('report.saving')"
-            @update:template-text="courseCopyTemplateText = $event"
-            @save="saveCourseCopyTemplate"
-        >
+            :save-loading="isSavingCourseCopyTemplate" :cancel-text="$t('common.cancel')" :save-text="$t('common.save')"
+            :saving-text="$t('report.saving')" @update:template-text="courseCopyTemplateText = $event"
+            @save="saveCourseCopyTemplate">
             <template #controls>
                 <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
                     <div class="flex flex-col gap-2 md:flex-row md:items-end">
@@ -501,21 +499,16 @@
             </template>
             <template #variables>
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div
-                        v-for="variable in courseTemplateVariables"
-                        :key="variable.key"
-                        class="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm"
-                    >
+                    <div v-for="variable in courseTemplateVariables" :key="variable.key"
+                        class="space-y-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
                         <div class="flex items-start justify-between gap-3">
                             <div>
                                 <p class="text-sm font-bold leading-tight text-gray-900">{{ variable.label }}</p>
                                 <p class="mt-1 text-xs leading-5 text-gray-500">{{ variable.description }}</p>
                             </div>
-                            <button
-                                @click="insertCourseTemplateVariable(variable.key)"
+                            <button @click="insertCourseTemplateVariable(variable.key)"
                                 class="shrink-0 whitespace-nowrap rounded-lg bg-indigo-50 px-2 py-1 text-xs font-semibold text-indigo-700 transition-colors hover:bg-indigo-100"
-                                :title="variable.token"
-                            >
+                                :title="variable.token">
                                 {{ variable.token }}
                             </button>
                         </div>
@@ -524,10 +517,8 @@
                             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                                 {{ $t('report.editor.copy_course_template_variable_mode_label') }}
                             </label>
-                            <select
-                                v-model="selectedCourseTemplateModes[variable.key]"
-                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
-                            >
+                            <select v-model="selectedCourseTemplateModes[variable.key]"
+                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500">
                                 <option v-for="mode in variable.modeOptions" :key="mode.value" :value="mode.value">
                                     {{ mode.label }}
                                 </option>
@@ -538,7 +529,8 @@
                             <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                                 {{ $t('report.editor.copy_course_template_preview_title') }}
                             </p>
-                            <p class="min-h-[3.25rem] whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
+                            <p
+                                class="min-h-[3.25rem] whitespace-pre-wrap break-words rounded-xl border border-gray-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700">
                                 {{ variable.previewValue || '—' }}
                             </p>
                         </div>
@@ -547,32 +539,20 @@
             </template>
         </CopyTemplateEditorModal>
 
-        <CopyTemplateEditorModal
-            ref="reportTemplateModal"
-            v-model="showReportTemplateManagerModal"
-            :title="$t('report.editor.template_manager_title')"
-            :hint="$t('report.editor.template_manager_hint')"
+        <CopyTemplateEditorModal ref="reportTemplateModal" v-model="showReportTemplateManagerModal"
+            :title="$t('report.editor.template_manager_title')" :hint="$t('report.editor.template_manager_hint')"
             :variable-title="$t('report.editor.template_manager_fields')"
             :preview-title="$t('report.editor.template_preview_title')"
             :preview-hint="$t('report.editor.template_preview_hint')"
-            :preview-empty="$t('report.editor.template_preview_empty')"
-            :preview-text="reportTemplatePreviewText"
-            :preview-sections="reportTemplatePreviewSections"
-            :variable-count="reportTemplateVariables.length"
-            :is-loading="isLoadingTemplateManager"
-            :loading-text="$t('report.editor.template_manager_loading')"
-            :loading-hint="$t('report.editor.template_manager_loading_hint')"
-            :save-loading="isSavingTemplate"
-            :save-disabled="!templateDraftName.trim()"
-            :cancel-text="$t('common.cancel')"
-            :save-text="$t('report.editor.template_save_action')"
-            :saving-text="$t('report.saving')"
-            :editable-fields="reportTemplateEditableFields"
-            :variable-preview="reportTemplateVariablePreview"
-            @update:editable-fields-content="onEditableFieldsUpdate"
-            @insert-variable="insertReportTemplateVariable"
-            @save="saveTemplateDraft"
-        >
+            :preview-empty="$t('report.editor.template_preview_empty')" :preview-text="reportTemplatePreviewText"
+            :preview-sections="reportTemplatePreviewSections" :variable-count="reportTemplateVariables.length"
+            :is-loading="isLoadingTemplateManager" :loading-text="$t('report.editor.template_manager_loading')"
+            :loading-hint="$t('report.editor.template_manager_loading_hint')" :save-loading="isSavingTemplate"
+            :save-disabled="!templateDraftName.trim()" :cancel-text="$t('common.cancel')"
+            :save-text="$t('report.editor.template_save_action')" :saving-text="$t('report.saving')"
+            :editable-fields="reportTemplateEditableFields" :variable-preview="reportTemplateVariablePreview"
+            @update:editable-fields-content="onEditableFieldsUpdate" @insert-variable="insertReportTemplateVariable"
+            @save="saveTemplateDraft">
             <template #controls>
                 <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3 space-y-3">
                     <div class="grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto_auto] md:items-end">
@@ -591,8 +571,7 @@
                             class="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-100">
                             {{ $t('report.editor.template_new_action') }}
                         </button>
-                        <button @click="deleteSelectedTemplate"
-                            :disabled="!selectedTemplateId"
+                        <button @click="deleteSelectedTemplate" :disabled="!selectedTemplateId"
                             class="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-bold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50">
                             {{ $t('common.delete') }}
                         </button>
@@ -615,26 +594,28 @@
 
                     <div class="rounded-xl border border-purple-200 bg-purple-50/60 p-3 space-y-2">
                         <div class="flex flex-wrap gap-2">
-                            <button
-                                v-for="variable in reportTemplateVariables"
-                                :key="variable.key"
+                            <button v-for="variable in reportTemplateVariables" :key="variable.key"
                                 @click="insertVariableToFocusedField(variable.key)"
                                 @mouseenter="handleTemplateVariableMouseEnter(variable.key, $event)"
                                 @mouseleave="handleTemplateVariableMouseLeave"
                                 class="relative rounded-lg bg-purple-100 px-2 py-1 text-xs font-semibold text-purple-800 transition hover:bg-purple-200"
-                                :title="variable.description"
-                            >
+                                :title="variable.description">
                                 {{ variable.token }}
                             </button>
                         </div>
-                        <p class="text-xs text-purple-700">{{ $t('report.editor.template_variable_auto_insert_hint', '點擊上方欄位後，點擊變數即可插入') }}</p>
+                        <p class="text-xs text-purple-700">{{ $t('report.editor.template_variable_auto_insert_hint',
+                            '點擊上方欄位後，點擊變數即可插入') }}</p>
 
                         <!-- Variable Mode Selectors -->
-                        <div v-if="reportTemplateVariables.some(v => v.modes?.length)" class="mt-2 pt-2 border-t border-purple-200/50">
+                        <div v-if="reportTemplateVariables.some(v => v.modes?.length)"
+                            class="mt-2 pt-2 border-t border-purple-200/50">
                             <div class="flex flex-wrap gap-4">
-                                <div v-for="variable in reportTemplateVariables.filter(v => v.modes?.length)" :key="variable.key" class="space-y-1">
-                                    <label class="block text-[10px] font-bold uppercase tracking-wider text-purple-900/60">
-                                        {{ variable.label }} {{ $t('report.editor.copy_course_template_variable_mode_label') }}
+                                <div v-for="variable in reportTemplateVariables.filter(v => v.modes?.length)"
+                                    :key="variable.key" class="space-y-1">
+                                    <label
+                                        class="block text-[10px] font-bold uppercase tracking-wider text-purple-900/60">
+                                        {{ variable.label }} {{
+                                            $t('report.editor.copy_course_template_variable_mode_label') }}
                                     </label>
                                     <select v-model="selectedReportTemplateModes[variable.key]"
                                         class="rounded-lg border border-purple-200 bg-white/80 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-emerald-500">
@@ -654,14 +635,9 @@
             </template>
         </CopyTemplateEditorModal>
 
-        <ReportVersionHistoryModal 
-            v-if="props.reportId"
-            v-model:is-open="showVersionHistoryModal"
-            :report-id="props.reportId"
-            :current-version="version"
-            :available-lessons="availableLessons"
-            @restored="handleReportRestored"
-        />
+        <ReportVersionHistoryModal v-if="props.reportId" v-model:is-open="showVersionHistoryModal"
+            :report-id="props.reportId" :current-version="version" :available-lessons="availableLessons"
+            @restored="handleReportRestored" />
     </div>
 </template>
 
@@ -817,10 +793,10 @@ const reportTemplateVariables = computed<ReportTemplateVariableItem[]>(() => {
     ]
 
     return keys.map(key => {
-        const definition = key === 'lesson' 
+        const definition = key === 'lesson'
             ? { modes: [{ value: 'arabic', label: 'arabic' }, { value: 'roman', label: 'roman' }, { value: 'chinese', label: 'chinese' }, { value: 'formal', label: 'formal' }] }
             : {}
-            
+
         return {
             key,
             token: formatCopyTemplateToken(key, selectedReportTemplateModes.value[key]),
@@ -1807,7 +1783,7 @@ function handleReportRestored(report: OccurrenceReportDTO) {
 
     // Emit the event to parent
     emit('restored', report)
-    
+
     // Clear unsaved changes flag
     reset()
 }

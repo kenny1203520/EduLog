@@ -68,5 +68,7 @@
     "clear": "Clear",
     "start_date": "Start Date",
     "end_date": "End Date",
-    "font_size": "Font Size"
+    "font_size": "Font Size",
+    "show_more": "Show More",
+    "show_less": "Show Less"
 }
