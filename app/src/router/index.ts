@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory, type RouteLocationNormalized } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
 import LoginView from '@/views/LoginView.vue'
-import i18n from '@/i18n'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -128,52 +127,6 @@ router.beforeEach(async (to: RouteLocationNormalized) => {
   }
 
   return true
-})
-
-// Dynamic Title & SEO Metadata Guard
-router.afterEach((to) => {
-  const t = i18n.global.t
-  const baseTitle = 'EduLog'
-  
-  // 1. Handle Dynamic Title
-  const titleKey = to.meta.title as string | undefined
-  let finalTitle = baseTitle
-  if (titleKey) {
-    const translatedTitle = t(titleKey)
-    if (translatedTitle !== titleKey) {
-      finalTitle = `${baseTitle} | ${translatedTitle}`
-    }
-  }
-  document.title = finalTitle
-
-  // 2. Handle Meta Description & Social Tags
-  const descKey = to.meta.description as string | undefined
-  const finalDesc = descKey ? t(descKey) : t('nav.subtitle')
-
-  const updateMetaTag = (selector: string, attr: string, value: string) => {
-    let el = document.querySelector(selector)
-    if (!el) {
-      el = document.createElement('meta')
-      if (selector.startsWith('meta[name')) {
-        const name = selector.match(/name="([^"]+)"/)?.[1]
-        if (name) el.setAttribute('name', name)
-      } else if (selector.startsWith('meta[property')) {
-        const prop = selector.match(/property="([^"]+)"/)?.[1]
-        if (prop) el.setAttribute('property', prop)
-      }
-      document.head.appendChild(el)
-    }
-    el.setAttribute(attr, value)
-  }
-
-  updateMetaTag('meta[name="description"]', 'content', finalDesc)
-  updateMetaTag('meta[property="og:title"]', 'content', finalTitle)
-  updateMetaTag('meta[property="og:description"]', 'content', finalDesc)
-  updateMetaTag('meta[property="og:type"]', 'content', 'website')
-  updateMetaTag('meta[property="og:url"]', 'content', window.location.href)
-  updateMetaTag('meta[name="twitter:card"]', 'content', 'summary_large_image')
-  updateMetaTag('meta[name="twitter:title"]', 'content', finalTitle)
-  updateMetaTag('meta[name="twitter:description"]', 'content', finalDesc)
 })
 
 export default router

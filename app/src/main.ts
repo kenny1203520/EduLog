@@ -7,12 +7,14 @@ import 'vue-toastification/dist/index.css'
 import App from './App.vue'
 import router from './router'
 import './pwa'
+import { setupDocumentHead } from './utils/documentHead'
 
 const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
 app.use(i18n)
+setupDocumentHead(router)
 app.use(Toast, {
     position: 'top-right',
     timeout: 3000,

@@ -2753,8 +2753,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 <div>
                                     <div class="font-black text-gray-900">{{ teacher.name }}</div>
                                     <div class="text-xs font-bold text-gray-400">{{ teacher.email || teacher.phone ||
-                                        'No
-                                        contact info' }}</div>
+                                        'No contact info' }}</div>
                                 </div>
                             </div>
 
