@@ -22,7 +22,7 @@ async function handleLogout() {
     <div class="flex h-screen bg-gray-50 overflow-hidden">
         <!-- Mobile Header -->
         <div
-            class="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b z-30 flex items-center px-4 justify-between shadow-sm">
+            class="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 z-30 flex items-center px-4 justify-between shadow-sm">
             <div class="flex items-center gap-3">
                 <button @click="isSidebarOpen = !isSidebarOpen"
                     class="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg">
@@ -53,7 +53,7 @@ async function handleLogout() {
                 isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                 isDesktopSidebarOpen ? 'lg:w-64' : 'lg:w-0 lg:overflow-hidden'
             ]">
-            <div class="p-6 border-b flex justify-between items-center" :class="{ 'lg:hidden': !isDesktopSidebarOpen }">
+            <div class="p-6 flex justify-between items-center" :class="{ 'lg:hidden': !isDesktopSidebarOpen }">
                 <div class="whitespace-nowrap overflow-hidden">
                     <div class="flex items-center gap-3">
                         <img src="/pwa-192x192.png" alt="EduLog Logo" class="w-10 h-10 rounded-xl shadow-md" />
@@ -72,6 +72,9 @@ async function handleLogout() {
                     </svg>
                 </button>
             </div>
+
+            <!-- Subtle Divider -->
+            <div class="mx-6 h-px bg-gray-100/60"></div>
 
             <!-- Language Switcher in Sidebar -->
             <div class="px-6 py-2">
@@ -101,6 +104,9 @@ async function handleLogout() {
                     </button>
                 </div>
             </div>
+
+            <!-- Subtle Divider -->
+            <div class="mx-6 mt-2 h-px bg-gray-100/60"></div>
 
             <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
                 <router-link to="/dashboard" @click="isSidebarOpen = false"
@@ -211,7 +217,10 @@ async function handleLogout() {
                 </router-link>
             </nav>
 
-            <div class="p-4 border-t">
+            <!-- Subtle Divider -->
+            <div class="mx-6 h-px bg-gray-100/60"></div>
+
+            <div class="p-4">
                 <div class="flex items-center mb-4 px-2">
                     <div
                         class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">
