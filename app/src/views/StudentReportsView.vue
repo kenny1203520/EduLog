@@ -55,7 +55,7 @@
                         <div
                             class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
                             <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
-                                }}</span>
+                            }}</span>
                             <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
                             <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
                                 v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
