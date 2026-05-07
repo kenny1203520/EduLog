@@ -72,8 +72,8 @@ const showAddStudentModal = ref(false)
 const isAddingStudent = ref(false)
 const makeupCandidates = ref<Enrollment[]>([])
 const makeupSearch = ref('')
-const selectedMakeupStudentId = ref<string>('')
-const selectedMakeupEnrollmentId = ref<string>('')
+const selectedMakeupStudentId = ref<string | null>(null)
+const selectedMakeupEnrollmentId = ref<string | null>(null)
 const makeupJoinDate = ref(DateUtils.formatLocalDate(new Date()))
 
 // Teacher Management State
@@ -469,7 +469,7 @@ const makeupStudentOptions = computed(() => {
     }
 
     return [
-        { label: t('classroom.please_select_student'), value: '' },
+        { label: t('classroom.please_select_student'), value: null },
         ...students.map(s => ({
             label: s.studentName || 'Unnamed',
             value: s.studentId || ''
@@ -485,7 +485,7 @@ const makeupEnrollmentOptions = computed(() => {
     )
 
     return [
-        { label: t('classroom.please_select_student_enrollment'), value: '' },
+        { label: t('classroom.please_select_student_enrollment'), value: null },
         ...studentEnrollments.map(e => ({
             label: `${e.courseDisplayName || (e.courseSubject + ' ' + (e.courseStage || ''))} (${e.status})`,
             value: e.id || ''
@@ -512,7 +512,7 @@ const selectedMakeupEnrollment = computed(() => {
 })
 
 function handleMakeupStudentChange() {
-    selectedMakeupEnrollmentId.value = ''
+    selectedMakeupEnrollmentId.value = null
 }
 
 function formatDateOnly(date: Date): string {

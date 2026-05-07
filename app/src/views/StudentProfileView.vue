@@ -116,7 +116,7 @@ const enrollmentStatusOptions = computed(() => [
 
 const courseOptionsDropdown = computed(() => {
     return [
-        { label: t('student.internal_courses.select_course_option'), value: '' },
+        { label: t('student.internal_courses.select_course_option'), value: null },
         ...availableCourses.value.map(c => ({
             label: `${c.subject} ${c.stage}`,
             value: c.id
@@ -134,7 +134,7 @@ const classroomOptionsDropdown = computed(() => {
         : availableClassrooms.value
 
     return [
-        { label: t('student.internal_courses.classroom_none'), value: '' },
+        { label: t('student.internal_courses.classroom_none'), value: null },
         ...classrooms.map(c => ({
             label: c.name + (c.address ? ` - ${c.address}` : ''),
             value: c.id
@@ -152,7 +152,7 @@ const sessionOptionsDropdown = computed(() => {
     }
 
     return [
-        { label: t('student.internal_courses.session_select_placeholder'), value: '' },
+        { label: t('student.internal_courses.session_select_placeholder'), value: null },
         ...sessions.map(s => ({
             label: `${s.name} (${t('classroom.days.' + s.day_of_week)} ${s.start_time?.slice(0, 5)})`,
             value: s.id
