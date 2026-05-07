@@ -41,7 +41,14 @@
     "no_incomplete_reports": "No incomplete reports found.",
     "missing_content": "Missing Content",
     "missing_unit": "Missing Unit",
+    "missing_progress": "Missing Progress",
+    "missing_participation": "Missing Participation",
+    "missing_behavior": "Missing Behavior",
+    "not_created": "Not Created",
     "select_incomplete_to_edit": "Select a report to start editing",
+    "select_incomplete_hint": "Select an incomplete report from the left list to start editing. All changes will be saved automatically.",
+    "view_student_profile": "View student profile",
+    "search_placeholder": "Search reports...",
     "report_id": "Report ID",
     "reference_panel": {
         "title": "Report Reference",
@@ -118,7 +125,11 @@
             "slash": "Slash separated",
             "newline": "New line separated",
             "bullet": "Bullet separated",
-            "space": "Space separated"
+            "space": "Space separated",
+            "arabic": "Arabic Numerals (1, 2, 3)",
+            "roman": "Roman Numerals (I, II, III)",
+            "chinese": "Chinese Numerals (一, 二, 三)",
+            "formal": "Formal Chinese Numerals (壹, 貳, 參)"
         },
         "copy_course_template_variable_descriptions": {
             "course_name": "Course name.",
@@ -158,6 +169,7 @@
             "progress_end": "Chapter Progress (End)",
             "is_completed": "Completed Status"
         },
+        "template_variable_auto_insert_hint": "Click a field above, then click a variable to insert",
         "attendance_title": "Attendance Status",
         "system_managed_absence_notice": "This absence is managed by the system (e.g., leave or suspension records) and cannot be modified directly.",
         "present": "Present",
@@ -208,9 +220,25 @@
         "delete_report_title": "Delete Report",
         "delete_report_confirm": "Are you sure you want to delete this report? This will automatically recalculate the student's progress.",
         "delete_success": "Report Deleted",
-        "confirm_create_report": "This class has no report yet. Clicking will automatically create a new report for the student. Do you want to continue?",
         "confirm_create_report_title": "Create New Report?",
-        "create_error": "Failed to create report"
+        "confirm_create_report": "This class has no report yet. Clicking will automatically create a new report for the student. Do you want to continue?",
+        "create_error": "Failed to create report",
+        "version_saved_at": "Saved At",
+        "empty_content": "(No content)",
+        "version_history": "Version History",
+        "version_history_title": "Version History",
+        "restore_version": "Restore to This Version",
+        "loading_versions": "Loading versions...",
+        "no_version_history": "No version history found",
+        "current_version": "Current Version",
+        "latest_version": "Latest",
+        "load_history_failed": "Failed to load version history. Please try again later.",
+        "confirm_restore_title": "Confirm Restore?",
+        "confirm_restore_message": "Restoring to version {version} will overwrite your unsaved changes. Continue?",
+        "confirm_restore": "Confirm Restore",
+        "restore_success": "Restored successfully",
+        "restore_conflict_error": "Restore failed: Another user has modified this report. Please refresh first.",
+        "restore_failed": "Restore failed, please try again."
     },
     "conflict": {
         "title": "Conflict Detected",
@@ -259,5 +287,8 @@
     "error": {
         "cannot_set_conducted_during_holiday": "Cannot mark class as conducted during a holiday period.",
         "cannot_set_teacher_present_during_holiday": "Cannot mark teacher as present during a holiday period."
-    }
+    },
+    "refresh_all": "Refresh All",
+    "refresh_all_confirm": "Are you sure you want to refresh all? This will reload the report list and the current editor; any unsaved changes will be lost.",
+    "refresh_success": "Refreshed successfully"
 }

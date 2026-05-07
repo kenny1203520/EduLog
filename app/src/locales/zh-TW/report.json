@@ -24,7 +24,7 @@
     "lesson_label": "課次",
     "learning_content": "學習內容",
     "participation": "課堂參與",
-    "behavior": "課堂表現",
+    "behavior": "課堂秩序",
     "update_available": "有更新",
     "update_available_desc": "其他使用者已更新此報告，點擊以重新整理。",
     "contact_notes": "聯絡欄",
@@ -41,7 +41,14 @@
     "no_incomplete_reports": "目前沒有未完成報告。",
     "missing_content": "內容未填",
     "missing_unit": "課次未選",
+    "missing_progress": "進度未填",
+    "missing_participation": "參與度未填",
+    "missing_behavior": "秩序未填",
+    "not_created": "尚未建立",
     "select_incomplete_to_edit": "請從左側選擇一份未完成報告開始編輯",
+    "select_incomplete_hint": "請從左側列表選擇一份尚未完成的報告開始編輯。所有更改將自動保存。",
+    "view_student_profile": "開啟學生個人資料",
+    "search_placeholder": "搜尋報告...",
     "report_id": "報告編號",
     "reference_panel": {
         "title": "報告參考查詢",
@@ -118,7 +125,11 @@
             "slash": "斜線分隔",
             "newline": "換行分隔",
             "bullet": "項目符號分隔",
-            "space": "空白分隔"
+            "space": "空白分隔",
+            "arabic": "阿拉伯數字 (1, 2, 3)",
+            "roman": "羅馬數字 (I, II, III)",
+            "chinese": "中文數字 (一, 二, 三)",
+            "formal": "正體中文數字 (壹, 貳, 參)"
         },
         "copy_course_template_variable_descriptions": {
             "course_name": "課程名稱。",
@@ -158,6 +169,7 @@
             "progress_end": "章節進度（結束）",
             "is_completed": "是否完整完成"
         },
+        "template_variable_auto_insert_hint": "點擊上方欄位後，點擊變數即可插入",
         "attendance_title": "出席狀況",
         "system_managed_absence_notice": "此缺席狀態由系統管理（如請假或停課紀錄），不可直接修改。",
         "present": "出席",
@@ -208,9 +220,25 @@
         "delete_report_title": "刪除報告",
         "delete_report_confirm": "確定要刪除此報告嗎？刪除後，學生的課程進度將會自動更新（若此報告是最後一次上課紀錄，進度將會退回）。",
         "delete_success": "報告已刪除",
+        "confirm_create_report_title": "建立新報告",
         "confirm_create_report": "此課堂尚未建立報告，點選後將會自動為學生建立一份新的報告。確定要繼續嗎？",
-        "confirm_create_report_title": "建立新報告？",
-        "create_error": "建立報告失敗"
+        "create_error": "建立報告失敗",
+        "version_saved_at": "儲存時間",
+        "empty_content": "(無內容)",
+        "version_history": "版本紀錄",
+        "version_history_title": "版本紀錄",
+        "restore_version": "回檔至此版本",
+        "loading_versions": "載入版本紀錄中...",
+        "no_version_history": "尚無版本紀錄",
+        "current_version": "目前版本",
+        "latest_version": "最新",
+        "load_history_failed": "載入版本紀錄失敗，請稍後再試。",
+        "confirm_restore_title": "確認回檔？",
+        "confirm_restore_message": "即將回檔至版本 {version}，這將會覆蓋您目前尚未儲存的變更。確定要繼續嗎？",
+        "confirm_restore": "確認回檔",
+        "restore_success": "回檔成功",
+        "restore_conflict_error": "回檔失敗：已有其他使用者修改了此報告。請先重新載入取得最新版本。",
+        "restore_failed": "回檔失敗，請稍後再試。"
     },
     "conflict": {
         "title": "偵測到版本衝突",
@@ -259,5 +287,8 @@
     "error": {
         "cannot_set_conducted_during_holiday": "國定假期期間無法將課程設為已進行",
         "cannot_set_teacher_present_during_holiday": "國定假期期間無法將教師設為出席"
-    }
+    },
+    "refresh_all": "重新整理全部",
+    "refresh_all_confirm": "確定要重新整理全部嗎？這將重新整理目前列表並重新載入編輯器內容，未儲存的變更將會遺失。",
+    "refresh_success": "重新整理成功"
 }

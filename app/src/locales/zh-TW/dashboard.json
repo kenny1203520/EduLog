@@ -10,14 +10,6 @@
     "tagline": "以下是您教育中心今日的最新動態。",
     "manage_students_btn": "管理學生",
     "explore_courses_btn": "瀏覽課程",
-    "stats": {
-        "engagement": "參與度",
-        "coming_soon": "敬請期待",
-        "today_classes": "今日課程",
-        "productivity": "生產力",
-        "ready": "就緒",
-        "active_students": "活躍學生"
-    },
     "schedule": {
         "title": "今日課表",
         "subtitle": "正在進行中及即將開始的課程。",
@@ -27,10 +19,25 @@
         "no_classes_sub": "享受您的時光或提前規劃！",
         "time_slot": "時間區段",
         "class_name": "班級名稱",
-        "untitled_class": "未命名班級"
+        "untitled_class": "未命名班級",
+        "next_class": "下一堂課",
+        "open_session": "開啟點名"
+    },
+    "stats": {
+        "engagement": "參與度",
+        "coming_soon": "敬請期待",
+        "today_classes": "今日課程",
+        "productivity": "生產力",
+        "ready": "就緒",
+        "active_students": "活躍學生",
+        "total_students": "學生總數",
+        "total_courses": "課程總數",
+        "pending_reports": "未完成報告"
     },
     "pending_reports": "未完成報告",
     "missing": "缺漏",
     "incomplete": "未完成",
-    "missing_count": "{count} 筆缺漏"
+    "missing_count": "{count} 筆缺漏",
+    "action_needed": "待處理事項",
+    "view_all_reports_count": "查看全部 {count} 筆報告"
 }

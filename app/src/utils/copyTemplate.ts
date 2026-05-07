@@ -1,4 +1,7 @@
+import { formatNumber } from './numberFormatting'
+
 export type CopyTemplateType = 'attendance_copy' | 'course_copy'
+
 
 export type CopyTemplateSource = 'class_session' | 'user_default' | 'system_default'
 
@@ -139,7 +142,14 @@ export const COURSE_TEMPLATE_VARIABLE_DEFINITIONS: CopyTemplateVariableDefinitio
     {
         key: 'lesson_sequence',
         label: 'lesson_sequence',
-        description: 'lesson_sequence_description'
+        description: 'lesson_sequence_description',
+        defaultMode: 'arabic',
+        modes: [
+            { value: 'arabic', label: 'arabic' },
+            { value: 'roman', label: 'roman' },
+            { value: 'chinese', label: 'chinese' },
+            { value: 'formal', label: 'formal' }
+        ]
     },
     {
         key: 'lesson_title',
@@ -177,4 +187,16 @@ export function renderCopyTemplate(
 
         return String(rawValue)
     })
+}
+
+/**
+ * Creates formatters for a numeric variable that support various number formats.
+ */
+export function createNumberFormatters(variableKey: string): Record<string, CopyTemplateFormatter> {
+    return {
+        arabic: (context) => formatNumber(context[variableKey], 'arabic'),
+        roman: (context) => formatNumber(context[variableKey], 'roman'),
+        chinese: (context) => formatNumber(context[variableKey], 'chinese'),
+        formal: (context) => formatNumber(context[variableKey], 'formal')
+    }
 }

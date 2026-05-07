@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS public.occurrence_reports (
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     lesson_id uuid,
-    is_completed boolean DEFAULT true,
+    is_completed boolean DEFAULT false,
     progress_letter character varying CHECK (progress_letter::text ~ '^[A-Z](-[A-Z])?$'::text),
     attendance_status character varying NOT NULL DEFAULT 'pending'::character varying CHECK (
         attendance_status::text = ANY (

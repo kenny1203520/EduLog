@@ -55,7 +55,7 @@
                         <div
                             class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
                             <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
-                            }}</span>
+                                }}</span>
                             <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
                             <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
                                 v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
@@ -321,7 +321,8 @@
                             </div>
                             <div>
                                 <p class="text-xs text-gray-500">{{ $t('student.internal_courses.status') }}</p>
-                                <p class="text-sm font-bold text-gray-800">{{ $t('student.internal_courses.status_' + (enrollmentInfo.status || 'active')) }}</p>
+                                <p class="text-sm font-bold text-gray-800">{{ $t('student.internal_courses.status_' +
+                                    (enrollmentInfo.status || 'active')) }}</p>
                             </div>
                         </div>
                     </div>
@@ -410,7 +411,7 @@
                         :initial-class-notes="selectedReport.classNotes" :initial-content="selectedReport.content"
                         :initial-enrollment-external-link="enrollmentInfo?.externalLink"
                         @save-success="handleSaveSuccess" @save-error="handleSaveError" @conflict="handleConflict"
-                        @deleted="handleDeleted" />
+                        @restored="handleReportRestored" @deleted="handleDeleted" />
                 </div>
 
                 <!-- Empty State -->
@@ -461,8 +462,8 @@ import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
-import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
-import { CourseService } from '@/services/Course/CourseService'
+import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { CourseService } from '@/services/course/CourseService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { SuspensionService } from '@/services/suspension/SuspensionService'
@@ -1223,6 +1224,15 @@ function handleSaveSuccess(newVersion: number) {
     toast.success(t('report.save_success'))
     switchToListView() // Refresh list view data
     viewMode.value = 'calendar' // But keep calendar active
+}
+
+function handleReportRestored(restoredReport: OccurrenceReportDTO) {
+    if (selectedReport.value) {
+        selectedReport.value = new OccurrenceReport(restoredReport)
+    }
+    toast.success(t('report.editor.restore_success', '回檔成功'))
+    switchToListView()
+    viewMode.value = 'calendar'
 }
 
 function handleSaveError(error: string) {

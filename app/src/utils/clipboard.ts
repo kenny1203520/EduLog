@@ -6,12 +6,37 @@
  * The fallback mechanism uses a hidden textarea and document.execCommand('copy')
  * which often bypasses this restriction if initiated within a user gesture chain.
  */
-export async function copyToClipboard(text: string): Promise<boolean> {
+/**
+ * Robust clipboard utility that works across modern browsers and provides
+ * a fallback for older browsers or strict environments like iOS Safari.
+ * 
+ * iOS Safari strictly blocks async clipboard writes (e.g. after a fetch request).
+ * For async content, pass a Promise<string> to use the ClipboardItem API
+ * which maintains the user gesture chain.
+ */
+export async function copyToClipboard(textOrPromise: string | Promise<string>): Promise<boolean> {
     // Attempt modern Clipboard API first (only in secure contexts)
     if (navigator.clipboard && window.isSecureContext) {
         try {
-            await navigator.clipboard.writeText(text)
-            return true
+            if (textOrPromise instanceof Promise) {
+                // For async content, Safari requires using ClipboardItem with the promise
+                if (typeof ClipboardItem !== 'undefined') {
+                    const item = new ClipboardItem({
+                        'text/plain': textOrPromise.then(text => new Blob([text], { type: 'text/plain' }))
+                    })
+                    await navigator.clipboard.write([item])
+                    return true
+                } else {
+                    // Fallback if ClipboardItem is not supported
+                    const text = await textOrPromise
+                    await navigator.clipboard.writeText(text)
+                    return true
+                }
+            } else {
+                // Synchronous text
+                await navigator.clipboard.writeText(textOrPromise)
+                return true
+            }
         } catch (err) {
             console.warn('Clipboard API failed, trying fallback', err)
             // Fall through to the fallback method below
@@ -19,31 +44,26 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     }
 
     // Fallback strategy for older browsers and iOS Safari strict mode
+    // Note: If we are here with a Promise, we must await it, which might 
+    // break the gesture chain in some browsers.
+    const text = typeof textOrPromise === 'string' ? textOrPromise : await textOrPromise
+
     return new Promise((resolve) => {
         try {
             const textArea = document.createElement("textarea")
             textArea.value = text
 
-            // Prevent scrolling and ensure it's not visible, but MUST remain in the layout
-            // flow for iOS to allow selection and copying.
+            // Essential for iOS: must be in the DOM and visible but not disruptive
             textArea.style.position = "fixed"
+            textArea.style.left = "-9999px"
             textArea.style.top = "0"
-            textArea.style.left = "0"
-            textArea.style.width = "2rem"
-            textArea.style.height = "2rem"
-            textArea.style.padding = "0"
-            textArea.style.border = "none"
-            textArea.style.outline = "none"
-            textArea.style.boxShadow = "none"
-            textArea.style.background = "transparent"
-            textArea.style.opacity = "0"
-            textArea.style.pointerEvents = "none" // Prevent accidental interaction
-
+            textArea.setAttribute("readonly", "") // Prevent keyboard from popping up
+            
             document.body.appendChild(textArea)
 
-            // Select the text carefully to appease iOS Safari
-            if (navigator.userAgent.match(/ipad|iphone/i)) {
-                // iOS-specific selection
+            // Select the text
+            const isIOS = navigator.userAgent.match(/ipad|iphone/i)
+            if (isIOS) {
                 const range = document.createRange()
                 range.selectNodeContents(textArea)
                 const selection = window.getSelection()
@@ -51,7 +71,6 @@ export async function copyToClipboard(text: string): Promise<boolean> {
                 selection?.addRange(range)
                 textArea.setSelectionRange(0, 999999)
             } else {
-                // Standard selection
                 textArea.select()
             }
 

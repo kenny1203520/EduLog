@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-
-
-
+import BaseDropdown from './BaseDropdown.vue'
 
 const props = defineProps<{
     modelValue: number // current page
@@ -31,12 +29,6 @@ function changePage(page: number) {
     if (page >= 1 && page <= totalPages.value) {
         emit('update:modelValue', page)
     }
-}
-
-function updatePerPage(event: Event) {
-    const target = event.target as HTMLSelectElement
-    emit('update:perPage', parseInt(target.value))
-    emit('update:modelValue', 1) // Reset to page 1
 }
 
 // Visible Pages Logic (show max 5)
@@ -83,13 +75,13 @@ const visiblePages = computed(() => {
 
             <div class="flex items-center gap-2">
                 <span class="hidden sm:inline">{{ $t('common.pagination.show') }}</span>
-                <select :value="perPage" @change="updatePerPage"
-                    class="border-gray-200 rounded text-sm py-1 pl-2 pr-8 focus:ring-emerald-500 focus:border-emerald-500 cursor-pointer">
-                    <option :value="10">10</option>
-                    <option :value="20">20</option>
-                    <option :value="50">50</option>
-                    <option :value="100">100</option>
-                </select>
+                <BaseDropdown :modelValue="perPage" :options="[
+                    { label: '10', value: 10 },
+                    { label: '20', value: 20 },
+                    { label: '50', value: 50 },
+                    { label: '100', value: 100 }
+                ]" theme="gray" class="!w-20" menuWidthClass="w-20"
+                    @update:modelValue="$emit('update:perPage', $event); $emit('update:modelValue', 1)" />
             </div>
         </div>
 

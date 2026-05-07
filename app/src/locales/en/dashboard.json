@@ -10,14 +10,6 @@
     "tagline": "Here's what's happening today in your education center.",
     "manage_students_btn": "Manage Students",
     "explore_courses_btn": "Explore Courses",
-    "stats": {
-        "engagement": "Engagement",
-        "coming_soon": "Coming Soon",
-        "today_classes": "Today's Classes",
-        "productivity": "Productivity",
-        "ready": "Ready",
-        "active_students": "Active Students"
-    },
     "schedule": {
         "title": "Today's Schedule",
         "subtitle": "Classes happening right now and later today.",
@@ -27,10 +19,25 @@
         "no_classes_sub": "Enjoy your time or plan ahead!",
         "time_slot": "Time Slot",
         "class_name": "Class Name",
-        "untitled_class": "Untitled Class"
+        "untitled_class": "Untitled Class",
+        "next_class": "Next Class",
+        "open_session": "Open Session"
+    },
+    "stats": {
+        "engagement": "Engagement",
+        "coming_soon": "Coming Soon",
+        "today_classes": "Today's Classes",
+        "productivity": "Productivity",
+        "ready": "Ready",
+        "active_students": "Active Students",
+        "total_students": "Total Students",
+        "total_courses": "Total Courses",
+        "pending_reports": "Pending Reports"
     },
     "pending_reports": "Pending Reports",
     "missing": "Missing",
     "incomplete": "Incomplete",
-    "missing_count": "{count} missing"
+    "missing_count": "{count} missing",
+    "action_needed": "Action Needed",
+    "view_all_reports_count": "View All {count} Reports"
 }

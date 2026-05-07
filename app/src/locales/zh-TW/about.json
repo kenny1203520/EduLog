@@ -1,0 +1,13 @@
+{
+    "title": "關於 EduLog",
+    "version": "版本",
+    "description": "EduLog 是一個專業的家教報告管理系統，旨在簡化教學記錄與進度追蹤。",
+    "developer": "開發者",
+    "contact": "聯絡支援",
+    "changelog": "更新日誌",
+    "changelog_subtitle": "系統更新與功能改進紀錄",
+    "resources": "資源與連結",
+    "github": "GitHub 原始碼",
+    "docker": "Docker Image",
+    "copyright": "© 2026 EduLog. 保留所有權利。"
+}

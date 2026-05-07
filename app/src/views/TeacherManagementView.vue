@@ -12,7 +12,10 @@ import {
 import {
     AuthUserSearchService,
     type AuthUserSearchResultDTO
-} from '@/services/Auth/AuthUserSearchService'
+} from '@/services/auth/AuthUserSearchService'
+
+import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -25,6 +28,12 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 const pagination = ref({ page: 1, perPage: 8 })
 const selectedTeacherIds = ref<Set<string>>(new Set())
 const pendingDeleteCount = ref(0)
+
+const sortOptions = computed(() => [
+    { label: t('teacher.sort_name'), value: 'name' },
+    { label: t('teacher.sort_email'), value: 'email' },
+    { label: t('teacher.sort_created_at'), value: 'created_at' }
+])
 
 const isModalOpen = ref(false)
 const isSaving = ref(false)
@@ -95,13 +104,8 @@ const pagedTeachers = computed(() => {
     return sortedTeachers.value.slice(start, end)
 })
 
-const totalPages = computed(() => Math.max(1, Math.ceil(sortedTeachers.value.length / pagination.value.perPage)))
 const selectedCount = computed(() => selectedTeacherIds.value.size)
 const statistics = computed<TeacherStatisticsDTO>(() => TeacherService.getTeacherStatistics(teachers.value))
-
-const pageSelected = computed(() => {
-    return pagedTeachers.value.length > 0 && pagedTeachers.value.every((teacher) => teacher.id && selectedTeacherIds.value.has(teacher.id))
-})
 
 watch(searchQuery, () => {
     pagination.value.page = 1
@@ -239,22 +243,22 @@ async function saveTeacher() {
     const payload = preparePayload()
 
     if (!payload.name || !payload.email) {
-        toast.error(t('teacher.validation_required') || 'Please fill in the required fields')
+        toast.error(t('teacher.validation_required'))
         return
     }
 
     if (!isValidEmail(payload.email)) {
-        toast.error(t('teacher.validation_email') || 'Please enter a valid email address')
+        toast.error(t('teacher.validation_email'))
         return
     }
 
     if (payload.user_id && !isValidUuid(payload.user_id)) {
-        toast.error(t('teacher.validation_user_id') || 'Please enter a valid UUID or leave it empty')
+        toast.error(t('teacher.validation_user_id'))
         return
     }
 
     if (payload.gov_id && payload.gov_id.length > 20) {
-        toast.error(t('teacher.validation_gov_id') || 'Government ID must be 20 characters or fewer')
+        toast.error(t('teacher.validation_gov_id'))
         return
     }
 
@@ -263,22 +267,22 @@ async function saveTeacher() {
 
         if (editingTeacher.value?.id) {
             await TeacherService.updateTeacher(editingTeacher.value.id, payload)
-            toast.success(t('teacher.update_success') || 'Teacher updated successfully')
+            toast.success(t('teacher.update_success'))
         } else {
             await TeacherService.createTeacher(payload as Omit<TeacherDTO, 'id' | 'created_at' | 'updated_at'>)
-            toast.success(t('teacher.create_success') || 'Teacher created successfully')
+            toast.success(t('teacher.create_success'))
         }
 
         await loadTeachers()
         closeModal()
     } catch (error: any) {
         console.error(error)
-        let message = error.message || t('teacher.save_failed') || 'Failed to save teacher'
-        
+        let message = error.message || t('teacher.save_failed')
+
         if (message.includes('teachers_user_id_key')) {
             message = t('teacher.error_duplicate_user')
         }
-        
+
         toast.error(message)
     } finally {
         isSaving.value = false
@@ -343,33 +347,14 @@ async function handleConfirm() {
     }
 }
 
-function formatDate(value?: string | null) {
-    if (!value) return '—'
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return value
-    return date.toLocaleDateString(locale.value === 'zh-TW' ? 'zh-TW' : 'en-US')
-}
-
-function toggleTeacherSelection(teacherId: string, checked: boolean) {
+function toggleTeacherSelection(teacherId: string | undefined, checked: boolean) {
+    if (!teacherId) return
     const next = new Set(selectedTeacherIds.value)
     if (checked) {
         next.add(teacherId)
     } else {
         next.delete(teacherId)
     }
-    selectedTeacherIds.value = next
-}
-
-function togglePageSelection(checked: boolean) {
-    const next = new Set(selectedTeacherIds.value)
-    pagedTeachers.value.forEach((teacher) => {
-        if (!teacher.id) return
-        if (checked) {
-            next.add(teacher.id)
-        } else {
-            next.delete(teacher.id)
-        }
-    })
     selectedTeacherIds.value = next
 }
 
@@ -387,268 +372,264 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
     sortDirection.value = 'asc'
 }
 </script>
-
 <template>
-    <div class="relative min-h-screen overflow-hidden bg-slate-50">
-        <div class="absolute inset-x-0 top-0 h-72 bg-gradient-to-br from-emerald-50 via-white to-cyan-50"></div>
-        <div class="absolute -right-16 top-10 h-72 w-72 rounded-full bg-emerald-200/30 blur-3xl"></div>
-        <div class="absolute left-0 top-40 h-56 w-56 rounded-full bg-cyan-200/30 blur-3xl"></div>
-
-        <div class="relative mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <div class="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                <div class="max-w-3xl">
-                    <p class="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">{{ t('nav.teachers') }}</p>
-                    <h1 class="mt-3 text-3xl font-black tracking-tight text-slate-900 sm:text-4xl lg:text-5xl">
-                        {{ t('teacher.management_title') }}
-                    </h1>
-                    <p class="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-                        {{ t('teacher.management_subtitle') }}
-                    </p>
+    <div class="space-y-6">
+        <BasePageHeader :overline="t('nav.teachers')" :title="t('teacher.management_title')"
+            :subtitle="t('teacher.management_subtitle')">
+            <template #icon>
+                <div
+                    class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path d="M12 14l9-5-9-5-9 5 9 5z" />
+                        <path
+                            d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                    </svg>
                 </div>
-
-                <div class="flex flex-wrap gap-3">
-                    <button
-                        @click="openCreateModal"
-                        class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 hover:shadow-xl hover:shadow-emerald-600/25">
-                        <span class="text-lg leading-none">+</span>
-                        {{ t('teacher.add_teacher') }}
-                    </button>
-                    <button
-                        v-if="selectedCount > 0"
-                        @click="openBatchDeleteConfirm"
-                        class="inline-flex items-center gap-2 rounded-2xl border border-rose-200 bg-white px-5 py-3 text-sm font-semibold text-rose-600 shadow-sm transition hover:border-rose-300 hover:bg-rose-50">
-                        {{ t('teacher.bulk_delete') }} ({{ selectedCount }})
-                    </button>
-                </div>
-            </div>
-
-            <div class="mb-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div class="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
-                    <p class="text-sm font-medium text-slate-500">{{ t('teacher.stats_total') }}</p>
-                    <div class="mt-2 flex items-end justify-between">
-                        <span class="text-3xl font-black text-slate-900">{{ statistics.totalTeachers }}</span>
-                        <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                            {{ t('teacher.stats_tracked') }}
-                        </span>
-                    </div>
-                </div>
-                <div class="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
-                    <p class="text-sm font-medium text-slate-500">{{ t('teacher.stats_linked') }}</p>
-                    <div class="mt-2 flex items-end justify-between">
-                        <span class="text-3xl font-black text-slate-900">{{ statistics.linkedAccounts }}</span>
-                        <span class="rounded-full bg-cyan-50 px-3 py-1 text-xs font-semibold text-cyan-700">
-                            {{ t('teacher.linked_account') }}
-                        </span>
-                    </div>
-                </div>
-                <div class="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
-                    <p class="text-sm font-medium text-slate-500">{{ t('teacher.stats_unlinked') }}</p>
-                    <div class="mt-2 flex items-end justify-between">
-                        <span class="text-3xl font-black text-slate-900">{{ statistics.unlinkedAccounts }}</span>
-                        <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
-                            {{ t('teacher.unlinked_account') }}
-                        </span>
-                    </div>
-                </div>
-                <div class="rounded-3xl border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
-                    <p class="text-sm font-medium text-slate-500">{{ t('teacher.stats_complete') }}</p>
-                    <div class="mt-2 flex items-end justify-between">
-                        <span class="text-3xl font-black text-slate-900">{{ statistics.completeProfiles }}</span>
-                        <span class="rounded-full bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
-                            {{ t('teacher.profile_complete') }}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="rounded-3xl border border-slate-200 bg-white/95 p-5 shadow-sm shadow-slate-200/60 backdrop-blur">
-                <div class="grid gap-4 xl:grid-cols-[1fr_auto_auto] xl:items-end">
-                    <div>
-                        <label class="mb-2 block text-sm font-semibold text-slate-700">
-                            {{ t('teacher.search_label') }}
-                        </label>
-                        <input
-                            v-model="searchQuery"
-                            type="text"
-                            :placeholder="t('teacher.search_placeholder')"
-                            class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+            </template>
+            <template #actions>
+                <div class="flex flex-col sm:flex-row flex-1 items-center gap-4 w-full max-w-4xl">
+                    <!-- Search Bar -->
+                    <div
+                        class="w-full flex-1 flex items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                        <div class="pl-3 text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <input v-model="searchQuery" type="text" :placeholder="t('teacher.search_placeholder')"
+                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
+                        <button v-if="searchQuery" @click="searchQuery = ''"
+                            class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
 
-                    <div>
-                        <label class="mb-2 block text-sm font-semibold text-slate-700">
-                            {{ t('teacher.sort_label') }}
-                        </label>
-                        <select
-                            v-model="sortField"
-                            class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100">
-                            <option value="name">{{ t('teacher.sort_name') }}</option>
-                            <option value="email">{{ t('teacher.sort_email') }}</option>
-                            <option value="created_at">{{ t('teacher.sort_created_at') }}</option>
-                        </select>
+                    <!-- Sort Dropdown -->
+                    <div class="flex items-center gap-2 shrink-0">
+                        <BaseDropdown v-model="sortField" :options="sortOptions" theme="emerald"
+                            class="min-w-[140px]" />
+                        <button @click="cycleSort(sortField)"
+                            class="p-3 rounded-xl bg-white border border-gray-100 shadow-sm text-gray-500 hover:text-emerald-600 transition-colors active:scale-95">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-300"
+                                :class="{ 'rotate-180': sortDirection === 'desc' }" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+                            </svg>
+                        </button>
                     </div>
-
-                    <button
-                        @click="cycleSort(sortField)"
-                        class="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700">
-                        <span v-if="sortDirection === 'asc'">↑</span>
-                        <span v-else>↓</span>
-                        {{ sortDirection === 'asc' ? t('teacher.sort_asc') : t('teacher.sort_desc') }}
-                    </button>
                 </div>
 
-                <div v-if="selectedCount > 0" class="mt-5 flex flex-col gap-3 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-800 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        {{ t('teacher.selected_count', { count: selectedCount }) }}
-                    </div>
-                    <button @click="clearSelection" class="font-semibold text-emerald-700 hover:text-emerald-900">
-                        {{ t('teacher.clear_selection') }}
-                    </button>
-                </div>
-            </div>
-
-            <div v-if="loading" class="mt-8 flex justify-center rounded-3xl border border-slate-200 bg-white/90 py-16 shadow-sm">
-                <div class="flex items-center gap-3 text-slate-500">
-                    <span class="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent"></span>
-                    {{ t('teacher.loading') }}
-                </div>
-            </div>
-
-            <div v-else-if="pagedTeachers.length > 0" class="mt-8 overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm shadow-slate-200/50">
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-slate-200">
-                        <thead class="bg-slate-50/90">
-                            <tr>
-                                <th class="px-4 py-4 text-left">
-                                    <input
-                                        type="checkbox"
-                                        :checked="pageSelected"
-                                        @change="togglePageSelection(($event.target as HTMLInputElement).checked)"
-                                        class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                                </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700" @click="cycleSort('name')">
-                                        {{ t('teacher.name_label') }}
-                                    </button>
-                                </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700" @click="cycleSort('email')">
-                                        {{ t('teacher.account_label') }}
-                                    </button>
-                                </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    {{ t('teacher.contact_label') }}
-                                </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    {{ t('teacher.profile_label') }}
-                                </th>
-                                <th class="px-4 py-4 text-left text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    <button class="inline-flex items-center gap-2 hover:text-emerald-700" @click="cycleSort('created_at')">
-                                        {{ t('teacher.created_at_label') }}
-                                    </button>
-                                </th>
-                                <th class="px-4 py-4 text-right text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
-                                    {{ t('teacher.actions') }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-slate-100 bg-white">
-                            <tr
-                                v-for="teacher in pagedTeachers"
-                                :key="teacher.id"
-                                class="transition hover:bg-slate-50/80">
-                                <td class="px-4 py-4 align-top">
-                                    <input
-                                        v-if="teacher.id"
-                                        type="checkbox"
-                                        :checked="selectedTeacherIds.has(teacher.id)"
-                                        @change="toggleTeacherSelection(teacher.id, ($event.target as HTMLInputElement).checked)"
-                                        class="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
-                                </td>
-                                <td class="px-4 py-4 align-top">
-                                    <div class="flex items-start gap-3">
-                                        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-cyan-500 font-bold text-white shadow-md shadow-emerald-500/25">
-                                            {{ teacher.name?.charAt(0)?.toUpperCase() || 'T' }}
-                                        </div>
-                                        <div class="min-w-0">
-                                            <div class="font-semibold text-slate-900">{{ teacher.name }}</div>
-                                            <div v-if="teacher.birthday" class="mt-1 text-sm text-slate-500">
-                                                {{ t('teacher.birthday_label') }}: {{ formatDate(teacher.birthday) }}
-                                            </div>
-                                            <div v-if="teacher.gov_id" class="mt-1 text-sm text-slate-500">
-                                                {{ t('teacher.gov_id_label') }}: {{ teacher.gov_id }}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-4 py-4 align-top">
-                                    <div class="space-y-2">
-                                        <div class="text-sm font-medium text-slate-900">{{ teacher.email }}</div>
-                                        <span
-                                            :class="teacher.user_id ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'"
-                                            class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold">
-                                            {{ teacher.user_id ? t('teacher.linked_account') : t('teacher.unlinked_account') }}
-                                        </span>
-                                    </div>
-                                </td>
-                                <td class="px-4 py-4 align-top text-sm text-slate-600">
-                                    <div>{{ teacher.phone || '—' }}</div>
-                                    <div v-if="teacher.address" class="mt-1 max-w-xs break-words text-slate-500">
-                                        {{ teacher.address }}
-                                    </div>
-                                </td>
-                                <td class="px-4 py-4 align-top text-sm text-slate-600">
-                                    <div>{{ teacher.bio || '—' }}</div>
-                                </td>
-                                <td class="px-4 py-4 align-top text-sm text-slate-600">
-                                    {{ formatDate(teacher.created_at) }}
-                                </td>
-                                <td class="px-4 py-4 align-top text-right">
-                                    <div class="inline-flex items-center gap-2">
-                                        <button
-                                            @click="openEditModal(teacher)"
-                                            class="rounded-xl border border-emerald-200 px-3 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50">
-                                            {{ t('common.edit') }}
-                                        </button>
-                                        <button
-                                            @click="openDeleteConfirm(teacher)"
-                                            class="rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:border-rose-300 hover:bg-rose-50">
-                                            {{ t('common.delete') }}
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div v-else class="mt-8 rounded-3xl border border-dashed border-slate-300 bg-white/90 px-6 py-16 text-center shadow-sm">
-                <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-600 text-2xl font-black">
-                    T
-                </div>
-                <h2 class="mt-6 text-xl font-bold text-slate-900">{{ t('teacher.no_data') }}</h2>
-                <p class="mt-2 text-sm text-slate-500">
-                    {{ searchQuery ? t('teacher.no_search_results') : t('teacher.no_data_hint') }}
-                </p>
-                <button
-                    @click="openCreateModal"
-                    class="mt-6 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700">
-                    {{ t('teacher.add_teacher') }}
+                <!-- Add Button -->
+                <button @click="openCreateModal"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest shrink-0 w-full lg:w-auto">
+                    <span class="text-xl leading-none">+</span> {{ t('teacher.add_teacher') }}
                 </button>
-            </div>
+            </template>
+        </BasePageHeader>
 
-            <div v-if="!loading && totalPages > 1" class="mt-8 flex justify-center">
-                <Pagination
-                    :modelValue="pagination.page"
-                    :perPage="pagination.perPage"
-                    :totalItems="sortedTeachers.length"
-                    @update:modelValue="pagination.page = $event"
-                    @update:perPage="pagination.perPage = $event; pagination.page = 1" />
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div v-for="(stat, key) in [
+                { label: t('teacher.stats_total'), value: statistics.totalTeachers, color: 'emerald', icon: 'M17 20h5v-1a7 7 0 00-7-7h-1m-6 8h12m-6-8a4 4 0 100-8 4 4 0 000 8zm-5 8a7 7 0 0114 0v1H6v-1z' },
+                { label: t('teacher.stats_linked'), value: statistics.linkedAccounts, color: 'cyan', icon: 'M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z' },
+                { label: t('teacher.stats_unlinked'), value: statistics.unlinkedAccounts, color: 'amber', icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' },
+                { label: t('teacher.stats_complete'), value: statistics.completeProfiles, color: 'violet', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' }
+            ]" :key="key"
+                class="bg-white/80 backdrop-blur-sm border border-gray-100 rounded-2xl p-4 shadow-sm group hover:shadow-md transition-all">
+                <div class="flex items-center gap-3">
+                    <div
+                        :class="`w-10 h-10 rounded-xl bg-${stat.color}-50 text-${stat.color}-600 flex items-center justify-center shrink-0 transition-transform group-hover:scale-110`">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" :d="stat.icon" />
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-[14px] font-black uppercase tracking-widest text-gray-400 leading-none mb-1.5">{{
+                            stat.label }}</p>
+                        <p class="text-xl font-black text-gray-900 leading-none">{{ stat.value }}</p>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div
-            v-if="isModalOpen"
+        <!-- Bulk Actions Bar -->
+        <Transition enter-active-class="transition duration-300 ease-out"
+            enter-from-class="transform -translate-y-4 opacity-0" enter-to-class="transform translate-y-0 opacity-100"
+            leave-active-class="transition duration-200 ease-in" leave-from-class="transform translate-y-0 opacity-100"
+            leave-to-class="transform -translate-y-4 opacity-0">
+            <div v-if="selectedCount > 0"
+                class="bg-emerald-600 rounded-2xl p-4 shadow-lg shadow-emerald-200 flex items-center justify-between text-white">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center font-black">
+                        {{ selectedCount }}
+                    </div>
+                    <span class="font-bold text-sm uppercase tracking-widest">{{ t('teacher.selected_count', {
+                        count:
+                            selectedCount
+                    }) }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button @click="clearSelection"
+                        class="px-4 py-2 rounded-xl hover:bg-white/10 transition font-bold text-sm">
+                        {{ t('teacher.clear_selection') }}
+                    </button>
+                    <button @click="openBatchDeleteConfirm"
+                        class="bg-white text-emerald-600 px-6 py-2 rounded-xl font-black text-sm hover:bg-emerald-50 transition active:scale-95 shadow-sm uppercase tracking-widest">
+                        {{ t('teacher.bulk_delete') }}
+                    </button>
+                </div>
+            </div>
+        </Transition>
+
+        <!-- Main Content Grid -->
+        <div v-if="loading" class="text-center py-20 bg-white rounded-3xl border border-gray-100 shadow-sm">
+            <svg class="animate-spin h-10 w-10 mx-auto mb-4 text-emerald-500" xmlns="http://www.w3.org/2000/svg"
+                fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                </path>
+            </svg>
+            <p class="text-gray-500 font-medium">{{ t('common.loading') }}...</p>
+        </div>
+
+        <div v-else-if="pagedTeachers.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div v-for="teacher in pagedTeachers" :key="teacher.id"
+                class="bg-white rounded-3xl shadow-sm border border-gray-100 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group overflow-hidden flex flex-col h-full relative">
+
+                <!-- Selection Checkbox -->
+                <div class="absolute top-4 left-4 z-10">
+                    <input type="checkbox" :checked="teacher.id ? selectedTeacherIds.has(teacher.id) : false"
+                        @change="toggleTeacherSelection(teacher.id, ($event.target as HTMLInputElement).checked)"
+                        class="h-5 w-5 rounded-lg border-gray-200 text-emerald-600 focus:ring-emerald-500 transition-all cursor-pointer shadow-sm" />
+                </div>
+
+                <!-- Card Header/Avatar -->
+                <div class="p-6 pb-0 flex flex-col items-center text-center">
+                    <div class="relative mb-4">
+                        <div
+                            class="w-20 h-20 rounded-[2rem] bg-gradient-to-br from-emerald-500 to-cyan-500 flex items-center justify-center text-3xl font-black text-white shadow-xl shadow-emerald-200 group-hover:scale-110 transition-transform duration-500">
+                            {{ teacher.name?.charAt(0)?.toUpperCase() || 'T' }}
+                        </div>
+                        <div v-if="teacher.user_id"
+                            class="absolute -bottom-1 -right-1 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border border-emerald-50 text-emerald-500"
+                            :title="t('teacher.linked_account')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
+                                fill="currentColor">
+                                <path fill-rule="evenodd"
+                                    d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h3
+                        class="text-xl font-black text-gray-900 line-clamp-1 group-hover:text-emerald-600 transition-colors">
+                        {{
+                            teacher.name }}</h3>
+                    <p class="text-sm font-bold text-gray-400 mt-1 uppercase tracking-widest">{{ teacher.user_id ?
+                        t('teacher.linked_account') : t('teacher.unlinked_account') }}</p>
+                </div>
+
+                <!-- Info Body -->
+                <div class="p-6 flex-1 space-y-4">
+                    <div class="flex flex-col gap-2.5">
+                        <div
+                            class="flex items-center gap-3 text-sm text-gray-600 bg-gray-50/80 p-2 rounded-xl border border-gray-100/50">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-500" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                            <span class="truncate font-medium">{{ teacher.email }}</span>
+                        </div>
+                        <div v-if="teacher.phone"
+                            class="flex items-center gap-3 text-sm text-gray-600 bg-gray-50/80 p-2 rounded-xl border border-gray-100/50">
+                            <div
+                                class="w-8 h-8 rounded-lg bg-white flex items-center justify-center shadow-sm shrink-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-500" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                                </svg>
+                            </div>
+                            <span class="truncate font-medium">{{ teacher.phone }}</span>
+                        </div>
+                    </div>
+
+                    <div v-if="teacher.bio"
+                        class="text-xs text-gray-400 line-clamp-2 leading-relaxed italic border-l-2 border-emerald-100 pl-3">
+                        "{{ teacher.bio }}"
+                    </div>
+                </div>
+
+                <!-- Action Footer -->
+                <div class="p-4 bg-gray-50/50 border-t border-gray-100 flex items-center gap-2">
+                    <button @click="openEditModal(teacher)"
+                        class="flex-1 bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-100 py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-all shadow-sm active:scale-95 flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                        </svg>
+                        {{ t('common.edit') }}
+                    </button>
+                    <button @click="openDeleteConfirm(teacher)"
+                        class="p-2.5 bg-white hover:bg-rose-50 text-rose-400 hover:text-rose-600 border border-gray-100 hover:border-rose-100 rounded-xl transition-all shadow-sm active:scale-95">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div v-else
+            class="mt-8 rounded-[3rem] border-4 border-dashed border-gray-100 bg-white py-20 text-center shadow-inner">
+            <div class="mx-auto w-24 h-24 bg-gray-50 rounded-[2.5rem] flex items-center justify-center mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-gray-200" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M17 20h5v-1a7 7 0 00-7-7h-1m-6 8h12m-6-8a4 4 0 100-8 4 4 0 000 8zm-5 8a7 7 0 0114 0v1H6v-1z" />
+                </svg>
+            </div>
+            <h2 class="text-2xl font-black text-gray-900 uppercase tracking-tight">{{ t('teacher.no_data') }}</h2>
+            <p class="mt-2 text-gray-400 font-medium max-w-sm mx-auto">
+                {{ searchQuery ? t('teacher.no_search_results') : t('teacher.no_data_hint') }}
+            </p>
+            <button @click="openCreateModal"
+                class="mt-8 bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 rounded-2xl transition-all shadow-xl shadow-emerald-200 font-black uppercase tracking-widest active:scale-95">
+                {{ t('teacher.add_teacher') }}
+            </button>
+        </div>
+
+        <div v-if="!loading && sortedTeachers.length > 0" class="mt-12 flex justify-center pb-12">
+            <Pagination :modelValue="pagination.page" :perPage="pagination.perPage" :totalItems="sortedTeachers.length"
+                @update:modelValue="pagination.page = $event"
+                @update:perPage="pagination.perPage = $event; pagination.page = 1" />
+        </div>
+
+        <!-- Modals and Tooltips -->
+        <ConfirmModal :is-open="confirmModal.isOpen" :title="confirmModal.title" :message="confirmModal.message"
+            :confirm-text="confirmModal.confirmText" :is-dangerous="confirmModal.isDangerous"
+            :is-loading="confirmModal.isLoading" @confirm="handleConfirm" @close="confirmModal.isOpen = false" />
+
+        <div v-if="isModalOpen"
             class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
             <div class="w-full max-w-4xl overflow-hidden rounded-[2rem] bg-white shadow-2xl shadow-slate-950/20">
                 <div class="flex items-center justify-between border-b border-slate-200 px-6 py-5">
@@ -660,15 +641,18 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             {{ editingTeacher ? t('teacher.edit_teacher_hint') : t('teacher.add_teacher_hint') }}
                         </p>
                     </div>
-                    <button @click="closeModal" class="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+                    <button @click="closeModal"
+                        class="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
                         <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
 
                 <div class="max-h-[78vh] overflow-y-auto px-6 py-6">
-                    <div class="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    <div
+                        class="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
                         {{ t('teacher.user_id_hint') }}
                     </div>
 
@@ -678,25 +662,24 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                                 <label class="mb-2 block text-sm font-semibold text-slate-700">
                                     {{ t('teacher.user_search_label') }}
                                 </label>
-                                <input
-                                    v-model="userSearchQuery"
-                                    type="email"
+                                <input v-model="userSearchQuery" type="email"
                                     :placeholder="t('teacher.user_search_placeholder')"
                                     class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100"
                                     @keydown.enter.prevent="searchUsersByEmail" />
                             </div>
                             <div class="flex items-center gap-3">
                                 <label class="inline-flex items-center gap-2 text-sm text-slate-700">
-                                    <input type="checkbox" v-model="userSearchOnlyUnlinked" class="h-4 w-4 rounded border-slate-300 text-emerald-600" />
+                                    <input type="checkbox" v-model="userSearchOnlyUnlinked"
+                                        class="h-4 w-4 rounded border-slate-300 text-emerald-600" />
                                     <span>{{ t('teacher.filter_unlinked') }}</span>
                                 </label>
 
-                                <button
-                                    @click="searchUsersByEmail"
-                                    :disabled="isSearchingUsers"
+                                <button @click="searchUsersByEmail" :disabled="isSearchingUsers"
                                     class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
-                                    <span v-if="isSearchingUsers" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
-                                    {{ isSearchingUsers ? t('teacher.user_search_loading') : t('teacher.user_search_button') }}
+                                    <span v-if="isSearchingUsers"
+                                        class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                                    {{ isSearchingUsers ? t('teacher.user_search_loading') :
+                                        t('teacher.user_search_button') }}
                                 </button>
                             </div>
                         </div>
@@ -710,9 +693,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                         </p>
 
                         <div v-if="userSearchResults.length > 0" class="mt-4 space-y-2">
-                            <div
-                                v-for="result in userSearchResults"
-                                :key="result.id"
+                            <div v-for="result in userSearchResults" :key="result.id"
                                 class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                                 <div>
                                     <div class="text-sm font-semibold text-slate-900">{{ result.email }}</div>
@@ -720,8 +701,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                                         {{ result.id }}
                                     </div>
                                 </div>
-                                <button
-                                    @click="applyUserSearchResult(result)"
+                                <button @click="applyUserSearchResult(result)"
                                     class="inline-flex items-center justify-center rounded-xl border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-50">
                                     {{ t('teacher.user_search_select') }}
                                 </button>
@@ -734,10 +714,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.user_id_label') }}
                             </label>
-                            <input
-                                v-model="form.user_id"
-                                type="text"
-                                :placeholder="t('teacher.user_id_placeholder')"
+                            <input v-model="form.user_id" type="text" :placeholder="t('teacher.user_id_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -745,10 +722,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.name_label') }} <span class="text-rose-500">*</span>
                             </label>
-                            <input
-                                v-model="form.name"
-                                type="text"
-                                :placeholder="t('teacher.name_placeholder')"
+                            <input v-model="form.name" type="text" :placeholder="t('teacher.name_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -756,10 +730,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.email_label') }} <span class="text-rose-500">*</span>
                             </label>
-                            <input
-                                v-model="form.email"
-                                type="email"
-                                :placeholder="t('teacher.email_placeholder')"
+                            <input v-model="form.email" type="email" :placeholder="t('teacher.email_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -767,10 +738,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.phone_label') }}
                             </label>
-                            <input
-                                v-model="form.phone"
-                                type="tel"
-                                :placeholder="t('teacher.phone_placeholder')"
+                            <input v-model="form.phone" type="tel" :placeholder="t('teacher.phone_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -778,9 +746,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.birthday_label') }}
                             </label>
-                            <input
-                                v-model="form.birthday"
-                                type="date"
+                            <input v-model="form.birthday" type="date"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -788,10 +754,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.gov_id_label') }}
                             </label>
-                            <input
-                                v-model="form.gov_id"
-                                type="text"
-                                maxlength="20"
+                            <input v-model="form.gov_id" type="text" maxlength="20"
                                 :placeholder="t('teacher.gov_id_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
@@ -800,10 +763,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.address_label') }}
                             </label>
-                            <input
-                                v-model="form.address"
-                                type="text"
-                                :placeholder="t('teacher.address_placeholder')"
+                            <input v-model="form.address" type="text" :placeholder="t('teacher.address_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
                         </div>
 
@@ -811,40 +771,29 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.bio_label') }}
                             </label>
-                            <textarea
-                                v-model="form.bio"
-                                rows="4"
-                                :placeholder="t('teacher.bio_placeholder')"
+                            <textarea v-model="form.bio" rows="4" :placeholder="t('teacher.bio_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"></textarea>
                         </div>
                     </div>
                 </div>
 
                 <div class="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-5">
-                    <button
-                        @click="closeModal"
+                    <button @click="closeModal"
                         class="rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50">
                         {{ t('common.cancel') }}
                     </button>
-                    <button
-                        @click="saveTeacher"
-                        :disabled="isSaving"
+                    <button @click="saveTeacher" :disabled="isSaving"
                         class="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
-                        <span v-if="isSaving" class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                        <span v-if="isSaving"
+                            class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                         {{ isSaving ? t('common.saving') : t('common.save') }}
                     </button>
                 </div>
             </div>
         </div>
 
-        <ConfirmModal
-            :is-open="confirmModal.isOpen"
-            :title="confirmModal.title"
-            :message="confirmModal.message"
-            :confirm-text="confirmModal.confirmText"
-            :is-dangerous="confirmModal.isDangerous"
-            :is-loading="confirmModal.isLoading"
-            @confirm="handleConfirm"
-            @close="confirmModal.isOpen = false" />
+        <ConfirmModal :is-open="confirmModal.isOpen" :title="confirmModal.title" :message="confirmModal.message"
+            :confirm-text="confirmModal.confirmText" :is-dangerous="confirmModal.isDangerous"
+            :is-loading="confirmModal.isLoading" @confirm="handleConfirm" @close="confirmModal.isOpen = false" />
     </div>
 </template>

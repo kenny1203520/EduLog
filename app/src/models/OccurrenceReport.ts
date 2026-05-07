@@ -74,7 +74,7 @@ export class OccurrenceReport {
         this.enrollmentId = data.enrollment_id
         this.classOccurrenceId = data.class_occurrence_id
         this.lessonId = data.lesson_id
-        this.isCompleted = data.is_completed ?? true
+        this.isCompleted = data.is_completed ?? false
 
         // Detailed fields
         this.progressLetter = data.progress_letter

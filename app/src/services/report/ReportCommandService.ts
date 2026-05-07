@@ -215,7 +215,8 @@ export class ReportCommandService {
     static async restoreReportVersion(
         reportId: string,
         versionId: string,
-        userId?: string
+        userId?: string,
+        currentVersion?: number
     ): Promise<OccurrenceReport> {
         const { data: version, error: versionError } = await supabase
             .from('report_versions')
@@ -225,12 +226,16 @@ export class ReportCommandService {
 
         if (versionError || !version) throw new Error(`Failed to fetch version: ${versionError?.message}`)
 
-        // Guard: check if current report is system-managed
+        // Guard: check if current report is system-managed and handle version conflicts
         const { data: current } = await supabase
             .from('occurrence_reports')
             .select('version, absence_reason')
             .eq('id', reportId)
             .single()
+
+        if (current && currentVersion !== undefined && current.version !== currentVersion) {
+            throw new Error('Conflict detected: Report was modified by another user')
+        }
 
         const isSystemManaged = current?.absence_reason === 'holiday' || current?.absence_reason === 'suspension'
         if (isSystemManaged && version.snapshot) {

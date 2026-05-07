@@ -5,6 +5,8 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
+import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
+import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -52,47 +54,61 @@ function navigateToReports(id: string) {
     router.push({ name: 'student-all-reports', params: { id } })
 }
 
-function copyToClipboard(text: string) {
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(text).then(() => {
-            toast.success(t('common.copy_success'))
-        })
+async function copyToClipboard(text: string) {
+    if (!text) return
+    const success = await copyToClipboardUtil(text)
+    if (success) {
+        toast.success(t('common.copy_success'))
     }
 }
 </script>
 
 <template>
     <div class="space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-5">
-            <h1 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('common.students') }}</h1>
-
-            <div
-                class="flex flex-1 items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm max-w-xl group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
-                <div class="pl-3 text-gray-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+        <BasePageHeader
+            :overline="t('nav.students')"
+            :title="t('common.students')"
+            :subtitle="t('nav.description.students')"
+        >
+            <template #icon>
+                <div
+                    class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                 </div>
-                <input v-model="studentStore.searchQuery" type="text"
-                    :placeholder="$t('common.search', 'Search students...')"
-                    class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
-                <button v-if="studentStore.searchQuery" @click="studentStore.searchQuery = ''"
-                    class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
+            </template>
+            <template #actions>
+                <div
+                    class="flex flex-1 items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm max-w-xl group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                    <div class="pl-3 text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <input v-model="studentStore.searchQuery" type="text"
+                        :placeholder="t('common.search', 'Search students...')"
+                        class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
+                    <button v-if="studentStore.searchQuery" @click="studentStore.searchQuery = ''"
+                        class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
 
-            <button @click="showCreateModal = true"
-                class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center gap-2 active:scale-95 shrink-0 text-sm uppercase tracking-widest">
-                <span class="text-xl leading-none">+</span> {{ $t('student.add_title') }}
-            </button>
-        </div>
+                <button @click="showCreateModal = true"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center gap-2 active:scale-95 shrink-0 text-sm uppercase tracking-widest">
+                    <span class="text-xl leading-none">+</span> {{ t('student.add_title') }}
+                </button>
+            </template>
+        </BasePageHeader>
 
         <!-- Loading State -->
         <div v-if="studentStore.loading"
@@ -170,7 +186,12 @@ function copyToClipboard(text: string) {
                 <!-- Card Actions -->
                 <div class="px-5 py-4 flex gap-2">
                     <button @click="navigateToProfile(student.id)"
-                        class="flex-1 bg-gray-50 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 py-2.5 rounded-xl text-sm font-bold transition-all border border-gray-100 hover:border-emerald-200">
+                        class="flex-1 bg-gray-50 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 py-2.5 rounded-xl text-sm font-bold transition-all border border-gray-100 hover:border-emerald-200 flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                            viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                        </svg>
                         {{ $t('common.edit') }}
                     </button>
                     <button @click="navigateToReports(student.id)"

@@ -169,7 +169,7 @@
     "chapter_progress": "章節進度",
     "completion_status": "完成狀態",
     "highest_progress": "最高進度",
-    "latest_progress": "最新紀錄",
+    "latest_progress": "上週/上次紀錄",
     "progress_completed": "已完成",
     "progress_incomplete": "未完成",
     "progress_no_record": "尚無學習紀錄",
@@ -214,5 +214,6 @@
     "teaching_schedule": "授課排程",
     "add_teacher_assignment": "新增教師授課期程",
     "one_day_assignment": "單日臨時授課",
-    "master_schedule_link": "調整班級總體排程"
+    "master_schedule_link": "調整班級總體排程",
+    "teacher_attendance_only_self": "只能更改自己的出缺席"
 }

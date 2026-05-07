@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue' // Added watch
-import { CourseCatalogService } from '@/services/Course/CourseCatalogService'
+import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { Course, Lesson, type CourseDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
+import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -243,13 +244,25 @@ async function deleteLesson(id: string) {
 <template>
     <div class="h-[calc(100vh-8rem)] flex flex-col">
         <!-- Header -->
-        <div class="flex items-center justify-between mb-6 shrink-0">
-            <h1 class="text-3xl font-black text-gray-900 tracking-tight">{{ $t('nav.courses') }}</h1>
-            <button @click="openCreateModal"
-                class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 flex items-center gap-2 font-bold active:scale-95">
-                <span class="text-xl">+</span> {{ $t('common.add') }}
-            </button>
-        </div>
+        <BasePageHeader :overline="t('nav.courses')" :title="t('course.title')"
+            :subtitle="t('nav.description.courses')">
+            <template #icon>
+                <div
+                    class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                </div>
+            </template>
+            <template #actions>
+                <button @click="openCreateModal"
+                    class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 flex items-center gap-2 font-bold active:scale-95">
+                    <span class="text-xl">+</span> {{ t('common.add') }}
+                </button>
+            </template>
+        </BasePageHeader>
 
         <!-- Loading State -->
         <div v-if="loading"
@@ -270,13 +283,13 @@ async function deleteLesson(id: string) {
             <div class="w-full lg:w-80 flex flex-col bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden border-r-4 border-r-emerald-500/10 transition-transform duration-300 absolute inset-0 z-10 lg:static lg:transform-none"
                 :class="selectedCourseId ? '-translate-x-full lg:translate-x-0' : 'translate-x-0'">
                 <div class="p-6 border-b border-gray-50 bg-gray-50/30">
-                    <h3 class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{ $t('course.list_title')
-                        }}</h3>
+                    <h3 class="text-s font-black text-emerald-600 uppercase tracking-widest">
+                        {{ $t('course.list_title') }}</h3>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
                     <div v-for="(group, subject) in groupedCourses" :key="subject">
                         <h4
-                            class="px-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            class="px-2 text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                             <span class="w-1 h-3 bg-emerald-400 rounded-full"></span>
                             {{ subject }}
                         </h4>
@@ -287,7 +300,7 @@ async function deleteLesson(id: string) {
                                     ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100 translate-x-1'
                                     : 'hover:bg-gray-50 text-gray-700'">
                                 <div class="font-bold relative z-10">{{ course.displayName }}</div>
-                                <div class="text-[10px] opacity-70 relative z-10"
+                                <div class="text-[11px] opacity-70 relative z-10"
                                     :class="selectedCourseId === course.id ? 'text-emerald-50' : 'text-gray-400'">
                                     {{ course.stage }} · {{ course.lessons.length }} {{ $t('course.lessons_count_short')
                                     }}
@@ -353,11 +366,11 @@ async function deleteLesson(id: string) {
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center gap-3 mb-2 flex-wrap">
                                     <span
-                                        class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100">
+                                        class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[12px] font-black uppercase tracking-widest border border-emerald-100">
                                         {{ selectedCourse.subject }}
                                     </span>
                                     <span
-                                        class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                                        class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[12px] font-black uppercase tracking-widest border border-blue-100">
                                         {{ selectedCourse.stage }}
                                     </span>
                                 </div>
@@ -488,7 +501,7 @@ async function deleteLesson(id: string) {
                                                 {{ lesson.sequence }}
                                             </span>
                                             <span class="text-xl font-bold text-gray-800 tracking-tight">{{ lesson.title
-                                                }}</span>
+                                            }}</span>
                                         </div>
                                         <div
                                             class="flex gap-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-all">
@@ -527,9 +540,9 @@ async function deleteLesson(id: string) {
                                         </svg>
                                     </div>
                                     <h4 class="text-lg font-black text-gray-900 mb-1">{{ $t('course.no_lessons_title')
-                                        }}</h4>
+                                    }}</h4>
                                     <p class="text-gray-400 font-medium italic text-sm">{{ $t('course.no_lessons_sub')
-                                        }}</p>
+                                    }}</p>
                                 </div>
                             </div>
                         </div>
@@ -562,7 +575,7 @@ async function deleteLesson(id: string) {
                 <div class="space-y-4">
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.subject')
-                            }}</label>
+                        }}</label>
                         <input v-model="courseForm.subject" :placeholder="$t('course.subject_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
@@ -582,7 +595,7 @@ async function deleteLesson(id: string) {
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
-                            }}</label>
+                        }}</label>
                         <textarea v-model="courseForm.description" rows="3"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"></textarea>
                     </div>

@@ -67,5 +67,14 @@
     "save_error": "Failed to save",
     "clear": "Clear",
     "start_date": "Start Date",
-    "end_date": "End Date"
+    "end_date": "End Date",
+    "font_size": "Font Size",
+    "show_more": "Show More",
+    "show_less": "Show Less",
+    "system_managed": "System Managed",
+    "language": "Language",
+    "languages": {
+        "zh-TW": "繁體中文",
+        "en": "English"
+    }
 }

@@ -53,6 +53,8 @@ export function useAutoSave(options: AutoSaveOptions) {
     // Debounce timer
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
     let activeSavePromise: Promise<void> | null = null
+    let isDirtyWhileSaving = false
+    let saveRequestCounter = 0
 
     /**
      * Clears the existing debounce timer
@@ -70,42 +72,45 @@ export function useAutoSave(options: AutoSaveOptions) {
     async function saveNow(content: string): Promise<void> {
         clearTimer()
 
+        const currentRequestId = ++saveRequestCounter
+
         if (activeSavePromise) {
+            isDirtyWhileSaving = true
             await activeSavePromise
-            return
+            
+            // 如果在等待期間有更新的儲存請求進來，放棄當前的請求
+            if (currentRequestId !== saveRequestCounter) {
+                return
+            }
         }
 
         if (!hasUnsavedChanges.value) {
             return
         }
 
-        if (isSaving.value) {
-            console.log('Save already in progress, skipping')
-            return
-        }
-
         isSaving.value = true
         saveError.value = null
+        isDirtyWhileSaving = false
 
         activeSavePromise = (async () => {
             try {
                 const result = await onSave(content)
 
                 if (result.conflict) {
-                    // Conflict detected
                     hasUnsavedChanges.value = true
                     if (onConflict) {
                         onConflict(result.serverReport || null)
                     }
                 } else if (result.success) {
-                    // Success
                     lastSaved.value = new Date()
-                    hasUnsavedChanges.value = false
+                    // 只有在儲存期間沒有新變動時，才重置 hasUnsavedChanges
+                    if (!isDirtyWhileSaving) {
+                        hasUnsavedChanges.value = false
+                    }
                     if (onSuccess && result.newVersion) {
                         onSuccess(result.newVersion)
                     }
                 } else {
-                    // Error
                     const errorMsg = 'Failed to save'
                     saveError.value = errorMsg
                     hasUnsavedChanges.value = true
@@ -135,6 +140,12 @@ export function useAutoSave(options: AutoSaveOptions) {
      */
     function triggerAutoSave(content: string): void {
         hasUnsavedChanges.value = true
+        
+        // If we are currently saving, mark it as dirty so it doesn't reset after save
+        if (isSaving.value) {
+            isDirtyWhileSaving = true
+        }
+
         clearTimer()
 
         debounceTimer = setTimeout(() => {
