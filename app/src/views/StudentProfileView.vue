@@ -1832,7 +1832,7 @@ async function copyToClipboard(text: string) {
                                 </div>
 
                                 <div class="rounded-lg border border-blue-200 bg-white/70 p-3 text-xs text-blue-700">
-                                    教室與班級不可在此編輯，請使用「{{ $t('student.internal_courses.transfer_btn') }}」。
+                                    {{ $t('student.internal_courses.transfer_notice', { btn: $t('student.internal_courses.transfer_btn') }) }}
                                 </div>
 
                                 <div class="grid grid-cols-1 gap-3">
@@ -2072,7 +2072,7 @@ async function copyToClipboard(text: string) {
                                     <p class="mt-1 text-xs text-gray-400">{{
                                         $t('student.internal_courses.enrollment_report_count_hint') }}</p>
                                     <p v-if="isCreateTrialStatus" class="mt-1 text-xs text-amber-600 font-semibold">
-                                        {{ $t('student.internal_courses.status_trial') }}：固定建立 1 堂
+                                        {{ $t('student.internal_courses.status_trial_generate_hint') }}
                                     </p>
                                 </div>
                             </div>

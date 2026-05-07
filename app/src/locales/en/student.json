@@ -150,7 +150,9 @@
         "trial_to_active_message": "Set the total number of reports for this enrollment, including existing trial reports.",
         "target_total_reports": "Total report count",
         "target_total_reports_hint": "The system only creates the missing count and keeps existing trial reports.",
-        "trial_to_active_confirm": "Confirm Conversion"
+        "trial_to_active_confirm": "Confirm Conversion",
+        "transfer_notice": "Classroom and session cannot be edited here, please use '{btn}'.",
+        "status_trial_generate_hint": "Trial: Fixed to generate 1 session"
     },
     "credentials": {
         "title": "Credentials",

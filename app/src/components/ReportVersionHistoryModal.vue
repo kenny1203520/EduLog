@@ -314,7 +314,7 @@
 
             <!-- Confirm Restore Modal -->
             <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
-                :confirm-text="$t('report.editor.confirm_restore', '確認回檔')" :is-dangerous="true"
+                :confirm-text="$t('report.editor.confirm_restore')" :is-dangerous="true"
                 :is-loading="confirmState.isLoading" @confirm="executeRestore" @close="confirmState.isOpen = false" />
         </div>
     </Teleport>
