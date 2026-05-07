@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
+import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -64,36 +65,50 @@ async function copyToClipboard(text: string) {
 
 <template>
     <div class="space-y-6">
-        <div class="flex justify-between items-center flex-wrap gap-5">
-            <h1 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('common.students') }}</h1>
-
-            <div
-                class="flex flex-1 items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm max-w-xl group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
-                <div class="pl-3 text-gray-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+        <BasePageHeader
+            :overline="t('nav.students')"
+            :title="t('common.students')"
+            :subtitle="t('nav.description.students')"
+        >
+            <template #icon>
+                <div
+                    class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                     </svg>
                 </div>
-                <input v-model="studentStore.searchQuery" type="text"
-                    :placeholder="$t('common.search', 'Search students...')"
-                    class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
-                <button v-if="studentStore.searchQuery" @click="studentStore.searchQuery = ''"
-                    class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
+            </template>
+            <template #actions>
+                <div
+                    class="flex flex-1 items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm max-w-xl group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                    <div class="pl-3 text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <input v-model="studentStore.searchQuery" type="text"
+                        :placeholder="t('common.search', 'Search students...')"
+                        class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2" />
+                    <button v-if="studentStore.searchQuery" @click="studentStore.searchQuery = ''"
+                        class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
 
-            <button @click="showCreateModal = true"
-                class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center gap-2 active:scale-95 shrink-0 text-sm uppercase tracking-widest">
-                <span class="text-xl leading-none">+</span> {{ $t('student.add_title') }}
-            </button>
-        </div>
+                <button @click="showCreateModal = true"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center gap-2 active:scale-95 shrink-0 text-sm uppercase tracking-widest">
+                    <span class="text-xl leading-none">+</span> {{ t('student.add_title') }}
+                </button>
+            </template>
+        </BasePageHeader>
 
         <!-- Loading State -->
         <div v-if="studentStore.loading"

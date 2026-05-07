@@ -46,6 +46,9 @@
     "missing_behavior": "秩序未填",
     "not_created": "尚未建立",
     "select_incomplete_to_edit": "請從左側選擇一份未完成報告開始編輯",
+    "select_incomplete_hint": "請從左側列表選擇一份尚未完成的報告開始編輯。所有更改將自動保存。",
+    "view_student_profile": "開啟學生個人資料",
+    "search_placeholder": "搜尋報告...",
     "report_id": "報告編號",
     "reference_panel": {
         "title": "報告參考查詢",

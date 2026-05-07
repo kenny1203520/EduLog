@@ -17,6 +17,7 @@ import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -132,6 +133,11 @@ const days = [
     { value: 5, label: 'Fri' },
     { value: 6, label: 'Sat' },
 ]
+
+const dayOptions = computed(() => days.map(d => ({
+    label: t(`classroom.days.${d.value}`),
+    value: d.value
+})))
 
 onMounted(async () => {
     await loadData()
@@ -519,58 +525,72 @@ function clearTeacherSelection() {
 
 <template>
     <div class="space-y-6">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
-            <h1 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('classroom.title') }}</h1>
-
-            <div class="flex flex-col sm:flex-row flex-1 items-center gap-4 w-full max-w-2xl">
-                <!-- Search Bar -->
+        <BasePageHeader
+            :overline="t('nav.classrooms')"
+            :title="t('classroom.title')"
+            :subtitle="t('nav.description.classrooms')"
+        >
+            <template #icon>
                 <div
-                    class="w-full flex-1 flex items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
-                    <div class="pl-3 text-gray-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
+                    class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                </div>
+            </template>
+            <template #actions>
+                <div class="flex flex-col sm:flex-row flex-1 items-center gap-4 w-full max-w-2xl">
+                    <!-- Search Bar -->
+                    <div
+                        class="w-full flex-1 flex items-center gap-4 bg-white/50 p-1.5 rounded-2xl border border-gray-100 shadow-sm group focus-within:border-emerald-200 focus-within:ring-4 focus-within:ring-emerald-500/5 transition-all">
+                        <div class="pl-3 text-gray-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+                        <input v-model="searchQuery" type="text" :placeholder="t('common.search', 'Search...')"
+                            class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
+                        <button v-if="searchQuery" @click="searchQuery = ''"
+                            class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
-                    <input v-model="searchQuery" type="text" :placeholder="$t('common.search', 'Search...')"
-                        class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
-                    <button v-if="searchQuery" @click="searchQuery = ''"
-                        class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+
+                    <!-- Tab Switcher -->
+                    <div
+                        class="flex bg-gray-100/80 p-1 rounded-2xl border border-gray-100 shadow-inner w-full sm:w-auto overflow-x-auto shrink-0">
+                        <button @click="activeTab = 'rooms'"
+                            class="flex-1 sm:flex-none px-4 sm:px-5 py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all uppercase tracking-widest whitespace-nowrap"
+                            :class="activeTab === 'rooms' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'">
+                            {{ t('classroom.rooms_tab') }}
+                        </button>
+                        <button @click="activeTab = 'sessions'"
+                            class="flex-1 sm:flex-none px-4 sm:px-5 py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all uppercase tracking-widest whitespace-nowrap"
+                            :class="activeTab === 'sessions' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'">
+                            {{ t('classroom.sessions_tab') }}
+                        </button>
+                    </div>
                 </div>
 
-                <!-- Tab Switcher -->
-                <div
-                    class="flex bg-gray-100/80 p-1 rounded-2xl border border-gray-100 shadow-inner w-full sm:w-auto overflow-x-auto shrink-0">
-                    <button @click="activeTab = 'rooms'"
-                        class="flex-1 sm:flex-none px-4 sm:px-5 py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all uppercase tracking-widest whitespace-nowrap"
-                        :class="activeTab === 'rooms' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'">
-                        {{ $t('classroom.rooms_tab') }}
-                    </button>
-                    <button @click="activeTab = 'sessions'"
-                        class="flex-1 sm:flex-none px-4 sm:px-5 py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all uppercase tracking-widest whitespace-nowrap"
-                        :class="activeTab === 'sessions' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-400 hover:text-gray-600'">
-                        {{ $t('classroom.sessions_tab') }}
-                    </button>
-                </div>
-            </div>
-
-            <!-- Primary Action Button -->
-            <button v-if="activeTab === 'rooms'" @click="isCreateRoomModalOpen = true"
-                class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto">
-                <span class="text-xl leading-none">+</span> {{ $t('classroom.add_room') }}
-            </button>
-            <button v-else @click="openCreateSessionModal"
-                class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto">
-                <span class="text-xl leading-none">+</span> {{ $t('classroom.add_session') }}
-            </button>
-        </div>
+                <!-- Primary Action Button -->
+                <button v-if="activeTab === 'rooms'" @click="isCreateRoomModalOpen = true"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
+                    <span class="text-xl leading-none">+</span> {{ t('classroom.add_room') }}
+                </button>
+                <button v-else @click="openCreateSessionModal"
+                    class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
+                    <span class="text-xl leading-none">+</span> {{ t('classroom.add_session') }}
+                </button>
+            </template>
+        </BasePageHeader>
 
         <div
             class="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col md:flex-row md:items-center gap-3">
@@ -1035,11 +1055,7 @@ function clearTeacherSelection() {
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
                             }}</label>
                         <div class="flex flex-wrap gap-2">
-                            <select v-model="newSession.day_of_week"
-                                class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 bg-white">
-                                <option v-for="d in days" :key="d.value" :value="d.value">{{
-                                    $t(`classroom.days.${d.value}`) }}</option>
-                            </select>
+                            <BaseDropdown v-model="newSession.day_of_week" :options="dayOptions" theme="emerald" />
                             <div class="flex items-center gap-2">
                                 <input type="time" v-model="newSession.start_time"
                                     class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">

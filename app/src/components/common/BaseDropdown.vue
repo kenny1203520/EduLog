@@ -15,13 +15,15 @@ const props = withDefaults(defineProps<{
     widthClass?: string
     menuWidthClass?: string
     maxHeightClass?: string
+    disabled?: boolean
 }>(), {
     placeholder: 'Select option',
     theme: 'indigo',
     align: 'left',
     widthClass: 'w-full',
     menuWidthClass: 'w-full',
-    maxHeightClass: 'max-h-60'
+    maxHeightClass: 'max-h-60',
+    disabled: false
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -93,10 +95,10 @@ function select(value: any) {
         <!-- Overlay to close when clicking outside -->
         <div v-if="isOpen" class="fixed inset-0 z-40" @click="close"></div>
 
-        <button @click="toggle" type="button"
-            class="w-full flex items-center justify-between gap-2 text-xs font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 transition-all shadow-sm"
+        <button @click="toggle" type="button" :disabled="disabled"
+            class="w-full flex items-center justify-between gap-2 text-xs font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
             :class="[themeClasses.ring, isOpen ? 'ring-4' : '']">
-            <span class="truncate" :class="modelValue !== '' && modelValue !== null ? themeClasses.text : 'text-gray-400'">
+            <span class="truncate" :class="modelValue !== '' && modelValue !== null && !disabled ? themeClasses.text : 'text-gray-400'">
                 {{ selectedOption ? selectedOption.label : placeholder }}
             </span>
             <svg xmlns="http://www.w3.org/2000/svg" 

@@ -48,7 +48,7 @@ async function handleLogout() {
 
         <!-- Sidebar -->
         <aside
-            class="fixed lg:static inset-y-0 left-0 z-50 bg-white shadow-xl lg:shadow-md flex flex-col transition-all duration-300 transform lg:transform-none"
+            class="fixed lg:static inset-y-0 left-0 z-50 bg-white border-r border-gray-100 flex flex-col transition-all duration-300 transform lg:transform-none"
             :class="[
                 isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
                 isDesktopSidebarOpen ? 'lg:w-64' : 'lg:w-0 lg:overflow-hidden'
@@ -105,7 +105,7 @@ async function handleLogout() {
             <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
                 <router-link to="/dashboard" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
-                    exact-active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    exact-active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -118,7 +118,7 @@ async function handleLogout() {
 
                 <router-link to="/dashboard/students" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
-                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -131,7 +131,7 @@ async function handleLogout() {
 
                 <router-link to="/dashboard/courses" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
-                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -144,7 +144,7 @@ async function handleLogout() {
 
                 <router-link to="/dashboard/classrooms" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
-                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -157,7 +157,7 @@ async function handleLogout() {
 
                 <router-link to="/dashboard/holidays" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
-                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -170,7 +170,7 @@ async function handleLogout() {
 
                 <router-link to="/dashboard/teachers" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
-                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -183,7 +183,7 @@ async function handleLogout() {
 
                 <router-link to="/dashboard/reports/incomplete" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
-                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -196,7 +196,7 @@ async function handleLogout() {
 
                 <router-link to="/dashboard/about" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
-                    active-class="bg-emerald-50 text-emerald-700 font-bold shadow-sm ring-1 ring-emerald-100">
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
                     <div class="flex items-center gap-3">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -257,7 +257,7 @@ async function handleLogout() {
                 </button>
             </div>
 
-            <div class="px-4 pb-4 lg:px-8 lg:pb-8">
+            <div class="px-3 pb-4 lg:px-6 lg:pb-6">
                 <router-view />
             </div>
         </main>

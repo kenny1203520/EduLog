@@ -46,6 +46,9 @@
     "missing_behavior": "Missing Behavior",
     "not_created": "Not Created",
     "select_incomplete_to_edit": "Select a report to start editing",
+    "select_incomplete_hint": "Select an incomplete report from the left list to start editing. All changes will be saved automatically.",
+    "view_student_profile": "View student profile",
+    "search_placeholder": "Search reports...",
     "report_id": "Report ID",
     "reference_panel": {
         "title": "Report Reference",

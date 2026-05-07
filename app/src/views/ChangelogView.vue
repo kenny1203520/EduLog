@@ -2,6 +2,7 @@
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { computed } from 'vue'
+import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const router = useRouter()
 const { tm } = useI18n()
@@ -25,17 +26,21 @@ function getChangeTypeClass(type: string) {
 <template>
     <div class="max-w-3xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <!-- Header -->
-        <div class="flex items-center gap-4">
-            <button @click="router.back()" class="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-            </button>
-            <div>
-                <h1 class="text-3xl font-bold text-gray-900">{{ $t('about.changelog') }}</h1>
-                <p class="text-gray-500">{{ $t('about.changelog_subtitle') }}</p>
-            </div>
-        </div>
+        <BasePageHeader
+            :title="$t('about.changelog')"
+            :subtitle="$t('about.changelog_subtitle')"
+        >
+            <template #overline>
+                <div class="flex items-center gap-2">
+                    <button @click="router.back()" class="p-1 hover:bg-emerald-50 rounded-lg transition-colors text-emerald-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                    </button>
+                    <span class="text-xs font-semibold uppercase tracking-[0.35em] text-emerald-600">{{ $t('nav.about') }}</span>
+                </div>
+            </template>
+        </BasePageHeader>
 
         <!-- Timeline -->
         <div class="relative space-y-12 before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-200 before:to-transparent">

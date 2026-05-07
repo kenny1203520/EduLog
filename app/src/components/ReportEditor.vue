@@ -127,15 +127,8 @@
                         {{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}
                     </a>
                 </div>
-                <select v-model="selectedLessonId"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
-                    :class="{ 'opacity-50': disabled }" :disabled="disabled">
-                    <option value="">{{ $t('report.editor.select_lesson') }}</option>
-                    <option v-for="lesson in availableLessons" :key="lesson.id" :value="lesson.id">
-                        Lesson {{ (lesson as any).sequence }}: {{ (lesson as any).title
-                        }}
-                    </option>
-                </select>
+                <BaseDropdown v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
+                    theme="emerald" />
             </div>
 
             <!-- Report External Link Input -->
@@ -212,31 +205,7 @@
                 </div>
 
                 <!-- User-selectable absence reason -->
-                <select v-else v-model="absenceReason"
-                    class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                    :class="showAbsenceError ? 'border-red-300 bg-red-50' : 'border-gray-300'">
-                    <option value="">{{ $t('report.editor.select_reason') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.busy_with_schoolwork')">{{
-                        $t('report.editor.absence_reasons.busy_with_schoolwork') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.school_event')">{{
-                        $t('report.editor.absence_reasons.school_event') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.family_matter')">{{
-                        $t('report.editor.absence_reasons.family_matter') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.sick_or_injured')">{{
-                        $t('report.editor.absence_reasons.sick_or_injured') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.reason_not_provided')">{{
-                        $t('report.editor.absence_reasons.reason_not_provided') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.travel_abroad')">{{
-                        $t('report.editor.absence_reasons.travel_abroad') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.family_ceremony')">{{
-                        $t('report.editor.absence_reasons.family_ceremony') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.school_activity')">{{
-                        $t('report.editor.absence_reasons.school_activity') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.suspension')">{{
-                        $t('report.editor.absence_reasons.suspension') }}</option>
-                    <option :value="$t('report.editor.absence_reasons.other')">{{
-                        $t('report.editor.absence_reasons.other') }}</option>
-                </select>
+                <BaseDropdown v-else v-model="absenceReason" :options="absenceReasonOptions" theme="red" />
                 <p v-if="showAbsenceError && !isSystemManagedAbsence" class="mt-1 text-sm text-red-600">{{
                     $t('report.editor.absence_reason_required') }}</p>
             </div>
@@ -262,36 +231,7 @@
                     <label class="block text-xs font-medium text-gray-600 mb-1">
                         {{ $t('report.editor.progress_start_label') }}
                     </label>
-                    <select v-model="progressStart"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500">
-                        <option value="">{{ $t('report.editor.select_progress') }}</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                        <option value="D">D</option>
-                        <option value="E">E</option>
-                        <option value="F">F</option>
-                        <option value="G">G</option>
-                        <option value="H">H</option>
-                        <option value="I">I</option>
-                        <option value="J">J</option>
-                        <option value="K">K</option>
-                        <option value="L">L</option>
-                        <option value="M">M</option>
-                        <option value="N">N</option>
-                        <option value="O">O</option>
-                        <option value="P">P</option>
-                        <option value="Q">Q</option>
-                        <option value="R">R</option>
-                        <option value="S">S</option>
-                        <option value="T">T</option>
-                        <option value="U">U</option>
-                        <option value="V">V</option>
-                        <option value="W">W</option>
-                        <option value="X">X</option>
-                        <option value="Y">Y</option>
-                        <option value="Z">Z</option>
-                    </select>
+                    <BaseDropdown v-model="progressStart" :options="progressOptions" theme="amber" />
                 </div>
 
                 <!-- End Progress -->
@@ -299,36 +239,7 @@
                     <label class="block text-xs font-medium text-gray-600 mb-1">
                         {{ $t('report.editor.progress_end_label') }}
                     </label>
-                    <select v-model="progressEnd"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500">
-                        <option value="">{{ $t('report.editor.select_progress') }}</option>
-                        <option value="A">A</option>
-                        <option value="B">B</option>
-                        <option value="C">C</option>
-                        <option value="D">D</option>
-                        <option value="E">E</option>
-                        <option value="F">F</option>
-                        <option value="G">G</option>
-                        <option value="H">H</option>
-                        <option value="I">I</option>
-                        <option value="J">J</option>
-                        <option value="K">K</option>
-                        <option value="L">L</option>
-                        <option value="M">M</option>
-                        <option value="N">N</option>
-                        <option value="O">O</option>
-                        <option value="P">P</option>
-                        <option value="Q">Q</option>
-                        <option value="R">R</option>
-                        <option value="S">S</option>
-                        <option value="T">T</option>
-                        <option value="U">U</option>
-                        <option value="V">V</option>
-                        <option value="W">W</option>
-                        <option value="X">X</option>
-                        <option value="Y">Y</option>
-                        <option value="Z">Z</option>
-                    </select>
+                    <BaseDropdown v-model="progressEnd" :options="progressOptions" theme="amber" />
                 </div>
             </div>
 
@@ -424,7 +335,7 @@
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
                     <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                    }}</span>
+                        }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
                     {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
@@ -482,12 +393,8 @@
                             <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
                                 {{ $t('report.editor.copy_course_template_load_from') }}
                             </label>
-                            <select v-model="selectedCourseTemplateLoadKey"
-                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
-                                <option v-for="item in courseTemplateLoadOptions" :key="item.key" :value="item.key">
-                                    {{ item.displayLabel }}
-                                </option>
-                            </select>
+                            <BaseDropdown v-model="selectedCourseTemplateLoadKey"
+                                :options="courseTemplateLoadOptionsDropdown" theme="amber" />
                         </div>
                         <button @click="loadSelectedCourseTemplate"
                             class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
@@ -517,12 +424,8 @@
                             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                                 {{ $t('report.editor.copy_course_template_variable_mode_label') }}
                             </label>
-                            <select v-model="selectedCourseTemplateModes[variable.key]"
-                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500">
-                                <option v-for="mode in variable.modeOptions" :key="mode.value" :value="mode.value">
-                                    {{ mode.label }}
-                                </option>
-                            </select>
+                            <BaseDropdown v-model="selectedCourseTemplateModes[variable.key]"
+                                :options="variable.modeOptions || []" theme="emerald" />
                         </div>
 
                         <div>
@@ -560,12 +463,8 @@
                             <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
                                 {{ $t('report.editor.template_select_label') }}
                             </label>
-                            <select v-model="selectedTemplateId"
-                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                                @change="handleTemplateSelectionChange">
-                                <option value="">{{ $t('report.editor.template_new_option') }}</option>
-                                <option v-for="t in savedTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
-                            </select>
+                            <BaseDropdown v-model="selectedTemplateId" :options="templateOptionsDropdown" theme="amber"
+                                @change="handleTemplateSelectionChange" />
                         </div>
                         <button @click="createNewTemplateDraft"
                             class="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-gray-700 transition hover:bg-gray-100">
@@ -603,8 +502,8 @@
                                 {{ variable.token }}
                             </button>
                         </div>
-                        <p class="text-xs text-purple-700">{{ $t('report.editor.template_variable_auto_insert_hint',
-                            '點擊上方欄位後，點擊變數即可插入') }}</p>
+                        <p class="text-xs text-purple-700">{{ $t('report.editor.template_variable_auto_insert_hint') }}
+                        </p>
 
                         <!-- Variable Mode Selectors -->
                         <div v-if="reportTemplateVariables.some(v => v.modes?.length)"
@@ -617,12 +516,9 @@
                                         {{ variable.label }} {{
                                             $t('report.editor.copy_course_template_variable_mode_label') }}
                                     </label>
-                                    <select v-model="selectedReportTemplateModes[variable.key]"
-                                        class="rounded-lg border border-purple-200 bg-white/80 px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-emerald-500">
-                                        <option v-for="mode in variable.modes" :key="mode.value" :value="mode.value">
-                                            {{ $t(`report.editor.copy_course_template_variable_modes.${mode.value}`) }}
-                                        </option>
-                                    </select>
+                                    <BaseDropdown v-model="selectedReportTemplateModes[variable.key]"
+                                        :options="(variable.modes || []).map(m => ({ label: $t(`report.editor.copy_course_template_variable_modes.${m.value}`), value: m.value }))"
+                                        theme="emerald" />
                                 </div>
                             </div>
                         </div>
@@ -648,6 +544,7 @@ import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
+import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
@@ -806,6 +703,48 @@ const reportTemplateVariables = computed<ReportTemplateVariableItem[]>(() => {
         }
     })
 })
+
+const lessonOptions = computed(() => [
+    { label: t('report.editor.select_lesson'), value: '' },
+    ...props.availableLessons.map(lesson => ({
+        label: `Lesson ${(lesson as any).sequence}: ${(lesson as any).title}`,
+        value: lesson.id
+    }))
+])
+
+const absenceReasonOptions = computed(() => [
+    { label: t('report.editor.select_reason'), value: '' },
+    ...([
+        'busy_with_schoolwork',
+        'school_event',
+        'family_matter',
+        'sick_or_injured',
+        'reason_not_provided',
+        'travel_abroad',
+        'family_ceremony',
+        'school_activity',
+        'suspension',
+        'other'
+    ].map(key => ({
+        label: t(`report.editor.absence_reasons.${key}`),
+        value: t(`report.editor.absence_reasons.${key}`)
+    })))
+])
+
+const progressOptions = computed(() => [
+    { label: t('report.editor.select_progress'), value: '' },
+    ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(l => ({ label: l, value: l }))
+])
+
+const templateOptionsDropdown = computed(() => [
+    { label: t('report.editor.template_new_option'), value: '' },
+    ...savedTemplates.value.map(t => ({ label: t.name, value: t.id }))
+])
+
+const courseTemplateLoadOptionsDropdown = computed(() => courseTemplateLoadOptions.value.map(opt => ({
+    label: opt.displayLabel,
+    value: opt.key
+})))
 
 function buildReportTemplateContext() {
     const lesson = selectedCoursePreviewLesson.value

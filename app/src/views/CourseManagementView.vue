@@ -6,6 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
+import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -243,13 +244,28 @@ async function deleteLesson(id: string) {
 <template>
     <div class="h-[calc(100vh-8rem)] flex flex-col">
         <!-- Header -->
-        <div class="flex items-center justify-between mb-6 shrink-0">
-            <h1 class="text-3xl font-black text-gray-900 tracking-tight">{{ $t('nav.courses') }}</h1>
-            <button @click="openCreateModal"
-                class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 flex items-center gap-2 font-bold active:scale-95">
-                <span class="text-xl">+</span> {{ $t('common.add') }}
-            </button>
-        </div>
+        <BasePageHeader
+            :overline="t('nav.courses')"
+            :title="t('course.title')"
+            :subtitle="t('nav.description.courses')"
+        >
+            <template #icon>
+                <div
+                    class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                </div>
+            </template>
+            <template #actions>
+                <button @click="openCreateModal"
+                    class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200 flex items-center gap-2 font-bold active:scale-95">
+                    <span class="text-xl">+</span> {{ t('common.add') }}
+                </button>
+            </template>
+        </BasePageHeader>
 
         <!-- Loading State -->
         <div v-if="loading"
