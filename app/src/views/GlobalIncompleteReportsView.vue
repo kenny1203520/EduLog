@@ -175,6 +175,7 @@
                         <div class="flex gap-1.5 flex-wrap">
                             <div v-for="tag in [
                                 { show: report.missingContent, label: $t('report.missing_content'), color: 'rose' },
+                                { show: report.missingLesson, label: $t('report.missing_unit'), color: 'indigo' },
                                 { show: report.missingProgress, label: $t('report.missing_progress'), color: 'amber' },
                                 { show: report.missingParticipation, label: $t('report.missing_participation'), color: 'blue' },
                                 { show: report.missingBehavior, label: $t('report.missing_behavior'), color: 'purple' }
