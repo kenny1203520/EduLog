@@ -3,6 +3,7 @@
         class="flex flex-col bg-gray-50 overflow-hidden h-[calc(100dvh-4rem)] lg:h-[calc(100vh-5rem)] -mx-3 -mb-4 lg:-mx-6 lg:-mb-6 relative">
         <BasePageHeader :overline="t('nav.incomplete_reports')" :title="t('report.incomplete_reports_title')"
             :subtitle="t('report.incomplete_reports_subtitle')" :hide-background="true" :compact="true"
+            :inline-actions-mobile="true"
             class="z-20 bg-white/80 backdrop-blur-md border-b border-gray-100 shadow-sm px-4 sm:px-6 lg:px-8">
             <template #icon>
                 <div
@@ -39,9 +40,9 @@
                     </button>
 
                     <!-- Refresh Buttons -->
-                    <div class="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-100">
+                    <div class="flex items-center bg-gray-50 p-1 rounded-xl border border-gray-100 shrink-0 shadow-sm">
                         <button @click="requestRefresh"
-                            class="p-2 rounded-lg hover:bg-white hover:text-amber-600 hover:shadow-sm transition-all text-gray-400 active:scale-95"
+                            class="p-1.5 sm:p-2 rounded-lg hover:bg-white hover:text-amber-600 hover:shadow-sm transition-all text-gray-400 active:scale-95"
                             :class="{ 'animate-spin opacity-50 pointer-events-none': isRefreshing }"
                             :disabled="isRefreshing" :title="t('report.refresh_all')">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
@@ -169,7 +170,7 @@
                             <span class="truncate">{{ report.className }}</span>
                             <span v-if="report.classroomName" class="shrink-0 text-gray-300 text-[8px]">•</span>
                             <span v-if="report.classroomName" class="truncate text-gray-400">{{ report.classroomName
-                                }}</span>
+                            }}</span>
                         </div>
 
                         <div class="flex gap-1.5 flex-wrap">
@@ -259,7 +260,7 @@
                                         {{ selectedReport.studentName }}
                                     </h3>
                                     <router-link v-if="selectedReport.fullStudent?.id"
-                                        :to="`/dashboard/student/${selectedReport.fullStudent.id}`" target="_blank"
+                                        :to="`/dashboard/student/${selectedReport.fullStudent.id}`"
                                         class="w-10 h-10 flex items-center justify-center text-emerald-600 bg-emerald-50 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shrink-0 shadow-sm border border-emerald-100/50 group/link"
                                         :title="t('report.view_student_profile')">
                                         <svg xmlns="http://www.w3.org/2000/svg"
