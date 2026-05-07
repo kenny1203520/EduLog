@@ -32,6 +32,7 @@ import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 type ReportEditorExpose = {
@@ -448,35 +449,51 @@ function normalizeDateInput(value: string | Date | undefined): string {
     return DateUtils.formatLocalDate(parsed)
 }
 
-const filteredMakeupStudents = computed(() => {
-    const studentMap = new Map<string, { studentId: string; studentName: string; studentEmail?: string }>()
+const attendanceTemplateLoadOptionsDropdown = computed(() => {
+    return attendanceTemplateLoadOptions.value.map(opt => ({
+        label: opt.label,
+        value: opt.key
+    }))
+})
 
-    makeupCandidates.value.forEach(item => {
-        if (!item.studentId || !item.studentName) {
-            return
-        }
-        if (!studentMap.has(item.studentId)) {
-            studentMap.set(item.studentId, {
-                studentId: item.studentId,
-                studentName: item.studentName,
-                studentEmail: item.studentEmail
-            })
-        }
-    })
 
-    const students = [...studentMap.values()]
-    const keyword = makeupSearch.value.trim().toLowerCase()
 
-    if (!keyword) {
-        return students
+const makeupStudentOptions = computed(() => {
+    const search = makeupSearch.value.toLowerCase().trim()
+    let students = makeupCandidates.value
+
+    if (search) {
+        students = students.filter(s =>
+            s.studentName?.toLowerCase().includes(search)
+        )
     }
 
-    return students.filter(student => {
-        return [student.studentName, student.studentEmail]
-            .filter(Boolean)
-            .some(text => text!.toLowerCase().includes(keyword))
-    })
+    return [
+        { label: t('classroom.please_select_student'), value: '' },
+        ...students.map(s => ({
+            label: s.studentName || 'Unnamed',
+            value: s.studentId || ''
+        }))
+    ]
 })
+
+const makeupEnrollmentOptions = computed(() => {
+    if (!selectedMakeupStudentId.value) return []
+
+    const studentEnrollments = makeupCandidates.value.filter(
+        e => e.studentId === selectedMakeupStudentId.value
+    )
+
+    return [
+        { label: t('classroom.please_select_student_enrollment'), value: '' },
+        ...studentEnrollments.map(e => ({
+            label: `${e.courseDisplayName || (e.courseSubject + ' ' + (e.courseStage || ''))} (${e.status})`,
+            value: e.id || ''
+        }))
+    ]
+})
+
+
 
 const filteredTeachers = computed(() => {
     const query = teacherSearchQuery.value.trim().toLowerCase()
@@ -488,13 +505,7 @@ const filteredTeachers = computed(() => {
     )
 })
 
-const selectedStudentEnrollments = computed(() => {
-    if (!selectedMakeupStudentId.value) {
-        return []
-    }
 
-    return makeupCandidates.value.filter(item => item.studentId === selectedMakeupStudentId.value)
-})
 
 const selectedMakeupEnrollment = computed(() => {
     return makeupCandidates.value.find(item => item.id === selectedMakeupEnrollmentId.value) || null
@@ -2488,34 +2499,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_student')
                         }}</label>
-                        <select v-model="selectedMakeupStudentId" @change="handleMakeupStudentChange"
-                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                            :disabled="isAddingStudent">
-                            <option value="">{{ $t('classroom.add_student_select_student_placeholder') }}</option>
-                            <option v-for="student in filteredMakeupStudents" :key="student.studentId"
-                                :value="student.studentId">
-                                {{ student.studentName }}{{ student.studentEmail ? ` (${student.studentEmail})` : '' }}
-                            </option>
-                        </select>
+                        <BaseDropdown v-model="selectedMakeupStudentId" :options="makeupStudentOptions"
+                            :placeholder="$t('classroom.add_student_select_student_placeholder')" theme="emerald"
+                            @change="handleMakeupStudentChange" :disabled="isAddingStudent" />
                     </div>
 
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_course')
                         }}</label>
-                        <select v-model="selectedMakeupEnrollmentId"
-                            class="w-full border-gray-300 rounded-xl px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                            :disabled="isAddingStudent || !selectedMakeupStudentId">
-                            <option value="">{{ $t('classroom.add_student_select_course_placeholder') }}</option>
-                            <option v-for="candidate in selectedStudentEnrollments" :key="candidate.id"
-                                :value="candidate.id">
-                                {{ candidate.courseDisplayName || `${candidate.courseSubject} ${candidate.courseStage}`
-                                }}
-                                {{ candidate.classSessionName ? ` · ${candidate.classSessionName}` : '' }}
-                            </option>
-                            <option v-if="selectedMakeupStudentId && selectedStudentEnrollments.length === 0" disabled>
-                                {{ $t('classroom.add_student_no_active_courses') }}
-                            </option>
-                        </select>
+                        <BaseDropdown v-model="selectedMakeupEnrollmentId" :options="makeupEnrollmentOptions"
+                            :placeholder="$t('classroom.add_student_select_course_placeholder')" theme="emerald"
+                            :disabled="isAddingStudent || !selectedMakeupStudentId" />
                     </div>
 
                     <div>
@@ -2588,12 +2582,9 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <label class="block text-xs font-bold uppercase tracking-wide text-amber-900 mb-1">
                                 {{ $t('classroom.copy_template_load_from') }}
                             </label>
-                            <select v-model="selectedAttendanceTemplateLoadKey"
-                                class="w-full rounded-xl border border-amber-300 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500">
-                                <option v-for="item in attendanceTemplateLoadOptions" :key="item.key" :value="item.key">
-                                    {{ item.label }}
-                                </option>
-                            </select>
+                            <BaseDropdown v-model="selectedAttendanceTemplateLoadKey"
+                                :options="attendanceTemplateLoadOptionsDropdown"
+                                :placeholder="$t('classroom.copy_template_load_from')" theme="amber" />
                         </div>
                         <button @click="loadSelectedAttendanceTemplate"
                             class="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-amber-600"
@@ -2624,12 +2615,8 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <label class="block text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                                 {{ $t('classroom.copy_template_variable_mode_label') }}
                             </label>
-                            <select v-model="selectedAttendanceTemplateModes[variable.key]"
-                                class="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500">
-                                <option v-for="mode in variable.modeOptions" :key="mode.value" :value="mode.value">
-                                    {{ mode.label }}
-                                </option>
-                            </select>
+                            <BaseDropdown v-model="selectedAttendanceTemplateModes[variable.key]"
+                                :options="variable.modeOptions" theme="gray" />
                         </div>
 
                         <div>
