@@ -48,7 +48,7 @@ async function handleLogin() {
 
             <form @submit.prevent="handleLogin" class="space-y-6 w-full">
                 <div class="space-y-2">
-                    <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">{{
+                    <label class="block text-[12px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">{{
                         $t('auth.email') }}</label>
                     <div class="relative group">
                         <input v-model="email" type="email" required
@@ -61,7 +61,7 @@ async function handleLogin() {
                 </div>
 
                 <div class="space-y-2">
-                    <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">{{
+                    <label class="block text-[12px] font-black text-emerald-600 uppercase tracking-[0.2em] ml-1">{{
                         $t('auth.password') }}</label>
                     <div class="relative group">
                         <input v-model="password" type="password" required

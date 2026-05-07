@@ -170,11 +170,8 @@ function closeModal() {
 
 <template>
     <div class="space-y-6">
-        <BasePageHeader
-            :overline="t('nav.holidays')"
-            :title="t('holiday.title')"
-            :subtitle="t('nav.description.holidays')"
-        >
+        <BasePageHeader :overline="t('nav.holidays')" :title="t('holiday.title')"
+            :subtitle="t('nav.description.holidays')">
             <template #icon>
                 <div
                     class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
@@ -232,15 +229,15 @@ function closeModal() {
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 mb-1">
                             <span v-if="holiday.classSessionIds.length > 0"
-                                class="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-purple-100">
+                                class="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-[12px] font-black uppercase tracking-widest border border-purple-100">
                                 {{ $t('holiday.scope_session') }}
                             </span>
                             <span v-else-if="holiday.classroomIds.length > 0"
-                                class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                                class="px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-[12px] font-black uppercase tracking-widest border border-blue-100">
                                 {{ $t('holiday.scope_classroom') }}
                             </span>
                             <span v-else
-                                class="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100">
+                                class="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[12px] font-black uppercase tracking-widest border border-emerald-100">
                                 {{ $t('holiday.scope_global') }}
                             </span>
                         </div>
@@ -285,7 +282,7 @@ function closeModal() {
                             </svg>
                         </div>
                         <div>
-                            <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">{{
+                            <p class="text-[12px] font-black text-gray-400 uppercase tracking-widest">{{
                                 $t('holiday.date_label') }}</p>
                             <p class="text-sm font-bold text-gray-700">{{ holiday.formattedRange }}</p>
                         </div>
@@ -294,7 +291,7 @@ function closeModal() {
                     <!-- Target Detail -->
                     <div v-if="holiday.classroomIds.length > 0 || holiday.classSessionIds.length > 0"
                         class="pt-3 border-t border-gray-50">
-                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">{{
+                        <p class="text-[12px] font-black text-gray-400 uppercase tracking-widest mb-2">{{
                             $t('holiday.scope_label') }} Detail</p>
                         <p class="text-xs font-medium text-gray-600 line-clamp-2 italic">
                             {{ holiday.classSessionIds.length > 0 ? getNamesForIds('session', holiday.classSessionIds) :

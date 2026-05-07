@@ -146,10 +146,10 @@
                                     {{ report.studentName }}</div>
                                 <div class="flex items-center gap-2 mt-1.5">
                                     <div
-                                        class="px-2 py-0.5 rounded-lg bg-gray-50 border border-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-tighter shadow-inner">
+                                        class="px-2 py-0.5 rounded-lg bg-gray-50 border border-gray-100 text-[12px] font-black text-gray-500 uppercase tracking-tighter shadow-inner">
                                         {{ formatDate(report.date) }}
                                     </div>
-                                    <div class="text-[10px] font-bold text-emerald-600/70">
+                                    <div class="text-[12px] font-bold text-emerald-600/70">
                                         {{ formatTimeRange(report.startTime, report.endTime) }}
                                     </div>
                                 </div>
@@ -169,7 +169,7 @@
                             <span class="truncate">{{ report.className }}</span>
                             <span v-if="report.classroomName" class="shrink-0 text-gray-300 text-[8px]">•</span>
                             <span v-if="report.classroomName" class="truncate text-gray-400">{{ report.classroomName
-                            }}</span>
+                                }}</span>
                         </div>
 
                         <div class="flex gap-1.5 flex-wrap">
@@ -180,14 +180,14 @@
                                 { show: report.missingParticipation, label: $t('report.missing_participation'), color: 'blue' },
                                 { show: report.missingBehavior, label: $t('report.missing_behavior'), color: 'purple' }
                             ].filter(t => t.show)" :key="tag.label"
-                                :class="`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest bg-${tag.color}-50 text-${tag.color}-600 border border-${tag.color}-100 shadow-sm shadow-${tag.color}-500/5`">
+                                :class="`px-2 py-1 rounded-lg text-[11px] font-black uppercase tracking-widest bg-${tag.color}-50 text-${tag.color}-600 border border-${tag.color}-100 shadow-sm shadow-${tag.color}-500/5`">
                                 {{ tag.label }}
                             </div>
                         </div>
 
                         <div v-if="report.updatedAt"
                             class="mt-4 pt-3 border-t border-gray-50 flex items-center justify-between">
-                            <div class="flex items-center gap-1.5 text-[10px] font-bold text-gray-300">
+                            <div class="flex items-center gap-1.5 text-[11px] font-bold text-gray-300">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
                                     stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -198,7 +198,7 @@
                                         'short', day: 'numeric'
                                 }) }}
                             </div>
-                            <div class="text-[10px] font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">
+                            <div class="text-[11px] font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">
                                 {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleTimeString([], {
                                     hour:
                                         '2-digit',
@@ -240,14 +240,14 @@
                                 <div
                                     class="text-center bg-white p-3 rounded-[1.5rem] border border-gray-100 min-w-[80px] sm:min-w-[100px] shadow-xl shadow-emerald-500/5">
                                     <div
-                                        class="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">
+                                        class="text-[11px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">
                                         {{ formatWeekday(selectedReport.date) }}
                                     </div>
                                     <div class="text-2xl sm:text-4xl font-black text-gray-900 leading-none my-1">
                                         {{ new Date(selectedReport.date).getDate() }}
                                     </div>
                                     <div v-if="selectedReport.startTime"
-                                        class="text-[9px] font-black text-emerald-600/70 whitespace-nowrap uppercase tracking-tighter">
+                                        class="text-[11px] font-black text-emerald-600/70 whitespace-nowrap uppercase tracking-tighter">
                                         {{ formatTimeRange(selectedReport.startTime, selectedReport.endTime) }}
                                     </div>
                                 </div>
@@ -286,7 +286,7 @@
 
                         <!-- Right Stats (Desktop) -->
                         <div class="hidden sm:flex flex-col items-end shrink-0 relative z-10">
-                            <div class="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em] mb-2 px-1">{{
+                            <div class="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] mb-2 px-1">{{
                                 $t('report.report_id') }}</div>
                             <div
                                 class="bg-gray-50/80 px-4 py-2 rounded-xl border border-gray-100/50 font-mono text-[10px] font-bold text-gray-400 shadow-inner">
