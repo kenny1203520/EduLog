@@ -214,5 +214,6 @@
     "teaching_schedule": "Teaching Schedule",
     "add_teacher_assignment": "Add Teacher Assignment",
     "one_day_assignment": "One-day Assignment",
-    "master_schedule_link": "Manage Overall Schedule"
+    "master_schedule_link": "Manage Overall Schedule",
+    "teacher_attendance_only_self": "Can only modify your own attendance"
 }

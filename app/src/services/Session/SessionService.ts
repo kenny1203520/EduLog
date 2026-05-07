@@ -125,4 +125,34 @@ export class SessionService {
             current_enrollments: count || 0
         }
     }
+
+    static async getMaxEnrollmentInDateRange(sessionId: string, startDate: string, endDate: string): Promise<number> {
+        const { data: occurrences, error } = await supabase
+            .from('class_occurrences')
+            .select(`
+                id,
+                occurrence_date,
+                occurrence_reports ( count )
+            `)
+            .eq('class_session_id', sessionId)
+            .gte('occurrence_date', startDate)
+            .lte('occurrence_date', endDate)
+
+        if (error) throw new Error(error.message)
+        if (!occurrences || occurrences.length === 0) return 0
+
+        let maxCount = 0
+        for (const occ of occurrences) {
+            let count = 0
+            if (Array.isArray(occ.occurrence_reports)) {
+                count = occ.occurrence_reports[0]?.count || 0
+            } else if (occ.occurrence_reports && typeof occ.occurrence_reports === 'object') {
+                count = (occ.occurrence_reports as any).count || 0
+            }
+            if (count > maxCount) {
+                maxCount = count
+            }
+        }
+        return maxCount
+    }
 }

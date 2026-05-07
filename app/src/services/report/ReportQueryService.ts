@@ -191,8 +191,8 @@ export class ReportQueryService {
             const hasContent = !!(report.content && report.content.trim().length > 0)
             const hasLesson = !!report.lesson_id
             const hasProgress = report.is_completed || !!(report.progress_letter && report.progress_letter.trim())
-            const hasParticipation = report.class_participation != null
-            const hasBehavior = report.classroom_behavior != null
+            const hasParticipation = report.class_participation != null && report.class_participation > 0
+            const hasBehavior = report.classroom_behavior != null && report.classroom_behavior > 0
 
             const isIncomplete = !(hasContent && hasLesson && hasProgress && hasParticipation && hasBehavior)
             

@@ -298,6 +298,7 @@ const newEnrollment = ref<Partial<EnrollmentDTO>>({ status: 'active' })
 const enrollmentGenerateCount = ref(1)
 const selectedSessionDetails = ref<any>(null)
 const classroomSearchTerm = ref('')
+const isCheckingCapacity = ref(false)
 
 const showActivateTrialModal = ref(false)
 const activateTrialTargetReportCount = ref(1)
@@ -308,7 +309,7 @@ const isCreateTrialStatus = computed(() => newEnrollment.value.status === 'trial
 
 
 const isSessionFull = computed(() => {
-    if (!selectedSessionDetails.value) return false
+    if (!selectedSessionDetails.value || isCheckingCapacity.value) return false
     return selectedSessionDetails.value.current_enrollments >= selectedSessionDetails.value.capacity
 })
 
@@ -318,24 +319,55 @@ function getCourseLessonCount(courseId?: string): number {
     return Math.max(1, selectedCourse?.lessons?.length || 1)
 }
 
-// Watch Session Selection to Fetch Details
-watch(() => newEnrollment.value.class_session_id, async (sessionId) => {
+function calculateEndDate(startDate: string, dayOfWeek: number, lessonCount: number): string {
+    const start = new Date(startDate)
+    // Find the first date that matches dayOfWeek
+    let firstOcc = new Date(start)
+    let diff = dayOfWeek - firstOcc.getDay()
+    if (diff < 0) diff += 7
+    firstOcc.setDate(firstOcc.getDate() + diff)
+
+    // Add (lessonCount - 1) weeks
+    const endOcc = new Date(firstOcc)
+    endOcc.setDate(endOcc.getDate() + (lessonCount - 1) * 7)
+
+    const dateStr = `${endOcc.getFullYear()}-${String(endOcc.getMonth() + 1).padStart(2, '0')}-${String(endOcc.getDate()).padStart(2, '0')}`
+    return dateStr
+}
+
+// Watch Session, Start Date, and Lesson Count to Fetch accurate Capacity
+watch([
+    () => newEnrollment.value.class_session_id,
+    () => newEnrollment.value.start_date,
+    () => enrollmentGenerateCount.value
+], async ([sessionId, startDate, generateCount]) => {
     if (!sessionId) {
         selectedSessionDetails.value = null
         return
     }
 
     try {
-        // Fetch session details including classroom info and enrollment count
-        selectedSessionDetails.value = await SessionService.getSessionDetails(sessionId)
+        isCheckingCapacity.value = true
+        // Fetch/Update session details
+        if (!selectedSessionDetails.value || selectedSessionDetails.value.id !== sessionId) {
+            selectedSessionDetails.value = await SessionService.getSessionDetails(sessionId)
 
-        // Auto-set classroom from session
-        if (selectedSessionDetails.value.classroom_id) {
-            newEnrollment.value.classroom_id = selectedSessionDetails.value.classroom_id
+            // Auto-set classroom from session
+            if (selectedSessionDetails.value.classroom_id) {
+                newEnrollment.value.classroom_id = selectedSessionDetails.value.classroom_id
+            }
+        }
+
+        // Calculate and update capacity for specific date range
+        if (startDate && generateCount && selectedSessionDetails.value.day_of_week !== undefined) {
+            const endDateStr = calculateEndDate(startDate, selectedSessionDetails.value.day_of_week, Math.max(1, generateCount))
+            const maxEnrollment = await SessionService.getMaxEnrollmentInDateRange(sessionId, startDate, endDateStr)
+            selectedSessionDetails.value.current_enrollments = maxEnrollment
         }
     } catch (e) {
-        console.error('Failed to fetch session details:', e)
-        selectedSessionDetails.value = null
+        console.error('Failed to fetch session details or capacity:', e)
+    } finally {
+        isCheckingCapacity.value = false
     }
 })
 
@@ -1832,7 +1864,10 @@ async function copyToClipboard(text: string) {
                                 </div>
 
                                 <div class="rounded-lg border border-blue-200 bg-white/70 p-3 text-xs text-blue-700">
-                                    教室與班級不可在此編輯，請使用「{{ $t('student.internal_courses.transfer_btn') }}」。
+                                    {{ $t('student.internal_courses.transfer_notice', {
+                                        btn:
+                                            $t('student.internal_courses.transfer_btn')
+                                    }) }}
                                 </div>
 
                                 <div class="grid grid-cols-1 gap-3">
@@ -1916,7 +1951,8 @@ async function copyToClipboard(text: string) {
                                 <label class="block text-sm font-bold text-gray-700 mb-2">{{
                                     $t('student.internal_courses.course') }}</label>
                                 <BaseDropdown v-model="newEnrollment.course_id" :options="courseOptionsDropdown"
-                                    :placeholder="$t('student.internal_courses.select_course_option')" theme="emerald" />
+                                    :placeholder="$t('student.internal_courses.select_course_option')"
+                                    theme="emerald" />
                             </div>
 
                             <div v-if="newEnrollment.course_id"
@@ -1942,7 +1978,7 @@ async function copyToClipboard(text: string) {
                                     <BaseDropdown v-model="newEnrollment.classroom_id"
                                         :options="classroomOptionsDropdown"
                                         :placeholder="$t('student.internal_courses.classroom_none')" theme="emerald" />
-                                    <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-wider px-1">
+                                    <p class="text-[11px] font-bold text-emerald-600 uppercase tracking-wider px-1">
                                         {{ $t('student.internal_courses.classroom_search_hint') }}
                                     </p>
                                 </div>
@@ -1953,7 +1989,8 @@ async function copyToClipboard(text: string) {
                                         $t('student.internal_courses.session_select') }}</label>
                                     <BaseDropdown v-model="newEnrollment.class_session_id"
                                         :options="sessionOptionsDropdown"
-                                        :placeholder="$t('student.internal_courses.session_select_placeholder')" theme="emerald" />
+                                        :placeholder="$t('student.internal_courses.session_select_placeholder')"
+                                        theme="emerald" />
                                     <p class="text-xs font-medium text-gray-400 px-1">{{
                                         $t('student.internal_courses.session_hint') }}</p>
 
@@ -2005,19 +2042,21 @@ async function copyToClipboard(text: string) {
                                                     $t('student.internal_courses.session_capacity') }}</span>
                                                 <div class="flex items-center gap-2">
                                                     <div class="w-24 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                        <div class="h-full transition-all duration-500"
+                                                        <div class="h-full transition-all duration-1000 ease-out"
                                                             :class="isSessionFull ? 'bg-red-500' : 'bg-emerald-500'"
-                                                            :style="{ width: `${(selectedSessionDetails.current_enrollments / selectedSessionDetails.capacity) * 100}%` }">
+                                                            :style="{ width: isCheckingCapacity ? '0%' : `${(selectedSessionDetails.current_enrollments / selectedSessionDetails.capacity) * 100}%` }">
                                                         </div>
                                                     </div>
-                                                    <span class="font-black tabular-nums"
+                                                    <span v-if="isCheckingCapacity"
+                                                        class="animate-pulse text-gray-400 text-xs">...</span>
+                                                    <span v-else class="font-black tabular-nums text-xs"
                                                         :class="isSessionFull ? 'text-red-600' : 'text-emerald-700'">
                                                         {{ selectedSessionDetails.current_enrollments }}/{{
                                                             selectedSessionDetails.capacity }}
                                                     </span>
                                                 </div>
                                             </div>
-                                            <div v-if="isSessionFull"
+                                            <div v-if="!isCheckingCapacity && isSessionFull"
                                                 class="mt-1 bg-red-50 text-red-700 px-4 py-2 rounded-xl text-xs font-bold border border-red-100 animate-pulse text-center">
                                                 {{ $t('student.internal_courses.session_full') }}
                                             </div>
@@ -2046,7 +2085,7 @@ async function copyToClipboard(text: string) {
                                 <!-- 6. External Link -->
                                 <div>
                                     <label class="block text-sm font-bold text-gray-700 mb-2">{{
-                                        $t('student.internal_courses.external_link') || 'Company Report Overview URL'
+                                        $t('student.internal_courses.external_link')
                                     }}</label>
                                     <div class="relative">
                                         <input type="url" v-model="newEnrollment.external_link"
@@ -2072,7 +2111,7 @@ async function copyToClipboard(text: string) {
                                     <p class="mt-1 text-xs text-gray-400">{{
                                         $t('student.internal_courses.enrollment_report_count_hint') }}</p>
                                     <p v-if="isCreateTrialStatus" class="mt-1 text-xs text-amber-600 font-semibold">
-                                        {{ $t('student.internal_courses.status_trial') }}：固定建立 1 堂
+                                        {{ $t('student.internal_courses.status_trial_generate_hint') }}
                                     </p>
                                 </div>
                             </div>
@@ -2086,7 +2125,7 @@ async function copyToClipboard(text: string) {
                             {{ $t('common.cancel') || $t('student.cancel') }}
                         </button>
                         <button @click="enrollStudent"
-                            :disabled="isSessionFull || !newEnrollment.course_id || !newEnrollment.class_session_id || isModifying"
+                            :disabled="isCheckingCapacity || isSessionFull || !newEnrollment.course_id || !newEnrollment.class_session_id || isModifying"
                             class="px-8 py-2.5 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 hover:shadow-lg shadow-emerald-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center gap-2"
                             :title="isSessionFull ? 'This session is at full capacity' : ''">
                             <svg v-if="isModifying" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">

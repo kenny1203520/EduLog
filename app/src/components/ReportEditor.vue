@@ -1398,9 +1398,9 @@ const isSystemManagedAbsence = computed(() => {
 const getSystemManagedAbsenceLabel = () => {
     const reason = absenceReason.value?.toLowerCase() || ''
     if (reason === 'holiday') {
-        return `${t('report.editor.absence_reasons.holiday')} (系統管理)`
+        return `${t('report.editor.absence_reasons.holiday')} (${t('common.system_managed')})`
     } else if (reason === 'suspension') {
-        return `${t('report.editor.absence_reasons.suspension')} (系統管理)`
+        return `${t('report.editor.absence_reasons.suspension')} (${t('common.system_managed')})`
     }
     return absenceReason.value
 }

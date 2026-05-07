@@ -244,11 +244,8 @@ async function deleteLesson(id: string) {
 <template>
     <div class="h-[calc(100vh-8rem)] flex flex-col">
         <!-- Header -->
-        <BasePageHeader
-            :overline="t('nav.courses')"
-            :title="t('course.title')"
-            :subtitle="t('nav.description.courses')"
-        >
+        <BasePageHeader :overline="t('nav.courses')" :title="t('course.title')"
+            :subtitle="t('nav.description.courses')">
             <template #icon>
                 <div
                     class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
@@ -286,13 +283,13 @@ async function deleteLesson(id: string) {
             <div class="w-full lg:w-80 flex flex-col bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden border-r-4 border-r-emerald-500/10 transition-transform duration-300 absolute inset-0 z-10 lg:static lg:transform-none"
                 :class="selectedCourseId ? '-translate-x-full lg:translate-x-0' : 'translate-x-0'">
                 <div class="p-6 border-b border-gray-50 bg-gray-50/30">
-                    <h3 class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{ $t('course.list_title')
-                    }}</h3>
+                    <h3 class="text-s font-black text-emerald-600 uppercase tracking-widest">
+                        {{ $t('course.list_title') }}</h3>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
                     <div v-for="(group, subject) in groupedCourses" :key="subject">
                         <h4
-                            class="px-2 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            class="px-2 text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-2">
                             <span class="w-1 h-3 bg-emerald-400 rounded-full"></span>
                             {{ subject }}
                         </h4>
@@ -303,7 +300,7 @@ async function deleteLesson(id: string) {
                                     ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-100 translate-x-1'
                                     : 'hover:bg-gray-50 text-gray-700'">
                                 <div class="font-bold relative z-10">{{ course.displayName }}</div>
-                                <div class="text-[10px] opacity-70 relative z-10"
+                                <div class="text-[11px] opacity-70 relative z-10"
                                     :class="selectedCourseId === course.id ? 'text-emerald-50' : 'text-gray-400'">
                                     {{ course.stage }} · {{ course.lessons.length }} {{ $t('course.lessons_count_short')
                                     }}
@@ -369,11 +366,11 @@ async function deleteLesson(id: string) {
                             <div class="flex-1 min-w-0">
                                 <div class="flex items-center gap-3 mb-2 flex-wrap">
                                     <span
-                                        class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100">
+                                        class="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[12px] font-black uppercase tracking-widest border border-emerald-100">
                                         {{ selectedCourse.subject }}
                                     </span>
                                     <span
-                                        class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                                        class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[12px] font-black uppercase tracking-widest border border-blue-100">
                                         {{ selectedCourse.stage }}
                                     </span>
                                 </div>

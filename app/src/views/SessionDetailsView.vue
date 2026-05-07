@@ -942,7 +942,7 @@ function getAttendancePreviewNames(): Record<'present_list' | 'absent_list' | 'p
     if (grouped.present_list.length === 0 && grouped.absent_list.length === 0 && grouped.pending_list.length === 0) {
         grouped.present_list = [...fallback.slice(0, 2)]
         grouped.absent_list = [fallback[2]]
-        grouped.pending_list = ['待點名學生']
+        grouped.pending_list = [t('classroom.pending_list')]
     }
 
     return grouped
@@ -1747,10 +1747,9 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         v-if="todayOccurrence">
                         <div class="flex items-center justify-between">
                             <div>
-                                <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') ||
-                                    '教師出席紀錄' }}</h3>
+                                <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') }}</h3>
                                 <p class="text-xs font-bold text-gray-400">
-                                    {{ $t('classroom.teacher_attendance_subtitle') || '註記您的出缺席狀態' }}
+                                    {{ $t('classroom.teacher_attendance_subtitle') }}
                                 </p>
                             </div>
 
@@ -1778,14 +1777,13 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     <div class="font-bold text-gray-900">{{ teacher.name }}</div>
                                     <div class="text-[10px] uppercase font-black tracking-widest"
                                         :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'text-emerald-600' : 'text-gray-400'">
-                                        {{ isTeacherPresent(teacher.id, teacher.user_id) ? ($t('attendance.present') ||
-                                            '已出席') : ($t('attendance.absent') || '未出席') }}
+                                        {{ isTeacherPresent(teacher.id, teacher.user_id) ? $t('attendance.present') : $t('attendance.absent') }}
                                     </div>
                                 </div>
 
                                 <label class="relative inline-flex items-center cursor-pointer ml-2"
                                     :class="{ 'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id || isOccurrenceInHoliday }"
-                                    :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : (auth.user?.id !== teacher.user_id ? '只能更改自己的出缺席' : '')">
+                                    :title="isOccurrenceInHoliday ? $t('report.error.cannot_set_teacher_present_during_holiday') : (auth.user?.id !== teacher.user_id ? $t('classroom.teacher_attendance_only_self') : '')">
                                     <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)"
                                         :disabled="auth.user?.id !== teacher.user_id || isOccurrenceInHoliday"
                                         @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
@@ -1798,7 +1796,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <div v-else
                             class="text-center py-6 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
                             <p class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
-                                $t('classroom.no_teachers_assigned') || '尚未指派教師' }}</p>
+                                $t('classroom.no_teachers_assigned') }}</p>
                         </div>
                     </div>
 
@@ -2645,9 +2643,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     <!-- Header -->
                     <div class="p-8 border-b border-gray-50 flex items-center justify-between shrink-0">
                         <div>
-                            <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{
-                                $t('classroom.manage_teachers') ||
-                                '管理教師' }}</h2>
+                            <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('classroom.manage_teachers') }}</h2>
                             <p class="text-sm font-bold text-gray-400 mt-1">{{ displayedOccurrenceDate }}</p>
                         </div>
                         <button @click="showTeacherEditModal = false"

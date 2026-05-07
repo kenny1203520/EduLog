@@ -149,8 +149,10 @@
         "trial_to_active_title": "試聽轉為進行中",
         "trial_to_active_message": "請設定此 enrollment 的報告總份數（包含試聽期間已存在的報告）。",
         "target_total_reports": "報告總份數",
-        "target_total_reports_hint": "系統只會補足缺少的份數，既有試聽報告會保留。",
-        "trial_to_active_confirm": "確認轉為進行中"
+        "target_total_reports_hint": "系統僅會補足差額，並保留現有試聽紀錄。",
+        "trial_to_active_confirm": "確認轉換",
+        "transfer_notice": "教室與班級不可在此編輯，請使用「{btn}」。",
+        "status_trial_generate_hint": "試聽：固定建立 1 堂"
     },
     "credentials": {
         "title": "帳戶與密碼",
