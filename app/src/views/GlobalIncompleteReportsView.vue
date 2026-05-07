@@ -83,7 +83,7 @@
                             class="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-100 rounded-xl text-sm font-bold text-gray-700 placeholder:text-gray-300 outline-none focus:ring-4 focus:ring-emerald-500/5 focus:border-emerald-200 transition-all shadow-sm"
                             :placeholder="t('report.search_placeholder')" />
                     </div>
-                    
+
                     <!-- Refresh Button -->
                     <button @click="loadReports(false)"
                         class="shrink-0 p-2.5 rounded-xl bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-emerald-600 hover:border-emerald-100 transition-all active:scale-95"
@@ -258,14 +258,14 @@
                                         {{ selectedReport.studentName }}
                                     </h3>
                                     <router-link v-if="selectedReport.fullStudent?.id"
-                                        :to="`/dashboard/students/${selectedReport.fullStudent.id}`" target="_blank"
+                                        :to="`/dashboard/student/${selectedReport.fullStudent.id}`" target="_blank"
                                         class="w-10 h-10 flex items-center justify-center text-emerald-600 bg-emerald-50 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shrink-0 shadow-sm border border-emerald-100/50 group/link"
                                         :title="t('report.view_student_profile')">
                                         <svg xmlns="http://www.w3.org/2000/svg"
                                             class="h-4 w-4 group-hover/link:scale-110 transition-transform" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7-7h14a7 7 0 00-7-7z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
                                         </svg>
                                     </router-link>
                                 </div>
