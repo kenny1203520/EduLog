@@ -72,7 +72,7 @@ async function handleLogin() {
 
             <h1 class="text-4xl font-black text-gray-900 mb-2 tracking-tight text-center">{{ $t('auth.login_title') }}
             </h1>
-            <p class="text-gray-500 mb-10 font-medium italic">Welcome back to EduLog</p>
+            <p class="text-gray-500 mb-10 font-medium italic">{{ $t('auth.welcome_subtitle') }}</p>
 
             <form @submit.prevent="handleLogin" class="space-y-6 w-full">
                 <div class="space-y-2">
