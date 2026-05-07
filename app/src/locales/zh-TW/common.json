@@ -71,5 +71,10 @@
     "font_size": "字體大小",
     "show_more": "顯示更多",
     "show_less": "減少顯示",
-    "system_managed": "系統管理"
+    "system_managed": "系統管理",
+    "language": "語言",
+    "languages": {
+        "zh-TW": "繁體中文",
+        "en": "English"
+    }
 }

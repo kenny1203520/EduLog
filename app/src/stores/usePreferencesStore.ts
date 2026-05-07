@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
+import i18n from '@/i18n'
 
 export const usePreferencesStore = defineStore('preferences', () => {
     const globalFontScale = ref(Number(localStorage.getItem('globalFontScale')) || 100)
     const editorFontScale = ref(Number(localStorage.getItem('editorFontScale')) || 100)
+    const locale = ref(localStorage.getItem('locale') || 'zh-TW')
 
     const MIN_SCALE = 70
     const MAX_SCALE = 200
@@ -20,6 +22,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
     watch(editorFontScale, (val) => {
         localStorage.setItem('editorFontScale', val.toString())
     })
+    
+    watch(locale, (val) => {
+        localStorage.setItem('locale', val)
+        // @ts-ignore
+        i18n.global.locale.value = val
+    }, { immediate: true })
 
     function adjustGlobalScale(delta: number) {
         const newVal = Number(globalFontScale.value) + delta
@@ -40,6 +48,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         editorFontScale,
         adjustGlobalScale,
         adjustEditorScale,
+        locale,
         STEP
     }
 })

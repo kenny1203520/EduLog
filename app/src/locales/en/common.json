@@ -71,5 +71,10 @@
     "font_size": "Font Size",
     "show_more": "Show More",
     "show_less": "Show Less",
-    "system_managed": "System Managed"
+    "system_managed": "System Managed",
+    "language": "Language",
+    "languages": {
+        "zh-TW": "繁體中文",
+        "en": "English"
+    }
 }
