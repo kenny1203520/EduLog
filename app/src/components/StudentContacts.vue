@@ -1,0 +1,272 @@
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useToast } from 'vue-toastification'
+import { StudentService } from '@/services/student/StudentService'
+import { useStudentStore } from '@/stores/useStudentStore'
+import { useEmailValidation } from '@/composables/useEmailValidation'
+import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
+import ConfirmModal from '@/components/common/ConfirmModal.vue'
+
+const props = defineProps<{
+    studentId: string
+    contacts: any[]
+}>()
+
+const { t } = useI18n()
+const toast = useToast()
+const studentStore = useStudentStore()
+const { validateEmail, getEmailError } = useEmailValidation()
+
+const isModifying = ref(false)
+const newContact = ref({ name: '', relation: '', phone: '', email: '' })
+const contactEmailTouched = ref(false)
+const contactEmailError = computed(() => contactEmailTouched.value ? getEmailError(newContact.value.email) : null)
+
+const editingContactId = ref<string | null>(null)
+const editContactForm = ref({ name: '', relation: '', phone: '', email: '' })
+
+// Confirm Modal state for deletion
+const showDeleteConfirm = ref(false)
+const contactToDelete = ref<string | null>(null)
+
+async function addContact() {
+    if (!newContact.value.name) return
+
+    if (newContact.value.email && !validateEmail(newContact.value.email)) {
+        contactEmailTouched.value = true
+        toast.error(t('student.errors.email_invalid'))
+        return
+    }
+
+    try {
+        isModifying.value = true
+        await StudentService.addContact({ ...newContact.value, student_id: props.studentId })
+        newContact.value = { name: '', relation: '', phone: '', email: '' }
+        contactEmailTouched.value = false
+        await studentStore.loadStudent(props.studentId)
+        toast.success(t('student.contacts.add_btn') + ' ' + t('common.success'))
+    } catch (e: any) {
+        console.error(e)
+        toast.error(e.message || t('student.errors.add_contact_failed'))
+    } finally {
+        isModifying.value = false
+    }
+}
+
+function startEditContact(contact: any) {
+    editingContactId.value = contact.id
+    editContactForm.value = { ...contact }
+}
+
+function cancelEditContact() {
+    editingContactId.value = null
+    editContactForm.value = { name: '', relation: '', phone: '', email: '' }
+}
+
+async function saveContact() {
+    if (!editingContactId.value) return
+    try {
+        isModifying.value = true
+        await StudentService.updateContact(editingContactId.value, editContactForm.value)
+        cancelEditContact()
+        await studentStore.loadStudent(props.studentId)
+        toast.success(t('common.save_success'))
+    } catch (e) {
+        console.error(e)
+        toast.error(t('student.errors.update_contact_failed'))
+    } finally {
+        isModifying.value = false
+    }
+}
+
+function confirmDeleteContact(id: string) {
+    contactToDelete.value = id
+    showDeleteConfirm.value = true
+}
+
+async function handleDeleteContact() {
+    if (!contactToDelete.value) return
+    try {
+        isModifying.value = true
+        await StudentService.deleteContact(contactToDelete.value)
+        await studentStore.loadStudent(props.studentId)
+        toast.success(t('common.deleted'))
+    } catch (e: any) {
+        console.error(e)
+        toast.error(e.message || t('student.errors.delete_contact_failed'))
+    } finally {
+        isModifying.value = false
+        showDeleteConfirm.value = false
+        contactToDelete.value = null
+    }
+}
+
+async function copyToClipboard(text: string) {
+    if (!text) return
+    const success = await copyToClipboardUtil(text)
+    if (success) {
+        toast.success(t('common.copy_success'))
+    } else {
+        toast.error(t('common.copy_error', 'Failed to copy to clipboard'))
+    }
+}
+</script>
+
+<template>
+    <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-fit transition-all hover:shadow-md">
+        <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+            <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                </svg>
+            </div>
+            {{ $t('student.sections.contacts') }}
+        </h2>
+
+        <ul class="space-y-4 mb-8">
+            <li v-for="c in contacts" :key="c.id"
+                class="bg-gray-50 p-4 rounded-xl border border-transparent hover:border-gray-200 transition-colors">
+                <div v-if="editingContactId !== c.id" class="flex justify-between items-start">
+                    <div>
+                        <div class="font-bold text-gray-800 text-lg flex items-center gap-2">
+                            {{ c.name }}
+                            <span
+                                class="text-xs text-gray-500 font-medium bg-white px-2 py-0.5 rounded-full border border-gray-100">{{
+                                    c.relation }}</span>
+                        </div>
+                        <div class="text-sm text-gray-600 mt-1 flex items-center gap-2 group">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-3.5 h-3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
+                            </svg>
+                            {{ c.phone }}
+                            <button v-if="c.phone" @click="copyToClipboard(c.phone)"
+                                class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-1 cursor-pointer"
+                                title="Copy">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="text-sm text-gray-600 flex items-center gap-2 group">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-3.5 h-3.5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+                            </svg>
+                            {{ c.email }}
+                            <button v-if="c.email" @click="copyToClipboard(c.email)"
+                                class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-1 cursor-pointer"
+                                title="Copy">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="flex space-x-1">
+                        <button @click="startEditContact(c)"
+                            class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                            </svg>
+                        </button>
+                        <button @click="confirmDeleteContact(c.id!)"
+                            class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Edit Mode -->
+                <div v-else class="space-y-3">
+                    <div class="grid grid-cols-2 gap-3">
+                        <input v-model="editContactForm.name" :placeholder="$t('student.contacts.name')"
+                            class="border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                        <input v-model="editContactForm.relation" :placeholder="$t('student.contacts.relation')"
+                            class="border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                        <input v-model="editContactForm.phone" :placeholder="$t('student.contacts.phone')"
+                            class="border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                        <input v-model="editContactForm.email" :placeholder="$t('student.contacts.email')"
+                            class="border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                    </div>
+                    <div class="flex justify-end space-x-2 pt-2">
+                        <button @click="cancelEditContact"
+                            class="text-gray-500 text-sm hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer">{{
+                                $t('student.cancel') }}</button>
+                        <button @click="saveContact" :disabled="isModifying"
+                            class="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                            <svg v-if="isModifying" class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
+                            </svg>
+                            {{ $t('student.save_details') }}
+                        </button>
+                    </div>
+                </div>
+            </li>
+        </ul>
+
+        <div class="border-t border-gray-100 pt-6">
+            <h3 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider flex items-center gap-2">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                {{ $t('student.contacts.add_title') }}
+            </h3>
+            <div
+                class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <input v-model="newContact.name" :placeholder="$t('student.contacts.name')"
+                        class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <input v-model="newContact.relation" :placeholder="$t('student.contacts.relation')"
+                        class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <input v-model="newContact.phone" :placeholder="$t('student.contacts.phone')"
+                        class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                    <div class="relative">
+                        <input v-model="newContact.email" type="email" @blur="contactEmailTouched = true"
+                            :placeholder="$t('student.contacts.email')"
+                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                            :class="{ 'border-red-500 focus:ring-red-500': contactEmailError }">
+                        <p v-if="contactEmailError" class="text-xs text-red-500 mt-1">{{ contactEmailError }}
+                        </p>
+                    </div>
+                </div>
+                <button @click="addContact" :disabled="isModifying"
+                    class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                        </path>
+                    </svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                        stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    {{ $t('student.contacts.add_btn') }}
+                </button>
+            </div>
+        </div>
+
+        <ConfirmModal :is-open="showDeleteConfirm" :title="$t('student.contacts.delete')"
+            :message="$t('student.contacts.confirm_delete')" :confirm-text="$t('common.delete')" :is-dangerous="true"
+            :is-loading="isModifying" @close="showDeleteConfirm = false" @confirm="handleDeleteContact" />
+    </section>
+</template>

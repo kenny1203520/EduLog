@@ -1,3 +1,5 @@
+import { Enrollment, type EnrollmentDTO } from './Enrollment'
+
 export interface StudentContactDTO {
   id?: string
   name: string
@@ -49,6 +51,7 @@ export interface StudentDTO {
   student_contacts?: StudentContactDTO[]
   student_schools?: StudentSchoolDTO[]
   student_credentials?: StudentCredentialDTO[]
+  enrollments?: EnrollmentDTO[]
 }
 
 export class Student {
@@ -69,6 +72,7 @@ export class Student {
   public contacts: StudentContactDTO[]
   public schools: StudentSchoolDTO[]
   public credentials: StudentCredentialDTO[]
+  public enrollments: Enrollment[]
 
   constructor(dto: StudentDTO) {
     this.id = dto.id
@@ -94,6 +98,7 @@ export class Student {
       return 0
     })
     this.credentials = dto.student_credentials || []
+    this.enrollments = (dto.enrollments || []).map(e => new Enrollment(e))
   }
 
   /**

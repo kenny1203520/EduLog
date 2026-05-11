@@ -1,5 +1,10 @@
 {
     "add_title": "新增學生",
+    "enroll_btn": "選修課程",
+    "profile": "學生個人檔案",
+    "profile_subtitle": "管理學生基本資料與修課紀錄",
+    "not_found": "找不到該學生",
+    "not_found_subtitle": "學生檔案可能已被移除或移動。",
     "name": "學生姓名",
     "grade": "年級 / 班級",
     "current_school": "當前學校",
@@ -18,7 +23,8 @@
     "save_details": "儲存資料",
     "required": "必填",
     "delete": "刪除學生",
-    "delete_title": "刪除學生",
+    "delete_confirm_title": "刪除學生",
+    "delete_confirm_message": "確定要刪除這位學生嗎？此動作無法復原！",
     "confirm_delete_student": "確定要刪除這位學生嗎？此動作無法復原！",
     "saving": "儲存中...",
     "loading": "載入學生資料中...",
@@ -42,6 +48,7 @@
         "phone": "電話",
         "email": "Email",
         "add_btn": "新增聯絡人",
+        "delete": "刪除聯絡人",
         "confirm_delete": "確定要刪除此聯絡人嗎？",
         "delete_confirm": "確定要刪除這位聯絡人嗎？"
     },
@@ -67,8 +74,12 @@
         "end_date": "結束日期",
         "present": "現在",
         "add_btn": "新增學校經歷",
+        "delete": "刪除學校記錄",
         "confirm_delete": "確定要刪除此學校經歷嗎？",
         "delete_confirm": "確定要刪除這筆學校記錄嗎？",
+        "add_failed": "新增學校經歷失敗",
+        "update_failed": "更新學校經歷失敗",
+        "delete_failed": "刪除學校經歷失敗",
         "senior_high": "高中",
         "junior_high": "國中",
         "elementary": "國小",
@@ -81,6 +92,7 @@
         "status_active": "在學中",
         "status_inactive": "非在學",
         "grade_all": "所有年級",
+        "required_fields": "部分欄位為必填",
         "add_student": "新增學員",
         "total_students": "學員總數",
         "no_students": "找不到符合搜尋條件的學生。",
@@ -154,6 +166,35 @@
         "transfer_notice": "教室與班級不可在此編輯，請使用「{btn}」。",
         "status_trial_generate_hint": "試聽：固定建立 1 堂"
     },
+    "enrollment_delete_title": "刪除報名記錄",
+    "enrollment_delete_message": "確定要刪除這筆報名記錄嗎？這將會從該班級移除學生。",
+    "enroll_modal": {
+        "title": "學生報名",
+        "subtitle": "為學生註冊新的課程時段",
+        "course": "選擇課程",
+        "classroom": "教室",
+        "capacity": "班級人數",
+        "type": "報名類型",
+        "type_regular": "正規",
+        "type_trial": "試聽",
+        "start_date": "開始日期",
+        "generate_count": "預計上課次數",
+        "full_warning": "所選區間已滿額"
+    },
+    "transfer_modal": {
+        "title": "班級調換",
+        "subtitle": "將學生移動到不同的班級時段",
+        "to_classroom": "目標班級時段",
+        "effective_date": "生效日期",
+        "note": "系統將會建立一個新的報名記錄，並從生效日期開始在目標班級產生課堂紀錄。"
+    },
+    "activate_trial_modal": {
+        "title": "轉為正式學員",
+        "subtitle": "將試聽狀態轉換為正式報名",
+        "to_classroom": "目標班級時段",
+        "effective_date": "生效日期",
+        "note": "報名狀態將更新為「正規」，並可分配到新的班級時段。"
+    },
     "credentials": {
         "title": "帳戶與密碼",
         "platform": "平台",
@@ -163,6 +204,7 @@
         "platform_name": "平台名稱",
         "add_title": "新增平台帳號",
         "add_btn": "新增帳號",
+        "delete": "刪除帳號密碼",
         "confirm_delete": "確定要刪除此帳號嗎？",
         "platforms": {
             "Orange Apple": "橘子蘋果學苑",
@@ -192,5 +234,20 @@
         "active": "進行中",
         "end_now": "立即結束",
         "no_records": "尚無停課紀錄"
+    },
+    "errors": {
+        "email_invalid": "請輸入有效的電子郵件地址",
+        "add_contact_failed": "新增聯絡人失敗",
+        "update_contact_failed": "更新聯絡人失敗",
+        "delete_contact_failed": "刪除聯絡人失敗",
+        "add_credential_failed": "新增帳號失敗",
+        "update_credential_failed": "更新帳號失敗",
+        "delete_credential_failed": "刪除帳號失敗",
+        "save_details_failed": "儲存詳細資料失敗",
+        "delete_student_failed": "刪除學生失敗",
+        "update_enrollment_failed": "更新報名記錄失敗",
+        "delete_enrollment_failed": "刪除報名記錄失敗",
+        "platform_required": "平台、使用者名稱與密碼皆為必填",
+        "session_full": "所選時段在該區間已滿額"
     }
 }

@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<{
     maxHeightClass?: string
     disabled?: boolean
 }>(), {
-    placeholder: 'Select option',
+    placeholder: '',
     theme: 'indigo',
     align: 'left',
     widthClass: 'w-full',
@@ -45,7 +45,7 @@ function updatePosition() {
             top: isTop ? 'auto' : `${rect.bottom + 8}px`,
             bottom: isTop ? `${window.innerHeight - rect.top + 8}px` : 'auto',
             left: `${rect.left}px`,
-            width: `${rect.width}px`,
+            minWidth: `${Math.max(rect.width, 160)}px`,
             zIndex: '9999'
         }
     }
@@ -134,7 +134,7 @@ onUnmounted(() => {
             class="w-full flex items-center justify-between gap-2 text-xs font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
             :class="[themeClasses.ring, isOpen ? 'ring-4' : '']">
             <span class="truncate" :class="modelValue !== '' && modelValue !== null && !disabled ? themeClasses.text : 'text-gray-400'">
-                {{ selectedOption ? selectedOption.label : placeholder }}
+                {{ selectedOption ? selectedOption.label : (placeholder || $t('common.select_placeholder')) }}
             </span>
             <svg xmlns="http://www.w3.org/2000/svg" 
                 class="h-3.5 w-3.5 transition-transform duration-300 text-gray-400" 

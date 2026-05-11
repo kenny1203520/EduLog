@@ -15,8 +15,7 @@ export class StudentQueryService {
 
         let query = supabase
             .from('students')
-            .select('*, student_contacts(*), student_schools(*), student_credentials(*)', { count: 'exact' })
-            .order('name')
+            .select('*, student_contacts(*), student_schools(*), student_credentials(*), enrollments(*, classrooms(name), courses(subject, stage, display_name), class_sessions(*))', { count: 'exact' })            .order('name')
 
         if (search) {
             query = query.ilike('name', `%${search}%`)
@@ -38,7 +37,7 @@ export class StudentQueryService {
     static async getById(id: string): Promise<Student | null> {
         const { data, error } = await supabase
             .from('students')
-            .select('*, student_contacts(*), student_schools(*), student_credentials(*)')
+            .select('*, student_contacts(*), student_schools(*), student_credentials(*), enrollments(*, classrooms(name), courses(subject, stage, display_name), class_sessions(*))')
             .eq('id', id)
             .single()
 
