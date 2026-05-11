@@ -57,7 +57,7 @@ async function submitActivateTrial() {
     try {
         isSubmitting.value = true
         await EnrollmentService.update(props.fromEnrollmentId, {
-            status: 'active',
+            status: 'regular',
             class_session_id: activateTrialForm.value.class_session_id || undefined,
             start_date: activateTrialForm.value.effective_date
         })

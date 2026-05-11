@@ -120,7 +120,7 @@
         "edit_enrollment": "編輯課程",
         "delete_enrollment": "刪除課程",
         "edit_enrollment_title": "編輯課程註冊",
-        "status_active": "進行中",
+        "status_regular": "正式",
         "status_trial": "試聽",
         "status_completed": "已完成",
         "status_dropped": "已退選",
@@ -158,11 +158,11 @@
         "transfer_target_date": "補課日期",
         "enrollment_report_count": "報名幾節課",
         "enrollment_report_count_hint": "預設為該課程課次數量，可自行調整要先建立的課堂紀錄份數。",
-        "trial_to_active_title": "試聽轉為進行中",
-        "trial_to_active_message": "請設定此 enrollment 的報告總份數（包含試聽期間已存在的報告）。",
+        "trial_to_regular_title": "試聽轉為正式",
+        "trial_to_regular_message": "請設定此報名的報告總份數（包含試聽期間已存在的報告）。",
         "target_total_reports": "報告總份數",
         "target_total_reports_hint": "系統僅會補足差額，並保留現有試聽紀錄。",
-        "trial_to_active_confirm": "確認轉換",
+        "trial_to_regular_confirm": "確認轉換",
         "transfer_notice": "教室與班級不可在此編輯，請使用「{btn}」。",
         "status_trial_generate_hint": "試聽：固定建立 1 堂"
     },
@@ -175,7 +175,7 @@
         "classroom": "教室",
         "capacity": "班級人數",
         "type": "報名類型",
-        "type_regular": "進行中",
+        "type_regular": "正式",
         "type_trial": "試聽",
         "start_date": "開始日期",
         "generate_count": "預計上課次數",
@@ -193,7 +193,7 @@
         "subtitle": "將試聽狀態轉換為正式報名",
         "to_classroom": "目標班級時段",
         "effective_date": "生效日期",
-        "note": "報名狀態將更新為「正規」，並可分配到新的班級時段。"
+        "note": "報名狀態將更新為「正式」，並可分配到新的班級時段。"
     },
     "credentials": {
         "title": "帳戶與密碼",

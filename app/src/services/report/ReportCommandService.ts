@@ -382,7 +382,7 @@ export class ReportCommandService {
             .from('enrollments')
             .select('id')
             .eq('class_session_id', occurrence.class_session_id)
-            .eq('status', 'active')
+            .eq('status', 'regular')
 
         if (enrollError) throw new Error(`Failed to fetch enrollments: ${enrollError.message}`)
 

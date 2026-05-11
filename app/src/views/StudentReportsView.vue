@@ -322,7 +322,7 @@
                             <div>
                                 <p class="text-xs text-gray-500">{{ $t('student.internal_courses.status') }}</p>
                                 <p class="text-sm font-bold text-gray-800">{{ $t('student.internal_courses.status_' +
-                                    (enrollmentInfo.status || 'active')) }}</p>
+                                    (enrollmentInfo.status || 'regular')) }}</p>
                             </div>
                         </div>
                     </div>
@@ -914,7 +914,7 @@ async function loadOccurrences() {
             externalLink: enrollment.externalLink,
             studentId: enrollment.studentId
         }
-        isEnrollmentActive.value = enrollment.status === 'active'
+        isEnrollmentActive.value = enrollment.status === 'regular'
 
         // 2. Load lessons for this course (needed for editor)
         if (enrollment.courseId) {
@@ -981,7 +981,7 @@ async function loadOccurrences() {
 
             // 4a. Auto-Repair Schedule (Gap Filling)
             // If enrollment is active but schedule ran out (e.g. paused for months), generate it now.
-            if (enrollment.status === 'active' && enrollment.classSessionId) {
+            if (enrollment.status === 'regular' && enrollment.classSessionId) {
                 const currentSessionOccs = futureOccurrences.filter(o => o.classSessionId === enrollment.classSessionId)
 
                 // Find latest date in the window

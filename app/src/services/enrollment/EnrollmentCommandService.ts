@@ -27,7 +27,7 @@ export class EnrollmentCommandService {
             .insert({
                 ...enrollmentData,
                 user_id: user.id,
-                status: enrollmentData.status || 'active'
+                status: enrollmentData.status || 'regular'
             })
             .select(`
                 *,
@@ -98,8 +98,8 @@ export class EnrollmentCommandService {
         const nextStatus = updated.status
 
         if (
-            previousStatus !== 'active' &&
-            nextStatus === 'active' &&
+            previousStatus !== 'regular' &&
+            nextStatus === 'regular' &&
             updated.id &&
             updated.class_session_id &&
             updated.course_id
@@ -166,8 +166,8 @@ export class EnrollmentCommandService {
         }
 
         const todayStr = EnrollmentSupportService.normalizeDateOnly(new Date())
-        if (enrollment.status !== 'active' && normalizedTargetDate >= todayStr) {
-            throw new Error('Only active enrollments can join a future class.')
+        if (enrollment.status !== 'regular' && normalizedTargetDate >= todayStr) {
+            throw new Error('Only regular enrollments can join a future class.')
         }
 
         const { data: sessionInfo, error: sessionInfoError } = await supabase

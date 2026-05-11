@@ -5,7 +5,7 @@ export interface EnrollmentDTO {
     course_id: string
     classroom_id?: string
     class_session_id?: string
-    status: 'active' | 'completed' | 'dropped' | 'trial'
+    status: 'regular' | 'completed' | 'dropped' | 'trial'
     start_date?: string
     lesson_number?: number
     external_link?: string
@@ -62,7 +62,7 @@ export class Enrollment {
         this.courseId = data.course_id
         this.classroomId = data.classroom_id
         this.classSessionId = data.class_session_id
-        this.status = data.status || 'active'
+        this.status = data.status || 'regular'
         this.startDate = data.start_date
         this.lessonNumber = data.lesson_number
         this.externalLink = data.external_link

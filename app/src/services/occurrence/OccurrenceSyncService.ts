@@ -108,7 +108,7 @@ export class OccurrenceSyncService {
             .from('enrollments')
             .select('*', { count: 'exact', head: true })
             .eq('class_session_id', sessionId)
-            .eq('status', 'active')
+            .in('status', ['regular', 'trial'])
 
         if (enrollmentCount && enrollmentCount > 0) {
             const startDate = new Date()

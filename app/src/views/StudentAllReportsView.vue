@@ -62,9 +62,9 @@
                                 {{ enrollment.classroomName }}
                             </span>
                             <span class="capitalize font-semibold" :class="{
-                                'text-emerald-600': enrollment.status === 'active',
+                                'text-emerald-600': enrollment.status === 'regular',
                                 'text-amber-600': enrollment.status === 'trial',
-                                'text-gray-400': enrollment.status !== 'active' && enrollment.status !== 'trial'
+                                'text-gray-400': enrollment.status !== 'regular' && enrollment.status !== 'trial'
                             }">
                                 {{ $t('student.internal_courses.status_' + enrollment.status) }}
                             </span>

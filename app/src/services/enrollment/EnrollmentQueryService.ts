@@ -50,7 +50,7 @@ export class EnrollmentQueryService {
                 class_sessions (id, name, day_of_week, start_time, end_time),
                 students (name, email)
             `)
-            .eq('status', 'active')
+            .in('status', ['regular', 'trial'])
             .order('created_at', { ascending: false })
 
         if (error) throw new Error(`Failed to fetch active enrollments: ${error.message}`)

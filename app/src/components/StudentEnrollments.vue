@@ -225,7 +225,7 @@ async function refreshData() {
                                     class="px-4 py-2 bg-white border border-amber-100 text-amber-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("student.internal_courses.transfer_btn") }}
                                 </button>
-                                <button v-if="e.enrollment_type === 'trial'" @click="openActivateTrial(e.id)"
+                                <button v-if="e.status === 'trial'" @click="openActivateTrial(e.id)"
                                     class="px-4 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("student.activate_trial_btn") }}
                                 </button>
@@ -243,7 +243,7 @@ async function refreshData() {
                             <select v-model="editEnrollmentForm.enrollment_type"
                                 class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
                                 <option value="regular">
-                                    {{ $t("student.internal_courses.status_active") }}
+                                    {{ $t("student.internal_courses.status_regular") }}
                                 </option>
                                 <option value="trial">
                                     {{ $t("student.internal_courses.status_trial") }}

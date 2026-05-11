@@ -487,7 +487,7 @@ const makeupEnrollmentOptions = computed(() => {
     return [
         { label: t('classroom.please_select_student_enrollment'), value: null },
         ...studentEnrollments.map(e => ({
-            label: `${e.courseDisplayName || (e.courseSubject + ' ' + (e.courseStage || ''))} (${e.status})`,
+            label: `${e.courseDisplayName || (e.courseSubject + ' ' + (e.courseStage || ''))} (${t(`student.internal_courses.status_${e.status}`)})`,
             value: e.id || ''
         }))
     ]
@@ -1350,7 +1350,7 @@ async function submitAddStudentToClass() {
         return
     }
 
-    if (selected.status !== 'active' && normalizedJoinDate >= DateUtils.formatLocalDate(new Date())) {
+    if (selected.status !== 'regular' && normalizedJoinDate >= DateUtils.formatLocalDate(new Date())) {
         toast.error(t('classroom.add_student_active_only_for_future'))
         return
     }
@@ -1988,7 +1988,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                         </span>
                                         <span
                                             class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
-                                            :class="e.status === 'active'
+                                            :class="e.status === 'regular'
                                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
                                                 : (e.status === 'trial'
                                                     ? 'bg-amber-50 text-amber-700 border-amber-100'
@@ -2248,7 +2248,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                             </span>
                                             <span
                                                 class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border whitespace-nowrap inline-block lg:inline"
-                                                :class="e.status === 'active'
+                                                :class="e.status === 'regular'
                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
                                                     : (e.status === 'trial'
                                                         ? 'bg-amber-50 text-amber-700 border-amber-100'
