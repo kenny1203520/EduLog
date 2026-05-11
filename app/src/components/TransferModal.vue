@@ -112,10 +112,10 @@ async function submitTransfer() {
                         </svg>
                     </div>
                     <div>
-                        <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{
+                        <h2 class="text-3xl font-black text-gray-900 tracking-tight">{{
                             $t('student.transfer_modal.title')
                         }}</h2>
-                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">{{
+                        <p class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-1">{{
                             $t('student.transfer_modal.subtitle') }}</p>
                     </div>
                 </div>
@@ -133,7 +133,7 @@ async function submitTransfer() {
             <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
                 <div class="space-y-6">
                     <div class="space-y-4">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.transfer_modal.to_classroom') }}</label>
                         <SearchableSelect v-model="transferForm.to_session_id" :options="sessionOptions"
                             :placeholder="$t('common.select_placeholder')" />
@@ -149,15 +149,15 @@ async function submitTransfer() {
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.transfer_modal.effective_date') }}</label>
                         <input type="date" v-model="transferForm.effective_date"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 transition-all font-bold text-gray-700 shadow-sm">
+                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 transition-all text-lg font-bold text-gray-700 shadow-sm">
                     </div>
                 </div>
 
                 <div class="bg-amber-50 rounded-2xl p-4 border border-amber-100">
-                    <p class="text-[10px] font-bold text-amber-800 leading-relaxed uppercase tracking-wider">
+                    <p class="text-sm font-bold text-amber-800 leading-relaxed uppercase tracking-wider">
                         {{ $t('student.transfer_modal.note') }}
                     </p>
                 </div>
@@ -166,7 +166,7 @@ async function submitTransfer() {
             <!-- Footer -->
             <div class="p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex gap-4">
                 <button @click="emit('close')"
-                    class="flex-1 px-8 py-4 text-sm font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
+                    class="flex-1 px-8 py-4 text-base font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
                     {{ $t('common.cancel') }}
                 </button>
                 <button @click="submitTransfer()" :disabled="isSubmitting"

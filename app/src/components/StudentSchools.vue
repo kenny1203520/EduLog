@@ -150,8 +150,8 @@ async function copyToClipboard(text: string) {
 </script>
 
 <template>
-    <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-fit transition-all hover:shadow-md">
-        <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+    <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit transition-all hover:shadow-md">
+        <h2 class="text-2xl font-bold mb-8 flex items-center gap-3 text-gray-800">
             <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-6 h-6">
@@ -168,13 +168,13 @@ async function copyToClipboard(text: string) {
                 <div v-if="editingSchoolId !== s.id" class="flex justify-between items-start">
                     <div class="space-y-2">
                         <div>
-                            <div class="font-bold text-gray-800 text-lg">{{ s.name }}</div>
+                            <div class="font-bold text-gray-800 text-xl">{{ s.name }}</div>
 
                             <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
                                 <div v-if="s.school_student_id"
-                                    class="flex items-center gap-2 text-sm text-gray-600 group">
+                                    class="flex items-center gap-2 text-base font-bold text-gray-800 group">
                                     <span
-                                        class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
+                                        class="text-sm font-black text-gray-400 uppercase tracking-widest bg-gray-100 px-2 py-1 rounded border border-gray-200 inline-block mb-1">{{
                                             $t('student.schools.school_student_id') }}</span>
                                     <span class="font-mono text-gray-800 font-medium">{{ s.school_student_id
                                     }}</span>
@@ -190,31 +190,36 @@ async function copyToClipboard(text: string) {
                                 </div>
 
                                 <div v-if="s.status === 'enrolled' && s.grade"
-                                    class="flex items-center gap-2 text-sm text-gray-600">
+                                    class="flex items-center gap-2 text-base font-bold text-gray-800">
                                     <span
-                                        class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
+                                        class="text-sm font-black text-gray-400 uppercase tracking-widest bg-gray-100 px-2 py-1 rounded border border-gray-200 inline-block mb-1">{{
                                             $t('student.schools.grade') }}</span>
                                     <span class="font-medium text-gray-800">{{ s.grade }}</span>
                                 </div>
 
                                 <div v-if="s.status === 'enrolled' && s.class"
-                                    class="flex items-center gap-2 text-sm text-gray-600">
+                                    class="flex items-center gap-2 text-base font-bold text-gray-800">
                                     <span
-                                        class="font-medium text-gray-500 text-xs uppercase tracking-wide bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">{{
+                                        class="text-sm font-black text-gray-400 uppercase tracking-widest bg-gray-100 px-2 py-1 rounded border border-gray-200 inline-block mb-1">{{
                                             $t('student.schools.class') }}</span>
                                     <span class="font-medium text-gray-800">{{ s.class }}</span>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="text-xs text-gray-500 flex flex-wrap items-center gap-2 mt-2">
+                        <div class="flex flex-wrap items-center gap-3 mt-4">
                             <span v-if="s.status"
-                                class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full border border-blue-100 font-medium">{{
-                                    $t(`student.schools.status_options.${s.status}`) }}</span>
+                                :class="[
+                                    'px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest border',
+                                    s.status === 'enrolled' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                                    'bg-gray-100 text-gray-500 border-gray-200'
+                                ]">
+                                {{ $t(`student.schools.status_options.${s.status}`) }}
+                            </span>
                             <span
-                                class="bg-white border border-gray-200 text-gray-500 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                class="bg-white border border-gray-100 text-gray-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2 shadow-sm">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    stroke-width="1.5" stroke="currentColor" class="w-3 h-3">
+                                    stroke-width="2" stroke="currentColor" class="w-4 h-4">
                                     <path stroke-linecap="round" stroke-linejoin="round"
                                         d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
                                 </svg>
@@ -247,13 +252,13 @@ async function copyToClipboard(text: string) {
                 <div v-else class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-1">
-                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.schools.name') }}</label>
                             <input v-model="editSchoolForm.name"
-                                class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
                         </div>
                         <div class="space-y-1">
-                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.schools.status') }}</label>
                             <BaseDropdown v-model="editSchoolForm.status" :options="schoolStatusOptions"
                                 theme="emerald" />
@@ -262,15 +267,15 @@ async function copyToClipboard(text: string) {
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-1">
-                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.schools.school_student_id') }}</label>
                             <input v-model="editSchoolForm.school_student_id"
-                                class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
                         </div>
 
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-1">
-                                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                     $t('student.schools.grade') }}</label>
                                 <input v-model="editSchoolForm.grade"
                                     :disabled="editSchoolForm.status !== 'enrolled'"
@@ -278,7 +283,7 @@ async function copyToClipboard(text: string) {
                                     class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm bg-white disabled:bg-gray-100 disabled:text-gray-400 focus:ring-2 focus:ring-emerald-500 outline-none transition-colors">
                             </div>
                             <div class="space-y-1">
-                                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                     $t('student.schools.class') }}</label>
                                 <input v-model="editSchoolForm.class"
                                     :disabled="editSchoolForm.status !== 'enrolled'"
@@ -290,7 +295,7 @@ async function copyToClipboard(text: string) {
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-1">
-                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.schools.start_date') }}</label>
                             <input type="date" v-model="editSchoolForm.start_date"
                                 class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
@@ -300,7 +305,7 @@ async function copyToClipboard(text: string) {
                         </div>
 
                         <div class="space-y-1">
-                            <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.schools.end_date') }}</label>
                             <input type="date" v-model="editSchoolForm.end_date"
                                 class="w-full border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
@@ -314,7 +319,7 @@ async function copyToClipboard(text: string) {
                             class="px-3 py-1.5 text-gray-500 text-sm hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer">{{
                                 $t('student.cancel') }}</button>
                         <button @click="saveSchool" :disabled="isModifying"
-                            class="px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                            class="px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-base font-black uppercase tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                             <svg v-if="isModifying" class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
                                     stroke-width="4"></circle>
@@ -329,9 +334,9 @@ async function copyToClipboard(text: string) {
             </li>
         </ul>
 
-        <div class="border-t border-gray-100 pt-6">
-            <h3 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider flex items-center gap-2">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <div class="border-t border-gray-100 pt-8 mt-4">
+            <h3 class="text-sm font-black text-gray-400 mb-4 uppercase tracking-widest flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                 {{ $t('student.schools.add_title') }}
             </h3>
 
@@ -398,7 +403,7 @@ async function copyToClipboard(text: string) {
                 </div>
 
                 <button @click="addSchool" :disabled="isModifying"
-                    class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    class="w-full bg-emerald-600 text-white py-4 rounded-xl hover:bg-emerald-700 text-base font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
                             stroke-width="4"></circle>

@@ -110,9 +110,9 @@ async function refreshData() {
 </script>
 
 <template>
-    <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 transition-all hover:shadow-md">
-        <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-bold flex items-center gap-2 text-gray-800">
+    <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-md">
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="text-2xl font-bold flex items-center gap-3 text-gray-800">
                 <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                         stroke="currentColor" class="w-6 h-6">
@@ -136,10 +136,10 @@ async function refreshData() {
                     <div class="flex justify-between items-start">
                         <div class="space-y-3">
                             <div>
-                                <div class="font-black text-gray-900 text-xl tracking-tight leading-tight">
+                                <div class="font-black text-gray-900 text-2xl tracking-tight leading-tight">
                                     {{ e.courseDisplayName || e.courseSubject }}
                                 </div>
-                                <div class="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1 flex flex-wrap gap-x-2">
+                                <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-2 flex flex-wrap gap-x-2">
                                     <span>{{ e.classroomName || 'No Classroom' }}</span>
                                     <span v-if="e.classSessionName || e.formattedSchedule" class="text-gray-300">•</span>
                                     <span>{{ e.classSessionName }} {{ e.formattedSchedule }}</span>
@@ -157,9 +157,9 @@ async function refreshData() {
                                     {{ $t(`student.internal_courses.status_${e.status}`) }}
                                 </span>
                                 <span
-                                    class="bg-white border border-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                                    class="bg-white border border-gray-100 text-gray-500 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-2 shadow-sm">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                        stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                                        stroke-width="2" stroke="currentColor" class="w-4 h-4">
                                         <path stroke-linecap="round" stroke-linejoin="round"
                                             d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
                                     </svg>
@@ -201,11 +201,11 @@ async function refreshData() {
 
                             <div class="flex gap-2">
                                 <button @click="openTransfer(e.id)"
-                                    class="px-3 py-1.5 bg-white border border-amber-100 text-amber-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    class="px-4 py-2 bg-white border border-amber-100 text-amber-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t('student.internal_courses.transfer_btn') }}
                                 </button>
                                 <button v-if="e.enrollment_type === 'trial'" @click="openActivateTrial(e.id)"
-                                    class="px-3 py-1.5 bg-white border border-blue-100 text-blue-600 text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    class="px-4 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t('student.activate_trial_btn') }}
                                 </button>
                             </div>
@@ -217,10 +217,10 @@ async function refreshData() {
                 <div v-else class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div class="space-y-1">
-                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.enroll_modal.type') }}</label>
                             <select v-model="editEnrollmentForm.enrollment_type"
-                                class="w-full bg-white border-gray-200 rounded-xl px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
                                 <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
                                 <option value="trial">{{ $t('student.internal_courses.status_trial') }}</option>
                                 <option value="completed">{{ $t('student.internal_courses.status_completed') }}</option>
@@ -228,16 +228,16 @@ async function refreshData() {
                             </select>
                         </div>
                         <div class="space-y-1">
-                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.internal_courses.start_date') }}</label>
                             <input type="date" v-model="editEnrollmentForm.start_date"
-                                class="w-full bg-white border-gray-200 rounded-xl px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none">
+                                class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
                         </div>
                         <div class="space-y-1">
-                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.internal_courses.external_link') }}</label>
                             <input type="url" v-model="editEnrollmentForm.external_link"
-                                class="w-full bg-white border-gray-200 rounded-xl px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                                class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                 :placeholder="$t('common.optional')">
                         </div>
                     </div>
@@ -264,10 +264,10 @@ async function refreshData() {
 
     <!-- Add Enrollment Button at the bottom -->
         <button @click="showEnrollModal = true"
-            class="w-full py-6 bg-white border-2 border-dashed border-gray-200 rounded-[2rem] text-gray-500 font-bold flex items-center justify-center gap-2 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all cursor-pointer group">
-            <div class="p-1 bg-gray-100 rounded-lg group-hover:bg-emerald-100 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
-                    stroke="currentColor" class="w-4 h-4">
+            class="w-full py-8 bg-white border-2 border-dashed border-gray-200 rounded-[2.5rem] text-gray-500 text-lg font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all cursor-pointer group shadow-sm">
+            <div class="p-2 bg-gray-100 rounded-xl group-hover:bg-emerald-100 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3"
+                    stroke="currentColor" class="w-5 h-5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
             </div>

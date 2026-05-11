@@ -162,7 +162,7 @@ async function copyToClipboard(text: string) {
                         <div class="font-bold text-gray-800 text-lg flex items-center gap-2">
                             {{ c.platform }}
                             <span v-if="c.notes"
-                                class="text-[10px] font-medium text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded italic truncate max-w-[150px]"
+                                class="text-[12px] font-medium text-gray-400 border border-gray-200 px-1.5 py-0.5 rounded italic truncate max-w-[150px]"
                                 :title="c.notes">{{ c.notes }}</span>
                         </div>
                         <div class="flex space-x-1">
@@ -180,17 +180,17 @@ async function copyToClipboard(text: string) {
                                 title="Delete">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M6 18 18 6M6 6l12 12" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                                 </svg>
                             </button>
                         </div>
                     </div>
 
                     <div class="space-y-2">
-                        <div class="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-100 group">
+                        <div
+                            class="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-100 group">
                             <div class="flex flex-col">
-                                <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{{
+                                <span class="text-[12px] text-gray-400 uppercase font-bold tracking-wider">{{
                                     $t('student.credentials.username') }}</span>
                                 <span class="text-sm font-mono text-gray-700 break-all">{{ c.username }}</span>
                             </div>
@@ -204,9 +204,10 @@ async function copyToClipboard(text: string) {
                                 </svg>
                             </button>
                         </div>
-                        <div class="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-100 group">
+                        <div
+                            class="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-100 group">
                             <div class="flex flex-col">
-                                <span class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">{{
+                                <span class="text-[12px] text-gray-400 uppercase font-bold tracking-wider">{{
                                     $t('student.credentials.password') }}</span>
                                 <span class="text-sm font-mono text-gray-700 break-all">
                                     {{ visiblePasswords.has(c.id) ? c.password : '••••••••' }}
@@ -247,38 +248,49 @@ async function copyToClipboard(text: string) {
                 <div v-else class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="w-full">
-                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.platform') }}</label>
+                            <label
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                    $t('student.credentials.platform') }}</label>
                             <BaseDropdown v-model="editCredentialForm.platform" :options="platformOptions"
                                 theme="emerald" />
                         </div>
                         <div v-if="editCredentialForm.platform === 'Other'">
-                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.platform_name') }}</label>
-                            <input v-model="otherPlatformEdit"
-                                :placeholder="$t('student.credentials.platform_name')"
+                            <label
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                    $t('student.credentials.platform_name') }}</label>
+                            <input v-model="otherPlatformEdit" :placeholder="$t('student.credentials.platform_name')"
                                 class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                         </div>
                     </div>
 
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-50">
                         <div class="w-full">
-                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.username') }}</label>
-                            <input v-model="editCredentialForm.username" :placeholder="$t('student.credentials.username')"
+                            <label
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                    $t('student.credentials.username') }}</label>
+                            <input v-model="editCredentialForm.username"
+                                :placeholder="$t('student.credentials.username')"
                                 class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                         </div>
                         <div class="w-full">
-                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.password') }}</label>
-                            <input v-model="editCredentialForm.password" :placeholder="$t('student.credentials.password')"
+                            <label
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                    $t('student.credentials.password') }}</label>
+                            <input v-model="editCredentialForm.password"
+                                :placeholder="$t('student.credentials.password')"
                                 class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                         </div>
                         <div class="sm:col-span-2">
-                            <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.url') }}</label>
+                            <label
+                                class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                    $t('student.credentials.url') }}</label>
                             <input v-model="editCredentialForm.url" :placeholder="$t('student.credentials.url')"
                                 class="w-full border-gray-300 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                         </div>
                     </div>
 
                     <div class="flex justify-end gap-3 pt-2">
-                         <button @click="cancelEditCredential"
+                        <button @click="cancelEditCredential"
                             class="px-4 py-2 text-sm font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
                             {{ $t('common.cancel') }}
                         </button>
@@ -305,33 +317,37 @@ async function copyToClipboard(text: string) {
             </h3>
             <div
                 class="bg-gray-50 p-6 rounded-2xl border-2 border-dashed border-gray-200 hover:border-emerald-200 transition-all space-y-4">
-                
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="w-full">
-                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.platform') }}</label>
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            $t('student.credentials.platform') }}</label>
                         <BaseDropdown v-model="newCredential.platform" :options="platformOptions" theme="emerald" />
                     </div>
                     <div v-if="newCredential.platform === 'Other'" class="w-full">
-                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.platform_name') }}</label>
-                        <input v-model="otherPlatformAdd"
-                            :placeholder="$t('student.credentials.platform_name')"
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            $t('student.credentials.platform_name') }}</label>
+                        <input v-model="otherPlatformAdd" :placeholder="$t('student.credentials.platform_name')"
                             class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
                     <div class="w-full">
-                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.username') }}</label>
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            $t('student.credentials.username') }}</label>
                         <input v-model="newCredential.username" :placeholder="$t('student.credentials.username')"
                             class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                     </div>
                     <div class="w-full">
-                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.password') }}</label>
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            $t('student.credentials.password') }}</label>
                         <input v-model="newCredential.password" :placeholder="$t('student.credentials.password')"
                             class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                     </div>
                     <div class="sm:col-span-2">
-                        <label class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.credentials.url') }}</label>
+                        <label class="text-[12px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                            $t('student.credentials.url') }}</label>
                         <input v-model="newCredential.url" :placeholder="$t('student.credentials.url')"
                             class="w-full border-gray-200 rounded-xl px-4 py-2.5 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
                     </div>
@@ -340,14 +356,14 @@ async function copyToClipboard(text: string) {
                 <button @click="addCredential" :disabled="isModifying"
                     class="w-full bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 text-sm font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     <svg v-if="isModifying" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                            stroke-width="4"></circle>
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                        </circle>
                         <path class="opacity-75" fill="currentColor"
                             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
                         </path>
                     </svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                        stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
+                        stroke="currentColor" class="w-5 h-5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
                     {{ $t('student.credentials.add_btn') }}
@@ -356,8 +372,7 @@ async function copyToClipboard(text: string) {
         </div>
 
         <ConfirmModal :is-open="showDeleteConfirm" :title="$t('student.credentials.delete')"
-            :message="$t('student.credentials.confirm_delete')" :confirm-text="$t('common.delete')"
-            :is-dangerous="true" :is-loading="isModifying" @close="showDeleteConfirm = false"
-            @confirm="handleDeleteCredential" />
+            :message="$t('student.credentials.confirm_delete')" :confirm-text="$t('common.delete')" :is-dangerous="true"
+            :is-loading="isModifying" @close="showDeleteConfirm = false" @confirm="handleDeleteCredential" />
     </section>
 </template>

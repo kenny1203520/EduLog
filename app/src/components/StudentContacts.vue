@@ -114,8 +114,8 @@ async function copyToClipboard(text: string) {
 </script>
 
 <template>
-    <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-fit transition-all hover:shadow-md">
-        <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+    <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-fit transition-all hover:shadow-md">
+        <h2 class="text-2xl font-bold mb-8 flex items-center gap-3 text-gray-800">
             <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-6 h-6">
@@ -131,13 +131,13 @@ async function copyToClipboard(text: string) {
                 class="bg-gray-50 p-4 rounded-xl border border-transparent hover:border-gray-200 transition-colors">
                 <div v-if="editingContactId !== c.id" class="flex justify-between items-start">
                     <div>
-                        <div class="font-bold text-gray-800 text-lg flex items-center gap-2">
+                        <div class="font-bold text-gray-800 text-xl flex items-center gap-3">
                             {{ c.name }}
                             <span
-                                class="text-xs text-gray-500 font-medium bg-white px-2 py-0.5 rounded-full border border-gray-100">{{
+                                class="text-sm text-gray-500 font-medium bg-white px-3 py-1 rounded-full border border-gray-100">{{
                                     c.relation }}</span>
                         </div>
-                        <div class="text-sm text-gray-600 mt-1 flex items-center gap-2 group">
+                        <div class="text-base text-gray-600 mt-2 flex items-center gap-2 group">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                 stroke="currentColor" class="w-3.5 h-3.5">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -154,7 +154,7 @@ async function copyToClipboard(text: string) {
                                 </svg>
                             </button>
                         </div>
-                        <div class="text-sm text-gray-600 flex items-center gap-2 group">
+                        <div class="text-base text-gray-600 flex items-center gap-2 group">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                 stroke="currentColor" class="w-3.5 h-3.5">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -197,20 +197,20 @@ async function copyToClipboard(text: string) {
                 <div v-else class="space-y-3">
                     <div class="grid grid-cols-2 gap-3">
                         <input v-model="editContactForm.name" :placeholder="$t('student.contacts.name')"
-                            class="border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
                         <input v-model="editContactForm.relation" :placeholder="$t('student.contacts.relation')"
-                            class="border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
                         <input v-model="editContactForm.phone" :placeholder="$t('student.contacts.phone')"
-                            class="border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
                         <input v-model="editContactForm.email" :placeholder="$t('student.contacts.email')"
-                            class="border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
+                            class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
                     </div>
                     <div class="flex justify-end space-x-2 pt-2">
                         <button @click="cancelEditContact"
                             class="text-gray-500 text-sm hover:text-gray-700 px-3 py-1.5 rounded hover:bg-gray-100 transition-colors cursor-pointer">{{
                                 $t('student.cancel') }}</button>
                         <button @click="saveContact" :disabled="isModifying"
-                            class="bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-emerald-700 shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                            class="bg-emerald-600 text-white px-8 py-2.5 rounded-xl text-base font-black uppercase tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                             <svg v-if="isModifying" class="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
                                     stroke-width="4"></circle>
@@ -225,31 +225,42 @@ async function copyToClipboard(text: string) {
             </li>
         </ul>
 
-        <div class="border-t border-gray-100 pt-6">
-            <h3 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider flex items-center gap-2">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+        <div class="border-t border-gray-100 pt-8 mt-4">
+            <h3 class="text-sm font-black text-gray-400 mb-4 uppercase tracking-widest flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                 {{ $t('student.contacts.add_title') }}
             </h3>
             <div
-                class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
-                <div class="grid grid-cols-2 gap-3 mb-3">
-                    <input v-model="newContact.name" :placeholder="$t('student.contacts.name')"
-                        class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <input v-model="newContact.relation" :placeholder="$t('student.contacts.relation')"
-                        class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <input v-model="newContact.phone" :placeholder="$t('student.contacts.phone')"
-                        class="border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none">
-                    <div class="relative">
-                        <input v-model="newContact.email" type="email" @blur="contactEmailTouched = true"
-                            :placeholder="$t('student.contacts.email')"
-                            class="w-full border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
-                            :class="{ 'border-red-500 focus:ring-red-500': contactEmailError }">
-                        <p v-if="contactEmailError" class="text-xs text-red-500 mt-1">{{ contactEmailError }}
-                        </p>
+                class="bg-gray-50 p-6 rounded-2xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.name') }}</label>
+                        <input v-model="newContact.name" :placeholder="$t('student.contacts.name')"
+                            class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.relation') }}</label>
+                        <input v-model="newContact.relation" :placeholder="$t('student.contacts.relation')"
+                            class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.phone') }}</label>
+                        <input v-model="newContact.phone" :placeholder="$t('student.contacts.phone')"
+                            class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.email') }}</label>
+                        <div class="relative">
+                            <input v-model="newContact.email" type="email" @blur="contactEmailTouched = true"
+                                :placeholder="$t('student.contacts.email')"
+                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm"
+                                :class="{ 'border-red-500 focus:ring-red-500': contactEmailError }">
+                            <p v-if="contactEmailError" class="text-xs text-red-500 mt-1">{{ contactEmailError }}</p>
+                        </div>
                     </div>
                 </div>
                 <button @click="addContact" :disabled="isModifying"
-                    class="w-full bg-white border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                    class="w-full bg-emerald-600 text-white py-4 rounded-xl hover:bg-emerald-700 text-base font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
                     <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor"

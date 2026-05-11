@@ -125,9 +125,9 @@ async function submitEnrollment() {
                         </svg>
                     </div>
                     <div>
-                        <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{ $t('student.enroll_modal.title')
+                        <h2 class="text-3xl font-black text-gray-900 tracking-tight">{{ $t('student.enroll_modal.title')
                             }}</h2>
-                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">{{
+                        <p class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-1">{{
                             $t('student.enroll_modal.subtitle') }}</p>
                     </div>
                 </div>
@@ -146,14 +146,14 @@ async function submitEnrollment() {
                 <!-- Course & Classroom -->
                 <div class="grid grid-cols-1 gap-6">
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.enroll_modal.course') }}</label>
                         <SearchableSelect v-model="enrollForm.course_catalog_id" :options="catalogOptions"
                             :placeholder="$t('common.select_placeholder')" />
                     </div>
 
                     <div class="space-y-4">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.enroll_modal.classroom') }}</label>
                         <SearchableSelect v-model="enrollForm.class_session_id" :options="sessionOptions"
                             :placeholder="$t('common.select_placeholder')" />
@@ -172,7 +172,7 @@ async function submitEnrollment() {
                 <!-- Type, Count & Dates -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.enroll_modal.type') }}</label>
                         <BaseDropdown v-model="enrollForm.enrollment_type" :options="[
                             { label: $t('student.enroll_modal.type_regular'), value: 'regular' },
@@ -181,17 +181,17 @@ async function submitEnrollment() {
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.enroll_modal.start_date') }}</label>
                         <input type="date" v-model="enrollForm.start_date"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
+                            class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.enroll_modal.generate_count') || 'Expected Lessons' }}</label>
                         <input type="number" v-model.number="enrollForm.generate_count" min="1" max="100"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
+                            class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
                     </div>
                 </div>
             </div>
@@ -199,7 +199,7 @@ async function submitEnrollment() {
             <!-- Footer -->
             <div class="p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex gap-4">
                 <button @click="emit('close')"
-                    class="flex-1 px-8 py-4 text-sm font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
+                    class="flex-1 px-8 py-4 text-base font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
                     {{ $t('common.cancel') }}
                 </button>
                 <button @click="submitEnrollment()" :disabled="isSubmitting"

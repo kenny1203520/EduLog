@@ -5,7 +5,7 @@
             class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
             <!-- Header -->
             <div class="flex items-center justify-between p-8 border-b border-gray-50 shrink-0">
-                <h2 class="text-3xl font-black text-gray-900 tracking-tight">{{ $t('student.suspension.title') }}</h2>
+                <h2 class="text-4xl font-black text-gray-900 tracking-tight">{{ $t('student.suspension.title') }}</h2>
                 <button @click="$emit('close')"
                     class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
@@ -24,14 +24,14 @@
                         $t('student.suspension.add_new') }}</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="space-y-2">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
                                 {{ $t('student.suspension.start_date') }} <span class="text-red-500">*</span>
                             </label>
                             <input type="date" v-model="newSuspension.startDate"
                                 class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
                         </div>
                         <div class="space-y-2">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
                                 {{ $t('student.suspension.end_date') }}
                                 <span class="text-[10px] lowercase italic lowercase">({{
                                     $t('student.suspension.indefinite_hint')
@@ -41,7 +41,7 @@
                                 class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
                         </div>
                         <div class="md:col-span-2 space-y-2">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
                                 {{ $t('student.suspension.reason') }}
                             </label>
                             <input type="text" v-model="newSuspension.reason"
@@ -51,7 +51,7 @@
                     </div>
                     <div class="mt-8 flex justify-end">
                         <button @click="addSuspension" :disabled="!isValid || isAdding"
-                            class="px-8 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center gap-3 font-black shadow-xl shadow-emerald-100 active:scale-95">
+                            class="px-8 py-4 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center gap-3 text-base font-black shadow-xl shadow-emerald-100 active:scale-95 cursor-pointer">
                             <svg v-if="isAdding" class="animate-spin h-5 w-5 text-white"
                                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
@@ -67,7 +67,7 @@
 
                 <!-- Existing Suspensions -->
                 <div class="space-y-4">
-                    <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                    <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                         $t('student.suspension.history') }}</h3>
                     <div v-if="isLoading" class="flex flex-col items-center justify-center py-12">
                         <svg class="animate-spin h-10 w-10 text-emerald-500 mb-4" xmlns="http://www.w3.org/2000/svg"
@@ -140,23 +140,23 @@
                                         </svg>
                                     </div>
                                     <div>
-                                        <div class="font-black text-gray-900 text-lg tracking-tight">
+                                        <div class="font-black text-gray-900 text-xl tracking-tight">
                                             {{ formatDate(suspension.startDate) }}
-                                            <span class="mx-2 text-gray-300">→</span>
+                                            <span class="mx-3 text-gray-300">→</span>
                                             <span :class="{ 'text-emerald-600': !suspension.endDate }">
                                                 {{ suspension.endDate ? formatDate(suspension.endDate) :
                                                     $t('student.suspension.indefinite') }}
                                             </span>
                                         </div>
-                                        <div class="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1"
+                                        <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-2"
                                             v-if="suspension.reason">
                                             {{ suspension.reason }}
                                         </div>
                                     </div>
                                 </div>
-                                <div class="mt-3 flex gap-2" v-if="suspension.isActive">
+                                <div class="mt-4 flex gap-2" v-if="suspension.isActive">
                                     <span
-                                        class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-rose-50 text-rose-600 border border-rose-100">
+                                        class="px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-rose-50 text-rose-600 border border-rose-100 shadow-sm">
                                         {{ $t('student.suspension.active') }}
                                     </span>
                                 </div>

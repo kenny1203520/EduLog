@@ -136,8 +136,8 @@ watch(isEditingMainDetails, (val) => {
 
 <template>
     <!-- Main Details Form -->
-    <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 transition-all hover:shadow-md">
-        <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">
+    <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-md">
+        <h2 class="text-2xl font-bold mb-8 flex items-center gap-3 text-gray-800">
             <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-6 h-6">
@@ -150,18 +150,18 @@ watch(isEditingMainDetails, (val) => {
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div class="space-y-1.5">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.name')
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.name')
                 }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.name" type="text"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.name || '-' }}</div>
             </div>
 
             <div class="space-y-1.5">
                 <div class="flex items-center gap-2 mb-1.5">
-                    <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                    <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                         $t('student.gov_id') }}</label>
                     <button @click.stop="showGovId = !showGovId"
                         class="text-gray-400 hover:text-gray-600 focus:outline-none"
@@ -181,31 +181,31 @@ watch(isEditingMainDetails, (val) => {
                     </button>
                 </div>
                 <input v-if="isEditingMainDetails" v-model="form.gov_id" :type="showGovId ? 'text' : 'password'"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono flex items-center">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] font-mono flex items-center">
                     <span v-if="showGovId">{{ form.gov_id || '-' }}</span>
                     <span v-else>{{ form.gov_id ? '•'.repeat(Math.min(form.gov_id.length, 10)) : '-' }}</span>
                 </div>
             </div>
 
             <div class="space-y-1.5">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.birthday')
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.birthday')
                 }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.birthday" type="date"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.birthday || '-' }}</div>
             </div>
 
             <div class="space-y-1.5">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                     $t('student.external_link') }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.external_link" type="url" placeholder="https://"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] overflow-hidden text-ellipsis whitespace-nowrap">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] overflow-hidden text-ellipsis whitespace-nowrap">
                     <a v-if="form.external_link" :href="form.external_link" target="_blank"
                         class="text-emerald-600 hover:text-emerald-700 underline flex items-center gap-1">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -220,59 +220,59 @@ watch(isEditingMainDetails, (val) => {
             </div>
 
             <div class="space-y-1.5">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('auth.email')
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('auth.email')
                 }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.email" type="email" @blur="emailTouched = true"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400"
                     :class="{ 'border-red-500 focus:ring-red-500': emailError }">
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.email || '-' }}</div>
                 <p v-if="emailError && isEditingMainDetails" class="text-xs text-red-500 mt-1">{{ emailError }}</p>
             </div>
             <div class="space-y-1.5">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                     $t('student.contacts.phone') }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.phone" type="tel"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.phone || '-' }}</div>
             </div>
 
             <div class="space-y-1.5 md:col-span-2">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                     $t('student.residence_address') }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.residence_address" type="text"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.residence_address || '-' }}</div>
             </div>
             <div class="space-y-1.5 md:col-span-2">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                     $t('student.mailing_address') }}</label>
                 <input v-if="isEditingMainDetails" v-model="form.mailing_address" type="text"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px]">
                     {{ form.mailing_address || '-' }}</div>
             </div>
 
             <div class="space-y-1.5 md:col-span-2">
-                <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">{{ $t('student.notes')
+                <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.notes')
                 }}</label>
                 <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3"
-                    class="w-full border-gray-200 rounded-lg px-4 py-2.5 focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
+                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
                 <div v-else
-                    class="text-gray-800 px-4 py-2.5 bg-gray-50/50 rounded-lg border border-transparent min-h-[86px] whitespace-pre-wrap">
+                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[86px] whitespace-pre-wrap">
                     {{ form.notes || '-' }}</div>
             </div>
         </div>
 
         <div class="mt-8 flex justify-between items-center pt-6 border-t border-gray-100">
             <button @click="handleDeleteStudent"
-                class="text-red-500 hover:text-red-700 text-sm font-medium hover:underline cursor-pointer flex items-center gap-1 transition-colors">
+                class="text-red-500 hover:text-red-700 text-base font-bold hover:underline cursor-pointer flex items-center gap-2 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-4 h-4">
                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -288,7 +288,7 @@ watch(isEditingMainDetails, (val) => {
                 </button>
                 <button @click="isEditingMainDetails ? saveMainDetails() : toggleEditMainDetails()"
                     :disabled="isSaving"
-                    class="bg-emerald-600 text-white px-8 py-2.5 rounded-lg shadow-sm hover:bg-emerald-700 hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center gap-2 cursor-pointer">
+                    class="bg-emerald-600 text-white px-8 py-3 rounded-xl shadow-sm hover:bg-emerald-700 hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed text-base font-black uppercase tracking-widest flex items-center gap-2 cursor-pointer">
                     <svg v-if="!isSaving && isEditingMainDetails" xmlns="http://www.w3.org/2000/svg" fill="none"
                         viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
