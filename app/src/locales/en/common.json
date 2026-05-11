@@ -1,5 +1,6 @@
 {
     "add": "Add",
+    "no_results": "No results",
     "select_placeholder": "-- Select --",
     "search": "Search",
     "save": "Save",
@@ -83,5 +84,14 @@
     "languages": {
         "zh-TW": "繁體中文",
         "en": "English"
+    },
+    "days": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
     }
 }

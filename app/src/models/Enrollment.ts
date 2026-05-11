@@ -26,6 +26,7 @@ export interface EnrollmentDTO {
         day_of_week?: number
         start_time?: string
         end_time?: string
+        time_zone?: string
     }
     students?: {
         name: string
@@ -53,6 +54,7 @@ export class Enrollment {
     classSessionDayOfWeek?: number
     classSessionStartTime?: string
     classSessionEndTime?: string
+    classSessionTimeZone: string = ''
     studentName?: string
     studentEmail?: string
 
@@ -80,6 +82,7 @@ export class Enrollment {
             this.classSessionDayOfWeek = data.class_sessions.day_of_week
             this.classSessionStartTime = data.class_sessions.start_time
             this.classSessionEndTime = data.class_sessions.end_time
+            this.classSessionTimeZone = data.class_sessions.time_zone || 'Asia/Taipei'
         }
         if (data.students) {
             this.studentName = data.students.name
@@ -102,5 +105,11 @@ export class Enrollment {
         const dayName = days[this.classSessionDayOfWeek]
         const time = this.classSessionStartTime.slice(0, 5) // HH:MM
         return `${dayName} ${time}`
+    }
+
+    get classSessionDayKey(): string {
+        if (this.classSessionDayOfWeek === undefined) return ''
+        const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+        return days[this.classSessionDayOfWeek]
     }
 }

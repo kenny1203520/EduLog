@@ -109,18 +109,19 @@ async function submitEnrollment() {
         return
     }
 
-    const payload = {
+    const enrollmentData = {
         student_id: props.studentId,
         course_id: enrollForm.value.course_catalog_id,
         class_session_id: enrollForm.value.class_session_id,
         status: enrollForm.value.enrollment_type as any,
         start_date: enrollForm.value.start_date,
-        generate_count: enrollForm.value.generate_count
     }
 
     try {
         isSubmitting.value = true
-        await EnrollmentService.create(payload)
+        await EnrollmentService.create(enrollmentData, {
+            targetReportCount: enrollForm.value.generate_count
+        })
 
         toast.success(t('common.success'))
         emit('success')

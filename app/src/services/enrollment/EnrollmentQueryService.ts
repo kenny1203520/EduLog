@@ -26,7 +26,8 @@ export class EnrollmentQueryService {
                     day_of_week,
                     start_time,
                     end_time,
-                    capacity
+                    capacity,
+                    time_zone
                 )
             `)
             .eq('student_id', studentId)
@@ -47,7 +48,7 @@ export class EnrollmentQueryService {
                 *,
                 courses (subject, stage, display_name),
                 classrooms (name),
-                class_sessions (id, name, day_of_week, start_time, end_time),
+                class_sessions (id, name, day_of_week, start_time, end_time, time_zone),
                 students (name, email)
             `)
             .in('status', ['regular', 'trial'])

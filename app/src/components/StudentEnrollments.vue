@@ -4,11 +4,14 @@ import { useI18n } from "vue-i18n";
 import { useToast } from "vue-toastification";
 import { EnrollmentService } from "@/services/enrollment/EnrollmentService";
 import { useStudentStore } from "@/stores/useStudentStore";
+import { usePreferencesStore } from "@/stores/usePreferencesStore";
 import EnrollStudentModal from "@/components/EnrollStudentModal.vue";
 import TransferModal from "@/components/TransferModal.vue";
 import ActivateTrialModal from "@/components/ActivateTrialModal.vue";
 import StudentSuspensions from "@/components/StudentSuspensions.vue";
 import ConfirmModal from "@/components/common/ConfirmModal.vue";
+import TimeZoneSelect from "@/components/common/TimeZoneSelect.vue";
+import { SessionService } from "@/services/session/SessionService";
 
 const props = defineProps<{
     studentId: string;
@@ -18,6 +21,7 @@ const props = defineProps<{
 const { t } = useI18n();
 const toast = useToast();
 const studentStore = useStudentStore();
+const preferences = usePreferencesStore();
 
 const isModifying = ref(false);
 const editingEnrollmentId = ref<string | null>(null);
@@ -25,6 +29,7 @@ const editEnrollmentForm = ref({
     enrollment_type: "",
     start_date: "",
     external_link: "",
+    time_zone: "",
 });
 
 // Modal States
@@ -44,6 +49,7 @@ function startEditEnrollment(enrollment: any) {
         enrollment_type: enrollment.status,
         start_date: enrollment.startDate || enrollment.start_date,
         external_link: enrollment.externalLink || enrollment.external_link || "",
+        time_zone: enrollment.classSessionTimeZone || preferences.timeZone,
     };
 }
 
@@ -60,6 +66,15 @@ async function saveEnrollment() {
             start_date: editEnrollmentForm.value.start_date,
             external_link: editEnrollmentForm.value.external_link,
         });
+
+        // Update session timezone if changed
+        const enrollment = props.enrollments.find(e => e.id === editingEnrollmentId.value);
+        if (enrollment?.classSessionId && editEnrollmentForm.value.time_zone !== enrollment.classSessionTimeZone) {
+            await SessionService.updateClassSession(enrollment.classSessionId, {
+                time_zone: editEnrollmentForm.value.time_zone
+            });
+        }
+
         cancelEditEnrollment();
         await studentStore.loadStudent(props.studentId);
         toast.success(t("common.save_success"));
@@ -160,7 +175,12 @@ async function refreshData() {
                                     <span>{{ e.classroomName || "No Classroom" }}</span>
                                     <span v-if="e.classSessionName || e.formattedSchedule"
                                         class="text-gray-300">•</span>
-                                    <span>{{ e.classSessionName }} {{ e.formattedSchedule }}</span>
+                                    <span>{{ e.classSessionName }}</span>
+                                    <span v-if="e.classSessionDayKey" class="ml-1">
+                                        {{ $t(`common.days.${e.classSessionDayKey}`) }}
+                                        {{ e.classSessionStartTime?.slice(0, 5) }} -
+                                        {{ e.classSessionEndTime?.slice(0, 5) }}
+                                    </span>
                                 </div>
                             </div>
 
@@ -185,6 +205,8 @@ async function refreshData() {
                                             d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
                                     </svg>
                                     {{ e.formattedStartDate }}
+                                    <span class="text-[12px] text-gray-400 font-medium">({{ preferences.timeZoneLabel
+                                    }})</span>
                                 </span>
                             </div>
                         </div>
@@ -236,12 +258,12 @@ async function refreshData() {
 
                 <!-- Edit Mode -->
                 <div v-else class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                         <div class="space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t("student.enroll_modal.type") }}</label>
                             <select v-model="editEnrollmentForm.enrollment_type"
-                                class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                                class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
                                 <option value="regular">
                                     {{ $t("student.internal_courses.status_regular") }}
                                 </option>
@@ -260,14 +282,17 @@ async function refreshData() {
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t("student.internal_courses.start_date") }}</label>
                             <input type="date" v-model="editEnrollmentForm.start_date"
-                                class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all" />
+                                class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all" />
                         </div>
                         <div class="space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t("student.internal_courses.external_link") }}</label>
                             <input type="url" v-model="editEnrollmentForm.external_link"
-                                class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                 :placeholder="$t('common.optional')" />
+                        </div>
+                        <div class="space-y-1">
+                            <TimeZoneSelect v-model="editEnrollmentForm.time_zone" :label="$t('common.time_zone')" />
                         </div>
                     </div>
                     <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">

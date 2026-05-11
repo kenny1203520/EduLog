@@ -1,5 +1,6 @@
 {
     "add": "新增",
+    "no_results": "無資料",
     "select_placeholder": "-- 請選擇 --",
     "search": "搜尋",
     "save": "儲存",
@@ -83,5 +84,14 @@
     "languages": {
         "zh-TW": "繁體中文",
         "en": "English"
+    },
+    "days": {
+        "sun": "星期日",
+        "mon": "星期一",
+        "tue": "星期二",
+        "wed": "星期三",
+        "thu": "星期四",
+        "fri": "星期五",
+        "sat": "星期六"
     }
 }
