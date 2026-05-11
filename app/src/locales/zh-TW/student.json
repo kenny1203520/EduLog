@@ -175,7 +175,7 @@
         "classroom": "教室",
         "capacity": "班級人數",
         "type": "報名類型",
-        "type_regular": "正規",
+        "type_regular": "進行中",
         "type_trial": "試聽",
         "start_date": "開始日期",
         "generate_count": "預計上課次數",

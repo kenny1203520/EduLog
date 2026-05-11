@@ -24,13 +24,14 @@ const isSubmitting = ref(false)
 const enrollForm = ref({
     course_catalog_id: '',
     class_session_id: '',
-    enrollment_type: 'regular' as 'regular' | 'trial',
+    enrollment_type: 'active' as 'active' | 'trial',
     start_date: new Date().toISOString().split('T')[0],
     generate_count: 10
 })
 
 const catalogOptions = ref<any[]>([])
 const sessionOptions = ref<any[]>([])
+const fullCourses = ref<any[]>([])
 
 // Capacity Check Composable
 const { maxEnrollment, capacity, isChecking, isFull } = useCapacityCheck(
@@ -45,6 +46,7 @@ async function fetchOptions() {
             CourseCatalogService.getCourses(),
             SessionService.getClassSessions()
         ])
+        fullCourses.value = catalogs
         catalogOptions.value = catalogs.map(c => ({
             value: c.id,
             label: c.displayName
@@ -59,13 +61,33 @@ async function fetchOptions() {
     }
 }
 
+watch(() => enrollForm.value.course_catalog_id, (newId) => {
+    if (newId && enrollForm.value.enrollment_type === 'active') {
+        const course = fullCourses.value.find(c => c.id === newId)
+        if (course && course.lessons) {
+            enrollForm.value.generate_count = course.lessons.length
+        }
+    }
+})
+
+watch(() => enrollForm.value.enrollment_type, (newType) => {
+    if (newType === 'trial') {
+        enrollForm.value.generate_count = 1
+    } else if (newType === 'active' && enrollForm.value.course_catalog_id) {
+        const course = fullCourses.value.find(c => c.id === enrollForm.value.course_catalog_id)
+        if (course && course.lessons) {
+            enrollForm.value.generate_count = course.lessons.length
+        }
+    }
+})
+
 watch(() => props.isOpen, (val) => {
     if (val) {
         fetchOptions()
         enrollForm.value = {
             course_catalog_id: '',
             class_session_id: '',
-            enrollment_type: 'regular',
+            enrollment_type: 'active',
             start_date: new Date().toISOString().split('T')[0],
             generate_count: 10
         }
@@ -175,7 +197,7 @@ async function submitEnrollment() {
                         <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.enroll_modal.type') }}</label>
                         <BaseDropdown v-model="enrollForm.enrollment_type" :options="[
-                            { label: $t('student.enroll_modal.type_regular'), value: 'regular' },
+                            { label: $t('student.enroll_modal.type_regular'), value: 'active' },
                             { label: $t('student.enroll_modal.type_trial'), value: 'trial' }
                         ]" theme="emerald" />
                     </div>
