@@ -66,11 +66,6 @@ export class StudentCommandService {
         const { error: e3 } = await supabase.from('student_credentials').delete().eq('student_id', id)
         if (e3) throw new Error('Failed to delete credentials: ' + e3.message)
 
-        // 4. Delete Reports (Legacy or linked)
-        const { error: e4 } = await supabase.from('reports').delete().eq('student_id', id)
-        if (e4 && e4.code !== '42P01') {
-            throw new Error('Failed to delete reports: ' + e4.message)
-        }
 
         // 5. Finally Delete Student
         const { data, error } = await supabase

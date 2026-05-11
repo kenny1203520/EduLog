@@ -133,6 +133,7 @@ export class EnrollmentCommandService {
         const sessionId = enrollment?.class_session_id
 
         await EnrollmentSupportService.deleteReportsForEnrollment(enrollmentId)
+        await EnrollmentSupportService.deleteSuspensionsForEnrollment(enrollmentId)
 
         const { error: deleteError } = await supabase
             .from('enrollments')
