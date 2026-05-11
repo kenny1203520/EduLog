@@ -1,111 +1,127 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
-import { useToast } from 'vue-toastification'
-import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
-import { useStudentStore } from '@/stores/useStudentStore'
-import EnrollStudentModal from '@/components/EnrollStudentModal.vue'
-import TransferModal from '@/components/TransferModal.vue'
-import ActivateTrialModal from '@/components/ActivateTrialModal.vue'
-import StudentSuspensions from '@/components/StudentSuspensions.vue'
-import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import { ref } from "vue";
+import { useI18n } from "vue-i18n";
+import { useToast } from "vue-toastification";
+import { EnrollmentService } from "@/services/enrollment/EnrollmentService";
+import { useStudentStore } from "@/stores/useStudentStore";
+import EnrollStudentModal from "@/components/EnrollStudentModal.vue";
+import TransferModal from "@/components/TransferModal.vue";
+import ActivateTrialModal from "@/components/ActivateTrialModal.vue";
+import StudentSuspensions from "@/components/StudentSuspensions.vue";
+import ConfirmModal from "@/components/common/ConfirmModal.vue";
 
 const props = defineProps<{
-    studentId: string
-    enrollments: any[]
-}>()
+    studentId: string;
+    enrollments: any[];
+}>();
 
-const { t } = useI18n()
-const toast = useToast()
-const studentStore = useStudentStore()
+const { t } = useI18n();
+const toast = useToast();
+const studentStore = useStudentStore();
 
-const isModifying = ref(false)
-const editingEnrollmentId = ref<string | null>(null)
-const editEnrollmentForm = ref({ enrollment_type: '', start_date: '', external_link: '' })
+const isModifying = ref(false);
+const editingEnrollmentId = ref<string | null>(null);
+const editEnrollmentForm = ref({
+    enrollment_type: "",
+    start_date: "",
+    external_link: "",
+});
 
 // Modal States
-const showEnrollModal = ref(false)
-const showTransferModal = ref(false)
-const showActivateTrialModal = ref(false)
-const showSuspensionsModal = ref(false)
-const selectedEnrollmentId = ref<string | null>(null)
+const showEnrollModal = ref(false);
+const showTransferModal = ref(false);
+const showActivateTrialModal = ref(false);
+const showSuspensionsModal = ref(false);
+const selectedEnrollmentId = ref<string | null>(null);
 
 // Deletion
-const showDeleteConfirm = ref(false)
-const enrollmentToDelete = ref<string | null>(null)
+const showDeleteConfirm = ref(false);
+const enrollmentToDelete = ref<string | null>(null);
 
 function startEditEnrollment(enrollment: any) {
-    editingEnrollmentId.value = enrollment.id
+    editingEnrollmentId.value = enrollment.id;
     editEnrollmentForm.value = {
         enrollment_type: enrollment.status,
         start_date: enrollment.startDate || enrollment.start_date,
-        external_link: enrollment.externalLink || enrollment.external_link || ''
-    }
+        external_link: enrollment.externalLink || enrollment.external_link || "",
+    };
 }
 
 function cancelEditEnrollment() {
-    editingEnrollmentId.value = null
+    editingEnrollmentId.value = null;
 }
 
 async function saveEnrollment() {
-    if (!editingEnrollmentId.value) return
+    if (!editingEnrollmentId.value) return;
     try {
-        isModifying.value = true
+        isModifying.value = true;
         await EnrollmentService.update(editingEnrollmentId.value, {
             status: editEnrollmentForm.value.enrollment_type as any,
             start_date: editEnrollmentForm.value.start_date,
-            external_link: editEnrollmentForm.value.external_link
-        })
-        cancelEditEnrollment()
-        await studentStore.loadStudent(props.studentId)
-        toast.success(t('common.save_success'))
+            external_link: editEnrollmentForm.value.external_link,
+        });
+        cancelEditEnrollment();
+        await studentStore.loadStudent(props.studentId);
+        toast.success(t("common.save_success"));
     } catch (e: any) {
-        console.error(e)
-        toast.error(e.message || t('student.errors.update_enrollment_failed', 'Failed to update enrollment'))
+        console.error(e);
+        toast.error(
+            e.message ||
+            t(
+                "student.errors.update_enrollment_failed",
+                "Failed to update enrollment",
+            ),
+        );
     } finally {
-        isModifying.value = false
+        isModifying.value = false;
     }
 }
 
 function confirmRemoveEnrollment(id: string) {
-    enrollmentToDelete.value = id
-    showDeleteConfirm.value = true
+    enrollmentToDelete.value = id;
+    showDeleteConfirm.value = true;
 }
 
 async function handleRemoveEnrollment() {
-    if (!enrollmentToDelete.value) return
+    if (!enrollmentToDelete.value) return;
     try {
-        isModifying.value = true
-        await EnrollmentService.delete(enrollmentToDelete.value)
-        await studentStore.loadStudent(props.studentId)
-        toast.success(t('common.deleted'))
+        isModifying.value = true;
+        await EnrollmentService.delete(enrollmentToDelete.value);
+        await studentStore.loadStudent(props.studentId);
+        toast.success(t("common.deleted"));
     } catch (e: any) {
-        console.error(e)
-        toast.error(e.message || t('student.errors.delete_enrollment_failed', 'Failed to remove enrollment'))
+        console.error(e);
+        toast.error(
+            e.message ||
+            t(
+                "student.errors.delete_enrollment_failed",
+                "Failed to remove enrollment",
+            ),
+        );
     } finally {
-        isModifying.value = false
-        showDeleteConfirm.value = false
-        enrollmentToDelete.value = null
+        isModifying.value = false;
+        showDeleteConfirm.value = false;
+        enrollmentToDelete.value = null;
     }
 }
 
 function openTransfer(id: string) {
-    selectedEnrollmentId.value = id
-    showTransferModal.value = true
+    selectedEnrollmentId.value = id;
+    showTransferModal.value = true;
 }
 
 function openActivateTrial(id: string) {
-    selectedEnrollmentId.value = id
-    showActivateTrialModal.value = true
+    selectedEnrollmentId.value = id;
+    showActivateTrialModal.value = true;
 }
 
 function openSuspensions(id: string) {
-    selectedEnrollmentId.value = id
-    showSuspensionsModal.value = true
+    selectedEnrollmentId.value = id;
+    showSuspensionsModal.value = true;
 }
 
 async function refreshData() {
-    await studentStore.loadStudent(props.studentId)
+    await studentStore.loadStudent(props.studentId);
 }
 </script>
 
@@ -120,13 +136,13 @@ async function refreshData() {
                             d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.25c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
                     </svg>
                 </div>
-                {{ $t('student.sections.internal_courses') }}
+                {{ $t("student.sections.internal_courses") }}
             </h2>
         </div>
 
         <div v-if="enrollments.length === 0"
             class="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-200 text-gray-400 font-medium italic mb-6">
-            {{ $t('student.internal_courses.no_enrollments') }}
+            {{ $t("student.internal_courses.no_enrollments") }}
         </div>
 
         <div v-else class="grid grid-cols-1 gap-4 mb-6">
@@ -139,9 +155,11 @@ async function refreshData() {
                                 <div class="font-black text-gray-900 text-2xl tracking-tight leading-tight">
                                     {{ e.courseDisplayName || e.courseSubject }}
                                 </div>
-                                <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-2 flex flex-wrap gap-x-2">
-                                    <span>{{ e.classroomName || 'No Classroom' }}</span>
-                                    <span v-if="e.classSessionName || e.formattedSchedule" class="text-gray-300">•</span>
+                                <div
+                                    class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-2 flex flex-wrap gap-x-2">
+                                    <span>{{ e.classroomName || "No Classroom" }}</span>
+                                    <span v-if="e.classSessionName || e.formattedSchedule"
+                                        class="text-gray-300">•</span>
                                     <span>{{ e.classSessionName }} {{ e.formattedSchedule }}</span>
                                 </div>
                             </div>
@@ -149,10 +167,13 @@ async function refreshData() {
                             <div class="flex flex-wrap items-center gap-3">
                                 <span v-if="e.status" :class="[
                                     'px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest border',
-                                    e.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                                    e.status === 'trial' ? 'bg-blue-50 text-blue-600 border-blue-100' :
-                                    e.status === 'completed' ? 'bg-gray-100 text-gray-600 border-gray-200' :
-                                    'bg-rose-50 text-rose-600 border-rose-100'
+                                    e.status === 'regular'
+                                        ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                        : e.status === 'trial'
+                                            ? 'bg-blue-50 text-blue-600 border-blue-100'
+                                            : e.status === 'completed'
+                                                ? 'bg-gray-100 text-gray-600 border-gray-200'
+                                                : 'bg-rose-50 text-rose-600 border-rose-100',
                                 ]">
                                     {{ $t(`student.internal_courses.status_${e.status}`) }}
                                 </span>
@@ -202,11 +223,11 @@ async function refreshData() {
                             <div class="flex gap-2">
                                 <button @click="openTransfer(e.id)"
                                     class="px-4 py-2 bg-white border border-amber-100 text-amber-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
-                                    {{ $t('student.internal_courses.transfer_btn') }}
+                                    {{ $t("student.internal_courses.transfer_btn") }}
                                 </button>
                                 <button v-if="e.enrollment_type === 'trial'" @click="openActivateTrial(e.id)"
                                     class="px-4 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
-                                    {{ $t('student.activate_trial_btn') }}
+                                    {{ $t("student.activate_trial_btn") }}
                                 </button>
                             </div>
                         </div>
@@ -218,33 +239,41 @@ async function refreshData() {
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div class="space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                                $t('student.enroll_modal.type') }}</label>
+                                $t("student.enroll_modal.type") }}</label>
                             <select v-model="editEnrollmentForm.enrollment_type"
                                 class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
-                                <option value="active">{{ $t('student.internal_courses.status_active') }}</option>
-                                <option value="trial">{{ $t('student.internal_courses.status_trial') }}</option>
-                                <option value="completed">{{ $t('student.internal_courses.status_completed') }}</option>
-                                <option value="dropped">{{ $t('student.internal_courses.status_dropped') }}</option>
+                                <option value="regular">
+                                    {{ $t("student.internal_courses.status_active") }}
+                                </option>
+                                <option value="trial">
+                                    {{ $t("student.internal_courses.status_trial") }}
+                                </option>
+                                <option value="completed">
+                                    {{ $t("student.internal_courses.status_completed") }}
+                                </option>
+                                <option value="dropped">
+                                    {{ $t("student.internal_courses.status_dropped") }}
+                                </option>
                             </select>
                         </div>
                         <div class="space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                                $t('student.internal_courses.start_date') }}</label>
+                                $t("student.internal_courses.start_date") }}</label>
                             <input type="date" v-model="editEnrollmentForm.start_date"
-                                class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all">
+                                class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all" />
                         </div>
                         <div class="space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                                $t('student.internal_courses.external_link') }}</label>
+                                $t("student.internal_courses.external_link") }}</label>
                             <input type="url" v-model="editEnrollmentForm.external_link"
                                 class="px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                                :placeholder="$t('common.optional')">
+                                :placeholder="$t('common.optional')" />
                         </div>
                     </div>
                     <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
                         <button @click="cancelEditEnrollment"
                             class="px-4 py-2 text-sm font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
-                            {{ $t('common.cancel') }}
+                            {{ $t("common.cancel") }}
                         </button>
                         <button @click="saveEnrollment" :disabled="isModifying"
                             class="px-6 py-2 bg-emerald-600 text-white rounded-xl text-sm font-black hover:bg-emerald-700 shadow-lg shadow-emerald-50 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2">
@@ -255,23 +284,23 @@ async function refreshData() {
                                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
                                 </path>
                             </svg>
-                            {{ $t('common.save') }}
+                            {{ $t("common.save") }}
                         </button>
                     </div>
                 </div>
+            </div>
         </div>
-    </div>
 
-    <!-- Add Enrollment Button at the bottom -->
+        <!-- Add Enrollment Button at the bottom -->
         <button @click="showEnrollModal = true"
-            class="w-full py-8 bg-white border-2 border-dashed border-gray-200 rounded-[2.5rem] text-gray-500 text-lg font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all cursor-pointer group shadow-sm">
+            class="w-full py-5 bg-white border-2 border-dashed border-gray-200 rounded-[2.5rem] text-gray-500 text-lg font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-600 transition-all cursor-pointer group shadow-sm">
             <div class="p-2 bg-gray-100 rounded-xl group-hover:bg-emerald-100 transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3"
                     stroke="currentColor" class="w-5 h-5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
             </div>
-            {{ $t('student.enroll_btn') }}
+            {{ $t("student.enroll_btn") }}
         </button>
 
         <!-- Modals -->
