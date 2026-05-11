@@ -14,9 +14,9 @@ CREATE TABLE IF NOT EXISTS public.enrollments (
     student_id uuid NOT NULL,
     course_id uuid NOT NULL,
     classroom_id uuid,
-    status text DEFAULT 'active'::text CHECK (
+    status text DEFAULT 'regular'::text CHECK (
         status = ANY (
-            ARRAY ['active'::text, 'completed'::text, 'dropped'::text, 'trial'::text]
+            ARRAY ['regular'::text, 'completed'::text, 'dropped'::text, 'trial'::text]
         )
     ),
     user_id uuid NOT NULL DEFAULT auth.uid(),
