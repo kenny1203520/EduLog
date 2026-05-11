@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { OccurrenceReport, ReportVersion, type OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { DateUtils } from '@/utils/DateUtils'
 
 export class ReportQueryService {
     static async getReport(
@@ -154,10 +155,8 @@ export class ReportQueryService {
     }
 
     private static async fetchIncompleteReportsInternal(daysBack: number): Promise<any[]> {
-        const startDate = new Date()
-        startDate.setDate(startDate.getDate() - daysBack)
-        const dateStr = startDate.toISOString().split('T')[0]
-        const todayStr = new Date().toISOString().split('T')[0]
+        const todayStr = DateUtils.todayString()
+        const dateStr = DateUtils.addDaysToDateString(todayStr, -daysBack)
 
         // Fetch reports with attendance_status = 'present'
         // Join with everything needed to determine incompleteness and show details
@@ -170,7 +169,7 @@ export class ReportQueryService {
                     students (id, name)
                 ),
                 class_occurrences!inner (
-                    id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, is_conducted, status,
+                    id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, time_zone, is_conducted, status,
                     class_sessions (
                         id, name,
                         classrooms (id, name)
@@ -212,6 +211,7 @@ export class ReportQueryService {
                     className: session?.name || '-',
                     classroomName: classroom?.name || '-',
                     date: occ.occurrence_date,
+                    timeZone: occ.time_zone,
                     startTime: occ.actual_start_time || occ.original_start_time || undefined,
                     endTime: occ.actual_end_time || occ.original_end_time || undefined,
                     content: report.content || '',

@@ -3,6 +3,7 @@ import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurren
 import { OccurrenceQueryService } from './OccurrenceQueryService'
 import { HolidayService } from '../holiday/HolidayService'
 import { TeacherService } from '../teacher/TeacherService'
+import { DateUtils } from '@/utils/DateUtils'
 
 export class OccurrenceCommandService {
     private static generateOccurrenceDates(
@@ -27,10 +28,7 @@ export class OccurrenceCommandService {
     }
 
     private static formatDate(date: Date): string {
-        const year = date.getFullYear()
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const day = String(date.getDate()).padStart(2, '0')
-        return `${year}-${month}-${day}`
+        return DateUtils.formatLocalDate(date)
     }
 
     static async generateOccurrences(
@@ -48,7 +46,7 @@ export class OccurrenceCommandService {
 
         let effectiveStartDate = startDate
         if (session.start_date) {
-            const sessionStart = new Date(session.start_date)
+            const sessionStart = DateUtils.parseLocalDate(session.start_date) || new Date(session.start_date)
             if (effectiveStartDate < sessionStart) {
                 effectiveStartDate = sessionStart
             }
@@ -56,7 +54,7 @@ export class OccurrenceCommandService {
 
         let effectiveEndDate = endDate
         if (session.end_date) {
-            const sessionEnd = new Date(session.end_date)
+            const sessionEnd = DateUtils.parseLocalDate(session.end_date) || new Date(session.end_date)
             // Ensure sessionEnd is at the end of the day to avoid missing occurrences on the exact end_date
             sessionEnd.setHours(23, 59, 59, 999)
             if (effectiveEndDate > sessionEnd) {
@@ -67,6 +65,9 @@ export class OccurrenceCommandService {
         if (effectiveStartDate > effectiveEndDate) return []
 
         const dayOfWeek = (session as any).day_of_week
+        const timeZone = DateUtils.isValidTimeZone((session as any).time_zone)
+            ? (session as any).time_zone
+            : DateUtils.getDefaultTimeZone()
         const occurrenceDates = this.generateOccurrenceDates(dayOfWeek, effectiveStartDate, effectiveEndDate)
 
         // Fetch all session teachers with their effective periods
@@ -80,15 +81,15 @@ export class OccurrenceCommandService {
         // Fetch existing occurrences to preserve attendance status
         const { data: existingOccs } = await supabase
             .from('class_occurrences')
-            .select('occurrence_date, teacher_attendance')
+            .select('occurrence_date, teacher_attendance, time_zone')
             .eq('class_session_id', sessionId)
             .gte('occurrence_date', this.formatDate(effectiveStartDate))
             .lte('occurrence_date', this.formatDate(effectiveEndDate))
 
-        const existingAttendanceMap: Record<string, any> = {}
+        const existingOccurrenceMap: Record<string, any> = {}
         if (existingOccs) {
             existingOccs.forEach(occ => {
-                existingAttendanceMap[occ.occurrence_date] = occ.teacher_attendance || {}
+                existingOccurrenceMap[occ.occurrence_date] = occ
             })
         }
 
@@ -111,7 +112,8 @@ export class OccurrenceCommandService {
             }
 
             // Merge with existing attendance if it exists
-            const existingAttendance = existingAttendanceMap[dateStr] || {}
+            const existingOccurrence = existingOccurrenceMap[dateStr]
+            const existingAttendance = existingOccurrence?.teacher_attendance || {}
             const updatedAttendance: any = {}
 
             teacherIds.forEach((id: string) => {
@@ -130,6 +132,7 @@ export class OccurrenceCommandService {
                 status: 'scheduled',
                 original_start_time: (session as any).start_time,
                 original_end_time: (session as any).end_time,
+                time_zone: DateUtils.isValidTimeZone(existingOccurrence?.time_zone) ? existingOccurrence.time_zone : timeZone,
                 is_conducted: true,
                 teacher_ids: teacherIds,
                 teacher_attendance: updatedAttendance
@@ -153,7 +156,7 @@ export class OccurrenceCommandService {
         // Guard: check if occurrence is within a holiday period
         const occurrence = await OccurrenceQueryService.getOccurrenceById(occurrenceId)
         const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
-            ? occurrence.occurrenceDate.toISOString().split('T')[0]
+            ? DateUtils.formatLocalDate(occurrence.occurrenceDate)
             : occurrence.occurrenceDate
         const isHoliday = await HolidayService.isHoliday(
             occurrenceDateStr,

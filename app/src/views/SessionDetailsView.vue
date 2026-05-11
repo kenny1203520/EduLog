@@ -33,6 +33,8 @@ import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 type ReportEditorExpose = {
@@ -41,6 +43,7 @@ type ReportEditorExpose = {
 
 const { t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -49,7 +52,7 @@ const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
 const sessionTeachers = ref<(TeacherDTO & { effective_from: string; effective_to: string | null })[]>([])
-const weekAnchorDate = ref(new Date())
+const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
 const isCalendarExpanded = ref(false)
 const isOccurrenceInHoliday = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
@@ -74,7 +77,7 @@ const makeupCandidates = ref<Enrollment[]>([])
 const makeupSearch = ref('')
 const selectedMakeupStudentId = ref<string | null>(null)
 const selectedMakeupEnrollmentId = ref<string | null>(null)
-const makeupJoinDate = ref(DateUtils.formatLocalDate(new Date()))
+const makeupJoinDate = ref(DateUtils.todayString(preferences.timeZone))
 
 // Teacher Management State
 const occurrenceTeachers = ref<TeacherDTO[]>([])
@@ -99,6 +102,7 @@ const conflictServerReport = ref<OccurrenceReportDTO | null>(null)
 const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
 
 const session = ref<any>(null)
+const sessionTimeZone = computed(() => DateUtils.isValidTimeZone(session.value?.time_zone) ? session.value.time_zone : preferences.timeZone)
 const enrollments = ref<Enrollment[]>([])
 const courseLessons = ref<any[]>([])
 const courseLessonsByCourseId = ref<Record<string, Lesson[]>>({})
@@ -415,7 +419,7 @@ const displayedOccurrenceDate = computed(() => {
         return t('classroom.no_teaching_day_selected')
     }
 
-    return new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+    return DateUtils.displayDate(todayOccurrence.value.occurrenceDate, preferences.locale, preferences.timeZone)
 })
 
 const weekRangeLabel = computed(() => {
@@ -425,12 +429,12 @@ const weekRangeLabel = computed(() => {
     const end = new Date(weekAnchorDate.value)
     end.setDate(end.getDate() + 3)
 
-    return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
+    return `${DateUtils.displayDate(start, preferences.locale, preferences.timeZone)} - ${DateUtils.displayDate(end, preferences.locale, preferences.timeZone)}`
 })
 
 function normalizeDateInput(value: string | Date | undefined): string {
     if (!value) {
-        return DateUtils.formatLocalDate(new Date())
+        return DateUtils.todayString(preferences.timeZone)
     }
 
     if (value instanceof Date) {
@@ -443,7 +447,7 @@ function normalizeDateInput(value: string | Date | undefined): string {
 
     const parsed = new Date(value)
     if (Number.isNaN(parsed.getTime())) {
-        return DateUtils.formatLocalDate(new Date())
+        return DateUtils.todayString(preferences.timeZone)
     }
 
     return DateUtils.formatLocalDate(parsed)
@@ -655,7 +659,7 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
         // Check if occurrence is within a holiday period
         try {
             const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
-                ? occurrence.occurrenceDate.toISOString().split('T')[0]
+                ? DateUtils.formatLocalDate(occurrence.occurrenceDate)
                 : occurrence.occurrenceDate
             isOccurrenceInHoliday.value = await HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId)
         } catch (e) {
@@ -688,7 +692,7 @@ async function moveWeek(offset: number) {
 }
 
 async function goToToday() {
-    const today = new Date()
+    const today = DateUtils.todayDate(sessionTimeZone.value)
     weekAnchorDate.value = today
 
     await loadSessionOccurrences(today)
@@ -739,7 +743,7 @@ async function loadData() {
         }
 
         // 3. Find or Create Today's Occurrence
-        const today = new Date()
+        const today = DateUtils.todayDate(sessionTimeZone.value)
         todayOccurrence.value = null
         weekAnchorDate.value = today
 
@@ -1350,7 +1354,7 @@ async function submitAddStudentToClass() {
         return
     }
 
-    if (selected.status !== 'regular' && normalizedJoinDate >= DateUtils.formatLocalDate(new Date())) {
+    if (selected.status !== 'regular' && normalizedJoinDate >= DateUtils.todayString(preferences.timeZone)) {
         toast.error(t('classroom.add_student_active_only_for_future'))
         return
     }
@@ -1592,6 +1596,8 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </svg>
                         {{ session.start_time.slice(0, 5) }} - {{ session.end_time.slice(0, 5) }}
                     </span>
+                    <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                    <span>{{ session.time_zone || 'Asia/Taipei' }}</span>
                     <span v-if="session.external_link" class="w-1 h-1 bg-gray-300 rounded-full"></span>
                     <a v-if="session.external_link" :href="session.external_link" target="_blank"
                         class="flex items-center gap-1.5 text-emerald-600 hover:underline">
@@ -1616,6 +1622,10 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
             </div>
 
             <!-- Refresh Schedule Button -->
+            <div class="w-56">
+                <TimeZoneSelect :label="$t('common.time_zone')" dense />
+            </div>
+
             <button @click="requestRefreshSchedule"
                 class="p-3 rounded-2xl bg-white border border-gray-100 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-100 transition-all shadow-sm active:scale-90"
                 :title="$t('classroom.refresh_schedule')">

@@ -79,6 +79,7 @@
     "show_less": "減少顯示",
     "system_managed": "系統管理",
     "language": "語言",
+    "time_zone": "時區",
     "languages": {
         "zh-TW": "繁體中文",
         "en": "English"

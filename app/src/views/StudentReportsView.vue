@@ -14,6 +14,9 @@
                 <span v-if="enrollmentInfo">{{ enrollmentInfo.studentName }} - {{ enrollmentInfo.courseDisplay }}</span>
                 <span v-else>{{ $t('report.list_title') }}</span>
             </h1>
+            <div class="mt-3 max-w-xs">
+                <TimeZoneSelect :label="$t('common.time_zone')" dense />
+            </div>
         </div>
 
         <!-- Incomplete Reports Module -->
@@ -56,7 +59,7 @@
                             class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
                             <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
                             }}</span>
-                            <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
+                            <span class="text-lg font-black text-gray-800">{{ formatDayOfMonth(item.date) }}</span>
                             <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
                                 v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
                         </div>
@@ -460,6 +463,7 @@ import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
@@ -471,6 +475,8 @@ import { Suspension } from '@/models/Suspension'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
+import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type ReportEditorExpose = {
     saveNow: () => Promise<void>
@@ -481,6 +487,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const toast = useToast()
+const preferences = usePreferencesStore()
 
 const loading = ref(true)
 const occurrences = ref<ClassOccurrence[]>([])
@@ -812,17 +819,21 @@ const occurrenceStatuses = computed(() => {
 })
 
 function formatWeekday(dateVal: string | Date) {
-    return new Date(dateVal).toLocaleDateString(locale.value, { weekday: 'short' })
+    const date = typeof dateVal === 'string' ? DateUtils.parseLocalDate(dateVal) : dateVal
+    return date?.toLocaleDateString(locale.value, { weekday: 'short' }) || ''
+}
+
+function formatDayOfMonth(dateVal: string | Date) {
+    const date = typeof dateVal === 'string' ? DateUtils.parseLocalDate(dateVal) : dateVal
+    return date?.getDate() || ''
 }
 
 function formatDate(dateVal: string | Date) {
-    return new Date(dateVal).toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
+    return DateUtils.displayDate(dateVal, locale.value, preferences.timeZone)
 }
 
 function formatOccurrenceDateTime(occ: ClassOccurrence) {
-    // We construct a date object for the occurrence
-    // Note: d() usage depends on i18n setup, but toLocaleDateString is safer if d() isn't configured with 'short'
-    const date = new Date(occ.occurrenceDate).toLocaleDateString(locale.value)
+    const date = DateUtils.displayDate(occ.occurrenceDate, locale.value, preferences.timeZone)
     const time = occ.effectiveStartTime ? occ.effectiveStartTime.slice(0, 5) : ''
     return `${date} ${time}`.trim()
 }

@@ -1,3 +1,5 @@
+import { DateUtils } from '@/utils/DateUtils'
+
 export interface SuspensionDTO {
     id?: string
     enrollment_id: string
@@ -28,7 +30,7 @@ export class Suspension {
     }
 
     get isActive(): boolean {
-        const now = new Date().toISOString().split('T')[0] as string
+        const now = DateUtils.todayString()
         if (this.endDate) {
             return now >= this.startDate && now <= this.endDate
         }

@@ -5,6 +5,9 @@ import { useToast } from 'vue-toastification'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { SessionService } from '@/services/session/SessionService'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 const props = defineProps<{
     isOpen: boolean
@@ -16,11 +19,12 @@ const emit = defineEmits(['close', 'success'])
 
 const { t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
 const activateTrialForm = ref({
     class_session_id: '',
-    effective_date: new Date().toISOString().split('T')[0]
+    effective_date: DateUtils.todayString(preferences.timeZone)
 })
 
 const sessionOptions = ref<any[]>([])
@@ -42,7 +46,7 @@ watch(() => props.isOpen, (val) => {
         fetchSessions()
         activateTrialForm.value = {
             class_session_id: '',
-            effective_date: new Date().toISOString().split('T')[0]
+            effective_date: DateUtils.todayString(preferences.timeZone)
         }
     }
 })
@@ -110,6 +114,8 @@ async function submitActivateTrial() {
             <!-- Body -->
             <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
                 <div class="space-y-6">
+                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
+
                     <div class="space-y-2">
                         <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
                             $t('student.activate_trial_modal.to_classroom') }}</label>

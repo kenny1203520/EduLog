@@ -10,9 +10,13 @@ import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { DateUtils } from '@/utils/DateUtils'
 
 const { t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 const holidays = ref<Holiday[]>([])
 const classrooms = ref<ClassroomDTO[]>([])
 const sessions = ref<ClassSessionDTO[]>([])
@@ -28,8 +32,8 @@ const deleteId = ref<string | null>(null)
 
 const scopeType = ref<'global' | 'classroom' | 'session'>('global')
 const holidayForm = ref({
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0],
+    startDate: DateUtils.todayString(preferences.timeZone),
+    endDate: DateUtils.todayString(preferences.timeZone),
     name: '',
     classroomIds: [] as string[],
     classSessionIds: [] as string[]
@@ -133,8 +137,8 @@ function openAddModal() {
     editingId.value = null
     scopeType.value = 'global'
     holidayForm.value = {
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: new Date().toISOString().split('T')[0],
+        startDate: DateUtils.todayString(preferences.timeZone),
+        endDate: DateUtils.todayString(preferences.timeZone),
         name: '',
         classroomIds: [],
         classSessionIds: []
@@ -183,6 +187,9 @@ function closeModal() {
                 </div>
             </template>
             <template #actions>
+                <div class="w-full md:w-64">
+                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
+                </div>
                 <button @click="openAddModal"
                     class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition flex items-center gap-2 shadow-lg shadow-emerald-200 font-bold active:scale-95">
                     <span class="text-xl leading-none">+</span> {{ t('holiday.add_holiday') }}

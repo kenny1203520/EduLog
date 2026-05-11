@@ -13,6 +13,9 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { DateUtils } from '@/utils/DateUtils'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 
@@ -22,6 +25,7 @@ import BasePageHeader from '@/components/common/BasePageHeader.vue'
 const { t } = useI18n()
 const toast = useToast()
 const router = useRouter()
+const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 type DisplayMode = 'visible' | 'all' | 'hidden'
 
@@ -110,6 +114,7 @@ const newSession = ref<Partial<ClassSessionDTO>>({
     day_of_week: 1,
     start_time: '10:00',
     end_time: '12:00',
+    time_zone: preferences.timeZone,
     capacity: 10,
     lesson_number: 1,
     external_link: ''
@@ -368,6 +373,9 @@ async function toggleSessionVisibility(id?: string) {
 async function saveSession() {
     if (!newSession.value.name) return
     const payload = { ...newSession.value }
+    if (!DateUtils.isValidTimeZone(payload.time_zone)) {
+        payload.time_zone = preferences.timeZone
+    }
     if (!payload.classroom_id) {
         payload.classroom_id = null
     }
@@ -391,16 +399,16 @@ async function saveSession() {
         if (editingSession.value?.id) {
             // Sync occurrences if the schedule might have changed
             // This will create occurrences for the entire defined interval
-            const genStart = new Date(payload.start_date || new Date())
-            const genEnd = payload.end_date ? new Date(payload.end_date) : new Date()
+            const genStart = DateUtils.parseLocalDate(payload.start_date) || DateUtils.todayDate(payload.time_zone)
+            const genEnd = payload.end_date ? (DateUtils.parseLocalDate(payload.end_date) || DateUtils.todayDate(payload.time_zone)) : DateUtils.todayDate(payload.time_zone)
             if (!payload.end_date) {
                 genEnd.setMonth(genEnd.getMonth() + 6)
             }
             await OccurrenceService.generateOccurrences(sessionId, genStart, genEnd).catch(console.error)
         } else {
             // Generate occurrences for new sessions
-            const genStart = new Date(payload.start_date || new Date())
-            const genEnd = payload.end_date ? new Date(payload.end_date) : new Date()
+            const genStart = DateUtils.parseLocalDate(payload.start_date) || DateUtils.todayDate(payload.time_zone)
+            const genEnd = payload.end_date ? (DateUtils.parseLocalDate(payload.end_date) || DateUtils.todayDate(payload.time_zone)) : DateUtils.todayDate(payload.time_zone)
             if (!payload.end_date) {
                 genEnd.setMonth(genEnd.getMonth() + 6)
             }
@@ -419,7 +427,7 @@ async function saveSession() {
 
 async function openEditSession(session: ClassSessionDTO) {
     editingSession.value = session
-    newSession.value = { ...session }
+    newSession.value = { ...session, time_zone: session.time_zone || preferences.timeZone }
     try {
         const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
         selectedTeacherConfigs.value = assignedTeachers.map(t => ({
@@ -444,11 +452,12 @@ function openCreateSessionModal() {
         day_of_week: 1,
         start_time: '10:00',
         end_time: '12:00',
+        time_zone: preferences.timeZone,
         capacity: 10,
         lesson_number: 1,
         external_link: '',
         user_id: undefined,
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: DateUtils.todayString(preferences.timeZone),
         end_date: null
     }
     isCreateSessionModalOpen.value = true
@@ -465,6 +474,7 @@ function closeSessionModal() {
         day_of_week: 1,
         start_time: '10:00',
         end_time: '12:00',
+        time_zone: preferences.timeZone,
         capacity: 10,
         lesson_number: 1,
         external_link: '',
@@ -509,7 +519,7 @@ function toggleCourseSelection(courseId: string) {
 function addTeacherAssignment() {
     selectedTeacherConfigs.value.push({
         teacher_id: '',
-        effective_from: newSession.value.start_date || new Date().toISOString().split('T')[0],
+        effective_from: newSession.value.start_date || DateUtils.todayString(newSession.value.time_zone || preferences.timeZone),
         effective_to: null
     })
 }
@@ -578,6 +588,10 @@ function clearTeacherSelection() {
                             {{ t('classroom.sessions_tab') }}
                         </button>
                     </div>
+                </div>
+
+                <div class="w-full md:w-64">
+                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
                 </div>
 
                 <!-- Primary Action Button -->
@@ -798,6 +812,9 @@ function clearTeacherSelection() {
                                     </span>
                                     <span class="text-[12px] font-black text-gray-400 uppercase tracking-widest">
                                         {{ session.start_time.slice(0, 5) }}-{{ session.end_time.slice(0, 5) }}
+                                    </span>
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                        {{ session.time_zone || 'Asia/Taipei' }}
                                     </span>
                                     <span v-if="isSessionHidden(session.id)"
                                         class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">
@@ -1064,6 +1081,18 @@ function clearTeacherSelection() {
                                     class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                             </div>
                         </div>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.time_zone')
+                            }}</label>
+                        <select v-model="newSession.time_zone"
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            <option v-for="option in preferences.timeZoneOptions" :key="option.value"
+                                :value="option.value">
+                                {{ option.label }}
+                            </option>
+                        </select>
                     </div>
 
                     <div class="md:col-span-2">

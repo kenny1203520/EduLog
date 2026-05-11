@@ -7,6 +7,9 @@ import { SessionService } from '@/services/session/SessionService'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { useCapacityCheck } from '@/composables/useCapacityCheck'
 import CapacityProgressBar from '@/components/common/CapacityProgressBar.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 const props = defineProps<{
     isOpen: boolean
@@ -18,11 +21,12 @@ const emit = defineEmits(['close', 'success'])
 
 const { t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
 const transferForm = ref({
     to_session_id: '',
-    effective_date: new Date().toISOString().split('T')[0]
+    effective_date: DateUtils.todayString(preferences.timeZone)
 })
 
 const sessionOptions = ref<any[]>([])
@@ -52,7 +56,7 @@ watch(() => props.isOpen, (val) => {
         fetchSessions()
         transferForm.value = {
             to_session_id: '',
-            effective_date: new Date().toISOString().split('T')[0]
+            effective_date: DateUtils.todayString(preferences.timeZone)
         }
     }
 })
@@ -71,10 +75,7 @@ async function submitTransfer() {
     try {
         isSubmitting.value = true
         // Calculate originalLastDate as the day before effective_date
-        const effDate = new Date(transferForm.value.effective_date)
-        const lastDate = new Date(effDate)
-        lastDate.setDate(lastDate.getDate() - 1)
-        const originalLastDate = lastDate.toISOString().split('T')[0]
+        const originalLastDate = DateUtils.addDaysToDateString(transferForm.value.effective_date, -1)
 
         await EnrollmentService.transferClass(
             props.fromEnrollmentId,
@@ -132,6 +133,8 @@ async function submitTransfer() {
             <!-- Body -->
             <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
                 <div class="space-y-6">
+                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
+
                     <div class="space-y-4">
                         <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.transfer_modal.to_classroom') }}</label>

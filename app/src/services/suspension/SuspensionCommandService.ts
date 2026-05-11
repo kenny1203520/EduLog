@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Suspension, type SuspensionDTO } from '@/models/Suspension'
 import { SuspensionPolicyService } from './SuspensionPolicyService'
+import { DateUtils } from '@/utils/DateUtils'
 
 export class SuspensionCommandService {
     static async createSuspension(enrollmentId: string, startDate: string, endDate: string | null, reason?: string): Promise<Suspension> {
@@ -48,7 +49,7 @@ export class SuspensionCommandService {
         if (oldSuspension.endDate && newSuspension.endDate && newSuspension.endDate < oldSuspension.endDate) {
             const revertStart = new Date(newSuspension.endDate)
             revertStart.setDate(revertStart.getDate() + 1)
-            const revertStartStr = revertStart.toISOString().split('T')[0] as string
+            const revertStartStr = DateUtils.formatLocalDate(revertStart)
 
             await SuspensionPolicyService.revertReports({
                 enrollment_id: newSuspension.enrollmentId,
@@ -62,7 +63,7 @@ export class SuspensionCommandService {
         } else if (!oldSuspension.endDate && newSuspension.endDate) {
             const revertStart = new Date(newSuspension.endDate)
             revertStart.setDate(revertStart.getDate() + 1)
-            const revertStartStr = revertStart.toISOString().split('T')[0] as string
+            const revertStartStr = DateUtils.formatLocalDate(revertStart)
 
             await SuspensionPolicyService.revertReports({
                 enrollment_id: newSuspension.enrollmentId,

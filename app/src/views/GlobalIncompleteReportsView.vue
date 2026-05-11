@@ -17,6 +17,10 @@
             </template>
             <template #actions>
                 <div class="flex items-center gap-2 sm:gap-4">
+                    <div class="hidden lg:block w-56">
+                        <TimeZoneSelect :label="$t('common.time_zone')" dense />
+                    </div>
+
                     <!-- Stats Badge -->
                     <div
                         class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl border border-gray-100 shadow-inner">
@@ -374,12 +378,16 @@ import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportS
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { supabase } from '@/lib/supabase'
+import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 const { locale, t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 
 const loading = ref(true)
 const isRefreshing = ref(false)
@@ -561,11 +569,11 @@ function handleSaveError(msg: string) {
 }
 
 function formatDate(dateVal: string | Date) {
-    return new Date(dateVal).toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
+    return DateUtils.displayDate(dateVal, locale.value, preferences.timeZone)
 }
 
 function formatDateTime(report: any) {
-    const date = new Date(report.date).toLocaleDateString(locale.value)
+    const date = DateUtils.displayDate(report.date, locale.value, preferences.timeZone)
     const time = report.startTime ? report.startTime.slice(0, 5) : ''
     return `${date} ${time}`.trim()
 }
@@ -578,7 +586,8 @@ function formatTimeRange(start?: string, end?: string) {
 }
 
 function formatWeekday(dateVal: string | Date) {
-    return new Date(dateVal).toLocaleDateString(locale.value, { weekday: 'short' })
+    const date = typeof dateVal === 'string' ? DateUtils.parseLocalDate(dateVal) : dateVal
+    return date?.toLocaleDateString(locale.value, { weekday: 'short' }) || ''
 }
 
 onMounted(() => {

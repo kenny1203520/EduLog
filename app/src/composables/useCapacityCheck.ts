@@ -1,5 +1,6 @@
 import { ref, computed, watch } from 'vue'
 import { SessionService } from '@/services/session/SessionService'
+import { DateUtils } from '@/utils/DateUtils'
 
 export function useCapacityCheck(sessionIdRef: { value: string }, startDateRef: { value: string }, generateCountRef: { value: number }) {
     const maxEnrollment = ref(0)
@@ -27,11 +28,11 @@ export function useCapacityCheck(sessionIdRef: { value: string }, startDateRef: 
         try {
             // Calculate end date based on start date and count
             // This is a simple approximation, or we can fetch it from SessionService if it supports it
-            const start = new Date(startDate)
+            const start = DateUtils.parseLocalDate(startDate) || new Date(startDate)
             const end = new Date(start)
             // Assuming weekly classes, 7 days * (count - 1)
             end.setDate(start.getDate() + (count - 1) * 7)
-            const endDate = end.toISOString().split('T')[0]
+            const endDate = DateUtils.formatLocalDate(end)
 
             const [max, sessionDetails] = await Promise.all([
                 SessionService.getMaxEnrollmentInDateRange(sessionId, startDate, endDate),

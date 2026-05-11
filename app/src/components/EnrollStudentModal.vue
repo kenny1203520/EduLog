@@ -9,6 +9,9 @@ import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import { useCapacityCheck } from '@/composables/useCapacityCheck'
 import CapacityProgressBar from '@/components/common/CapacityProgressBar.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 const props = defineProps<{
     isOpen: boolean
@@ -19,13 +22,14 @@ const emit = defineEmits(['close', 'success'])
 
 const { t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
 const enrollForm = ref({
     course_catalog_id: '',
     class_session_id: '',
     enrollment_type: 'regular' as 'regular' | 'trial',
-    start_date: new Date().toISOString().split('T')[0],
+    start_date: DateUtils.todayString(preferences.timeZone),
     generate_count: 10
 })
 
@@ -88,7 +92,7 @@ watch(() => props.isOpen, (val) => {
             course_catalog_id: '',
             class_session_id: '',
             enrollment_type: 'regular',
-            start_date: new Date().toISOString().split('T')[0],
+            start_date: DateUtils.todayString(preferences.timeZone),
             generate_count: 10
         }
     }
@@ -167,6 +171,8 @@ async function submitEnrollment() {
             <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
                 <!-- Course & Classroom -->
                 <div class="grid grid-cols-1 gap-6">
+                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
+
                     <div class="space-y-2">
                         <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.enroll_modal.course') }}</label>

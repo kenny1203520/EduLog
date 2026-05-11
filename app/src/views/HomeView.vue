@@ -8,8 +8,12 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { StudentService } from '@/services/student/StudentService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { DateUtils } from '@/utils/DateUtils'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 
 const router = useRouter()
+const preferences = usePreferencesStore()
 const stats = ref({
     totalStudents: 0,
     activeCourses: 0,
@@ -21,22 +25,15 @@ const loading = ref(true)
 const nextClass = computed(() => {
     if (!todayOccurrences.value.length) return null
     const now = new Date()
-    const currentTimeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
 
-    // Find the first class that hasn't started yet
-    const upcoming = todayOccurrences.value.filter(occ => occ.effectiveStartTime && occ.effectiveStartTime >= currentTimeString)
-    if (upcoming.length > 0) {
-        return upcoming[0]
-    }
+    return todayOccurrences.value.find(occ => {
+        const endInstant = occ.effectiveEndInstant
+        const startInstant = occ.effectiveStartInstant
 
-    // If all classes have started, find the first one that is currently ongoing (start <= now <= end)
-    const ongoing = todayOccurrences.value.filter(occ => occ.effectiveStartTime && occ.effectiveEndTime && occ.effectiveStartTime <= currentTimeString && occ.effectiveEndTime >= currentTimeString)
-    if (ongoing.length > 0) {
-        return ongoing[0]
-    }
-
-    // If all are past, return null
-    return null
+        if (endInstant) return now < endInstant
+        if (startInstant) return now <= startInstant
+        return false
+    }) || null
 })
 
 onMounted(async () => {
@@ -50,10 +47,15 @@ onMounted(async () => {
             fetchPendingReports()
         ])
 
-        // Fetch today's classes
-        const today = new Date()
-        const start = new Date(today.setHours(0, 0, 0, 0))
-        const end = new Date(today.setHours(23, 59, 59, 999))
+        // Fetch a one-day buffer around the user's display date so class-time-zone
+        // occurrences that cross the user's calendar boundary are still considered.
+        const today = DateUtils.todayDate(preferences.timeZone)
+        const start = DateUtils.addDays(today, -1)
+        const end = DateUtils.addDays(today, 1)
+        const displayToday = DateUtils.todayString(preferences.timeZone)
+        const displayTomorrow = DateUtils.addDaysToDateString(displayToday, 1)
+        const displayDayStart = DateUtils.zonedDateTimeToInstant(displayToday, '00:00', preferences.timeZone)
+        const displayDayEnd = DateUtils.zonedDateTimeToInstant(displayTomorrow, '00:00', preferences.timeZone)
 
         const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
         const auth = useAuthStore()
@@ -71,6 +73,13 @@ onMounted(async () => {
             // Must be conducted
             if (d.isConducted !== true) return false
 
+            const occurrenceStart = d.effectiveStartInstant
+            const occurrenceEnd = d.effectiveEndInstant || occurrenceStart
+            if (displayDayStart && displayDayEnd && occurrenceStart && occurrenceEnd) {
+                const overlapsDisplayDay = occurrenceStart < displayDayEnd && occurrenceEnd >= displayDayStart
+                if (!overlapsDisplayDay) return false
+            }
+
             // If we have a teacher profile, filter by assignment and attendance
             if (teacherId) {
                 const isAssigned = d.teacherIds?.includes(teacherId)
@@ -82,8 +91,11 @@ onMounted(async () => {
             return false
         })
 
-        // Sort by start time
+        // Sort by actual instant, falling back to local time for incomplete records.
         visible.sort((a, b) => {
+            const instantA = a.effectiveStartInstant?.getTime()
+            const instantB = b.effectiveStartInstant?.getTime()
+            if (instantA != null && instantB != null) return instantA - instantB
             const timeA = a.effectiveStartTime || '23:59:59'
             const timeB = b.effectiveStartTime || '23:59:59'
             return timeA.localeCompare(timeB)
@@ -119,6 +131,10 @@ function openReport(enrollmentId: string) {
 
 function navigateToGlobalIncomplete() {
     router.push({ name: 'incomplete-reports' })
+}
+
+function formatReportDate(date: string | Date | undefined): string {
+    return DateUtils.displayDate(date, preferences.locale, preferences.timeZone)
 }
 
 </script>
@@ -221,6 +237,9 @@ function navigateToGlobalIncomplete() {
                                 $t('dashboard.schedule.title') }}</h3>
                             <p class="text-sm font-bold text-gray-400 italic">{{ $t('dashboard.schedule.subtitle') }}
                             </p>
+                            <p class="text-[11px] font-bold text-gray-400 mt-1">
+                                {{ $t('dashboard.schedule.time_zone', { zone: preferences.timeZoneLabel }) }}
+                            </p>
                         </div>
                         <button @click="router.push({ name: 'classrooms' })"
                             class="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
@@ -230,6 +249,9 @@ function navigateToGlobalIncomplete() {
                                     d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                             </svg>
                         </button>
+                        <div class="w-56">
+                            <TimeZoneSelect :label="$t('common.time_zone')" dense />
+                        </div>
                     </div>
 
                     <div v-if="loading" class="flex flex-col items-center py-12">
@@ -389,9 +411,7 @@ function navigateToGlobalIncomplete() {
                                     {{ report.isMissing ? $t('dashboard.missing') : $t('dashboard.incomplete') }}
                                 </span>
                                 <span class="text-[10px] font-black text-gray-400 uppercase">
-                                    {{ new Date(report.date).toLocaleDateString(undefined, {
-                                        month: 'short', day:
-                                    'numeric' }) }}
+                                    {{ formatReportDate(report.date) }}
                                 </span>
                             </div>
                         </div>

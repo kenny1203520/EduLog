@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -11,6 +12,10 @@ const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
 
 const version = __APP_VERSION__
+
+onMounted(() => {
+    preferences.loadUserPreferences()
+})
 
 async function handleLogout() {
     await auth.signOut()
@@ -86,6 +91,11 @@ async function handleLogout() {
                         :class="{ 'bg-white shadow text-emerald-600': preferences.locale === 'en', 'text-gray-500 hover:text-gray-700': preferences.locale !== 'en' }"
                         class="px-3 py-1.5 rounded transition flex-1">English</button>
                 </div>
+            </div>
+
+            <!-- Time Zone Switcher in Sidebar -->
+            <div class="px-6 py-2">
+                <TimeZoneSelect :label="$t('common.time_zone')" dense />
             </div>
 
             <!-- Font Size Switcher in Sidebar -->

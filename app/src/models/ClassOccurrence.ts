@@ -17,6 +17,7 @@ export interface ClassOccurrenceDTO {
     original_end_time?: string // HH:MM:SS
     actual_start_time?: string // HH:MM:SS
     actual_end_time?: string // HH:MM:SS
+    time_zone?: string
     notes?: string
     is_conducted?: boolean // Default true
     teacher_ids?: string[]
@@ -37,6 +38,7 @@ export class ClassOccurrence {
     originalEndTime?: string
     actualStartTime?: string
     actualEndTime?: string
+    timeZone: string
     notes?: string
     isConducted: boolean
     teacherIds: string[]
@@ -57,6 +59,7 @@ export class ClassOccurrence {
         this.originalEndTime = data.original_end_time
         this.actualStartTime = data.actual_start_time
         this.actualEndTime = data.actual_end_time
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : DateUtils.getDefaultTimeZone()
         this.notes = data.notes
         this.isConducted = data.is_conducted ?? false
         this.teacherIds = data.teacher_ids || []
@@ -78,6 +81,7 @@ export class ClassOccurrence {
             original_end_time: this.originalEndTime,
             actual_start_time: this.actualStartTime,
             actual_end_time: this.actualEndTime,
+            time_zone: this.timeZone,
             notes: this.notes,
             is_conducted: this.isConducted,
             teacher_ids: this.teacherIds,
@@ -144,6 +148,14 @@ export class ClassOccurrence {
      */
     get effectiveEndTime(): string | undefined {
         return this.actualEndTime || this.originalEndTime
+    }
+
+    get effectiveStartInstant(): Date | null {
+        return DateUtils.zonedDateTimeToInstant(this.formatDate(this.occurrenceDate), this.effectiveStartTime, this.timeZone)
+    }
+
+    get effectiveEndInstant(): Date | null {
+        return DateUtils.zonedDateTimeToInstant(this.formatDate(this.occurrenceDate), this.effectiveEndTime, this.timeZone)
     }
 
     /**

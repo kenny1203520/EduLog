@@ -13,6 +13,7 @@
     "schedule": {
         "title": "今日課表",
         "subtitle": "正在進行中及即將開始的課程。",
+        "time_zone": "時區：{zone}",
         "view_classrooms": "查看教室",
         "loading": "載入課表中...",
         "no_classes": "今日無排定課程",

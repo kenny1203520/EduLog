@@ -6,14 +6,17 @@
             <!-- Header -->
             <div class="flex items-center justify-between p-8 border-b border-gray-50 shrink-0">
                 <h2 class="text-4xl font-black text-gray-900 tracking-tight">{{ $t('student.suspension.title') }}</h2>
-                <button @click="$emit('close')"
-                    class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
+                <div class="flex items-center gap-3">
+                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
+                    <button @click="$emit('close')"
+                        class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <!-- Body -->
@@ -102,7 +105,7 @@
                                             <label
                                                 class="inline-flex items-center text-[10px] font-black text-gray-400 hover:text-emerald-600 cursor-pointer transition-colors uppercase tracking-widest">
                                                 <input type="checkbox" :checked="!editForm.endDate"
-                                                    @change="(e) => editForm.endDate = ((e.target as HTMLInputElement).checked ? '' : (suspension.endDate || new Date().toISOString().split('T')[0])) as string"
+                                                    @change="(e) => editForm.endDate = ((e.target as HTMLInputElement).checked ? '' : (suspension.endDate || DateUtils.todayString(preferences.timeZone))) as string"
                                                     class="rounded border-gray-300 w-3.5 h-3.5 text-emerald-600 focus:ring-0 mr-2">
                                                 {{ $t('student.suspension.indefinite') }}
                                             </label>
@@ -219,6 +222,8 @@ import { useToast } from 'vue-toastification'
 import { SuspensionService } from '@/services/suspension/SuspensionService'
 import type { Suspension } from '@/models/Suspension'
 import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import TimeZoneSelect from './common/TimeZoneSelect.vue'
 import ConfirmModal from './common/ConfirmModal.vue'
 
 const props = defineProps<{
@@ -227,6 +232,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 const emit = defineEmits(['close'])
 
 const suspensions = ref<Suspension[]>([])
@@ -242,7 +248,7 @@ const editForm = ref({
 })
 
 const newSuspension = ref({
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: DateUtils.todayString(preferences.timeZone),
     endDate: '', // Empty string for indefinite
     reason: ''
 })
@@ -320,7 +326,7 @@ async function addSuspension() {
         )
         // Reset form
         newSuspension.value = {
-            startDate: new Date().toISOString().split('T')[0],
+            startDate: DateUtils.todayString(preferences.timeZone),
             endDate: '',
             reason: ''
         }
@@ -382,7 +388,7 @@ async function saveEdit(id: string) {
 
 async function endSuspensionNow(suspension: Suspension) {
     if (!suspension.id) return
-    const today = new Date().toISOString().split('T')[0]
+    const today = DateUtils.todayString(preferences.timeZone)
 
     // If start date is in future, today is invalid end date (before start). 
     // But button only shows if active, meaning start <= today.
@@ -404,6 +410,6 @@ async function endSuspensionNow(suspension: Suspension) {
 }
 
 function formatDate(date: string) {
-    return DateUtils.displayDate(date)
+    return DateUtils.displayDate(date, preferences.locale, preferences.timeZone)
 }
 </script>

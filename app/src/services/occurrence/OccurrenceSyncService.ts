@@ -3,23 +3,16 @@ import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceCommandService } from './OccurrenceCommandService'
 
 export class OccurrenceSyncService {
-    private static formatDate(date: Date): string {
-        const year = date.getFullYear()
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const day = String(date.getDate()).padStart(2, '0')
-        return `${year}-${month}-${day}`
-    }
-
     static async syncSessionOccurrences(sessionId: string, scope: 'future' | 'all' = 'future'): Promise<void> {
-        const todayStr = this.formatDate(new Date())
-
         const { data: session } = await supabase
             .from('class_sessions')
-            .select('day_of_week')
+            .select('day_of_week, time_zone')
             .eq('id', sessionId)
             .single()
 
         const sessionDayOfWeek = session?.day_of_week
+        const sessionTimeZone = DateUtils.isValidTimeZone(session?.time_zone) ? session.time_zone : DateUtils.getDefaultTimeZone()
+        const todayStr = DateUtils.todayString(sessionTimeZone)
 
         let query = supabase
             .from('class_occurrences')
@@ -111,8 +104,8 @@ export class OccurrenceSyncService {
             .in('status', ['regular', 'trial'])
 
         if (enrollmentCount && enrollmentCount > 0) {
-            const startDate = new Date()
-            const endDate = new Date()
+            const startDate = DateUtils.todayDate(sessionTimeZone)
+            const endDate = new Date(startDate)
             endDate.setMonth(endDate.getMonth() + 6)
             await OccurrenceCommandService.generateOccurrences(sessionId, startDate, endDate)
         }

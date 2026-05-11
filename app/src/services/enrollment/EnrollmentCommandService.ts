@@ -5,6 +5,7 @@ import { OccurrenceReportService } from '../occurrence/OccurrenceReportService'
 import { EnrollmentStatusPolicyService } from './EnrollmentStatusPolicyService'
 import { EnrollmentTransferService } from './EnrollmentTransferService'
 import { EnrollmentSupportService } from './EnrollmentSupportService'
+import { DateUtils } from '@/utils/DateUtils'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -54,7 +55,7 @@ export class EnrollmentCommandService {
             await EnrollmentStatusPolicyService.generateReportsForSession(
                 enrollment.id!,
                 enrollment.class_session_id,
-                enrollment.start_date || new Date().toISOString().split('T')[0],
+                enrollment.start_date || DateUtils.todayString(),
                 enrollment.course_id,
                 {
                     targetReportCount: options.targetReportCount
@@ -108,7 +109,7 @@ export class EnrollmentCommandService {
                 updated.id,
                 updated.class_session_id,
                 updated.course_id,
-                updated.start_date || new Date().toISOString().split('T')[0],
+                updated.start_date || DateUtils.todayString(),
                 options.targetTotalReports
             )
         }
