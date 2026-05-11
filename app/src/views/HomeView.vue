@@ -10,7 +10,6 @@ import { StudentService } from '@/services/student/StudentService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
-import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 
 const router = useRouter()
 const preferences = usePreferencesStore()
@@ -24,14 +23,24 @@ const loading = ref(true)
 
 const nextClass = computed(() => {
     if (!todayOccurrences.value.length) return null
+
+    // Use the timezone-aware "now" for comparison
     const now = new Date()
 
+    // Find the first class that hasn't ended yet
+    // This will correctly show the "ongoing" class until its scheduled end time.
     return todayOccurrences.value.find(occ => {
         const endInstant = occ.effectiveEndInstant
-        const startInstant = occ.effectiveStartInstant
-
+        // If the class has an end time, show it if it's in the future
         if (endInstant) return now < endInstant
-        if (startInstant) return now <= startInstant
+
+        // Fallback for classes with only start time: show if it's in the future or started very recently (e.g., within the last hour)
+        const startInstant = occ.effectiveStartInstant
+        if (startInstant) {
+            const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+            return startInstant > oneHourAgo
+        }
+
         return false
     }) || null
 })
@@ -187,8 +196,13 @@ function formatReportDate(date: string | Date | undefined): string {
                         <div>
                             <div class="flex items-center gap-2 mb-3">
                                 <span class="flex h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <span class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{
-                                    $t('dashboard.schedule.next_class') }}</span>
+                                <span class="text-xs font-black text-emerald-600 uppercase tracking-widest">
+                                    {{ (nextClass.effectiveStartInstant && new Date() >=
+                                        nextClass.effectiveStartInstant)
+                                        ? $t('dashboard.schedule.ongoing_class')
+                                        : $t('dashboard.schedule.next_class')
+                                    }}
+                                </span>
                             </div>
                             <h2 class="text-3xl font-black text-gray-900 tracking-tight mb-2">
                                 {{ nextClass.sessionName || $t('dashboard.schedule.untitled_class') }}
@@ -249,9 +263,6 @@ function formatReportDate(date: string | Date | undefined): string {
                                     d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                             </svg>
                         </button>
-                        <div class="w-56">
-                            <TimeZoneSelect :label="$t('common.time_zone')" dense />
-                        </div>
                     </div>
 
                     <div v-if="loading" class="flex flex-col items-center py-12">
@@ -269,7 +280,7 @@ function formatReportDate(date: string | Date | undefined): string {
                         class="text-center py-12 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
                         <h4 class="text-lg font-black text-gray-900 mb-1">{{ $t('dashboard.schedule.no_classes') }}</h4>
                         <p class="text-sm text-gray-400 font-medium italic">{{ $t('dashboard.schedule.no_classes_sub')
-                            }}</p>
+                        }}</p>
                     </div>
 
                     <div v-else class="space-y-3">
@@ -288,7 +299,7 @@ function formatReportDate(date: string | Date | undefined): string {
                                             occ.effectiveEndTime?.slice(0, 5) }}</span>
                                         <span v-if="occ.classroomName"
                                             class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">{{
-                                            occ.classroomName }}</span>
+                                                occ.classroomName }}</span>
                                     </div>
                                 </div>
                             </div>

@@ -174,25 +174,25 @@ async function submitEnrollment() {
                     <TimeZoneSelect :label="$t('common.time_zone')" dense />
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                            $t('student.enroll_modal.course') }}</label>
+                        <label
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.enroll_modal.course') }}</label>
                         <SearchableSelect v-model="enrollForm.course_catalog_id" :options="catalogOptions"
                             :placeholder="$t('common.select_placeholder')" />
                     </div>
 
                     <div class="space-y-4">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                            $t('student.enroll_modal.classroom') }}</label>
+                        <label
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.enroll_modal.classroom') }}</label>
                         <SearchableSelect v-model="enrollForm.class_session_id" :options="sessionOptions"
                             :placeholder="$t('common.select_placeholder')" />
-                        
+
                         <!-- Modular Capacity Progress Bar -->
-                        <div v-if="enrollForm.class_session_id" class="mt-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 animate-in fade-in duration-500">
-                            <CapacityProgressBar 
-                                :current="maxEnrollment" 
-                                :capacity="capacity" 
-                                :is-loading="isChecking"
-                            />
+                        <div v-if="enrollForm.class_session_id"
+                            class="mt-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 animate-in fade-in duration-500">
+                            <CapacityProgressBar :current="maxEnrollment" :capacity="capacity"
+                                :is-loading="isChecking" />
                         </div>
                     </div>
                 </div>
@@ -200,8 +200,9 @@ async function submitEnrollment() {
                 <!-- Type, Count & Dates -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                            $t('student.enroll_modal.type') }}</label>
+                        <label
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.enroll_modal.type') }}</label>
                         <BaseDropdown v-model="enrollForm.enrollment_type" :options="[
                             { label: $t('student.enroll_modal.type_regular'), value: 'regular' },
                             { label: $t('student.enroll_modal.type_trial'), value: 'trial' }
@@ -209,15 +210,17 @@ async function submitEnrollment() {
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                            $t('student.enroll_modal.start_date') }}</label>
+                        <label
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.enroll_modal.start_date') }}</label>
                         <input type="date" v-model="enrollForm.start_date"
                             class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                            $t('student.enroll_modal.generate_count') || 'Expected Lessons' }}</label>
+                        <label
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.enroll_modal.generate_count') || 'Expected Lessons' }}</label>
                         <input type="number" v-model.number="enrollForm.generate_count" min="1" max="100"
                             class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
                     </div>

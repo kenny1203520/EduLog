@@ -10,7 +10,6 @@ import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
 
@@ -187,9 +186,6 @@ function closeModal() {
                 </div>
             </template>
             <template #actions>
-                <div class="w-full md:w-64">
-                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
-                </div>
                 <button @click="openAddModal"
                     class="bg-emerald-600 text-white px-6 py-3 rounded-2xl hover:bg-emerald-700 transition flex items-center gap-2 shadow-lg shadow-emerald-200 font-bold active:scale-95">
                     <span class="text-xl leading-none">+</span> {{ t('holiday.add_holiday') }}

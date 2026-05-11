@@ -3,7 +3,6 @@ import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
-import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -91,11 +90,6 @@ async function handleLogout() {
                         :class="{ 'bg-white shadow text-emerald-600': preferences.locale === 'en', 'text-gray-500 hover:text-gray-700': preferences.locale !== 'en' }"
                         class="px-3 py-1.5 rounded transition flex-1">English</button>
                 </div>
-            </div>
-
-            <!-- Time Zone Switcher in Sidebar -->
-            <div class="px-6 py-2">
-                <TimeZoneSelect :label="$t('common.time_zone')" dense />
             </div>
 
             <!-- Font Size Switcher in Sidebar -->
@@ -210,6 +204,21 @@ async function handleLogout() {
                                 d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                         </svg>
                         {{ $t('nav.incomplete_reports') }}
+                    </div>
+                </router-link>
+
+                <router-link to="/dashboard/settings" @click="isSidebarOpen = false"
+                    class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
+                    <div class="flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {{ $t('nav.settings') }}
                     </div>
                 </router-link>
 

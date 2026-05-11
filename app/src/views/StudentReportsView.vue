@@ -14,9 +14,6 @@
                 <span v-if="enrollmentInfo">{{ enrollmentInfo.studentName }} - {{ enrollmentInfo.courseDisplay }}</span>
                 <span v-else>{{ $t('report.list_title') }}</span>
             </h1>
-            <div class="mt-3 max-w-xs">
-                <TimeZoneSelect :label="$t('common.time_zone')" dense />
-            </div>
         </div>
 
         <!-- Incomplete Reports Module -->
@@ -463,7 +460,6 @@ import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'

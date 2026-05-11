@@ -3,6 +3,8 @@
  * Date-only values remain calendar dates, while "now" and timestamps can be
  * interpreted with the user's preferred IANA time zone.
  */
+import i18n from '@/i18n'
+
 export class DateUtils {
     private static readonly FALLBACK_TIME_ZONE = 'Asia/Taipei'
 
@@ -49,7 +51,25 @@ export class DateUtils {
 
     static formatTimeZoneLabel(timeZone: string, locale?: string): string {
         const offset = this.getTimeZoneOffsetLabel(timeZone, locale)
-        return offset ? `${timeZone} (${offset})` : timeZone
+        let display = timeZone
+        try {
+            const key = `timezones.${timeZone}`
+            // prefer locale-specific translation if present
+            if (i18n?.global?.te && i18n.global.te(key, locale as any)) {
+                // t accepts a locale as second argument in some setups; fall back to global locale if unsupported
+                // use a try/catch to avoid breaking when t signature differs
+                try {
+                    const translated = i18n.global.t(key, locale as any)
+                    if (translated && translated !== key) display = String(translated)
+                } catch {
+                    const translated = i18n.global.t(key)
+                    if (translated && translated !== key) display = String(translated)
+                }
+            }
+        } catch {
+            // ignore and fallback to zone identifier
+        }
+        return offset ? `${display} (${offset})` : display
     }
 
     static getTimeZoneOffsetLabel(timeZone: string, locale?: string): string {

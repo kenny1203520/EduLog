@@ -13,7 +13,6 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
-import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
 
@@ -535,11 +534,8 @@ function clearTeacherSelection() {
 
 <template>
     <div class="space-y-6">
-        <BasePageHeader
-            :overline="t('nav.classrooms')"
-            :title="t('classroom.title')"
-            :subtitle="t('nav.description.classrooms')"
-        >
+        <BasePageHeader :overline="t('nav.classrooms')" :title="t('classroom.title')"
+            :subtitle="t('nav.description.classrooms')">
             <template #icon>
                 <div
                     class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
@@ -588,10 +584,6 @@ function clearTeacherSelection() {
                             {{ t('classroom.sessions_tab') }}
                         </button>
                     </div>
-                </div>
-
-                <div class="w-full md:w-64">
-                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
                 </div>
 
                 <!-- Primary Action Button -->

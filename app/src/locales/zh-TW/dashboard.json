@@ -22,6 +22,7 @@
         "class_name": "班級名稱",
         "untitled_class": "未命名班級",
         "next_class": "下一堂課",
+        "ongoing_class": "進行中",
         "open_session": "開啟點名"
     },
     "stats": {

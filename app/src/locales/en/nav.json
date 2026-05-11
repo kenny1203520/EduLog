@@ -10,6 +10,7 @@
     "logout": "Logout",
     "about": "About System",
     "login": "Login",
+    "settings": "Settings",
     "home": "Home",
     "features": "Features",
     "get_started": "Get Started",
@@ -28,6 +29,7 @@
         "reports": "Edit and submit professional teaching reports for parents.",
         "holidays": "Manage class suspensions and holiday schedules.",
         "about": "Learn about EduLog system information and versions.",
-        "incomplete": "Track and finish pending reports to ensure seamless teaching."
+        "incomplete": "Track and finish pending reports to ensure seamless teaching.",
+        "settings": "Manage your preferences, time zone, and display settings."
     }
 }

@@ -17,9 +17,6 @@
             </template>
             <template #actions>
                 <div class="flex items-center gap-2 sm:gap-4">
-                    <div class="hidden lg:block w-56">
-                        <TimeZoneSelect :label="$t('common.time_zone')" dense />
-                    </div>
 
                     <!-- Stats Badge -->
                     <div
@@ -174,7 +171,7 @@
                             <span class="truncate">{{ report.className }}</span>
                             <span v-if="report.classroomName" class="shrink-0 text-gray-300 text-[8px]">•</span>
                             <span v-if="report.classroomName" class="truncate text-gray-400">{{ report.classroomName
-                            }}</span>
+                                }}</span>
                         </div>
 
                         <div class="flex gap-1.5 flex-wrap">
@@ -378,7 +375,6 @@ import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportS
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { supabase } from '@/lib/supabase'
