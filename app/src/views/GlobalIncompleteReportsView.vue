@@ -1,6 +1,6 @@
 <template>
     <div
-        class="flex flex-col bg-gray-50 overflow-hidden h-[calc(100dvh-4rem)] lg:h-[calc(100vh-5rem)] -mx-3 -mb-4 lg:-mx-6 lg:-mb-6 relative">
+        class="flex flex-col bg-gray-50 overflow-hidden h-[calc(100dvh-4rem)] lg:h-[calc(100vh-5rem)] -mx-3 -mb-2 lg:-mx-6 lg:-mb-2 relative">
         <BasePageHeader :overline="t('nav.incomplete_reports')" :title="t('report.incomplete_reports_title')"
             :subtitle="t('report.incomplete_reports_subtitle')" :hide-background="true" :compact="true"
             :inline-actions-mobile="true"
@@ -100,7 +100,7 @@
                 </div>
 
                 <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-8 text-gray-500">
-                    <div class="relative w-12 h-12 mb-4">
+                    <div class="relative w-12 h-12 mb-2">
                         <div class="absolute inset-0 rounded-2xl bg-emerald-100 animate-ping opacity-25"></div>
                         <div
                             class="relative flex items-center justify-center w-12 h-12 rounded-2xl bg-white border border-emerald-50 shadow-sm">
@@ -213,24 +213,26 @@
             </div>
 
             <!-- Right Pane: Editor -->
-            <div class="flex-1 bg-gray-50 p-4 sm:p-8 flex flex-col relative w-full md:w-auto h-full min-h-0 overflow-hidden"
+            <div class="flex-1 bg-gray-50 p-3 sm:p-3 flex flex-col relative w-full md:w-auto h-full min-h-0 overflow-hidden"
                 :class="{ 'hidden md:flex': !selectedReport }">
 
                 <div v-if="selectedReport" class="flex-1 flex flex-col max-w-7xl mx-auto w-full h-full min-h-0">
                     <!-- Context Banner -->
                     <div
-                        class="bg-white p-4 sm:p-8 rounded-[2.5rem] shadow-xl shadow-gray-200/40 border border-gray-100/50 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-4 shrink-0 overflow-hidden relative group">
+                        class="bg-white p-3 sm:p-3 lg:p-3 rounded-[2.5rem] shadow-xl shadow-gray-200/40 border border-gray-100/50 mb-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 animate-in fade-in slide-in-from-bottom-4 shrink-0 overflow-hidden relative group">
 
                         <!-- Background Decoration -->
                         <div
                             class="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700 opacity-50 pointer-events-none">
                         </div>
 
-                        <div class="flex items-center gap-4 sm:gap-6 relative z-10">
+                        <div class="flex items-center gap-4 sm:gap-4 relative z-10">
                             <div class="flex items-center gap-3">
                                 <!-- Back Button (Mobile) -->
                                 <button @click="selectedReport = null"
-                                    class="sm:hidden p-3 -ml-2 text-gray-400 hover:text-emerald-600 bg-gray-50 hover:bg-white rounded-2xl active:scale-95 transition-all shadow-sm">
+                                    class="lg:hidden p-3 -ml-2 text-gray-400 hover:text-emerald-600 bg-gray-50 hover:bg-white rounded-2xl active:scale-95 transition-all shadow-sm"
+                                    :aria-label="t('common.back') || 'Back to list'"
+                                    :title="t('common.back') || 'Back to list'">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
