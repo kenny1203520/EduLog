@@ -115,6 +115,7 @@ async function submitEnrollment() {
         class_session_id: enrollForm.value.class_session_id,
         status: enrollForm.value.enrollment_type as any,
         start_date: enrollForm.value.start_date,
+        time_zone: preferences.timeZone,
     }
 
     try {
@@ -172,14 +173,14 @@ async function submitEnrollment() {
             <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
                 <!-- Course & Classroom -->
                 <div class="grid grid-cols-1 gap-6">
-                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
+                    <TimeZoneSelect :label="$t('common.time_zone')" fontSizeClass="text-lg" />
 
                     <div class="space-y-2">
                         <label
                             class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.enroll_modal.course') }}</label>
                         <SearchableSelect v-model="enrollForm.course_catalog_id" :options="catalogOptions"
-                            :placeholder="$t('common.select_placeholder')" />
+                            :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg" />
                     </div>
 
                     <div class="space-y-4">
@@ -187,7 +188,7 @@ async function submitEnrollment() {
                             class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.enroll_modal.classroom') }}</label>
                         <SearchableSelect v-model="enrollForm.class_session_id" :options="sessionOptions"
-                            :placeholder="$t('common.select_placeholder')" />
+                            :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg" />
 
                         <!-- Modular Capacity Progress Bar -->
                         <div v-if="enrollForm.class_session_id"
@@ -207,7 +208,7 @@ async function submitEnrollment() {
                         <BaseDropdown v-model="enrollForm.enrollment_type" :options="[
                             { label: $t('student.enroll_modal.type_regular'), value: 'regular' },
                             { label: $t('student.enroll_modal.type_trial'), value: 'trial' }
-                        ]" theme="emerald" />
+                        ]" theme="emerald" fontSizeClass="text-lg" />
                     </div>
 
                     <div class="space-y-2">

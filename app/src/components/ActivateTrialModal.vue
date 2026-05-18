@@ -63,7 +63,8 @@ async function submitActivateTrial() {
         await EnrollmentService.update(props.fromEnrollmentId, {
             status: 'regular',
             class_session_id: activateTrialForm.value.class_session_id || undefined,
-            start_date: activateTrialForm.value.effective_date
+            start_date: activateTrialForm.value.effective_date,
+            time_zone: preferences.timeZone
         })
 
         toast.success(t('common.success'))

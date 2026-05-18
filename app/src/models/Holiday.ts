@@ -1,7 +1,10 @@
+import { DateUtils } from '@/utils/DateUtils'
+
 export interface HolidayDTO {
     id?: string
     start_date: string
     end_date: string
+    time_zone?: string
     name?: string
     classroom_ids?: string[]
     class_session_ids?: string[]
@@ -14,6 +17,7 @@ export class Holiday {
     id?: string
     startDate: string
     endDate: string
+    timeZone: string
     name?: string
     classroomIds: string[]
     classSessionIds: string[]
@@ -24,6 +28,7 @@ export class Holiday {
         this.id = data.id
         this.startDate = data.start_date
         this.endDate = data.end_date
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
         this.name = data.name
         this.classroomIds = data.classroom_ids || []
         this.classSessionIds = data.class_session_ids || []
@@ -32,7 +37,9 @@ export class Holiday {
     }
 
     get formattedRange(): string {
-        if (this.startDate === this.endDate) return this.startDate
-        return `${this.startDate} ~ ${this.endDate}`
+        const start = DateUtils.displayDate(this.startDate, undefined, this.timeZone)
+        const end = DateUtils.displayDate(this.endDate, undefined, this.timeZone)
+        if (this.startDate === this.endDate) return start
+        return `${start} ~ ${end}`
     }
 }

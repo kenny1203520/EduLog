@@ -11,7 +11,6 @@ import ActivateTrialModal from "@/components/ActivateTrialModal.vue";
 import StudentSuspensions from "@/components/StudentSuspensions.vue";
 import ConfirmModal from "@/components/common/ConfirmModal.vue";
 import TimeZoneSelect from "@/components/common/TimeZoneSelect.vue";
-import { SessionService } from "@/services/session/SessionService";
 
 const props = defineProps<{
     studentId: string;
@@ -49,7 +48,7 @@ function startEditEnrollment(enrollment: any) {
         enrollment_type: enrollment.status,
         start_date: enrollment.startDate || enrollment.start_date,
         external_link: enrollment.externalLink || enrollment.external_link || "",
-        time_zone: enrollment.classSessionTimeZone || preferences.timeZone,
+        time_zone: enrollment.timeZone || preferences.timeZone,
     };
 }
 
@@ -64,16 +63,9 @@ async function saveEnrollment() {
         await EnrollmentService.update(editingEnrollmentId.value, {
             status: editEnrollmentForm.value.enrollment_type as any,
             start_date: editEnrollmentForm.value.start_date,
+            time_zone: editEnrollmentForm.value.time_zone,
             external_link: editEnrollmentForm.value.external_link,
         });
-
-        // Update session timezone if changed
-        const enrollment = props.enrollments.find(e => e.id === editingEnrollmentId.value);
-        if (enrollment?.classSessionId && editEnrollmentForm.value.time_zone !== enrollment.classSessionTimeZone) {
-            await SessionService.updateClassSession(enrollment.classSessionId, {
-                time_zone: editEnrollmentForm.value.time_zone
-            });
-        }
 
         cancelEditEnrollment();
         await studentStore.loadStudent(props.studentId);
@@ -205,8 +197,8 @@ async function refreshData() {
                                             d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
                                     </svg>
                                     {{ e.formattedStartDate }}
-                                    <span class="text-[12px] text-gray-400 font-medium">({{ preferences.timeZoneLabel
-                                    }})</span>
+                                    <span class="text-[12px] text-gray-400 font-medium">({{ e.timeZone || 'Asia/Taipei'
+                                        }})</span>
                                 </span>
                             </div>
                         </div>

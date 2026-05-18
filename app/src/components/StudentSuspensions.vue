@@ -144,12 +144,13 @@
                                     </div>
                                     <div>
                                         <div class="font-black text-gray-900 text-xl tracking-tight">
-                                            {{ formatDate(suspension.startDate) }}
+                                            {{ formatDate(suspension.startDate, suspension.timeZone) }}
                                             <span class="mx-3 text-gray-300">→</span>
                                             <span :class="{ 'text-emerald-600': !suspension.endDate }">
-                                                {{ suspension.endDate ? formatDate(suspension.endDate) :
+                                                {{ suspension.endDate ? formatDate(suspension.endDate, suspension.timeZone) :
                                                     $t('student.suspension.indefinite') }}
                                             </span>
+                                            <span class="ml-2 text-[10px] text-gray-400 uppercase tracking-widest">{{ suspension.timeZone }}</span>
                                         </div>
                                         <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-2"
                                             v-if="suspension.reason">
@@ -322,7 +323,8 @@ async function addSuspension() {
             props.enrollmentId,
             newSuspension.value.startDate as string,
             newSuspension.value.endDate || null,
-            newSuspension.value.reason
+            newSuspension.value.reason,
+            preferences.timeZone
         )
         // Reset form
         newSuspension.value = {
@@ -373,6 +375,7 @@ async function saveEdit(id: string) {
     try {
         await SuspensionService.updateSuspension(id, {
             end_date: editForm.value.endDate || null,
+            time_zone: preferences.timeZone,
             reason: editForm.value.reason || undefined
         })
         await loadSuspensions()
@@ -397,7 +400,8 @@ async function endSuspensionNow(suspension: Suspension) {
         isEndingNowId.value = suspension.id
         // Use the general update method which handles syncing
         await SuspensionService.updateSuspension(suspension.id, {
-            end_date: today
+            end_date: today,
+            time_zone: preferences.timeZone
         })
         await loadSuspensions()
         toast.success(t('common.success') || 'Suspension ended successfully')
@@ -409,7 +413,7 @@ async function endSuspensionNow(suspension: Suspension) {
     }
 }
 
-function formatDate(date: string) {
-    return DateUtils.displayDate(date, preferences.locale, preferences.timeZone)
+function formatDate(date: string, timeZone: string = preferences.timeZone) {
+    return DateUtils.displayDate(date, preferences.locale, timeZone)
 }
 </script>

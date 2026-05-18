@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Holiday, type HolidayDTO } from '@/models/Holiday'
+import { DateUtils } from '@/utils/DateUtils'
 
 /**
  * Command service for holidays
@@ -13,6 +14,7 @@ export class HolidayCommandService {
         startDate: string,
         endDate: string,
         name?: string,
+        timeZone?: string,
         classroomIds?: string[],
         classSessionIds?: string[]
     }): Promise<Holiday> {
@@ -21,6 +23,7 @@ export class HolidayCommandService {
             .insert({
                 start_date: params.startDate,
                 end_date: params.endDate,
+                time_zone: DateUtils.isValidTimeZone(params.timeZone) ? params.timeZone : DateUtils.getDefaultTimeZone(),
                 name: params.name,
                 classroom_ids: params.classroomIds || [],
                 class_session_ids: params.classSessionIds || []

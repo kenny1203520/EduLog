@@ -16,6 +16,7 @@ export interface StudentSchoolDTO {
   status?: string
   start_date?: string // YYYY-MM-DD
   end_date?: string // YYYY-MM-DD or empty/null for Present
+  time_zone?: string
   grade?: string // e.g. "Year 1" (Required if status is Enrolled)
   class?: string // e.g. "Class A"
   school_student_id?: string // 学号

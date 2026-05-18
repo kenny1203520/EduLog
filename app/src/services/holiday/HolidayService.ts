@@ -19,6 +19,7 @@ export class HolidayService {
         startDate: string,
         endDate: string,
         name?: string,
+        timeZone?: string,
         classroomIds?: string[],
         classSessionIds?: string[]
     }): Promise<Holiday> {

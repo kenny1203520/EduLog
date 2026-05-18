@@ -27,6 +27,9 @@ export class EnrollmentCommandService {
             .from('enrollments')
             .insert({
                 ...enrollmentData,
+                time_zone: DateUtils.isValidTimeZone(enrollmentData.time_zone)
+                    ? enrollmentData.time_zone
+                    : DateUtils.getDefaultTimeZone(),
                 user_id: user.id,
                 status: enrollmentData.status || 'regular'
             })
@@ -81,9 +84,16 @@ export class EnrollmentCommandService {
             throw new Error(`Failed to fetch enrollment before update: ${existingError?.message || 'not found'}`)
         }
 
+        const updatePayload = {
+            ...updates,
+            ...(updates.time_zone !== undefined
+                ? { time_zone: DateUtils.isValidTimeZone(updates.time_zone) ? updates.time_zone : DateUtils.getDefaultTimeZone() }
+                : {})
+        }
+
         const { data: updated, error: updateError } = await supabase
             .from('enrollments')
-            .update(updates)
+            .update(updatePayload)
             .eq('id', enrollmentId)
             .select(`
                 *,

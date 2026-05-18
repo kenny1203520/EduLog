@@ -7,6 +7,7 @@ export interface EnrollmentDTO {
     class_session_id?: string
     status: 'regular' | 'completed' | 'dropped' | 'trial'
     start_date?: string
+    time_zone?: string
     lesson_number?: number
     external_link?: string
     created_at?: string
@@ -42,6 +43,7 @@ export class Enrollment {
     classSessionId?: string
     status: string
     startDate?: string
+    timeZone: string
     lessonNumber?: number
     externalLink?: string
     
@@ -66,6 +68,7 @@ export class Enrollment {
         this.classSessionId = data.class_session_id
         this.status = data.status || 'regular'
         this.startDate = data.start_date
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
         this.lessonNumber = data.lesson_number
         this.externalLink = data.external_link
         
@@ -96,7 +99,7 @@ export class Enrollment {
     }
 
     get formattedStartDate(): string {
-        return DateUtils.displayDate(this.startDate)
+        return DateUtils.displayDate(this.startDate, undefined, this.timeZone)
     }
 
     get formattedSchedule(): string {

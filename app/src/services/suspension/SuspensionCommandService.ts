@@ -4,15 +4,17 @@ import { SuspensionPolicyService } from './SuspensionPolicyService'
 import { DateUtils } from '@/utils/DateUtils'
 
 export class SuspensionCommandService {
-    static async createSuspension(enrollmentId: string, startDate: string, endDate: string | null, reason?: string): Promise<Suspension> {
+    static async createSuspension(enrollmentId: string, startDate: string, endDate: string | null, reason?: string, timeZone?: string): Promise<Suspension> {
         await SuspensionPolicyService.validateNoOverlap(enrollmentId, startDate, endDate)
 
+        const normalizedTimeZone = DateUtils.isValidTimeZone(timeZone) ? timeZone : DateUtils.getDefaultTimeZone()
         const { data, error } = await supabase
             .from('student_suspensions')
             .insert({
                 enrollment_id: enrollmentId,
                 start_date: startDate,
                 end_date: endDate,
+                time_zone: normalizedTimeZone,
                 reason: reason
             })
             .select()
@@ -35,9 +37,16 @@ export class SuspensionCommandService {
         if (fetchError) throw new Error(`Failed to fetch original suspension: ${fetchError.message}`)
         const oldSuspension = new Suspension(oldData)
 
+        const updatePayload = {
+            ...updates,
+            ...(updates.time_zone !== undefined
+                ? { time_zone: DateUtils.isValidTimeZone(updates.time_zone) ? updates.time_zone : DateUtils.getDefaultTimeZone() }
+                : {})
+        }
+
         const { data: newData, error: updateError } = await supabase
             .from('student_suspensions')
-            .update(updates)
+            .update(updatePayload)
             .eq('id', id)
             .select()
             .single()

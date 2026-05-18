@@ -85,6 +85,7 @@ async function handleSaveHoliday() {
         const payload = {
             start_date: holidayForm.value.startDate,
             end_date: holidayForm.value.endDate,
+            time_zone: preferences.timeZone,
             name: holidayForm.value.name,
             classroom_ids: scopeType.value === 'classroom' ? holidayForm.value.classroomIds : [],
             class_session_ids: scopeType.value === 'session' ? holidayForm.value.classSessionIds : []
@@ -96,6 +97,7 @@ async function handleSaveHoliday() {
             await HolidayService.createHoliday({
                 startDate: payload.start_date,
                 endDate: payload.end_date,
+                timeZone: payload.time_zone,
                 name: payload.name,
                 classroomIds: payload.classroom_ids,
                 classSessionIds: payload.class_session_ids
@@ -288,6 +290,7 @@ function closeModal() {
                             <p class="text-[12px] font-black text-gray-400 uppercase tracking-widest">{{
                                 $t('holiday.date_label') }}</p>
                             <p class="text-sm font-bold text-gray-700">{{ holiday.formattedRange }}</p>
+                            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{{ holiday.timeZone }}</p>
                         </div>
                     </div>
 

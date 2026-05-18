@@ -5,6 +5,7 @@ export interface SuspensionDTO {
     enrollment_id: string
     start_date: string
     end_date?: string | null
+    time_zone?: string
     reason?: string
     created_at?: string
     updated_at?: string
@@ -15,6 +16,7 @@ export class Suspension {
     enrollmentId: string
     startDate: string
     endDate?: string | null
+    timeZone: string
     reason?: string
     createdAt?: Date
     updatedAt?: Date
@@ -24,13 +26,14 @@ export class Suspension {
         this.enrollmentId = data.enrollment_id
         this.startDate = data.start_date
         this.endDate = data.end_date
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
         this.reason = data.reason
         this.createdAt = data.created_at ? new Date(data.created_at) : undefined
         this.updatedAt = data.updated_at ? new Date(data.updated_at) : undefined
     }
 
     get isActive(): boolean {
-        const now = DateUtils.todayString()
+        const now = DateUtils.todayString(this.timeZone)
         if (this.endDate) {
             return now >= this.startDate && now <= this.endDate
         }

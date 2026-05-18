@@ -7,6 +7,9 @@ import { useStudentStore } from '@/stores/useStudentStore'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { DateUtils } from '@/utils/DateUtils'
 
 const props = defineProps<{
     studentId: string
@@ -16,11 +19,12 @@ const props = defineProps<{
 const { t } = useI18n()
 const toast = useToast()
 const studentStore = useStudentStore()
+const preferences = usePreferencesStore()
 
 const isModifying = ref(false)
-const newSchool = ref({ name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' })
+const newSchool = ref({ name: '', status: '', grade: '', class: '', start_date: '', end_date: '', time_zone: preferences.timeZone, school_student_id: '' })
 const editingSchoolId = ref<string | null>(null)
-const editSchoolForm = ref({ name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' })
+const editSchoolForm = ref({ name: '', status: '', grade: '', class: '', start_date: '', end_date: '', time_zone: preferences.timeZone, school_student_id: '' })
 
 // Confirm Modal state for deletion
 const showDeleteConfirm = ref(false)
@@ -58,7 +62,7 @@ async function addSchool() {
     try {
         isModifying.value = true
         await StudentService.addSchool({ ...newSchool.value, student_id: props.studentId })
-        newSchool.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' }
+        newSchool.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', time_zone: preferences.timeZone, school_student_id: '' }
         await studentStore.loadStudent(props.studentId)
         toast.success(t('student.schools.add_btn') + ' ' + t('common.success'))
     } catch (e: any) {
@@ -71,12 +75,12 @@ async function addSchool() {
 
 function startEditSchool(school: any) {
     editingSchoolId.value = school.id
-    editSchoolForm.value = { ...school }
+    editSchoolForm.value = { ...school, time_zone: school.time_zone || preferences.timeZone }
 }
 
 function cancelEditSchool() {
     editingSchoolId.value = null
-    editSchoolForm.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', school_student_id: '' }
+    editSchoolForm.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', time_zone: preferences.timeZone, school_student_id: '' }
 }
 
 async function saveSchool() {
@@ -146,6 +150,10 @@ async function copyToClipboard(text: string) {
     } else {
         toast.error(t('common.copy_error', 'Failed to copy to clipboard'))
     }
+}
+
+function formatSchoolDate(date: string | undefined, timeZone?: string) {
+    return date ? DateUtils.displayDate(date, preferences.locale, timeZone || preferences.timeZone) : ''
 }
 </script>
 
@@ -223,7 +231,8 @@ async function copyToClipboard(text: string) {
                                     <path stroke-linecap="round" stroke-linejoin="round"
                                         d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
                                 </svg>
-                                {{ s.start_date }} - {{ s.end_date || $t('student.schools.present') }}
+                                {{ formatSchoolDate(s.start_date, s.time_zone) }} - {{ s.end_date ? formatSchoolDate(s.end_date, s.time_zone) : $t('student.schools.present') }}
+                                <span class="text-[12px] text-gray-400 font-medium">({{ s.time_zone || 'Asia/Taipei' }})</span>
                             </span>
                         </div>
                     </div>
@@ -314,6 +323,8 @@ async function copyToClipboard(text: string) {
                         </div>
                     </div>
 
+                    <TimeZoneSelect v-model="editSchoolForm.time_zone" :label="$t('common.time_zone')" dense />
+
                     <div class="flex justify-end space-x-2 pt-2 border-t border-gray-100">
                         <button @click="cancelEditSchool"
                             class="px-3 py-1.5 text-gray-500 text-sm hover:text-gray-700 hover:bg-gray-100 rounded transition-colors cursor-pointer">{{
@@ -400,6 +411,10 @@ async function copyToClipboard(text: string) {
                         <p class="text-[10px] text-gray-400 text-right mt-0.5">{{ $t('student.schools.present')
                         }}</p>
                     </div>
+                </div>
+
+                <div class="mb-4">
+                    <TimeZoneSelect v-model="newSchool.time_zone" :label="$t('common.time_zone')" dense />
                 </div>
 
                 <button @click="addSchool" :disabled="isModifying"
