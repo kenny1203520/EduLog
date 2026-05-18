@@ -3,6 +3,32 @@ import { OccurrenceReport, ReportVersion, type OccurrenceReportDTO } from '@/mod
 import { DateUtils } from '@/utils/DateUtils'
 
 export class ReportQueryService {
+    private static getOccurrenceSortKey(report: any): string {
+        const occurrence = Array.isArray(report?.class_occurrences)
+            ? report.class_occurrences[0]
+            : report?.class_occurrences
+        const date = occurrence?.occurrence_date || ''
+        const time = occurrence?.actual_start_time || occurrence?.original_start_time || '00:00:00'
+
+        return `${date}T${time}`
+    }
+
+    private static sortByOccurrenceDateTime<T extends any[]>(reports: T, sortBy: 'asc' | 'desc'): T {
+        const direction = sortBy === 'asc' ? 1 : -1
+        return [...reports].sort((a, b) => {
+            const aKey = this.getOccurrenceSortKey(a)
+            const bKey = this.getOccurrenceSortKey(b)
+
+            if (aKey === bKey) {
+                const aUpdated = a?.updated_at || ''
+                const bUpdated = b?.updated_at || ''
+                return aUpdated.localeCompare(bUpdated) * direction
+            }
+
+            return aKey.localeCompare(bKey) * direction
+        }) as T
+    }
+
     static async getReport(
         enrollmentId: string,
         occurrenceId: string
@@ -268,6 +294,7 @@ export class ReportQueryService {
                 ),
                 class_occurrences!inner (
                     occurrence_date,
+                    actual_start_time,
                     original_start_time,
                     class_session_id,
                     class_sessions!inner (
@@ -299,11 +326,12 @@ export class ReportQueryService {
 
         const { data, error, count } = await query
             .order('class_occurrences(occurrence_date)', { ascending: sortBy === 'asc' })
+            .order('class_occurrences(actual_start_time)', { ascending: sortBy === 'asc' })
             .order('class_occurrences(original_start_time)', { ascending: sortBy === 'asc' })
             .range(from, to)
 
         if (error) throw new Error(error.message)
-        return { data: data || [], count: count || 0 }
+        return { data: this.sortByOccurrenceDateTime(data || [], sortBy), count: count || 0 }
     }
 
     static async getReportsByStudent(
@@ -342,6 +370,7 @@ export class ReportQueryService {
                 ),
                 class_occurrences!inner (
                     occurrence_date,
+                    actual_start_time,
                     original_start_time,
                     class_sessions!inner (
                         name
@@ -366,12 +395,13 @@ export class ReportQueryService {
 
         const { data, error, count } = await query
             .order('class_occurrences(occurrence_date)', { ascending: sortBy === 'asc' })
+            .order('class_occurrences(actual_start_time)', { ascending: sortBy === 'asc' })
             .order('class_occurrences(original_start_time)', { ascending: sortBy === 'asc' })
             .range(from, to)
 
         if (error) throw new Error(error.message)
 
-        return { data: data || [], count: count || 0 }
+        return { data: this.sortByOccurrenceDateTime(data || [], sortBy), count: count || 0 }
     }
 
 }

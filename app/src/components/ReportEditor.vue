@@ -357,7 +357,7 @@
 
         <!-- Manual Save Button (Optional) -->
         <div v-if="showManualSave" class="mt-4">
-            <button @click="saveNow" :disabled="isSaving || !hasUnsavedChanges || !canSave"
+            <button @click="() => saveNow({ reason: 'manual' })" :disabled="isSaving || !hasUnsavedChanges || !canSave"
                 class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
                 {{ isSaving ? $t('report.saving') : $t('report.editor.save_now') }}
             </button>
@@ -580,6 +580,10 @@ interface ReportTemplateVariableItem {
     label: string
     description: string
     modes?: Array<{ value: string; label: string }>
+}
+
+type SaveNowOptions = {
+    reason?: 'manual' | 'switch'
 }
 
 // Templates State
@@ -1362,6 +1366,7 @@ const { t } = useI18n()
 // Local state
 const localContent = ref(props.initialContent)
 const version = ref(props.initialVersion)
+const hasShownSaveSuccessNotice = ref(false)
 
 // Detailed fields
 const selectedLessonId = ref(props.initialLessonId || '')
@@ -1528,9 +1533,14 @@ const {
     },
     onSuccess: (newVersion) => {
         version.value = newVersion
+        if (!hasShownSaveSuccessNotice.value) {
+            toast.success(t('report.editor.first_save_success'))
+            hasShownSaveSuccessNotice.value = true
+        }
         emit('save-success', newVersion)
     },
     onError: (message) => {
+        toast.error(t('report.editor.save_failed_with_message', { message }))
         emit('save-error', message)
     }
 })
@@ -1639,6 +1649,7 @@ const isInitializing = ref(false)
 // Reset auto-save state when switching reports
 watch(() => props.reportId, () => {
     isInitializing.value = true
+    hasShownSaveSuccessNotice.value = false
     reset()
     // 給予極短時間讓 props 傳遞到 local state
     setTimeout(() => {
@@ -1697,9 +1708,13 @@ function handleInput() {
 }
 
 
-function saveNow() {
+function saveNow(options: SaveNowOptions = {}) {
     if (!props.reportId || !canSave.value) {
         return Promise.resolve()
+    }
+
+    if (options.reason === 'switch' && (isSaving.value || hasUnsavedChanges.value)) {
+        toast.info(t('report.editor.waiting_for_save_before_switch'))
     }
 
     return autoSaveNow(localContent.value)

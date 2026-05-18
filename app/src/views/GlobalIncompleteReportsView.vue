@@ -529,8 +529,6 @@ watch(selectedReport, async (newVal) => {
 })
 
 async function handleSaveSuccess(updatedReport: any) {
-    toast.success(t('report.save_success'))
-
     const idx = incompleteReports.value.findIndex(r => r.id === updatedReport.id)
     if (idx !== -1) {
         const item = incompleteReports.value[idx]

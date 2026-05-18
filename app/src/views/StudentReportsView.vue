@@ -475,7 +475,7 @@ import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type ReportEditorExpose = {
-    saveNow: () => Promise<void>
+    saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<void>
 }
 
 const route = useRoute()
@@ -1149,7 +1149,7 @@ async function selectOccurrence(
     occurrence: ClassOccurrence,
     options: { allowCreatePrompt?: boolean } = {}
 ) {
-    await reportEditorRef.value?.saveNow()
+    await reportEditorRef.value?.saveNow({ reason: 'switch' })
 
     const previousSelectionState = {
         occurrence: selectedOccurrence.value,
@@ -1228,7 +1228,6 @@ function handleSaveSuccess(newVersion: number) {
         selectedReport.value.updatedAt = new Date()
     }
 
-    toast.success(t('report.save_success'))
     switchToListView() // Refresh list view data
     viewMode.value = 'calendar' // But keep calendar active
 }

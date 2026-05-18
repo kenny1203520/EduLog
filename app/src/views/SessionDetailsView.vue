@@ -38,7 +38,7 @@ import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 type ReportEditorExpose = {
-    saveNow: () => Promise<void>
+    saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<void>
 }
 
 const { t } = useI18n()
@@ -1279,7 +1279,7 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
 }
 
 async function toggleSplitView(enrollmentId: string) {
-    await quickReportEditorRef.value?.saveNow()
+    await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
 
     if (selectedEnrollmentId.value === enrollmentId && showSplitView.value) {
         showSplitView.value = false
@@ -1312,7 +1312,7 @@ async function toggleSplitView(enrollmentId: string) {
 }
 
 async function closeSplitView() {
-    await quickReportEditorRef.value?.saveNow()
+    await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
     showSplitView.value = false
     selectedEnrollmentId.value = null
 }
