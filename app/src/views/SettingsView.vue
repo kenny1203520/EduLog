@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const preferences = usePreferencesStore()
 const search = ref('')
 
 const timeZoneOptions = preferences.timeZoneOptions
+const browserTimeZoneLabel = computed(() => DateUtils.formatTimeZoneLabel(DateUtils.getBrowserTimeZone(), preferences.locale))
 
 const filteredOptions = ref(timeZoneOptions)
 
@@ -37,17 +40,24 @@ onMounted(() => {
 </script>
 
 <template>
-    <div class="max-w-4xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <!-- Header -->
-        <div class="bg-white rounded-[2.5rem] p-8 lg:p-10 border border-gray-100 shadow-sm relative overflow-hidden">
-            <div class="absolute -top-24 -right-24 w-96 h-96 bg-emerald-50 rounded-full blur-3xl opacity-50"></div>
-            <div class="relative z-10">
-                <h1 class="text-4xl font-black text-gray-900 tracking-tight mb-2">{{ $t('nav.settings') }}</h1>
-                <p class="text-lg text-gray-400 font-bold italic">{{ $t('settings.subtitle') }}</p>
-            </div>
-        </div>
+        <BasePageHeader
+            :overline="$t('nav.settings')"
+            :title="$t('nav.settings')"
+            :subtitle="$t('settings.subtitle')"
+        >
+            <template #icon>
+                <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </div>
+            </template>
+        </BasePageHeader>
 
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-8">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6 lg:gap-8">
             <!-- Sidebar Navigation (Quick scroll or tabs) -->
             <div class="md:col-span-4 space-y-2">
                 <nav class="sticky top-8 space-y-1">
@@ -98,6 +108,33 @@ onMounted(() => {
                                 class="bg-white text-emerald-600 border border-emerald-200 px-4 py-2 rounded-xl text-sm font-black hover:bg-emerald-600 hover:text-white transition-all active:scale-95">
                                 {{ $t('settings.timezone.use_browser') }}
                             </button>
+                        </div>
+
+                        <!-- Quick Selector -->
+                        <div class="rounded-3xl border border-gray-100 bg-gray-50/60 p-5 space-y-4">
+                            <div class="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                                <div>
+                                    <p class="text-xs font-black uppercase tracking-widest text-gray-400 mb-1">
+                                        {{ $t('settings.timezone.title') }}
+                                    </p>
+                                    <h4 class="text-lg font-black text-gray-900 tracking-tight">
+                                        {{ $t('common.time_zone') }}
+                                    </h4>
+                                </div>
+                                <button @click="useBrowserTimeZone"
+                                    class="self-start sm:self-auto text-emerald-600 bg-white border border-emerald-200 px-4 py-2 rounded-xl text-sm font-black hover:bg-emerald-600 hover:text-white transition-all active:scale-95">
+                                    {{ $t('settings.timezone.use_browser') }}
+                                </button>
+                            </div>
+
+                            <TimeZoneSelect :label="$t('common.time_zone')" dense />
+
+                            <p class="text-xs font-medium text-gray-500 leading-relaxed">
+                                {{ $t('settings.timezone.description') }}
+                            </p>
+                            <p class="text-[11px] font-bold text-gray-400 uppercase tracking-widest">
+                                {{ browserTimeZoneLabel }}
+                            </p>
                         </div>
 
                         <!-- Picker -->
