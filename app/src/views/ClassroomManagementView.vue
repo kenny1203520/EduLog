@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
+import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
@@ -165,17 +166,32 @@ async function loadData() {
 }
 
 async function loadRooms() {
-    const res = await ClassroomService.getClassrooms(
-        roomsPagination.value.page,
-        roomsPagination.value.perPage,
-        searchQuery.value,
-        displayMode.value
-    )
-    classrooms.value = res.data
-    roomsPagination.value.total = res.count
+    try {
+        const agg = await AggregateService.getClassroomSessionManagerAggregate(
+            roomsPagination.value.page,
+            roomsPagination.value.perPage,
+            searchQuery.value,
+            displayMode.value
+        )
+        classrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
+        roomsPagination.value.total = agg.count || 0
+        hiddenClassroomIds.value = new Set((agg.hiddenClassroomIds as string[] | undefined) || [])
+        hiddenSessionIds.value = new Set((agg.hiddenSessionIds as string[] | undefined) || [])
+        return
+    } catch (e) {
+        // fallback to existing client-side approach
+        const res = await ClassroomService.getClassrooms(
+            roomsPagination.value.page,
+            roomsPagination.value.perPage,
+            searchQuery.value,
+            displayMode.value
+        )
+        classrooms.value = res.data
+        roomsPagination.value.total = res.count
 
-    const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
-    hiddenClassroomIds.value = await VisibilityPreferenceService.getHiddenEntityIds('classroom', roomIds)
+        const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
+        hiddenClassroomIds.value = await VisibilityPreferenceService.getHiddenEntityIds('classroom', roomIds)
+    }
 }
 
 async function loadSessions() {
@@ -194,8 +210,14 @@ async function loadSessions() {
 }
 
 async function loadAllRooms() {
-    const res = await ClassroomService.getClassrooms(1, 1000)
-    allClassrooms.value = res.data
+    try {
+        const agg = await AggregateService.getClassroomSessionManagerAggregate(1, 1000, '')
+        allClassrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
+        return
+    } catch (e) {
+        const res = await ClassroomService.getClassrooms(1, 1000)
+        allClassrooms.value = res.data
+    }
 }
 
 watch(() => roomsPagination.value.page, loadRooms)

@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue'
 import { HolidayService } from '@/services/holiday/HolidayService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
+import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { Holiday } from '@/models/Holiday'
 import { useI18n } from 'vue-i18n'
@@ -47,12 +48,21 @@ onMounted(async () => {
 
 async function loadAuxData() {
     try {
-        const [roomsRes, sessionsRes] = await Promise.all([
-            ClassroomService.getClassrooms(1, 1000),
-            SessionService.getClassSessions(1, 1000)
-        ])
-        classrooms.value = roomsRes.data
-        sessions.value = sessionsRes.data
+        try {
+            const [roomsRes, sessionsRes] = await Promise.all([
+                AggregateService.getClassroomSessionManagerAggregate(1, 1000, ''),
+                SessionService.getClassSessions(1, 1000)
+            ])
+            classrooms.value = (roomsRes.classrooms || []).map((d: any) => d)
+            sessions.value = sessionsRes.data
+        } catch (e) {
+            const [roomsRes, sessionsRes] = await Promise.all([
+                ClassroomService.getClassrooms(1, 1000),
+                SessionService.getClassSessions(1, 1000)
+            ])
+            classrooms.value = roomsRes.data
+            sessions.value = sessionsRes.data
+        }
     } catch (e) {
         console.error('Failed to load classrooms/sessions:', e)
     }
@@ -61,7 +71,20 @@ async function loadAuxData() {
 async function loadHolidays() {
     try {
         loading.value = true
-        holidays.value = await HolidayService.listHolidays()
+        try {
+            const agg = await AggregateService.getHolidaysAggregate(true)
+            holidays.value = (agg || []).map((d: any) => new Holiday({
+                id: d.id,
+                startDate: d.start_date,
+                endDate: d.end_date,
+                timeZone: d.time_zone,
+                name: d.name,
+                classroomIds: d.classroom_ids || [],
+                classSessionIds: d.class_session_ids || []
+            }))
+        } catch (e) {
+            holidays.value = await HolidayService.listHolidays()
+        }
     } catch (e) {
         console.error(e)
     } finally {

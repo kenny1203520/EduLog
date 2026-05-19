@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { OccurrenceReport, ReportVersion, type OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
+import { AggregateService } from '@/services/AggregateService'
 
 export class ReportQueryService {
     private static getOccurrenceSortKey(report: any): string {
@@ -64,31 +65,48 @@ export class ReportQueryService {
     ): Promise<{ data: OccurrenceReport[], count: number }> {
         const from = (page - 1) * perPage
         const to = from + perPage - 1
-
-        const { data, error, count } = await supabase
-            .from('occurrence_reports')
-            .select(`
-                *,
-                class_occurrences!class_occurrence_id (
-                    occurrence_date
-                )
-            `, { count: 'exact' })
-            .eq('enrollment_id', enrollmentId)
-            .order('created_at', { ascending: false })
-            .range(from, to)
-
-        if (error) throw new Error(error.message)
-
-        return {
-            data: (data || []).map((dto: any) => {
-                const occurrenceDate = dto.class_occurrences?.occurrence_date
+        // Try aggregated endpoint first to reduce multiple DB roundtrips
+        try {
+            const agg = await AggregateService.getReportsByEnrollmentAggregate(enrollmentId, page, perPage)
+            const reports = (agg.reports || []).map((dto: any) => {
+                // Ensure occurrence_date is present for model
+                const occ = dto.class_occurrence || dto.class_occurrences
+                const occurrenceDate = occ?.occurrence_date
                 const mappedDto: OccurrenceReportDTO = {
                     ...dto,
                     occurrence_date: occurrenceDate
                 }
                 return new OccurrenceReport(mappedDto)
-            }),
-            count: count || 0
+            })
+
+            return { data: reports, count: agg.count || 0 }
+        } catch (e) {
+            // Fallback to previous direct query if aggregate fails
+            const { data, error, count } = await supabase
+                .from('occurrence_reports')
+                .select(`
+                    *,
+                    class_occurrences!class_occurrence_id (
+                        occurrence_date
+                    )
+                `, { count: 'exact' })
+                .eq('enrollment_id', enrollmentId)
+                .order('created_at', { ascending: false })
+                .range(from, to)
+
+            if (error) throw new Error(error.message)
+
+            return {
+                data: (data || []).map((dto: any) => {
+                    const occurrenceDate = dto.class_occurrences?.occurrence_date
+                    const mappedDto: OccurrenceReportDTO = {
+                        ...dto,
+                        occurrence_date: occurrenceDate
+                    }
+                    return new OccurrenceReport(mappedDto)
+                }),
+                count: count || 0
+            }
         }
     }
 
@@ -177,6 +195,14 @@ export class ReportQueryService {
     }
 
     static async getGlobalIncompleteReports(): Promise<any[]> {
+        // Try aggregate endpoint first
+        try {
+            const agg = await AggregateService.getIncompleteReportsAggregate(90)
+            if (Array.isArray(agg)) return agg
+        } catch (e) {
+            // ignore and fallback
+        }
+
         return this.fetchIncompleteReportsInternal(90)
     }
 

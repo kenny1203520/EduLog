@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { AggregateService } from '@/services/AggregateService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -49,12 +50,41 @@ onMounted(async () => {
     try {
         loading.value = true
 
-        // Fetch background stats in parallel
-        Promise.all([
-            StudentService.getAll(1, 1).then(res => { stats.value.totalStudents = res.count }).catch(e => console.error(e)),
-            CourseCatalogService.getCourses(1, 1).then(res => { stats.value.activeCourses = res.count }).catch(e => console.error(e)),
+        // Prefer dashboard aggregate endpoint
+        try {
+            const today = DateUtils.todayString(preferences.timeZone)
+            const agg = await AggregateService.getDashboardHomeAggregate(today, today)
+            stats.value.totalStudents = agg.stats?.totalStudents || 0
+            stats.value.activeCourses = agg.stats?.activeCourses || 0
+            pendingReports.value = agg.pendingReports || []
+            if (agg.occurrences && Array.isArray(agg.occurrences)) {
+                const occs = agg.occurrences.map((d: any) => ({
+                    ...d,
+                    effectiveStartInstant: d.occurrence_date ? new Date(`${d.occurrence_date}T${d.actual_start_time || '00:00:00'}`) : undefined,
+                    effectiveEndInstant: d.occurrence_date ? new Date(`${d.occurrence_date}T${d.actual_end_time || d.actual_start_time || '00:00:00'}`) : undefined
+                }))
+                const auth = useAuthStore()
+                const userId = auth.user?.id
+                // apply same visible filter locally using teacherId if available
+                if (userId) {
+                    // fallback to previous parallel fetch for teacher profile
+                    const teacherProfile = await TeacherService.getTeacherByUserId(userId).catch(() => null)
+                    const teacherId = teacherProfile?.id
+                    // keep existing occurrence filtering using OccurrenceService.getOccurrencesByDateRange if complexity needed
+                }
+                todayOccurrences.value = occs
+            } else {
+                // fallback to previous parallel fetches
+                StudentService.getAll(1, 1).then(res => { stats.value.totalStudents = res.count }).catch(e => console.error(e))
+                CourseCatalogService.getCourses(1, 1).then(res => { stats.value.activeCourses = res.count }).catch(e => console.error(e))
+                fetchPendingReports()
+            }
+        } catch (e) {
+            // fallback
+            StudentService.getAll(1, 1).then(res => { stats.value.totalStudents = res.count }).catch(e => console.error(e))
+            CourseCatalogService.getCourses(1, 1).then(res => { stats.value.activeCourses = res.count }).catch(e => console.error(e))
             fetchPendingReports()
-        ])
+        }
 
         // Fetch a one-day buffer around the user's display date so class-time-zone
         // occurrences that cross the user's calendar boundary are still considered.

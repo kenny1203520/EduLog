@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import i18n from '@/i18n'
 import { DateUtils } from '@/utils/DateUtils'
 import { UserPreferenceService } from '@/services/UserPreferenceService'
+import { AggregateService } from '@/services/AggregateService'
 
 export const usePreferencesStore = defineStore('preferences', () => {
     const globalFontScale = ref(Number(localStorage.getItem('globalFontScale')) || 100)
@@ -87,12 +88,25 @@ export const usePreferencesStore = defineStore('preferences', () => {
     async function loadUserPreferences() {
         isLoadingRemotePreferences.value = true
         try {
-            const remote = await UserPreferenceService.getCurrentUserPreferences()
-            if (remote?.time_zone && DateUtils.isValidTimeZone(remote.time_zone)) {
-                isApplyingRemotePreferences = true
-                timeZone.value = remote.time_zone
-                localStorage.setItem('timeZone', remote.time_zone)
-                isApplyingRemotePreferences = false
+            // Try the aggregated endpoint first (single request)
+            try {
+                const agg = await AggregateService.getUserPreferencesAggregate()
+                const remote = agg?.preferences || null
+                if (remote?.time_zone && DateUtils.isValidTimeZone(remote.time_zone)) {
+                    isApplyingRemotePreferences = true
+                    timeZone.value = remote.time_zone
+                    localStorage.setItem('timeZone', remote.time_zone)
+                    isApplyingRemotePreferences = false
+                }
+            } catch (e) {
+                // Fallback to previous direct service if aggregate endpoint fails
+                const remote = await UserPreferenceService.getCurrentUserPreferences()
+                if (remote?.time_zone && DateUtils.isValidTimeZone(remote.time_zone)) {
+                    isApplyingRemotePreferences = true
+                    timeZone.value = remote.time_zone
+                    localStorage.setItem('timeZone', remote.time_zone)
+                    isApplyingRemotePreferences = false
+                }
             }
         } catch (error) {
             console.warn('Failed to load user preferences:', error)
