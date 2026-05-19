@@ -28,6 +28,14 @@
             class="mb-4"
         />
 
+        <div v-if="realtimeEnabled && collabAwareness.length" class="mb-4 flex gap-2 items-center">
+            <template v-for="a in collabAwareness" :key="a.userId">
+                <div class="text-xs px-2 py-1 rounded-md" :style="{ background: a.color || '#eef2ff', color: '#111827' }">
+                    {{ a.displayName || a.userId }} <span class="ml-1 text-[10px] text-gray-600">{{ a.field }}{{ a.caret !== undefined ? `:${a.caret}` : '' }}</span>
+                </div>
+            </template>
+        </div>
+
         <div class="flex items-center gap-4">
             <!-- Reference Panel Toggle -->
             <button @click="showReferencePanel = !showReferencePanel"
@@ -354,7 +362,7 @@
                         $t('report.editor.character_count') }}
                 </span>
             </label>
-            <textarea v-model="localContent" @input="handleInput"
+            <textarea ref="learningTextarea" v-model="localContent" @input="handleInput" @keyup="updateCursor" @mouseup="updateCursor"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
                 class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono"
@@ -580,6 +588,8 @@ import type { Lesson } from '@/models/Course'
 import { useReportRealtime } from '@/composables/useReportRealtime'
 import { useEditorPresence } from '@/composables/useEditorPresence'
 import { useReportLocking } from '@/composables/useReportLocking'
+import { useReportCollab } from '@/composables/useReportCollab'
+import * as Y from 'yjs'
 import ActiveEditorsIndicator from '@/components/ActiveEditorsIndicator.vue'
 
 interface Template {
@@ -1573,6 +1583,14 @@ const { isLockedByOther } = useReportLocking(computed(() => props.reportId || ''
 const hasConflict = ref(false)
 const conflictMessage = ref<string | null>(null)
 
+// Collaboration (Yjs) bindings
+const { ydoc: collabYDoc, ready: collabReady, saveSnapshot: collabSaveSnapshot, awareness: collabAwareness, sendAwareness } = useReportCollab(computed(() => props.reportId || ''))
+const yText = ref<Y.Text | null>(null)
+const yTextContact = ref<Y.Text | null>(null)
+const yTextClass = ref<Y.Text | null>(null)
+const learningTextarea = ref<HTMLTextAreaElement | null>(null)
+let snapshotInterval: ReturnType<typeof setInterval> | null = null
+
 // Computed
 const wordCount = computed(() => {
     if (!localContent.value) return 0
@@ -1732,6 +1750,86 @@ function handleInput() {
 
     if (props.reportId) {
         triggerAutoSave(localContent.value)
+        // Write local changes into Yjs text (if collab ready)
+        try {
+            const doc = collabYDoc.value
+            const ytxt = yText.value
+            if (doc && ytxt) {
+                doc.transact(() => {
+                    // replace whole text — simple and consistent for textarea
+                    ytxt.delete(0, ytxt.length)
+                    ytxt.insert(0, localContent.value)
+                }, authStore.user?.id || 'local')
+            }
+        } catch (e) {
+            console.error('Failed to write to collab ytext', e)
+        }
+    }
+}
+
+// Watchers to write contactNotes and classNotes into Yjs
+watch(contactNotes, (val) => {
+    if (isInitializing.value) return
+    try {
+        const doc = collabYDoc.value
+        const y = yTextContact.value
+        if (doc && y) {
+            doc.transact(() => {
+                y.delete(0, y.length)
+                y.insert(0, val || '')
+            }, authStore.user?.id || 'local')
+        }
+    } catch (e) {
+        console.error('Failed to write to collab yContact', e)
+    }
+})
+
+watch(classNotes, (val) => {
+    if (isInitializing.value) return
+    try {
+        const doc = collabYDoc.value
+        const y = yTextClass.value
+        if (doc && y) {
+            doc.transact(() => {
+                y.delete(0, y.length)
+                y.insert(0, val || '')
+            }, authStore.user?.id || 'local')
+        }
+    } catch (e) {
+        console.error('Failed to write to collab yClass', e)
+    }
+})
+
+function getDisplayName() {
+    return authStore.user?.user_metadata?.full_name || authStore.user?.user_metadata?.name || authStore.user?.email || authStore.user?.id || 'anon'
+}
+
+function getColorForUser(id: string) {
+    const colors = ['#FDE68A', '#BFDBFE', '#C7F9CC', '#FBCFE8', '#E9D5FF', '#FEE2E2']
+    let hash = 0
+    for (let i = 0; i < id.length; i++) hash = (hash << 5) - hash + id.charCodeAt(i)
+    const idx = Math.abs(hash) % colors.length
+    return colors[idx]
+}
+
+function updateCursor() {
+    if (!learningTextarea.value || !sendAwareness) return
+    try {
+        const el = learningTextarea.value
+        const caret = el.selectionStart ?? 0
+        const selectionEnd = el.selectionEnd ?? caret
+        const payload = {
+            userId: authStore.user?.id || '',
+            displayName: getDisplayName(),
+            color: getColorForUser(authStore.user?.id || ''),
+            field: 'content',
+            caret,
+            selectionEnd,
+            updatedAt: new Date().toISOString()
+        }
+        void sendAwareness(payload)
+    } catch (e) {
+        console.error('Failed to send awareness', e)
     }
 }
 
@@ -1777,6 +1875,119 @@ defineExpose({
 // Warn before leaving with unsaved changes
 onBeforeUnmount(() => {
     void saveNow()
+    // Save final collab snapshot and cleanup
+    try {
+        if (props.reportId) {
+            void collabSaveSnapshot()
+        }
+    } catch (e) {
+        console.warn('Failed to save collab snapshot on unmount', e)
+    }
+    // clear snapshot interval
+    if (snapshotInterval) {
+        clearInterval(snapshotInterval)
+        snapshotInterval = null
+    }
+})
+
+// Initialize collab bindings when ready
+watch(collabReady, (readyVal) => {
+    if (!readyVal) return
+
+    const doc = collabYDoc.value
+    if (!doc) return
+
+    // get or create Y.Text
+    const ytxt = doc.getText('content')
+    yText.value = ytxt
+
+    // contactNotes and classNotes Y.Text
+    const yContact = doc.getText('contactNotes')
+    const yClass = doc.getText('classNotes')
+    yTextContact.value = yContact
+    yTextClass.value = yClass
+
+    // If remote snapshot has content and our local content is empty or equals initial, adopt remote
+    try {
+        const remote = ytxt.toString()
+        if (remote && remote !== '') {
+            // Prefer remote snapshot if local hasn't diverged
+            if (!localContent.value || localContent.value === props.initialContent) {
+                localContent.value = remote
+                reset()
+            }
+        }
+        // contact notes
+        const remoteContact = yContact.toString()
+        if (remoteContact && remoteContact !== '') {
+            if (!contactNotes.value || contactNotes.value === props.initialContactNotes) {
+                contactNotes.value = remoteContact
+            }
+        }
+
+        // class notes
+        const remoteClass = yClass.toString()
+        if (remoteClass && remoteClass !== '') {
+            if (!classNotes.value || classNotes.value === props.initialClassNotes) {
+                classNotes.value = remoteClass
+            }
+        }
+    } catch (e) {
+        console.error('Failed to read ytext initial content', e)
+    }
+
+    // Observe remote changes
+    ytxt.observe((event) => {
+        try {
+            const origin = (event.transaction as any)?.origin
+            // Only handle remote-origin updates to avoid echo
+            if (origin === 'remote') {
+                const updated = ytxt.toString()
+                if (updated !== localContent.value) {
+                    localContent.value = updated
+                }
+            }
+        } catch (e) {
+            console.error('Error handling ytext update', e)
+        }
+    })
+
+    // observe contactNotes
+    yContact.observe((event) => {
+        try {
+            const origin = (event.transaction as any)?.origin
+            if (origin === 'remote') {
+                const updated = yContact.toString()
+                if (updated !== contactNotes.value) {
+                    contactNotes.value = updated
+                }
+            }
+        } catch (e) {
+            console.error('Error handling yContact update', e)
+        }
+    })
+
+    // observe classNotes
+    yClass.observe((event) => {
+        try {
+            const origin = (event.transaction as any)?.origin
+            if (origin === 'remote') {
+                const updated = yClass.toString()
+                if (updated !== classNotes.value) {
+                    classNotes.value = updated
+                }
+            }
+        } catch (e) {
+            console.error('Error handling yClass update', e)
+        }
+    })
+
+    // Periodic snapshot save
+    snapshotInterval = setInterval(() => {
+        if (props.reportId) {
+            void collabSaveSnapshot()
+        }
+    }, 60000)
 })
 </script>
 

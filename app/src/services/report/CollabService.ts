@@ -24,6 +24,7 @@ function base64ToUint8Array(base64: string): Uint8Array {
 export class CollabService {
     private static docs: Map<string, Y.Doc> = new Map()
     private static channels: Map<string, any> = new Map()
+    private static awarenessCallbacks: Map<string, Array<(arr: any[]) => void>> = new Map()
 
     static async init(reportId: string, userId: string): Promise<Y.Doc> {
         if (this.docs.has(reportId)) return this.docs.get(reportId)!
@@ -77,6 +78,37 @@ export class CollabService {
 
         this.channels.set(channelName, channel)
 
+        // Subscribe to awareness table updates
+        const awarenessChannelName = `collab:awareness:${reportId}`
+        const awarenessChannel = supabase
+            .channel(awarenessChannelName)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'report_collab_awareness',
+                    filter: `occurrence_report_id=eq.${reportId}`
+                },
+                (payload: any) => {
+                    const newRow = payload.new
+                    if (!newRow || !newRow.awareness_payload) return
+
+                    try {
+                        const parsed = JSON.parse(newRow.awareness_payload)
+                        const callbacks = this.awarenessCallbacks.get(reportId) || []
+                        callbacks.forEach((cb) => {
+                            try { cb(parsed) } catch (e) { console.error(e) }
+                        })
+                    } catch (e) {
+                        console.error('Failed to parse awareness payload', e)
+                    }
+                }
+            )
+            .subscribe()
+
+        this.channels.set(awarenessChannelName, awarenessChannel)
+
         // Broadcast local updates to ops table
         doc.on('update', async (update: Uint8Array, origin: any) => {
             // skip updates that come from remote applies
@@ -119,6 +151,33 @@ export class CollabService {
         } catch (err) {
             console.error('Failed to save snapshot', err)
             return false
+        }
+    }
+
+    /**
+     * Send awareness payload (cursor/selection/state)
+     */
+    static async sendAwareness(reportId: string, userId: string, payload: object): Promise<void> {
+        try {
+            await supabase.from('report_collab_awareness').insert({
+                occurrence_report_id: reportId,
+                origin_user_id: userId,
+                awareness_payload: JSON.stringify(payload)
+            })
+        } catch (err) {
+            console.error('Failed to send awareness', err)
+        }
+    }
+
+    /**
+     * Register a callback to receive awareness updates
+     */
+    static onAwareness(reportId: string, cb: (arr: any[]) => void) {
+        if (!this.awarenessCallbacks.has(reportId)) this.awarenessCallbacks.set(reportId, [])
+        this.awarenessCallbacks.get(reportId)!.push(cb)
+        return () => {
+            const list = this.awarenessCallbacks.get(reportId) || []
+            this.awarenessCallbacks.set(reportId, list.filter(f => f !== cb))
         }
     }
 

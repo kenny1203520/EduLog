@@ -30,6 +30,46 @@ export function useReportCollab(reportId: Ref<string> | string) {
         ready.value = false
     }
 
+    // Awareness map (array of awareness payloads from other users)
+    const awareness = ref<any[]>([])
+
+    let awarenessUnsub: (() => void) | null = null
+
+    const sendAwareness = async (payload: object) => {
+        if (!reportIdValue) return
+        await CollabService.sendAwareness(reportIdValue, authStore.user?.id || '', payload)
+    }
+
+    const startAwarenessListener = () => {
+        if (!reportIdValue) return
+        awarenessUnsub = CollabService.onAwareness(reportIdValue, (p: any) => {
+            // p is a parsed payload (object); store or merge
+            // For simplicity convert to array of single payloads keyed by origin_user_id
+            try {
+                if (!p || !p.userId) return
+                // replace or push
+                const existingIndex = awareness.value.findIndex(a => a.userId === p.userId)
+                if (existingIndex >= 0) {
+                    awareness.value.splice(existingIndex, 1, p)
+                } else {
+                    awareness.value.push(p)
+                }
+            } catch (e) {
+                console.error(e)
+            }
+        })
+    }
+
+    onMounted(() => {
+        initialize()
+        startAwarenessListener()
+    })
+
+    onBeforeUnmount(() => {
+        if (awarenessUnsub) awarenessUnsub()
+        destroy()
+    })
+
     onMounted(() => {
         initialize()
     })
@@ -42,6 +82,8 @@ export function useReportCollab(reportId: Ref<string> | string) {
         ydoc,
         ready,
         saveSnapshot,
-        destroy
+        destroy,
+        awareness,
+        sendAwareness
     }
 }
