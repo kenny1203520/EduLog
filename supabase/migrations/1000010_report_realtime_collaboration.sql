@@ -176,11 +176,42 @@ USING (
 -- Policy: Authenticated users can create/update sync metadata (checked in function)
 DROP POLICY IF EXISTS "Allow sync metadata inserts via functions" ON public.report_sync_metadata;
 CREATE POLICY "Allow sync metadata inserts via functions" ON public.report_sync_metadata FOR INSERT 
-WITH CHECK (true);
+WITH CHECK (
+    occurrence_report_id IN (
+        SELECT orpt.id FROM public.occurrence_reports orpt
+        JOIN public.enrollments e ON orpt.enrollment_id = e.id
+        JOIN public.class_sessions cs ON e.class_session_id = cs.id
+        JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
+        JOIN public.teachers t ON cst.teacher_id = t.id
+        WHERE t.user_id = (SELECT auth.uid())
+        AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
+    )
+);
 
 DROP POLICY IF EXISTS "Allow sync metadata updates via functions" ON public.report_sync_metadata;
 CREATE POLICY "Allow sync metadata updates via functions" ON public.report_sync_metadata FOR UPDATE 
-USING (true);
+USING (
+    occurrence_report_id IN (
+        SELECT orpt.id FROM public.occurrence_reports orpt
+        JOIN public.enrollments e ON orpt.enrollment_id = e.id
+        JOIN public.class_sessions cs ON e.class_session_id = cs.id
+        JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
+        JOIN public.teachers t ON cst.teacher_id = t.id
+        WHERE t.user_id = (SELECT auth.uid())
+        AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
+    )
+)
+WITH CHECK (
+    occurrence_report_id IN (
+        SELECT orpt.id FROM public.occurrence_reports orpt
+        JOIN public.enrollments e ON orpt.enrollment_id = e.id
+        JOIN public.class_sessions cs ON e.class_session_id = cs.id
+        JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
+        JOIN public.teachers t ON cst.teacher_id = t.id
+        WHERE t.user_id = (SELECT auth.uid())
+        AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
+    )
+);
 
 -- Trigger for sync_metadata updated_at
 DROP TRIGGER IF EXISTS update_report_sync_metadata_updated_at ON public.report_sync_metadata;
@@ -552,14 +583,6 @@ WHERE is_collaborative_enabled = true;
 -- 9. Grant Function Permissions
 -- ==========================================
 
--- Revoke default public execution rights to address security lints
-REVOKE EXECUTE ON FUNCTION public.acquire_report_lock(uuid, uuid, integer) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.release_report_lock(uuid, uuid) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.update_editor_heartbeat(uuid, uuid) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.get_active_editors(uuid) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.record_report_sync(uuid, uuid, bigint, boolean, text, uuid[]) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.cleanup_expired_report_locks() FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.cleanup_inactive_report_editors() FROM PUBLIC;
 
 -- Grant execute permissions to appropriate roles
 GRANT EXECUTE ON FUNCTION public.acquire_report_lock(uuid, uuid, integer) TO authenticated;
@@ -570,5 +593,5 @@ GRANT EXECUTE ON FUNCTION public.record_report_sync(uuid, uuid, bigint, boolean,
 GRANT EXECUTE ON FUNCTION public.cleanup_expired_report_locks() TO postgres;
 GRANT EXECUTE ON FUNCTION public.cleanup_inactive_report_editors() TO postgres;
 
--- Revoke execution permissions on the auto RLS event trigger function from PUBLIC
-REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC;
+-- Revoke execution permissions on the auto RLS event trigger function from PUBLIC, anon, and authenticated
+REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated;
