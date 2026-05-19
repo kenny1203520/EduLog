@@ -148,7 +148,7 @@ export class AggregateService {
     const qs = []
     if (start) qs.push(`start=${encodeURIComponent(start)}`)
     if (end) qs.push(`end=${encodeURIComponent(end)}`)
-    const url = base ? `${base}/dashboard-home${qs.length ? `?${qs.join('&')}` : ''}` : `/dashboard-home${qs.length ? `?${qs.join('&')}` : ''}`
+    const url = base ? `${base}/dashboard${qs.length ? `?${qs.join('&')}` : ''}` : `/dashboard${qs.length ? `?${qs.join('&')}` : ''}`
 
     const cacheKey = `dashboard_home:${start || 'none'}:${end || 'none'}:t${token || 'anon'}`
     if (forceRefresh) {

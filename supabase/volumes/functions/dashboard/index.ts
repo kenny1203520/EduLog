@@ -55,11 +55,16 @@ serve(async (req: Request) => {
     const todayStr = new Date().toISOString().slice(0, 10)
     const dateStr = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
-    // Top 20 pending reports without content field
+    // All pending reports with fields required to determine incompleteness
     const pendingRes = await client
       .from('occurrence_reports')
       .select(`
         id,
+        content,
+        lesson_id,
+        progress_letter,
+        class_participation,
+        classroom_behavior,
         enrollments!inner(id, student_id, course_id, students(id, name)),
         class_occurrences!inner(id, occurrence_date, actual_start_time, original_start_time, class_session_id, class_sessions(id, name, classroom_id, classrooms(id, name))),
         is_completed, updated_at, attendance_status
@@ -68,13 +73,23 @@ serve(async (req: Request) => {
       .gte('class_occurrences.occurrence_date', dateStr)
       .lte('class_occurrences.occurrence_date', todayStr)
       .order('class_occurrences(occurrence_date)', { ascending: false })
-      .limit(20)
+    //   .limit(20)
 
     const pending = (pendingRes.data || []).map((r: any) => {
       const occ = r.class_occurrences
       const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
       const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
       const student = Array.isArray(r.enrollments?.students) ? r.enrollments.students[0] : r.enrollments?.students
+
+      // Incompleteness checks (mirror ReportQueryService.fetchIncompleteReportsInternal)
+      const hasContent = !!(r.content && typeof r.content === 'string' && r.content.trim().length > 0)
+      const hasLesson = !!r.lesson_id
+      const hasProgress = !!r.is_completed || !!(r.progress_letter && typeof r.progress_letter === 'string' && r.progress_letter.trim())
+      const hasParticipation = r.class_participation != null && r.class_participation > 0
+      const hasBehavior = r.classroom_behavior != null && r.classroom_behavior > 0
+
+      const isIncomplete = !(hasContent && hasLesson && hasProgress && hasParticipation && hasBehavior)
+
       return {
         id: r.id,
         studentName: student?.name || 'Unknown',
@@ -82,9 +97,16 @@ serve(async (req: Request) => {
         className: session?.name || '-',
         classroomName: classroom?.name || '-',
         enrollmentId: r.enrollments?.id,
-        isMissing: false
+        // include a short preview to avoid sending large payloads
+        contentPreview: hasContent ? (r.content || '').slice(0, 300) : '',
+        missingContent: !hasContent,
+        missingLesson: !hasLesson,
+        missingProgress: !hasProgress,
+        missingParticipation: !hasParticipation,
+        missingBehavior: !hasBehavior,
+        isMissing: isIncomplete
       }
-    })
+    }).filter((r: any) => r.isMissing)
 
     const pendingReportsCount = pending.length || 0
 
