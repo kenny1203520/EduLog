@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase'
+import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { StudentService } from '@/services/student/StudentService'
 
 export interface UserPreferencesAggregate {
   preferences: {
@@ -14,6 +16,7 @@ export interface UserPreferencesAggregate {
 export class AggregateService {
   private static _cache: Map<string, { expiresAt: number, data?: any, promise?: Promise<any> }> = new Map()
   private static DEFAULT_TTL_MS = 30 * 1000 // 30 seconds
+  private static MEDIUM_TTL_MS = 60 * 1000 // 60 seconds for catalog/counts
 
   private static async withCache<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
     const now = Date.now()
@@ -190,6 +193,23 @@ export class AggregateService {
         throw new Error(`AggregateService error: ${resp.status} ${txt}`)
       }
       return resp.json()
+    })
+  }
+
+  // Cached wrapper for courses catalog to avoid repeated client-side supabase calls
+  static async getCoursesCached(page: number = 1, perPage: number = 100) {
+    const cacheKey = `courses:p${page}:s${perPage}`
+    return this.withCache(cacheKey, this.MEDIUM_TTL_MS, async () => {
+      return CourseCatalogService.getCourses(page, perPage)
+    })
+  }
+
+  // Cached wrapper to fetch students count (returns numeric count)
+  static async getStudentsCountCached(): Promise<number> {
+    const cacheKey = `students:count`
+    return this.withCache<number>(cacheKey, this.MEDIUM_TTL_MS, async () => {
+      const res = await StudentService.getAll(1, 1)
+      return (res && (res.count || 0)) as number
     })
   }
 }

@@ -50,98 +50,95 @@ onMounted(async () => {
     try {
         loading.value = true
 
+        let usedAggregateOccurrences = false
+
         // Prefer dashboard aggregate endpoint
         try {
-            const today = DateUtils.todayString(preferences.timeZone)
-            const agg = await AggregateService.getDashboardHomeAggregate(today, today)
+            const todayStr = DateUtils.todayString(preferences.timeZone)
+            const agg = await AggregateService.getDashboardHomeAggregate(todayStr, todayStr)
             stats.value.totalStudents = agg.stats?.totalStudents || 0
             stats.value.activeCourses = agg.stats?.activeCourses || 0
             pendingReports.value = agg.pendingReports || []
+
             if (agg.occurrences && Array.isArray(agg.occurrences)) {
                 const occs = agg.occurrences.map((d: any) => ({
                     ...d,
                     effectiveStartInstant: d.occurrence_date ? new Date(`${d.occurrence_date}T${d.actual_start_time || '00:00:00'}`) : undefined,
                     effectiveEndInstant: d.occurrence_date ? new Date(`${d.occurrence_date}T${d.actual_end_time || d.actual_start_time || '00:00:00'}`) : undefined
                 }))
-                const auth = useAuthStore()
-                const userId = auth.user?.id
-                // apply same visible filter locally using teacherId if available
-                if (userId) {
-                    // fallback to previous parallel fetch for teacher profile
-                    const teacherProfile = await TeacherService.getTeacherByUserId(userId).catch(() => null)
-                    const teacherId = teacherProfile?.id
-                    // keep existing occurrence filtering using OccurrenceService.getOccurrencesByDateRange if complexity needed
-                }
+
+                // Optionally keep teacher visibility filtering client-side; for now use aggregate payload directly
                 todayOccurrences.value = occs
+                usedAggregateOccurrences = true
+                stats.value.todayClasses = occs.length
             } else {
-                // fallback to previous parallel fetches
+                // fallback to previous parallel fetches for counts
                 StudentService.getAll(1, 1).then(res => { stats.value.totalStudents = res.count }).catch(e => console.error(e))
                 CourseCatalogService.getCourses(1, 1).then(res => { stats.value.activeCourses = res.count }).catch(e => console.error(e))
                 fetchPendingReports()
             }
         } catch (e) {
-            // fallback
+            // fallback for aggregate failure
             StudentService.getAll(1, 1).then(res => { stats.value.totalStudents = res.count }).catch(e => console.error(e))
             CourseCatalogService.getCourses(1, 1).then(res => { stats.value.activeCourses = res.count }).catch(e => console.error(e))
             fetchPendingReports()
         }
 
-        // Fetch a one-day buffer around the user's display date so class-time-zone
-        // occurrences that cross the user's calendar boundary are still considered.
-        const today = DateUtils.todayDate(preferences.timeZone)
-        const start = DateUtils.addDays(today, -1)
-        const end = DateUtils.addDays(today, 1)
-        const displayToday = DateUtils.todayString(preferences.timeZone)
-        const displayTomorrow = DateUtils.addDaysToDateString(displayToday, 1)
-        const displayDayStart = DateUtils.zonedDateTimeToInstant(displayToday, '00:00', preferences.timeZone)
-        const displayDayEnd = DateUtils.zonedDateTimeToInstant(displayTomorrow, '00:00', preferences.timeZone)
+        if (!usedAggregateOccurrences) {
+            // Fetch a one-day buffer around the user's display date so class-time-zone
+            // occurrences that cross the user's calendar boundary are still considered.
+            const today = DateUtils.todayDate(preferences.timeZone)
+            const start = DateUtils.addDays(today, -1)
+            const end = DateUtils.addDays(today, 1)
+            const displayToday = DateUtils.todayString(preferences.timeZone)
+            const displayTomorrow = DateUtils.addDaysToDateString(displayToday, 1)
+            const displayDayStart = DateUtils.zonedDateTimeToInstant(displayToday, '00:00', preferences.timeZone)
+            const displayDayEnd = DateUtils.zonedDateTimeToInstant(displayTomorrow, '00:00', preferences.timeZone)
 
-        const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
-        const auth = useAuthStore()
-        const userId = auth.user?.id
+            const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
+            const auth = useAuthStore()
+            const userId = auth.user?.id
 
-        // Fetch teacher profile if logged in
-        const teacherProfile = userId ? await TeacherService.getTeacherByUserId(userId) : null
-        const teacherId = teacherProfile?.id
+            // Fetch teacher profile if logged in
+            const teacherProfile = userId ? await TeacherService.getTeacherByUserId(userId) : null
+            const teacherId = teacherProfile?.id
 
-        // Visible if:
-        // 1. Current user is assigned to the occurrence (teacherId is in teacherIds)
-        // 2. Teacher is marked attending (teacherAttendance[teacherId] is true)
-        // 3. Class is conducted (isConducted is true)
-        const visible = (data || []).filter(d => {
-            // Must be conducted
-            if (d.isConducted !== true) return false
+            // Visible if:
+            // 1. Current user is assigned to the occurrence (teacherId is in teacherIds)
+            // 2. Teacher is marked attending (teacherAttendance[teacherId] is true)
+            // 3. Class is conducted (isConducted is true)
+            const visible = (data || []).filter(d => {
+                if (d.isConducted !== true) return false
 
-            const occurrenceStart = d.effectiveStartInstant
-            const occurrenceEnd = d.effectiveEndInstant || occurrenceStart
-            if (displayDayStart && displayDayEnd && occurrenceStart && occurrenceEnd) {
-                const overlapsDisplayDay = occurrenceStart < displayDayEnd && occurrenceEnd >= displayDayStart
-                if (!overlapsDisplayDay) return false
-            }
+                const occurrenceStart = d.effectiveStartInstant
+                const occurrenceEnd = d.effectiveEndInstant || occurrenceStart
+                if (displayDayStart && displayDayEnd && occurrenceStart && occurrenceEnd) {
+                    const overlapsDisplayDay = occurrenceStart < displayDayEnd && occurrenceEnd >= displayDayStart
+                    if (!overlapsDisplayDay) return false
+                }
 
-            // If we have a teacher profile, filter by assignment and attendance
-            if (teacherId) {
-                const isAssigned = d.teacherIds?.includes(teacherId)
-                const isAttending = d.teacherAttendance && d.teacherAttendance[teacherId] === true
-                return isAssigned && isAttending
-            }
+                if (teacherId) {
+                    const isAssigned = d.teacherIds?.includes(teacherId)
+                    const isAttending = d.teacherAttendance && d.teacherAttendance[teacherId] === true
+                    return isAssigned && isAttending
+                }
 
-            // If no teacher profile is linked to this user, don't show any classes
-            return false
-        })
+                return false
+            })
 
-        // Sort by actual instant, falling back to local time for incomplete records.
-        visible.sort((a, b) => {
-            const instantA = a.effectiveStartInstant?.getTime()
-            const instantB = b.effectiveStartInstant?.getTime()
-            if (instantA != null && instantB != null) return instantA - instantB
-            const timeA = a.effectiveStartTime || '23:59:59'
-            const timeB = b.effectiveStartTime || '23:59:59'
-            return timeA.localeCompare(timeB)
-        })
+            // Sort by actual instant, falling back to local time for incomplete records.
+            visible.sort((a, b) => {
+                const instantA = a.effectiveStartInstant?.getTime()
+                const instantB = b.effectiveStartInstant?.getTime()
+                if (instantA != null && instantB != null) return instantA - instantB
+                const timeA = a.effectiveStartTime || '23:59:59'
+                const timeB = b.effectiveStartTime || '23:59:59'
+                return timeA.localeCompare(timeB)
+            })
 
-        todayOccurrences.value = visible
-        stats.value.todayClasses = visible.length
+            todayOccurrences.value = visible
+            stats.value.todayClasses = visible.length
+        }
     } catch (e) {
         console.error(e)
     } finally {

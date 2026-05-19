@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
+import { AggregateService } from '@/services/AggregateService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { SessionService } from '@/services/session/SessionService'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
@@ -47,7 +48,7 @@ const { maxEnrollment, capacity, isChecking, isFull } = useCapacityCheck(
 async function fetchOptions() {
     try {
         const [{ data: catalogs }, { data: sessions }] = await Promise.all([
-            CourseCatalogService.getCourses(),
+            AggregateService.getCoursesCached(),
             SessionService.getClassSessions()
         ])
         fullCourses.value = catalogs
