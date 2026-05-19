@@ -16,6 +16,18 @@
             {{ props.title || $t('report.editor.title') }}
         </h3>
 
+        <!-- Real-time Collaboration Status -->
+        <ActiveEditorsIndicator
+            v-if="realtimeEnabled"
+            :active-editors="otherEditors"
+            :is-locked-by-other="isLockedByOther"
+            :has-conflict="hasConflict"
+            :conflict-message="conflictMessage"
+            :is-syncing="realtimeStatus.syncing"
+            :last-sync-time="realtimeStatus.lastSyncTime"
+            class="mb-4"
+        />
+
         <div class="flex items-center gap-4">
             <!-- Reference Panel Toggle -->
             <button @click="showReferencePanel = !showReferencePanel"
@@ -565,6 +577,10 @@ import { copyToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
 
 import type { Lesson } from '@/models/Course'
+import { useReportRealtime } from '@/composables/useReportRealtime'
+import { useEditorPresence } from '@/composables/useEditorPresence'
+import { useReportLocking } from '@/composables/useReportLocking'
+import ActiveEditorsIndicator from '@/components/ActiveEditorsIndicator.vue'
 
 interface Template {
     id: string
@@ -1544,6 +1560,18 @@ const {
         emit('save-error', message)
     }
 })
+
+// Real-time collaboration composables (only when reportId is available)
+const realtimeEnabled = computed(() => !!props.reportId)
+const { status: realtimeStatus } = useReportRealtime(computed(() => props.reportId || ''))
+
+const { otherEditors } = useEditorPresence(computed(() => props.reportId || ''))
+
+const { isLockedByOther } = useReportLocking(computed(() => props.reportId || ''))
+
+// Track if we have a conflict
+const hasConflict = ref(false)
+const conflictMessage = ref<string | null>(null)
 
 // Computed
 const wordCount = computed(() => {
