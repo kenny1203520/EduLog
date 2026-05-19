@@ -72,41 +72,52 @@ export class CollabService {
                     }
                 }
             )
-            .subscribe((status: any) => {
-                // console.log('Collab channel status', status)
-            })
+            .subscribe()
 
         this.channels.set(channelName, channel)
 
         // Subscribe to awareness table updates
         const awarenessChannelName = `collab:awareness:${reportId}`
-        const awarenessChannel = supabase
-            .channel(awarenessChannelName)
-            .on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'report_collab_awareness',
-                    filter: `occurrence_report_id=eq.${reportId}`
-                },
-                (payload: any) => {
-                    const newRow = payload.new
-                    if (!newRow || !newRow.awareness_payload) return
+        const awarenessChannel = supabase.channel(awarenessChannelName)
 
-                    try {
-                        const parsed = JSON.parse(newRow.awareness_payload)
-                        const callbacks = this.awarenessCallbacks.get(reportId) || []
-                        callbacks.forEach((cb) => {
-                            try { cb(parsed) } catch (e) { console.error(e) }
-                        })
-                    } catch (e) {
-                        console.error('Failed to parse awareness payload', e)
-                    }
-                }
-            )
-            .subscribe()
+        const handleAwarenessRow = (newRow: any) => {
+            if (!newRow || !newRow.awareness_payload) return
+            try {
+                const parsed = JSON.parse(newRow.awareness_payload)
+                const callbacks = this.awarenessCallbacks.get(reportId) || []
+                callbacks.forEach((cb) => {
+                    try { cb(parsed) } catch (e) { console.error(e) }
+                })
+            } catch (e) {
+                console.error('Failed to parse awareness payload', e)
+            }
+        }
 
+        // listen for INSERT
+        awarenessChannel.on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'report_collab_awareness',
+                filter: `occurrence_report_id=eq.${reportId}`
+            },
+            (payload: any) => handleAwarenessRow(payload.new)
+        )
+
+        // listen for UPDATE (heartbeat/upsert)
+        awarenessChannel.on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'report_collab_awareness',
+                filter: `occurrence_report_id=eq.${reportId}`
+            },
+            (payload: any) => handleAwarenessRow(payload.new)
+        )
+
+        awarenessChannel.subscribe()
         this.channels.set(awarenessChannelName, awarenessChannel)
 
         // Broadcast local updates to ops table
@@ -159,11 +170,41 @@ export class CollabService {
      */
     static async sendAwareness(reportId: string, userId: string, payload: object): Promise<void> {
         try {
-            await supabase.from('report_collab_awareness').insert({
-                occurrence_report_id: reportId,
-                origin_user_id: userId,
-                awareness_payload: JSON.stringify(payload)
-            })
+            // Try to update existing row (heartbeat), otherwise insert
+            const now = new Date().toISOString()
+            const awarenessPayload = JSON.stringify({ ...payload, updatedAt: now })
+
+            const { data: existing, error: selectErr } = await supabase
+                .from('report_collab_awareness')
+                .select('id')
+                .eq('occurrence_report_id', reportId)
+                .eq('origin_user_id', userId)
+                .maybeSingle()
+
+            if (selectErr) {
+                // fallback to insert
+                await supabase.from('report_collab_awareness').insert({
+                    occurrence_report_id: reportId,
+                    origin_user_id: userId,
+                    awareness_payload: awarenessPayload,
+                    last_heartbeat: now
+                })
+                return
+            }
+
+            if (existing && existing.id) {
+                await supabase.from('report_collab_awareness').update({
+                    awareness_payload: awarenessPayload,
+                    last_heartbeat: now
+                }).match({ id: existing.id })
+            } else {
+                await supabase.from('report_collab_awareness').insert({
+                    occurrence_report_id: reportId,
+                    origin_user_id: userId,
+                    awareness_payload: awarenessPayload,
+                    last_heartbeat: now
+                })
+            }
         } catch (err) {
             console.error('Failed to send awareness', err)
         }

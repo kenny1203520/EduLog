@@ -362,12 +362,24 @@
                         $t('report.editor.character_count') }}
                 </span>
             </label>
-            <textarea ref="learningTextarea" v-model="localContent" @input="handleInput" @keyup="updateCursor" @mouseup="updateCursor"
-                :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
-                :disabled="props.disabled"
-                class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono"
-                :class="{ 'bg-gray-50': props.disabled, 'opacity-50': props.disabled }"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }" />
+            <div class="relative">
+                <textarea ref="learningTextarea" v-model="localContent" @input="handleInput" @keyup="onLocalEditKey" @mouseup="onLocalEditKey"
+                    :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
+                    :disabled="props.disabled"
+                    class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono relative z-10"
+                    :class="{ 'bg-gray-50': props.disabled, 'opacity-50': props.disabled }"
+                    :style="{ fontSize: `${preferences.editorFontScale}%` }" />
+
+                <!-- Caret overlay -->
+                <div v-if="caretVisible" class="absolute z-20 pointer-events-none" :style="{ left: caretPos.left + 'px', top: caretPos.top + 'px' }">
+                    <div :style="{ background: caretColor, color: '#111827' }" class="px-2 py-1 rounded-full text-xs font-semibold shadow-sm">
+                        {{ caretLabel }}
+                    </div>
+                </div>
+
+                <!-- Simple selection highlight (approx) -->
+                <div v-if="selectionVisible" class="absolute z-15 pointer-events-none" :style="selectionStyle"></div>
+            </div>
         </div>
 
         <!-- Error Display -->
@@ -1590,6 +1602,18 @@ const yTextContact = ref<Y.Text | null>(null)
 const yTextClass = ref<Y.Text | null>(null)
 const learningTextarea = ref<HTMLTextAreaElement | null>(null)
 let snapshotInterval: ReturnType<typeof setInterval> | null = null
+const prevYContent = ref('')
+
+// Awareness / caret overlay state
+const caretVisible = ref(false)
+const caretPos = ref({ left: 0, top: 0 })
+const caretLabel = ref('')
+const caretColor = ref('#BFDBFE')
+const selectionVisible = ref(false)
+const selectionStyle = ref<Record<string, string>>({})
+
+let awarenessThrottleTimer: any = null
+let awarenessHeartbeatTimer: any = null
 
 // Computed
 const wordCount = computed(() => {
@@ -1755,11 +1779,31 @@ function handleInput() {
             const doc = collabYDoc.value
             const ytxt = yText.value
             if (doc && ytxt) {
+                // apply minimal diff (prefix/suffix) to reduce ops
+                const oldStr = prevYContent.value || ''
+                const newStr = localContent.value || ''
+                let start = 0
+                const oldLen = oldStr.length
+                const newLen = newStr.length
+                while (start < oldLen && start < newLen && oldStr[start] === newStr[start]) start++
+                let endOld = oldLen - 1
+                let endNew = newLen - 1
+                while (endOld >= start && endNew >= start && oldStr[endOld] === newStr[endNew]) {
+                    endOld--
+                    endNew--
+                }
+                const deleteCount = endOld - start + 1
+                const insertText = endNew - start + 1 > 0 ? newStr.slice(start, endNew + 1) : ''
+
                 doc.transact(() => {
-                    // replace whole text — simple and consistent for textarea
-                    ytxt.delete(0, ytxt.length)
-                    ytxt.insert(0, localContent.value)
+                    if (deleteCount > 0) {
+                        ytxt.delete(start, deleteCount)
+                    }
+                    if (insertText) {
+                        ytxt.insert(start, insertText)
+                    }
                 }, authStore.user?.id || 'local')
+                prevYContent.value = newStr
             }
         } catch (e) {
             console.error('Failed to write to collab ytext', e)
@@ -1812,12 +1856,60 @@ function getColorForUser(id: string) {
     return colors[idx]
 }
 
-function updateCursor() {
-    if (!learningTextarea.value || !sendAwareness) return
+
+
+function onLocalEditKey() {
+    if (!learningTextarea.value) return
+    const el = learningTextarea.value
+    const caret = el.selectionStart ?? 0
+    const selectionEnd = el.selectionEnd ?? caret
+
+    // update overlay positions (improved mirror div + scroll/page offsets)
     try {
-        const el = learningTextarea.value
-        const caret = el.selectionStart ?? 0
-        const selectionEnd = el.selectionEnd ?? caret
+        const startCoords = getCaretCoordinates(el, caret)
+        const endCoords = getCaretCoordinates(el, selectionEnd)
+
+        // caret is based on caret position
+        caretPos.value.left = Math.max(0, startCoords.left - el.scrollLeft)
+        caretPos.value.top = Math.max(0, startCoords.top - el.scrollTop)
+        caretVisible.value = true
+        caretLabel.value = getDisplayName()
+        caretColor.value = getColorForUser(authStore.user?.id || '')
+
+        if (selectionEnd !== caret) {
+            // compute selection bounding rect (approximate)
+            const top = Math.min(startCoords.top, endCoords.top) - el.scrollTop
+            const bottom = Math.max(startCoords.top, endCoords.top) - el.scrollTop
+            const lineHeight = parseInt(getComputedStyle(el).lineHeight || '18')
+            const height = Math.max(lineHeight / 2, Math.abs(bottom - top) + lineHeight)
+
+            // if same line, try to compute width between coords, else use full width
+            let width = '100%'
+            let left = '0px'
+            if (Math.abs(startCoords.top - endCoords.top) < lineHeight) {
+                left = `${Math.max(0, Math.min(startCoords.left, endCoords.left) - el.scrollLeft)}px`
+                width = `${Math.max(2, Math.abs(endCoords.left - startCoords.left))}px`
+            }
+
+            selectionStyle.value = {
+                left,
+                top: `${top}px`,
+                width,
+                height: `${height}px`,
+                background: `${caretColor.value}55`
+            }
+            selectionVisible.value = true
+        } else {
+            selectionVisible.value = false
+        }
+    } catch (e) {
+        console.error('Failed to update caret overlay', e)
+    }
+
+    // throttle awareness sends to ~200ms
+    if (awarenessThrottleTimer) clearTimeout(awarenessThrottleTimer)
+    awarenessThrottleTimer = setTimeout(() => {
+        if (!sendAwareness) return
         const payload = {
             userId: authStore.user?.id || '',
             displayName: getDisplayName(),
@@ -1828,9 +1920,51 @@ function updateCursor() {
             updatedAt: new Date().toISOString()
         }
         void sendAwareness(payload)
-    } catch (e) {
-        console.error('Failed to send awareness', e)
-    }
+    }, 200)
+}
+
+// Simple caret coordinates helper (mirror div technique)
+function getCaretCoordinates(element: HTMLTextAreaElement, position: number) {
+    // mirror-div approach but copy relevant box model to improve accuracy
+    const div = document.createElement('div')
+    const style = getComputedStyle(element)
+    const props = [
+        'boxSizing', 'width', 'height', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'lineHeight',
+        'fontWeight', 'fontStyle', 'letterSpacing', 'textTransform', 'textAlign', 'whiteSpace'
+    ]
+    props.forEach((p) => {
+        try { div.style.setProperty(p, style.getPropertyValue(p)) } catch (e) { }
+    })
+    div.style.position = 'absolute'
+    div.style.visibility = 'hidden'
+    div.style.whiteSpace = 'pre-wrap'
+    div.style.wordWrap = 'break-word'
+    div.style.overflow = 'auto'
+    div.style.width = `${element.clientWidth}px`
+    div.style.padding = style.padding
+    div.style.border = style.border
+
+    // place offscreen near element to better reflect font rendering
+    const elRect = element.getBoundingClientRect()
+    div.style.left = `${elRect.left + window.scrollX}px`
+    div.style.top = `${elRect.top + window.scrollY}px`
+
+    document.body.appendChild(div)
+
+    const value = element.value.substring(0, position)
+    // preserve line breaks
+    const safe = value.replace(/\n$/g, '\n.')
+    div.textContent = safe
+
+    const span = document.createElement('span')
+    span.textContent = element.value.substring(position) || '.'
+    div.appendChild(span)
+    const rect = span.getBoundingClientRect()
+    const top = rect.top - elRect.top + element.scrollTop - window.scrollY
+    const left = rect.left - elRect.left + element.scrollLeft - window.scrollX
+    document.body.removeChild(div)
+    return { left, top }
 }
 
 
@@ -1888,6 +2022,15 @@ onBeforeUnmount(() => {
         clearInterval(snapshotInterval)
         snapshotInterval = null
     }
+    // clear awareness timers
+    if (awarenessThrottleTimer) {
+        clearTimeout(awarenessThrottleTimer)
+        awarenessThrottleTimer = null
+    }
+    if (awarenessHeartbeatTimer) {
+        clearInterval(awarenessHeartbeatTimer)
+        awarenessHeartbeatTimer = null
+    }
 })
 
 // Initialize collab bindings when ready
@@ -1936,7 +2079,8 @@ watch(collabReady, (readyVal) => {
         console.error('Failed to read ytext initial content', e)
     }
 
-    // Observe remote changes
+    // Observe remote changes (update localContent and prevYContent)
+    prevYContent.value = ytxt.toString()
     ytxt.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
@@ -1946,6 +2090,7 @@ watch(collabReady, (readyVal) => {
                 if (updated !== localContent.value) {
                     localContent.value = updated
                 }
+                prevYContent.value = updated
             }
         } catch (e) {
             console.error('Error handling ytext update', e)
@@ -1981,6 +2126,23 @@ watch(collabReady, (readyVal) => {
             console.error('Error handling yClass update', e)
         }
     })
+
+    // start awareness heartbeat to keep server-side last_heartbeat fresh
+    if (awarenessHeartbeatTimer) clearInterval(awarenessHeartbeatTimer)
+    awarenessHeartbeatTimer = setInterval(() => {
+        try {
+            if (!sendAwareness || !authStore.user?.id) return
+            void sendAwareness({
+                userId: authStore.user.id,
+                displayName: getDisplayName(),
+                color: getColorForUser(authStore.user?.id || ''),
+                field: 'heartbeat',
+                updatedAt: new Date().toISOString()
+            })
+        } catch (e) {
+            console.error('Failed to send awareness heartbeat', e)
+        }
+    }, 5000)
 
     // Periodic snapshot save
     snapshotInterval = setInterval(() => {

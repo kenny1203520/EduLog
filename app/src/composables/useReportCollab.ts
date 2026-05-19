@@ -47,9 +47,13 @@ export function useReportCollab(reportId: Ref<string> | string) {
             // For simplicity convert to array of single payloads keyed by origin_user_id
             try {
                 if (!p || !p.userId) return
-                // replace or push
+                // ignore stale payloads (compare updatedAt)
                 const existingIndex = awareness.value.findIndex(a => a.userId === p.userId)
                 if (existingIndex >= 0) {
+                    const existing = awareness.value[existingIndex]
+                    const existingTs = existing?.updatedAt ? new Date(existing.updatedAt).getTime() : 0
+                    const incomingTs = p?.updatedAt ? new Date(p.updatedAt).getTime() : 0
+                    if (incomingTs < existingTs) return
                     awareness.value.splice(existingIndex, 1, p)
                 } else {
                     awareness.value.push(p)
