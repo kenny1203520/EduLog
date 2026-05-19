@@ -31,14 +31,14 @@ ALTER TABLE public.report_locks ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can view locks on accessible reports" ON public.report_locks;
 CREATE POLICY "Users can view locks on accessible reports" ON public.report_locks FOR SELECT 
 USING (
-    locked_by = auth.uid() OR
+    locked_by = (SELECT auth.uid()) OR
     occurrence_report_id IN (
         SELECT orpt.id FROM public.occurrence_reports orpt
         JOIN public.enrollments e ON orpt.enrollment_id = e.id
         JOIN public.class_sessions cs ON e.class_session_id = cs.id
         JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
         JOIN public.teachers t ON cst.teacher_id = t.id
-        WHERE t.user_id = auth.uid()
+        WHERE t.user_id = (SELECT auth.uid())
         AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
     )
 );
@@ -46,12 +46,12 @@ USING (
 -- Policy: Users can only create/modify locks for their own user_id
 DROP POLICY IF EXISTS "Users can create locks only for themselves" ON public.report_locks;
 CREATE POLICY "Users can create locks only for themselves" ON public.report_locks FOR INSERT 
-WITH CHECK (locked_by = auth.uid());
+WITH CHECK (locked_by = (SELECT auth.uid()));
 
 -- Policy: Users can only delete their own locks
 DROP POLICY IF EXISTS "Users can delete only their own locks" ON public.report_locks;
 CREATE POLICY "Users can delete only their own locks" ON public.report_locks FOR DELETE 
-USING (locked_by = auth.uid());
+USING (locked_by = (SELECT auth.uid()));
 
 -- Trigger for locks updated_at
 DROP TRIGGER IF EXISTS update_report_locks_updated_at ON public.report_locks;
@@ -92,14 +92,14 @@ ALTER TABLE public.active_report_editors ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can view active editors for accessible reports" ON public.active_report_editors;
 CREATE POLICY "Users can view active editors for accessible reports" ON public.active_report_editors FOR SELECT 
 USING (
-    editor_id = auth.uid() OR
+    editor_id = (SELECT auth.uid()) OR
     occurrence_report_id IN (
         SELECT orpt.id FROM public.occurrence_reports orpt
         JOIN public.enrollments e ON orpt.enrollment_id = e.id
         JOIN public.class_sessions cs ON e.class_session_id = cs.id
         JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
         JOIN public.teachers t ON cst.teacher_id = t.id
-        WHERE t.user_id = auth.uid()
+        WHERE t.user_id = (SELECT auth.uid())
         AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
     )
 );
@@ -107,18 +107,18 @@ USING (
 -- Policy: Users can only create/update their own heartbeat
 DROP POLICY IF EXISTS "Users can create editor records only for themselves" ON public.active_report_editors;
 CREATE POLICY "Users can create editor records only for themselves" ON public.active_report_editors FOR INSERT 
-WITH CHECK (editor_id = auth.uid());
+WITH CHECK (editor_id = (SELECT auth.uid()));
 
 -- Policy: Users can only update their own heartbeat records
 DROP POLICY IF EXISTS "Users can update only their own heartbeat records" ON public.active_report_editors;
 CREATE POLICY "Users can update only their own heartbeat records" ON public.active_report_editors FOR UPDATE 
-USING (editor_id = auth.uid())
-WITH CHECK (editor_id = auth.uid());
+USING (editor_id = (SELECT auth.uid()))
+WITH CHECK (editor_id = (SELECT auth.uid()));
 
 -- Policy: Users can only delete their own records
 DROP POLICY IF EXISTS "Users can delete only their own editor records" ON public.active_report_editors;
 CREATE POLICY "Users can delete only their own editor records" ON public.active_report_editors FOR DELETE 
-USING (editor_id = auth.uid());
+USING (editor_id = (SELECT auth.uid()));
 
 -- Trigger for active_report_editors updated_at
 DROP TRIGGER IF EXISTS update_active_report_editors_updated_at ON public.active_report_editors;
@@ -168,7 +168,7 @@ USING (
         JOIN public.class_sessions cs ON e.class_session_id = cs.id
         JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
         JOIN public.teachers t ON cst.teacher_id = t.id
-        WHERE t.user_id = auth.uid()
+        WHERE t.user_id = (SELECT auth.uid())
         AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
     )
 );
@@ -201,7 +201,7 @@ SET search_path = public AS $$
 BEGIN
     DELETE FROM public.report_locks WHERE expires_at < timezone('utc'::text, now());
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function to clean expired active editors
 CREATE OR REPLACE FUNCTION public.cleanup_inactive_report_editors() RETURNS void
@@ -209,7 +209,7 @@ SET search_path = public AS $$
 BEGIN
     DELETE FROM public.active_report_editors WHERE heartbeat_expires_at < timezone('utc'::text, now());
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ==========================================
 -- 5. Report Lock Management
@@ -247,6 +247,20 @@ BEGIN
         RAISE EXCEPTION 'Report not found';
     END IF;
     
+    -- Authorization: check if user has access to this report
+    IF NOT EXISTS (
+        SELECT 1 FROM public.occurrence_reports orpt
+        JOIN public.enrollments e ON orpt.enrollment_id = e.id
+        JOIN public.class_sessions cs ON e.class_session_id = cs.id
+        JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
+        JOIN public.teachers t ON cst.teacher_id = t.id
+        WHERE orpt.id = p_report_id
+        AND t.user_id = auth.uid()
+        AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
+    ) THEN
+        RAISE EXCEPTION 'Access denied to report';
+    END IF;
+    
     -- Clean up expired locks first
     PERFORM public.cleanup_expired_report_locks();
     
@@ -262,7 +276,7 @@ BEGIN
     ) ON CONFLICT DO NOTHING
     RETURNING *;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- Function to release report lock with validation
 CREATE OR REPLACE FUNCTION public.release_report_lock(
@@ -288,7 +302,7 @@ BEGIN
     WHERE occurrence_report_id = p_report_id
     AND locked_by = p_user_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- ==========================================
 -- 6. Editor Presence Management
@@ -319,6 +333,20 @@ BEGIN
         RAISE EXCEPTION 'Report not found';
     END IF;
     
+    -- Authorization: check if user has access to this report
+    IF NOT EXISTS (
+        SELECT 1 FROM public.occurrence_reports orpt
+        JOIN public.enrollments e ON orpt.enrollment_id = e.id
+        JOIN public.class_sessions cs ON e.class_session_id = cs.id
+        JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
+        JOIN public.teachers t ON cst.teacher_id = t.id
+        WHERE orpt.id = p_report_id
+        AND t.user_id = auth.uid()
+        AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
+    ) THEN
+        RAISE EXCEPTION 'Access denied to report';
+    END IF;
+    
     -- Clean up inactive editors first
     PERFORM public.cleanup_inactive_report_editors();
     
@@ -337,7 +365,7 @@ BEGIN
         updated_at = timezone('utc'::text, now())
     RETURNING *;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- Function to get active editors for a report (with authorization check)
 CREATE OR REPLACE FUNCTION public.get_active_editors(p_report_id uuid)
@@ -376,7 +404,7 @@ BEGIN
     FROM public.active_report_editors eare
     WHERE eare.occurrence_report_id = p_report_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- ==========================================
 -- 7. Sync Metadata Management
@@ -415,6 +443,20 @@ BEGIN
         RAISE EXCEPTION 'Report not found';
     END IF;
     
+    -- Authorization: check if user has access to this report
+    IF NOT EXISTS (
+        SELECT 1 FROM public.occurrence_reports orpt
+        JOIN public.enrollments e ON orpt.enrollment_id = e.id
+        JOIN public.class_sessions cs ON e.class_session_id = cs.id
+        JOIN public.class_session_teachers cst ON cs.id = cst.class_session_id
+        JOIN public.teachers t ON cst.teacher_id = t.id
+        WHERE orpt.id = p_report_id
+        AND t.user_id = auth.uid()
+        AND (cst.effective_to IS NULL OR cst.effective_to >= CURRENT_DATE)
+    ) THEN
+        RAISE EXCEPTION 'Access denied to report';
+    END IF;
+    
     RETURN QUERY INSERT INTO public.report_sync_metadata (
         occurrence_report_id,
         last_synced_at,
@@ -441,7 +483,7 @@ BEGIN
         updated_at = timezone('utc'::text, now())
     RETURNING *;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY INVOKER;
 
 -- ==========================================
 -- 8. Columns on Existing Tables
@@ -510,11 +552,23 @@ WHERE is_collaborative_enabled = true;
 -- 9. Grant Function Permissions
 -- ==========================================
 
--- Grant execute permissions to authenticated users
-GRANT EXECUTE ON FUNCTION public.acquire_report_lock TO authenticated;
-GRANT EXECUTE ON FUNCTION public.release_report_lock TO authenticated;
-GRANT EXECUTE ON FUNCTION public.update_editor_heartbeat TO authenticated;
-GRANT EXECUTE ON FUNCTION public.get_active_editors TO authenticated;
-GRANT EXECUTE ON FUNCTION public.record_report_sync TO authenticated;
-GRANT EXECUTE ON FUNCTION public.cleanup_expired_report_locks TO postgres;
-GRANT EXECUTE ON FUNCTION public.cleanup_inactive_report_editors TO postgres;
+-- Revoke default public execution rights to address security lints
+REVOKE EXECUTE ON FUNCTION public.acquire_report_lock(uuid, uuid, integer) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.release_report_lock(uuid, uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.update_editor_heartbeat(uuid, uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_active_editors(uuid) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.record_report_sync(uuid, uuid, bigint, boolean, text, uuid[]) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.cleanup_expired_report_locks() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.cleanup_inactive_report_editors() FROM PUBLIC;
+
+-- Grant execute permissions to appropriate roles
+GRANT EXECUTE ON FUNCTION public.acquire_report_lock(uuid, uuid, integer) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.release_report_lock(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.update_editor_heartbeat(uuid, uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_active_editors(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.record_report_sync(uuid, uuid, bigint, boolean, text, uuid[]) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_expired_report_locks() TO postgres;
+GRANT EXECUTE ON FUNCTION public.cleanup_inactive_report_editors() TO postgres;
+
+-- Revoke execution permissions on the auto RLS event trigger function from PUBLIC
+REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC;
