@@ -75,12 +75,12 @@ async function loadHolidays() {
             const agg = await AggregateService.getHolidaysAggregate(true)
             holidays.value = (agg || []).map((d: any) => new Holiday({
                 id: d.id,
-                startDate: d.start_date,
-                endDate: d.end_date,
-                timeZone: d.time_zone,
+                start_date: d.start_date,
+                end_date: d.end_date,
+                time_zone: d.time_zone,
                 name: d.name,
-                classroomIds: d.classroom_ids || [],
-                classSessionIds: d.class_session_ids || []
+                classroom_ids: d.classroom_ids || [],
+                class_session_ids: d.class_session_ids || []
             }))
         } catch (e) {
             holidays.value = await HolidayService.listHolidays()

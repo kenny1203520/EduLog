@@ -34,28 +34,40 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // Counts
+    const userId = userRes.data.user.id
+
+    // Look up teacher profile matching user_id
+    const { data: teacher } = await client
+      .from('teachers')
+      .select('id')
+      .eq('user_id', userId)
+      .maybeSingle()
+    const teacherId = teacher?.id
+
+    // Counts (students & active courses)
     const studentsRes = await client.from('students').select('id', { count: 'exact' }).range(0, 0)
     const coursesRes = await client.from('courses').select('id', { count: 'exact' }).range(0, 0)
 
     const totalStudents = studentsRes.count || 0
     const activeCourses = coursesRes.count || 0
 
-    // Pending reports (limit 20) - reusing logic similar to ReportQueryService.fetchIncompleteReportsInternal
+    // Pending reports count & list
     const todayStr = new Date().toISOString().slice(0, 10)
     const dateStr = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
+    // Top 20 pending reports without content field
     const pendingRes = await client
       .from('occurrence_reports')
       .select(`
         id,
         enrollments!inner(id, student_id, course_id, students(id, name)),
         class_occurrences!inner(id, occurrence_date, actual_start_time, original_start_time, class_session_id, class_sessions(id, name, classroom_id, classrooms(id, name))),
-        content, is_completed, updated_at, attendance_status
+        is_completed, updated_at, attendance_status
       `)
       .eq('attendance_status', 'present')
       .gte('class_occurrences.occurrence_date', dateStr)
       .lte('class_occurrences.occurrence_date', todayStr)
+      .order('class_occurrences(occurrence_date)', { ascending: false })
       .limit(20)
 
     const pending = (pendingRes.data || []).map((r: any) => {
@@ -74,30 +86,67 @@ serve(async (req: Request) => {
       }
     })
 
+    const pendingReportsCount = pending.length || 0
+
     // Occurrences between start and end if provided
     let occurrences: any[] = []
     if (start && end) {
       const occRes = await client
         .from('class_occurrences')
-        .select(`*, class_sessions(name, time_zone, classrooms (name, color))`)
+        .select(`
+          *,
+          class_sessions (
+            name,
+            time_zone,
+            classrooms (
+              name,
+              color
+            )
+          )
+        `)
         .gte('occurrence_date', start)
         .lte('occurrence_date', end)
         .order('occurrence_date', { ascending: true })
 
-      occurrences = (occRes.data || []).map((d: any) => ({
-        id: d.id,
-        occurrence_date: d.occurrence_date,
-        actual_start_time: d.actual_start_time,
-        actual_end_time: d.actual_end_time,
-        sessionName: d.class_sessions?.name,
-        classroomName: d.class_sessions?.classrooms?.name,
-        classroomColor: d.class_sessions?.classrooms?.color,
-        isConducted: d.is_conducted
-      }))
+      if (occRes.error) {
+        throw occRes.error
+      }
+      
+      const rawOccurrences = occRes.data || []
+      
+      // Perform teacher filtering on the server
+      occurrences = rawOccurrences.filter((occ: any) => {
+        if (occ.is_conducted !== true) return false
+        if (teacherId) {
+          const isAssigned = occ.teacher_ids?.includes(teacherId)
+          const isAttending = occ.teacher_attendance?.[teacherId] === true
+          return isAssigned && isAttending
+        }
+        return true
+      })
     }
 
-    return new Response(JSON.stringify({ stats: { totalStudents, activeCourses }, pendingReports: pending, occurrences }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30, s-maxage=30, stale-while-revalidate=60' } })
+    return new Response(
+      JSON.stringify({
+        stats: {
+          totalStudents,
+          activeCourses,
+          pendingReportsCount
+        },
+        pendingReports: pending,
+        occurrences
+      }),
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'Cache-Control': 'public, max-age=30, s-maxage=30, stale-while-revalidate=60'
+        }
+      }
+    )
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || String(e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 })
+

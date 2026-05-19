@@ -1,14 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { AggregateService } from '@/services/AggregateService'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
-import type { ClassOccurrence } from '@/models/ClassOccurrence'
-import { useAuthStore } from '@/stores/useAuthStore'
-import { TeacherService } from '@/services/teacher/TeacherService'
-import { StudentService } from '@/services/student/StudentService'
-import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
 
@@ -20,6 +14,8 @@ const stats = ref({
     todayClasses: 0
 })
 const todayOccurrences = ref<ClassOccurrence[]>([])
+const pendingReports = ref<any[]>([])
+const pendingReportsCount = ref(0)
 const loading = ref(true)
 
 const nextClass = computed(() => {
@@ -50,84 +46,32 @@ onMounted(async () => {
     try {
         loading.value = true
 
-        let usedAggregateOccurrences = false
+        const todayStr = DateUtils.todayString(preferences.timeZone)
+        const agg = await AggregateService.getDashboardHome(todayStr, todayStr, true)
+        
+        stats.value.totalStudents = agg.stats?.totalStudents || 0
+        stats.value.activeCourses = agg.stats?.activeCourses || 0
+        pendingReports.value = agg.pendingReports || []
+        pendingReportsCount.value = agg.stats?.pendingReportsCount || 0
 
-        // Prefer dashboard aggregate endpoint
-        try {
-            const todayStr = DateUtils.todayString(preferences.timeZone)
-            const agg = await AggregateService.getDashboardHomeAggregate(todayStr, todayStr)
-            stats.value.totalStudents = agg.stats?.totalStudents || 0
-            stats.value.activeCourses = agg.stats?.activeCourses || 0
-            pendingReports.value = agg.pendingReports || []
-
-            if (agg.occurrences && Array.isArray(agg.occurrences)) {
-                const occs = agg.occurrences.map((d: any) => ({
-                    ...d,
-                    effectiveStartInstant: d.occurrence_date ? new Date(`${d.occurrence_date}T${d.actual_start_time || '00:00:00'}`) : undefined,
-                    effectiveEndInstant: d.occurrence_date ? new Date(`${d.occurrence_date}T${d.actual_end_time || d.actual_start_time || '00:00:00'}`) : undefined
-                }))
-
-                // Optionally keep teacher visibility filtering client-side; for now use aggregate payload directly
-                todayOccurrences.value = occs
-                usedAggregateOccurrences = true
-                stats.value.todayClasses = occs.length
-            } else {
-                // fallback to previous parallel fetches for counts
-                StudentService.getAll(1, 1).then(res => { stats.value.totalStudents = res.count }).catch(e => console.error(e))
-                CourseCatalogService.getCourses(1, 1).then(res => { stats.value.activeCourses = res.count }).catch(e => console.error(e))
-                fetchPendingReports()
-            }
-        } catch (e) {
-            // fallback for aggregate failure
-            StudentService.getAll(1, 1).then(res => { stats.value.totalStudents = res.count }).catch(e => console.error(e))
-            CourseCatalogService.getCourses(1, 1).then(res => { stats.value.activeCourses = res.count }).catch(e => console.error(e))
-            fetchPendingReports()
-        }
-
-        if (!usedAggregateOccurrences) {
-            // Fetch a one-day buffer around the user's display date so class-time-zone
-            // occurrences that cross the user's calendar boundary are still considered.
-            const today = DateUtils.todayDate(preferences.timeZone)
-            const start = DateUtils.addDays(today, -1)
-            const end = DateUtils.addDays(today, 1)
-            const displayToday = DateUtils.todayString(preferences.timeZone)
-            const displayTomorrow = DateUtils.addDaysToDateString(displayToday, 1)
-            const displayDayStart = DateUtils.zonedDateTimeToInstant(displayToday, '00:00', preferences.timeZone)
-            const displayDayEnd = DateUtils.zonedDateTimeToInstant(displayTomorrow, '00:00', preferences.timeZone)
-
-            const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
-            const auth = useAuthStore()
-            const userId = auth.user?.id
-
-            // Fetch teacher profile if logged in
-            const teacherProfile = userId ? await TeacherService.getTeacherByUserId(userId) : null
-            const teacherId = teacherProfile?.id
-
-            // Visible if:
-            // 1. Current user is assigned to the occurrence (teacherId is in teacherIds)
-            // 2. Teacher is marked attending (teacherAttendance[teacherId] is true)
-            // 3. Class is conducted (isConducted is true)
-            const visible = (data || []).filter(d => {
-                if (d.isConducted !== true) return false
-
-                const occurrenceStart = d.effectiveStartInstant
-                const occurrenceEnd = d.effectiveEndInstant || occurrenceStart
-                if (displayDayStart && displayDayEnd && occurrenceStart && occurrenceEnd) {
-                    const overlapsDisplayDay = occurrenceStart < displayDayEnd && occurrenceEnd >= displayDayStart
-                    if (!overlapsDisplayDay) return false
+        if (agg.occurrences && Array.isArray(agg.occurrences)) {
+            const mappedOccs: ClassOccurrence[] = agg.occurrences.map((d: any) => {
+                const occ = new ClassOccurrence(d)
+                if (d.class_sessions) {
+                    occ.sessionName = d.class_sessions.name
+                    if (!occ.timeZone && d.class_sessions.time_zone) {
+                        occ.timeZone = d.class_sessions.time_zone
+                    }
                 }
-
-                if (teacherId) {
-                    const isAssigned = d.teacherIds?.includes(teacherId)
-                    const isAttending = d.teacherAttendance && d.teacherAttendance[teacherId] === true
-                    return isAssigned && isAttending
+                if (d.class_sessions?.classrooms) {
+                    occ.classroomName = d.class_sessions.classrooms.name
+                    occ.classroomColor = d.class_sessions.classrooms.color
                 }
-
-                return false
+                return occ
             })
 
-            // Sort by actual instant, falling back to local time for incomplete records.
-            visible.sort((a, b) => {
+            // Sort by actual start time
+            mappedOccs.sort((a, b) => {
                 const instantA = a.effectiveStartInstant?.getTime()
                 const instantB = b.effectiveStartInstant?.getTime()
                 if (instantA != null && instantB != null) return instantA - instantB
@@ -136,26 +80,15 @@ onMounted(async () => {
                 return timeA.localeCompare(timeB)
             })
 
-            todayOccurrences.value = visible
-            stats.value.todayClasses = visible.length
+            todayOccurrences.value = mappedOccs
+            stats.value.todayClasses = mappedOccs.length
         }
     } catch (e) {
-        console.error(e)
+        console.error('Failed to load dashboard data:', e)
     } finally {
         loading.value = false
     }
 })
-
-const pendingReports = ref<any[]>([])
-
-async function fetchPendingReports() {
-    try {
-        const data = await OccurrenceReportService.getPendingReports()
-        pendingReports.value = data
-    } catch (e) {
-        console.error('Failed to fetch pending occurrences:', e)
-    }
-}
 
 function navigateToSession(id: string) {
     router.push({ name: 'session-details', params: { id } })
@@ -410,14 +343,14 @@ function formatReportDate(date: string | Date | undefined): string {
                                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                         </div>
-                        <p class="text-3xl font-black text-gray-900 tracking-tighter">{{ pendingReports.length }}</p>
+                        <p class="text-3xl font-black text-gray-900 tracking-tighter">{{ pendingReportsCount }}</p>
                         <h4 class="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">{{
                             $t('dashboard.stats.pending_reports') }}</h4>
                     </div>
                 </div>
 
                 <!-- Pending Reports Widget -->
-                <div v-if="pendingReports.length > 0"
+                <div v-if="pendingReportsCount > 0"
                     class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-6">
                     <div class="flex items-center justify-between mb-6">
                         <h3 class="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
@@ -457,7 +390,7 @@ function formatReportDate(date: string | Date | undefined): string {
 
                     <button @click="navigateToGlobalIncomplete"
                         class="w-full py-3 bg-gray-50 text-gray-600 font-black rounded-xl hover:bg-gray-100 transition-colors text-sm flex items-center justify-center gap-2">
-                        {{ $t('dashboard.view_all_reports_count', { count: pendingReports.length }) }}
+                        {{ $t('dashboard.view_all_reports_count', { count: pendingReportsCount }) }}
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

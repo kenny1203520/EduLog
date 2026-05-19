@@ -18,6 +18,18 @@ export class AggregateService {
   private static DEFAULT_TTL_MS = 30 * 1000 // 30 seconds
   private static MEDIUM_TTL_MS = 60 * 1000 // 60 seconds for catalog/counts
 
+  private static getFunctionsBaseUrl(): string {
+    if (import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL) {
+      return import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL
+    }
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    if (supabaseUrl) {
+      const cleanUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl
+      return `${cleanUrl}/functions/v1`
+    }
+    return ''
+  }
+
   private static async withCache<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
     const now = Date.now()
     const entry = this._cache.get(key)
@@ -60,8 +72,7 @@ export class AggregateService {
     }
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const base = import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL || ''
-    // If a base is provided, call `${base}/aggregate-user-preferences`, otherwise call root path
+    const base = this.getFunctionsBaseUrl()
     const url = base ? `${base}/aggregate-user-preferences` : '/aggregate-user-preferences'
 
     return this.withCache(`user_prefs:${token || 'anon'}`, this.DEFAULT_TTL_MS, async () => {
@@ -84,7 +95,7 @@ export class AggregateService {
     }
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const base = import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL || ''
+    const base = this.getFunctionsBaseUrl()
     const url = base ? `${base}/aggregate-student-reports?enrollment_id=${encodeURIComponent(enrollmentId)}&page=${page}&perPage=${perPage}` : `/aggregate-student-reports?enrollment_id=${encodeURIComponent(enrollmentId)}&page=${page}&perPage=${perPage}`
 
     const cacheKey = `reports_enrollment:${enrollmentId}:p${page}:s${perPage}`
@@ -108,7 +119,7 @@ export class AggregateService {
     }
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const base = import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL || ''
+    const base = this.getFunctionsBaseUrl()
     const qs = `page=${page}&perPage=${perPage}&search=${encodeURIComponent(search)}&visibilityMode=${encodeURIComponent(visibilityMode)}`
     const url = base ? `${base}/aggregate-classroom-session-manager?${qs}` : `/aggregate-classroom-session-manager?${qs}`
 
@@ -124,7 +135,7 @@ export class AggregateService {
     })
   }
 
-  static async getDashboardHomeAggregate(start?: string, end?: string) {
+  static async getDashboardHome(start?: string, end?: string, forceRefresh: boolean = false) {
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 
@@ -133,13 +144,24 @@ export class AggregateService {
     }
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const base = import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL || ''
+    const base = this.getFunctionsBaseUrl()
     const qs = []
     if (start) qs.push(`start=${encodeURIComponent(start)}`)
     if (end) qs.push(`end=${encodeURIComponent(end)}`)
-    const url = base ? `${base}/aggregate-dashboard-home${qs.length ? `?${qs.join('&')}` : ''}` : `/aggregate-dashboard-home${qs.length ? `?${qs.join('&')}` : ''}`
+    const url = base ? `${base}/dashboard-home${qs.length ? `?${qs.join('&')}` : ''}` : `/dashboard-home${qs.length ? `?${qs.join('&')}` : ''}`
 
     const cacheKey = `dashboard_home:${start || 'none'}:${end || 'none'}:t${token || 'anon'}`
+    if (forceRefresh) {
+      // Remove any cached entry and perform a fetch that forces validation
+      this.clearCache(cacheKey)
+      const resp = await fetch(url, { method: 'GET', headers, cache: 'no-cache' as RequestCache })
+      if (!resp.ok) {
+        const txt = await resp.text()
+        throw new Error(`AggregateService error: ${resp.status} ${txt}`)
+      }
+      return resp.json()
+    }
+
     return this.withCache(cacheKey, this.DEFAULT_TTL_MS, async () => {
       const resp = await fetch(url, { method: 'GET', headers })
       if (!resp.ok) {
@@ -159,7 +181,7 @@ export class AggregateService {
     }
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const base = import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL || ''
+    const base = this.getFunctionsBaseUrl()
     const url = base ? `${base}/aggregate-incomplete-reports?daysBack=${daysBack}` : `/aggregate-incomplete-reports?daysBack=${daysBack}`
 
     const cacheKey = `incomplete_reports:back${daysBack}:t${token || 'anon'}`
@@ -182,7 +204,7 @@ export class AggregateService {
     }
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    const base = import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL || ''
+    const base = this.getFunctionsBaseUrl()
     const url = base ? `${base}/aggregate-holidays-manager?expand=${expandNames}` : `/aggregate-holidays-manager?expand=${expandNames}`
 
     const cacheKey = `holidays:expand${expandNames}:t${token || 'anon'}`
@@ -213,4 +235,3 @@ export class AggregateService {
     })
   }
 }
-
