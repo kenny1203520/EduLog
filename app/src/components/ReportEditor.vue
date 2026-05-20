@@ -316,69 +316,99 @@
 
         <!-- Contact Notes -->
         <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-                </svg>
-                {{ $t('report.editor.contact_notes_label') }}
-            </label>
-            <textarea v-model="contactNotes" rows="2"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }"
-                :placeholder="$t('report.editor.contact_notes_placeholder')"></textarea>
+            <div class="mb-2 flex items-center justify-between gap-2">
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <svg class="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                    </svg>
+                    {{ $t('report.editor.contact_notes_label') }}
+                </label>
+                <div v-if="getEditorChips('contactNotes').length" class="flex flex-wrap justify-end gap-1">
+                    <span v-for="editor in getEditorChips('contactNotes')" :key="editor.userId"
+                        class="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                        :style="getEditorChipStyle(editor)">
+                        {{ editor.displayName }}
+                    </span>
+                </div>
+            </div>
+            <TipTapPlainEditor
+                v-model="contactNotes"
+                :placeholder="$t('report.editor.contact_notes_placeholder')"
+                :disabled="props.disabled"
+                :font-scale="preferences.editorFontScale"
+                :min-height="90"
+                :focus-ring-class="'ring-2 ring-blue-500 border-blue-500'"
+                @activity="onTextFieldActivity('contactNotes', $event)"
+            />
         </div>
 
         <!-- Class Notes -->
         <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
-                <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                {{ $t('report.editor.class_notes_label') }}
-                <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
-            </label>
-            <textarea v-model="classNotes" rows="4"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y font-mono"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }"
-                :placeholder="$t('report.editor.class_notes_placeholder')"></textarea>
+            <div class="mb-2 flex items-center justify-between gap-2">
+                <label class="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <svg class="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                    </svg>
+                    {{ $t('report.editor.class_notes_label') }}
+                    <span class="text-xs font-normal text-gray-500">{{ $t('report.editor.class_notes_subtitle') }}</span>
+                </label>
+                <div v-if="getEditorChips('classNotes').length" class="flex flex-wrap justify-end gap-1">
+                    <span v-for="editor in getEditorChips('classNotes')" :key="editor.userId"
+                        class="rounded-full border px-2 py-0.5 text-[10px] font-semibold text-slate-700"
+                        :style="getEditorChipStyle(editor)">
+                        {{ editor.displayName }}
+                    </span>
+                </div>
+            </div>
+            <TipTapPlainEditor
+                v-model="classNotes"
+                :placeholder="$t('report.editor.class_notes_placeholder')"
+                :disabled="props.disabled"
+                :font-scale="preferences.editorFontScale"
+                :min-height="140"
+                :mono="true"
+                :focus-ring-class="'ring-2 ring-purple-500 border-purple-500'"
+                @activity="onTextFieldActivity('classNotes', $event)"
+            />
         </div>
 
         <!-- Learning Report (Main Content) -->
         <div class="mb-6">
-            <label class="block text-sm font-medium text-gray-700 mb-2 flex items-center justify-between">
+            <label class="mb-2 flex items-center justify-between text-sm font-medium text-gray-700">
                 <span class="flex items-center gap-2">
                     <svg class="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     {{ $t('report.editor.learning_report_label') }}
-                    <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.learning_report_subtitle')
-                        }}</span>
+                    <span class="text-xs font-normal text-gray-500">{{ $t('report.editor.learning_report_subtitle') }}</span>
                 </span>
                 <span v-if="wordCount > 0" class="text-xs text-gray-500">
-                    {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{
-                        $t('report.editor.character_count') }}
+                    {{ wordCount }} {{ $t('report.editor.word_count') }} · {{ characterCount }} {{ $t('report.editor.character_count') }}
                 </span>
             </label>
             <div class="relative">
-                <textarea ref="learningTextarea" v-model="localContent" @input="handleInput" @keyup="onLocalEditKey" @mouseup="onLocalEditKey"
+                <TipTapPlainEditor
+                    v-model="localContent"
                     :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                     :disabled="props.disabled"
-                    class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono relative z-10"
-                    :class="{ 'bg-gray-50': props.disabled, 'opacity-50': props.disabled }"
-                    :style="{ fontSize: `${preferences.editorFontScale}%` }" />
+                    :font-scale="preferences.editorFontScale"
+                    :min-height="300"
+                    :mono="true"
+                    :focus-ring-class="'ring-2 ring-emerald-500 border-emerald-500'"
+                    @input="handleInput"
+                    @activity="onTextFieldActivity('content', $event)"
+                />
 
-                <!-- Caret overlay -->
-                <div v-if="caretVisible" class="absolute z-20 pointer-events-none" :style="{ left: caretPos.left + 'px', top: caretPos.top + 'px' }">
-                    <div :style="{ background: caretColor, color: '#111827' }" class="px-2 py-1 rounded-full text-xs font-semibold shadow-sm">
-                        {{ caretLabel }}
-                    </div>
+                <div v-if="getEditorChips('content').length" class="absolute right-2 top-2 z-30 flex flex-wrap justify-end gap-1 pointer-events-none">
+                    <span v-for="editor in getEditorChips('content')" :key="editor.userId"
+                        class="rounded-full px-2 py-1 text-[10px] font-semibold text-slate-800 shadow-sm"
+                        :style="{ backgroundColor: editor.color || '#BFDBFE' }">
+                        {{ editor.displayName }}
+                    </span>
                 </div>
-
-                <!-- Simple selection highlight (approx) -->
-                <div v-if="selectionVisible" class="absolute z-15 pointer-events-none" :style="selectionStyle"></div>
             </div>
         </div>
 
@@ -577,6 +607,7 @@ import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportS
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import TipTapPlainEditor from '@/components/common/TipTapPlainEditor.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
@@ -603,6 +634,8 @@ import { useReportLocking } from '@/composables/useReportLocking'
 import { useReportCollab } from '@/composables/useReportCollab'
 import * as Y from 'yjs'
 import ActiveEditorsIndicator from '@/components/ActiveEditorsIndicator.vue'
+
+const isDev = (typeof window !== 'undefined' && window.location.hostname.includes('localhost'))
 
 interface Template {
     id: string
@@ -1600,19 +1633,27 @@ const { ydoc: collabYDoc, ready: collabReady, saveSnapshot: collabSaveSnapshot, 
 const yText = ref<Y.Text | null>(null)
 const yTextContact = ref<Y.Text | null>(null)
 const yTextClass = ref<Y.Text | null>(null)
-const learningTextarea = ref<HTMLTextAreaElement | null>(null)
+const yMeta = ref<Y.Map<string | number | boolean | null> | null>(null)
 let snapshotInterval: ReturnType<typeof setInterval> | null = null
 const prevYContent = ref('')
+const isApplyingRemote = ref(false)
 
-// Awareness / caret overlay state
-const caretVisible = ref(false)
-const caretPos = ref({ left: 0, top: 0 })
-const caretLabel = ref('')
-const caretColor = ref('#BFDBFE')
-const selectionVisible = ref(false)
-const selectionStyle = ref<Record<string, string>>({})
+type AwarenessField = 'content' | 'contactNotes' | 'classNotes'
 
-let awarenessThrottleTimer: any = null
+interface CollabAwarenessEntry {
+    userId: string
+    displayName?: string
+    color?: string
+    field?: AwarenessField | string
+    caret?: number
+    selectionEnd?: number
+    updatedAt?: string
+}
+
+const localUserId = computed(() => authStore.user?.id || '')
+const remoteAwareness = computed(() => (collabAwareness.value || []).filter((entry: CollabAwarenessEntry) => entry.userId && entry.userId !== localUserId.value))
+
+let awarenessThrottleTimers = new Map<AwarenessField, ReturnType<typeof setTimeout>>()
 let awarenessHeartbeatTimer: any = null
 
 // Computed
@@ -1624,6 +1665,60 @@ const wordCount = computed(() => {
 const characterCount = computed(() => {
     return localContent.value.length
 })
+
+function applyRemoteChanges(updater: () => void) {
+    isApplyingRemote.value = true
+    try {
+        updater()
+    } finally {
+        setTimeout(() => {
+            isApplyingRemote.value = false
+        }, 0)
+    }
+}
+
+function getMetaSnapshot() {
+    return {
+        lessonId: selectedLessonId.value || '',
+        isCompleted: isCompleted.value,
+        progressStart: progressStart.value || '',
+        progressEnd: progressEnd.value || '',
+        attendanceStatus: attendanceStatus.value,
+        absenceReason: absenceReason.value || '',
+        classParticipation: classParticipation.value ?? 0,
+        classroomBehavior: classroomBehavior.value ?? 0,
+        externalLink: reportExternalLink.value || ''
+    }
+}
+
+function syncMetaToYMap() {
+    if (isInitializing.value || isApplyingRemote.value) return
+
+    const map = yMeta.value
+    const doc = collabYDoc.value
+    if (!map || !doc) return
+
+    const snapshot = getMetaSnapshot()
+    doc.transact(() => {
+        Object.entries(snapshot).forEach(([key, value]) => {
+            map.set(key, value)
+        })
+    }, authStore.user?.id || 'local')
+}
+
+function applyMetaFromYMap(map: Y.Map<string | number | boolean | null>) {
+    applyRemoteChanges(() => {
+        selectedLessonId.value = String(map.get('lessonId') || '')
+        isCompleted.value = Boolean(map.get('isCompleted'))
+        progressStart.value = String(map.get('progressStart') || '')
+        progressEnd.value = String(map.get('progressEnd') || '')
+        attendanceStatus.value = ((map.get('attendanceStatus') as 'present' | 'absent' | 'pending') || 'pending')
+        absenceReason.value = String(map.get('absenceReason') || '')
+        classParticipation.value = Number(map.get('classParticipation') || 0)
+        classroomBehavior.value = Number(map.get('classroomBehavior') || 0)
+        reportExternalLink.value = String(map.get('externalLink') || '')
+    })
+}
 
 // Watchers to sync props to local state (important for Master-Detail views where component is reused)
 watch(() => props.initialContent, (newContent) => {
@@ -1714,6 +1809,20 @@ watch([
     handleInput()
 })
 
+watch([
+    selectedLessonId,
+    isCompleted,
+    progressStart,
+    progressEnd,
+    attendanceStatus,
+    absenceReason,
+    classParticipation,
+    classroomBehavior,
+    reportExternalLink
+], () => {
+    syncMetaToYMap()
+})
+
 const isInitializing = ref(false)
 
 // Reset auto-save state when switching reports
@@ -1741,36 +1850,12 @@ watch(() => props.loading, (newLoading) => {
 
 // Methods
 function handleInput() {
-    if (isInitializing.value) {
-        // 如果正在初始化（從 props 同步中），我們不觸發自動儲存
-        // 這樣可以避免載入報告時立即觸發儲存任務
+    if (isInitializing.value || isApplyingRemote.value) {
         return
     }
 
-    // Trigger auto-save with all data
-    // We need to pass the external link to the parent via emit or just trust the triggerAutoSave
-    // triggerAutoSave calls saveFn with the CONTENT string usually. 
-    // But we have extra fields.
-    // The 'content' prop is usually just the text body.
-    // We should probably emit the external link update separately or ensure the parent reads it from the reference?
-    // Since we are using a custom autosave hook that likely calls a save function in the parent...
-    // Let's assume the parent needs to know about the external link update immediately?
-    // Or we can rely on `triggerAutoSave` triggering the save function which pulls from... wait.
-
-    // In `SessionDetailsView.vue`, the `handleEditorUpdate` usually takes `content`.
-    // We need to verify how `ReportEditor` communicates updates.
-    // It emits `update:content`. 
-
     emit('update:content', localContent.value)
     emit('update:report-external-link', reportExternalLink.value)
-
-    // Construct the full report data object for saving if needed, 
-    // but `triggerAutoSave` takes `data: T` (generic). 
-    // It seems `localContent` is passed to `triggerAutoSave`. 
-    // If `localContent` is just the string, then `useAutoSave` calls `onSave(localContent)`.
-
-    // We need to modify what we pass to triggerAutoSave if we want to save more than just content.
-    // OR we emit the updates and the parent handles the saving orchestration.
 
     if (props.reportId) {
         triggerAutoSave(localContent.value)
@@ -1803,6 +1888,7 @@ function handleInput() {
                         ytxt.insert(start, insertText)
                     }
                 }, authStore.user?.id || 'local')
+                if (isDev) console.log(`[collab] wrote local changes to ytext for ${props.reportId}: start=${start} delete=${deleteCount} insertLen=${insertText.length}`)
                 prevYContent.value = newStr
             }
         } catch (e) {
@@ -1813,7 +1899,7 @@ function handleInput() {
 
 // Watchers to write contactNotes and classNotes into Yjs
 watch(contactNotes, (val) => {
-    if (isInitializing.value) return
+    if (isInitializing.value || isApplyingRemote.value) return
     try {
         const doc = collabYDoc.value
         const y = yTextContact.value
@@ -1822,6 +1908,7 @@ watch(contactNotes, (val) => {
                 y.delete(0, y.length)
                 y.insert(0, val || '')
             }, authStore.user?.id || 'local')
+            if (isDev) console.log(`[collab] wrote contactNotes to ytext for ${props.reportId} len=${(val||'').length}`)
         }
     } catch (e) {
         console.error('Failed to write to collab yContact', e)
@@ -1829,7 +1916,7 @@ watch(contactNotes, (val) => {
 })
 
 watch(classNotes, (val) => {
-    if (isInitializing.value) return
+    if (isInitializing.value || isApplyingRemote.value) return
     try {
         const doc = collabYDoc.value
         const y = yTextClass.value
@@ -1838,6 +1925,7 @@ watch(classNotes, (val) => {
                 y.delete(0, y.length)
                 y.insert(0, val || '')
             }, authStore.user?.id || 'local')
+            if (isDev) console.log(`[collab] wrote classNotes to ytext for ${props.reportId} len=${(val||'').length}`)
         }
     } catch (e) {
         console.error('Failed to write to collab yClass', e)
@@ -1856,115 +1944,54 @@ function getColorForUser(id: string) {
     return colors[idx]
 }
 
-
-
-function onLocalEditKey() {
-    if (!learningTextarea.value) return
-    const el = learningTextarea.value
-    const caret = el.selectionStart ?? 0
-    const selectionEnd = el.selectionEnd ?? caret
-
-    // update overlay positions (improved mirror div + scroll/page offsets)
-    try {
-        const startCoords = getCaretCoordinates(el, caret)
-        const endCoords = getCaretCoordinates(el, selectionEnd)
-
-        // caret is based on caret position
-        caretPos.value.left = Math.max(0, startCoords.left - el.scrollLeft)
-        caretPos.value.top = Math.max(0, startCoords.top - el.scrollTop)
-        caretVisible.value = true
-        caretLabel.value = getDisplayName()
-        caretColor.value = getColorForUser(authStore.user?.id || '')
-
-        if (selectionEnd !== caret) {
-            // compute selection bounding rect (approximate)
-            const top = Math.min(startCoords.top, endCoords.top) - el.scrollTop
-            const bottom = Math.max(startCoords.top, endCoords.top) - el.scrollTop
-            const lineHeight = parseInt(getComputedStyle(el).lineHeight || '18')
-            const height = Math.max(lineHeight / 2, Math.abs(bottom - top) + lineHeight)
-
-            // if same line, try to compute width between coords, else use full width
-            let width = '100%'
-            let left = '0px'
-            if (Math.abs(startCoords.top - endCoords.top) < lineHeight) {
-                left = `${Math.max(0, Math.min(startCoords.left, endCoords.left) - el.scrollLeft)}px`
-                width = `${Math.max(2, Math.abs(endCoords.left - startCoords.left))}px`
-            }
-
-            selectionStyle.value = {
-                left,
-                top: `${top}px`,
-                width,
-                height: `${height}px`,
-                background: `${caretColor.value}55`
-            }
-            selectionVisible.value = true
-        } else {
-            selectionVisible.value = false
-        }
-    } catch (e) {
-        console.error('Failed to update caret overlay', e)
-    }
-
-    // throttle awareness sends to ~200ms
-    if (awarenessThrottleTimer) clearTimeout(awarenessThrottleTimer)
-    awarenessThrottleTimer = setTimeout(() => {
-        if (!sendAwareness) return
-        const payload = {
-            userId: authStore.user?.id || '',
-            displayName: getDisplayName(),
-            color: getColorForUser(authStore.user?.id || ''),
-            field: 'content',
-            caret,
-            selectionEnd,
-            updatedAt: new Date().toISOString()
-        }
-        void sendAwareness(payload)
-    }, 200)
+function getFieldEditors(field: AwarenessField): CollabAwarenessEntry[] {
+    return remoteAwareness.value.filter((entry) => entry.field === field)
 }
 
-// Simple caret coordinates helper (mirror div technique)
-function getCaretCoordinates(element: HTMLTextAreaElement, position: number) {
-    // mirror-div approach but copy relevant box model to improve accuracy
-    const div = document.createElement('div')
-    const style = getComputedStyle(element)
-    const props = [
-        'boxSizing', 'width', 'height', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-        'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'fontFamily', 'fontSize', 'lineHeight',
-        'fontWeight', 'fontStyle', 'letterSpacing', 'textTransform', 'textAlign', 'whiteSpace'
-    ]
-    props.forEach((p) => {
-        try { div.style.setProperty(p, style.getPropertyValue(p)) } catch (e) { }
-    })
-    div.style.position = 'absolute'
-    div.style.visibility = 'hidden'
-    div.style.whiteSpace = 'pre-wrap'
-    div.style.wordWrap = 'break-word'
-    div.style.overflow = 'auto'
-    div.style.width = `${element.clientWidth}px`
-    div.style.padding = style.padding
-    div.style.border = style.border
+function getEditorChips(field: AwarenessField) {
+    return getFieldEditors(field).slice(0, 4)
+}
 
-    // place offscreen near element to better reflect font rendering
-    const elRect = element.getBoundingClientRect()
-    div.style.left = `${elRect.left + window.scrollX}px`
-    div.style.top = `${elRect.top + window.scrollY}px`
+function getEditorChipStyle(editor: CollabAwarenessEntry) {
+    const color = editor.color || '#BFDBFE'
+    return {
+        backgroundColor: `${color}55`,
+        borderColor: color
+    }
+}
 
-    document.body.appendChild(div)
+function buildAwarenessPayload(field: AwarenessField, caret?: number, selectionEnd?: number) {
+    return {
+        userId: localUserId.value,
+        displayName: getDisplayName(),
+        color: getColorForUser(localUserId.value),
+        field,
+        caret,
+        selectionEnd,
+        updatedAt: new Date().toISOString()
+    }
+}
 
-    const value = element.value.substring(0, position)
-    // preserve line breaks
-    const safe = value.replace(/\n$/g, '\n.')
-    div.textContent = safe
+function scheduleAwareness(field: AwarenessField, caret?: number, selectionEnd?: number) {
+    const existingTimer = awarenessThrottleTimers.get(field)
+    if (existingTimer) {
+        clearTimeout(existingTimer)
+    }
 
-    const span = document.createElement('span')
-    span.textContent = element.value.substring(position) || '.'
-    div.appendChild(span)
-    const rect = span.getBoundingClientRect()
-    const top = rect.top - elRect.top + element.scrollTop - window.scrollY
-    const left = rect.left - elRect.left + element.scrollLeft - window.scrollX
-    document.body.removeChild(div)
-    return { left, top }
+    const timer = setTimeout(() => {
+        if (!sendAwareness) return
+        const payload = buildAwarenessPayload(field, caret, selectionEnd)
+        if (isDev) console.log(`[collab] sending awareness for ${props.reportId}:`, payload)
+        void sendAwareness(payload)
+    }, 180)
+
+    awarenessThrottleTimers.set(field, timer)
+}
+
+function onTextFieldActivity(field: AwarenessField, payload?: { caret?: number; selectionEnd?: number }) {
+    const caret = payload?.caret
+    const selectionEnd = payload?.selectionEnd
+    scheduleAwareness(field, caret, selectionEnd)
 }
 
 
@@ -2023,10 +2050,8 @@ onBeforeUnmount(() => {
         snapshotInterval = null
     }
     // clear awareness timers
-    if (awarenessThrottleTimer) {
-        clearTimeout(awarenessThrottleTimer)
-        awarenessThrottleTimer = null
-    }
+    awarenessThrottleTimers.forEach((timer) => clearTimeout(timer))
+    awarenessThrottleTimers.clear()
     if (awarenessHeartbeatTimer) {
         clearInterval(awarenessHeartbeatTimer)
         awarenessHeartbeatTimer = null
@@ -2047,8 +2072,10 @@ watch(collabReady, (readyVal) => {
     // contactNotes and classNotes Y.Text
     const yContact = doc.getText('contactNotes')
     const yClass = doc.getText('classNotes')
+    const meta = doc.getMap('reportMeta') as Y.Map<string | number | boolean | null>
     yTextContact.value = yContact
     yTextClass.value = yClass
+    yMeta.value = meta
 
     // If remote snapshot has content and our local content is empty or equals initial, adopt remote
     try {
@@ -2056,15 +2083,19 @@ watch(collabReady, (readyVal) => {
         if (remote && remote !== '') {
             // Prefer remote snapshot if local hasn't diverged
             if (!localContent.value || localContent.value === props.initialContent) {
-                localContent.value = remote
-                reset()
+                applyRemoteChanges(() => {
+                    localContent.value = remote
+                    reset()
+                })
             }
         }
         // contact notes
         const remoteContact = yContact.toString()
         if (remoteContact && remoteContact !== '') {
             if (!contactNotes.value || contactNotes.value === props.initialContactNotes) {
-                contactNotes.value = remoteContact
+                applyRemoteChanges(() => {
+                    contactNotes.value = remoteContact
+                })
             }
         }
 
@@ -2072,8 +2103,16 @@ watch(collabReady, (readyVal) => {
         const remoteClass = yClass.toString()
         if (remoteClass && remoteClass !== '') {
             if (!classNotes.value || classNotes.value === props.initialClassNotes) {
-                classNotes.value = remoteClass
+                applyRemoteChanges(() => {
+                    classNotes.value = remoteClass
+                })
             }
+        }
+
+        if (meta.size > 0) {
+            applyMetaFromYMap(meta)
+        } else {
+            syncMetaToYMap()
         }
     } catch (e) {
         console.error('Failed to read ytext initial content', e)
@@ -2087,8 +2126,11 @@ watch(collabReady, (readyVal) => {
             // Only handle remote-origin updates to avoid echo
             if (origin === 'remote') {
                 const updated = ytxt.toString()
+                if (isDev) console.log(`[collab] remote ytext update for ${props.reportId} origin=${origin} len=${updated.length}`)
                 if (updated !== localContent.value) {
-                    localContent.value = updated
+                    applyRemoteChanges(() => {
+                        localContent.value = updated
+                    })
                 }
                 prevYContent.value = updated
             }
@@ -2104,7 +2146,9 @@ watch(collabReady, (readyVal) => {
             if (origin === 'remote') {
                 const updated = yContact.toString()
                 if (updated !== contactNotes.value) {
-                    contactNotes.value = updated
+                    applyRemoteChanges(() => {
+                        contactNotes.value = updated
+                    })
                 }
             }
         } catch (e) {
@@ -2119,11 +2163,24 @@ watch(collabReady, (readyVal) => {
             if (origin === 'remote') {
                 const updated = yClass.toString()
                 if (updated !== classNotes.value) {
-                    classNotes.value = updated
+                    applyRemoteChanges(() => {
+                        classNotes.value = updated
+                    })
                 }
             }
         } catch (e) {
             console.error('Error handling yClass update', e)
+        }
+    })
+
+    meta.observe((event) => {
+        try {
+            const origin = (event.transaction as any)?.origin
+            if (origin === 'remote') {
+                applyMetaFromYMap(meta)
+            }
+        } catch (e) {
+            console.error('Error handling report meta update', e)
         }
     })
 

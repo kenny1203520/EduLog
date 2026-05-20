@@ -74,13 +74,7 @@ export function useReportCollab(reportId: Ref<string> | string) {
         destroy()
     })
 
-    onMounted(() => {
-        initialize()
-    })
-
-    onBeforeUnmount(() => {
-        destroy()
-    })
+    // lifecycle handled above: initialize() and destroy() are invoked once
 
     return {
         ydoc,
