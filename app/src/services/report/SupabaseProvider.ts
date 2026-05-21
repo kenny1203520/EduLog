@@ -1,5 +1,10 @@
 import * as Y from 'yjs'
-import { Awareness, removeAwarenessStates } from 'y-protocols/awareness'
+import {
+    Awareness,
+    applyAwarenessUpdate,
+    encodeAwarenessUpdate,
+    removeAwarenessStates
+} from 'y-protocols/awareness'
 import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 
 export const uint8ArrayToBase64 = (u8: Uint8Array): string => {
@@ -28,11 +33,48 @@ function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
     }
 }
 
+interface AwarenessChange {
+    added: number[]
+    updated: number[]
+    removed: number[]
+}
+
+interface ReportPresencePayload {
+    clientId: number
+    user?: Record<string, any>
+    awarenessUpdateBase64: string
+    updatedAt: string
+}
+
 export class SupabaseProvider {
     public awareness: Awareness
+    public ready: Promise<void>
     private channel: RealtimeChannel
     private isDestroyed = false
     private isSubscribed = false
+    private resolveReady!: () => void
+    private readonly remoteClientIds = new Set<number>()
+    private readonly docUpdateHandler = (update: Uint8Array, origin: any) => {
+        if (origin === this || this.isDestroyed) return
+
+        if (this.isSubscribed && this.supabase.realtime.isConnected()) {
+            this.channel.send({
+                type: 'broadcast',
+                event: 'sync-update',
+                payload: { update: uint8ArrayToBase64(update) }
+            })
+        }
+
+        this.debouncedSave()
+    }
+    private readonly awarenessUpdateHandler = (change: AwarenessChange, origin: any) => {
+        if (origin === this || this.isDestroyed) return
+
+        const changedLocalState = [...change.added, ...change.updated, ...change.removed].includes(this.awareness.clientID)
+        if (changedLocalState) {
+            void this.trackLocalAwareness()
+        }
+    }
 
     private supabase: SupabaseClient
     public doc: Y.Doc
@@ -50,11 +92,14 @@ export class SupabaseProvider {
         this.roomId = roomId
         this.userId = userId
         this.awareness = new Awareness(this.doc)
+        this.ready = new Promise((resolve) => {
+            this.resolveReady = resolve
+        })
 
         this.channel = this.supabase.channel(`room:${this.roomId}`, {
             config: {
                 broadcast: { ack: false },
-                presence: { key: this.awareness.clientID.toString() }
+                presence: { key: `${this.userId || 'anonymous'}:${this.awareness.clientID}` }
             }
         })
 
@@ -62,13 +107,13 @@ export class SupabaseProvider {
         this.setupSupabase()
 
         this.channel.subscribe(async (status) => {
+            if (this.isDestroyed) return
+
             if (status === 'SUBSCRIBED') {
                 this.isSubscribed = true
                 await this.loadInitialState()
-                const localState = this.awareness.getLocalState()
-                if (localState && this.supabase.realtime.isConnected()) {
-                    this.channel.track(localState)
-                }
+                await this.trackLocalAwareness()
+                this.resolveReady()
             } else {
                 this.isSubscribed = false
             }
@@ -76,74 +121,74 @@ export class SupabaseProvider {
     }
 
     private setupYjs() {
-        this.doc.on('update', (update: Uint8Array, origin: any) => {
-            if (origin === this || this.isDestroyed) return
-            
-            if (this.isSubscribed && this.supabase.realtime.isConnected()) {
-                this.channel.send({
-                    type: 'broadcast',
-                    event: 'sync-update',
-                    payload: { update: Array.from(update) }
-                })
-            }
-
-            this.debouncedSave()
-        })
-
-        this.awareness.on('update', (_: any, origin: any) => {
-            if (origin === this || this.isDestroyed) return
-            
-            const localState = this.awareness.getLocalState()
-            if (localState && this.isSubscribed && this.supabase.realtime.isConnected()) {
-                this.channel.track(localState)
-            }
-        })
+        this.doc.on('update', this.docUpdateHandler)
+        this.awareness.on('update', this.awarenessUpdateHandler)
     }
 
     private setupSupabase() {
         this.channel.on('broadcast', { event: 'sync-update' }, (payload) => {
             if (this.isDestroyed) return
-            const update = new Uint8Array(payload.payload.update)
+            const encodedUpdate = payload.payload?.update
+            if (typeof encodedUpdate !== 'string') return
+
+            const update = base64ToUint8Array(encodedUpdate)
             Y.applyUpdate(this.doc, update, this)
         })
 
         this.channel.on('presence', { event: 'sync' }, () => {
             if (this.isDestroyed) return
             const state = this.channel.presenceState()
-            const awarenessStates = this.awareness.getStates()
-            
-            const added: number[] = []
-            const updated: number[] = []
-            const removed: number[] = []
+            const seenRemoteClientIds = new Set<number>()
 
-            awarenessStates.forEach((_, clientId) => {
-                if (clientId !== this.awareness.clientID && !state[clientId.toString()]) {
-                    removed.push(clientId)
-                }
+            Object.values(state).forEach((presences) => {
+                ;(presences as any[]).forEach((presence) => {
+                    const payload = presence as Partial<ReportPresencePayload>
+                    if (
+                        typeof payload.clientId !== 'number' ||
+                        payload.clientId === this.awareness.clientID ||
+                        typeof payload.awarenessUpdateBase64 !== 'string'
+                    ) {
+                        return
+                    }
+
+                    seenRemoteClientIds.add(payload.clientId)
+                    this.remoteClientIds.add(payload.clientId)
+                    applyAwarenessUpdate(this.awareness, base64ToUint8Array(payload.awarenessUpdateBase64), this)
+                })
             })
-            
+
+            const removed = [...this.remoteClientIds].filter((clientId) => !seenRemoteClientIds.has(clientId))
             if (removed.length > 0) {
                 removeAwarenessStates(this.awareness, removed, this)
+                removed.forEach((clientId) => {
+                    this.remoteClientIds.delete(clientId)
+                })
             }
+        })
 
-            Object.keys(state).forEach((clientIdStr) => {
-                const clientId = Number(clientIdStr)
-                if (clientId === this.awareness.clientID) return
-                
-                const presences = state[clientIdStr] as any[]
-                if (presences.length > 0) {
-                    const remoteState = presences[0]
-                    if (!awarenessStates.has(clientId)) {
-                        added.push(clientId)
-                    } else {
-                        updated.push(clientId)
-                    }
-                    this.awareness.getStates().set(clientId, remoteState)
+        this.channel.on('presence', { event: 'join' }, () => {
+            if (!this.isDestroyed) {
+                void this.trackLocalAwareness()
+            }
+        })
+
+        this.channel.on('presence', { event: 'leave' }, () => {
+            if (!this.isDestroyed) {
+                const state = this.channel.presenceState()
+                const seenRemoteClientIds = new Set<number>()
+                Object.values(state).forEach((presences) => {
+                    ;(presences as any[]).forEach((presence) => {
+                        const payload = presence as Partial<ReportPresencePayload>
+                        if (typeof payload.clientId === 'number' && payload.clientId !== this.awareness.clientID) {
+                            seenRemoteClientIds.add(payload.clientId)
+                        }
+                    })
+                })
+                const removed = [...this.remoteClientIds].filter((clientId) => !seenRemoteClientIds.has(clientId))
+                if (removed.length > 0) {
+                    removeAwarenessStates(this.awareness, removed, this)
+                    removed.forEach((clientId) => this.remoteClientIds.delete(clientId))
                 }
-            })
-
-            if (added.length || updated.length) {
-                this.awareness.emit('update', [{ added, updated, removed: [] }, this])
             }
         })
     }
@@ -207,10 +252,43 @@ export class SupabaseProvider {
         }
     }
 
-    public destroy() {
+    private async trackLocalAwareness() {
+        if (this.isDestroyed || !this.isSubscribed || !this.supabase.realtime.isConnected()) return
+
+        const localState = this.awareness.getLocalState()
+        if (!localState) {
+            await this.channel.untrack()
+            return
+        }
+
+        await this.channel.track({
+            clientId: this.awareness.clientID,
+            user: localState.user,
+            awarenessUpdateBase64: uint8ArrayToBase64(encodeAwarenessUpdate(this.awareness, [this.awareness.clientID])),
+            updatedAt: new Date().toISOString()
+        } satisfies ReportPresencePayload)
+    }
+
+    public async destroy() {
+        if (this.isDestroyed) return
+
         this.isDestroyed = true
-        this.channel.unsubscribe()
+        this.resolveReady()
+        this.doc.off('update', this.docUpdateHandler)
+        this.awareness.off('update', this.awarenessUpdateHandler)
+        removeAwarenessStates(this.awareness, [...this.remoteClientIds], this)
+        try {
+            await this.channel.untrack()
+        } catch (err) {
+            console.warn('Failed to untrack report collaboration presence:', err)
+        }
+        try {
+            await this.channel.unsubscribe()
+        } catch (err) {
+            console.warn('Failed to unsubscribe report collaboration channel:', err)
+        }
         this.supabase.removeChannel(this.channel)
         this.awareness.destroy()
+        this.remoteClientIds.clear()
     }
 }

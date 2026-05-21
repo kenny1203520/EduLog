@@ -1,4 +1,4 @@
-import { ref, shallowRef, onMounted, onBeforeUnmount, type Ref } from 'vue'
+import { ref, shallowRef, watch, onBeforeUnmount, type Ref } from 'vue'
 import { SupabaseProvider } from '@/services/report/SupabaseProvider'
 import { supabase } from '@/lib/supabase'
 import * as Y from 'yjs'
@@ -9,10 +9,29 @@ export function useReportCollab(reportId: Ref<string> | string) {
     const ydoc = shallowRef<Y.Doc | null>(null)
     const provider = shallowRef<SupabaseProvider | null>(null)
     const ready = ref(false)
+    let generation = 0
 
-    const reportIdValue = typeof reportId === 'string' ? reportId : reportId.value
+    const getReportId = () => (typeof reportId === 'string' ? reportId : reportId.value)
+
+    const destroyCurrent = async () => {
+        ready.value = false
+
+        if (provider.value) {
+            await provider.value.destroy()
+            provider.value = null
+        }
+
+        if (ydoc.value) {
+            ydoc.value.destroy()
+            ydoc.value = null
+        }
+    }
 
     const initialize = async () => {
+        const token = ++generation
+        await destroyCurrent()
+
+        const reportIdValue = getReportId()
         if (!reportIdValue) return
         
         const doc = new Y.Doc()
@@ -21,6 +40,14 @@ export function useReportCollab(reportId: Ref<string> | string) {
         const userId = authStore.user?.id || ''
         const supabaseProvider = new SupabaseProvider(supabase, doc, reportIdValue, userId)
         provider.value = supabaseProvider
+
+        await supabaseProvider.ready
+
+        if (token !== generation) {
+            await supabaseProvider.destroy()
+            doc.destroy()
+            return
+        }
         
         ready.value = true
     }
@@ -31,23 +58,20 @@ export function useReportCollab(reportId: Ref<string> | string) {
     }
 
     const destroy = async () => {
-        if (provider.value) {
-            provider.value.destroy()
-            provider.value = null
-        }
-        if (ydoc.value) {
-            ydoc.value.destroy()
-            ydoc.value = null
-        }
-        ready.value = false
+        generation += 1
+        await destroyCurrent()
     }
 
-    onMounted(() => {
-        initialize()
-    })
+    watch(
+        () => getReportId(),
+        () => {
+            void initialize()
+        },
+        { immediate: true }
+    )
 
     onBeforeUnmount(() => {
-        destroy()
+        void destroy()
     })
 
     return {

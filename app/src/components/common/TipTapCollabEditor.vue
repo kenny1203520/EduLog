@@ -101,6 +101,14 @@ watch(
     }
 )
 
+watch(
+    () => props.user,
+    (user) => {
+        editor.commands.updateUser(user)
+    },
+    { deep: true }
+)
+
 const showPlaceholder = computed(() => {
     // If editor has content, Tiptap automatically removes the empty paragraph when text is typed, 
     // but by default an empty Tiptap editor has a <p></p>. 

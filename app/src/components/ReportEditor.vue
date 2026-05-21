@@ -574,7 +574,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type WatchStopHandle } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
@@ -1436,82 +1436,145 @@ const { ydoc, provider: awarenessProvider, ready, saveSnapshot } = useReportColl
 const contactNotesEditorRef = ref<any>(null)
 const classNotesEditorRef = ref<any>(null)
 const contentEditorRef = ref<any>(null)
+const collabWatchStops: WatchStopHandle[] = []
+const collabXmlObservers: Array<{ fragment: any; observer: (event: any) => void }> = []
+let collabMetaMap: any = null
+let collabMetaObserver: ((event: any) => void) | null = null
+let isApplyingRemoteCollab = false
+
+function cleanupReportCollabBindings() {
+    collabWatchStops.splice(0).forEach((stop) => stop())
+
+    if (collabMetaMap && collabMetaObserver) {
+        collabMetaMap.unobserve(collabMetaObserver)
+    }
+    collabMetaMap = null
+    collabMetaObserver = null
+
+    collabXmlObservers.splice(0).forEach(({ fragment, observer }) => {
+        fragment.unobserve(observer)
+    })
+}
+
+function withCollabGuard(fn: () => void) {
+    isApplyingRemoteCollab = true
+    try {
+        fn()
+    } finally {
+        isApplyingRemoteCollab = false
+    }
+}
+
+function syncTextRefsFromEditors() {
+    if (contentEditorRef.value?.editor) {
+        localContent.value = contentEditorRef.value.editor.getText()
+    }
+    if (contactNotesEditorRef.value?.editor) {
+        contactNotes.value = contactNotesEditorRef.value.editor.getText()
+    }
+    if (classNotesEditorRef.value?.editor) {
+        classNotes.value = classNotesEditorRef.value.editor.getText()
+    }
+}
+
+function setEditorContentSilently(editorRef: any, content: string) {
+    editorRef.value?.editor?.commands.setContent(content, { emitUpdate: false })
+}
+
+function writeReportMeta(metaMap: any) {
+    metaMap.set('attendanceStatus', attendanceStatus.value)
+    metaMap.set('absenceReason', absenceReason.value)
+    metaMap.set('classParticipation', classParticipation.value)
+    metaMap.set('classroomBehavior', classroomBehavior.value)
+    metaMap.set('isCompleted', isCompleted.value)
+    metaMap.set('progressStart', progressStart.value)
+    metaMap.set('progressEnd', progressEnd.value)
+    metaMap.set('selectedLessonId', selectedLessonId.value)
+    metaMap.set('reportExternalLink', reportExternalLink.value)
+    metaMap.set('version', version.value)
+}
 
 watch(ready, (isReady) => {
+    cleanupReportCollabBindings()
+
     if (isReady && ydoc.value) {
         // Setup reportMeta sync
         const metaMap = ydoc.value.getMap('reportMeta')
+        collabMetaMap = metaMap
 
         // Initialize local fields from map if they exist, otherwise seed them from local state
-        if (metaMap.has('attendanceStatus')) attendanceStatus.value = metaMap.get('attendanceStatus') as any
-        else if (attendanceStatus.value) metaMap.set('attendanceStatus', attendanceStatus.value)
+        withCollabGuard(() => {
+            if (metaMap.has('attendanceStatus')) attendanceStatus.value = metaMap.get('attendanceStatus') as any
+            else metaMap.set('attendanceStatus', attendanceStatus.value)
 
-        if (metaMap.has('absenceReason')) absenceReason.value = metaMap.get('absenceReason') as any
-        else if (absenceReason.value) metaMap.set('absenceReason', absenceReason.value)
+            if (metaMap.has('absenceReason')) absenceReason.value = metaMap.get('absenceReason') as any
+            else metaMap.set('absenceReason', absenceReason.value)
 
-        if (metaMap.has('classParticipation')) classParticipation.value = metaMap.get('classParticipation') as any
-        else if (classParticipation.value !== undefined) metaMap.set('classParticipation', classParticipation.value)
+            if (metaMap.has('classParticipation')) classParticipation.value = Number(metaMap.get('classParticipation') ?? 0)
+            else metaMap.set('classParticipation', classParticipation.value)
 
-        if (metaMap.has('classroomBehavior')) classroomBehavior.value = metaMap.get('classroomBehavior') as any
-        else if (classroomBehavior.value !== undefined) metaMap.set('classroomBehavior', classroomBehavior.value)
+            if (metaMap.has('classroomBehavior')) classroomBehavior.value = Number(metaMap.get('classroomBehavior') ?? 0)
+            else metaMap.set('classroomBehavior', classroomBehavior.value)
 
-        if (metaMap.has('isCompleted')) isCompleted.value = metaMap.get('isCompleted') as any
-        else if (isCompleted.value !== undefined) metaMap.set('isCompleted', isCompleted.value)
+            if (metaMap.has('isCompleted')) isCompleted.value = Boolean(metaMap.get('isCompleted'))
+            else metaMap.set('isCompleted', isCompleted.value)
 
-        if (metaMap.has('progressStart')) progressStart.value = metaMap.get('progressStart') as any
-        else if (progressStart.value) metaMap.set('progressStart', progressStart.value)
+            if (metaMap.has('progressStart')) progressStart.value = (metaMap.get('progressStart') as string) || ''
+            else metaMap.set('progressStart', progressStart.value)
 
-        if (metaMap.has('progressEnd')) progressEnd.value = metaMap.get('progressEnd') as any
-        else if (progressEnd.value) metaMap.set('progressEnd', progressEnd.value)
+            if (metaMap.has('progressEnd')) progressEnd.value = (metaMap.get('progressEnd') as string) || ''
+            else metaMap.set('progressEnd', progressEnd.value)
 
-        if (metaMap.has('selectedLessonId')) selectedLessonId.value = metaMap.get('selectedLessonId') as any
-        else if (selectedLessonId.value) metaMap.set('selectedLessonId', selectedLessonId.value)
+            if (metaMap.has('selectedLessonId')) selectedLessonId.value = (metaMap.get('selectedLessonId') as string) || ''
+            else metaMap.set('selectedLessonId', selectedLessonId.value)
 
-        if (metaMap.has('reportExternalLink')) reportExternalLink.value = metaMap.get('reportExternalLink') as any
-        else if (reportExternalLink.value) metaMap.set('reportExternalLink', reportExternalLink.value)
+            if (metaMap.has('reportExternalLink')) reportExternalLink.value = (metaMap.get('reportExternalLink') as string) || ''
+            else metaMap.set('reportExternalLink', reportExternalLink.value)
 
-        if (metaMap.has('version')) {
-            const remoteVersion = metaMap.get('version') as number
-            if (remoteVersion > version.value) {
-                version.value = remoteVersion
-            }
-        } else {
-            metaMap.set('version', version.value)
-        }
-        
-        metaMap.observe((event) => {
-            event.changes.keys.forEach((_, key) => {
-                const newVal = metaMap.get(key)
-                if (key === 'attendanceStatus' && newVal !== attendanceStatus.value) attendanceStatus.value = newVal as any
-                if (key === 'absenceReason' && newVal !== absenceReason.value) absenceReason.value = newVal as any
-                if (key === 'classParticipation' && newVal !== classParticipation.value) classParticipation.value = newVal as any
-                if (key === 'classroomBehavior' && newVal !== classroomBehavior.value) classroomBehavior.value = newVal as any
-                if (key === 'isCompleted' && newVal !== isCompleted.value) isCompleted.value = newVal as any
-                if (key === 'progressStart' && newVal !== progressStart.value) progressStart.value = newVal as any
-                if (key === 'progressEnd' && newVal !== progressEnd.value) progressEnd.value = newVal as any
-                if (key === 'selectedLessonId' && newVal !== selectedLessonId.value) selectedLessonId.value = newVal as any
-                if (key === 'reportExternalLink' && newVal !== reportExternalLink.value) reportExternalLink.value = newVal as any
-                if (key === 'version') {
-                    const remoteVersion = newVal as number
-                    if (remoteVersion > version.value) {
-                        version.value = remoteVersion
-                    }
+            if (metaMap.has('version')) {
+                const remoteVersion = Number(metaMap.get('version') || 0)
+                if (remoteVersion > version.value) {
+                    version.value = remoteVersion
                 }
-            })
+            } else {
+                metaMap.set('version', version.value)
+            }
         })
+        
+        collabMetaObserver = (event) => {
+            withCollabGuard(() => {
+                event.changes.keys.forEach((_: unknown, key: string) => {
+                    const newVal = metaMap.get(key)
+                    if (key === 'attendanceStatus' && newVal !== attendanceStatus.value) attendanceStatus.value = newVal as any
+                    if (key === 'absenceReason' && newVal !== absenceReason.value) absenceReason.value = newVal as any
+                    if (key === 'classParticipation' && Number(newVal ?? 0) !== classParticipation.value) classParticipation.value = Number(newVal ?? 0)
+                    if (key === 'classroomBehavior' && Number(newVal ?? 0) !== classroomBehavior.value) classroomBehavior.value = Number(newVal ?? 0)
+                    if (key === 'isCompleted' && Boolean(newVal) !== isCompleted.value) isCompleted.value = Boolean(newVal)
+                    if (key === 'progressStart' && (newVal || '') !== progressStart.value) progressStart.value = newVal as any || ''
+                    if (key === 'progressEnd' && (newVal || '') !== progressEnd.value) progressEnd.value = newVal as any || ''
+                    if (key === 'selectedLessonId' && (newVal || '') !== selectedLessonId.value) selectedLessonId.value = newVal as any || ''
+                    if (key === 'reportExternalLink' && (newVal || '') !== reportExternalLink.value) reportExternalLink.value = newVal as any || ''
+                    if (key === 'version') {
+                        const remoteVersion = Number(newVal || 0)
+                        if (remoteVersion > version.value) {
+                            version.value = remoteVersion
+                        }
+                    }
+                })
+            })
+        }
+        metaMap.observe(collabMetaObserver)
 
-        let isInternalUpdate = false
         // Listen for local changes to update map
         const setupMapSync = (refVar: any, mapKey: string) => {
-            watch(refVar, (val) => {
-                if (isInternalUpdate) return
+            const stop = watch(refVar, (val) => {
+                if (isApplyingRemoteCollab || isInitializing.value) return
                 if (metaMap.get(mapKey) !== val) {
-                    isInternalUpdate = true
                     metaMap.set(mapKey, val)
-                    isInternalUpdate = false
                     handleInput()
                 }
-            })
+            }, { flush: 'sync' })
+            collabWatchStops.push(stop)
         }
         
         setupMapSync(attendanceStatus, 'attendanceStatus')
@@ -1527,46 +1590,51 @@ watch(ready, (isReady) => {
         // Seed XML fragments on initialization if ydoc has no content but local has content
         nextTick(() => {
             if (!ydoc.value) return
-            if (contentEditorRef.value?.editor && ydoc.value.getXmlFragment('content_xml').length === 0 && localContent.value) {
-                contentEditorRef.value.editor.commands.setContent(localContent.value)
-            }
-            if (contactNotesEditorRef.value?.editor && ydoc.value.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
-                contactNotesEditorRef.value.editor.commands.setContent(contactNotes.value)
-            }
-            if (classNotesEditorRef.value?.editor && ydoc.value.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
-                classNotesEditorRef.value.editor.commands.setContent(classNotes.value)
-            }
+            withCollabGuard(() => {
+                let seeded = false
+
+                if (contentEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
+                    setEditorContentSilently(contentEditorRef, localContent.value)
+                    seeded = true
+                }
+                if (contactNotesEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
+                    setEditorContentSilently(contactNotesEditorRef, contactNotes.value)
+                    seeded = true
+                }
+                if (classNotesEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
+                    setEditorContentSilently(classNotesEditorRef, classNotes.value)
+                    seeded = true
+                }
+
+                if (seeded) {
+                    void saveSnapshot()
+                }
+            })
         })
 
         // Setup text sync for saving
-        ydoc.value.getXmlFragment('content_xml').observe((event) => {
-            if (event.transaction.local) {
-                handleInput()
-            } else {
-                if (contentEditorRef.value?.editor) {
-                    localContent.value = contentEditorRef.value.editor.getText()
+        const observeXmlFragment = (fieldName: string, onRemoteChange?: () => void) => {
+            const fragment = ydoc.value!.getXmlFragment(fieldName)
+            const observer = (event: any) => {
+                if (event.transaction.local && !isApplyingRemoteCollab) {
+                    handleInput()
+                    return
                 }
-                emit('update:content', localContent.value)
+
+                nextTick(() => {
+                    syncTextRefsFromEditors()
+                    onRemoteChange?.()
+                })
             }
+            fragment.observe(observer)
+            collabXmlObservers.push({ fragment, observer })
+        }
+
+        observeXmlFragment('content_xml', () => {
+            emit('update:content', localContent.value)
         })
-        ydoc.value.getXmlFragment('contactNotes_xml').observe((event) => {
-            if (event.transaction.local) {
-                handleInput()
-            } else {
-                if (contactNotesEditorRef.value?.editor) {
-                    contactNotes.value = contactNotesEditorRef.value.editor.getText()
-                }
-            }
-        })
-        ydoc.value.getXmlFragment('classNotes_xml').observe((event) => {
-            if (event.transaction.local) {
-                handleInput()
-            } else {
-                if (classNotesEditorRef.value?.editor) {
-                    classNotes.value = classNotesEditorRef.value.editor.getText()
-                }
-            }
-        })
+        observeXmlFragment('contactNotes_xml')
+        observeXmlFragment('classNotes_xml')
     }
 })
 
@@ -1899,7 +1967,7 @@ watch(() => props.loading, (newLoading) => {
 })
 
 function handleInput() {
-    if (isInitializing.value) {
+    if (isInitializing.value || isApplyingRemoteCollab) {
         // 如果正在初始化（從 props 同步中），我們不觸發自動儲存
         // 這樣可以避免載入報告時立即觸發儲存任務
         return
@@ -1951,17 +2019,13 @@ function handleReportRestored(report: OccurrenceReportDTO) {
 
     if (ydoc.value) {
         const metaMap = ydoc.value.getMap('reportMeta')
-        metaMap.set('version', report.version)
-
-        if (contentEditorRef.value?.editor) {
-            contentEditorRef.value.editor.commands.setContent(report.content || '')
-        }
-        if (contactNotesEditorRef.value?.editor) {
-            contactNotesEditorRef.value.editor.commands.setContent(report.contact_notes || '')
-        }
-        if (classNotesEditorRef.value?.editor) {
-            classNotesEditorRef.value.editor.commands.setContent(report.class_notes || '')
-        }
+        withCollabGuard(() => {
+            writeReportMeta(metaMap)
+            setEditorContentSilently(contentEditorRef, report.content || '')
+            setEditorContentSilently(contactNotesEditorRef, report.contact_notes || '')
+            setEditorContentSilently(classNotesEditorRef, report.class_notes || '')
+        })
+        void saveSnapshot()
     }
 
     // Emit the event to parent
@@ -1977,6 +2041,7 @@ defineExpose({
 
 // Warn before leaving with unsaved changes
 onBeforeUnmount(() => {
+    cleanupReportCollabBindings()
     void saveNow()
 })
 </script>
