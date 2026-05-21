@@ -215,5 +215,7 @@
     "add_teacher_assignment": "Add Teacher Assignment",
     "one_day_assignment": "One-day Assignment",
     "master_schedule_link": "Manage Overall Schedule",
-    "teacher_attendance_only_self": "Can only modify your own attendance"
+    "teacher_attendance_only_self": "Can only modify your own attendance",
+    "please_select_student": "Please select student",
+    "please_select_student_enrollment": "Please select course enrollment"
 }

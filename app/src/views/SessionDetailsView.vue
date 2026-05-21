@@ -472,9 +472,19 @@ const makeupStudentOptions = computed(() => {
         )
     }
 
+    // Deduplicate students by studentId to prevent duplicate option choices
+    const uniqueStudents: typeof students = []
+    const seenStudentIds = new Set<string>()
+    for (const student of students) {
+        if (student.studentId && !seenStudentIds.has(student.studentId)) {
+            seenStudentIds.add(student.studentId)
+            uniqueStudents.push(student)
+        }
+    }
+
     return [
         { label: t('classroom.please_select_student'), value: null },
-        ...students.map(s => ({
+        ...uniqueStudents.map(s => ({
             label: s.studentName || 'Unnamed',
             value: s.studentId || ''
         }))
