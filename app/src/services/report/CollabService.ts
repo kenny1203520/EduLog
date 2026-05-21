@@ -21,6 +21,24 @@ function base64ToUint8Array(base64: string): Uint8Array {
     return bytes
 }
 
+function buildSnapshotDoc(sourceDoc: Y.Doc): Y.Doc {
+    const snapshotDoc = new Y.Doc()
+
+    snapshotDoc.getText('content').insert(0, sourceDoc.getText('content').toString())
+    snapshotDoc.getText('contactNotes').insert(0, sourceDoc.getText('contactNotes').toString())
+    snapshotDoc.getText('classNotes').insert(0, sourceDoc.getText('classNotes').toString())
+
+    const sourceMeta = sourceDoc.getMap('reportMeta')
+    const snapshotMeta = snapshotDoc.getMap('reportMeta')
+    sourceMeta.forEach((value, key) => {
+        if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            snapshotMeta.set(key, value)
+        }
+    })
+
+    return snapshotDoc
+}
+
 export class CollabService {
     private static docs: Map<string, Y.Doc> = new Map()
     private static channels: Map<string, any> = new Map()
@@ -163,7 +181,8 @@ export class CollabService {
         if (!doc) return false
 
         try {
-            const state = Y.encodeStateAsUpdate(doc)
+            const snapshotDoc = buildSnapshotDoc(doc)
+            const state = Y.encodeStateAsUpdate(snapshotDoc)
             const base64 = uint8ArrayToBase64(state)
 
             // Upsert snapshot

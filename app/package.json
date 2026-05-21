@@ -13,7 +13,7 @@
         "@supabase/supabase-js": "^2.105.3",
         "@tailwindcss/postcss": "^4.2.4",
         "@tiptap/extension-collaboration": "^3.23.5",
-        "@tiptap/extension-collaboration-cursor": "^2.26.2",
+        "@tiptap/extension-collaboration-cursor": "3.0.0",
         "@tiptap/starter-kit": "^3.23.5",
         "@tiptap/vue-3": "^3.23.5",
         "autoprefixer": "^10.5.0",

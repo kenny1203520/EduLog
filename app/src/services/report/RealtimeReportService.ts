@@ -187,7 +187,7 @@ export class RealtimeReportService {
                 .select('*')
                 .eq('occurrence_report_id', reportId)
                 .gt('expires_at', new Date().toISOString())
-                .single()
+                .maybeSingle()
 
             if (error) {
                 return null
