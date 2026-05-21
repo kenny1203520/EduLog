@@ -60,7 +60,8 @@ const focused = ref(false)
 const editor = new Editor({
     extensions: [
         StarterKit.configure({
-            history: false
+            history: false,
+            undoRedo: false
         } as any),
         Collaboration.configure({
             document: props.ydoc as any,

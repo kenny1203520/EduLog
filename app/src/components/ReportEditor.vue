@@ -1469,6 +1469,15 @@ watch(ready, (isReady) => {
 
         if (metaMap.has('reportExternalLink')) reportExternalLink.value = metaMap.get('reportExternalLink') as any
         else if (reportExternalLink.value) metaMap.set('reportExternalLink', reportExternalLink.value)
+
+        if (metaMap.has('version')) {
+            const remoteVersion = metaMap.get('version') as number
+            if (remoteVersion > version.value) {
+                version.value = remoteVersion
+            }
+        } else {
+            metaMap.set('version', version.value)
+        }
         
         metaMap.observe((event) => {
             event.changes.keys.forEach((_, key) => {
@@ -1482,6 +1491,12 @@ watch(ready, (isReady) => {
                 if (key === 'progressEnd' && newVal !== progressEnd.value) progressEnd.value = newVal as any
                 if (key === 'selectedLessonId' && newVal !== selectedLessonId.value) selectedLessonId.value = newVal as any
                 if (key === 'reportExternalLink' && newVal !== reportExternalLink.value) reportExternalLink.value = newVal as any
+                if (key === 'version') {
+                    const remoteVersion = newVal as number
+                    if (remoteVersion > version.value) {
+                        version.value = remoteVersion
+                    }
+                }
             })
         })
 
@@ -1524,9 +1539,34 @@ watch(ready, (isReady) => {
         })
 
         // Setup text sync for saving
-        ydoc.value.getXmlFragment('content_xml').observe(() => { handleInput() })
-        ydoc.value.getXmlFragment('contactNotes_xml').observe(() => { handleInput() })
-        ydoc.value.getXmlFragment('classNotes_xml').observe(() => { handleInput() })
+        ydoc.value.getXmlFragment('content_xml').observe((event) => {
+            if (event.transaction.local) {
+                handleInput()
+            } else {
+                if (contentEditorRef.value?.editor) {
+                    localContent.value = contentEditorRef.value.editor.getText()
+                }
+                emit('update:content', localContent.value)
+            }
+        })
+        ydoc.value.getXmlFragment('contactNotes_xml').observe((event) => {
+            if (event.transaction.local) {
+                handleInput()
+            } else {
+                if (contactNotesEditorRef.value?.editor) {
+                    contactNotes.value = contactNotesEditorRef.value.editor.getText()
+                }
+            }
+        })
+        ydoc.value.getXmlFragment('classNotes_xml').observe((event) => {
+            if (event.transaction.local) {
+                handleInput()
+            } else {
+                if (classNotesEditorRef.value?.editor) {
+                    classNotes.value = classNotesEditorRef.value.editor.getText()
+                }
+            }
+        })
     }
 })
 
@@ -1716,6 +1756,13 @@ const {
     },
     onSuccess: (newVersion) => {
         version.value = newVersion
+        if (ydoc.value) {
+            const metaMap = ydoc.value.getMap('reportMeta')
+            const currentMetaVer = metaMap.get('version') as number || 0
+            if (newVersion > currentMetaVer) {
+                metaMap.set('version', newVersion)
+            }
+        }
         emit('save-success', newVersion)
     },
     onError: (message) => {
@@ -1819,6 +1866,11 @@ watch([
     classNotes,
     reportExternalLink
 ], () => {
+    // If collaboration is active, Yjs observers and setupMapSync handle the local input saves.
+    // We only use this watcher when collaboration is NOT ready/active.
+    if (ready.value && ydoc.value) {
+        return
+    }
     handleInput()
 })
 
@@ -1898,6 +1950,9 @@ function handleReportRestored(report: OccurrenceReportDTO) {
     reportExternalLink.value = report.external_link || ''
 
     if (ydoc.value) {
+        const metaMap = ydoc.value.getMap('reportMeta')
+        metaMap.set('version', report.version)
+
         if (contentEditorRef.value?.editor) {
             contentEditorRef.value.editor.commands.setContent(report.content || '')
         }

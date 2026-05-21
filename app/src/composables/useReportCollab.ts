@@ -1,4 +1,4 @@
-import { ref, onMounted, onBeforeUnmount, type Ref } from 'vue'
+import { ref, shallowRef, onMounted, onBeforeUnmount, type Ref } from 'vue'
 import { SupabaseProvider } from '@/services/report/SupabaseProvider'
 import { supabase } from '@/lib/supabase'
 import * as Y from 'yjs'
@@ -6,8 +6,8 @@ import { useAuthStore } from '@/stores/useAuthStore'
 
 export function useReportCollab(reportId: Ref<string> | string) {
     const authStore = useAuthStore()
-    const ydoc = ref<Y.Doc | null>(null)
-    const provider = ref<SupabaseProvider | null>(null)
+    const ydoc = shallowRef<Y.Doc | null>(null)
+    const provider = shallowRef<SupabaseProvider | null>(null)
     const ready = ref(false)
 
     const reportIdValue = typeof reportId === 'string' ? reportId : reportId.value
