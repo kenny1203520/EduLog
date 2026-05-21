@@ -304,8 +304,9 @@
                 {{ $t('report.editor.contact_notes_label') }}
             </label>
             <TipTapCollabEditor 
+                ref="contactNotesEditorRef"
                 v-if="ready && ydoc"
-                field-name="contactNotes" 
+                field-name="contactNotes_xml" 
                 :ydoc="ydoc" 
                 :provider="awarenessProvider" 
                 :disabled="props.disabled" 
@@ -331,8 +332,9 @@
                 <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
             </label>
             <TipTapCollabEditor 
+                ref="classNotesEditorRef"
                 v-if="ready && ydoc"
-                field-name="classNotes" 
+                field-name="classNotes_xml" 
                 :ydoc="ydoc" 
                 :provider="awarenessProvider" 
                 :disabled="props.disabled" 
@@ -365,8 +367,9 @@
                 </span>
             </label>
             <TipTapCollabEditor 
+                ref="contentEditorRef"
                 v-if="ready && ydoc"
-                field-name="content" 
+                field-name="content_xml" 
                 :ydoc="ydoc" 
                 :provider="awarenessProvider" 
                 :disabled="props.disabled" 
@@ -571,7 +574,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
@@ -587,7 +590,6 @@ import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/cop
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useToast } from 'vue-toastification'
 import { useReportCollab } from '@/composables/useReportCollab'
-import createAwarenessProvider from '@/services/report/AwarenessProvider'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import {
@@ -772,9 +774,16 @@ const handleConfirmAction = async () => {
 
 const handleCopyContent = (text: string) => {
     if (!text) return
-    const current = localContent.value || ''
-    localContent.value = current + (current ? '\n\n' : '') + text
-    handleInput()
+    if (ydoc.value && contentEditorRef.value?.editor) {
+        const editor = contentEditorRef.value.editor
+        const current = editor.getText()
+        editor.commands.focus('end')
+        editor.commands.insertContent((current ? '\n\n' : '') + text)
+    } else {
+        const current = localContent.value || ''
+        localContent.value = current + (current ? '\n\n' : '') + text
+        handleInput()
+    }
 }
 
 async function loadTemplates() {
@@ -1227,9 +1236,30 @@ function applyTemplate(template: Template) {
     let changed = false
 
     if (ydoc.value) {
-        if (renderedContent) ydoc.value.getText('content').insert(0, renderedContent)
-        if (renderedContactNotes) ydoc.value.getText('contactNotes').insert(0, renderedContactNotes)
-        if (renderedClassNotes) ydoc.value.getText('classNotes').insert(0, renderedClassNotes)
+        if (renderedContent && contentEditorRef.value?.editor) {
+            const editor = contentEditorRef.value.editor
+            if (editor.isEmpty) editor.commands.setContent(renderedContent)
+            else {
+                editor.commands.focus('end')
+                editor.commands.insertContent('\n\n' + renderedContent)
+            }
+        }
+        if (renderedContactNotes && contactNotesEditorRef.value?.editor) {
+            const editor = contactNotesEditorRef.value.editor
+            if (editor.isEmpty) editor.commands.setContent(renderedContactNotes)
+            else {
+                editor.commands.focus('end')
+                editor.commands.insertContent('\n\n' + renderedContactNotes)
+            }
+        }
+        if (renderedClassNotes && classNotesEditorRef.value?.editor) {
+            const editor = classNotesEditorRef.value.editor
+            if (editor.isEmpty) editor.commands.setContent(renderedClassNotes)
+            else {
+                editor.commands.focus('end')
+                editor.commands.insertContent('\n\n' + renderedClassNotes)
+            }
+        }
         changed = true
     } else {
         if (!localContent.value.trim() && renderedContent) {
@@ -1401,32 +1431,44 @@ onMounted(() => {
 
 // Collab logic
 const reportIdRef = computed(() => props.reportId || '')
-const { ydoc, ready, saveSnapshot, sessionId } = useReportCollab(reportIdRef as any)
-const awarenessProvider = ref<any>(null)
+const { ydoc, provider: awarenessProvider, ready, saveSnapshot } = useReportCollab(reportIdRef as any)
+
+const contactNotesEditorRef = ref<any>(null)
+const classNotesEditorRef = ref<any>(null)
+const contentEditorRef = ref<any>(null)
 
 watch(ready, (isReady) => {
     if (isReady && ydoc.value) {
-        const provider = createAwarenessProvider({
-            reportId: props.reportId!,
-            sessionId,
-            userId: authStore.user?.id,
-            ydoc: ydoc.value
-        })
-        awarenessProvider.value = provider
-
         // Setup reportMeta sync
         const metaMap = ydoc.value.getMap('reportMeta')
 
-        // Initialize local fields from map if they exist
+        // Initialize local fields from map if they exist, otherwise seed them from local state
         if (metaMap.has('attendanceStatus')) attendanceStatus.value = metaMap.get('attendanceStatus') as any
+        else if (attendanceStatus.value) metaMap.set('attendanceStatus', attendanceStatus.value)
+
         if (metaMap.has('absenceReason')) absenceReason.value = metaMap.get('absenceReason') as any
+        else if (absenceReason.value) metaMap.set('absenceReason', absenceReason.value)
+
         if (metaMap.has('classParticipation')) classParticipation.value = metaMap.get('classParticipation') as any
+        else if (classParticipation.value !== undefined) metaMap.set('classParticipation', classParticipation.value)
+
         if (metaMap.has('classroomBehavior')) classroomBehavior.value = metaMap.get('classroomBehavior') as any
+        else if (classroomBehavior.value !== undefined) metaMap.set('classroomBehavior', classroomBehavior.value)
+
         if (metaMap.has('isCompleted')) isCompleted.value = metaMap.get('isCompleted') as any
+        else if (isCompleted.value !== undefined) metaMap.set('isCompleted', isCompleted.value)
+
         if (metaMap.has('progressStart')) progressStart.value = metaMap.get('progressStart') as any
+        else if (progressStart.value) metaMap.set('progressStart', progressStart.value)
+
         if (metaMap.has('progressEnd')) progressEnd.value = metaMap.get('progressEnd') as any
+        else if (progressEnd.value) metaMap.set('progressEnd', progressEnd.value)
+
         if (metaMap.has('selectedLessonId')) selectedLessonId.value = metaMap.get('selectedLessonId') as any
+        else if (selectedLessonId.value) metaMap.set('selectedLessonId', selectedLessonId.value)
+
         if (metaMap.has('reportExternalLink')) reportExternalLink.value = metaMap.get('reportExternalLink') as any
+        else if (reportExternalLink.value) metaMap.set('reportExternalLink', reportExternalLink.value)
         
         metaMap.observe((event) => {
             event.changes.keys.forEach((_, key) => {
@@ -1467,18 +1509,27 @@ watch(ready, (isReady) => {
         setupMapSync(selectedLessonId, 'selectedLessonId')
         setupMapSync(reportExternalLink, 'reportExternalLink')
         
+        // Seed XML fragments on initialization if ydoc has no content but local has content
+        nextTick(() => {
+            if (!ydoc.value) return
+            if (contentEditorRef.value?.editor && ydoc.value.getXmlFragment('content_xml').length === 0 && localContent.value) {
+                contentEditorRef.value.editor.commands.setContent(localContent.value)
+            }
+            if (contactNotesEditorRef.value?.editor && ydoc.value.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
+                contactNotesEditorRef.value.editor.commands.setContent(contactNotes.value)
+            }
+            if (classNotesEditorRef.value?.editor && ydoc.value.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
+                classNotesEditorRef.value.editor.commands.setContent(classNotes.value)
+            }
+        })
+
         // Setup text sync for saving
-        ydoc.value.getText('content').observe(() => { handleInput() })
-        ydoc.value.getText('contactNotes').observe(() => { handleInput() })
-        ydoc.value.getText('classNotes').observe(() => { handleInput() })
+        ydoc.value.getXmlFragment('content_xml').observe(() => { handleInput() })
+        ydoc.value.getXmlFragment('contactNotes_xml').observe(() => { handleInput() })
+        ydoc.value.getXmlFragment('classNotes_xml').observe(() => { handleInput() })
     }
 })
 
-onBeforeUnmount(() => {
-    if (awarenessProvider.value) {
-        awarenessProvider.value.destroy()
-    }
-})
 
 
 
@@ -1571,9 +1622,9 @@ const {
             absenceReason.value = finalAbsenceReason
         }
 
-        const saveContent = ydoc.value ? ydoc.value.getText('content').toString() : content
-        const saveContact = ydoc.value ? ydoc.value.getText('contactNotes').toString() : contactNotes.value
-        const saveClass = ydoc.value ? ydoc.value.getText('classNotes').toString() : classNotes.value
+        const saveContent = (ydoc.value && contentEditorRef.value?.editor) ? contentEditorRef.value.editor.getText() : content
+        const saveContact = (ydoc.value && contactNotesEditorRef.value?.editor) ? contactNotesEditorRef.value.editor.getText() : contactNotes.value
+        const saveClass = (ydoc.value && classNotesEditorRef.value?.editor) ? classNotesEditorRef.value.editor.getText() : classNotes.value
 
         try {
             // Also take a snapshot for version history
@@ -1795,7 +1846,6 @@ watch(() => props.loading, (newLoading) => {
     }
 })
 
-// Methods
 function handleInput() {
     if (isInitializing.value) {
         // 如果正在初始化（從 props 同步中），我們不觸發自動儲存
@@ -1803,30 +1853,20 @@ function handleInput() {
         return
     }
 
-    // Trigger auto-save with all data
-    // We need to pass the external link to the parent via emit or just trust the triggerAutoSave
-    // triggerAutoSave calls saveFn with the CONTENT string usually. 
-    // But we have extra fields.
-    // The 'content' prop is usually just the text body.
-    // We should probably emit the external link update separately or ensure the parent reads it from the reference?
-    // Since we are using a custom autosave hook that likely calls a save function in the parent...
-    // Let's assume the parent needs to know about the external link update immediately?
-    // Or we can rely on `triggerAutoSave` triggering the save function which pulls from... wait.
-
-    // In `SessionDetailsView.vue`, the `handleEditorUpdate` usually takes `content`.
-    // We need to verify how `ReportEditor` communicates updates.
-    // It emits `update:content`. 
+    if (ydoc.value) {
+        if (contentEditorRef.value?.editor) {
+            localContent.value = contentEditorRef.value.editor.getText()
+        }
+        if (contactNotesEditorRef.value?.editor) {
+            contactNotes.value = contactNotesEditorRef.value.editor.getText()
+        }
+        if (classNotesEditorRef.value?.editor) {
+            classNotes.value = classNotesEditorRef.value.editor.getText()
+        }
+    }
 
     emit('update:content', localContent.value)
     emit('update:report-external-link', reportExternalLink.value)
-
-    // Construct the full report data object for saving if needed, 
-    // but `triggerAutoSave` takes `data: T` (generic). 
-    // It seems `localContent` is passed to `triggerAutoSave`. 
-    // If `localContent` is just the string, then `useAutoSave` calls `onSave(localContent)`.
-
-    // We need to modify what we pass to triggerAutoSave if we want to save more than just content.
-    // OR we emit the updates and the parent handles the saving orchestration.
 
     if (props.reportId) {
         triggerAutoSave(localContent.value)
@@ -1856,6 +1896,18 @@ function handleReportRestored(report: OccurrenceReportDTO) {
     contactNotes.value = report.contact_notes || ''
     classNotes.value = report.class_notes || ''
     reportExternalLink.value = report.external_link || ''
+
+    if (ydoc.value) {
+        if (contentEditorRef.value?.editor) {
+            contentEditorRef.value.editor.commands.setContent(report.content || '')
+        }
+        if (contactNotesEditorRef.value?.editor) {
+            contactNotesEditorRef.value.editor.commands.setContent(report.contact_notes || '')
+        }
+        if (classNotesEditorRef.value?.editor) {
+            classNotesEditorRef.value.editor.commands.setContent(report.class_notes || '')
+        }
+    }
 
     // Emit the event to parent
     emit('restored', report)

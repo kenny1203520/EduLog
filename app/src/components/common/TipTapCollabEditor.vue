@@ -29,7 +29,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor'
+import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import * as Y from 'yjs'
 
 interface Props {
@@ -66,7 +66,7 @@ const editor = new Editor({
             document: props.ydoc as any,
             field: props.fieldName
         }),
-        CollaborationCursor.configure({
+        CollaborationCaret.configure({
             provider: props.provider as any,
             user: props.user
         })
@@ -111,6 +111,10 @@ const showPlaceholder = computed(() => {
 onBeforeUnmount(() => {
     editor.destroy()
 })
+
+defineExpose({
+    editor
+})
 </script>
 
 <style scoped>
@@ -139,8 +143,8 @@ onBeforeUnmount(() => {
     margin-top: 0.125rem;
 }
 
-/* Collaboration Cursor Styles */
-.editor-content :deep(.collaboration-cursor__caret) {
+/* Collaboration Caret Styles */
+.editor-content :deep(.collaboration-carets__caret) {
     border-left: 2px solid;
     border-right: 2px solid;
     margin-left: -2px;
@@ -150,7 +154,7 @@ onBeforeUnmount(() => {
     word-break: normal;
 }
 
-.editor-content :deep(.collaboration-cursor__label) {
+.editor-content :deep(.collaboration-carets__label) {
     border-radius: 4px;
     color: #fff;
     font-size: 10px;

@@ -1,0 +1,216 @@
+import * as Y from 'yjs'
+import { Awareness, removeAwarenessStates } from 'y-protocols/awareness'
+import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
+
+export const uint8ArrayToBase64 = (u8: Uint8Array): string => {
+    let binary = ''
+    const chunkSize = 0x8000
+    for (let i = 0; i < u8.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, Array.from(u8.subarray(i, i + chunkSize)))
+    }
+    return btoa(binary)
+}
+
+export const base64ToUint8Array = (base64: string): Uint8Array => {
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i)
+    }
+    return bytes
+}
+
+function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
+    let timer: ReturnType<typeof setTimeout>
+    return (...args: Parameters<T>) => {
+        clearTimeout(timer)
+        timer = setTimeout(() => fn(...args), ms)
+    }
+}
+
+export class SupabaseProvider {
+    public awareness: Awareness
+    private channel: RealtimeChannel
+    private isDestroyed = false
+    private isSubscribed = false
+
+    private supabase: SupabaseClient
+    public doc: Y.Doc
+    private roomId: string
+    private userId?: string
+
+    constructor(
+        supabase: SupabaseClient,
+        doc: Y.Doc,
+        roomId: string,
+        userId?: string
+    ) {
+        this.supabase = supabase
+        this.doc = doc
+        this.roomId = roomId
+        this.userId = userId
+        this.awareness = new Awareness(this.doc)
+
+        this.channel = this.supabase.channel(`room:${this.roomId}`, {
+            config: {
+                broadcast: { ack: false },
+                presence: { key: this.awareness.clientID.toString() }
+            }
+        })
+
+        this.setupYjs()
+        this.setupSupabase()
+
+        this.channel.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                this.isSubscribed = true
+                await this.loadInitialState()
+                const localState = this.awareness.getLocalState()
+                if (localState && this.supabase.realtime.isConnected()) {
+                    this.channel.track(localState)
+                }
+            } else {
+                this.isSubscribed = false
+            }
+        })
+    }
+
+    private setupYjs() {
+        this.doc.on('update', (update: Uint8Array, origin: any) => {
+            if (origin === this || this.isDestroyed) return
+            
+            if (this.isSubscribed && this.supabase.realtime.isConnected()) {
+                this.channel.send({
+                    type: 'broadcast',
+                    event: 'sync-update',
+                    payload: { update: Array.from(update) }
+                })
+            }
+
+            this.debouncedSave()
+        })
+
+        this.awareness.on('update', (_: any, origin: any) => {
+            if (origin === this || this.isDestroyed) return
+            
+            const localState = this.awareness.getLocalState()
+            if (localState && this.isSubscribed && this.supabase.realtime.isConnected()) {
+                this.channel.track(localState)
+            }
+        })
+    }
+
+    private setupSupabase() {
+        this.channel.on('broadcast', { event: 'sync-update' }, (payload) => {
+            if (this.isDestroyed) return
+            const update = new Uint8Array(payload.payload.update)
+            Y.applyUpdate(this.doc, update, this)
+        })
+
+        this.channel.on('presence', { event: 'sync' }, () => {
+            if (this.isDestroyed) return
+            const state = this.channel.presenceState()
+            const awarenessStates = this.awareness.getStates()
+            
+            const added: number[] = []
+            const updated: number[] = []
+            const removed: number[] = []
+
+            awarenessStates.forEach((_, clientId) => {
+                if (clientId !== this.awareness.clientID && !state[clientId.toString()]) {
+                    removed.push(clientId)
+                }
+            })
+            
+            if (removed.length > 0) {
+                removeAwarenessStates(this.awareness, removed, this)
+            }
+
+            Object.keys(state).forEach((clientIdStr) => {
+                const clientId = Number(clientIdStr)
+                if (clientId === this.awareness.clientID) return
+                
+                const presences = state[clientIdStr] as any[]
+                if (presences.length > 0) {
+                    const remoteState = presences[0]
+                    if (!awarenessStates.has(clientId)) {
+                        added.push(clientId)
+                    } else {
+                        updated.push(clientId)
+                    }
+                    this.awareness.getStates().set(clientId, remoteState)
+                }
+            })
+
+            if (added.length || updated.length) {
+                this.awareness.emit('update', [{ added, updated, removed: [] }, this])
+            }
+        })
+    }
+
+    private async loadInitialState() {
+        try {
+            const { data, error } = await this.supabase
+                .from('report_collab_docs')
+                .select('snapshot_base64')
+                .eq('occurrence_report_id', this.roomId)
+                .maybeSingle()
+
+            if (error) {
+                console.error('loadInitialState db error:', error)
+                return
+            }
+
+            if (data?.snapshot_base64) {
+                const update = base64ToUint8Array(data.snapshot_base64)
+                Y.applyUpdate(this.doc, update, this)
+            }
+        } catch (err) {
+            console.error('Failed to load document state:', err)
+        }
+    }
+
+    private debouncedSave = debounce(async () => {
+        try {
+            await this.saveSnapshot()
+        } catch (err) {
+            console.error('Failed to auto-save document:', err)
+        }
+    }, 2500)
+
+    public async saveSnapshot(): Promise<boolean> {
+        try {
+            const stateUpdate = Y.encodeStateAsUpdate(this.doc)
+            const base64State = uint8ArrayToBase64(stateUpdate)
+            
+            const payload: any = {
+                occurrence_report_id: this.roomId,
+                snapshot_base64: base64State
+            }
+            if (this.userId) {
+                payload.last_updated_by = this.userId
+            }
+            
+            const { error } = await this.supabase.from('report_collab_docs').upsert(
+                payload, 
+                { onConflict: 'occurrence_report_id' }
+            )
+            
+            if (error) {
+                console.error('Failed to save snapshot:', error)
+                return false
+            }
+            return true
+        } catch (err) {
+            console.error('saveSnapshot exception:', err)
+            return false
+        }
+    }
+
+    public destroy() {
+        this.isDestroyed = true
+        this.channel.unsubscribe()
+        this.supabase.removeChannel(this.channel)
+        this.awareness.destroy()
+    }
+}
