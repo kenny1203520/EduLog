@@ -339,6 +339,7 @@
                 :font-scale="preferences.editorFontScale"
                 :min-height="90"
                 :focus-ring-class="'ring-2 ring-blue-500 border-blue-500'"
+                :remote-selections="getRemoteSelections('contactNotes')"
                 @activity="onTextFieldActivity('contactNotes', $event)"
             />
         </div>
@@ -370,6 +371,7 @@
                 :min-height="140"
                 :mono="true"
                 :focus-ring-class="'ring-2 ring-purple-500 border-purple-500'"
+                :remote-selections="getRemoteSelections('classNotes')"
                 @activity="onTextFieldActivity('classNotes', $event)"
             />
         </div>
@@ -398,6 +400,7 @@
                     :min-height="300"
                     :mono="true"
                     :focus-ring-class="'ring-2 ring-emerald-500 border-emerald-500'"
+                    :remote-selections="getRemoteSelections('content')"
                     @input="handleInput"
                     @activity="onTextFieldActivity('content', $event)"
                 />
@@ -1948,6 +1951,16 @@ function getFieldEditors(field: AwarenessField): CollabAwarenessEntry[] {
     return remoteAwareness.value.filter((entry) => entry.field === field)
 }
 
+function getRemoteSelections(field: AwarenessField) {
+    return getFieldEditors(field).map((entry) => ({
+        userId: entry.userId,
+        displayName: entry.displayName,
+        color: entry.color,
+        caret: entry.caret,
+        selectionEnd: entry.selectionEnd
+    }))
+}
+
 function getEditorChips(field: AwarenessField) {
     return getFieldEditors(field).slice(0, 4)
 }
@@ -2123,8 +2136,9 @@ watch(collabReady, (readyVal) => {
     ytxt.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
-            // Only handle remote-origin updates to avoid echo
-            if (origin === 'remote') {
+            // Treat updates coming from other origins (not our local user id) as remote
+            const localId = authStore.user?.id || 'local'
+            if (origin !== localId) {
                 const updated = ytxt.toString()
                 if (isDev) console.log(`[collab] remote ytext update for ${props.reportId} origin=${origin} len=${updated.length}`)
                 if (updated !== localContent.value) {
@@ -2143,7 +2157,8 @@ watch(collabReady, (readyVal) => {
     yContact.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
-            if (origin === 'remote') {
+            const localId = authStore.user?.id || 'local'
+            if (origin !== localId) {
                 const updated = yContact.toString()
                 if (updated !== contactNotes.value) {
                     applyRemoteChanges(() => {
@@ -2160,7 +2175,8 @@ watch(collabReady, (readyVal) => {
     yClass.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
-            if (origin === 'remote') {
+            const localId = authStore.user?.id || 'local'
+            if (origin !== localId) {
                 const updated = yClass.toString()
                 if (updated !== classNotes.value) {
                     applyRemoteChanges(() => {
@@ -2176,7 +2192,8 @@ watch(collabReady, (readyVal) => {
     meta.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
-            if (origin === 'remote') {
+            const localId = authStore.user?.id || 'local'
+            if (origin !== localId) {
                 applyMetaFromYMap(meta)
             }
         } catch (e) {
