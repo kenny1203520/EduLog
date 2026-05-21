@@ -26,7 +26,7 @@ export class CollabService {
     private static channels: Map<string, any> = new Map()
     private static awarenessCallbacks: Map<string, Array<(arr: any[]) => void>> = new Map()
 
-    static async init(reportId: string, userId: string): Promise<Y.Doc> {
+    static async init(reportId: string, originKey: string, userId?: string): Promise<Y.Doc> {
         if (this.docs.has(reportId)) return this.docs.get(reportId)!
 
         const doc = new Y.Doc()
@@ -136,11 +136,12 @@ export class CollabService {
 
             try {
                 const base64 = uint8ArrayToBase64(update)
-                if (isDev) console.log(`[collab] broadcasting local update for ${reportId} by ${userId} (${update.length} bytes) origin:`, origin)
+                if (isDev) console.log(`[collab] broadcasting local update for ${reportId} by ${originKey} (${update.length} bytes) origin:`, origin)
                 const { error } = await supabase.from('report_collab_ops').insert({
                     occurrence_report_id: reportId,
                     op_payload: base64,
-                    origin_user_id: userId
+                    origin_user_id: userId || originKey,
+                    origin_session_id: originKey
                 })
                 if (error) {
                     console.error('[collab] failed to insert op row', error)
@@ -213,26 +214,28 @@ export class CollabService {
     /**
      * Send awareness payload (cursor/selection/state)
      */
-    static async sendAwareness(reportId: string, userId: string, payload: object): Promise<void> {
+    static async sendAwareness(reportId: string, originKey: string, userId?: string, payload?: object): Promise<void> {
         const isDev = (typeof window !== 'undefined' && window.location.hostname.includes('localhost'))
         try {
-            if (isDev) console.log(`[collab] sendAwareness for ${reportId} by ${userId}:`, payload)
+            if (isDev) console.log(`[collab] sendAwareness for ${reportId} by ${originKey} (user=${userId}):`, payload)
             // Try to update existing row (heartbeat), otherwise insert
             const now = new Date().toISOString()
-            const awarenessPayload = JSON.stringify({ ...payload, updatedAt: now })
+            const awarenessPayload = JSON.stringify({ ...(payload || {}), updatedAt: now })
 
+            // Find by reportId + origin_session_id so each session has its own row
             const { data: existing, error: selectErr } = await supabase
                 .from('report_collab_awareness')
                 .select('id')
                 .eq('occurrence_report_id', reportId)
-                .eq('origin_user_id', userId)
+                .eq('origin_session_id', originKey)
                 .maybeSingle()
 
             if (selectErr) {
                 // fallback to insert
                 const { error: insertErr } = await supabase.from('report_collab_awareness').insert({
                     occurrence_report_id: reportId,
-                    origin_user_id: userId,
+                    origin_user_id: userId || originKey,
+                    origin_session_id: originKey,
                     awareness_payload: awarenessPayload,
                     last_heartbeat: now
                 })
@@ -243,13 +246,15 @@ export class CollabService {
             if (existing && existing.id) {
                 const { error: updateErr } = await supabase.from('report_collab_awareness').update({
                     awareness_payload: awarenessPayload,
-                    last_heartbeat: now
+                    last_heartbeat: now,
+                    origin_user_id: userId || originKey
                 }).match({ id: existing.id })
                 if (updateErr) console.error('[collab] failed to update awareness row', updateErr)
             } else {
                 const { error: insertErr } = await supabase.from('report_collab_awareness').insert({
                     occurrence_report_id: reportId,
-                    origin_user_id: userId,
+                    origin_user_id: userId || originKey,
+                    origin_session_id: originKey,
                     awareness_payload: awarenessPayload,
                     last_heartbeat: now
                 })

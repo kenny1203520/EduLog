@@ -1632,7 +1632,7 @@ const hasConflict = ref(false)
 const conflictMessage = ref<string | null>(null)
 
 // Collaboration (Yjs) bindings
-const { ydoc: collabYDoc, ready: collabReady, saveSnapshot: collabSaveSnapshot, awareness: collabAwareness, sendAwareness } = useReportCollab(computed(() => props.reportId || ''))
+const { ydoc: collabYDoc, ready: collabReady, saveSnapshot: collabSaveSnapshot, awareness: collabAwareness, sendAwareness, sessionId } = useReportCollab(computed(() => props.reportId || ''))
 const yText = ref<Y.Text | null>(null)
 const yTextContact = ref<Y.Text | null>(null)
 const yTextClass = ref<Y.Text | null>(null)
@@ -1706,7 +1706,7 @@ function syncMetaToYMap() {
         Object.entries(snapshot).forEach(([key, value]) => {
             map.set(key, value)
         })
-    }, authStore.user?.id || 'local')
+    }, sessionId || authStore.user?.id || 'local')
 }
 
 function applyMetaFromYMap(map: Y.Map<string | number | boolean | null>) {
@@ -1890,7 +1890,7 @@ function handleInput() {
                     if (insertText) {
                         ytxt.insert(start, insertText)
                     }
-                }, authStore.user?.id || 'local')
+                }, sessionId || authStore.user?.id || 'local')
                 if (isDev) console.log(`[collab] wrote local changes to ytext for ${props.reportId}: start=${start} delete=${deleteCount} insertLen=${insertText.length}`)
                 prevYContent.value = newStr
             }
@@ -1906,11 +1906,11 @@ watch(contactNotes, (val) => {
     try {
         const doc = collabYDoc.value
         const y = yTextContact.value
-        if (doc && y) {
-            doc.transact(() => {
+            if (doc && y) {
+            	doc.transact(() => {
                 y.delete(0, y.length)
                 y.insert(0, val || '')
-            }, authStore.user?.id || 'local')
+            }, sessionId || authStore.user?.id || 'local')
             if (isDev) console.log(`[collab] wrote contactNotes to ytext for ${props.reportId} len=${(val||'').length}`)
         }
     } catch (e) {
@@ -1923,11 +1923,11 @@ watch(classNotes, (val) => {
     try {
         const doc = collabYDoc.value
         const y = yTextClass.value
-        if (doc && y) {
-            doc.transact(() => {
+            if (doc && y) {
+            	doc.transact(() => {
                 y.delete(0, y.length)
                 y.insert(0, val || '')
-            }, authStore.user?.id || 'local')
+            }, sessionId || authStore.user?.id || 'local')
             if (isDev) console.log(`[collab] wrote classNotes to ytext for ${props.reportId} len=${(val||'').length}`)
         }
     } catch (e) {
@@ -2136,8 +2136,8 @@ watch(collabReady, (readyVal) => {
     ytxt.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
-            // Treat updates coming from other origins (not our local user id) as remote
-            const localId = authStore.user?.id || 'local'
+            // Treat updates coming from other origins (not our local session id) as remote
+            const localId = sessionId || authStore.user?.id || 'local'
             if (origin !== localId) {
                 const updated = ytxt.toString()
                 if (isDev) console.log(`[collab] remote ytext update for ${props.reportId} origin=${origin} len=${updated.length}`)
@@ -2157,7 +2157,7 @@ watch(collabReady, (readyVal) => {
     yContact.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
-            const localId = authStore.user?.id || 'local'
+            const localId = sessionId || authStore.user?.id || 'local'
             if (origin !== localId) {
                 const updated = yContact.toString()
                 if (updated !== contactNotes.value) {
@@ -2175,7 +2175,7 @@ watch(collabReady, (readyVal) => {
     yClass.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
-            const localId = authStore.user?.id || 'local'
+            const localId = sessionId || authStore.user?.id || 'local'
             if (origin !== localId) {
                 const updated = yClass.toString()
                 if (updated !== classNotes.value) {
@@ -2192,7 +2192,7 @@ watch(collabReady, (readyVal) => {
     meta.observe((event) => {
         try {
             const origin = (event.transaction as any)?.origin
-            const localId = authStore.user?.id || 'local'
+            const localId = sessionId || authStore.user?.id || 'local'
             if (origin !== localId) {
                 applyMetaFromYMap(meta)
             }

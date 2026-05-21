@@ -10,10 +10,20 @@ export function useReportCollab(reportId: Ref<string> | string) {
 
     const reportIdValue = typeof reportId === 'string' ? reportId : reportId.value
 
+    // Per-session origin token to distinguish multiple tabs for same user
+    const sessionId = (() => {
+        try {
+            // prefer crypto.randomUUID when available
+            // @ts-ignore
+            if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+        } catch (e) {}
+        return 's-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 0xFFFFFF).toString(36)
+    })()
+
     const initialize = async () => {
         if (!reportIdValue) return
-        const userId = authStore.user?.id || ''
-        const doc = await CollabService.init(reportIdValue, userId)
+        const originKey = sessionId
+        const doc = await CollabService.init(reportIdValue, originKey, authStore.user?.id || '')
         ydoc.value = doc
         ready.value = true
     }
@@ -37,7 +47,9 @@ export function useReportCollab(reportId: Ref<string> | string) {
 
     const sendAwareness = async (payload: object) => {
         if (!reportIdValue) return
-        await CollabService.sendAwareness(reportIdValue, authStore.user?.id || '', payload)
+        // ensure payload includes userId and sessionId for consumers
+        const composed = { ...(payload || {}), userId: authStore.user?.id || '', sessionId }
+        await CollabService.sendAwareness(reportIdValue, sessionId, authStore.user?.id || '', composed)
     }
 
     const startAwarenessListener = () => {
@@ -46,9 +58,12 @@ export function useReportCollab(reportId: Ref<string> | string) {
             // p is a parsed payload (object); store or merge
             // For simplicity convert to array of single payloads keyed by origin_user_id
             try {
-                if (!p || !p.userId) return
+                if (!p) return
+                // Use sessionId as unique key so multiple tabs of same user don't overwrite
+                const key = p.sessionId || p.userId || null
+                if (!key) return
                 // ignore stale payloads (compare updatedAt)
-                const existingIndex = awareness.value.findIndex(a => a.userId === p.userId)
+                const existingIndex = awareness.value.findIndex(a => (a.sessionId || a.userId) === key)
                 if (existingIndex >= 0) {
                     const existing = awareness.value[existingIndex]
                     const existingTs = existing?.updatedAt ? new Date(existing.updatedAt).getTime() : 0
@@ -82,6 +97,7 @@ export function useReportCollab(reportId: Ref<string> | string) {
         saveSnapshot,
         destroy,
         awareness,
-        sendAwareness
+        sendAwareness,
+        sessionId
     }
 }
