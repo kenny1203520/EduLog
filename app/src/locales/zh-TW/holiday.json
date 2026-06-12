@@ -14,5 +14,8 @@
     "scope_classroom": "特定教室",
     "scope_session": "特定班級",
     "target_label": "對象名稱",
+    "filter_by_classroom": "依教室篩選",
+    "session_schedule_hint": "每個班級會顯示星期與上課時間。",
+    "no_sessions_for_classroom": "此教室目前沒有可選班級",
     "save_success": "假期儲存成功"
 }

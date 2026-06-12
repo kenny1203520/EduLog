@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { HolidayService } from '@/services/holiday/HolidayService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/AggregateService'
@@ -10,6 +10,7 @@ import { useToast } from 'vue-toastification'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
+import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
@@ -25,6 +26,7 @@ const isSaving = ref(false)
 const isDeleting = ref(false)
 const isAddModalOpen = ref(false)
 const editingId = ref<string | null>(null)
+const selectedSessionClassroomFilter = ref('')
 
 // Confirm Modal State
 const showDeleteConfirm = ref(false)
@@ -37,6 +39,31 @@ const holidayForm = ref({
     name: '',
     classroomIds: [] as string[],
     classSessionIds: [] as string[]
+})
+
+const classroomFilterOptions = computed(() => [
+    { label: t('classroom.all_rooms'), value: '' },
+    ...classrooms.value
+        .filter(room => Boolean(room.id))
+        .map(room => ({ label: room.name, value: room.id }))
+])
+
+const filteredSessions = computed(() => {
+    return sessions.value
+        .filter(session => !selectedSessionClassroomFilter.value || session.classroom_id === selectedSessionClassroomFilter.value)
+        .sort((a, b) => {
+            const roomCompare = getRoomName(a.classroom_id).localeCompare(getRoomName(b.classroom_id))
+            if (roomCompare !== 0) return roomCompare
+
+            const dayA = a.day_of_week === 0 ? 7 : a.day_of_week
+            const dayB = b.day_of_week === 0 ? 7 : b.day_of_week
+            if (dayA !== dayB) return dayA - dayB
+
+            const timeCompare = (a.start_time || '').localeCompare(b.start_time || '')
+            if (timeCompare !== 0) return timeCompare
+
+            return a.name.localeCompare(b.name)
+        })
 })
 
 onMounted(async () => {
@@ -100,6 +127,28 @@ function getNamesForIds(type: 'classroom' | 'session', ids: string[]) {
     }
 }
 
+function getRoomName(id?: string | null) {
+    return classrooms.value.find(room => room.id === id)?.name || t('common.unknown_room')
+}
+
+function getDayLabel(day: number) {
+    return t(`classroom.days.${day}`)
+}
+
+function formatSessionTime(time?: string) {
+    return time ? time.slice(0, 5) : '--:--'
+}
+
+function formatSessionSchedule(session: ClassSessionDTO) {
+    return `${getDayLabel(session.day_of_week)} ${formatSessionTime(session.start_time)}-${formatSessionTime(session.end_time)}`
+}
+
+function getSessionsForIds(ids: string[]) {
+    return ids
+        .map(id => sessions.value.find(session => session.id === id))
+        .filter((session): session is ClassSessionDTO => Boolean(session))
+}
+
 async function handleSaveHoliday() {
     if (!holidayForm.value.startDate || !holidayForm.value.endDate) return
     try {
@@ -160,6 +209,7 @@ async function confirmDelete() {
 function openAddModal() {
     editingId.value = null
     scopeType.value = 'global'
+    selectedSessionClassroomFilter.value = ''
     holidayForm.value = {
         startDate: DateUtils.todayString(preferences.timeZone),
         endDate: DateUtils.todayString(preferences.timeZone),
@@ -193,6 +243,7 @@ function openEditModal(holiday: Holiday) {
 function closeModal() {
     isAddModalOpen.value = false
     editingId.value = null
+    selectedSessionClassroomFilter.value = ''
 }
 </script>
 
@@ -322,9 +373,29 @@ function closeModal() {
                         class="pt-3 border-t border-gray-50">
                         <p class="text-[12px] font-black text-gray-400 uppercase tracking-widest mb-2">{{
                             $t('holiday.scope_label') }} Detail</p>
-                        <p class="text-xs font-medium text-gray-600 line-clamp-2 italic">
-                            {{ holiday.classSessionIds.length > 0 ? getNamesForIds('session', holiday.classSessionIds) :
-                                getNamesForIds('classroom', holiday.classroomIds) }}
+                        <div v-if="holiday.classSessionIds.length > 0" class="space-y-2">
+                            <div v-for="session in getSessionsForIds(holiday.classSessionIds)" :key="session.id"
+                                class="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <p class="text-xs font-black text-gray-800 truncate">{{ session.name }}</p>
+                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
+                                            {{ getRoomName(session.classroom_id) }}
+                                        </p>
+                                    </div>
+                                    <span
+                                        class="shrink-0 text-[10px] font-black text-purple-700 bg-purple-50 border border-purple-100 rounded-lg px-2 py-1 whitespace-nowrap">
+                                        {{ formatSessionSchedule(session) }}
+                                    </span>
+                                </div>
+                            </div>
+                            <p v-if="getSessionsForIds(holiday.classSessionIds).length === 0"
+                                class="text-xs font-medium text-gray-600 line-clamp-2 italic">
+                                {{ getNamesForIds('session', holiday.classSessionIds) }}
+                            </p>
+                        </div>
+                        <p v-else class="text-xs font-medium text-gray-600 line-clamp-2 italic">
+                            {{ getNamesForIds('classroom', holiday.classroomIds) }}
                         </p>
                     </div>
                 </div>
@@ -400,22 +471,45 @@ function closeModal() {
                     </div>
 
                     <div v-if="scopeType === 'session'" class="space-y-3 animate-in fade-in slide-in-from-top-2">
-                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
-                            $t('holiday.scope_session') }}</label>
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                                <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                                    $t('holiday.scope_session') }}</label>
+                                <p class="mt-1 text-[11px] font-bold text-gray-400">{{ $t('holiday.session_schedule_hint') }}</p>
+                            </div>
+                            <div class="w-full sm:w-56">
+                                <label
+                                    class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">
+                                    {{ $t('holiday.filter_by_classroom') }}
+                                </label>
+                                <BaseDropdown v-model="selectedSessionClassroomFilter" :options="classroomFilterOptions"
+                                    theme="emerald" :placeholder="$t('classroom.all_rooms')" />
+                            </div>
+                        </div>
                         <div
                             class="grid grid-cols-1 gap-1 max-h-60 overflow-y-auto p-3 border border-gray-100 rounded-2xl bg-gray-50 custom-scrollbar">
-                            <label v-for="s in sessions" :key="s.id"
-                                class="flex items-center gap-4 p-3 hover:bg-white rounded-xl cursor-pointer transition-all border border-transparent hover:border-emerald-100 select-none"
+                            <label v-for="s in filteredSessions" :key="s.id"
+                                class="flex items-start gap-4 p-3 hover:bg-white rounded-xl cursor-pointer transition-all border border-transparent hover:border-emerald-100 select-none"
                                 :class="holidayForm.classSessionIds.includes(s.id!) ? 'bg-white border-emerald-100 ring-1 ring-emerald-50' : ''">
                                 <input type="checkbox" :value="s.id" v-model="holidayForm.classSessionIds"
-                                    class="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300">
-                                <div class="flex flex-col min-w-0">
-                                    <span class="text-sm font-black text-gray-900 truncate">{{ s.name }}</span>
+                                    class="mt-1 w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300">
+                                <div class="flex flex-col min-w-0 flex-1">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <span class="text-sm font-black text-gray-900 truncate">{{ s.name }}</span>
+                                        <span
+                                            class="shrink-0 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 whitespace-nowrap">
+                                            {{ formatSessionSchedule(s) }}
+                                        </span>
+                                    </div>
                                     <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
-                                        {{classrooms.find(r => r.id === s.classroom_id)?.name}}
+                                        {{ getRoomName(s.classroom_id) }} · {{ s.time_zone || preferences.timeZone }}
                                     </span>
                                 </div>
                             </label>
+                            <div v-if="filteredSessions.length === 0"
+                                class="py-8 text-center text-xs font-bold text-gray-400">
+                                {{ $t('holiday.no_sessions_for_classroom') }}
+                            </div>
                         </div>
                     </div>
 
