@@ -19,11 +19,13 @@ export function getKodingCredentials(credentials: KodingCredential[] | undefined
 }
 
 export function buildKodingCodeCheckUrl({ admissionId, userName, lesson }: KodingCodeCheckParams): string {
-    const params = new URLSearchParams({
-        admission_id: admissionId.trim(),
-        user_name: userName.trim(),
-        lesson: String(lesson).trim()
-    })
+    const params = [
+        ['admission_id', admissionId.trim()],
+        ['user_name', userName.trim()],
+        ['lesson', String(lesson).trim()]
+    ]
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        .join('&')
 
-    return `https://koding.school/students/code_check?${params.toString()}`
+    return `https://koding.school/students/code_check?${params}`
 }

@@ -45,14 +45,16 @@ const showDeleteConfirm = ref(false)
 const credentialToDelete = ref<string | null>(null)
 
 async function addCredential() {
-    if (!newCredential.value.platform || !newCredential.value.username || !newCredential.value.password) {
+    const platformValue = newCredential.value.platform === 'Other' ? otherPlatformAdd.value.trim() : newCredential.value.platform
+    const requiresPassword = platformValue !== KODING_PLATFORM
+
+    if (!platformValue || !newCredential.value.username || (requiresPassword && !newCredential.value.password)) {
         toast.error(t('student.errors.platform_required'))
         return
     }
 
     try {
         isModifying.value = true
-        const platformValue = newCredential.value.platform === 'Other' ? otherPlatformAdd.value : newCredential.value.platform
         await StudentService.addCredential({ ...newCredential.value, platform: platformValue, student_id: props.studentId })
         newCredential.value = { platform: '', username: '', password: '', url: '' }
         otherPlatformAdd.value = ''

@@ -35,6 +35,7 @@ import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
@@ -1373,8 +1374,6 @@ async function closeSplitView() {
 }
 
 async function loadKodingCandidates() {
-    if (kodingCandidates.value.length > 0) return
-
     isLoadingKodingCandidates.value = true
     try {
         const [studentsResult, teachersResult] = await Promise.all([
@@ -2719,8 +2718,9 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <label class="mb-2 block text-sm font-bold text-gray-700">
                                 {{ $t('classroom.koding_comparison') }}
                             </label>
-                            <BaseDropdown v-model="kodingForm.candidateKey" :options="kodingCandidateOptions"
-                                theme="amber" @change="handleKodingCandidateChange" />
+                            <SearchableSelect v-model="kodingForm.candidateKey" :options="kodingCandidateOptions"
+                                :placeholder="$t('classroom.koding_select_comparison')"
+                                @update:modelValue="handleKodingCandidateChange" />
                         </div>
                     </div>
 

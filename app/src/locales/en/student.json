@@ -249,7 +249,7 @@
         "delete_student_failed": "Failed to delete student",
         "update_enrollment_failed": "Failed to update enrollment",
         "delete_enrollment_failed": "Failed to delete enrollment",
-        "platform_required": "Platform, username, and password are required",
+        "platform_required": "Platform and username are required; password is also required for non-Koding School accounts",
         "session_full": "Selected session is full in the chosen period"
     }
 }
