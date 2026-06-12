@@ -74,5 +74,18 @@
   "validation_email": "請輸入有效的 Email",
   "validation_user_id": "系統帳號 ID 必須是有效的 UUID",
   "validation_gov_id": "身分證號長度不可超過 20 個字元",
-  "error_duplicate_user": "此系統帳號已綁定至其他教師"
+  "error_duplicate_user": "此系統帳號已綁定至其他教師",
+  "credentials_title": "Koding School 帳號",
+  "credentials_hint": "可為同一位老師記錄多個 Koding username，作為作業檢查對照組。",
+  "credentials_empty": "尚未新增 Koding 帳號",
+  "credentials_add": "新增帳號",
+  "credentials_username": "Username",
+  "credentials_password": "Password",
+  "credentials_url": "URL",
+  "credentials_save_teacher_first": "請先儲存教師資料後再新增帳號",
+  "credentials_username_required": "請輸入 Koding username",
+  "credentials_add_success": "Koding 帳號已新增",
+  "credentials_update_success": "Koding 帳號已更新",
+  "credentials_delete_success": "Koding 帳號已刪除",
+  "credentials_save_failed": "儲存 Koding 帳號失敗"
 }

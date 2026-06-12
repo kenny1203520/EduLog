@@ -7,6 +7,7 @@ import { useStudentStore } from '@/stores/useStudentStore'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import { KODING_PLATFORM } from '@/utils/koding'
 
 const props = defineProps<{
     studentId: string
@@ -30,6 +31,7 @@ const platformOptions = [
     { label: t('student.credentials.platforms.Anydesk'), value: 'Anydesk' },
     { label: t('student.credentials.platforms.Quiz Platform'), value: 'Quiz Platform' },
     { label: t('student.credentials.platforms.Discord'), value: 'Discord' },
+    { label: t('student.credentials.platforms.Koding School'), value: KODING_PLATFORM },
     { label: t('student.credentials.platforms.Other'), value: 'Other' }
 ]
 

@@ -74,5 +74,18 @@
   "validation_email": "Please enter a valid email address",
   "validation_user_id": "System account ID must be a valid UUID",
   "validation_gov_id": "ID number must be 20 characters or fewer",
-  "error_duplicate_user": "This system account is already linked to another teacher"
+  "error_duplicate_user": "This system account is already linked to another teacher",
+  "credentials_title": "Koding School Accounts",
+  "credentials_hint": "Store one or more Koding usernames for this teacher as code-check comparison accounts.",
+  "credentials_empty": "No Koding accounts yet",
+  "credentials_add": "Add Account",
+  "credentials_username": "Username",
+  "credentials_password": "Password",
+  "credentials_url": "URL",
+  "credentials_save_teacher_first": "Save the teacher before adding accounts",
+  "credentials_username_required": "Enter a Koding username",
+  "credentials_add_success": "Koding account added",
+  "credentials_update_success": "Koding account updated",
+  "credentials_delete_success": "Koding account deleted",
+  "credentials_save_failed": "Failed to save Koding account"
 }

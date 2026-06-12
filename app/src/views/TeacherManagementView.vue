@@ -6,6 +6,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import {
     TeacherService,
+    type TeacherCredentialDTO,
     type TeacherDTO,
     type TeacherStatisticsDTO
 } from '@/services/teacher/TeacherService'
@@ -16,6 +17,7 @@ import {
 
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import { KODING_PLATFORM } from '@/utils/koding'
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -37,6 +39,7 @@ const sortOptions = computed(() => [
 
 const isModalOpen = ref(false)
 const isSaving = ref(false)
+const isCredentialSaving = ref(false)
 const editingTeacher = ref<TeacherDTO | null>(null)
 const userSearchQuery = ref('')
 const userSearchResults = ref<AuthUserSearchResultDTO[]>([])
@@ -54,6 +57,8 @@ const form = ref<Partial<TeacherDTO>>({
     address: '',
     bio: ''
 })
+const newKodingCredential = ref({ username: '', password: '', url: '' })
+const editingKodingCredentials = ref<TeacherCredentialDTO[]>([])
 
 const confirmModal = ref({
     isOpen: false,
@@ -123,7 +128,7 @@ onMounted(loadTeachers)
 async function loadTeachers() {
     try {
         loading.value = true
-        teachers.value = await TeacherService.getAllTeachers()
+        teachers.value = await TeacherService.getAllTeachersWithCredentials()
         selectedTeacherIds.value = new Set()
     } catch (error) {
         console.error(error)
@@ -149,6 +154,8 @@ function createEmptyForm(): Partial<TeacherDTO> {
 function openCreateModal() {
     editingTeacher.value = null
     form.value = createEmptyForm()
+    editingKodingCredentials.value = []
+    newKodingCredential.value = { username: '', password: '', url: '' }
     resetUserSearchState()
     isModalOpen.value = true
 }
@@ -165,6 +172,8 @@ function openEditModal(teacher: TeacherDTO) {
         address: teacher.address ?? '',
         bio: teacher.bio ?? ''
     }
+    editingKodingCredentials.value = getTeacherKodingCredentials(teacher).map(credential => ({ ...credential }))
+    newKodingCredential.value = { username: '', password: '', url: '' }
     resetUserSearchState()
     isModalOpen.value = true
 }
@@ -173,6 +182,8 @@ function closeModal() {
     isModalOpen.value = false
     editingTeacher.value = null
     form.value = createEmptyForm()
+    editingKodingCredentials.value = []
+    newKodingCredential.value = { username: '', password: '', url: '' }
     resetUserSearchState()
 }
 
@@ -370,6 +381,89 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
 
     sortField.value = field
     sortDirection.value = 'asc'
+}
+
+function getTeacherKodingCredentials(teacher: TeacherDTO | null): TeacherCredentialDTO[] {
+    return (teacher?.teacher_credentials || []).filter(credential => credential.platform === KODING_PLATFORM)
+}
+
+async function addTeacherKodingCredential() {
+    if (!editingTeacher.value?.id) {
+        toast.error(t('teacher.credentials_save_teacher_first'))
+        return
+    }
+
+    const username = newKodingCredential.value.username.trim()
+    if (!username) {
+        toast.error(t('teacher.credentials_username_required'))
+        return
+    }
+
+    try {
+        isCredentialSaving.value = true
+        await TeacherService.addCredential({
+            teacher_id: editingTeacher.value.id,
+            platform: KODING_PLATFORM,
+            username,
+            password: newKodingCredential.value.password.trim(),
+            url: newKodingCredential.value.url.trim()
+        })
+        newKodingCredential.value = { username: '', password: '', url: '' }
+        await loadTeachers()
+        const refreshed = teachers.value.find(teacher => teacher.id === editingTeacher.value?.id)
+        if (refreshed) {
+            editingTeacher.value = refreshed
+            editingKodingCredentials.value = getTeacherKodingCredentials(refreshed).map(credential => ({ ...credential }))
+        }
+        toast.success(t('teacher.credentials_add_success'))
+    } catch (error: any) {
+        console.error(error)
+        toast.error(error.message || t('teacher.credentials_save_failed'))
+    } finally {
+        isCredentialSaving.value = false
+    }
+}
+
+async function updateTeacherKodingCredential(credential: TeacherCredentialDTO) {
+    if (!credential.id) return
+    if (!credential.username?.trim()) {
+        toast.error(t('teacher.credentials_username_required'))
+        return
+    }
+
+    try {
+        isCredentialSaving.value = true
+        await TeacherService.updateCredential(credential.id, {
+            platform: KODING_PLATFORM,
+            username: credential.username.trim(),
+            password: credential.password?.trim() || '',
+            url: credential.url?.trim() || ''
+        })
+        await loadTeachers()
+        toast.success(t('teacher.credentials_update_success'))
+    } catch (error: any) {
+        console.error(error)
+        toast.error(error.message || t('teacher.credentials_save_failed'))
+    } finally {
+        isCredentialSaving.value = false
+    }
+}
+
+async function deleteTeacherKodingCredential(credential: TeacherCredentialDTO) {
+    if (!credential.id) return
+
+    try {
+        isCredentialSaving.value = true
+        await TeacherService.deleteCredential(credential.id)
+        editingKodingCredentials.value = editingKodingCredentials.value.filter(item => item.id !== credential.id)
+        await loadTeachers()
+        toast.success(t('teacher.credentials_delete_success'))
+    } catch (error: any) {
+        console.error(error)
+        toast.error(error.message || t('teacher.credentials_save_failed'))
+    } finally {
+        isCredentialSaving.value = false
+    }
 }
 </script>
 <template>
@@ -773,6 +867,87 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
                             </label>
                             <textarea v-model="form.bio" rows="4" :placeholder="t('teacher.bio_placeholder')"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"></textarea>
+                        </div>
+                    </div>
+
+                    <div v-if="editingTeacher" class="mt-6 rounded-3xl border border-emerald-100 bg-emerald-50/40 p-5">
+                        <div class="mb-4 flex items-center justify-between gap-3">
+                            <div>
+                                <h3 class="text-base font-black text-slate-900">{{ t('teacher.credentials_title') }}</h3>
+                                <p class="mt-1 text-sm text-slate-500">{{ t('teacher.credentials_hint') }}</p>
+                            </div>
+                            <span class="rounded-full bg-white px-3 py-1 text-xs font-bold text-emerald-700">
+                                {{ editingKodingCredentials.length }}
+                            </span>
+                        </div>
+
+                        <div v-if="editingKodingCredentials.length > 0" class="space-y-3">
+                            <div v-for="credential in editingKodingCredentials" :key="credential.id"
+                                class="grid gap-3 rounded-2xl border border-emerald-100 bg-white p-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        {{ t('teacher.credentials_username') }}
+                                    </label>
+                                    <input v-model="credential.username" type="text"
+                                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        {{ t('teacher.credentials_password') }}
+                                    </label>
+                                    <input v-model="credential.password" type="text"
+                                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                        {{ t('teacher.credentials_url') }}
+                                    </label>
+                                    <input v-model="credential.url" type="url"
+                                        class="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                                </div>
+                                <div class="flex gap-2">
+                                    <button @click="updateTeacherKodingCredential(credential)" :disabled="isCredentialSaving"
+                                        class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50">
+                                        {{ t('common.save') }}
+                                    </button>
+                                    <button @click="deleteTeacherKodingCredential(credential)" :disabled="isCredentialSaving"
+                                        class="rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm font-bold text-rose-500 transition hover:bg-rose-50 disabled:opacity-50">
+                                        {{ t('common.delete') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-else class="rounded-2xl border border-dashed border-emerald-200 bg-white/70 px-4 py-5 text-center text-sm font-semibold text-slate-400">
+                            {{ t('teacher.credentials_empty') }}
+                        </div>
+
+                        <div class="mt-4 grid gap-3 rounded-2xl border border-dashed border-emerald-200 bg-white/80 p-4 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+                            <div>
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    {{ t('teacher.credentials_username') }}
+                                </label>
+                                <input v-model="newKodingCredential.username" type="text"
+                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    {{ t('teacher.credentials_password') }}
+                                </label>
+                                <input v-model="newKodingCredential.password" type="text"
+                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+                            </div>
+                            <div>
+                                <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    {{ t('teacher.credentials_url') }}
+                                </label>
+                                <input v-model="newKodingCredential.url" type="url"
+                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
+                            </div>
+                            <button @click="addTeacherKodingCredential" :disabled="isCredentialSaving"
+                                class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
+                                {{ t('teacher.credentials_add') }}
+                            </button>
                         </div>
                     </div>
                 </div>

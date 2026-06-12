@@ -28,6 +28,7 @@ const editEnrollmentForm = ref({
     enrollment_type: "",
     start_date: "",
     external_link: "",
+    koding_admission_id: "",
     time_zone: "",
 });
 
@@ -48,6 +49,7 @@ function startEditEnrollment(enrollment: any) {
         enrollment_type: enrollment.status,
         start_date: enrollment.startDate || enrollment.start_date,
         external_link: enrollment.externalLink || enrollment.external_link || "",
+        koding_admission_id: enrollment.kodingAdmissionId || enrollment.koding_admission_id || "",
         time_zone: enrollment.timeZone || preferences.timeZone,
     };
 }
@@ -65,6 +67,7 @@ async function saveEnrollment() {
             start_date: editEnrollmentForm.value.start_date,
             time_zone: editEnrollmentForm.value.time_zone,
             external_link: editEnrollmentForm.value.external_link,
+            koding_admission_id: editEnrollmentForm.value.koding_admission_id,
         });
 
         cancelEditEnrollment();
@@ -280,6 +283,13 @@ async function refreshData() {
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t("student.internal_courses.external_link") }}</label>
                             <input type="url" v-model="editEnrollmentForm.external_link"
+                                class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                                :placeholder="$t('common.optional')" />
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t("student.internal_courses.koding_admission_id") }}</label>
+                            <input type="text" v-model="editEnrollmentForm.koding_admission_id"
                                 class="w-full px-4 py-3 text-base font-bold bg-white shadow-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                                 :placeholder="$t('common.optional')" />
                         </div>

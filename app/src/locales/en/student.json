@@ -139,6 +139,7 @@
         "session_capacity": "Capacity",
         "session_full": "FULL",
         "external_link": "External Report Overview URL",
+        "koding_admission_id": "Koding admission ID",
         "transfer_btn": "Transfer",
         "transfer_title": "Transfer Class",
         "transfer_from": "From Session",
@@ -213,6 +214,7 @@
             "Anydesk": "Anydesk",
             "Quiz Platform": "Quiz Platform",
             "Discord": "Discord",
+            "Koding School": "Koding School",
             "Other": "Other"
         }
     },

@@ -146,6 +146,7 @@
         "session_capacity": "人數",
         "session_full": "已滿",
         "external_link": "外部報告總覽連結",
+        "koding_admission_id": "Koding admission ID",
         "transfer_date_placeholder": "-- 請選擇生效日期 --",
         "last_lesson": "最後上課日",
         "first_lesson": "首堂上課日",
@@ -213,6 +214,7 @@
             "Anydesk": "Anydesk",
             "Quiz Platform": "測驗平台",
             "Discord": "Discord",
+            "Koding School": "Koding School",
             "Other": "其他"
         }
     },

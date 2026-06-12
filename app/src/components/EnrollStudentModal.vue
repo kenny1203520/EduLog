@@ -30,6 +30,7 @@ const enrollForm = ref({
     class_session_id: '',
     enrollment_type: 'regular' as 'regular' | 'trial',
     start_date: DateUtils.todayString(preferences.timeZone),
+    koding_admission_id: '',
     generate_count: 10
 })
 
@@ -93,6 +94,7 @@ watch(() => props.isOpen, (val) => {
             class_session_id: '',
             enrollment_type: 'regular',
             start_date: DateUtils.todayString(preferences.timeZone),
+            koding_admission_id: '',
             generate_count: 10
         }
     }
@@ -116,6 +118,7 @@ async function submitEnrollment() {
         status: enrollForm.value.enrollment_type as any,
         start_date: enrollForm.value.start_date,
         time_zone: preferences.timeZone,
+        koding_admission_id: enrollForm.value.koding_admission_id.trim() || undefined,
     }
 
     try {
@@ -217,6 +220,15 @@ async function submitEnrollment() {
                                 $t('student.enroll_modal.start_date') }}</label>
                         <input type="date" v-model="enrollForm.start_date"
                             class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
+                    </div>
+
+                    <div class="space-y-2">
+                        <label
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.internal_courses.koding_admission_id') }}</label>
+                        <input type="text" v-model="enrollForm.koding_admission_id"
+                            class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm"
+                            :placeholder="$t('common.optional')">
                     </div>
 
                     <div class="space-y-2">

@@ -10,6 +10,7 @@ export interface EnrollmentDTO {
     time_zone?: string
     lesson_number?: number
     external_link?: string
+    koding_admission_id?: string
     created_at?: string
     updated_at?: string
     
@@ -46,6 +47,7 @@ export class Enrollment {
     timeZone: string
     lessonNumber?: number
     externalLink?: string
+    kodingAdmissionId?: string
     
     // Display helpers
     courseSubject: string = ''
@@ -71,6 +73,7 @@ export class Enrollment {
         this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
         this.lessonNumber = data.lesson_number
         this.externalLink = data.external_link
+        this.kodingAdmissionId = data.koding_admission_id
         
         if (data.courses) {
             this.courseSubject = data.courses.subject

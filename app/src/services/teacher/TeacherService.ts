@@ -10,6 +10,18 @@ export interface TeacherDTO {
     gov_id?: string | null
     address?: string | null
     bio?: string | null
+    teacher_credentials?: TeacherCredentialDTO[]
+    created_at?: string
+    updated_at?: string
+}
+
+export interface TeacherCredentialDTO {
+    id?: string
+    teacher_id?: string
+    platform: string
+    username?: string
+    password?: string
+    url?: string
     created_at?: string
     updated_at?: string
 }
@@ -77,10 +89,20 @@ export class TeacherService {
         return (data as TeacherDTO[]) || []
     }
 
+    static async getAllTeachersWithCredentials(): Promise<TeacherDTO[]> {
+        const { data, error } = await supabase
+            .from('teachers')
+            .select('*, teacher_credentials(*)')
+            .order('name', { ascending: true })
+
+        if (error) throw new Error(error.message)
+        return (data as TeacherDTO[]) || []
+    }
+
     static async getTeacherById(id: string): Promise<TeacherDTO> {
         const { data, error } = await supabase
             .from('teachers')
-            .select('*')
+            .select('*, teacher_credentials(*)')
             .eq('id', id)
             .single()
 
@@ -160,6 +182,41 @@ export class TeacherService {
         for (const id of ids) {
             await this.deleteTeacher(id)
         }
+    }
+
+    static async addCredential(credential: TeacherCredentialDTO): Promise<TeacherCredentialDTO> {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('User not authenticated')
+
+        const { data, error } = await supabase
+            .from('teacher_credentials')
+            .insert({ ...credential, user_id: user.id })
+            .select()
+            .single()
+
+        if (error) throw new Error(error.message)
+        return data as TeacherCredentialDTO
+    }
+
+    static async updateCredential(id: string, credential: Partial<TeacherCredentialDTO>): Promise<TeacherCredentialDTO> {
+        const { data, error } = await supabase
+            .from('teacher_credentials')
+            .update(credential)
+            .eq('id', id)
+            .select()
+            .single()
+
+        if (error) throw new Error(error.message)
+        return data as TeacherCredentialDTO
+    }
+
+    static async deleteCredential(id: string): Promise<void> {
+        const { error } = await supabase
+            .from('teacher_credentials')
+            .delete()
+            .eq('id', id)
+
+        if (error) throw new Error(error.message)
     }
 
     // Session-teacher relationships

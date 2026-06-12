@@ -17,6 +17,7 @@ import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import type { TeacherDTO } from '@/services/teacher/TeacherService'
+import { StudentService } from '@/services/student/StudentService'
 import {
     ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_ATTENDANCE_TEMPLATE,
@@ -24,6 +25,7 @@ import {
     renderCopyTemplate
 } from '@/utils/copyTemplate'
 import { copyToClipboard } from '@/utils/clipboard'
+import { buildKodingCodeCheckUrl, getKodingCredentials, type KodingCredential } from '@/utils/koding'
 
 import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
@@ -79,6 +81,18 @@ const selectedMakeupStudentId = ref<string | null>(null)
 const selectedMakeupEnrollmentId = ref<string | null>(null)
 const makeupJoinDate = ref(DateUtils.todayString(preferences.timeZone))
 
+// Koding.school Code Check State
+const showKodingCheckModal = ref(false)
+const isLoadingKodingCandidates = ref(false)
+const kodingTargetEnrollment = ref<Enrollment | null>(null)
+const kodingCandidates = ref<KodingComparisonCandidate[]>([])
+const kodingLessonOptions = ref<Array<{ label: string; value: string }>>([])
+const kodingForm = ref({
+    lesson: '',
+    candidateKey: '',
+    credentialId: ''
+})
+
 // Teacher Management State
 const occurrenceTeachers = ref<TeacherDTO[]>([])
 const allTeachersList = ref<TeacherDTO[]>([])
@@ -127,6 +141,13 @@ interface TodayCourseSummary {
     completionStatus: string
     tone: ProgressTone
     hasRecord: boolean
+}
+
+interface KodingComparisonCandidate {
+    key: string
+    type: 'student' | 'teacher'
+    label: string
+    credentials: KodingCredential[]
 }
 
 function getDefaultProgressSummary(): StudentProgressSummary {
@@ -518,6 +539,30 @@ const filteredTeachers = computed(() => {
         t.email.toLowerCase().includes(query)
     )
 })
+
+const kodingCandidateOptions = computed(() => [
+    { label: t('classroom.koding_select_comparison'), value: '' },
+    ...kodingCandidates.value.map(candidate => ({
+        label: `${candidate.label} (${t(`classroom.koding_candidate_${candidate.type}`)})`,
+        value: candidate.key
+    }))
+])
+
+const selectedKodingCandidate = computed(() => {
+    return kodingCandidates.value.find(candidate => candidate.key === kodingForm.value.candidateKey) || null
+})
+
+const selectedKodingCandidateCredentials = computed(() => {
+    return selectedKodingCandidate.value?.credentials || []
+})
+
+const kodingCredentialOptions = computed(() => [
+    { label: t('classroom.koding_select_account'), value: '' },
+    ...selectedKodingCandidateCredentials.value.map(credential => ({
+        label: credential.username || t('classroom.koding_unnamed_account'),
+        value: credential.id || credential.username || ''
+    }))
+])
 
 
 
@@ -1325,6 +1370,126 @@ async function closeSplitView() {
     await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
     showSplitView.value = false
     selectedEnrollmentId.value = null
+}
+
+async function loadKodingCandidates() {
+    if (kodingCandidates.value.length > 0) return
+
+    isLoadingKodingCandidates.value = true
+    try {
+        const [studentsResult, teachersResult] = await Promise.all([
+            StudentService.getAll(1, 10000),
+            TeacherService.getAllTeachersWithCredentials()
+        ])
+
+        const studentCandidates = studentsResult.data.map(student => ({
+            key: `student:${student.id}`,
+            type: 'student' as const,
+            label: student.displayName,
+            credentials: getKodingCredentials(student.credentials)
+        }))
+
+        const teacherCandidates = teachersResult.map(teacher => ({
+            key: `teacher:${teacher.id}`,
+            type: 'teacher' as const,
+            label: teacher.name,
+            credentials: getKodingCredentials(teacher.teacher_credentials)
+        }))
+
+        kodingCandidates.value = [...studentCandidates, ...teacherCandidates].sort((left, right) =>
+            left.label.localeCompare(right.label, preferences.locale)
+        )
+    } catch (error: any) {
+        console.error(error)
+        toast.error(error.message || t('classroom.koding_load_candidates_failed'))
+    } finally {
+        isLoadingKodingCandidates.value = false
+    }
+}
+
+async function openKodingCheck(enrollment: Enrollment) {
+    kodingTargetEnrollment.value = enrollment
+    kodingForm.value = {
+        lesson: '',
+        candidateKey: '',
+        credentialId: ''
+    }
+
+    try {
+        const lessons = await getLessonsForCourse(enrollment.courseId)
+        kodingLessonOptions.value = [
+            { label: t('classroom.koding_select_lesson'), value: '' },
+            ...lessons
+                .filter(lesson => lesson.sequence !== undefined && lesson.sequence !== null)
+                .sort((left, right) => left.sequence - right.sequence)
+                .map(lesson => ({
+                    label: `L${lesson.sequence} ${lesson.title}`,
+                    value: String(lesson.sequence)
+                }))
+        ]
+
+        const report = reportMap.value.get(enrollment.id!)
+        const reportLesson = report?.lessonId ? lessons.find(lesson => lesson.id === report.lessonId) : undefined
+        kodingForm.value.lesson = reportLesson?.sequence ? String(reportLesson.sequence) : ''
+    } catch (error) {
+        console.error(error)
+        kodingLessonOptions.value = [{ label: t('classroom.koding_select_lesson'), value: '' }]
+    }
+
+    showKodingCheckModal.value = true
+    await loadKodingCandidates()
+}
+
+function handleKodingCandidateChange(candidateKey?: string) {
+    const key = candidateKey ?? kodingForm.value.candidateKey
+    const candidate = kodingCandidates.value.find(item => item.key === key)
+    const credentials = candidate?.credentials || []
+    kodingForm.value.credentialId = credentials.length === 1
+        ? (credentials[0].id || credentials[0].username || '')
+        : ''
+}
+
+function getSelectedKodingUsername(): string {
+    const credential = selectedKodingCandidateCredentials.value.find(item =>
+        (item.id || item.username || '') === kodingForm.value.credentialId
+    )
+
+    return credential?.username?.trim() || ''
+}
+
+function launchKodingCheck() {
+    const admissionId = kodingTargetEnrollment.value?.kodingAdmissionId?.trim() || ''
+    const lesson = kodingForm.value.lesson.trim()
+    const userName = getSelectedKodingUsername()
+
+    if (!admissionId) {
+        toast.error(t('classroom.koding_missing_admission_id'))
+        return
+    }
+
+    if (!lesson) {
+        toast.error(t('classroom.koding_missing_lesson'))
+        return
+    }
+
+    if (!selectedKodingCandidate.value) {
+        toast.error(t('classroom.koding_missing_comparison'))
+        return
+    }
+
+    if (selectedKodingCandidateCredentials.value.length === 0) {
+        toast.error(t('classroom.koding_no_account'))
+        return
+    }
+
+    if (!userName) {
+        toast.error(t('classroom.koding_missing_account'))
+        return
+    }
+
+    const url = buildKodingCodeCheckUrl({ admissionId, userName, lesson })
+    window.open(url, '_blank', 'noopener,noreferrer')
+    showKodingCheckModal.value = false
 }
 
 async function openAddStudentModal() {
@@ -2154,6 +2319,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </button>
                                 </div>
 
+                                <button @click="openKodingCheck(e)"
+                                    class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-amber-50 text-amber-700 border border-amber-100 active:scale-95 transition-all"
+                                    :title="$t('classroom.koding_check')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
+                                    </svg>
+                                    <span class="text-xs font-black tracking-wide">{{ $t('classroom.koding_check') }}</span>
+                                </button>
+
                                 <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
                                     class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 no-underline active:scale-95 transition-all"
                                     :title="$t('classroom.view_profile')">
@@ -2370,6 +2546,16 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                                         d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                 </svg>
                                             </button>
+                                            <button @click="openKodingCheck(e)"
+                                                class="p-2.5 xl:p-3 rounded-2xl bg-amber-50 text-amber-600 hover:text-amber-700 hover:bg-amber-100 border border-amber-100 transition-all active:scale-90"
+                                                :title="$t('classroom.koding_check')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                    viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
+                                                </svg>
+                                            </button>
                                             <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
                                                 class="p-2.5 xl:p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"
                                                 :title="$t('classroom.view_profile')">
@@ -2489,6 +2675,91 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
         <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
             :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
             :is-loading="isRefreshing" @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
+
+        <div v-if="showKodingCheckModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+            @click.self="showKodingCheckModal = false">
+            <div class="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden">
+                <div class="flex items-center justify-between border-b border-gray-100 px-6 py-5">
+                    <div>
+                        <h2 class="text-2xl font-black text-gray-900">{{ $t('classroom.koding_check_title') }}</h2>
+                        <p class="mt-1 text-sm font-semibold text-gray-400">
+                            {{ kodingTargetEnrollment?.studentName }} · {{ kodingTargetEnrollment?.displayName }}
+                        </p>
+                    </div>
+                    <button @click="showKodingCheckModal = false"
+                        class="rounded-xl p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div class="space-y-5 px-6 py-6">
+                    <div class="rounded-2xl border p-4"
+                        :class="kodingTargetEnrollment?.kodingAdmissionId ? 'border-emerald-100 bg-emerald-50 text-emerald-900' : 'border-rose-100 bg-rose-50 text-rose-900'">
+                        <div class="text-xs font-black uppercase tracking-widest opacity-70">
+                            {{ $t('student.internal_courses.koding_admission_id') }}
+                        </div>
+                        <div class="mt-1 font-mono text-sm font-bold break-all">
+                            {{ kodingTargetEnrollment?.kodingAdmissionId || $t('classroom.koding_missing_admission_id') }}
+                        </div>
+                    </div>
+
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-gray-700">
+                                {{ $t('classroom.koding_lesson') }}
+                            </label>
+                            <BaseDropdown v-model="kodingForm.lesson" :options="kodingLessonOptions" theme="amber" />
+                        </div>
+
+                        <div>
+                            <label class="mb-2 block text-sm font-bold text-gray-700">
+                                {{ $t('classroom.koding_comparison') }}
+                            </label>
+                            <BaseDropdown v-model="kodingForm.candidateKey" :options="kodingCandidateOptions"
+                                theme="amber" @change="handleKodingCandidateChange" />
+                        </div>
+                    </div>
+
+                    <div v-if="isLoadingKodingCandidates"
+                        class="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                        {{ $t('classroom.koding_loading_candidates') }}
+                    </div>
+
+                    <div v-if="selectedKodingCandidate && selectedKodingCandidateCredentials.length === 0"
+                        class="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+                        {{ $t('classroom.koding_no_account') }}
+                    </div>
+
+                    <div v-if="selectedKodingCandidateCredentials.length > 1"
+                        class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">
+                        {{ $t('classroom.koding_multiple_accounts_warning') }}
+                    </div>
+
+                    <div v-if="selectedKodingCandidateCredentials.length > 0">
+                        <label class="mb-2 block text-sm font-bold text-gray-700">
+                            {{ $t('classroom.koding_account') }}
+                        </label>
+                        <BaseDropdown v-model="kodingForm.credentialId" :options="kodingCredentialOptions"
+                            theme="amber" />
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 border-t border-gray-100 bg-gray-50 px-6 py-5">
+                    <button @click="showKodingCheckModal = false"
+                        class="rounded-2xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-600 transition hover:bg-gray-100">
+                        {{ $t('common.cancel') }}
+                    </button>
+                    <button @click="launchKodingCheck"
+                        class="rounded-2xl bg-amber-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-amber-100 transition hover:bg-amber-600">
+                        {{ $t('classroom.koding_open_check') }}
+                    </button>
+                </div>
+            </div>
+        </div>
 
         <div v-if="showAddStudentModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div
