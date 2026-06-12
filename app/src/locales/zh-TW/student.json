@@ -208,13 +208,12 @@
         "delete": "刪除帳號密碼",
         "confirm_delete": "確定要刪除此帳號嗎？",
         "platforms": {
-            "Orange Apple": "橘子蘋果學苑",
+            "koding_school_orange_apple": "橘蘋學習平台",
             "Roblox": "Roblox",
             "Minecraft": "Minecraft",
             "Anydesk": "Anydesk",
             "Quiz Platform": "測驗平台",
             "Discord": "Discord",
-            "Koding School": "Koding School",
             "Other": "其他"
         }
     },
@@ -249,7 +248,7 @@
         "delete_student_failed": "刪除學生失敗",
         "update_enrollment_failed": "更新報名記錄失敗",
         "delete_enrollment_failed": "刪除報名記錄失敗",
-        "platform_required": "平台與使用者名稱為必填；非 Koding School 帳號也需填寫密碼",
+        "platform_required": "平台與使用者名稱為必填；非橘蘋學習平台帳號也需填寫密碼",
         "session_full": "所選時段在該區間已滿額"
     }
 }

@@ -17,7 +17,7 @@ import {
 
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
-import { KODING_PLATFORM } from '@/utils/koding'
+import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -384,7 +384,7 @@ function cycleSort(field: 'name' | 'email' | 'created_at') {
 }
 
 function getTeacherKodingCredentials(teacher: TeacherDTO | null): TeacherCredentialDTO[] {
-    return (teacher?.teacher_credentials || []).filter(credential => credential.platform === KODING_PLATFORM)
+    return (teacher?.teacher_credentials || []).filter(credential => isKodingPlatform(credential.platform))
 }
 
 async function addTeacherKodingCredential() {

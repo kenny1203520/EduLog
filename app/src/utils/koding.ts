@@ -1,4 +1,9 @@
-export const KODING_PLATFORM = 'Koding School'
+export const KODING_PLATFORM = 'Koding School (Orange Apple)'
+export const KODING_PLATFORM_ALIASES = [
+    KODING_PLATFORM,
+    'Koding School',
+    'Orange Apple'
+]
 
 export interface KodingCredential {
     id?: string
@@ -14,8 +19,13 @@ export interface KodingCodeCheckParams {
 
 export function getKodingCredentials(credentials: KodingCredential[] | undefined | null): KodingCredential[] {
     return (credentials || []).filter(credential =>
-        credential.platform === KODING_PLATFORM && Boolean(credential.username?.trim())
+        isKodingPlatform(credential.platform) && Boolean(credential.username?.trim())
     )
+}
+
+export function isKodingPlatform(platform: string | undefined | null): boolean {
+    const normalized = platform?.trim().toLowerCase()
+    return Boolean(normalized && KODING_PLATFORM_ALIASES.some(alias => alias.toLowerCase() === normalized))
 }
 
 export function buildKodingCodeCheckUrl({ admissionId, userName, lesson }: KodingCodeCheckParams): string {

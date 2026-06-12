@@ -26,7 +26,7 @@ export interface StudentSchoolDTO {
 
 export interface StudentCredentialDTO {
   id?: string
-  platform: 'Orange Apple' | 'Roblox' | 'Minecraft' | 'Anydesk' | 'Quiz Platform' | string
+  platform: 'Koding School (Orange Apple)' | 'Roblox' | 'Minecraft' | 'Anydesk' | 'Quiz Platform' | string
   username?: string
   password?: string
   url?: string

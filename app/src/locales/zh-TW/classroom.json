@@ -217,7 +217,7 @@
     "master_schedule_link": "調整班級總體排程",
     "teacher_attendance_only_self": "只能更改自己的出缺席",
     "koding_check": "作業檢查",
-    "koding_check_title": "Koding School 作業檢查",
+    "koding_check_title": "橘蘋學習平台作業檢查",
     "koding_open_check": "開啟檢查頁",
     "koding_lesson": "檢查課次",
     "koding_comparison": "對照組",
@@ -233,9 +233,9 @@
     "koding_missing_admission_id": "此報名尚未設定 Koding admission ID",
     "koding_missing_lesson": "請先選擇檢查課次",
     "koding_missing_comparison": "請先選擇對照組",
-    "koding_no_account": "所選對照組沒有 Koding School 帳號",
+    "koding_no_account": "所選對照組沒有橘蘋學習平台帳號",
     "koding_missing_account": "請先選擇要使用的 Koding 帳號",
-    "koding_multiple_accounts_warning": "此人有多個 Koding School 帳號，請選擇要使用哪一個。",
+    "koding_multiple_accounts_warning": "此人有多個橘蘋學習平台帳號，請選擇要使用哪一個。",
     "please_select_student": "請選擇學生",
     "please_select_student_enrollment": "請選擇課表"
 }
