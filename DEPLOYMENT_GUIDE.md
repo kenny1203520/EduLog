@@ -6,6 +6,11 @@
 - Docker 與 Docker Compose (建議版本 `v2.x` 以上)
 - Git
 
+## 關於舊版資料繼承
+如果您是從原有的 `supabase` 專案轉移過來，請不用擔心資料遺失：
+1. **實體檔案與資料庫 (Bind Mounts)**：所有的 Postgres 資料與 Storage 檔案都是綁定在您本地端的 `./supabase/volumes/` 資料夾，只要資料夾存在，新啟動的系統就會直接讀取舊資料。
+2. **具名卷宗 (Named Volumes)**：包含 `pgsodium` 加解密金鑰的 `db-config` 卷宗，我們已在 `docker-compose.yml` 中指定使用舊有的名稱 (`supabase_db-config`)，確保資料庫加密金鑰的無縫繼承。
+
 ## 第一步：準備環境變數
 
 首先，從根目錄的範本檔案複製一份您的環境變數設定檔：
