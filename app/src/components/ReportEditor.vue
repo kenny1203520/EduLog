@@ -1663,6 +1663,136 @@ const contactNotes = ref(props.initialContactNotes || '')
 const classNotes = ref(props.initialClassNotes || '')
 const reportExternalLink = ref(props.initialReportExternalLink || '')
 
+type AttendanceStatus = 'present' | 'absent' | 'pending'
+
+interface ReportFieldSnapshot {
+    lessonId: string
+    isCompleted: boolean
+    progressLetter: string
+    attendanceStatus: AttendanceStatus
+    absenceReason: string | null
+    classParticipation: number
+    classroomBehavior: number
+    contactNotes: string
+    classNotes: string
+    content: string
+    externalLink: string
+}
+
+type ReportSavePayload = {
+    lessonId?: string
+    isCompleted?: boolean
+    progressLetter?: string | null
+    attendanceStatus?: AttendanceStatus
+    absenceReason?: string | null
+    classParticipation?: number
+    classroomBehavior?: number
+    contactNotes?: string
+    classNotes?: string
+    content?: string
+    externalLink?: string
+}
+
+function normalizeString(value: string | null | undefined): string {
+    return value || ''
+}
+
+function normalizeAbsenceReason(status: AttendanceStatus, reason: string | null | undefined): string | null {
+    return status === 'absent' ? normalizeString(reason) : null
+}
+
+function buildCurrentSnapshot(overrides: Partial<ReportFieldSnapshot> = {}): ReportFieldSnapshot {
+    return {
+        lessonId: selectedLessonId.value || '',
+        isCompleted: isCompleted.value,
+        progressLetter: progressLetter.value || '',
+        attendanceStatus: attendanceStatus.value,
+        absenceReason: normalizeAbsenceReason(attendanceStatus.value, absenceReason.value),
+        classParticipation: classParticipation.value,
+        classroomBehavior: classroomBehavior.value,
+        contactNotes: contactNotes.value || '',
+        classNotes: classNotes.value || '',
+        content: localContent.value || '',
+        externalLink: reportExternalLink.value || '',
+        ...overrides
+    }
+}
+
+function buildSnapshotFromProps(): ReportFieldSnapshot {
+    const initialStatus = props.initialAttendanceStatus || 'pending'
+    const initialProgress = props.initialProgressStart && props.initialProgressEnd
+        ? `${props.initialProgressStart}-${props.initialProgressEnd}`
+        : (props.initialProgressStart || props.initialProgressEnd || '')
+
+    return {
+        lessonId: props.initialLessonId || '',
+        isCompleted: props.initialIsCompleted ?? false,
+        progressLetter: initialProgress,
+        attendanceStatus: initialStatus,
+        absenceReason: normalizeAbsenceReason(initialStatus, props.initialAbsenceReason),
+        classParticipation: props.initialClassParticipation ?? 0,
+        classroomBehavior: props.initialClassroomBehavior ?? 0,
+        contactNotes: props.initialContactNotes || '',
+        classNotes: props.initialClassNotes || '',
+        content: props.initialContent || '',
+        externalLink: props.initialReportExternalLink || ''
+    }
+}
+
+function buildDirtyPayload(current: ReportFieldSnapshot): { keys: Array<keyof ReportFieldSnapshot>, payload: ReportSavePayload } {
+    const previous = savedReportSnapshot.value
+    const keys: Array<keyof ReportFieldSnapshot> = []
+    const payload: ReportSavePayload = {}
+
+    const addIfChanged = <K extends keyof ReportFieldSnapshot>(
+        key: K,
+        assign: () => void
+    ) => {
+        if (current[key] !== previous[key]) {
+            keys.push(key)
+            assign()
+        }
+    }
+
+    addIfChanged('lessonId', () => {
+        payload.lessonId = current.lessonId || undefined
+    })
+    addIfChanged('isCompleted', () => {
+        payload.isCompleted = current.isCompleted
+    })
+    addIfChanged('progressLetter', () => {
+        payload.progressLetter = current.progressLetter || null
+    })
+    addIfChanged('attendanceStatus', () => {
+        payload.attendanceStatus = current.attendanceStatus
+    })
+    addIfChanged('absenceReason', () => {
+        payload.absenceReason = current.absenceReason
+    })
+    addIfChanged('classParticipation', () => {
+        payload.classParticipation = current.classParticipation
+    })
+    addIfChanged('classroomBehavior', () => {
+        payload.classroomBehavior = current.classroomBehavior
+    })
+    addIfChanged('contactNotes', () => {
+        payload.contactNotes = current.contactNotes
+    })
+    addIfChanged('classNotes', () => {
+        payload.classNotes = current.classNotes
+    })
+    addIfChanged('content', () => {
+        payload.content = current.content
+    })
+    addIfChanged('externalLink', () => {
+        payload.externalLink = current.externalLink
+    })
+
+    return { keys, payload }
+}
+
+const savedReportSnapshot = ref<ReportFieldSnapshot>(buildSnapshotFromProps())
+
 
 // Computed progress letter for backend (combining start-end range)
 const progressLetter = computed(() => {
@@ -1723,57 +1853,73 @@ const {
             return { success: false, message: t('report.editor.required_field_error') }
         }
 
-        // Auto-fill absence reason if missing
+        // Auto-fill absence reason if missing, and clear reasons for present/pending.
         let finalAbsenceReason = absenceReason.value
         if (attendanceStatus.value === 'absent' && !finalAbsenceReason) {
             finalAbsenceReason = t('report.editor.absence_reasons.reason_not_provided')
             absenceReason.value = finalAbsenceReason
+        } else if (attendanceStatus.value !== 'absent' && finalAbsenceReason) {
+            finalAbsenceReason = ''
+            absenceReason.value = ''
         }
 
         const saveContent = (ydoc.value && contentEditorRef.value?.editor) ? contentEditorRef.value.editor.getText() : content
         const saveContact = (ydoc.value && contactNotesEditorRef.value?.editor) ? contactNotesEditorRef.value.editor.getText() : contactNotes.value
         const saveClass = (ydoc.value && classNotesEditorRef.value?.editor) ? classNotesEditorRef.value.editor.getText() : classNotes.value
+        localContent.value = saveContent
+        contactNotes.value = saveContact
+        classNotes.value = saveClass
 
         try {
-            // Also take a snapshot for version history
-            if (ready.value && props.reportId && authStore.user?.id) {
+            const currentSnapshot = buildCurrentSnapshot({
+                content: saveContent,
+                contactNotes: saveContact,
+                classNotes: saveClass,
+                absenceReason: normalizeAbsenceReason(attendanceStatus.value, finalAbsenceReason)
+            })
+            const { keys, payload } = buildDirtyPayload(currentSnapshot)
+            const isAttendanceOnly = keys.length > 0 && keys.every(key => key === 'attendanceStatus' || key === 'absenceReason')
+
+            if (keys.length === 0) {
+                return { success: true, newVersion: version.value }
+            }
+
+            if (!isAttendanceOnly && ready.value && props.reportId && authStore.user?.id) {
                 await saveSnapshot()
             }
 
-            const result = await OccurrenceReportService.saveReport(
-                props.reportId,
-                version.value,
-                authStore.user?.id,
-                {
-                    lessonId: selectedLessonId.value || undefined,
-                    isCompleted: isCompleted.value,
-                    progressLetter: progressLetter.value || undefined,
-                    attendanceStatus: attendanceStatus.value,
-                    absenceReason: finalAbsenceReason || undefined,
-                    classParticipation: classParticipation.value,
-                    classroomBehavior: classroomBehavior.value,
-                    contactNotes: saveContact,
-                    classNotes: saveClass,
-                    content: saveContent,
-                    externalLink: reportExternalLink.value
-                }
-            )
+            const result = isAttendanceOnly
+                ? await OccurrenceReportService.saveAttendanceOnly(
+                    props.reportId,
+                    version.value,
+                    authStore.user?.id,
+                    {
+                        attendanceStatus: currentSnapshot.attendanceStatus,
+                        absenceReason: currentSnapshot.absenceReason
+                    }
+                )
+                : await OccurrenceReportService.saveReport(
+                    props.reportId,
+                    version.value,
+                    authStore.user?.id,
+                    payload
+                )
 
             const localReportPayload: OccurrenceReportDTO = {
                 id: props.reportId,
                 enrollment_id: props.enrollmentId || '',
                 class_occurrence_id: props.classOccurrenceId || '',
                 lesson_id: selectedLessonId.value || '',
-                content: content,
+                content: saveContent,
                 is_completed: isCompleted.value,
 
                 progress_letter: progressLetter.value || '',
                 attendance_status: attendanceStatus.value,
-                absence_reason: finalAbsenceReason || '',
+                absence_reason: currentSnapshot.absenceReason || '',
                 class_participation: classParticipation.value,
                 classroom_behavior: classroomBehavior.value,
-                contact_notes: contactNotes.value,
-                class_notes: classNotes.value,
+                contact_notes: saveContact,
+                class_notes: saveClass,
                 external_link: reportExternalLink.value,
 
                 version: version.value,
@@ -1824,6 +1970,7 @@ const {
     },
     onSuccess: (newVersion) => {
         version.value = newVersion
+        savedReportSnapshot.value = buildCurrentSnapshot()
         if (ydoc.value) {
             const metaMap = ydoc.value.getMap('reportMeta')
             const currentMetaVer = metaMap.get('version') as number || 0
@@ -1903,10 +2050,9 @@ watch(() => props.initialReportExternalLink, (newVal) => {
     reportExternalLink.value = newVal || ''
 })
 
-// Business rule: absent → incomplete
 watch(attendanceStatus, (newStatus) => {
-    if (newStatus === 'absent') {
-        isCompleted.value = false
+    if (newStatus !== 'absent' && absenceReason.value) {
+        absenceReason.value = ''
     }
 })
 
@@ -1947,6 +2093,7 @@ const isInitializing = ref(false)
 // Reset auto-save state when switching reports
 watch(() => props.reportId, () => {
     isInitializing.value = true
+    savedReportSnapshot.value = buildSnapshotFromProps()
     reset()
     // 給予極短時間讓 props 傳遞到 local state
     setTimeout(() => {

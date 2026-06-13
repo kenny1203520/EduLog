@@ -45,8 +45,7 @@ export class SuspensionPolicyService {
             .from('occurrence_reports')
             .update({
                 attendance_status: 'absent',
-                absence_reason: 'suspension',
-                is_completed: false
+                absence_reason: 'suspension'
             })
             .eq('enrollment_id', suspension.enrollmentId)
             .in('class_occurrence_id', ids)
@@ -122,10 +121,12 @@ export class SuspensionPolicyService {
         await supabase
             .from('occurrence_reports')
             .update({
-                absence_reason: 'pending'
+                attendance_status: 'pending',
+                absence_reason: null
             })
             .eq('enrollment_id', suspension.enrollment_id)
             .in('class_occurrence_id', ids)
+            .eq('attendance_status', 'absent')
             .eq('absence_reason', 'suspension')
     }
 }

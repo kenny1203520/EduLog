@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { SessionService } from '@/services/session/SessionService'
@@ -788,6 +788,11 @@ onMounted(() => {
 
 // Attendance & Rating Handlers
 async function toggleAttendance(enrId: string) {
+    if (isOccurrenceInHoliday.value) {
+        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
+        return
+    }
+
     const report = reportMap.value.get(enrId)
     if (!report) return
 
@@ -805,14 +810,13 @@ async function toggleAttendance(enrId: string) {
 
     savingMap.value.set(enrId, true)
     try {
-        await OccurrenceReportService.saveReport(
+        await OccurrenceReportService.saveAttendanceOnly(
             report.id,
             report.version,
             undefined,
             {
                 attendanceStatus: newStatus,
-                absenceReason: newStatus === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : undefined,
-                content: report.content || '',
+                absenceReason: newStatus === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null,
             }
         )
         // Refresh local report state
@@ -827,6 +831,11 @@ async function toggleAttendance(enrId: string) {
 }
 
 async function batchSetAttendance(status: 'present' | 'absent') {
+    if (isOccurrenceInHoliday.value) {
+        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
+        return
+    }
+
     const ids = Array.from(selectedEnrollmentIds.value)
     if (ids.length === 0) return
 
@@ -836,14 +845,13 @@ async function batchSetAttendance(status: 'present' | 'absent') {
 
         savingMap.value.set(enrId, true)
         try {
-            await OccurrenceReportService.saveReport(
+            await OccurrenceReportService.saveAttendanceOnly(
                 report.id,
                 report.version,
                 undefined,
                 {
                     attendanceStatus: status,
-                    absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : undefined,
-                    content: report.content || '',
+                    absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null,
                 }
             )
             const updated = await OccurrenceReportService.getReportById(report.id)
@@ -1325,9 +1333,24 @@ async function toggleSplitView(enrollmentId: string) {
 }
 
 async function closeSplitView() {
+    const enrollmentIdToRestore = selectedEnrollmentId.value
     await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
     showSplitView.value = false
     selectedEnrollmentId.value = null
+
+    if (enrollmentIdToRestore) {
+        await nextTick()
+        scrollToEnrollment(enrollmentIdToRestore)
+    }
+}
+
+function scrollToEnrollment(enrollmentId: string) {
+    requestAnimationFrame(() => {
+        const selector = `[data-enrollment-id="${enrollmentId}"]`
+        const targets = Array.from(document.querySelectorAll<HTMLElement>(selector))
+        const target = targets.find(el => el.offsetParent !== null) || targets[0]
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
 }
 
 async function openKodingCheck(enrollment: Enrollment) {
@@ -1878,12 +1901,12 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <!-- Batch Action Buttons -->
                             <div class="flex items-center gap-3">
                                 <button @click="batchSetAttendance('present')"
-                                    :disabled="selectedEnrollmentIds.size === 0"
+                                    :disabled="selectedEnrollmentIds.size === 0 || isOccurrenceInHoliday"
                                     class="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100/50">
                                     {{ $t('attendance.present') }}
                                 </button>
                                 <button @click="batchSetAttendance('absent')"
-                                    :disabled="selectedEnrollmentIds.size === 0"
+                                    :disabled="selectedEnrollmentIds.size === 0 || isOccurrenceInHoliday"
                                     class="flex-1 px-6 py-4 bg-red-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-700 transition-all active:scale-95 shadow-lg shadow-red-100/50">
                                     {{ $t('attendance.absent') }}
                                 </button>
@@ -1994,7 +2017,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
                     <!-- Responsive Card List -->
                     <div class="grid grid-cols-1 gap-4" :class="showSplitView ? '2xl:hidden' : 'xl:hidden'">
-                        <div v-for="e in visibleEnrollments" :key="e.id"
+                        <div v-for="e in visibleEnrollments" :key="e.id" :data-enrollment-id="e.id"
                             class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
                             <div class="space-y-3">
                                 <!-- A. Header -->
@@ -2109,7 +2132,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                             'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
                                             'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
                                             'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
-                                        }" :title="$t('attendance.status')" :disabled="savingMap.has(e.id!)">
+                                        }" :title="$t('attendance.status')" :disabled="savingMap.has(e.id!) || isOccurrenceInHoliday">
                                         <!-- Present Icon (Check) -->
                                         <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
                                             xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
@@ -2221,7 +2244,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-50">
-                                <tr v-for="e in visibleEnrollments" :key="e.id"
+                                <tr v-for="e in visibleEnrollments" :key="e.id" :data-enrollment-id="e.id"
                                     class="hover:bg-emerald-50/20 transition-colors group">
                                     <!-- Attendance Column -->
                                     <td class="px-3 lg:px-4 py-4 lg:py-6 text-center" v-if="todayOccurrence">
@@ -2233,7 +2256,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                                 'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
                                             }"
                                             :title="$t('attendance.status') + ': ' + (reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' + reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending'))"
-                                            :disabled="savingMap.has(e.id!)">
+                                            :disabled="savingMap.has(e.id!) || isOccurrenceInHoliday">
                                             <!-- Present Icon (Check) -->
                                             <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
                                                 xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
