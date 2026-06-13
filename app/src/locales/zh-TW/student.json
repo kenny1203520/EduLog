@@ -117,6 +117,7 @@
         "no_enrollments": "尚未選修任何課程",
         "add_enrollment_hint": "點擊學生個人頁面的「選修課程」開始為學生新增課程。",
         "view_reports": "查看報告",
+        "external_overview": "外部總覽",
         "edit_enrollment": "編輯課程",
         "delete_enrollment": "刪除課程",
         "edit_enrollment_title": "編輯課程註冊",

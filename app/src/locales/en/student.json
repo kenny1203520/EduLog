@@ -117,6 +117,7 @@
         "no_enrollments": "No active enrollments",
         "add_enrollment_hint": "Click 'Enroll in Course' on the student profile to add courses.",
         "view_reports": "View Reports",
+        "external_overview": "External Overview",
         "edit_enrollment": "Edit Course",
         "delete_enrollment": "Delete Course",
         "edit_enrollment_title": "Edit Course Enrollment",
