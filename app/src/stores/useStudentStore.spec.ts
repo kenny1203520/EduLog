@@ -48,7 +48,7 @@ describe('useStudentStore', () => {
 
   it('deleteStudent removes a student from the list', async () => {
     const store = useStudentStore()
-    store.students = [{ id: '1', name: 'John Doe', organization_id: 'org1', created_at: '', updated_at: '' }]
+    store.students = [{ id: '1', name: 'John Doe', created_at: new Date(), updated_at: new Date() } as any]
     
     vi.mocked(StudentService.delete).mockResolvedValue(undefined)
     await store.deleteStudent('1')
