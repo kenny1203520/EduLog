@@ -160,3 +160,7 @@ src/
 1. **Strict Git Flow**: ALL Git operations must strictly adhere to the Git Flow standard.
 2. **Branching**: Use `feature/`, `release/`, and `hotfix/` branches branching from `develop` (or `master` for hotfixes).
 3. **Merging**: Never merge `develop` directly into `master`. Always merge `release/` or `hotfix/` branches into `master` and `develop` using the `--no-ff` flag to preserve branch topology.
+
+### Release Management
+1. **GitHub Releases**: When a new version is released (i.e. tagging `master`), you MUST create a corresponding **GitHub Release** on the repository.
+2. **Release Notes**: The release description must clearly document the version update contents (Changelog) and include any **Database/System Migration Manuals** if applicable.
