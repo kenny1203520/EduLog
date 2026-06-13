@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { Enrollment } from '@/models/Enrollment'
 import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
+import { OccurrenceReportService } from '../occurrence/OccurrenceReportService'
 import { EnrollmentTransferQueryService, type TransferMigrationRow } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { EnrollmentSupportService } from './EnrollmentSupportService'
@@ -171,6 +172,75 @@ export class EnrollmentTransferService {
         }
 
         await this.transferSingleLessonReport(candidates[0].id, targetSessionId, targetDate)
+    }
+
+    static async transferSingleLessonFromDate(
+        enrollmentId: string,
+        originalDate: string,
+        targetSessionId: string,
+        targetDate: string,
+        options: { createIfMissing?: boolean } = {}
+    ): Promise<void> {
+        const enrollment = await EnrollmentTransferQueryService.getEnrollmentSessionInfo(enrollmentId)
+        const originalSessionId = enrollment.class_session_id
+
+        if (!originalSessionId) {
+            throw new Error('Enrollment has no current session to transfer from')
+        }
+
+        const originalDayOfWeek = await EnrollmentTransferQueryService.getSessionDayOfWeek(originalSessionId)
+        const selectedOriginalDayOfWeek = EnrollmentSupportService.dayOfWeekFromDateOnly(originalDate)
+
+        if (selectedOriginalDayOfWeek !== originalDayOfWeek) {
+            throw new Error('ORIGINAL_DATE_NOT_CLASS_DAY')
+        }
+
+        await this.assertTargetDateMatchesSession(targetSessionId, targetDate)
+
+        const target = DateUtils.parseLocalDate(targetDate) || new Date(targetDate)
+        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch(() => {})
+
+        const targetOccId = await EnrollmentTransferQueryService.getTargetOccurrenceId(
+            targetSessionId,
+            targetDate
+        )
+        const existingTargetReport = await EnrollmentTransferQueryService.getExistingReportForOccurrence(
+            enrollmentId,
+            targetOccId
+        )
+
+        if (existingTargetReport) {
+            throw new Error('TARGET_REPORT_ALREADY_EXISTS')
+        }
+
+        const original = DateUtils.parseLocalDate(originalDate) || new Date(originalDate)
+        await OccurrenceService.generateOccurrences(originalSessionId, original, original).catch(() => {})
+
+        const originalOccId = await EnrollmentTransferQueryService.getTargetOccurrenceId(
+            originalSessionId,
+            originalDate
+        )
+        const existingOriginalReport = await EnrollmentTransferQueryService.getExistingReportForOccurrence(
+            enrollmentId,
+            originalOccId
+        )
+
+        if (existingOriginalReport) {
+            await this.transferSingleLessonReport(existingOriginalReport.id, targetSessionId, targetDate)
+            return
+        }
+
+        if (!options.createIfMissing) {
+            throw new Error('ORIGINAL_REPORT_NOT_FOUND')
+        }
+
+        const createdReport = await OccurrenceReportService.createReport(enrollmentId, originalOccId)
+
+        if (!createdReport.id) {
+            throw new Error('Failed to create original report for transfer')
+        }
+
+        await this.transferSingleLessonReport(createdReport.id, targetSessionId, targetDate)
     }
 
     static async transferSingleLessonReport(

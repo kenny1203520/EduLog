@@ -29,18 +29,22 @@ const preferences = usePreferencesStore()
 const isSubmitting = ref(false)
 const isLoadingReports = ref(false)
 const isLoadingClassrooms = ref(false)
+const isLoadingEnrollment = ref(false)
 const selectedClassroomId = ref('')
 const transferForm = ref({
     mode: 'class' as 'class' | 'single',
+    single_source_mode: 'report' as 'report' | 'date',
     to_session_id: '',
     effective_date: DateUtils.todayString(preferences.timeZone),
     selected_report_id: '',
+    original_date: DateUtils.todayString(preferences.timeZone),
     target_date: DateUtils.todayString(preferences.timeZone)
 })
 
 const classroomOptions = ref<any[]>([])
 const sessionOptions = ref<any[]>([])
 const reportOptions = ref<any[]>([])
+const currentEnrollment = ref<any | null>(null)
 const transferDateForCapacity = computed(() => (
     transferForm.value.mode === 'single'
         ? transferForm.value.target_date
@@ -93,6 +97,40 @@ function formatSessionOptionLabel(session: any): string {
     return scheduleParts.length > 0
         ? `${session.name} · ${scheduleParts.join(' ')}`
         : session.name
+}
+
+const currentEnrollmentSummary = computed(() => {
+    const enrollment = currentEnrollment.value
+    if (!enrollment) return ''
+
+    const scheduleParts = [
+        formatWeekdayFromIndex(enrollment.classSessionDayOfWeek),
+        formatTimeRange(enrollment.classSessionStartTime, enrollment.classSessionEndTime)
+    ].filter(Boolean)
+    const contextParts = [
+        enrollment.classSessionName,
+        scheduleParts.join(' '),
+        enrollment.classroomName,
+        enrollment.displayName
+    ].filter(Boolean)
+
+    return contextParts.join(' · ')
+})
+
+async function fetchCurrentEnrollment() {
+    currentEnrollment.value = null
+
+    if (!props.studentId || !props.fromEnrollmentId) return
+
+    try {
+        isLoadingEnrollment.value = true
+        const enrollments = await EnrollmentService.getByStudentId(props.studentId)
+        currentEnrollment.value = enrollments.find((enrollment: any) => enrollment.id === props.fromEnrollmentId) || null
+    } catch (e) {
+        console.error(e)
+    } finally {
+        isLoadingEnrollment.value = false
+    }
 }
 
 async function fetchSessions() {
@@ -177,6 +215,10 @@ async function fetchReports() {
                 }
             })
             .filter(Boolean)
+
+        if (reportOptions.value.length === 0 && transferForm.value.mode === 'single') {
+            transferForm.value.single_source_mode = 'date'
+        }
     } catch (e) {
         console.error(e)
         toast.error(t('student.transfer_modal.load_reports_failed'))
@@ -193,17 +235,26 @@ watch(() => props.isOpen, (val) => {
         fetchReports()
         transferForm.value = {
             mode: 'class',
+            single_source_mode: 'report',
             to_session_id: '',
             effective_date: DateUtils.todayString(preferences.timeZone),
             selected_report_id: '',
+            original_date: DateUtils.todayString(preferences.timeZone),
             target_date: DateUtils.todayString(preferences.timeZone)
         }
+        fetchCurrentEnrollment()
     }
 })
 
 watch(selectedClassroomId, async () => {
     transferForm.value.to_session_id = ''
     await fetchSessions()
+})
+
+watch(() => transferForm.value.mode, (mode) => {
+    if (mode === 'single' && reportOptions.value.length === 0) {
+        transferForm.value.single_source_mode = 'date'
+    }
 })
 
 async function submitTransfer() {
@@ -217,7 +268,20 @@ async function submitTransfer() {
         return
     }
 
-    if (transferForm.value.mode === 'single' && (!transferForm.value.selected_report_id || !transferForm.value.target_date)) {
+    if (
+        transferForm.value.mode === 'single' &&
+        (
+            !transferForm.value.target_date ||
+            (
+                transferForm.value.single_source_mode === 'report' &&
+                !transferForm.value.selected_report_id
+            ) ||
+            (
+                transferForm.value.single_source_mode === 'date' &&
+                !transferForm.value.original_date
+            )
+        )
+    ) {
         toast.error(t('student.management.required_fields', 'Missing required fields'))
         return
     }
@@ -231,11 +295,21 @@ async function submitTransfer() {
         isSubmitting.value = true
 
         if (transferForm.value.mode === 'single') {
-            await EnrollmentService.transferSingleLessonReport(
-                transferForm.value.selected_report_id,
-                transferForm.value.to_session_id,
-                transferForm.value.target_date
-            )
+            if (transferForm.value.single_source_mode === 'date') {
+                await EnrollmentService.transferSingleLessonFromDate(
+                    props.fromEnrollmentId,
+                    transferForm.value.original_date,
+                    transferForm.value.to_session_id,
+                    transferForm.value.target_date,
+                    { createIfMissing: true }
+                )
+            } else {
+                await EnrollmentService.transferSingleLessonReport(
+                    transferForm.value.selected_report_id,
+                    transferForm.value.to_session_id,
+                    transferForm.value.target_date
+                )
+            }
         } else {
             // Compatibility parameter: transfer service keeps the argument but uses transferDate for the new rule.
             const originalLastDate = DateUtils.addDaysToDateString(transferForm.value.effective_date, -1)
@@ -265,6 +339,8 @@ async function submitTransfer() {
             toast.error(t('student.transfer_modal.original_report_not_found'))
         } else if (message.includes('ORIGINAL_REPORT_AMBIGUOUS')) {
             toast.error(t('student.transfer_modal.original_report_ambiguous'))
+        } else if (message.includes('ORIGINAL_DATE_NOT_CLASS_DAY')) {
+            toast.error(t('student.transfer_modal.original_date_not_class_day'))
         } else {
             toast.error(message || 'Failed to transfer student')
         }
@@ -334,14 +410,60 @@ async function submitTransfer() {
                         </button>
                     </div>
 
+                    <div v-if="transferForm.mode === 'class'" class="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                        <p class="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">
+                            {{ $t('student.transfer_modal.current_class') }}
+                        </p>
+                        <p class="text-sm font-black text-gray-800 leading-relaxed">
+                            <span v-if="isLoadingEnrollment">{{ $t('common.loading') }}</span>
+                            <span v-else-if="currentEnrollmentSummary">{{ currentEnrollmentSummary }}</span>
+                            <span v-else>{{ $t('student.transfer_modal.current_class_unavailable') }}</span>
+                        </p>
+                    </div>
+
                     <div v-if="transferForm.mode === 'single'" class="space-y-4">
-                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
-                            $t('student.transfer_modal.original_report') }}</label>
-                        <SearchableSelect v-model="transferForm.selected_report_id" :options="reportOptions"
-                            :placeholder="isLoadingReports ? $t('common.loading') : $t('student.transfer_modal.original_report_placeholder')" />
-                        <p v-if="!isLoadingReports && reportOptions.length === 0"
+                        <div class="grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1">
+                            <button type="button" @click="transferForm.single_source_mode = 'report'"
+                                :class="[
+                                    'rounded-xl px-4 py-3 text-sm font-black uppercase tracking-widest transition-all',
+                                    transferForm.single_source_mode === 'report'
+                                        ? 'bg-white text-amber-700 shadow-sm'
+                                        : 'text-gray-400 hover:text-gray-600'
+                                ]">
+                                {{ $t('student.transfer_modal.source_report') }}
+                            </button>
+                            <button type="button" @click="transferForm.single_source_mode = 'date'"
+                                :class="[
+                                    'rounded-xl px-4 py-3 text-sm font-black uppercase tracking-widest transition-all',
+                                    transferForm.single_source_mode === 'date'
+                                        ? 'bg-white text-amber-700 shadow-sm'
+                                        : 'text-gray-400 hover:text-gray-600'
+                                ]">
+                                {{ $t('student.transfer_modal.source_date') }}
+                            </button>
+                        </div>
+
+                        <div v-if="transferForm.single_source_mode === 'report'" class="space-y-2">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.transfer_modal.original_report') }}</label>
+                            <SearchableSelect v-model="transferForm.selected_report_id" :options="reportOptions"
+                                :placeholder="isLoadingReports ? $t('common.loading') : $t('student.transfer_modal.original_report_placeholder')" />
+                        </div>
+
+                        <div v-else class="space-y-2">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.transfer_modal.original_date') }}</label>
+                            <BaseDatePicker v-model="transferForm.original_date"
+                                theme="amber" :placeholder="$t('student.transfer_modal.original_date')" />
+                        </div>
+
+                        <p v-if="!isLoadingReports && reportOptions.length === 0 && transferForm.single_source_mode === 'report'"
                             class="text-sm font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
                             {{ $t('student.transfer_modal.no_reports') }}
+                        </p>
+                        <p v-if="transferForm.single_source_mode === 'date'"
+                            class="text-sm font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                            {{ $t('student.transfer_modal.source_date_hint') }}
                         </p>
                     </div>
 
