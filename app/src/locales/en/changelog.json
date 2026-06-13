@@ -1,6 +1,44 @@
 {
     "entries": [
         {
+            "version": "1.3.0",
+            "date": "2026-06-14",
+            "changes": {
+                "added": [
+                    "Real-time collaborative report editor (Yjs + Supabase + Tiptap).",
+                    "Student enrollment and scheduling management system.",
+                    "Holiday management integration.",
+                    "Global time zone configuration and support.",
+                    "Koding code check workflow integration.",
+                    "Remote selection visuals and presence tracking for collaboration."
+                ],
+                "changed": [
+                    "Refactored AggregateService to introduce caching mechanisms.",
+                    "Removed version display from the navigation bar."
+                ]
+            }
+        },
+        {
+            "version": "1.2.0",
+            "date": "2026-05-18",
+            "changes": {
+                "added": [
+                    "Report version history tracking and restoration functionality.",
+                    "Global incomplete reports view with sidebar functionality.",
+                    "About page with version information and changelog display.",
+                    "Developer link to GitHub in the About view.",
+                    "Support for variable mode selectors in report templates."
+                ],
+                "changed": [
+                    "Major UI/UX improvements including responsiveness, better SVG icons, and consistent button layouts.",
+                    "Replaced older layout patterns with BasePageHeader and MainLayout with sidebar navigation."
+                ],
+                "removed": [
+                    "Unused old domain services directories (Auth, Course, Classroom, Session) as part of service architecture refactoring."
+                ]
+            }
+        },
+        {
             "version": "1.1.1",
             "date": "2026-05-03",
             "changes": {
