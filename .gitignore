@@ -4,6 +4,7 @@ dist
 dist-ssr
 *.local
 .npmrc
+.env
 
 # Supabase
 supabase_docker/.env
