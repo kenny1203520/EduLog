@@ -1,17 +1,17 @@
 # Usage
 #   Start:              docker compose up -d
-#   With helpers:       docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml up -d
+#   With helpers:       docker compose -f docker-compose.yml -f ./supabase/dev/docker-compose.dev.yml up -d
 #   Stop:               docker compose down
-#   Destroy:            docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans
+#   Destroy:            docker compose -f docker-compose.yml -f ./supabase/dev/docker-compose.dev.yml down -v --remove-orphans
 #   Reset everything:  ./reset.sh
 
-name: supabase
+name: edulog
 
 services:
   studio:
     networks:
-      - supabase
-    container_name: supabase-studio
+      - edulog
+    container_name: edulog-studio
     image: supabase/studio:2026.04.28-sha-89d08a2
     restart: unless-stopped
     healthcheck:
@@ -70,14 +70,14 @@ services:
       SNIPPETS_MANAGEMENT_FOLDER: /app/snippets
       EDGE_FUNCTIONS_MANAGEMENT_FOLDER: /app/edge-functions
     volumes:
-      - ./volumes/snippets:/app/snippets:Z
-      - ./volumes/functions:/app/edge-functions:Z
+      - ./supabase/volumes/snippets:/app/snippets:Z
+      - ./supabase/volumes/functions:/app/edge-functions:Z
 
   kong:
     networks:
-      - supabase
+      - edulog
       - frontend
-    container_name: supabase-kong
+    container_name: edulog-kong
     image: kong/kong:3.9.1
     restart: unless-stopped
     healthcheck:
@@ -95,10 +95,10 @@ services:
       - ${KONG_HTTPS_PORT}:8443/tcp
     volumes:
       # https://github.com/supabase/supabase/issues/12661
-      - ./volumes/api/kong.yml:/home/kong/temp.yml:ro,z
-      - ./volumes/api/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh:ro,z
-      #- ./volumes/api/server.crt:/home/kong/server.crt:ro
-      #- ./volumes/api/server.key:/home/kong/server.key:ro
+      - ./supabase/volumes/api/kong.yml:/home/kong/temp.yml:ro,z
+      - ./supabase/volumes/api/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh:ro,z
+      #- ./supabase/volumes/api/server.crt:/home/kong/server.crt:ro
+      #- ./supabase/volumes/api/server.key:/home/kong/server.key:ro
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /usr/local/kong/kong.yml
@@ -123,9 +123,9 @@ services:
 
   auth:
     networks:
-      - supabase
+      - edulog
       - frontend
-    container_name: supabase-auth
+    container_name: edulog-auth
     image: supabase/gotrue:v2.189.0
     restart: unless-stopped
     healthcheck:
@@ -264,8 +264,8 @@ services:
 
   rest:
     networks:
-      - supabase
-    container_name: supabase-rest
+      - edulog
+    container_name: edulog-rest
     image: postgrest/postgrest:v14.8
     restart: unless-stopped
     depends_on:
@@ -293,7 +293,7 @@ services:
 
   realtime:
     networks:
-      - supabase
+      - edulog
     # This container name looks inconsistent but is correct because realtime constructs tenant id by parsing the subdomain
     container_name: realtime-dev.supabase-realtime
     image: supabase/realtime:v2.89.0
@@ -344,8 +344,8 @@ services:
   # To use S3 backed storage: docker compose -f docker-compose.yml -f docker-compose.s3.yml up
   storage:
     networks:
-      - supabase
-    container_name: supabase-storage
+      - edulog
+    container_name: edulog-storage
     image: supabase/storage-api:v1.58.4
     restart: unless-stopped
     depends_on:
@@ -407,16 +407,16 @@ services:
       S3_PROTOCOL_ACCESS_KEY_ID: ${S3_PROTOCOL_ACCESS_KEY_ID}
       S3_PROTOCOL_ACCESS_KEY_SECRET: ${S3_PROTOCOL_ACCESS_KEY_SECRET}
     volumes:
-      - ./volumes/storage:/var/lib/storage:z
+      - ./supabase/volumes/storage:/var/lib/storage:z
 
   imgproxy:
     networks:
-      - supabase
-    container_name: supabase-imgproxy
+      - edulog
+    container_name: edulog-imgproxy
     image: darthsim/imgproxy:v3.30.1
     restart: unless-stopped
     volumes:
-      - ./volumes/storage:/var/lib/storage:z
+      - ./supabase/volumes/storage:/var/lib/storage:z
     healthcheck:
       test: ["CMD", "imgproxy", "health"]
       timeout: 5s
@@ -431,8 +431,8 @@ services:
 
   meta:
     networks:
-      - supabase
-    container_name: supabase-meta
+      - edulog
+    container_name: edulog-meta
     image: supabase/postgres-meta:v0.96.5
     restart: unless-stopped
     depends_on:
@@ -452,12 +452,12 @@ services:
 
   functions:
     networks:
-      - supabase
-    container_name: supabase-edge-functions
+      - edulog
+    container_name: edulog-edge-functions
     image: supabase/edge-runtime:v1.74.0
     restart: unless-stopped
     volumes:
-      - ./volumes/functions:/home/deno/functions:Z
+      - ./supabase/volumes/functions:/home/deno/functions:Z
       - deno-cache:/root/.cache/deno
     depends_on:
       kong:
@@ -487,9 +487,9 @@ services:
 
   analytics:
     networks:
-      - supabase
+      - edulog
       - frontend
-    container_name: supabase-analytics
+    container_name: edulog-analytics
     image: supabase/logflare:1.39.3
     restart: unless-stopped
     ports:
@@ -538,26 +538,26 @@ services:
   # Comment out everything below this point if you are using an external Postgres database
   db:
     networks:
-      - supabase
-    container_name: supabase-db
+      - edulog
+    container_name: edulog-db
     image: supabase/postgres:15.14.1.112
     restart: unless-stopped
     volumes:
-      - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
+      - ./supabase/volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
       # Must be superuser to create event trigger
-      - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
+      - ./supabase/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
       # Must be superuser to alter reserved role
-      - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
+      - ./supabase/volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
       # Initialize the database settings with JWT_SECRET and JWT_EXP
-      - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
+      - ./supabase/volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
       # PGDATA directory is persisted between restarts
-      - ./volumes/db/data:/var/lib/postgresql/data:Z
+      - ./supabase/volumes/db/data:/var/lib/postgresql/data:Z
       # Changes required for internal supabase data such as _analytics
-      - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
+      - ./supabase/volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
       # Changes required for Analytics support
-      - ./volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z
+      - ./supabase/volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z
       # Changes required for Pooler support
-      - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
+      - ./supabase/volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
       # Use named volume to persist pgsodium decryption key between restarts
       - db-config:/etc/postgresql-custom
     healthcheck:
@@ -597,12 +597,12 @@ services:
 
   vector:
     networks:
-      - supabase
-    container_name: supabase-vector
+      - edulog
+    container_name: edulog-vector
     image: timberio/vector:0.53.0-alpine
     restart: unless-stopped
     volumes:
-      - ./volumes/logs/vector.yml:/etc/vector/vector.yml:ro,z
+      - ./supabase/volumes/logs/vector.yml:/etc/vector/vector.yml:ro,z
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro,z
     healthcheck:
       test:
@@ -630,15 +630,15 @@ services:
   # Update the DATABASE_URL if you are using an external Postgres database
   supavisor:
     networks:
-      - supabase
-    container_name: supabase-pooler
+      - edulog
+    container_name: edulog-pooler
     image: supabase/supavisor:2.7.4
     restart: unless-stopped
     ports:
       - ${POSTGRES_PORT}:5432
       - ${POOLER_PROXY_PORT_TRANSACTION}:6543
     volumes:
-      - ./volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z
+      - ./supabase/volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z
     healthcheck:
       test:
         [
@@ -684,12 +684,27 @@ services:
         "/app/bin/migrate && /app/bin/supavisor eval \"$$(cat /etc/pooler/pooler.exs)\" && /app/bin/server",
       ]
 
+  edulog:
+    container_name: edulog-frontend
+    image: ghcr.io/kenny1203520/edulog:${EDULOG_IMAGE_TAG:-latest}
+    ports:
+      - "${EDULOG_PORT:-4173}:4173"
+    environment:
+      - VITE_SUPABASE_URL=${SUPABASE_PUBLIC_URL}
+      - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
+    restart: unless-stopped
+    networks:
+      - frontend
+      - edulog
+
 volumes:
   db-config:
+    name: supabase_db-config
   deno-cache:
+    name: supabase_deno-cache
 
 networks:
-  supabase:
+  edulog:
     driver: bridge
   frontend:
     driver: bridge
