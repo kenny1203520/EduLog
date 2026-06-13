@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { usePreferencesStore } from './usePreferencesStore'
 import { AggregateService } from '@/services/AggregateService'
-import { UserPreferenceService } from '@/services/UserPreferenceService'
 
 // Mock dependencies
 vi.mock('@/services/AggregateService', () => ({
