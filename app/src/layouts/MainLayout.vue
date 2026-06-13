@@ -10,8 +10,6 @@ const preferences = usePreferencesStore()
 const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
 
-const version = __APP_VERSION__
-
 onMounted(() => {
     preferences.loadUserPreferences()
 })
@@ -258,9 +256,6 @@ async function handleLogout() {
                     </svg>
                     {{ $t('nav.logout') }}
                 </button>
-                <div class="mt-4 text-center">
-                    <p class="text-[10px] text-gray-400 font-medium tracking-widest uppercase">v{{ version }}</p>
-                </div>
             </div>
         </aside>
 
