@@ -44,8 +44,7 @@ export class HolidayCommandService {
         }
 
         const holiday = new Holiday(data)
-        // Background sync existing reports
-        this.syncReportsForHoliday(holiday).catch(console.error)
+        await this.syncReportsForHoliday(holiday)
         return holiday
     }
 
@@ -66,9 +65,9 @@ export class HolidayCommandService {
 
         const holiday = new Holiday(data)
         if (existingHoliday) {
-            this.releaseReportsForHoliday(existingHoliday).catch(console.error)
+            await this.releaseReportsForHoliday(existingHoliday)
         }
-        this.syncReportsForHoliday(holiday).catch(console.error)
+        await this.syncReportsForHoliday(holiday)
         return holiday
     }
 
@@ -86,7 +85,7 @@ export class HolidayCommandService {
         if (error) throw new Error(`Failed to delete holiday: ${error.message}`)
 
         if (existingHoliday) {
-            this.releaseReportsForHoliday(existingHoliday).catch(console.error)
+            await this.releaseReportsForHoliday(existingHoliday)
         }
     }
 
@@ -98,8 +97,7 @@ export class HolidayCommandService {
             .maybeSingle()
 
         if (error) {
-            console.error('Failed to fetch holiday before mutation:', error)
-            return null
+            throw new Error(`Failed to fetch holiday before mutation: ${error.message}`)
         }
 
         return data ? new Holiday(data) : null
@@ -115,10 +113,14 @@ export class HolidayCommandService {
         if (holiday.classSessionIds.length > 0) {
             query = query.in('class_session_id', holiday.classSessionIds)
         } else if (holiday.classroomIds.length > 0) {
-            const { data: sessionIds } = await supabase
+            const { data: sessionIds, error: sessionError } = await supabase
                 .from('class_sessions')
                 .select('id')
                 .in('classroom_id', holiday.classroomIds)
+
+            if (sessionError) {
+                throw new Error(`Failed to fetch sessions for holiday classrooms: ${sessionError.message}`)
+            }
 
             if (!sessionIds || sessionIds.length === 0) return []
             query = query.in('class_session_id', sessionIds.map(s => s.id))
@@ -127,8 +129,7 @@ export class HolidayCommandService {
         const { data, error } = await query
 
         if (error) {
-            console.error('Failed to fetch occurrences for holiday:', error)
-            return []
+            throw new Error(`Failed to fetch occurrences for holiday: ${error.message}`)
         }
 
         return (data || []) as HolidayOccurrence[]
@@ -167,8 +168,7 @@ export class HolidayCommandService {
             .gte('end_date', occurrence.occurrence_date)
 
         if (error) {
-            console.error('Failed to check remaining holidays:', error)
-            return true
+            throw new Error(`Failed to check remaining holidays: ${error.message}`)
         }
 
         return (data || []).some(holiday => this.holidayAppliesToOccurrence(holiday as HolidayDTO, occurrence))
@@ -204,7 +204,7 @@ export class HolidayCommandService {
             .eq('absence_reason', 'holiday')
 
         if (reportError) {
-            console.error('Failed to release reports after holiday removal:', reportError)
+            throw new Error(`Failed to release reports after holiday removal: ${reportError.message}`)
         }
 
         for (const occ of releasableOccurrences) {
@@ -222,7 +222,7 @@ export class HolidayCommandService {
                 .eq('id', occ.id)
 
             if (updateError) {
-                console.error(`Failed to restore occurrence ${occ.id} after holiday removal:`, updateError)
+                throw new Error(`Failed to restore occurrence ${occ.id} after holiday removal: ${updateError.message}`)
             }
         }
     }
@@ -246,7 +246,7 @@ export class HolidayCommandService {
             .in('class_occurrence_id', occurrenceIds)
 
         if (reportError) {
-            console.error('Failed to sync reports for holiday:', reportError)
+            throw new Error(`Failed to sync reports for holiday: ${reportError.message}`)
         }
 
         // 3. Mark occurrences as not conducted and disable all teacher attendance
@@ -265,7 +265,7 @@ export class HolidayCommandService {
                 .eq('id', occ.id)
 
             if (updateError) {
-                console.error(`Failed to update occurrence ${occ.id} for holiday:`, updateError)
+                throw new Error(`Failed to update occurrence ${occ.id} for holiday: ${updateError.message}`)
             }
         }
     }

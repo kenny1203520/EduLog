@@ -45,13 +45,15 @@ export class HolidayQueryService {
             orConditions.push(`class_session_ids.cs.{${sessionId}}`)
         }
 
-        const { data, error } = await query.or(orConditions.join(',')).maybeSingle()
+        const { data, error } = await query
+            .or(orConditions.join(','))
+            .limit(1)
 
         if (error) {
             console.error('Error checking holiday:', error)
             return false
         }
 
-        return !!data
+        return (data || []).length > 0
     }
 }
