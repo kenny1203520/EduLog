@@ -311,8 +311,11 @@ function launchKodingCheck() {
                         <label class="mb-2 block text-sm font-bold text-gray-700">
                             {{ $t('classroom.koding_comparison') }}
                         </label>
+                        <SearchableSelect v-model="form.candidateKey" :options="candidateOptions"
+                            :placeholder="$t('classroom.koding_select_comparison')"
+                            @update:modelValue="handleCandidateChange" />
                         <label
-                            class="mb-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm font-semibold text-amber-900">
+                            class="mt-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm font-semibold text-amber-900">
                             <input v-model="showOnlyCourseStudents" type="checkbox"
                                 class="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-500 focus:ring-amber-500" />
                             <span class="leading-snug">
@@ -322,9 +325,6 @@ function launchKodingCheck() {
                                 </span>
                             </span>
                         </label>
-                        <SearchableSelect v-model="form.candidateKey" :options="candidateOptions"
-                            :placeholder="$t('classroom.koding_select_comparison')"
-                            @update:modelValue="handleCandidateChange" />
                     </div>
                 </div>
 
