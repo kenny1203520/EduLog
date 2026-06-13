@@ -81,4 +81,32 @@ export class EnrollmentService {
             targetDate
         )
     }
+
+    static async transferSingleLessonReport(
+        reportId: string,
+        targetSessionId: string,
+        targetDate: string
+    ): Promise<void> {
+        return EnrollmentCommandService.transferSingleLessonReport(
+            reportId,
+            targetSessionId,
+            targetDate
+        )
+    }
+
+    static async transferSingleLessonFromDate(
+        enrollmentId: string,
+        originalDate: string,
+        targetSessionId: string,
+        targetDate: string,
+        options: { createIfMissing?: boolean } = {}
+    ): Promise<void> {
+        return EnrollmentCommandService.transferSingleLessonFromDate(
+            enrollmentId,
+            originalDate,
+            targetSessionId,
+            targetDate,
+            options
+        )
+    }
 }

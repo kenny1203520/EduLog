@@ -166,6 +166,9 @@ export class ReportQueryService {
                     *,
                     class_session:class_sessions!class_session_id(
                         name,
+                        day_of_week,
+                        start_time,
+                        end_time,
                         classroom:classrooms!classroom_id(name)
                     )
                 ),
