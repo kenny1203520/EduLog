@@ -8,6 +8,7 @@ import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportS
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { useCapacityCheck } from '@/composables/useCapacityCheck'
 import CapacityProgressBar from '@/components/common/CapacityProgressBar.vue'
+import BaseDatePicker from '@/components/common/BaseDatePicker.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -95,7 +96,7 @@ async function fetchSessions() {
         const { data: sessions } = await SessionService.getClassSessions()
         sessionOptions.value = sessions.map((s: any) => ({
             value: s.id,
-            label: s.name
+            label: formatSessionOptionLabel(s)
         }))
     } catch (e) {
         console.error(e)
@@ -123,10 +124,13 @@ async function fetchReports() {
                 const lessonTitle = report.lesson?.title || ''
                 const date = DateUtils.displayDate(occurrence.occurrence_date, preferences.locale, preferences.timeZone)
                 const weekday = formatWeekdayFromDate(occurrence.occurrence_date)
-                const time = formatTime(
+                const time = formatTimeRange(
                     occurrence.actual_start_time ||
                     occurrence.original_start_time ||
-                    occurrence.class_session?.start_time
+                    occurrence.class_session?.start_time,
+                    occurrence.actual_end_time ||
+                    occurrence.original_end_time ||
+                    occurrence.class_session?.end_time
                 )
                 const dateParts = [
                     date,
@@ -328,10 +332,10 @@ async function submitTransfer() {
                             transferForm.mode === 'single'
                                 ? $t('student.transfer_modal.target_date')
                                 : $t('student.transfer_modal.effective_date') }}</label>
-                        <input v-if="transferForm.mode === 'single'" type="date" v-model="transferForm.target_date"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 transition-all text-lg font-bold text-gray-700 shadow-sm">
-                        <input v-else type="date" v-model="transferForm.effective_date"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-amber-500/10 focus:border-amber-500 transition-all text-lg font-bold text-gray-700 shadow-sm">
+                        <BaseDatePicker v-if="transferForm.mode === 'single'" v-model="transferForm.target_date"
+                            theme="amber" :placeholder="$t('student.transfer_modal.target_date')" />
+                        <BaseDatePicker v-else v-model="transferForm.effective_date"
+                            theme="amber" :placeholder="$t('student.transfer_modal.effective_date')" />
                     </div>
                 </div>
 
