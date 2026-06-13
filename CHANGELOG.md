@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-06-14
+
+### Fixed
+- Restored missing `v1.3.1` and `v1.3.2` changelog entries.
+
 ## [1.3.2] - 2026-06-14
+
+### Fixed
+- Bumped package.json version and updated documentation rules in AGENT.md.
+
+## [1.3.1] - 2026-06-14
 
 ### Fixed
 - Resolved TypeScript build errors in unit tests affecting the deployment pipeline.
