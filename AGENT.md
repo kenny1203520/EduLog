@@ -162,5 +162,9 @@ src/
 3. **Merging**: Never merge `develop` directly into `master`. Always merge `release/` or `hotfix/` branches into `master` and `develop` using the `--no-ff` flag to preserve branch topology.
 
 ### Release Management
-1. **GitHub Releases**: When a new version is released (i.e. tagging `master`), you MUST create a corresponding **GitHub Release** on the repository.
-2. **Release Notes**: The release description must clearly document the version update contents (Changelog) and include any **Database/System Migration Manuals** if applicable.
+1. **Release Branch Checklist**: When creating a `release/vX.Y.Z` branch, you MUST:
+   - Bump the `"version"` field in `app/package.json` to match the new release version.
+   - Update the root `CHANGELOG.md` with the new version's features, fixes, and notes.
+   - Update the in-app changelog (e.g., `app/src/locales/en/changelog.json` & `zh-TW/changelog.json`) so users can see updates in the UI.
+2. **GitHub Releases**: When a new version is released (i.e. tagging `master`), you MUST create a corresponding **GitHub Release** on the repository.
+3. **Release Notes**: The release description must clearly document the version update contents (Changelog) and include any **Database/System Migration Manuals** if applicable.
