@@ -66,12 +66,12 @@ export class OccurrenceService {
         return OccurrenceCommandService.generateOccurrencesForAllSessions(startDate, endDate, sessionIds)
     }
 
-    static async getTodayOccurrences(): Promise<ClassOccurrence[]> {
-        return OccurrenceQueryService.getTodayOccurrences()
+    static async getTodayOccurrences(timeZone?: string): Promise<ClassOccurrence[]> {
+        return OccurrenceQueryService.getTodayOccurrences(timeZone)
     }
 
-    static async getUpcomingOccurrences(days: number = 7): Promise<ClassOccurrence[]> {
-        return OccurrenceQueryService.getUpcomingOccurrences(days)
+    static async getUpcomingOccurrences(days: number = 7, timeZone?: string): Promise<ClassOccurrence[]> {
+        return OccurrenceQueryService.getUpcomingOccurrences(days, timeZone)
     }
 
     static async syncSessionOccurrences(

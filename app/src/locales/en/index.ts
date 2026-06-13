@@ -12,6 +12,8 @@ import attendance from './attendance.json'
 import teacher from './teacher.json'
 import about from './about.json'
 import changelog from './changelog.json'
+import timezones from './timezones.json'
+import settings from './settings.json'
 
 export default {
   nav,
@@ -27,5 +29,7 @@ export default {
   attendance,
   teacher,
   about,
-  changelog
+  changelog,
+  timezones,
+  settings
 }

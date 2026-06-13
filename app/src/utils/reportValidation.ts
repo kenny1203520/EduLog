@@ -7,7 +7,6 @@ export interface ReportValidationError {
 /**
  * Validates report data according to business rules:
  * - If absent → must have absence_reason
- * - If absent → automatically set is_completed = false
  * - If incomplete → progress_letter is recommended
  */
 export function validateReportData(data: {
@@ -28,9 +27,7 @@ export function validateReportData(data: {
         }
     }
 
-    // Rule 2: Absent should be incomplete (handled in applyBusinessRules)
-    
-    // Rule 3: Incomplete should have progress letter (warning only)
+    // Rule 2: Incomplete should have progress letter (warning only)
     if (data.isCompleted === false && !data.progressLetter) {
         // This is a warning, not an error
         // Could add to warnings array if needed
@@ -44,7 +41,6 @@ export function validateReportData(data: {
 
 /**
  * Applies business rules to report data:
- * - If absent → force is_completed = false
  * - If completed → clear progress_letter
  */
 export function applyBusinessRules(data: {
@@ -57,11 +53,6 @@ export function applyBusinessRules(data: {
 } {
     let isCompleted = data.isCompleted ?? true
     let progressLetter = data.progressLetter
-
-    // Rule: Absent → force incomplete
-    if (data.attendanceStatus === 'absent') {
-        isCompleted = false
-    }
 
     // Rule: Completed → clear progress letter
     if (isCompleted) {

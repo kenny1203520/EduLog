@@ -1,12 +1,10 @@
 import { supabase } from '@/lib/supabase'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
+import { DateUtils } from '@/utils/DateUtils'
 
 export class OccurrenceQueryService {
     private static formatDate(date: Date): string {
-        const year = date.getFullYear()
-        const month = String(date.getMonth() + 1).padStart(2, '0')
-        const day = String(date.getDate()).padStart(2, '0')
-        return `${year}-${month}-${day}`
+        return DateUtils.formatLocalDate(date)
     }
 
     static async getOccurrencesBySession(
@@ -43,6 +41,7 @@ export class OccurrenceQueryService {
                 *,
                 class_sessions (
                     name,
+                    time_zone,
                     classrooms (name, color)
                 )
             `)
@@ -63,6 +62,9 @@ export class OccurrenceQueryService {
 
             if (dto.class_sessions) {
                 occ.sessionName = dto.class_sessions.name
+                if (!dto.time_zone && DateUtils.isValidTimeZone(dto.class_sessions.time_zone)) {
+                    occ.timeZone = dto.class_sessions.time_zone
+                }
             }
 
             if (dto.class_sessions?.classrooms) {
@@ -86,15 +88,14 @@ export class OccurrenceQueryService {
         return new ClassOccurrence(data as any)
     }
 
-    static async getTodayOccurrences(): Promise<ClassOccurrence[]> {
-        const today = new Date()
+    static async getTodayOccurrences(timeZone: string = DateUtils.getDefaultTimeZone()): Promise<ClassOccurrence[]> {
+        const today = DateUtils.todayDate(timeZone)
         return this.getOccurrencesByDateRange(today, today)
     }
 
-    static async getUpcomingOccurrences(days: number = 7): Promise<ClassOccurrence[]> {
-        const today = new Date()
-        const future = new Date()
-        future.setDate(today.getDate() + days)
+    static async getUpcomingOccurrences(days: number = 7, timeZone: string = DateUtils.getDefaultTimeZone()): Promise<ClassOccurrence[]> {
+        const today = DateUtils.todayDate(timeZone)
+        const future = DateUtils.addDays(today, days)
 
         return this.getOccurrencesByDateRange(today, future)
     }

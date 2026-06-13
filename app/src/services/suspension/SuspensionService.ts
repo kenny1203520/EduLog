@@ -11,8 +11,8 @@ export class SuspensionService {
         return SuspensionQueryService.isSuspended(enrollmentId, dateStr)
     }
 
-    static async createSuspension(enrollmentId: string, startDate: string, endDate: string | null, reason?: string): Promise<Suspension> {
-        return SuspensionCommandService.createSuspension(enrollmentId, startDate, endDate, reason)
+    static async createSuspension(enrollmentId: string, startDate: string, endDate: string | null, reason?: string, timeZone?: string): Promise<Suspension> {
+        return SuspensionCommandService.createSuspension(enrollmentId, startDate, endDate, reason, timeZone)
     }
 
     static async updateSuspension(id: string, updates: Partial<SuspensionDTO>): Promise<Suspension> {

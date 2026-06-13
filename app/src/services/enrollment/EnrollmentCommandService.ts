@@ -5,6 +5,7 @@ import { OccurrenceReportService } from '../occurrence/OccurrenceReportService'
 import { EnrollmentStatusPolicyService } from './EnrollmentStatusPolicyService'
 import { EnrollmentTransferService } from './EnrollmentTransferService'
 import { EnrollmentSupportService } from './EnrollmentSupportService'
+import { DateUtils } from '@/utils/DateUtils'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -26,8 +27,11 @@ export class EnrollmentCommandService {
             .from('enrollments')
             .insert({
                 ...enrollmentData,
+                time_zone: DateUtils.isValidTimeZone(enrollmentData.time_zone)
+                    ? enrollmentData.time_zone
+                    : DateUtils.getDefaultTimeZone(),
                 user_id: user.id,
-                status: enrollmentData.status || 'active'
+                status: enrollmentData.status || 'regular'
             })
             .select(`
                 *,
@@ -54,7 +58,7 @@ export class EnrollmentCommandService {
             await EnrollmentStatusPolicyService.generateReportsForSession(
                 enrollment.id!,
                 enrollment.class_session_id,
-                enrollment.start_date || new Date().toISOString().split('T')[0],
+                enrollment.start_date || DateUtils.todayString(),
                 enrollment.course_id,
                 {
                     targetReportCount: options.targetReportCount
@@ -80,9 +84,16 @@ export class EnrollmentCommandService {
             throw new Error(`Failed to fetch enrollment before update: ${existingError?.message || 'not found'}`)
         }
 
+        const updatePayload = {
+            ...updates,
+            ...(updates.time_zone !== undefined
+                ? { time_zone: DateUtils.isValidTimeZone(updates.time_zone) ? updates.time_zone : DateUtils.getDefaultTimeZone() }
+                : {})
+        }
+
         const { data: updated, error: updateError } = await supabase
             .from('enrollments')
-            .update(updates)
+            .update(updatePayload)
             .eq('id', enrollmentId)
             .select(`
                 *,
@@ -98,8 +109,8 @@ export class EnrollmentCommandService {
         const nextStatus = updated.status
 
         if (
-            previousStatus !== 'active' &&
-            nextStatus === 'active' &&
+            previousStatus !== 'regular' &&
+            nextStatus === 'regular' &&
             updated.id &&
             updated.class_session_id &&
             updated.course_id
@@ -108,7 +119,7 @@ export class EnrollmentCommandService {
                 updated.id,
                 updated.class_session_id,
                 updated.course_id,
-                updated.start_date || new Date().toISOString().split('T')[0],
+                updated.start_date || DateUtils.todayString(),
                 options.targetTotalReports
             )
         }
@@ -133,6 +144,7 @@ export class EnrollmentCommandService {
         const sessionId = enrollment?.class_session_id
 
         await EnrollmentSupportService.deleteReportsForEnrollment(enrollmentId)
+        await EnrollmentSupportService.deleteSuspensionsForEnrollment(enrollmentId)
 
         const { error: deleteError } = await supabase
             .from('enrollments')
@@ -166,8 +178,8 @@ export class EnrollmentCommandService {
         }
 
         const todayStr = EnrollmentSupportService.normalizeDateOnly(new Date())
-        if (enrollment.status !== 'active' && normalizedTargetDate >= todayStr) {
-            throw new Error('Only active enrollments can join a future class.')
+        if (enrollment.status !== 'regular' && normalizedTargetDate >= todayStr) {
+            throw new Error('Only regular enrollments can join a future class.')
         }
 
         const { data: sessionInfo, error: sessionInfoError } = await supabase
@@ -244,6 +256,34 @@ export class EnrollmentCommandService {
             originalDate,
             targetSessionId,
             targetDate
+        )
+    }
+
+    static async transferSingleLessonReport(
+        reportId: string,
+        targetSessionId: string,
+        targetDate: string
+    ): Promise<void> {
+        return EnrollmentTransferService.transferSingleLessonReport(
+            reportId,
+            targetSessionId,
+            targetDate
+        )
+    }
+
+    static async transferSingleLessonFromDate(
+        enrollmentId: string,
+        originalDate: string,
+        targetSessionId: string,
+        targetDate: string,
+        options: { createIfMissing?: boolean } = {}
+    ): Promise<void> {
+        return EnrollmentTransferService.transferSingleLessonFromDate(
+            enrollmentId,
+            originalDate,
+            targetSessionId,
+            targetDate,
+            options
         )
     }
 

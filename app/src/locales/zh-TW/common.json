@@ -1,5 +1,7 @@
 {
     "add": "新增",
+    "no_results": "無資料",
+    "select_placeholder": "-- 請選擇 --",
     "search": "搜尋",
     "save": "儲存",
     "saving": "儲存中",
@@ -12,11 +14,15 @@
     "edit": "編輯",
     "view": "查看",
     "view_link": "查看連結",
+    "show": "顯示",
+    "hide": "隱藏",
     "confirm_delete": "確定要刪除嗎？",
     "unknown_room": "未知教室",
     "no_description": "無簡介",
     "copy_success": "已複製到剪貼簿！",
     "back": "返回",
+    "back_to_dashboard": "返回控制台",
+    "optional": "選填",
     "start": "開始",
     "end": "結束",
     "students": "學生",
@@ -39,6 +45,7 @@
     "refresh": "重新整理",
     "items": "項目",
     "loading": "載入中",
+    "checking": "檢查中",
     "unknown_student": "未知學生",
     "unknown_course": "未知課程",
     "version": "版本",
@@ -73,8 +80,18 @@
     "show_less": "減少顯示",
     "system_managed": "系統管理",
     "language": "語言",
+    "time_zone": "時區",
     "languages": {
         "zh-TW": "繁體中文",
         "en": "English"
+    },
+    "days": {
+        "sun": "星期日",
+        "mon": "星期一",
+        "tue": "星期二",
+        "wed": "星期三",
+        "thu": "星期四",
+        "fri": "星期五",
+        "sat": "星期六"
     }
 }

@@ -303,7 +303,19 @@
                 </svg>
                 {{ $t('report.editor.contact_notes_label') }}
             </label>
-            <textarea v-model="contactNotes" rows="2"
+            <TipTapCollabEditor 
+                ref="contactNotesEditorRef"
+                v-if="ready && ydoc"
+                field-name="contactNotes_xml" 
+                :ydoc="ydoc" 
+                :provider="awarenessProvider" 
+                :disabled="props.disabled" 
+                :font-scale="preferences.editorFontScale"
+                :min-height="90"
+                :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#60A5FA' }"
+                :placeholder="$t('report.editor.contact_notes_placeholder')" />
+            <!-- Fallback standard editor if ydoc not ready -->
+            <textarea v-else v-model="contactNotes" rows="2"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"
                 :style="{ fontSize: `${preferences.editorFontScale}%` }"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"></textarea>
@@ -319,7 +331,19 @@
                 {{ $t('report.editor.class_notes_label') }}
                 <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
             </label>
-            <textarea v-model="classNotes" rows="4"
+            <TipTapCollabEditor 
+                ref="classNotesEditorRef"
+                v-if="ready && ydoc"
+                field-name="classNotes_xml" 
+                :ydoc="ydoc" 
+                :provider="awarenessProvider" 
+                :disabled="props.disabled" 
+                :font-scale="preferences.editorFontScale"
+                :min-height="140"
+                mono
+                :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#A78BFA' }"
+                :placeholder="$t('report.editor.class_notes_placeholder')" />
+            <textarea v-else v-model="classNotes" rows="4"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y font-mono"
                 :style="{ fontSize: `${preferences.editorFontScale}%` }"
                 :placeholder="$t('report.editor.class_notes_placeholder')"></textarea>
@@ -342,7 +366,19 @@
                         $t('report.editor.character_count') }}
                 </span>
             </label>
-            <textarea v-model="localContent" @input="handleInput"
+            <TipTapCollabEditor 
+                ref="contentEditorRef"
+                v-if="ready && ydoc"
+                field-name="content_xml" 
+                :ydoc="ydoc" 
+                :provider="awarenessProvider" 
+                :disabled="props.disabled" 
+                :font-scale="preferences.editorFontScale"
+                :min-height="300"
+                mono
+                :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#34D399' }"
+                :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')" />
+            <textarea v-else v-model="localContent" @input="handleInput"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
                 class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono"
@@ -538,13 +574,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type WatchStopHandle } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAutoSave } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import TipTapCollabEditor from '@/components/common/TipTapCollabEditor.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
@@ -552,6 +589,7 @@ import { ReportTemplateService } from '@/services/report/ReportTemplateService'
 import { CopyTemplateService, type CopyTemplateLoadOption } from '@/services/copy_template/CopyTemplateService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useToast } from 'vue-toastification'
+import { useReportCollab } from '@/composables/useReportCollab'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import {
@@ -565,6 +603,89 @@ import { copyToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
 
 import type { Lesson } from '@/models/Course'
+
+interface Props {
+    reportId?: string // 報告ID
+    initialVersion?: number // 報告版本
+    loading?: boolean // 是否載入中
+    placeholder?: string // 報告預設文字
+    disabled?: boolean // 是否禁用
+    showManualSave?: boolean // 是否顯示手動儲存
+    debounceMs?: number // 停止輸入後多久自動儲存(ms)
+    enrollmentId?: string // 課程報名ID
+    classOccurrenceId?: string // 課堂上課日期時間ID
+    title?: string // 報告標題
+    courseName?: string // 課程名稱
+    courseStage?: string // 課程階段
+    courseDisplayName?: string // 課程顯示名稱
+    initialClassroomName?: string // 教室名稱
+    initialSessionName?: string // 班級名稱
+    initialSessionTime?: string // 班級時段
+    initialStudentName?: string // 學生姓名
+    initialStudentId?: string // 學生ID
+    student?: any // 學生
+    initialLessonId?: string // 課次
+    availableLessons?: Lesson[] // 可選課次清單
+    initialReportExternalLink?: string // 外部連結
+    initialIsCompleted?: boolean // 是否完整完成
+    initialProgressStart?: string // 進度開始
+    initialProgressEnd?: string // 進度結束
+    initialAttendanceStatus?: 'present' | 'absent' | 'pending' // 出缺勤狀態
+    initialAbsenceReason?: string // 缺勤原因
+    initialClassParticipation?: number // 課堂參與
+    initialClassroomBehavior?: number // 課堂秩序
+    initialContactNotes?: string // 聯絡欄
+    initialClassNotes?: string // 課堂筆記/紀錄
+    initialContent?: string // 學習報告
+    initialEnrollmentExternalLink?: string // 課程外部連結
+    initialCreatedAt?: string // 建立時間
+    compact?: boolean // 是否為緊湊模式 (for split view)
+}
+
+const props = withDefaults(defineProps<Props>(), {
+    reportId: undefined,
+    initialVersion: 1,
+    loading: false,
+    placeholder: '',
+    disabled: false,
+    showManualSave: false,
+    debounceMs: 2000,
+    title: undefined,
+    courseName: '',
+    courseStage: '',
+    courseDisplayName: '',
+    initialClassroomName: '',
+    initialSessionName: '',
+    initialSessionTime: '',
+    initialStudentName: '',
+    initialStudentId: '',
+    initialLessonId: '',
+    availableLessons: () => [],
+    initialReportExternalLink: '',
+    initialIsCompleted: false,
+    initialProgressStart: undefined,
+    initialProgressEnd: undefined,
+    initialAttendanceStatus: 'pending',
+    initialAbsenceReason: undefined,
+    initialClassParticipation: 0,
+    initialClassroomBehavior: 0,
+    initialContactNotes: '',
+    initialClassNotes: '',
+    initialContent: '',
+    initialEnrollmentExternalLink: '',
+    initialCreatedAt: '',
+    compact: false,
+})
+
+const emit = defineEmits<{
+    'update:content': [content: string]
+    'save-success': [version: number]
+    'update:report-external-link': [value: string]
+    'save-error': [error: string]
+    'conflict': [serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO]
+    'deleted': []
+    'restored': [report: OccurrenceReportDTO]
+}>()
 
 interface Template {
     id: string
@@ -653,9 +774,16 @@ const handleConfirmAction = async () => {
 
 const handleCopyContent = (text: string) => {
     if (!text) return
-    const current = localContent.value || ''
-    localContent.value = current + (current ? '\n\n' : '') + text
-    handleInput()
+    if (ydoc.value && contentEditorRef.value?.editor) {
+        const editor = contentEditorRef.value.editor
+        const current = editor.getText()
+        editor.commands.focus('end')
+        editor.commands.insertContent((current ? '\n\n' : '') + text)
+    } else {
+        const current = localContent.value || ''
+        localContent.value = current + (current ? '\n\n' : '') + text
+        handleInput()
+    }
 }
 
 async function loadTemplates() {
@@ -1107,19 +1235,47 @@ function applyTemplate(template: Template) {
 
     let changed = false
 
-    if (!localContent.value.trim() && renderedContent) {
-        localContent.value = renderedContent
+    if (ydoc.value) {
+        if (renderedContent && contentEditorRef.value?.editor) {
+            const editor = contentEditorRef.value.editor
+            if (editor.isEmpty) editor.commands.setContent(renderedContent)
+            else {
+                editor.commands.focus('end')
+                editor.commands.insertContent('\n\n' + renderedContent)
+            }
+        }
+        if (renderedContactNotes && contactNotesEditorRef.value?.editor) {
+            const editor = contactNotesEditorRef.value.editor
+            if (editor.isEmpty) editor.commands.setContent(renderedContactNotes)
+            else {
+                editor.commands.focus('end')
+                editor.commands.insertContent('\n\n' + renderedContactNotes)
+            }
+        }
+        if (renderedClassNotes && classNotesEditorRef.value?.editor) {
+            const editor = classNotesEditorRef.value.editor
+            if (editor.isEmpty) editor.commands.setContent(renderedClassNotes)
+            else {
+                editor.commands.focus('end')
+                editor.commands.insertContent('\n\n' + renderedClassNotes)
+            }
+        }
         changed = true
-    }
+    } else {
+        if (!localContent.value.trim() && renderedContent) {
+            localContent.value = renderedContent
+            changed = true
+        }
 
-    if (!contactNotes.value.trim() && renderedContactNotes) {
-        contactNotes.value = renderedContactNotes
-        changed = true
-    }
+        if (!contactNotes.value.trim() && renderedContactNotes) {
+            contactNotes.value = renderedContactNotes
+            changed = true
+        }
 
-    if (!classNotes.value.trim() && renderedClassNotes) {
-        classNotes.value = renderedClassNotes
-        changed = true
+        if (!classNotes.value.trim() && renderedClassNotes) {
+            classNotes.value = renderedClassNotes
+            changed = true
+        }
     }
 
     if (changed) {
@@ -1273,88 +1429,217 @@ onMounted(() => {
     loadTemplates()
 })
 
-interface Props {
-    reportId?: string // 報告ID
-    initialVersion?: number // 報告版本
-    loading?: boolean // 是否載入中
-    placeholder?: string // 報告預設文字
-    disabled?: boolean // 是否禁用
-    showManualSave?: boolean // 是否顯示手動儲存
-    debounceMs?: number // 停止輸入後多久自動儲存(ms)
-    enrollmentId?: string // 課程報名ID
-    classOccurrenceId?: string // 課堂上課日期時間ID
-    title?: string // 報告標題
-    courseName?: string // 課程名稱
-    courseStage?: string // 課程階段
-    courseDisplayName?: string // 課程顯示名稱
-    initialClassroomName?: string // 教室名稱
-    initialSessionName?: string // 班級名稱
-    initialSessionTime?: string // 班級時段
-    initialStudentName?: string // 學生姓名
-    initialStudentId?: string // 學生ID
-    student?: any // 學生
-    initialLessonId?: string // 課次
-    availableLessons?: Lesson[] // 可選課次清單
-    initialReportExternalLink?: string // 外部連結
-    initialIsCompleted?: boolean // 是否完整完成
-    initialProgressStart?: string // 進度開始
-    initialProgressEnd?: string // 進度結束
-    initialAttendanceStatus?: 'present' | 'absent' | 'pending' // 出缺勤狀態
-    initialAbsenceReason?: string // 缺勤原因
-    initialClassParticipation?: number // 課堂參與
-    initialClassroomBehavior?: number // 課堂秩序
-    initialContactNotes?: string // 聯絡欄
-    initialClassNotes?: string // 課堂筆記/紀錄
-    initialContent?: string // 學習報告
-    initialEnrollmentExternalLink?: string // 課程外部連結
-    initialCreatedAt?: string // 建立時間
-    compact?: boolean // 是否為緊湊模式 (for split view)
+// Collab logic
+const reportIdRef = computed(() => props.reportId || '')
+const { ydoc, provider: awarenessProvider, ready, saveSnapshot } = useReportCollab(reportIdRef as any)
+
+const contactNotesEditorRef = ref<any>(null)
+const classNotesEditorRef = ref<any>(null)
+const contentEditorRef = ref<any>(null)
+const collabWatchStops: WatchStopHandle[] = []
+const collabXmlObservers: Array<{ fragment: any; observer: (event: any) => void }> = []
+let collabMetaMap: any = null
+let collabMetaObserver: ((event: any) => void) | null = null
+let isApplyingRemoteCollab = false
+
+function cleanupReportCollabBindings() {
+    collabWatchStops.splice(0).forEach((stop) => stop())
+
+    if (collabMetaMap && collabMetaObserver) {
+        collabMetaMap.unobserve(collabMetaObserver)
+    }
+    collabMetaMap = null
+    collabMetaObserver = null
+
+    collabXmlObservers.splice(0).forEach(({ fragment, observer }) => {
+        fragment.unobserve(observer)
+    })
 }
 
-const props = withDefaults(defineProps<Props>(), {
-    reportId: undefined,
-    initialVersion: 1,
-    loading: false,
-    placeholder: '',
-    disabled: false,
-    showManualSave: false,
-    debounceMs: 2000,
-    title: undefined,
-    courseName: '',
-    courseStage: '',
-    courseDisplayName: '',
-    initialClassroomName: '',
-    initialSessionName: '',
-    initialSessionTime: '',
-    initialStudentName: '',
-    initialStudentId: '',
-    initialLessonId: '',
-    availableLessons: () => [],
-    initialReportExternalLink: '',
-    initialIsCompleted: false,
-    initialProgressStart: undefined,
-    initialProgressEnd: undefined,
-    initialAttendanceStatus: 'pending',
-    initialAbsenceReason: undefined,
-    initialClassParticipation: 0,
-    initialClassroomBehavior: 0,
-    initialContactNotes: '',
-    initialClassNotes: '',
-    initialContent: '',
-    initialEnrollmentExternalLink: '',
-    initialCreatedAt: '',
-    compact: false,
+function withCollabGuard(fn: () => void) {
+    isApplyingRemoteCollab = true
+    try {
+        fn()
+    } finally {
+        isApplyingRemoteCollab = false
+    }
+}
+
+function syncTextRefsFromEditors() {
+    if (contentEditorRef.value?.editor) {
+        localContent.value = contentEditorRef.value.editor.getText()
+    }
+    if (contactNotesEditorRef.value?.editor) {
+        contactNotes.value = contactNotesEditorRef.value.editor.getText()
+    }
+    if (classNotesEditorRef.value?.editor) {
+        classNotes.value = classNotesEditorRef.value.editor.getText()
+    }
+}
+
+function setEditorContentSilently(editorRef: any, content: string) {
+    editorRef.value?.editor?.commands.setContent(content, { emitUpdate: false })
+}
+
+function writeReportMeta(metaMap: any) {
+    metaMap.set('attendanceStatus', attendanceStatus.value)
+    metaMap.set('absenceReason', absenceReason.value)
+    metaMap.set('classParticipation', classParticipation.value)
+    metaMap.set('classroomBehavior', classroomBehavior.value)
+    metaMap.set('isCompleted', isCompleted.value)
+    metaMap.set('progressStart', progressStart.value)
+    metaMap.set('progressEnd', progressEnd.value)
+    metaMap.set('selectedLessonId', selectedLessonId.value)
+    metaMap.set('reportExternalLink', reportExternalLink.value)
+    metaMap.set('version', version.value)
+}
+
+watch(ready, (isReady) => {
+    cleanupReportCollabBindings()
+
+    if (isReady && ydoc.value) {
+        // Setup reportMeta sync
+        const metaMap = ydoc.value.getMap('reportMeta')
+        collabMetaMap = metaMap
+
+        // Initialize local fields from map if they exist, otherwise seed them from local state
+        withCollabGuard(() => {
+            if (metaMap.has('attendanceStatus')) attendanceStatus.value = metaMap.get('attendanceStatus') as any
+            else metaMap.set('attendanceStatus', attendanceStatus.value)
+
+            if (metaMap.has('absenceReason')) absenceReason.value = metaMap.get('absenceReason') as any
+            else metaMap.set('absenceReason', absenceReason.value)
+
+            if (metaMap.has('classParticipation')) classParticipation.value = Number(metaMap.get('classParticipation') ?? 0)
+            else metaMap.set('classParticipation', classParticipation.value)
+
+            if (metaMap.has('classroomBehavior')) classroomBehavior.value = Number(metaMap.get('classroomBehavior') ?? 0)
+            else metaMap.set('classroomBehavior', classroomBehavior.value)
+
+            if (metaMap.has('isCompleted')) isCompleted.value = Boolean(metaMap.get('isCompleted'))
+            else metaMap.set('isCompleted', isCompleted.value)
+
+            if (metaMap.has('progressStart')) progressStart.value = (metaMap.get('progressStart') as string) || ''
+            else metaMap.set('progressStart', progressStart.value)
+
+            if (metaMap.has('progressEnd')) progressEnd.value = (metaMap.get('progressEnd') as string) || ''
+            else metaMap.set('progressEnd', progressEnd.value)
+
+            if (metaMap.has('selectedLessonId')) selectedLessonId.value = (metaMap.get('selectedLessonId') as string) || ''
+            else metaMap.set('selectedLessonId', selectedLessonId.value)
+
+            if (metaMap.has('reportExternalLink')) reportExternalLink.value = (metaMap.get('reportExternalLink') as string) || ''
+            else metaMap.set('reportExternalLink', reportExternalLink.value)
+
+            if (metaMap.has('version')) {
+                const remoteVersion = Number(metaMap.get('version') || 0)
+                if (remoteVersion > version.value) {
+                    version.value = remoteVersion
+                }
+            } else {
+                metaMap.set('version', version.value)
+            }
+        })
+        
+        collabMetaObserver = (event) => {
+            withCollabGuard(() => {
+                event.changes.keys.forEach((_: unknown, key: string) => {
+                    const newVal = metaMap.get(key)
+                    if (key === 'attendanceStatus' && newVal !== attendanceStatus.value) attendanceStatus.value = newVal as any
+                    if (key === 'absenceReason' && newVal !== absenceReason.value) absenceReason.value = newVal as any
+                    if (key === 'classParticipation' && Number(newVal ?? 0) !== classParticipation.value) classParticipation.value = Number(newVal ?? 0)
+                    if (key === 'classroomBehavior' && Number(newVal ?? 0) !== classroomBehavior.value) classroomBehavior.value = Number(newVal ?? 0)
+                    if (key === 'isCompleted' && Boolean(newVal) !== isCompleted.value) isCompleted.value = Boolean(newVal)
+                    if (key === 'progressStart' && (newVal || '') !== progressStart.value) progressStart.value = newVal as any || ''
+                    if (key === 'progressEnd' && (newVal || '') !== progressEnd.value) progressEnd.value = newVal as any || ''
+                    if (key === 'selectedLessonId' && (newVal || '') !== selectedLessonId.value) selectedLessonId.value = newVal as any || ''
+                    if (key === 'reportExternalLink' && (newVal || '') !== reportExternalLink.value) reportExternalLink.value = newVal as any || ''
+                    if (key === 'version') {
+                        const remoteVersion = Number(newVal || 0)
+                        if (remoteVersion > version.value) {
+                            version.value = remoteVersion
+                        }
+                    }
+                })
+            })
+        }
+        metaMap.observe(collabMetaObserver)
+
+        // Listen for local changes to update map
+        const setupMapSync = (refVar: any, mapKey: string) => {
+            const stop = watch(refVar, (val) => {
+                if (isApplyingRemoteCollab || isInitializing.value) return
+                if (metaMap.get(mapKey) !== val) {
+                    metaMap.set(mapKey, val)
+                    handleInput()
+                }
+            }, { flush: 'sync' })
+            collabWatchStops.push(stop)
+        }
+        
+        setupMapSync(attendanceStatus, 'attendanceStatus')
+        setupMapSync(absenceReason, 'absenceReason')
+        setupMapSync(classParticipation, 'classParticipation')
+        setupMapSync(classroomBehavior, 'classroomBehavior')
+        setupMapSync(isCompleted, 'isCompleted')
+        setupMapSync(progressStart, 'progressStart')
+        setupMapSync(progressEnd, 'progressEnd')
+        setupMapSync(selectedLessonId, 'selectedLessonId')
+        setupMapSync(reportExternalLink, 'reportExternalLink')
+        
+        // Seed XML fragments on initialization if ydoc has no content but local has content
+        nextTick(() => {
+            if (!ydoc.value) return
+            withCollabGuard(() => {
+                let seeded = false
+
+                if (contentEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
+                    setEditorContentSilently(contentEditorRef, localContent.value)
+                    seeded = true
+                }
+                if (contactNotesEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
+                    setEditorContentSilently(contactNotesEditorRef, contactNotes.value)
+                    seeded = true
+                }
+                if (classNotesEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
+                    setEditorContentSilently(classNotesEditorRef, classNotes.value)
+                    seeded = true
+                }
+
+                if (seeded) {
+                    void saveSnapshot()
+                }
+            })
+        })
+
+        // Setup text sync for saving
+        const observeXmlFragment = (fieldName: string, onRemoteChange?: () => void) => {
+            const fragment = ydoc.value!.getXmlFragment(fieldName)
+            const observer = (event: any) => {
+                if (event.transaction.local && !isApplyingRemoteCollab) {
+                    handleInput()
+                    return
+                }
+
+                nextTick(() => {
+                    syncTextRefsFromEditors()
+                    onRemoteChange?.()
+                })
+            }
+            fragment.observe(observer)
+            collabXmlObservers.push({ fragment, observer })
+        }
+
+        observeXmlFragment('content_xml', () => {
+            emit('update:content', localContent.value)
+        })
+        observeXmlFragment('contactNotes_xml')
+        observeXmlFragment('classNotes_xml')
+    }
 })
 
-const emit = defineEmits<{
-    'update:content': [content: string]
-    'save-success': [version: number]
-    'update:report-external-link': [value: string]
-    'save-error': [error: string]
-    'conflict': [serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO]
-    'deleted': []
-    'restored': [report: OccurrenceReportDTO]
-}>()
+
+
 
 const authStore = useAuthStore()
 const { t } = useI18n()
@@ -1362,6 +1647,8 @@ const { t } = useI18n()
 // Local state
 const localContent = ref(props.initialContent)
 const version = ref(props.initialVersion)
+
+
 
 // Detailed fields
 const selectedLessonId = ref(props.initialLessonId || '')
@@ -1375,6 +1662,136 @@ const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
 const contactNotes = ref(props.initialContactNotes || '')
 const classNotes = ref(props.initialClassNotes || '')
 const reportExternalLink = ref(props.initialReportExternalLink || '')
+
+type AttendanceStatus = 'present' | 'absent' | 'pending'
+
+interface ReportFieldSnapshot {
+    lessonId: string
+    isCompleted: boolean
+    progressLetter: string
+    attendanceStatus: AttendanceStatus
+    absenceReason: string | null
+    classParticipation: number
+    classroomBehavior: number
+    contactNotes: string
+    classNotes: string
+    content: string
+    externalLink: string
+}
+
+type ReportSavePayload = {
+    lessonId?: string
+    isCompleted?: boolean
+    progressLetter?: string | null
+    attendanceStatus?: AttendanceStatus
+    absenceReason?: string | null
+    classParticipation?: number
+    classroomBehavior?: number
+    contactNotes?: string
+    classNotes?: string
+    content?: string
+    externalLink?: string
+}
+
+function normalizeString(value: string | null | undefined): string {
+    return value || ''
+}
+
+function normalizeAbsenceReason(status: AttendanceStatus, reason: string | null | undefined): string | null {
+    return status === 'absent' ? normalizeString(reason) : null
+}
+
+function buildCurrentSnapshot(overrides: Partial<ReportFieldSnapshot> = {}): ReportFieldSnapshot {
+    return {
+        lessonId: selectedLessonId.value || '',
+        isCompleted: isCompleted.value,
+        progressLetter: progressLetter.value || '',
+        attendanceStatus: attendanceStatus.value,
+        absenceReason: normalizeAbsenceReason(attendanceStatus.value, absenceReason.value),
+        classParticipation: classParticipation.value,
+        classroomBehavior: classroomBehavior.value,
+        contactNotes: contactNotes.value || '',
+        classNotes: classNotes.value || '',
+        content: localContent.value || '',
+        externalLink: reportExternalLink.value || '',
+        ...overrides
+    }
+}
+
+function buildSnapshotFromProps(): ReportFieldSnapshot {
+    const initialStatus = props.initialAttendanceStatus || 'pending'
+    const initialProgress = props.initialProgressStart && props.initialProgressEnd
+        ? `${props.initialProgressStart}-${props.initialProgressEnd}`
+        : (props.initialProgressStart || props.initialProgressEnd || '')
+
+    return {
+        lessonId: props.initialLessonId || '',
+        isCompleted: props.initialIsCompleted ?? false,
+        progressLetter: initialProgress,
+        attendanceStatus: initialStatus,
+        absenceReason: normalizeAbsenceReason(initialStatus, props.initialAbsenceReason),
+        classParticipation: props.initialClassParticipation ?? 0,
+        classroomBehavior: props.initialClassroomBehavior ?? 0,
+        contactNotes: props.initialContactNotes || '',
+        classNotes: props.initialClassNotes || '',
+        content: props.initialContent || '',
+        externalLink: props.initialReportExternalLink || ''
+    }
+}
+
+function buildDirtyPayload(current: ReportFieldSnapshot): { keys: Array<keyof ReportFieldSnapshot>, payload: ReportSavePayload } {
+    const previous = savedReportSnapshot.value
+    const keys: Array<keyof ReportFieldSnapshot> = []
+    const payload: ReportSavePayload = {}
+
+    const addIfChanged = <K extends keyof ReportFieldSnapshot>(
+        key: K,
+        assign: () => void
+    ) => {
+        if (current[key] !== previous[key]) {
+            keys.push(key)
+            assign()
+        }
+    }
+
+    addIfChanged('lessonId', () => {
+        payload.lessonId = current.lessonId || undefined
+    })
+    addIfChanged('isCompleted', () => {
+        payload.isCompleted = current.isCompleted
+    })
+    addIfChanged('progressLetter', () => {
+        payload.progressLetter = current.progressLetter || null
+    })
+    addIfChanged('attendanceStatus', () => {
+        payload.attendanceStatus = current.attendanceStatus
+    })
+    addIfChanged('absenceReason', () => {
+        payload.absenceReason = current.absenceReason
+    })
+    addIfChanged('classParticipation', () => {
+        payload.classParticipation = current.classParticipation
+    })
+    addIfChanged('classroomBehavior', () => {
+        payload.classroomBehavior = current.classroomBehavior
+    })
+    addIfChanged('contactNotes', () => {
+        payload.contactNotes = current.contactNotes
+    })
+    addIfChanged('classNotes', () => {
+        payload.classNotes = current.classNotes
+    })
+    addIfChanged('content', () => {
+        payload.content = current.content
+    })
+    addIfChanged('externalLink', () => {
+        payload.externalLink = current.externalLink
+    })
+
+    return { keys, payload }
+}
+
+const savedReportSnapshot = ref<ReportFieldSnapshot>(buildSnapshotFromProps())
 
 
 // Computed progress letter for backend (combining start-end range)
@@ -1436,48 +1853,73 @@ const {
             return { success: false, message: t('report.editor.required_field_error') }
         }
 
-        // Auto-fill absence reason if missing
+        // Auto-fill absence reason if missing, and clear reasons for present/pending.
         let finalAbsenceReason = absenceReason.value
         if (attendanceStatus.value === 'absent' && !finalAbsenceReason) {
             finalAbsenceReason = t('report.editor.absence_reasons.reason_not_provided')
             absenceReason.value = finalAbsenceReason
+        } else if (attendanceStatus.value !== 'absent' && finalAbsenceReason) {
+            finalAbsenceReason = ''
+            absenceReason.value = ''
         }
 
+        const saveContent = (ydoc.value && contentEditorRef.value?.editor) ? contentEditorRef.value.editor.getText() : content
+        const saveContact = (ydoc.value && contactNotesEditorRef.value?.editor) ? contactNotesEditorRef.value.editor.getText() : contactNotes.value
+        const saveClass = (ydoc.value && classNotesEditorRef.value?.editor) ? classNotesEditorRef.value.editor.getText() : classNotes.value
+        localContent.value = saveContent
+        contactNotes.value = saveContact
+        classNotes.value = saveClass
+
         try {
-            const result = await OccurrenceReportService.saveReport(
-                props.reportId,
-                version.value,
-                authStore.user?.id,
-                {
-                    lessonId: selectedLessonId.value || undefined,
-                    isCompleted: isCompleted.value,
-                    progressLetter: progressLetter.value || undefined,
-                    attendanceStatus: attendanceStatus.value,
-                    absenceReason: finalAbsenceReason || undefined,
-                    classParticipation: classParticipation.value,
-                    classroomBehavior: classroomBehavior.value,
-                    contactNotes: contactNotes.value,
-                    classNotes: classNotes.value,
-                    content: content,
-                    externalLink: reportExternalLink.value
-                }
-            )
+            const currentSnapshot = buildCurrentSnapshot({
+                content: saveContent,
+                contactNotes: saveContact,
+                classNotes: saveClass,
+                absenceReason: normalizeAbsenceReason(attendanceStatus.value, finalAbsenceReason)
+            })
+            const { keys, payload } = buildDirtyPayload(currentSnapshot)
+            const isAttendanceOnly = keys.length > 0 && keys.every(key => key === 'attendanceStatus' || key === 'absenceReason')
+
+            if (keys.length === 0) {
+                return { success: true, newVersion: version.value }
+            }
+
+            if (!isAttendanceOnly && ready.value && props.reportId && authStore.user?.id) {
+                await saveSnapshot()
+            }
+
+            const result = isAttendanceOnly
+                ? await OccurrenceReportService.saveAttendanceOnly(
+                    props.reportId,
+                    version.value,
+                    authStore.user?.id,
+                    {
+                        attendanceStatus: currentSnapshot.attendanceStatus,
+                        absenceReason: currentSnapshot.absenceReason
+                    }
+                )
+                : await OccurrenceReportService.saveReport(
+                    props.reportId,
+                    version.value,
+                    authStore.user?.id,
+                    payload
+                )
 
             const localReportPayload: OccurrenceReportDTO = {
                 id: props.reportId,
                 enrollment_id: props.enrollmentId || '',
                 class_occurrence_id: props.classOccurrenceId || '',
                 lesson_id: selectedLessonId.value || '',
-                content: content,
+                content: saveContent,
                 is_completed: isCompleted.value,
 
                 progress_letter: progressLetter.value || '',
                 attendance_status: attendanceStatus.value,
-                absence_reason: finalAbsenceReason || '',
+                absence_reason: currentSnapshot.absenceReason || '',
                 class_participation: classParticipation.value,
                 classroom_behavior: classroomBehavior.value,
-                contact_notes: contactNotes.value,
-                class_notes: classNotes.value,
+                contact_notes: saveContact,
+                class_notes: saveClass,
                 external_link: reportExternalLink.value,
 
                 version: version.value,
@@ -1528,6 +1970,14 @@ const {
     },
     onSuccess: (newVersion) => {
         version.value = newVersion
+        savedReportSnapshot.value = buildCurrentSnapshot()
+        if (ydoc.value) {
+            const metaMap = ydoc.value.getMap('reportMeta')
+            const currentMetaVer = metaMap.get('version') as number || 0
+            if (newVersion > currentMetaVer) {
+                metaMap.set('version', newVersion)
+            }
+        }
         emit('save-success', newVersion)
     },
     onError: (message) => {
@@ -1600,10 +2050,9 @@ watch(() => props.initialReportExternalLink, (newVal) => {
     reportExternalLink.value = newVal || ''
 })
 
-// Business rule: absent → incomplete
 watch(attendanceStatus, (newStatus) => {
-    if (newStatus === 'absent') {
-        isCompleted.value = false
+    if (newStatus !== 'absent' && absenceReason.value) {
+        absenceReason.value = ''
     }
 })
 
@@ -1631,6 +2080,11 @@ watch([
     classNotes,
     reportExternalLink
 ], () => {
+    // If collaboration is active, Yjs observers and setupMapSync handle the local input saves.
+    // We only use this watcher when collaboration is NOT ready/active.
+    if (ready.value && ydoc.value) {
+        return
+    }
     handleInput()
 })
 
@@ -1639,6 +2093,7 @@ const isInitializing = ref(false)
 // Reset auto-save state when switching reports
 watch(() => props.reportId, () => {
     isInitializing.value = true
+    savedReportSnapshot.value = buildSnapshotFromProps()
     reset()
     // 給予極短時間讓 props 傳遞到 local state
     setTimeout(() => {
@@ -1658,38 +2113,27 @@ watch(() => props.loading, (newLoading) => {
     }
 })
 
-// Methods
 function handleInput() {
-    if (isInitializing.value) {
+    if (isInitializing.value || isApplyingRemoteCollab) {
         // 如果正在初始化（從 props 同步中），我們不觸發自動儲存
         // 這樣可以避免載入報告時立即觸發儲存任務
         return
     }
 
-    // Trigger auto-save with all data
-    // We need to pass the external link to the parent via emit or just trust the triggerAutoSave
-    // triggerAutoSave calls saveFn with the CONTENT string usually. 
-    // But we have extra fields.
-    // The 'content' prop is usually just the text body.
-    // We should probably emit the external link update separately or ensure the parent reads it from the reference?
-    // Since we are using a custom autosave hook that likely calls a save function in the parent...
-    // Let's assume the parent needs to know about the external link update immediately?
-    // Or we can rely on `triggerAutoSave` triggering the save function which pulls from... wait.
-
-    // In `SessionDetailsView.vue`, the `handleEditorUpdate` usually takes `content`.
-    // We need to verify how `ReportEditor` communicates updates.
-    // It emits `update:content`. 
+    if (ydoc.value) {
+        if (contentEditorRef.value?.editor) {
+            localContent.value = contentEditorRef.value.editor.getText()
+        }
+        if (contactNotesEditorRef.value?.editor) {
+            contactNotes.value = contactNotesEditorRef.value.editor.getText()
+        }
+        if (classNotesEditorRef.value?.editor) {
+            classNotes.value = classNotesEditorRef.value.editor.getText()
+        }
+    }
 
     emit('update:content', localContent.value)
     emit('update:report-external-link', reportExternalLink.value)
-
-    // Construct the full report data object for saving if needed, 
-    // but `triggerAutoSave` takes `data: T` (generic). 
-    // It seems `localContent` is passed to `triggerAutoSave`. 
-    // If `localContent` is just the string, then `useAutoSave` calls `onSave(localContent)`.
-
-    // We need to modify what we pass to triggerAutoSave if we want to save more than just content.
-    // OR we emit the updates and the parent handles the saving orchestration.
 
     if (props.reportId) {
         triggerAutoSave(localContent.value)
@@ -1720,6 +2164,17 @@ function handleReportRestored(report: OccurrenceReportDTO) {
     classNotes.value = report.class_notes || ''
     reportExternalLink.value = report.external_link || ''
 
+    if (ydoc.value) {
+        const metaMap = ydoc.value.getMap('reportMeta')
+        withCollabGuard(() => {
+            writeReportMeta(metaMap)
+            setEditorContentSilently(contentEditorRef, report.content || '')
+            setEditorContentSilently(contactNotesEditorRef, report.contact_notes || '')
+            setEditorContentSilently(classNotesEditorRef, report.class_notes || '')
+        })
+        void saveSnapshot()
+    }
+
     // Emit the event to parent
     emit('restored', report)
 
@@ -1733,6 +2188,7 @@ defineExpose({
 
 // Warn before leaving with unsaved changes
 onBeforeUnmount(() => {
+    cleanupReportCollabBindings()
     void saveNow()
 })
 </script>

@@ -2,6 +2,30 @@ import { supabase } from '@/lib/supabase'
 
 export type TransferMigrationRow = {
     id: string
+    enrollment_id: string
+    class_occurrence_id: string
+    version?: number
+    content?: string | null
+    lesson_id?: string | null
+    is_completed?: boolean | null
+    progress_letter?: string | null
+    attendance_status?: string | null
+    absence_reason?: string | null
+    class_participation?: number | null
+    classroom_behavior?: number | null
+    contact_notes?: string | null
+    class_notes?: string | null
+    external_link?: string | null
+    class_occurrence: Array<{
+        id?: string
+        occurrence_date: string
+        class_session_id: string
+    }>
+}
+
+export type SingleLessonTransferReportRow = {
+    id: string
+    enrollment_id: string
     class_occurrence_id: string
     version?: number
     class_occurrence: Array<{
@@ -28,19 +52,31 @@ export class EnrollmentTransferQueryService {
     static async getReportsToMigrate(
         enrollmentId: string,
         oldSessionId: string | null,
-        originalLastDate: string
+        transferDate: string
     ): Promise<TransferMigrationRow[]> {
         const { data, error } = await supabase
             .from('occurrence_reports')
             .select(`
                 id,
+                enrollment_id,
                 class_occurrence_id,
                 version,
-                class_occurrence:class_occurrences!inner(occurrence_date, class_session_id)
+                content,
+                lesson_id,
+                is_completed,
+                progress_letter,
+                attendance_status,
+                absence_reason,
+                class_participation,
+                classroom_behavior,
+                contact_notes,
+                class_notes,
+                external_link,
+                class_occurrence:class_occurrences!inner(id, occurrence_date, class_session_id)
             `)
             .eq('enrollment_id', enrollmentId)
             .eq('class_occurrence.class_session_id', oldSessionId)
-            .gt('class_occurrence.occurrence_date', originalLastDate)
+            .gte('class_occurrence.occurrence_date', transferDate)
             .order('occurrence_date', { foreignTable: 'class_occurrences', ascending: true })
 
         if (error) {
@@ -48,6 +84,63 @@ export class EnrollmentTransferQueryService {
         }
 
         return (data || []) as TransferMigrationRow[]
+    }
+
+    static async getSingleLessonReportCandidates(
+        enrollmentId: string,
+        originalDate: string
+    ): Promise<SingleLessonTransferReportRow[]> {
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select(`
+                id,
+                enrollment_id,
+                class_occurrence_id,
+                version,
+                class_occurrence:class_occurrences!inner(occurrence_date, class_session_id)
+            `)
+            .eq('enrollment_id', enrollmentId)
+            .eq('class_occurrence.occurrence_date', originalDate)
+
+        if (error) {
+            throw new Error(`Failed to find original report: ${error.message}`)
+        }
+
+        return (data || []) as SingleLessonTransferReportRow[]
+    }
+
+    static async getReportTransferInfo(reportId: string): Promise<SingleLessonTransferReportRow> {
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select(`
+                id,
+                enrollment_id,
+                class_occurrence_id,
+                version,
+                class_occurrence:class_occurrences!inner(occurrence_date, class_session_id)
+            `)
+            .eq('id', reportId)
+            .single()
+
+        if (error || !data) {
+            throw new Error(`Failed to fetch report for transfer: ${error?.message || 'not found'}`)
+        }
+
+        return data as SingleLessonTransferReportRow
+    }
+
+    static async getSessionDayOfWeek(sessionId: string): Promise<number> {
+        const { data, error } = await supabase
+            .from('class_sessions')
+            .select('day_of_week')
+            .eq('id', sessionId)
+            .single()
+
+        if (error || data?.day_of_week === null || data?.day_of_week === undefined) {
+            throw new Error(`Failed to fetch target session: ${error?.message || 'missing day of week'}`)
+        }
+
+        return data.day_of_week
     }
 
     static async getLessonCount(courseId: string, fallbackCount: number): Promise<number> {
@@ -72,6 +165,24 @@ export class EnrollmentTransferQueryService {
         }
 
         return (data || []) as Array<{ id: string }>
+    }
+
+    static async getExistingReportForOccurrence(
+        enrollmentId: string,
+        occurrenceId: string
+    ): Promise<{ id: string } | null> {
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select('id')
+            .eq('enrollment_id', enrollmentId)
+            .eq('class_occurrence_id', occurrenceId)
+            .maybeSingle()
+
+        if (error) {
+            throw new Error(`Failed to check target report: ${error.message}`)
+        }
+
+        return data || null
     }
 
     static async getTargetOccurrenceId(sessionId: string, targetDate: string): Promise<string> {

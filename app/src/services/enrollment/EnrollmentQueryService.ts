@@ -26,7 +26,8 @@ export class EnrollmentQueryService {
                     day_of_week,
                     start_time,
                     end_time,
-                    capacity
+                    capacity,
+                    time_zone
                 )
             `)
             .eq('student_id', studentId)
@@ -47,10 +48,10 @@ export class EnrollmentQueryService {
                 *,
                 courses (subject, stage, display_name),
                 classrooms (name),
-                class_sessions (id, name, day_of_week, start_time, end_time),
+                class_sessions (id, name, day_of_week, start_time, end_time, time_zone),
                 students (name, email)
             `)
-            .eq('status', 'active')
+            .in('status', ['regular', 'trial'])
             .order('created_at', { ascending: false })
 
         if (error) throw new Error(`Failed to fetch active enrollments: ${error.message}`)

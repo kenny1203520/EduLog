@@ -66,7 +66,7 @@ export class CourseService {
             students (name, email)
         `)
             .eq('class_session_id', sessionId)
-            .in('status', ['active', 'trial'])
+            .in('status', ['regular', 'trial'])
             .order('name', { foreignTable: 'students', ascending: true })
 
         if (error) throw new Error(error.message)

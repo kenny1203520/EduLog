@@ -17,6 +17,7 @@ export interface ClassSessionDTO {
     day_of_week: number
     start_time: string
     end_time: string
+    time_zone?: string
     capacity: number
     lesson_number?: number
     user_id?: string // Teacher ID

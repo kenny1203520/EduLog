@@ -1,113 +1,94 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
-import type { ClassOccurrence } from '@/models/ClassOccurrence'
-import { useAuthStore } from '@/stores/useAuthStore'
-import { TeacherService } from '@/services/teacher/TeacherService'
-import { StudentService } from '@/services/student/StudentService'
-import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { AggregateService } from '@/services/AggregateService'
+import { ClassOccurrence } from '@/models/ClassOccurrence'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { DateUtils } from '@/utils/DateUtils'
 
 const router = useRouter()
+const preferences = usePreferencesStore()
 const stats = ref({
     totalStudents: 0,
     activeCourses: 0,
     todayClasses: 0
 })
 const todayOccurrences = ref<ClassOccurrence[]>([])
+const pendingReports = ref<any[]>([])
+const pendingReportsCount = ref(0)
 const loading = ref(true)
 
 const nextClass = computed(() => {
     if (!todayOccurrences.value.length) return null
+
+    // Use the timezone-aware "now" for comparison
     const now = new Date()
-    const currentTimeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
 
-    // Find the first class that hasn't started yet
-    const upcoming = todayOccurrences.value.filter(occ => occ.effectiveStartTime && occ.effectiveStartTime >= currentTimeString)
-    if (upcoming.length > 0) {
-        return upcoming[0]
-    }
+    // Find the first class that hasn't ended yet
+    // This will correctly show the "ongoing" class until its scheduled end time.
+    return todayOccurrences.value.find(occ => {
+        const endInstant = occ.effectiveEndInstant
+        // If the class has an end time, show it if it's in the future
+        if (endInstant) return now < endInstant
 
-    // If all classes have started, find the first one that is currently ongoing (start <= now <= end)
-    const ongoing = todayOccurrences.value.filter(occ => occ.effectiveStartTime && occ.effectiveEndTime && occ.effectiveStartTime <= currentTimeString && occ.effectiveEndTime >= currentTimeString)
-    if (ongoing.length > 0) {
-        return ongoing[0]
-    }
+        // Fallback for classes with only start time: show if it's in the future or started very recently (e.g., within the last hour)
+        const startInstant = occ.effectiveStartInstant
+        if (startInstant) {
+            const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+            return startInstant > oneHourAgo
+        }
 
-    // If all are past, return null
-    return null
+        return false
+    }) || null
 })
 
 onMounted(async () => {
     try {
         loading.value = true
 
-        // Fetch background stats in parallel
-        Promise.all([
-            StudentService.getAll(1, 1).then(res => { stats.value.totalStudents = res.count }).catch(e => console.error(e)),
-            CourseCatalogService.getCourses(1, 1).then(res => { stats.value.activeCourses = res.count }).catch(e => console.error(e)),
-            fetchPendingReports()
-        ])
+        const todayStr = DateUtils.todayString(preferences.timeZone)
+        const agg = await AggregateService.getDashboardHome(todayStr, todayStr, true)
+        
+        stats.value.totalStudents = agg.stats?.totalStudents || 0
+        stats.value.activeCourses = agg.stats?.activeCourses || 0
+        pendingReports.value = agg.pendingReports || []
+        pendingReportsCount.value = agg.stats?.pendingReportsCount || 0
 
-        // Fetch today's classes
-        const today = new Date()
-        const start = new Date(today.setHours(0, 0, 0, 0))
-        const end = new Date(today.setHours(23, 59, 59, 999))
+        if (agg.occurrences && Array.isArray(agg.occurrences)) {
+            const mappedOccs: ClassOccurrence[] = agg.occurrences.map((d: any) => {
+                const occ = new ClassOccurrence(d)
+                if (d.class_sessions) {
+                    occ.sessionName = d.class_sessions.name
+                    if (!occ.timeZone && d.class_sessions.time_zone) {
+                        occ.timeZone = d.class_sessions.time_zone
+                    }
+                }
+                if (d.class_sessions?.classrooms) {
+                    occ.classroomName = d.class_sessions.classrooms.name
+                    occ.classroomColor = d.class_sessions.classrooms.color
+                }
+                return occ
+            })
 
-        const data = await OccurrenceService.getOccurrencesByDateRange(start, end)
-        const auth = useAuthStore()
-        const userId = auth.user?.id
+            // Sort by actual start time
+            mappedOccs.sort((a, b) => {
+                const instantA = a.effectiveStartInstant?.getTime()
+                const instantB = b.effectiveStartInstant?.getTime()
+                if (instantA != null && instantB != null) return instantA - instantB
+                const timeA = a.effectiveStartTime || '23:59:59'
+                const timeB = b.effectiveStartTime || '23:59:59'
+                return timeA.localeCompare(timeB)
+            })
 
-        // Fetch teacher profile if logged in
-        const teacherProfile = userId ? await TeacherService.getTeacherByUserId(userId) : null
-        const teacherId = teacherProfile?.id
-
-        // Visible if:
-        // 1. Current user is assigned to the occurrence (teacherId is in teacherIds)
-        // 2. Teacher is marked attending (teacherAttendance[teacherId] is true)
-        // 3. Class is conducted (isConducted is true)
-        const visible = (data || []).filter(d => {
-            // Must be conducted
-            if (d.isConducted !== true) return false
-
-            // If we have a teacher profile, filter by assignment and attendance
-            if (teacherId) {
-                const isAssigned = d.teacherIds?.includes(teacherId)
-                const isAttending = d.teacherAttendance && d.teacherAttendance[teacherId] === true
-                return isAssigned && isAttending
-            }
-
-            // If no teacher profile is linked to this user, don't show any classes
-            return false
-        })
-
-        // Sort by start time
-        visible.sort((a, b) => {
-            const timeA = a.effectiveStartTime || '23:59:59'
-            const timeB = b.effectiveStartTime || '23:59:59'
-            return timeA.localeCompare(timeB)
-        })
-
-        todayOccurrences.value = visible
-        stats.value.todayClasses = visible.length
+            todayOccurrences.value = mappedOccs
+            stats.value.todayClasses = mappedOccs.length
+        }
     } catch (e) {
-        console.error(e)
+        console.error('Failed to load dashboard data:', e)
     } finally {
         loading.value = false
     }
 })
-
-const pendingReports = ref<any[]>([])
-
-async function fetchPendingReports() {
-    try {
-        const data = await OccurrenceReportService.getPendingReports()
-        pendingReports.value = data
-    } catch (e) {
-        console.error('Failed to fetch pending occurrences:', e)
-    }
-}
 
 function navigateToSession(id: string) {
     router.push({ name: 'session-details', params: { id } })
@@ -119,6 +100,10 @@ function openReport(enrollmentId: string) {
 
 function navigateToGlobalIncomplete() {
     router.push({ name: 'incomplete-reports' })
+}
+
+function formatReportDate(date: string | Date | undefined): string {
+    return DateUtils.displayDate(date, preferences.locale, preferences.timeZone)
 }
 
 </script>
@@ -171,8 +156,13 @@ function navigateToGlobalIncomplete() {
                         <div>
                             <div class="flex items-center gap-2 mb-3">
                                 <span class="flex h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <span class="text-xs font-black text-emerald-600 uppercase tracking-widest">{{
-                                    $t('dashboard.schedule.next_class') }}</span>
+                                <span class="text-xs font-black text-emerald-600 uppercase tracking-widest">
+                                    {{ (nextClass.effectiveStartInstant && new Date() >=
+                                        nextClass.effectiveStartInstant)
+                                        ? $t('dashboard.schedule.ongoing_class')
+                                        : $t('dashboard.schedule.next_class')
+                                    }}
+                                </span>
                             </div>
                             <h2 class="text-3xl font-black text-gray-900 tracking-tight mb-2">
                                 {{ nextClass.sessionName || $t('dashboard.schedule.untitled_class') }}
@@ -221,6 +211,9 @@ function navigateToGlobalIncomplete() {
                                 $t('dashboard.schedule.title') }}</h3>
                             <p class="text-sm font-bold text-gray-400 italic">{{ $t('dashboard.schedule.subtitle') }}
                             </p>
+                            <p class="text-[11px] font-bold text-gray-400 mt-1">
+                                {{ $t('dashboard.schedule.time_zone', { zone: preferences.timeZoneLabel }) }}
+                            </p>
                         </div>
                         <button @click="router.push({ name: 'classrooms' })"
                             class="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors">
@@ -247,7 +240,7 @@ function navigateToGlobalIncomplete() {
                         class="text-center py-12 bg-gray-50/50 rounded-3xl border border-dashed border-gray-200">
                         <h4 class="text-lg font-black text-gray-900 mb-1">{{ $t('dashboard.schedule.no_classes') }}</h4>
                         <p class="text-sm text-gray-400 font-medium italic">{{ $t('dashboard.schedule.no_classes_sub')
-                            }}</p>
+                        }}</p>
                     </div>
 
                     <div v-else class="space-y-3">
@@ -266,7 +259,7 @@ function navigateToGlobalIncomplete() {
                                             occ.effectiveEndTime?.slice(0, 5) }}</span>
                                         <span v-if="occ.classroomName"
                                             class="text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">{{
-                                            occ.classroomName }}</span>
+                                                occ.classroomName }}</span>
                                     </div>
                                 </div>
                             </div>
@@ -350,14 +343,14 @@ function navigateToGlobalIncomplete() {
                                     d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                         </div>
-                        <p class="text-3xl font-black text-gray-900 tracking-tighter">{{ pendingReports.length }}</p>
+                        <p class="text-3xl font-black text-gray-900 tracking-tighter">{{ pendingReportsCount }}</p>
                         <h4 class="text-[11px] font-black text-gray-400 uppercase tracking-widest mt-1">{{
                             $t('dashboard.stats.pending_reports') }}</h4>
                     </div>
                 </div>
 
                 <!-- Pending Reports Widget -->
-                <div v-if="pendingReports.length > 0"
+                <div v-if="pendingReportsCount > 0"
                     class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-6">
                     <div class="flex items-center justify-between mb-6">
                         <h3 class="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
@@ -389,9 +382,7 @@ function navigateToGlobalIncomplete() {
                                     {{ report.isMissing ? $t('dashboard.missing') : $t('dashboard.incomplete') }}
                                 </span>
                                 <span class="text-[10px] font-black text-gray-400 uppercase">
-                                    {{ new Date(report.date).toLocaleDateString(undefined, {
-                                        month: 'short', day:
-                                    'numeric' }) }}
+                                    {{ formatReportDate(report.date) }}
                                 </span>
                             </div>
                         </div>
@@ -399,7 +390,7 @@ function navigateToGlobalIncomplete() {
 
                     <button @click="navigateToGlobalIncomplete"
                         class="w-full py-3 bg-gray-50 text-gray-600 font-black rounded-xl hover:bg-gray-100 transition-colors text-sm flex items-center justify-center gap-2">
-                        {{ $t('dashboard.view_all_reports_count', { count: pendingReports.length }) }}
+                        {{ $t('dashboard.view_all_reports_count', { count: pendingReportsCount }) }}
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

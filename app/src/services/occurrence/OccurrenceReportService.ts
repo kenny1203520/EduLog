@@ -40,18 +40,30 @@ export class OccurrenceReportService {
         detailedData?: {
             lessonId?: string
             isCompleted?: boolean
-            progressLetter?: string
+            progressLetter?: string | null
             attendanceStatus?: 'present' | 'absent' | 'pending'
-            absenceReason?: string
+            absenceReason?: string | null
             classParticipation?: number
             classroomBehavior?: number
             contactNotes?: string
             classNotes?: string
-            content: string,
+            content?: string,
             externalLink?: string
         }
     ): Promise<SaveReportResult> {
         return ReportCommandService.saveReport(reportId, currentVersion, userId, detailedData)
+    }
+
+    static async saveAttendanceOnly(
+        reportId: string,
+        currentVersion: number,
+        userId: string | undefined,
+        attendanceData: {
+            attendanceStatus: 'present' | 'absent' | 'pending'
+            absenceReason?: string | null
+        }
+    ): Promise<SaveReportResult> {
+        return ReportCommandService.saveAttendanceOnly(reportId, currentVersion, userId, attendanceData)
     }
 
     static async getReportVersions(reportId: string): Promise<ReportVersion[]> {

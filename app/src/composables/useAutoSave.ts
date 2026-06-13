@@ -9,7 +9,7 @@ export interface AutoSaveOptions {
     debounceMs?: number
     
     /** Callback function to save content, returns save result */
-    onSave: (content: string) => Promise<{ success: boolean, conflict?: boolean, newVersion?: number, serverVersion?: number, serverReport?: OccurrenceReportDTO | null }>
+    onSave: (content: string) => Promise<{ success: boolean, conflict?: boolean, newVersion?: number, serverVersion?: number, serverReport?: OccurrenceReportDTO | null, message?: string }>
     
     /** Callback when a conflict is detected */
     onConflict?: (serverReport: OccurrenceReportDTO | null) => void
@@ -111,7 +111,7 @@ export function useAutoSave(options: AutoSaveOptions) {
                         onSuccess(result.newVersion)
                     }
                 } else {
-                    const errorMsg = 'Failed to save'
+                    const errorMsg = result.message || 'Failed to save'
                     saveError.value = errorMsg
                     hasUnsavedChanges.value = true
                     if (onError) {

@@ -1,0 +1,17 @@
+{
+    "subtitle": "管理您的個人偏好與系統設定",
+    "timezone": {
+        "title": "時區設定",
+        "description": "設定系統顯示時間所使用的時區。這會影響您的課堂顯示、報告時間以及所有時間相關的功能。",
+        "current": "目前設定的時區",
+        "use_browser": "使用瀏覽器時區",
+        "search_placeholder": "搜尋地區或城市 (例如: 台北, London, UTC...)"
+    },
+    "appearance": {
+        "title": "外觀與個人化",
+        "description": "自訂您的介面顯示方式，提供更舒適的使用體驗。",
+        "font_scale": "全域字體大小",
+        "font_scale_hint": "調整後會立即套用到所有頁面。",
+        "language": "介面語言"
+    }
+}

@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Student, type StudentDTO } from '@/models/Student'
 import { EnrollmentService } from '../enrollment/EnrollmentService'
+import { DateUtils } from '@/utils/DateUtils'
 
 /**
  * Command service for students
@@ -66,11 +67,6 @@ export class StudentCommandService {
         const { error: e3 } = await supabase.from('student_credentials').delete().eq('student_id', id)
         if (e3) throw new Error('Failed to delete credentials: ' + e3.message)
 
-        // 4. Delete Reports (Legacy or linked)
-        const { error: e4 } = await supabase.from('reports').delete().eq('student_id', id)
-        if (e4 && e4.code !== '42P01') {
-            throw new Error('Failed to delete reports: ' + e4.message)
-        }
 
         // 5. Finally Delete Student
         const { data, error } = await supabase
@@ -110,13 +106,18 @@ export class StudentCommandService {
     static async addSchool(school: any) {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const { data, error } = await supabase.from('student_schools').insert({ ...school, user_id: user.id }).select().single()
+        const timeZone = DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
+        const { data, error } = await supabase.from('student_schools').insert({ ...school, time_zone: timeZone, user_id: user.id }).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async updateSchool(id: string, school: any) {
-        const { data, error } = await supabase.from('student_schools').update(school).eq('id', id).select().single()
+        const updates = {
+            ...school,
+            time_zone: DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
+        }
+        const { data, error } = await supabase.from('student_schools').update(updates).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return data
     }

@@ -2,6 +2,27 @@ import { supabase } from '@/lib/supabase'
 
 export class EnrollmentSupportService {
     static async deleteReportsForEnrollment(enrollmentId: string): Promise<void> {
+        // 1. Get all report IDs for this enrollment to clean up versions
+        const { data: reports } = await supabase
+            .from('occurrence_reports')
+            .select('id')
+            .eq('enrollment_id', enrollmentId)
+
+        if (reports && reports.length > 0) {
+            const reportIds = reports.map(r => r.id)
+            // 2. Delete all versions for these reports
+            const { error: vError } = await supabase
+                .from('report_versions')
+                .delete()
+                .in('occurrence_report_id', reportIds)
+
+            if (vError) {
+                console.error(`Failed to delete report versions for enrollment ${enrollmentId}:`, vError)
+                throw new Error(`Failed to delete report versions: ${vError.message}`)
+            }
+        }
+
+        // 3. Delete the reports themselves
         const { error } = await supabase
             .from('occurrence_reports')
             .delete()
@@ -9,6 +30,19 @@ export class EnrollmentSupportService {
 
         if (error) {
             console.error(`Failed to delete reports for enrollment ${enrollmentId}:`, error)
+            throw new Error(`Failed to delete reports: ${error.message}`)
+        }
+    }
+
+    static async deleteSuspensionsForEnrollment(enrollmentId: string): Promise<void> {
+        const { error } = await supabase
+            .from('student_suspensions')
+            .delete()
+            .eq('enrollment_id', enrollmentId)
+
+        if (error) {
+            console.error(`Failed to delete suspensions for enrollment ${enrollmentId}:`, error)
+            throw new Error(`Failed to delete suspensions: ${error.message}`)
         }
     }
 

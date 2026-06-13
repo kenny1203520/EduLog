@@ -16,14 +16,16 @@ const props = withDefaults(defineProps<{
     menuWidthClass?: string
     maxHeightClass?: string
     disabled?: boolean
+    fontSizeClass?: string
 }>(), {
-    placeholder: 'Select option',
+    placeholder: '',
     theme: 'indigo',
     align: 'left',
     widthClass: 'w-full',
     menuWidthClass: 'w-full',
     maxHeightClass: 'max-h-60',
-    disabled: false
+    disabled: false,
+    fontSizeClass: 'text-xs'
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -45,7 +47,7 @@ function updatePosition() {
             top: isTop ? 'auto' : `${rect.bottom + 8}px`,
             bottom: isTop ? `${window.innerHeight - rect.top + 8}px` : 'auto',
             left: `${rect.left}px`,
-            width: `${rect.width}px`,
+            minWidth: `${Math.max(rect.width, 160)}px`,
             zIndex: '9999'
         }
     }
@@ -131,10 +133,10 @@ onUnmounted(() => {
 <template>
     <div class="relative" :class="widthClass" ref="containerRef">
         <button @click="toggle" type="button" :disabled="disabled"
-            class="w-full flex items-center justify-between gap-2 text-xs font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
-            :class="[themeClasses.ring, isOpen ? 'ring-4' : '']">
+            class="w-full flex items-center justify-between gap-2 font-bold border border-gray-100 rounded-xl px-3 py-2.5 bg-white hover:bg-gray-50 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-50"
+            :class="[themeClasses.ring, isOpen ? 'ring-4' : '', fontSizeClass]">
             <span class="truncate" :class="modelValue !== '' && modelValue !== null && !disabled ? themeClasses.text : 'text-gray-400'">
-                {{ selectedOption ? selectedOption.label : placeholder }}
+                {{ selectedOption ? selectedOption.label : (placeholder || $t('common.select_placeholder')) }}
             </span>
             <svg xmlns="http://www.w3.org/2000/svg" 
                 class="h-3.5 w-3.5 transition-transform duration-300 text-gray-400" 
@@ -165,8 +167,11 @@ onUnmounted(() => {
                     ]">
                     <div v-for="opt in options" :key="String(opt.value)" 
                         @click="select(opt.value)"
-                        class="px-3 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center justify-between group"
-                        :class="modelValue === opt.value ? [themeClasses.bg, themeClasses.text] : ['text-gray-600', 'hover:bg-gray-50', themeClasses.hoverText]">
+                        class="px-3 py-2.5 rounded-xl font-bold cursor-pointer transition-colors flex items-center justify-between group"
+                        :class="[
+                            modelValue === opt.value ? [themeClasses.bg, themeClasses.text] : ['text-gray-600', 'hover:bg-gray-50', themeClasses.hoverText],
+                            fontSizeClass
+                        ]">
                         <span class="truncate">{{ opt.label }}</span>
                         <svg v-if="modelValue === opt.value" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />

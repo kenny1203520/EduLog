@@ -89,6 +89,12 @@ const router = createRouter({
           meta: { title: 'nav.teachers', description: 'nav.description.teachers' }
         },
         {
+          path: 'settings',
+          name: 'settings',
+          component: () => import('@/views/SettingsView.vue'),
+          meta: { title: 'nav.settings', description: 'nav.description.settings' }
+        },
+        {
           path: 'about',
           name: 'about',
           component: () => import('@/views/AboutView.vue'),

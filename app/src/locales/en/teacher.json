@@ -74,5 +74,29 @@
   "validation_email": "Please enter a valid email address",
   "validation_user_id": "System account ID must be a valid UUID",
   "validation_gov_id": "ID number must be 20 characters or fewer",
-  "error_duplicate_user": "This system account is already linked to another teacher"
+  "error_duplicate_user": "This system account is already linked to another teacher",
+  "credentials_title": "Platform Accounts",
+  "credentials_hint": "Store multiple platform accounts for this teacher. Koding School (Orange Apple) accounts still appear as code-check comparison accounts.",
+  "credentials_empty": "No platform accounts yet",
+  "credentials_add": "Add Account",
+  "credentials_platform": "Platform",
+  "credentials_platform_name": "Platform Name",
+  "credentials_username": "Username",
+  "credentials_password": "Password",
+  "credentials_url": "URL",
+  "credentials_save_teacher_first": "Save the teacher before adding accounts",
+  "credentials_platform_required": "Platform and username are required; password is also required for non-Koding School (Orange Apple) accounts",
+  "credentials_add_success": "Platform account added",
+  "credentials_update_success": "Platform account updated",
+  "credentials_delete_success": "Platform account deleted",
+  "credentials_save_failed": "Failed to save platform account",
+  "credentials_platforms": {
+    "koding_school_orange_apple": "Koding School (Orange Apple)",
+    "Roblox": "Roblox",
+    "Minecraft": "Minecraft",
+    "Anydesk": "Anydesk",
+    "Quiz Platform": "Quiz Platform",
+    "Discord": "Discord",
+    "Other": "Other"
+  }
 }

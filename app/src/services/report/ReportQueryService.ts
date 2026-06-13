@@ -1,7 +1,35 @@
 import { supabase } from '@/lib/supabase'
 import { OccurrenceReport, ReportVersion, type OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { DateUtils } from '@/utils/DateUtils'
+import { AggregateService } from '@/services/AggregateService'
 
 export class ReportQueryService {
+    private static getOccurrenceSortKey(report: any): string {
+        const occurrence = Array.isArray(report?.class_occurrences)
+            ? report.class_occurrences[0]
+            : report?.class_occurrences
+        const date = occurrence?.occurrence_date || ''
+        const time = occurrence?.actual_start_time || occurrence?.original_start_time || '00:00:00'
+
+        return `${date}T${time}`
+    }
+
+    private static sortByOccurrenceDateTime<T extends any[]>(reports: T, sortBy: 'asc' | 'desc'): T {
+        const direction = sortBy === 'asc' ? 1 : -1
+        return [...reports].sort((a, b) => {
+            const aKey = this.getOccurrenceSortKey(a)
+            const bKey = this.getOccurrenceSortKey(b)
+
+            if (aKey === bKey) {
+                const aUpdated = a?.updated_at || ''
+                const bUpdated = b?.updated_at || ''
+                return aUpdated.localeCompare(bUpdated) * direction
+            }
+
+            return aKey.localeCompare(bKey) * direction
+        }) as T
+    }
+
     static async getReport(
         enrollmentId: string,
         occurrenceId: string
@@ -37,31 +65,48 @@ export class ReportQueryService {
     ): Promise<{ data: OccurrenceReport[], count: number }> {
         const from = (page - 1) * perPage
         const to = from + perPage - 1
-
-        const { data, error, count } = await supabase
-            .from('occurrence_reports')
-            .select(`
-                *,
-                class_occurrences!class_occurrence_id (
-                    occurrence_date
-                )
-            `, { count: 'exact' })
-            .eq('enrollment_id', enrollmentId)
-            .order('created_at', { ascending: false })
-            .range(from, to)
-
-        if (error) throw new Error(error.message)
-
-        return {
-            data: (data || []).map((dto: any) => {
-                const occurrenceDate = dto.class_occurrences?.occurrence_date
+        // Try aggregated endpoint first to reduce multiple DB roundtrips
+        try {
+            const agg = await AggregateService.getReportsByEnrollmentAggregate(enrollmentId, page, perPage)
+            const reports = (agg.reports || []).map((dto: any) => {
+                // Ensure occurrence_date is present for model
+                const occ = dto.class_occurrence || dto.class_occurrences
+                const occurrenceDate = occ?.occurrence_date
                 const mappedDto: OccurrenceReportDTO = {
                     ...dto,
                     occurrence_date: occurrenceDate
                 }
                 return new OccurrenceReport(mappedDto)
-            }),
-            count: count || 0
+            })
+
+            return { data: reports, count: agg.count || 0 }
+        } catch (e) {
+            // Fallback to previous direct query if aggregate fails
+            const { data, error, count } = await supabase
+                .from('occurrence_reports')
+                .select(`
+                    *,
+                    class_occurrences!class_occurrence_id (
+                        occurrence_date
+                    )
+                `, { count: 'exact' })
+                .eq('enrollment_id', enrollmentId)
+                .order('created_at', { ascending: false })
+                .range(from, to)
+
+            if (error) throw new Error(error.message)
+
+            return {
+                data: (data || []).map((dto: any) => {
+                    const occurrenceDate = dto.class_occurrences?.occurrence_date
+                    const mappedDto: OccurrenceReportDTO = {
+                        ...dto,
+                        occurrence_date: occurrenceDate
+                    }
+                    return new OccurrenceReport(mappedDto)
+                }),
+                count: count || 0
+            }
         }
     }
 
@@ -121,6 +166,9 @@ export class ReportQueryService {
                     *,
                     class_session:class_sessions!class_session_id(
                         name,
+                        day_of_week,
+                        start_time,
+                        end_time,
                         classroom:classrooms!classroom_id(name)
                     )
                 ),
@@ -150,14 +198,20 @@ export class ReportQueryService {
     }
 
     static async getGlobalIncompleteReports(): Promise<any[]> {
+        // Try aggregate endpoint first
+        try {
+            const agg = await AggregateService.getIncompleteReportsAggregate(90)
+            if (Array.isArray(agg)) return agg
+        } catch (e) {
+            // ignore and fallback
+        }
+
         return this.fetchIncompleteReportsInternal(90)
     }
 
     private static async fetchIncompleteReportsInternal(daysBack: number): Promise<any[]> {
-        const startDate = new Date()
-        startDate.setDate(startDate.getDate() - daysBack)
-        const dateStr = startDate.toISOString().split('T')[0]
-        const todayStr = new Date().toISOString().split('T')[0]
+        const todayStr = DateUtils.todayString()
+        const dateStr = DateUtils.addDaysToDateString(todayStr, -daysBack)
 
         // Fetch reports with attendance_status = 'present'
         // Join with everything needed to determine incompleteness and show details
@@ -170,7 +224,7 @@ export class ReportQueryService {
                     students (id, name)
                 ),
                 class_occurrences!inner (
-                    id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, is_conducted, status,
+                    id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, time_zone, is_conducted, status,
                     class_sessions (
                         id, name,
                         classrooms (id, name)
@@ -212,6 +266,7 @@ export class ReportQueryService {
                     className: session?.name || '-',
                     classroomName: classroom?.name || '-',
                     date: occ.occurrence_date,
+                    timeZone: occ.time_zone,
                     startTime: occ.actual_start_time || occ.original_start_time || undefined,
                     endTime: occ.actual_end_time || occ.original_end_time || undefined,
                     content: report.content || '',
@@ -268,6 +323,7 @@ export class ReportQueryService {
                 ),
                 class_occurrences!inner (
                     occurrence_date,
+                    actual_start_time,
                     original_start_time,
                     class_session_id,
                     class_sessions!inner (
@@ -299,11 +355,12 @@ export class ReportQueryService {
 
         const { data, error, count } = await query
             .order('class_occurrences(occurrence_date)', { ascending: sortBy === 'asc' })
+            .order('class_occurrences(actual_start_time)', { ascending: sortBy === 'asc' })
             .order('class_occurrences(original_start_time)', { ascending: sortBy === 'asc' })
             .range(from, to)
 
         if (error) throw new Error(error.message)
-        return { data: data || [], count: count || 0 }
+        return { data: this.sortByOccurrenceDateTime(data || [], sortBy), count: count || 0 }
     }
 
     static async getReportsByStudent(
@@ -342,6 +399,7 @@ export class ReportQueryService {
                 ),
                 class_occurrences!inner (
                     occurrence_date,
+                    actual_start_time,
                     original_start_time,
                     class_sessions!inner (
                         name
@@ -366,12 +424,13 @@ export class ReportQueryService {
 
         const { data, error, count } = await query
             .order('class_occurrences(occurrence_date)', { ascending: sortBy === 'asc' })
+            .order('class_occurrences(actual_start_time)', { ascending: sortBy === 'asc' })
             .order('class_occurrences(original_start_time)', { ascending: sortBy === 'asc' })
             .range(from, to)
 
         if (error) throw new Error(error.message)
 
-        return { data: data || [], count: count || 0 }
+        return { data: this.sortByOccurrenceDateTime(data || [], sortBy), count: count || 0 }
     }
 
 }

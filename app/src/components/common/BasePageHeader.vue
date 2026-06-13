@@ -18,7 +18,7 @@ defineProps<Props>()
 </script>
 
 <template>
-  <div class="relative w-full overflow-visible mb-4">
+  <div class="relative w-full overflow-visible mb-2">
     <!-- Background effects -->
     <template v-if="!hideBackground">
       <div class="absolute inset-0 -top-24 -bottom-24 overflow-hidden -z-10 pointer-events-none">

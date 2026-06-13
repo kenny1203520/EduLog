@@ -37,7 +37,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div v-if="isOpen" class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <Teleport to="body">
+    <div v-if="isOpen" class="fixed inset-0 z-[90] flex items-center justify-center p-4">
         <!-- Backdrop -->
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" @click="$emit('close')"></div>
 
@@ -94,4 +95,5 @@ onUnmounted(() => {
             </div>
         </div>
     </div>
+    </Teleport>
 </template>

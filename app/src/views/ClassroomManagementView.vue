@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
+import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
@@ -13,6 +14,8 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { DateUtils } from '@/utils/DateUtils'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 
@@ -22,6 +25,7 @@ import BasePageHeader from '@/components/common/BasePageHeader.vue'
 const { t } = useI18n()
 const toast = useToast()
 const router = useRouter()
+const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 type DisplayMode = 'visible' | 'all' | 'hidden'
 
@@ -110,6 +114,7 @@ const newSession = ref<Partial<ClassSessionDTO>>({
     day_of_week: 1,
     start_time: '10:00',
     end_time: '12:00',
+    time_zone: preferences.timeZone,
     capacity: 10,
     lesson_number: 1,
     external_link: ''
@@ -161,17 +166,32 @@ async function loadData() {
 }
 
 async function loadRooms() {
-    const res = await ClassroomService.getClassrooms(
-        roomsPagination.value.page,
-        roomsPagination.value.perPage,
-        searchQuery.value,
-        displayMode.value
-    )
-    classrooms.value = res.data
-    roomsPagination.value.total = res.count
+    try {
+        const agg = await AggregateService.getClassroomSessionManagerAggregate(
+            roomsPagination.value.page,
+            roomsPagination.value.perPage,
+            searchQuery.value,
+            displayMode.value
+        )
+        classrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
+        roomsPagination.value.total = agg.count || 0
+        hiddenClassroomIds.value = new Set((agg.hiddenClassroomIds as string[] | undefined) || [])
+        hiddenSessionIds.value = new Set((agg.hiddenSessionIds as string[] | undefined) || [])
+        return
+    } catch (e) {
+        // fallback to existing client-side approach
+        const res = await ClassroomService.getClassrooms(
+            roomsPagination.value.page,
+            roomsPagination.value.perPage,
+            searchQuery.value,
+            displayMode.value
+        )
+        classrooms.value = res.data
+        roomsPagination.value.total = res.count
 
-    const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
-    hiddenClassroomIds.value = await VisibilityPreferenceService.getHiddenEntityIds('classroom', roomIds)
+        const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
+        hiddenClassroomIds.value = await VisibilityPreferenceService.getHiddenEntityIds('classroom', roomIds)
+    }
 }
 
 async function loadSessions() {
@@ -190,8 +210,14 @@ async function loadSessions() {
 }
 
 async function loadAllRooms() {
-    const res = await ClassroomService.getClassrooms(1, 1000)
-    allClassrooms.value = res.data
+    try {
+        const agg = await AggregateService.getClassroomSessionManagerAggregate(1, 1000, '')
+        allClassrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
+        return
+    } catch (e) {
+        const res = await ClassroomService.getClassrooms(1, 1000)
+        allClassrooms.value = res.data
+    }
 }
 
 watch(() => roomsPagination.value.page, loadRooms)
@@ -368,6 +394,9 @@ async function toggleSessionVisibility(id?: string) {
 async function saveSession() {
     if (!newSession.value.name) return
     const payload = { ...newSession.value }
+    if (!DateUtils.isValidTimeZone(payload.time_zone)) {
+        payload.time_zone = preferences.timeZone
+    }
     if (!payload.classroom_id) {
         payload.classroom_id = null
     }
@@ -391,16 +420,16 @@ async function saveSession() {
         if (editingSession.value?.id) {
             // Sync occurrences if the schedule might have changed
             // This will create occurrences for the entire defined interval
-            const genStart = new Date(payload.start_date || new Date())
-            const genEnd = payload.end_date ? new Date(payload.end_date) : new Date()
+            const genStart = DateUtils.parseLocalDate(payload.start_date) || DateUtils.todayDate(payload.time_zone)
+            const genEnd = payload.end_date ? (DateUtils.parseLocalDate(payload.end_date) || DateUtils.todayDate(payload.time_zone)) : DateUtils.todayDate(payload.time_zone)
             if (!payload.end_date) {
                 genEnd.setMonth(genEnd.getMonth() + 6)
             }
             await OccurrenceService.generateOccurrences(sessionId, genStart, genEnd).catch(console.error)
         } else {
             // Generate occurrences for new sessions
-            const genStart = new Date(payload.start_date || new Date())
-            const genEnd = payload.end_date ? new Date(payload.end_date) : new Date()
+            const genStart = DateUtils.parseLocalDate(payload.start_date) || DateUtils.todayDate(payload.time_zone)
+            const genEnd = payload.end_date ? (DateUtils.parseLocalDate(payload.end_date) || DateUtils.todayDate(payload.time_zone)) : DateUtils.todayDate(payload.time_zone)
             if (!payload.end_date) {
                 genEnd.setMonth(genEnd.getMonth() + 6)
             }
@@ -419,7 +448,7 @@ async function saveSession() {
 
 async function openEditSession(session: ClassSessionDTO) {
     editingSession.value = session
-    newSession.value = { ...session }
+    newSession.value = { ...session, time_zone: session.time_zone || preferences.timeZone }
     try {
         const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
         selectedTeacherConfigs.value = assignedTeachers.map(t => ({
@@ -444,11 +473,12 @@ function openCreateSessionModal() {
         day_of_week: 1,
         start_time: '10:00',
         end_time: '12:00',
+        time_zone: preferences.timeZone,
         capacity: 10,
         lesson_number: 1,
         external_link: '',
         user_id: undefined,
-        start_date: new Date().toISOString().split('T')[0],
+        start_date: DateUtils.todayString(preferences.timeZone),
         end_date: null
     }
     isCreateSessionModalOpen.value = true
@@ -465,6 +495,7 @@ function closeSessionModal() {
         day_of_week: 1,
         start_time: '10:00',
         end_time: '12:00',
+        time_zone: preferences.timeZone,
         capacity: 10,
         lesson_number: 1,
         external_link: '',
@@ -509,7 +540,7 @@ function toggleCourseSelection(courseId: string) {
 function addTeacherAssignment() {
     selectedTeacherConfigs.value.push({
         teacher_id: '',
-        effective_from: newSession.value.start_date || new Date().toISOString().split('T')[0],
+        effective_from: newSession.value.start_date || DateUtils.todayString(newSession.value.time_zone || preferences.timeZone),
         effective_to: null
     })
 }
@@ -525,11 +556,8 @@ function clearTeacherSelection() {
 
 <template>
     <div class="space-y-6">
-        <BasePageHeader
-            :overline="t('nav.classrooms')"
-            :title="t('classroom.title')"
-            :subtitle="t('nav.description.classrooms')"
-        >
+        <BasePageHeader :overline="t('nav.classrooms')" :title="t('classroom.title')"
+            :subtitle="t('nav.description.classrooms')">
             <template #icon>
                 <div
                     class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
@@ -799,6 +827,9 @@ function clearTeacherSelection() {
                                     <span class="text-[12px] font-black text-gray-400 uppercase tracking-widest">
                                         {{ session.start_time.slice(0, 5) }}-{{ session.end_time.slice(0, 5) }}
                                     </span>
+                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                        {{ session.time_zone || 'Asia/Taipei' }}
+                                    </span>
                                     <span v-if="isSessionHidden(session.id)"
                                         class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">
                                         {{ $t('classroom.hidden') }}
@@ -1064,6 +1095,18 @@ function clearTeacherSelection() {
                                     class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                             </div>
                         </div>
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.time_zone')
+                            }}</label>
+                        <select v-model="newSession.time_zone"
+                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                            <option v-for="option in preferences.timeZoneOptions" :key="option.value"
+                                :value="option.value">
+                                {{ option.label }}
+                            </option>
+                        </select>
                     </div>
 
                     <div class="md:col-span-2">

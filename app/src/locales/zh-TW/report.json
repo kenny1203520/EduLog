@@ -67,7 +67,7 @@
         "next": "下一步",
         "newest": "從新排到舊",
         "oldest": "從舊排到新",
-        "contact": "家長聯絡",
+        "contact": "聯絡欄",
         "class_notes": "課堂筆記",
         "total": "總計"
     },
@@ -79,6 +79,9 @@
         "lesson_completed": "課程已完成",
         "view_external_report": "外部報告總覽連結",
         "report_link_label": "報告連結",
+        "first_save_success": "報告已儲存",
+        "save_failed_with_message": "儲存失敗：{message}",
+        "waiting_for_save_before_switch": "正在完成儲存，切換內容會稍等一下。",
         "templates": "範本管理",
         "template_name_placeholder": "範本名稱...",
         "template_saved": "範本已儲存",

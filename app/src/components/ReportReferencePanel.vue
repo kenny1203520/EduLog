@@ -361,6 +361,7 @@ import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
+import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { useI18n } from 'vue-i18n'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
@@ -487,14 +488,21 @@ function switchTab(tab: 'peer' | 'history') {
 
 async function loadFilterOptions() {
     try {
-        const [crs, cls, sessions] = await Promise.all([
-            CourseCatalogService.getCourses(1, 1000),
-            ClassroomService.getClassrooms(1, 1000),
-            SessionService.getClassSessions(1, 1000)
-        ])
-        courses.value = crs.data
-        classrooms.value = cls.data
-        allSessions.value = sessions.data
+        const crsP = CourseCatalogService.getCourses(1, 1000)
+        const sessionsP = SessionService.getClassSessions(1, 1000)
+
+        // Try aggregate for classrooms first
+        try {
+            const [crs, agg, sessions] = await Promise.all([crsP, AggregateService.getClassroomSessionManagerAggregate(1, 1000, ''), sessionsP])
+            courses.value = crs.data
+            classrooms.value = (agg.classrooms || []).map((d: any) => d)
+            allSessions.value = sessions.data
+        } catch (e) {
+            const [crs, cls, sessions] = await Promise.all([crsP, ClassroomService.getClassrooms(1, 1000), sessionsP])
+            courses.value = crs.data
+            classrooms.value = cls.data
+            allSessions.value = sessions.data
+        }
     } catch (e) {
         console.error('Failed to load filters:', e)
     }

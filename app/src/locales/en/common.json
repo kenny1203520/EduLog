@@ -1,5 +1,7 @@
 {
     "add": "Add",
+    "no_results": "No results",
+    "select_placeholder": "-- Select --",
     "search": "Search",
     "save": "Save",
     "saving": "Saving",
@@ -12,11 +14,15 @@
     "edit": "Edit",
     "view": "View",
     "view_link": "View Link",
+    "show": "Show",
+    "hide": "Hide",
     "confirm_delete": "Are you sure you want to delete?",
     "unknown_room": "Unknown Room",
     "no_description": "No description",
     "copy_success": "Copied to clipboard!",
     "back": "Back",
+    "back_to_dashboard": "Back to Dashboard",
+    "optional": "Optional",
     "start": "Start",
     "end": "End",
     "students": "Students",
@@ -39,6 +45,7 @@
     "refresh": "Refresh",
     "items": "Items",
     "loading": "Loading",
+    "checking": "Checking",
     "unknown_student": "Unknown Student",
     "unknown_course": "Unknown Course",
     "version": "Ver",
@@ -73,8 +80,18 @@
     "show_less": "Show Less",
     "system_managed": "System Managed",
     "language": "Language",
+    "time_zone": "Time Zone",
     "languages": {
         "zh-TW": "繁體中文",
         "en": "English"
+    },
+    "days": {
+        "sun": "Sun",
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat"
     }
 }

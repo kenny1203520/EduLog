@@ -114,7 +114,7 @@ export class SessionService {
             .from('enrollments')
             .select('*', { count: 'exact', head: true })
             .eq('class_session_id', sessionId)
-            .eq('status', 'active')
+            .eq('status', 'regular')
 
         if (countError) throw new Error(countError.message)
 

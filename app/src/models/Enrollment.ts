@@ -5,10 +5,12 @@ export interface EnrollmentDTO {
     course_id: string
     classroom_id?: string
     class_session_id?: string
-    status: 'active' | 'completed' | 'dropped' | 'trial'
+    status: 'regular' | 'completed' | 'dropped' | 'trial'
     start_date?: string
+    time_zone?: string
     lesson_number?: number
     external_link?: string
+    koding_admission_id?: string
     created_at?: string
     updated_at?: string
     
@@ -26,6 +28,7 @@ export interface EnrollmentDTO {
         day_of_week?: number
         start_time?: string
         end_time?: string
+        time_zone?: string
     }
     students?: {
         name: string
@@ -41,8 +44,10 @@ export class Enrollment {
     classSessionId?: string
     status: string
     startDate?: string
+    timeZone: string
     lessonNumber?: number
     externalLink?: string
+    kodingAdmissionId?: string
     
     // Display helpers
     courseSubject: string = ''
@@ -53,6 +58,7 @@ export class Enrollment {
     classSessionDayOfWeek?: number
     classSessionStartTime?: string
     classSessionEndTime?: string
+    classSessionTimeZone: string = ''
     studentName?: string
     studentEmail?: string
 
@@ -62,10 +68,12 @@ export class Enrollment {
         this.courseId = data.course_id
         this.classroomId = data.classroom_id
         this.classSessionId = data.class_session_id
-        this.status = data.status || 'active'
+        this.status = data.status || 'regular'
         this.startDate = data.start_date
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
         this.lessonNumber = data.lesson_number
         this.externalLink = data.external_link
+        this.kodingAdmissionId = data.koding_admission_id
         
         if (data.courses) {
             this.courseSubject = data.courses.subject
@@ -80,6 +88,7 @@ export class Enrollment {
             this.classSessionDayOfWeek = data.class_sessions.day_of_week
             this.classSessionStartTime = data.class_sessions.start_time
             this.classSessionEndTime = data.class_sessions.end_time
+            this.classSessionTimeZone = data.class_sessions.time_zone || 'Asia/Taipei'
         }
         if (data.students) {
             this.studentName = data.students.name
@@ -93,7 +102,7 @@ export class Enrollment {
     }
 
     get formattedStartDate(): string {
-        return DateUtils.displayDate(this.startDate)
+        return DateUtils.displayDate(this.startDate, undefined, this.timeZone)
     }
 
     get formattedSchedule(): string {
@@ -102,5 +111,11 @@ export class Enrollment {
         const dayName = days[this.classSessionDayOfWeek]
         const time = this.classSessionStartTime.slice(0, 5) // HH:MM
         return `${dayName} ${time}`
+    }
+
+    get classSessionDayKey(): string {
+        if (this.classSessionDayOfWeek === undefined) return ''
+        const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+        return days[this.classSessionDayOfWeek]
     }
 }

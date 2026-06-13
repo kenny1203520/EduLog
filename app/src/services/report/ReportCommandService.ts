@@ -8,6 +8,25 @@ import { EnrollmentProgressService } from '../enrollment/EnrollmentProgressServi
 import { ReportLifecyclePolicy } from './ReportLifecyclePolicy'
 import { ReportQueryService } from './ReportQueryService'
 
+type ReportSaveData = {
+    lessonId?: string
+    isCompleted?: boolean
+    progressLetter?: string | null
+    attendanceStatus?: 'present' | 'absent' | 'pending'
+    absenceReason?: string | null
+    classParticipation?: number
+    classroomBehavior?: number
+    contactNotes?: string
+    classNotes?: string
+    content?: string
+    externalLink?: string
+}
+
+type AttendanceOnlyData = {
+    attendanceStatus: 'present' | 'absent' | 'pending'
+    absenceReason?: string | null
+}
+
 export class ReportCommandService {
     static async createReport(
         enrollmentId: string,
@@ -60,19 +79,7 @@ export class ReportCommandService {
         reportId: string,
         currentVersion: number,
         userId?: string,
-        detailedData?: {
-            lessonId?: string
-            isCompleted?: boolean
-            progressLetter?: string
-            attendanceStatus?: 'present' | 'absent' | 'pending'
-            absenceReason?: string
-            classParticipation?: number
-            classroomBehavior?: number
-            contactNotes?: string
-            classNotes?: string
-            content: string,
-            externalLink?: string
-        }
+        detailedData?: ReportSaveData
     ): Promise<SaveReportResult> {
         const { data: serverReport, error: fetchError } = await supabase
             .from('occurrence_reports')
@@ -127,23 +134,17 @@ export class ReportCommandService {
         }
 
         if (detailedData) {
-            let isCompleted = detailedData.isCompleted ?? true
-            const progressLetter = detailedData.progressLetter || null
-
-            if (detailedData.attendanceStatus === 'absent') {
-                isCompleted = false
-            }
-
             if (detailedData.lessonId !== undefined) {
                 updateData.lesson_id = detailedData.lessonId
             }
             if (detailedData.externalLink !== undefined) {
                 updateData.external_link = detailedData.externalLink
             }
-            updateData.is_completed = isCompleted
-
-            if (progressLetter !== undefined) {
-                updateData.progress_letter = progressLetter
+            if (detailedData.isCompleted !== undefined) {
+                updateData.is_completed = detailedData.isCompleted
+            }
+            if (detailedData.progressLetter !== undefined) {
+                updateData.progress_letter = detailedData.progressLetter || null
             }
             if (detailedData.attendanceStatus !== undefined) {
                 updateData.attendance_status = detailedData.attendanceStatus
@@ -202,6 +203,98 @@ export class ReportCommandService {
                 )
             } catch (progressError: any) {
                 console.error('Failed to update progress:', progressError)
+            }
+        }
+
+        return {
+            success: true,
+            conflict: false,
+            newVersion: updated.version
+        }
+    }
+
+    static async saveAttendanceOnly(
+        reportId: string,
+        currentVersion: number,
+        userId: string | undefined,
+        attendanceData: AttendanceOnlyData
+    ): Promise<SaveReportResult> {
+        const { data: serverReport, error: fetchError } = await supabase
+            .from('occurrence_reports')
+            .select('*')
+            .eq('id', reportId)
+            .single()
+
+        if (fetchError) {
+            return {
+                success: false,
+                conflict: false,
+                message: `Failed to fetch report: ${fetchError.message}`
+            }
+        }
+
+        if (serverReport.version !== currentVersion) {
+            return {
+                success: false,
+                conflict: true,
+                serverContent: serverReport.content,
+                serverReport: serverReport,
+                message: 'Conflict detected: Report was modified by another user'
+            }
+        }
+
+        const isSystemManaged = serverReport.absence_reason === 'holiday' || serverReport.absence_reason === 'suspension'
+        if (isSystemManaged) {
+            if (attendanceData.attendanceStatus !== serverReport.attendance_status) {
+                return {
+                    success: false,
+                    conflict: false,
+                    message: `Cannot modify attendance status: This report is managed by the system (${serverReport.absence_reason}).`
+                }
+            }
+
+            if (attendanceData.absenceReason !== undefined && attendanceData.absenceReason !== serverReport.absence_reason) {
+                return {
+                    success: false,
+                    conflict: false,
+                    message: `Cannot modify absence reason: This report is managed by the system (${serverReport.absence_reason}).`
+                }
+            }
+        }
+
+        const newVersion = currentVersion + 1
+        const updateData: any = {
+            attendance_status: attendanceData.attendanceStatus,
+            version: newVersion,
+            last_edited_by: userId,
+            last_edited_at: new Date().toISOString()
+        }
+
+        if (attendanceData.absenceReason !== undefined) {
+            updateData.absence_reason = attendanceData.absenceReason
+        }
+
+        const { data: updated, error: updateError } = await supabase
+            .from('occurrence_reports')
+            .update(updateData)
+            .eq('id', reportId)
+            .eq('version', currentVersion)
+            .select()
+            .single()
+
+        if (updateError) {
+            if (updateError.code === 'PGRST116') {
+                return {
+                    success: false,
+                    conflict: true,
+                    message: 'Conflict detected: Concurrent modification'
+                }
+            }
+
+            return {
+                success: false,
+                conflict: false,
+                message: `Failed to save attendance: ${updateError.message}`
             }
         }
 
@@ -382,7 +475,7 @@ export class ReportCommandService {
             .from('enrollments')
             .select('id')
             .eq('class_session_id', occurrence.class_session_id)
-            .eq('status', 'active')
+            .eq('status', 'regular')
 
         if (enrollError) throw new Error(`Failed to fetch enrollments: ${enrollError.message}`)
 

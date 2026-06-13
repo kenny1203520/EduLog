@@ -5,15 +5,18 @@
             class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
             <!-- Header -->
             <div class="flex items-center justify-between p-8 border-b border-gray-50 shrink-0">
-                <h2 class="text-3xl font-black text-gray-900 tracking-tight">{{ $t('student.suspension.title') }}</h2>
-                <button @click="$emit('close')"
-                    class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
+                <h2 class="text-4xl font-black text-gray-900 tracking-tight">{{ $t('student.suspension.title') }}</h2>
+                <div class="flex items-center gap-3">
+                    <TimeZoneSelect :label="$t('common.time_zone')" dense />
+                    <button @click="$emit('close')"
+                        class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <!-- Body -->
@@ -24,14 +27,14 @@
                         $t('student.suspension.add_new') }}</h3>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="space-y-2">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
                                 {{ $t('student.suspension.start_date') }} <span class="text-red-500">*</span>
                             </label>
                             <input type="date" v-model="newSuspension.startDate"
                                 class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
                         </div>
                         <div class="space-y-2">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
                                 {{ $t('student.suspension.end_date') }}
                                 <span class="text-[10px] lowercase italic lowercase">({{
                                     $t('student.suspension.indefinite_hint')
@@ -41,7 +44,7 @@
                                 class="w-full bg-white border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold text-gray-700 shadow-sm">
                         </div>
                         <div class="md:col-span-2 space-y-2">
-                            <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">
                                 {{ $t('student.suspension.reason') }}
                             </label>
                             <input type="text" v-model="newSuspension.reason"
@@ -51,7 +54,7 @@
                     </div>
                     <div class="mt-8 flex justify-end">
                         <button @click="addSuspension" :disabled="!isValid || isAdding"
-                            class="px-8 py-3 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center gap-3 font-black shadow-xl shadow-emerald-100 active:scale-95">
+                            class="px-8 py-4 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center gap-3 text-base font-black shadow-xl shadow-emerald-100 active:scale-95 cursor-pointer">
                             <svg v-if="isAdding" class="animate-spin h-5 w-5 text-white"
                                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
@@ -67,7 +70,7 @@
 
                 <!-- Existing Suspensions -->
                 <div class="space-y-4">
-                    <h3 class="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                    <h3 class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                         $t('student.suspension.history') }}</h3>
                     <div v-if="isLoading" class="flex flex-col items-center justify-center py-12">
                         <svg class="animate-spin h-10 w-10 text-emerald-500 mb-4" xmlns="http://www.w3.org/2000/svg"
@@ -102,7 +105,7 @@
                                             <label
                                                 class="inline-flex items-center text-[10px] font-black text-gray-400 hover:text-emerald-600 cursor-pointer transition-colors uppercase tracking-widest">
                                                 <input type="checkbox" :checked="!editForm.endDate"
-                                                    @change="(e) => editForm.endDate = ((e.target as HTMLInputElement).checked ? '' : (suspension.endDate || new Date().toISOString().split('T')[0])) as string"
+                                                    @change="(e) => editForm.endDate = ((e.target as HTMLInputElement).checked ? '' : (suspension.endDate || DateUtils.todayString(preferences.timeZone))) as string"
                                                     class="rounded border-gray-300 w-3.5 h-3.5 text-emerald-600 focus:ring-0 mr-2">
                                                 {{ $t('student.suspension.indefinite') }}
                                             </label>
@@ -140,23 +143,24 @@
                                         </svg>
                                     </div>
                                     <div>
-                                        <div class="font-black text-gray-900 text-lg tracking-tight">
-                                            {{ formatDate(suspension.startDate) }}
-                                            <span class="mx-2 text-gray-300">→</span>
+                                        <div class="font-black text-gray-900 text-xl tracking-tight">
+                                            {{ formatDate(suspension.startDate, suspension.timeZone) }}
+                                            <span class="mx-3 text-gray-300">→</span>
                                             <span :class="{ 'text-emerald-600': !suspension.endDate }">
-                                                {{ suspension.endDate ? formatDate(suspension.endDate) :
+                                                {{ suspension.endDate ? formatDate(suspension.endDate, suspension.timeZone) :
                                                     $t('student.suspension.indefinite') }}
                                             </span>
+                                            <span class="ml-2 text-[10px] text-gray-400 uppercase tracking-widest">{{ suspension.timeZone }}</span>
                                         </div>
-                                        <div class="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1"
+                                        <div class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-2"
                                             v-if="suspension.reason">
                                             {{ suspension.reason }}
                                         </div>
                                     </div>
                                 </div>
-                                <div class="mt-3 flex gap-2" v-if="suspension.isActive">
+                                <div class="mt-4 flex gap-2" v-if="suspension.isActive">
                                     <span
-                                        class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-rose-50 text-rose-600 border border-rose-100">
+                                        class="px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest bg-rose-50 text-rose-600 border border-rose-100 shadow-sm">
                                         {{ $t('student.suspension.active') }}
                                     </span>
                                 </div>
@@ -219,6 +223,8 @@ import { useToast } from 'vue-toastification'
 import { SuspensionService } from '@/services/suspension/SuspensionService'
 import type { Suspension } from '@/models/Suspension'
 import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import TimeZoneSelect from './common/TimeZoneSelect.vue'
 import ConfirmModal from './common/ConfirmModal.vue'
 
 const props = defineProps<{
@@ -227,6 +233,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 const emit = defineEmits(['close'])
 
 const suspensions = ref<Suspension[]>([])
@@ -242,7 +249,7 @@ const editForm = ref({
 })
 
 const newSuspension = ref({
-    startDate: new Date().toISOString().split('T')[0],
+    startDate: DateUtils.todayString(preferences.timeZone),
     endDate: '', // Empty string for indefinite
     reason: ''
 })
@@ -316,11 +323,12 @@ async function addSuspension() {
             props.enrollmentId,
             newSuspension.value.startDate as string,
             newSuspension.value.endDate || null,
-            newSuspension.value.reason
+            newSuspension.value.reason,
+            preferences.timeZone
         )
         // Reset form
         newSuspension.value = {
-            startDate: new Date().toISOString().split('T')[0],
+            startDate: DateUtils.todayString(preferences.timeZone),
             endDate: '',
             reason: ''
         }
@@ -367,6 +375,7 @@ async function saveEdit(id: string) {
     try {
         await SuspensionService.updateSuspension(id, {
             end_date: editForm.value.endDate || null,
+            time_zone: preferences.timeZone,
             reason: editForm.value.reason || undefined
         })
         await loadSuspensions()
@@ -382,7 +391,7 @@ async function saveEdit(id: string) {
 
 async function endSuspensionNow(suspension: Suspension) {
     if (!suspension.id) return
-    const today = new Date().toISOString().split('T')[0]
+    const today = DateUtils.todayString(preferences.timeZone)
 
     // If start date is in future, today is invalid end date (before start). 
     // But button only shows if active, meaning start <= today.
@@ -391,7 +400,8 @@ async function endSuspensionNow(suspension: Suspension) {
         isEndingNowId.value = suspension.id
         // Use the general update method which handles syncing
         await SuspensionService.updateSuspension(suspension.id, {
-            end_date: today
+            end_date: today,
+            time_zone: preferences.timeZone
         })
         await loadSuspensions()
         toast.success(t('common.success') || 'Suspension ended successfully')
@@ -403,7 +413,7 @@ async function endSuspensionNow(suspension: Suspension) {
     }
 }
 
-function formatDate(date: string) {
-    return DateUtils.displayDate(date)
+function formatDate(date: string, timeZone: string = preferences.timeZone) {
+    return DateUtils.displayDate(date, preferences.locale, timeZone)
 }
 </script>

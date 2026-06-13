@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -10,7 +10,9 @@ const preferences = usePreferencesStore()
 const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
 
-const version = __APP_VERSION__
+onMounted(() => {
+    preferences.loadUserPreferences()
+})
 
 async function handleLogout() {
     await auth.signOut()
@@ -203,6 +205,21 @@ async function handleLogout() {
                     </div>
                 </router-link>
 
+                <router-link to="/dashboard/settings" @click="isSidebarOpen = false"
+                    class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
+                    active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
+                    <div class="flex items-center gap-3">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {{ $t('nav.settings') }}
+                    </div>
+                </router-link>
+
                 <router-link to="/dashboard/about" @click="isSidebarOpen = false"
                     class="block px-4 py-3 rounded-xl text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition font-medium"
                     active-class="bg-emerald-50/60 text-emerald-600 font-bold relative before:absolute before:left-[-1rem] before:top-3 before:bottom-3 before:w-1 before:bg-emerald-500 before:rounded-r-full">
@@ -239,9 +256,6 @@ async function handleLogout() {
                     </svg>
                     {{ $t('nav.logout') }}
                 </button>
-                <div class="mt-4 text-center">
-                    <p class="text-[10px] text-gray-400 font-medium tracking-widest uppercase">v{{ version }}</p>
-                </div>
             </div>
         </aside>
 

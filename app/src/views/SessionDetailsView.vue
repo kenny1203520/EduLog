@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { SessionService } from '@/services/session/SessionService'
@@ -30,17 +30,21 @@ import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
+import KodingCodeCheckModal from '@/components/KodingCodeCheckModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 type ReportEditorExpose = {
-    saveNow: () => Promise<void>
+    saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<void>
 }
 
 const { t } = useI18n()
 const toast = useToast()
+const preferences = usePreferencesStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -49,7 +53,7 @@ const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
 const sessionTeachers = ref<(TeacherDTO & { effective_from: string; effective_to: string | null })[]>([])
-const weekAnchorDate = ref(new Date())
+const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
 const isCalendarExpanded = ref(false)
 const isOccurrenceInHoliday = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
@@ -74,7 +78,11 @@ const makeupCandidates = ref<Enrollment[]>([])
 const makeupSearch = ref('')
 const selectedMakeupStudentId = ref<string | null>(null)
 const selectedMakeupEnrollmentId = ref<string | null>(null)
-const makeupJoinDate = ref(DateUtils.formatLocalDate(new Date()))
+const makeupJoinDate = ref(DateUtils.todayString(preferences.timeZone))
+
+const showKodingCheckModal = ref(false)
+const kodingTargetEnrollment = ref<Enrollment | null>(null)
+const kodingInitialLessonId = ref<string | null>(null)
 
 // Teacher Management State
 const occurrenceTeachers = ref<TeacherDTO[]>([])
@@ -99,6 +107,7 @@ const conflictServerReport = ref<OccurrenceReportDTO | null>(null)
 const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
 
 const session = ref<any>(null)
+const sessionTimeZone = computed(() => DateUtils.isValidTimeZone(session.value?.time_zone) ? session.value.time_zone : preferences.timeZone)
 const enrollments = ref<Enrollment[]>([])
 const courseLessons = ref<any[]>([])
 const courseLessonsByCourseId = ref<Record<string, Lesson[]>>({})
@@ -415,7 +424,7 @@ const displayedOccurrenceDate = computed(() => {
         return t('classroom.no_teaching_day_selected')
     }
 
-    return new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+    return DateUtils.displayDate(todayOccurrence.value.occurrenceDate, preferences.locale, preferences.timeZone)
 })
 
 const weekRangeLabel = computed(() => {
@@ -425,12 +434,12 @@ const weekRangeLabel = computed(() => {
     const end = new Date(weekAnchorDate.value)
     end.setDate(end.getDate() + 3)
 
-    return `${start.toLocaleDateString()} - ${end.toLocaleDateString()}`
+    return `${DateUtils.displayDate(start, preferences.locale, preferences.timeZone)} - ${DateUtils.displayDate(end, preferences.locale, preferences.timeZone)}`
 })
 
 function normalizeDateInput(value: string | Date | undefined): string {
     if (!value) {
-        return DateUtils.formatLocalDate(new Date())
+        return DateUtils.todayString(preferences.timeZone)
     }
 
     if (value instanceof Date) {
@@ -443,7 +452,7 @@ function normalizeDateInput(value: string | Date | undefined): string {
 
     const parsed = new Date(value)
     if (Number.isNaN(parsed.getTime())) {
-        return DateUtils.formatLocalDate(new Date())
+        return DateUtils.todayString(preferences.timeZone)
     }
 
     return DateUtils.formatLocalDate(parsed)
@@ -468,9 +477,19 @@ const makeupStudentOptions = computed(() => {
         )
     }
 
+    // Deduplicate students by studentId to prevent duplicate option choices
+    const uniqueStudents: typeof students = []
+    const seenStudentIds = new Set<string>()
+    for (const student of students) {
+        if (student.studentId && !seenStudentIds.has(student.studentId)) {
+            seenStudentIds.add(student.studentId)
+            uniqueStudents.push(student)
+        }
+    }
+
     return [
         { label: t('classroom.please_select_student'), value: null },
-        ...students.map(s => ({
+        ...uniqueStudents.map(s => ({
             label: s.studentName || 'Unnamed',
             value: s.studentId || ''
         }))
@@ -487,7 +506,7 @@ const makeupEnrollmentOptions = computed(() => {
     return [
         { label: t('classroom.please_select_student_enrollment'), value: null },
         ...studentEnrollments.map(e => ({
-            label: `${e.courseDisplayName || (e.courseSubject + ' ' + (e.courseStage || ''))} (${e.status})`,
+            label: `${e.courseDisplayName || (e.courseSubject + ' ' + (e.courseStage || ''))} (${t(`student.internal_courses.status_${e.status}`)})`,
             value: e.id || ''
         }))
     ]
@@ -504,8 +523,6 @@ const filteredTeachers = computed(() => {
         t.email.toLowerCase().includes(query)
     )
 })
-
-
 
 const selectedMakeupEnrollment = computed(() => {
     return makeupCandidates.value.find(item => item.id === selectedMakeupEnrollmentId.value) || null
@@ -655,7 +672,7 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
         // Check if occurrence is within a holiday period
         try {
             const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
-                ? occurrence.occurrenceDate.toISOString().split('T')[0]
+                ? DateUtils.formatLocalDate(occurrence.occurrenceDate)
                 : occurrence.occurrenceDate
             isOccurrenceInHoliday.value = await HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId)
         } catch (e) {
@@ -688,7 +705,7 @@ async function moveWeek(offset: number) {
 }
 
 async function goToToday() {
-    const today = new Date()
+    const today = DateUtils.todayDate(sessionTimeZone.value)
     weekAnchorDate.value = today
 
     await loadSessionOccurrences(today)
@@ -739,7 +756,7 @@ async function loadData() {
         }
 
         // 3. Find or Create Today's Occurrence
-        const today = new Date()
+        const today = DateUtils.todayDate(sessionTimeZone.value)
         todayOccurrence.value = null
         weekAnchorDate.value = today
 
@@ -771,6 +788,11 @@ onMounted(() => {
 
 // Attendance & Rating Handlers
 async function toggleAttendance(enrId: string) {
+    if (isOccurrenceInHoliday.value) {
+        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
+        return
+    }
+
     const report = reportMap.value.get(enrId)
     if (!report) return
 
@@ -788,14 +810,13 @@ async function toggleAttendance(enrId: string) {
 
     savingMap.value.set(enrId, true)
     try {
-        await OccurrenceReportService.saveReport(
+        await OccurrenceReportService.saveAttendanceOnly(
             report.id,
             report.version,
             undefined,
             {
                 attendanceStatus: newStatus,
-                absenceReason: newStatus === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : undefined,
-                content: report.content || '',
+                absenceReason: newStatus === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null,
             }
         )
         // Refresh local report state
@@ -810,6 +831,11 @@ async function toggleAttendance(enrId: string) {
 }
 
 async function batchSetAttendance(status: 'present' | 'absent') {
+    if (isOccurrenceInHoliday.value) {
+        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
+        return
+    }
+
     const ids = Array.from(selectedEnrollmentIds.value)
     if (ids.length === 0) return
 
@@ -819,14 +845,13 @@ async function batchSetAttendance(status: 'present' | 'absent') {
 
         savingMap.value.set(enrId, true)
         try {
-            await OccurrenceReportService.saveReport(
+            await OccurrenceReportService.saveAttendanceOnly(
                 report.id,
                 report.version,
                 undefined,
                 {
                     attendanceStatus: status,
-                    absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : undefined,
-                    content: report.content || '',
+                    absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null,
                 }
             )
             const updated = await OccurrenceReportService.getReportById(report.id)
@@ -1275,7 +1300,7 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
 }
 
 async function toggleSplitView(enrollmentId: string) {
-    await quickReportEditorRef.value?.saveNow()
+    await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
 
     if (selectedEnrollmentId.value === enrollmentId && showSplitView.value) {
         showSplitView.value = false
@@ -1308,9 +1333,30 @@ async function toggleSplitView(enrollmentId: string) {
 }
 
 async function closeSplitView() {
-    await quickReportEditorRef.value?.saveNow()
+    const enrollmentIdToRestore = selectedEnrollmentId.value
+    await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
     showSplitView.value = false
     selectedEnrollmentId.value = null
+
+    if (enrollmentIdToRestore) {
+        await nextTick()
+        scrollToEnrollment(enrollmentIdToRestore)
+    }
+}
+
+function scrollToEnrollment(enrollmentId: string) {
+    requestAnimationFrame(() => {
+        const selector = `[data-enrollment-id="${enrollmentId}"]`
+        const targets = Array.from(document.querySelectorAll<HTMLElement>(selector))
+        const target = targets.find(el => el.offsetParent !== null) || targets[0]
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+}
+
+async function openKodingCheck(enrollment: Enrollment) {
+    kodingTargetEnrollment.value = enrollment
+    kodingInitialLessonId.value = reportMap.value.get(enrollment.id!)?.lessonId || null
+    showKodingCheckModal.value = true
 }
 
 async function openAddStudentModal() {
@@ -1350,7 +1396,7 @@ async function submitAddStudentToClass() {
         return
     }
 
-    if (selected.status !== 'active' && normalizedJoinDate >= DateUtils.formatLocalDate(new Date())) {
+    if (selected.status !== 'regular' && normalizedJoinDate >= DateUtils.todayString(preferences.timeZone)) {
         toast.error(t('classroom.add_student_active_only_for_future'))
         return
     }
@@ -1592,6 +1638,8 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </svg>
                         {{ session.start_time.slice(0, 5) }} - {{ session.end_time.slice(0, 5) }}
                     </span>
+                    <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
+                    <span>{{ session.time_zone || 'Asia/Taipei' }}</span>
                     <span v-if="session.external_link" class="w-1 h-1 bg-gray-300 rounded-full"></span>
                     <a v-if="session.external_link" :href="session.external_link" target="_blank"
                         class="flex items-center gap-1.5 text-emerald-600 hover:underline">
@@ -1616,6 +1664,10 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
             </div>
 
             <!-- Refresh Schedule Button -->
+            <div class="w-56">
+                <TimeZoneSelect :label="$t('common.time_zone')" dense />
+            </div>
+
             <button @click="requestRefreshSchedule"
                 class="p-3 rounded-2xl bg-white border border-gray-100 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-100 transition-all shadow-sm active:scale-90"
                 :title="$t('classroom.refresh_schedule')">
@@ -1849,12 +1901,12 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <!-- Batch Action Buttons -->
                             <div class="flex items-center gap-3">
                                 <button @click="batchSetAttendance('present')"
-                                    :disabled="selectedEnrollmentIds.size === 0"
+                                    :disabled="selectedEnrollmentIds.size === 0 || isOccurrenceInHoliday"
                                     class="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100/50">
                                     {{ $t('attendance.present') }}
                                 </button>
                                 <button @click="batchSetAttendance('absent')"
-                                    :disabled="selectedEnrollmentIds.size === 0"
+                                    :disabled="selectedEnrollmentIds.size === 0 || isOccurrenceInHoliday"
                                     class="flex-1 px-6 py-4 bg-red-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-700 transition-all active:scale-95 shadow-lg shadow-red-100/50">
                                     {{ $t('attendance.absent') }}
                                 </button>
@@ -1965,7 +2017,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
                     <!-- Responsive Card List -->
                     <div class="grid grid-cols-1 gap-4" :class="showSplitView ? '2xl:hidden' : 'xl:hidden'">
-                        <div v-for="e in visibleEnrollments" :key="e.id"
+                        <div v-for="e in visibleEnrollments" :key="e.id" :data-enrollment-id="e.id"
                             class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
                             <div class="space-y-3">
                                 <!-- A. Header -->
@@ -1988,7 +2040,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                         </span>
                                         <span
                                             class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
-                                            :class="e.status === 'active'
+                                            :class="e.status === 'regular'
                                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
                                                 : (e.status === 'trial'
                                                     ? 'bg-amber-50 text-amber-700 border-amber-100'
@@ -2080,7 +2132,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                             'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
                                             'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
                                             'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
-                                        }" :title="$t('attendance.status')" :disabled="savingMap.has(e.id!)">
+                                        }" :title="$t('attendance.status')" :disabled="savingMap.has(e.id!) || isOccurrenceInHoliday">
                                         <!-- Present Icon (Check) -->
                                         <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
                                             xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
@@ -2134,6 +2186,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </button>
                                 </div>
 
+                                <button @click="openKodingCheck(e)"
+                                    class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-amber-50 text-amber-700 border border-amber-100 active:scale-95 transition-all"
+                                    :title="$t('classroom.koding_check')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
+                                    </svg>
+                                    <span class="text-xs font-black tracking-wide">{{ $t('classroom.koding_check') }}</span>
+                                </button>
+
                                 <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
                                     class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 no-underline active:scale-95 transition-all"
                                     :title="$t('classroom.view_profile')">
@@ -2181,7 +2244,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-50">
-                                <tr v-for="e in visibleEnrollments" :key="e.id"
+                                <tr v-for="e in visibleEnrollments" :key="e.id" :data-enrollment-id="e.id"
                                     class="hover:bg-emerald-50/20 transition-colors group">
                                     <!-- Attendance Column -->
                                     <td class="px-3 lg:px-4 py-4 lg:py-6 text-center" v-if="todayOccurrence">
@@ -2193,7 +2256,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                                 'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
                                             }"
                                             :title="$t('attendance.status') + ': ' + (reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' + reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending'))"
-                                            :disabled="savingMap.has(e.id!)">
+                                            :disabled="savingMap.has(e.id!) || isOccurrenceInHoliday">
                                             <!-- Present Icon (Check) -->
                                             <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
                                                 xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
@@ -2248,7 +2311,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                             </span>
                                             <span
                                                 class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border whitespace-nowrap inline-block lg:inline"
-                                                :class="e.status === 'active'
+                                                :class="e.status === 'regular'
                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
                                                     : (e.status === 'trial'
                                                         ? 'bg-amber-50 text-amber-700 border-amber-100'
@@ -2348,6 +2411,16 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                                     <path stroke-linecap="round" stroke-linejoin="round"
                                                         stroke-width="2"
                                                         d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                </svg>
+                                            </button>
+                                            <button @click="openKodingCheck(e)"
+                                                class="p-2.5 xl:p-3 rounded-2xl bg-amber-50 text-amber-600 hover:text-amber-700 hover:bg-amber-100 border border-amber-100 transition-all active:scale-90"
+                                                :title="$t('classroom.koding_check')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                    viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
                                                 </svg>
                                             </button>
                                             <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
@@ -2469,6 +2542,9 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
         <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
             :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
             :is-loading="isRefreshing" @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
+
+        <KodingCodeCheckModal :is-open="showKodingCheckModal" :target="kodingTargetEnrollment"
+            :initial-lesson-id="kodingInitialLessonId" @close="showKodingCheckModal = false" />
 
         <div v-if="showAddStudentModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div

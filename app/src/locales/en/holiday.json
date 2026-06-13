@@ -14,5 +14,8 @@
     "scope_classroom": "Specific Classroom",
     "scope_session": "Specific Session",
     "target_label": "Target Name",
+    "filter_by_classroom": "Filter by room",
+    "session_schedule_hint": "Each session shows its day and class time.",
+    "no_sessions_for_classroom": "No sessions available for this room",
     "save_success": "Holiday saved successfully"
 }

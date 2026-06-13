@@ -1,3 +1,5 @@
+import { Enrollment, type EnrollmentDTO } from './Enrollment'
+
 export interface StudentContactDTO {
   id?: string
   name: string
@@ -14,6 +16,7 @@ export interface StudentSchoolDTO {
   status?: string
   start_date?: string // YYYY-MM-DD
   end_date?: string // YYYY-MM-DD or empty/null for Present
+  time_zone?: string
   grade?: string // e.g. "Year 1" (Required if status is Enrolled)
   class?: string // e.g. "Class A"
   school_student_id?: string // 学号
@@ -23,7 +26,7 @@ export interface StudentSchoolDTO {
 
 export interface StudentCredentialDTO {
   id?: string
-  platform: 'Orange Apple' | 'Roblox' | 'Minecraft' | 'Anydesk' | 'Quiz Platform' | string
+  platform: 'Koding School (Orange Apple)' | 'Roblox' | 'Minecraft' | 'Anydesk' | 'Quiz Platform' | string
   username?: string
   password?: string
   url?: string
@@ -49,6 +52,7 @@ export interface StudentDTO {
   student_contacts?: StudentContactDTO[]
   student_schools?: StudentSchoolDTO[]
   student_credentials?: StudentCredentialDTO[]
+  enrollments?: EnrollmentDTO[]
 }
 
 export class Student {
@@ -69,6 +73,7 @@ export class Student {
   public contacts: StudentContactDTO[]
   public schools: StudentSchoolDTO[]
   public credentials: StudentCredentialDTO[]
+  public enrollments: Enrollment[]
 
   constructor(dto: StudentDTO) {
     this.id = dto.id
@@ -94,6 +99,7 @@ export class Student {
       return 0
     })
     this.credentials = dto.student_credentials || []
+    this.enrollments = (dto.enrollments || []).map(e => new Enrollment(e))
   }
 
   /**

@@ -1,19 +1,33 @@
 <template>
     <div class="student-reports-view p-6 max-w-7xl mx-auto">
-        <!-- Header with Back Button -->
-        <div class="mb-6">
-            <button @click="router.back()"
-                class="mb-4 text-gray-600 hover:text-emerald-600 font-medium flex items-center gap-2 transition">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                </svg>
-                {{ $t('common.back') }}
-            </button>
-            <h1 class="text-2xl font-bold text-gray-900">
-                <span v-if="enrollmentInfo">{{ enrollmentInfo.studentName }} - {{ enrollmentInfo.courseDisplay }}</span>
-                <span v-else>{{ $t('report.list_title') }}</span>
-            </h1>
+        <!-- Header with Back Button and Actions -->
+        <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <button @click="router.back()"
+                    class="mb-4 text-gray-600 hover:text-emerald-600 font-medium flex items-center gap-2 transition cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                    {{ $t('common.back') }}
+                </button>
+                <h1 class="text-2xl font-bold text-gray-900">
+                    <span v-if="enrollmentInfo">{{ enrollmentInfo.studentName }} - {{ enrollmentInfo.courseDisplay }}</span>
+                    <span v-else>{{ $t('report.list_title') }}</span>
+                </h1>
+            </div>
+
+            <div v-if="enrollmentInfo?.externalLink" class="flex items-center">
+                <a :href="enrollmentInfo.externalLink"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-blue-100 text-blue-600 text-sm font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                    </svg>
+                    {{ $t("student.internal_courses.external_overview") }}
+                </a>
+            </div>
         </div>
 
         <!-- Incomplete Reports Module -->
@@ -55,8 +69,8 @@
                         <div
                             class="flex flex-col items-center w-16 shrink-0 bg-white rounded-lg p-2 border border-amber-100 shadow-sm">
                             <span class="text-xs font-bold text-gray-400 uppercase">{{ formatWeekday(item.date)
-                                }}</span>
-                            <span class="text-lg font-black text-gray-800">{{ new Date(item.date).getDate() }}</span>
+                            }}</span>
+                            <span class="text-lg font-black text-gray-800">{{ formatDayOfMonth(item.date) }}</span>
                             <span class="text-[10px] font-bold text-emerald-600 truncate w-full text-center"
                                 v-if="item.startTime">{{ item.startTime.slice(0, 5) }}</span>
                         </div>
@@ -322,7 +336,7 @@
                             <div>
                                 <p class="text-xs text-gray-500">{{ $t('student.internal_courses.status') }}</p>
                                 <p class="text-sm font-bold text-gray-800">{{ $t('student.internal_courses.status_' +
-                                    (enrollmentInfo.status || 'active')) }}</p>
+                                    (enrollmentInfo.status || 'regular')) }}</p>
                             </div>
                         </div>
                     </div>
@@ -340,14 +354,25 @@
                     <!-- Occurrence Info Card -->
                     <div
                         class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-5 mb-6 border border-emerald-100 shadow-sm">
-                        <h2 class="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-600" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            {{ formatOccurrenceDateTime(selectedOccurrence) }}
-                        </h2>
+                        <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <h2 class="font-bold text-gray-900 text-lg flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-emerald-600"
+                                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span>{{ formatOccurrenceDateTime(selectedOccurrence) }}</span>
+                            </h2>
+                            <button type="button" @click="showKodingCheckModal = true"
+                                class="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-100 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-orange-600 shadow-sm transition hover:border-orange-200 hover:bg-orange-50 active:scale-95">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
+                                </svg>
+                                {{ $t('classroom.koding_check') }}
+                            </button>
+                        </div>
                         <div class="text-sm text-gray-600 grid grid-cols-2 gap-4">
                             <div v-if="selectedOccurrence.classroomName" class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
@@ -447,11 +472,14 @@
             :confirm-text="$t('common.continue')" :is-loading="isCreatingReport" @confirm="handleConfirmCreate"
             @close="handleCancelCreate" />
 
+        <KodingCodeCheckModal :is-open="showKodingCheckModal" :target="kodingCheckTarget"
+            :initial-lesson-id="selectedReport?.lessonId || null" @close="showKodingCheckModal = false" />
+
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { supabase } from '@/lib/supabase'
@@ -460,6 +488,7 @@ import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import KodingCodeCheckModal from '@/components/KodingCodeCheckModal.vue'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
@@ -471,9 +500,11 @@ import { Suspension } from '@/models/Suspension'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
+import { DateUtils } from '@/utils/DateUtils'
+import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type ReportEditorExpose = {
-    saveNow: () => Promise<void>
+    saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<void>
 }
 
 const route = useRoute()
@@ -481,6 +512,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const toast = useToast()
+const preferences = usePreferencesStore()
 
 const loading = ref(true)
 const occurrences = ref<ClassOccurrence[]>([])
@@ -496,6 +528,7 @@ const conflictServerReport = ref<OccurrenceReportDTO | null>(null)
 const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
 const enrollmentInfo = ref<{
     id: string,
+    courseId?: string,
     studentName: string,
     courseName: string,
     courseStage?: string,
@@ -504,7 +537,8 @@ const enrollmentInfo = ref<{
     sessionName?: string,
     status?: string,
     externalLink?: string,
-    studentId?: string
+    studentId?: string,
+    kodingAdmissionId?: string
 } | null>(null)
 const isEnrollmentActive = ref(false)
 const courseLessons = ref<any[]>([])
@@ -514,6 +548,7 @@ let reportSubscription: RealtimeChannel | null = null
 const showCreateConfirm = ref(false)
 const isCreatingReport = ref(false)
 const pendingOccurrence = ref<ClassOccurrence | null>(null)
+const showKodingCheckModal = ref(false)
 const pendingSelectionState = ref<{
     occurrence: ClassOccurrence | null
     report: OccurrenceReport | null
@@ -598,7 +633,6 @@ async function handleConfirmCreate() {
 }
 
 // List View State
-import { computed } from 'vue'
 const viewMode = ref<'calendar' | 'list'>('calendar')
 const listLoading = ref(false)
 const allReports = ref<any[]>([])
@@ -732,6 +766,19 @@ const existingReportIds = computed(() => {
     return new Set(allReports.value.map(r => r.class_occurrence_id))
 })
 
+const kodingCheckTarget = computed(() => {
+    if (!enrollmentInfo.value) return null
+    return {
+        id: enrollmentInfo.value.id,
+        enrollmentId: enrollmentInfo.value.id,
+        studentName: enrollmentInfo.value.studentName,
+        courseDisplayName: enrollmentInfo.value.courseDisplay || enrollmentInfo.value.courseName,
+        displayName: enrollmentInfo.value.courseDisplay || enrollmentInfo.value.courseName,
+        courseId: enrollmentInfo.value.courseId,
+        kodingAdmissionId: enrollmentInfo.value.kodingAdmissionId
+    }
+})
+
 const occurrenceStatuses = computed(() => {
     const statusMap: Record<string, string> = {}
 
@@ -812,17 +859,21 @@ const occurrenceStatuses = computed(() => {
 })
 
 function formatWeekday(dateVal: string | Date) {
-    return new Date(dateVal).toLocaleDateString(locale.value, { weekday: 'short' })
+    const date = typeof dateVal === 'string' ? DateUtils.parseLocalDate(dateVal) : dateVal
+    return date?.toLocaleDateString(locale.value, { weekday: 'short' }) || ''
+}
+
+function formatDayOfMonth(dateVal: string | Date) {
+    const date = typeof dateVal === 'string' ? DateUtils.parseLocalDate(dateVal) : dateVal
+    return date?.getDate() || ''
 }
 
 function formatDate(dateVal: string | Date) {
-    return new Date(dateVal).toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
+    return DateUtils.displayDate(dateVal, locale.value, preferences.timeZone)
 }
 
 function formatOccurrenceDateTime(occ: ClassOccurrence) {
-    // We construct a date object for the occurrence
-    // Note: d() usage depends on i18n setup, but toLocaleDateString is safer if d() isn't configured with 'short'
-    const date = new Date(occ.occurrenceDate).toLocaleDateString(locale.value)
+    const date = DateUtils.displayDate(occ.occurrenceDate, locale.value, preferences.timeZone)
     const time = occ.effectiveStartTime ? occ.effectiveStartTime.slice(0, 5) : ''
     return `${date} ${time}`.trim()
 }
@@ -904,6 +955,7 @@ async function loadOccurrences() {
         // Store enrollment info for display
         enrollmentInfo.value = {
             id: enrollment.id || '',
+            courseId: enrollment.courseId,
             studentName: enrollment.studentName || 'Student',
             courseName: enrollment.courseSubject || 'Course',
             courseStage: enrollment.courseStage,
@@ -912,9 +964,10 @@ async function loadOccurrences() {
             sessionName: enrollment.classSessionName,
             status: enrollment.status,
             externalLink: enrollment.externalLink,
-            studentId: enrollment.studentId
+            studentId: enrollment.studentId,
+            kodingAdmissionId: enrollment.kodingAdmissionId
         }
-        isEnrollmentActive.value = enrollment.status === 'active'
+        isEnrollmentActive.value = enrollment.status === 'regular'
 
         // 2. Load lessons for this course (needed for editor)
         if (enrollment.courseId) {
@@ -981,7 +1034,7 @@ async function loadOccurrences() {
 
             // 4a. Auto-Repair Schedule (Gap Filling)
             // If enrollment is active but schedule ran out (e.g. paused for months), generate it now.
-            if (enrollment.status === 'active' && enrollment.classSessionId) {
+            if (enrollment.status === 'regular' && enrollment.classSessionId) {
                 const currentSessionOccs = futureOccurrences.filter(o => o.classSessionId === enrollment.classSessionId)
 
                 // Find latest date in the window
@@ -1142,7 +1195,7 @@ async function selectOccurrence(
     occurrence: ClassOccurrence,
     options: { allowCreatePrompt?: boolean } = {}
 ) {
-    await reportEditorRef.value?.saveNow()
+    await reportEditorRef.value?.saveNow({ reason: 'switch' })
 
     const previousSelectionState = {
         occurrence: selectedOccurrence.value,
@@ -1221,7 +1274,6 @@ function handleSaveSuccess(newVersion: number) {
         selectedReport.value.updatedAt = new Date()
     }
 
-    toast.success(t('report.save_success'))
     switchToListView() // Refresh list view data
     viewMode.value = 'calendar' // But keep calendar active
 }
