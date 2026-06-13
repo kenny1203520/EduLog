@@ -99,22 +99,23 @@ function formatSessionOptionLabel(session: any): string {
         : session.name
 }
 
-const currentEnrollmentSummary = computed(() => {
+const currentEnrollmentDetails = computed(() => {
     const enrollment = currentEnrollment.value
-    if (!enrollment) return ''
+    if (!enrollment) return null
 
     const scheduleParts = [
         formatWeekdayFromIndex(enrollment.classSessionDayOfWeek),
         formatTimeRange(enrollment.classSessionStartTime, enrollment.classSessionEndTime)
     ].filter(Boolean)
-    const contextParts = [
-        enrollment.classSessionName,
-        scheduleParts.join(' '),
-        enrollment.classroomName,
-        enrollment.displayName
-    ].filter(Boolean)
 
-    return contextParts.join(' · ')
+    return {
+        className: [
+            enrollment.classSessionName,
+            scheduleParts.join(' ')
+        ].filter(Boolean).join(' · '),
+        courseName: enrollment.displayName,
+        classroomName: enrollment.classroomName
+    }
 })
 
 async function fetchCurrentEnrollment() {
@@ -352,30 +353,30 @@ async function submitTransfer() {
 </script>
 
 <template>
-    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4"
+    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 backdrop-blur-md p-2 sm:items-center sm:p-4"
         @click.self="emit('close')">
         <div
-            class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
+            class="bg-white rounded-[1.75rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-xl max-h-[calc(100dvh-1rem)] sm:max-h-[90dvh] min-h-0 flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
             <!-- Header -->
-            <div class="flex items-center justify-between p-8 border-b border-gray-50 shrink-0">
-                <div class="flex items-center gap-4">
-                    <div class="p-3 bg-amber-50 rounded-2xl text-amber-600">
+            <div class="flex items-center justify-between gap-4 p-5 sm:p-8 border-b border-gray-50 shrink-0">
+                <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div class="p-2.5 sm:p-3 bg-amber-50 rounded-2xl text-amber-600 shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
                             stroke="currentColor" class="w-6 h-6">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
                         </svg>
                     </div>
-                    <div>
-                        <h2 class="text-3xl font-black text-gray-900 tracking-tight">{{
+                    <div class="min-w-0">
+                        <h2 class="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight truncate">{{
                             $t('student.transfer_modal.title')
                         }}</h2>
-                        <p class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-1">{{
+                        <p class="text-xs sm:text-sm font-bold text-gray-400 uppercase tracking-widest mt-1 leading-snug">{{
                             $t('student.transfer_modal.subtitle') }}</p>
                     </div>
                 </div>
                 <button @click="emit('close')"
-                    class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all cursor-pointer">
+                    class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all cursor-pointer shrink-0">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
@@ -385,8 +386,8 @@ async function submitTransfer() {
             </div>
 
             <!-- Body -->
-            <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
-                <div class="space-y-6">
+            <div class="flex-1 min-h-0 p-5 sm:p-8 overflow-y-auto overscroll-contain custom-scrollbar space-y-6 sm:space-y-8">
+                <div class="space-y-5 sm:space-y-6">
                     <TimeZoneSelect :label="$t('common.time_zone')" dense />
 
                     <div class="grid grid-cols-2 gap-2 rounded-2xl bg-gray-100 p-1">
@@ -410,14 +411,41 @@ async function submitTransfer() {
                         </button>
                     </div>
 
-                    <div v-if="transferForm.mode === 'class'" class="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                    <div v-if="transferForm.mode === 'class'" class="bg-gray-50 rounded-2xl p-4 sm:p-5 border border-gray-100">
                         <p class="text-xs font-black text-gray-400 uppercase tracking-widest mb-2">
                             {{ $t('student.transfer_modal.current_class') }}
                         </p>
-                        <p class="text-sm font-black text-gray-800 leading-relaxed">
-                            <span v-if="isLoadingEnrollment">{{ $t('common.loading') }}</span>
-                            <span v-else-if="currentEnrollmentSummary">{{ currentEnrollmentSummary }}</span>
-                            <span v-else>{{ $t('student.transfer_modal.current_class_unavailable') }}</span>
+                        <p v-if="isLoadingEnrollment" class="text-sm font-black text-gray-800 leading-relaxed">
+                            {{ $t('common.loading') }}
+                        </p>
+                        <div v-else-if="currentEnrollmentDetails" class="space-y-3">
+                            <div class="grid grid-cols-[4rem_1fr] gap-3">
+                                <span class="text-xs font-black text-gray-400 uppercase tracking-widest pt-0.5">
+                                    {{ $t('student.transfer_modal.class_label') }}
+                                </span>
+                                <span class="min-w-0 text-sm font-black text-gray-900 leading-relaxed break-words">
+                                    {{ currentEnrollmentDetails.className || '-' }}
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-[4rem_1fr] gap-3">
+                                <span class="text-xs font-black text-gray-400 uppercase tracking-widest pt-0.5">
+                                    {{ $t('student.transfer_modal.course_label') }}
+                                </span>
+                                <span class="min-w-0 text-sm font-bold text-gray-700 leading-relaxed break-words">
+                                    {{ currentEnrollmentDetails.courseName || '-' }}
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-[4rem_1fr] gap-3">
+                                <span class="text-xs font-black text-gray-400 uppercase tracking-widest pt-0.5">
+                                    {{ $t('student.transfer_modal.classroom_label') }}
+                                </span>
+                                <span class="min-w-0 text-sm font-bold text-gray-700 leading-relaxed break-words">
+                                    {{ currentEnrollmentDetails.classroomName || '-' }}
+                                </span>
+                            </div>
+                        </div>
+                        <p v-else class="text-sm font-black text-gray-800 leading-relaxed">
+                            {{ $t('student.transfer_modal.current_class_unavailable') }}
                         </p>
                     </div>
 
@@ -512,13 +540,13 @@ async function submitTransfer() {
             </div>
 
             <!-- Footer -->
-            <div class="p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex gap-4">
+            <div class="p-5 sm:p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex gap-3 sm:gap-4">
                 <button @click="emit('close')"
-                    class="flex-1 px-8 py-4 text-base font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
+                    class="flex-1 px-4 sm:px-8 py-4 text-sm sm:text-base font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
                     {{ $t('common.cancel') }}
                 </button>
                 <button @click="submitTransfer()" :disabled="isSubmitting"
-                    class="flex-1 px-8 py-4 bg-amber-600 text-white rounded-2xl hover:bg-amber-700 disabled:opacity-50 transition-all flex items-center justify-center gap-3 font-black shadow-xl shadow-amber-100 active:scale-95 cursor-pointer uppercase tracking-widest">
+                    class="flex-1 px-4 sm:px-8 py-4 bg-amber-600 text-white rounded-2xl hover:bg-amber-700 disabled:opacity-50 transition-all flex items-center justify-center gap-3 text-sm sm:text-base font-black shadow-xl shadow-amber-100 active:scale-95 cursor-pointer uppercase tracking-widest">
                     <svg v-if="isSubmitting" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
                         </circle>
@@ -533,3 +561,29 @@ async function submitTransfer() {
 
     </div>
 </template>
+
+<style scoped>
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(217 119 6 / 0.45) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgb(217 119 6 / 0.35);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(217 119 6 / 0.55);
+}
+</style>
