@@ -190,6 +190,7 @@
         "original_report": "原定上課報告",
         "original_report_placeholder": "請選擇要調整的報告",
         "no_reports": "這個課程目前沒有可調整的既有報告。",
+        "classroom_filter": "教室篩選",
         "effective_date": "生效日期",
         "target_date": "補課日期",
         "note": "系統會保留同一份報名記錄。既有上課報告會留在原班級，只有生效日後的空白占位報告會移到目標班級。",

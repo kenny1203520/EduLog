@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { SessionService } from '@/services/session/SessionService'
+import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { useCapacityCheck } from '@/composables/useCapacityCheck'
@@ -27,6 +28,8 @@ const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
 const isLoadingReports = ref(false)
+const isLoadingClassrooms = ref(false)
+const selectedClassroomId = ref('')
 const transferForm = ref({
     mode: 'class' as 'class' | 'single',
     to_session_id: '',
@@ -35,6 +38,7 @@ const transferForm = ref({
     target_date: DateUtils.todayString(preferences.timeZone)
 })
 
+const classroomOptions = ref<any[]>([])
 const sessionOptions = ref<any[]>([])
 const reportOptions = ref<any[]>([])
 const transferDateForCapacity = computed(() => (
@@ -93,13 +97,36 @@ function formatSessionOptionLabel(session: any): string {
 
 async function fetchSessions() {
     try {
-        const { data: sessions } = await SessionService.getClassSessions()
+        const { data: sessions } = await SessionService.getClassSessions(
+            1,
+            500,
+            undefined,
+            selectedClassroomId.value || null
+        )
         sessionOptions.value = sessions.map((s: any) => ({
             value: s.id,
             label: formatSessionOptionLabel(s)
         }))
     } catch (e) {
         console.error(e)
+    }
+}
+
+async function fetchClassrooms() {
+    try {
+        isLoadingClassrooms.value = true
+        const { data: classrooms } = await ClassroomService.getClassrooms(1, 500)
+        classroomOptions.value = [
+            { value: '', label: t('classroom.all_rooms') },
+            ...classrooms.map((classroom: any) => ({
+                value: classroom.id,
+                label: classroom.name
+            }))
+        ]
+    } catch (e) {
+        console.error(e)
+    } finally {
+        isLoadingClassrooms.value = false
     }
 }
 
@@ -160,6 +187,8 @@ async function fetchReports() {
 
 watch(() => props.isOpen, (val) => {
     if (val) {
+        selectedClassroomId.value = ''
+        fetchClassrooms()
         fetchSessions()
         fetchReports()
         transferForm.value = {
@@ -170,6 +199,11 @@ watch(() => props.isOpen, (val) => {
             target_date: DateUtils.todayString(preferences.timeZone)
         }
     }
+})
+
+watch(selectedClassroomId, async () => {
+    transferForm.value.to_session_id = ''
+    await fetchSessions()
 })
 
 async function submitTransfer() {
@@ -312,6 +346,13 @@ async function submitTransfer() {
                     </div>
 
                     <div class="space-y-4">
+                        <div class="space-y-2">
+                            <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.transfer_modal.classroom_filter') }}</label>
+                            <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
+                                :placeholder="isLoadingClassrooms ? $t('common.loading') : $t('classroom.all_rooms')" />
+                        </div>
+
                         <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.transfer_modal.to_classroom') }}</label>
                         <SearchableSelect v-model="transferForm.to_session_id" :options="sessionOptions"
