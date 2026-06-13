@@ -228,6 +228,8 @@
     "koding_candidate_student": "學生",
     "koding_candidate_teacher": "老師",
     "koding_unnamed_account": "未命名帳號",
+    "koding_only_course_students": "僅顯示有修該課程的學生",
+    "koding_teachers_always_shown": "老師一律顯示",
     "koding_loading_candidates": "載入可選對照組中...",
     "koding_load_candidates_failed": "載入 Koding 對照組失敗",
     "koding_missing_admission_id": "此報名尚未設定 Koding admission ID",

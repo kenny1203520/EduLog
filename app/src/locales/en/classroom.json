@@ -228,6 +228,8 @@
     "koding_candidate_student": "Student",
     "koding_candidate_teacher": "Teacher",
     "koding_unnamed_account": "Unnamed account",
+    "koding_only_course_students": "Only show students enrolled in this course",
+    "koding_teachers_always_shown": "Teachers are always shown",
     "koding_loading_candidates": "Loading comparison choices...",
     "koding_load_candidates_failed": "Failed to load Koding comparison choices",
     "koding_missing_admission_id": "This enrollment does not have a Koding admission ID",

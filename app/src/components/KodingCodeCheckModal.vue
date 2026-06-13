@@ -26,6 +26,7 @@ interface KodingComparisonCandidate {
     type: 'student' | 'teacher'
     label: string
     userId?: string | null
+    courseIds?: string[]
     credentials: KodingCredential[]
 }
 
@@ -47,6 +48,7 @@ const preferences = usePreferencesStore()
 
 const isLoadingCandidates = ref(false)
 const isLoadingLessons = ref(false)
+const showOnlyCourseStudents = ref(true)
 const candidates = ref<KodingComparisonCandidate[]>([])
 const lessonOptions = ref<Array<{ label: string; value: string }>>([])
 const form = ref({
@@ -57,16 +59,26 @@ const form = ref({
 
 const targetTitle = computed(() => props.target?.courseDisplayName || props.target?.displayName || '')
 
+const filteredCandidates = computed(() => {
+    const courseId = props.target?.courseId
+    if (!showOnlyCourseStudents.value || !courseId) return candidates.value
+
+    return candidates.value.filter(candidate => {
+        if (candidate.type === 'teacher') return true
+        return candidate.courseIds?.includes(courseId) || false
+    })
+})
+
 const candidateOptions = computed(() => [
     { label: t('classroom.koding_select_comparison'), value: '' },
-    ...candidates.value.map(candidate => ({
+    ...filteredCandidates.value.map(candidate => ({
         label: `${candidate.label} (${t(`classroom.koding_candidate_${candidate.type}`)})`,
         value: candidate.key
     }))
 ])
 
 const selectedCandidate = computed(() => {
-    return candidates.value.find(candidate => candidate.key === form.value.candidateKey) || null
+    return filteredCandidates.value.find(candidate => candidate.key === form.value.candidateKey) || null
 })
 
 const selectedCandidateCredentials = computed(() => selectedCandidate.value?.credentials || [])
@@ -85,7 +97,17 @@ watch(() => props.isOpen, async (isOpen) => {
     }
 })
 
+watch([showOnlyCourseStudents, filteredCandidates], () => {
+    if (!form.value.candidateKey) return
+    const stillVisible = filteredCandidates.value.some(candidate => candidate.key === form.value.candidateKey)
+    if (stillVisible) return
+
+    form.value.candidateKey = ''
+    form.value.credentialId = ''
+})
+
 async function initialize() {
+    showOnlyCourseStudents.value = true
     form.value = {
         lesson: props.initialLessonSequence ? String(props.initialLessonSequence) : '',
         candidateKey: '',
@@ -143,6 +165,7 @@ async function loadCandidates() {
             key: `student:${student.id}`,
             type: 'student' as const,
             label: student.displayName,
+            courseIds: Array.from(new Set(student.enrollments.map(enrollment => enrollment.courseId).filter(Boolean))),
             credentials: getKodingCredentials(student.credentials)
         }))
 
@@ -185,7 +208,7 @@ function selectCurrentUserTeacher() {
 
 function handleCandidateChange(candidateKey?: string) {
     const key = candidateKey ?? form.value.candidateKey
-    const candidate = candidates.value.find(item => item.key === key)
+    const candidate = filteredCandidates.value.find(item => item.key === key)
     const credentials = candidate?.credentials || []
     form.value.credentialId = credentials.length === 1
         ? (credentials[0].id || credentials[0].username || '')
@@ -287,6 +310,17 @@ function launchKodingCheck() {
                     <div>
                         <label class="mb-2 block text-sm font-bold text-gray-700">
                             {{ $t('classroom.koding_comparison') }}
+                        </label>
+                        <label
+                            class="mb-3 flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm font-semibold text-amber-900">
+                            <input v-model="showOnlyCourseStudents" type="checkbox"
+                                class="mt-0.5 h-4 w-4 rounded border-amber-300 text-amber-500 focus:ring-amber-500" />
+                            <span class="leading-snug">
+                                <span class="block">{{ $t('classroom.koding_only_course_students') }}</span>
+                                <span class="block text-xs font-bold text-amber-700/80">
+                                    {{ $t('classroom.koding_teachers_always_shown') }}
+                                </span>
+                            </span>
                         </label>
                         <SearchableSelect v-model="form.candidateKey" :options="candidateOptions"
                             :placeholder="$t('classroom.koding_select_comparison')"
