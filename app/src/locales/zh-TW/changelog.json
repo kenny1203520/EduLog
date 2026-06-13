@@ -1,7 +1,25 @@
 {
     "entries": [
         {
+            "version": "1.3.3",
+            "date": "2026-06-14",
+            "changes": {
+                "fixed": [
+                    "還原缺失的 v1.3.1 與 v1.3.2 更新日誌紀錄。"
+                ]
+            }
+        },
+        {
             "version": "1.3.2",
+            "date": "2026-06-14",
+            "changes": {
+                "fixed": [
+                    "修正 package.json 版本號遺漏問題並更新發布規範。"
+                ]
+            }
+        },
+        {
+            "version": "1.3.1",
             "date": "2026-06-14",
             "changes": {
                 "fixed": [
