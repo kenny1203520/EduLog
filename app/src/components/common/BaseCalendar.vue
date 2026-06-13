@@ -66,8 +66,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { DateUtils } from '@/utils/DateUtils'
 
 export interface BaseCalendarDay {
     date: Date
@@ -77,21 +78,36 @@ export interface BaseCalendarDay {
 
 interface Props {
     compact?: boolean
+    modelValue?: string | Date | null
+    initialMonth?: string | Date | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
-    compact: false
+    compact: false,
+    modelValue: null,
+    initialMonth: null
 })
 
 const emit = defineEmits<{
     'select-date': [date: Date]
+    'update:modelValue': [date: string]
 }>()
 
 const { locale } = useI18n()
 
 // State
-const currentDate = ref(new Date())
-const selectedDate = ref<Date | null>(null)
+const currentDate = ref(normalizeDate(props.initialMonth) || normalizeDate(props.modelValue) || new Date())
+const selectedDate = ref<Date | null>(normalizeDate(props.modelValue))
+
+function normalizeDate(value: string | Date | null | undefined): Date | null {
+    if (!value) return null
+    const date = typeof value === 'string'
+        ? DateUtils.parseLocalDate(value) || new Date(value)
+        : new Date(value)
+    if (Number.isNaN(date.getTime())) return null
+    date.setHours(0, 0, 0, 0)
+    return date
+}
 
 // Computed
 const currentMonthYear = computed(() => {
@@ -175,7 +191,6 @@ function previousMonth() {
         currentDate.value.getMonth() - 1,
         1
     )
-    selectedDate.value = null
 }
 
 function nextMonth() {
@@ -184,12 +199,14 @@ function nextMonth() {
         currentDate.value.getMonth() + 1,
         1
     )
-    selectedDate.value = null
 }
 
 function selectDay(date: Date) {
-    selectedDate.value = date
-    emit('select-date', date)
+    const selected = new Date(date)
+    selected.setHours(0, 0, 0, 0)
+    selectedDate.value = selected
+    emit('update:modelValue', DateUtils.formatLocalDate(selected))
+    emit('select-date', selected)
 }
 
 function getDayClasses(day: BaseCalendarDay) {
@@ -205,6 +222,21 @@ function getDayClasses(day: BaseCalendarDay) {
     }
     return 'bg-white border-gray-100 hover:border-emerald-200 hover:bg-gray-50'
 }
+
+watch(() => props.modelValue, value => {
+    const nextDate = normalizeDate(value)
+    selectedDate.value = nextDate
+    if (nextDate) {
+        currentDate.value = new Date(nextDate.getFullYear(), nextDate.getMonth(), 1)
+    }
+})
+
+watch(() => props.initialMonth, value => {
+    const nextDate = normalizeDate(value)
+    if (nextDate && !selectedDate.value) {
+        currentDate.value = new Date(nextDate.getFullYear(), nextDate.getMonth(), 1)
+    }
+})
 
 // Expose methods that parents might need (e.g. moving by week or selecting specific date)
 defineExpose({

@@ -183,10 +183,23 @@
     },
     "transfer_modal": {
         "title": "班級調換",
-        "subtitle": "將學生移動到不同的班級時段",
+        "subtitle": "調整同一份課程報名的上課班級",
+        "mode_class": "轉班",
+        "mode_single": "單堂調課",
         "to_classroom": "目標班級時段",
+        "original_report": "原定上課報告",
+        "original_report_placeholder": "請選擇要調整的報告",
+        "no_reports": "這個課程目前沒有可調整的既有報告。",
         "effective_date": "生效日期",
-        "note": "系統將會建立一個新的報名記錄，並從生效日期開始在目標班級產生課堂紀錄。"
+        "target_date": "補課日期",
+        "note": "系統會保留同一份報名記錄。既有上課報告會留在原班級，只有生效日後的空白占位報告會移到目標班級。",
+        "single_note": "系統會移動同一份報告到目標班級日期，不會建立新的報名記錄。",
+        "load_reports_failed": "載入既有報告失敗",
+        "target_date_not_class_day": "目標日期不是該班級的授課日，請改選授課日。",
+        "target_report_exists": "此學生課程在目標日期已經有報告，無法重複調課。",
+        "same_session_error": "目標班級不可與目前班級相同。",
+        "original_report_not_found": "找不到原定上課報告。",
+        "original_report_ambiguous": "同一天有多筆報告，請改用報告選單指定單一報告。"
     },
     "activate_trial_modal": {
         "title": "轉為正式學員",

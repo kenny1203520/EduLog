@@ -81,4 +81,16 @@ export class EnrollmentService {
             targetDate
         )
     }
+
+    static async transferSingleLessonReport(
+        reportId: string,
+        targetSessionId: string,
+        targetDate: string
+    ): Promise<void> {
+        return EnrollmentCommandService.transferSingleLessonReport(
+            reportId,
+            targetSessionId,
+            targetDate
+        )
+    }
 }

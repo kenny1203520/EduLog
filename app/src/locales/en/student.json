@@ -183,10 +183,23 @@
     },
     "transfer_modal": {
         "title": "Transfer Class",
-        "subtitle": "Move student to a different class session",
+        "subtitle": "Adjust the class session for the same enrollment",
+        "mode_class": "Transfer",
+        "mode_single": "Single Lesson",
         "to_classroom": "Target Session",
+        "original_report": "Original Report",
+        "original_report_placeholder": "Select the report to move",
+        "no_reports": "This enrollment has no existing reports to move.",
         "effective_date": "Effective Date",
-        "note": "A new enrollment will be created for the target session starting from the effective date."
+        "target_date": "Make-up Date",
+        "note": "The same enrollment will be kept. Existing class reports stay in their original session; only future blank placeholder reports move to the target session.",
+        "single_note": "The same report will be moved to the target session date. No new enrollment will be created.",
+        "load_reports_failed": "Failed to load existing reports",
+        "target_date_not_class_day": "The target date is not a teaching day for that session.",
+        "target_report_exists": "This enrollment already has a report on the target date.",
+        "same_session_error": "Target session cannot be the current session.",
+        "original_report_not_found": "Original class report was not found.",
+        "original_report_ambiguous": "Multiple reports were found on that date. Select a specific report instead."
     },
     "activate_trial_modal": {
         "title": "Activate Trial",
