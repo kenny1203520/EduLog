@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useToast } from "vue-toastification";
 import { EnrollmentService } from "@/services/enrollment/EnrollmentService";
@@ -11,6 +11,7 @@ import ActivateTrialModal from "@/components/ActivateTrialModal.vue";
 import StudentSuspensions from "@/components/StudentSuspensions.vue";
 import ConfirmModal from "@/components/common/ConfirmModal.vue";
 import TimeZoneSelect from "@/components/common/TimeZoneSelect.vue";
+import KodingCodeCheckModal from "@/components/KodingCodeCheckModal.vue";
 
 const props = defineProps<{
     studentId: string;
@@ -37,7 +38,9 @@ const showEnrollModal = ref(false);
 const showTransferModal = ref(false);
 const showActivateTrialModal = ref(false);
 const showSuspensionsModal = ref(false);
+const showKodingCheckModal = ref(false);
 const selectedEnrollmentId = ref<string | null>(null);
+const selectedKodingEnrollment = ref<any | null>(null);
 
 // Deletion
 const showDeleteConfirm = ref(false);
@@ -130,6 +133,20 @@ function openSuspensions(id: string) {
     showSuspensionsModal.value = true;
 }
 
+function openKodingCheck(enrollment: any) {
+    selectedKodingEnrollment.value = enrollment;
+    showKodingCheckModal.value = true;
+}
+
+const kodingCheckTarget = computed(() => {
+    if (!selectedKodingEnrollment.value) return null;
+    return {
+        ...selectedKodingEnrollment.value,
+        studentName: studentStore.currentStudent?.displayName || studentStore.currentStudent?.name || "",
+        courseDisplayName: selectedKodingEnrollment.value.courseDisplayName || selectedKodingEnrollment.value.displayName,
+    };
+});
+
 async function refreshData() {
     await studentStore.loadStudent(props.studentId);
 }
@@ -159,10 +176,10 @@ async function refreshData() {
             <div v-for="e in enrollments" :key="e.id"
                 class="bg-gray-50 p-6 rounded-2xl border border-transparent hover:border-emerald-100 transition-all group hover:shadow-lg hover:shadow-emerald-50/50">
                 <div v-if="editingEnrollmentId !== e.id">
-                    <div class="flex justify-between items-start">
-                        <div class="space-y-3">
+                    <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                        <div class="min-w-0 space-y-3">
                             <div>
-                                <div class="font-black text-gray-900 text-2xl tracking-tight leading-tight">
+                                <div class="break-words font-black text-gray-900 text-2xl tracking-tight leading-tight">
                                     {{ e.courseDisplayName || e.courseSubject }}
                                 </div>
                                 <div
@@ -206,8 +223,9 @@ async function refreshData() {
                             </div>
                         </div>
 
-                        <div class="flex flex-col items-end gap-2">
-                            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <div class="flex w-full flex-col gap-3 xl:w-auto xl:shrink-0 xl:items-end">
+                            <div
+                                class="flex items-center justify-end gap-1 opacity-100 transition-all sm:opacity-0 sm:group-hover:opacity-100">
                                 <button @click="openSuspensions(e.id)"
                                     class="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
                                     title="Suspensions">
@@ -237,13 +255,18 @@ async function refreshData() {
                                 </button>
                             </div>
 
-                            <div class="flex gap-2">
+                            <div
+                                class="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap xl:justify-end">
                                 <button @click="openTransfer(e.id)"
-                                    class="px-4 py-2 bg-white border border-amber-100 text-amber-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    class="inline-flex items-center justify-center whitespace-nowrap px-4 py-2 bg-white border border-amber-100 text-amber-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("student.internal_courses.transfer_btn") }}
                                 </button>
+                                <button @click="openKodingCheck(e)"
+                                    class="inline-flex items-center justify-center whitespace-nowrap px-4 py-2 bg-white border border-orange-100 text-orange-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-orange-50 hover:border-orange-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    {{ $t("classroom.koding_check") }}
+                                </button>
                                 <button v-if="e.status === 'trial'" @click="openActivateTrial(e.id)"
-                                    class="px-4 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    class="inline-flex items-center justify-center whitespace-nowrap px-4 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("student.activate_trial_btn") }}
                                 </button>
                             </div>
@@ -361,6 +384,9 @@ async function refreshData() {
 
         <StudentSuspensions v-if="showSuspensionsModal" :enrollment-id="selectedEnrollmentId!"
             @close="showSuspensionsModal = false" />
+
+        <KodingCodeCheckModal :is-open="showKodingCheckModal" :target="kodingCheckTarget"
+            @close="showKodingCheckModal = false" />
 
         <ConfirmModal :is-open="showDeleteConfirm" :title="$t('student.enrollment_delete_title')"
             :message="$t('student.enrollment_delete_message')" :confirm-text="$t('common.delete')" :is-dangerous="true"
