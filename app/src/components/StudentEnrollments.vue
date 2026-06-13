@@ -253,6 +253,25 @@ async function refreshData() {
 
                 <!-- Edit Mode -->
                 <div v-else class="space-y-4">
+                    <div class="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
+                        <p class="text-xs font-black text-emerald-600 uppercase tracking-widest mb-2">
+                            {{ $t("student.internal_courses.edit_enrollment") }}
+                        </p>
+                        <h3 class="text-xl font-black text-gray-900 leading-tight break-words">
+                            {{ e.courseDisplayName || e.courseSubject }}
+                        </h3>
+                        <p class="mt-2 text-sm font-bold text-gray-500 leading-relaxed break-words">
+                            <span>{{ e.classroomName || "No Classroom" }}</span>
+                            <span v-if="e.classSessionName || e.formattedSchedule" class="mx-2 text-gray-300">•</span>
+                            <span>{{ e.classSessionName }}</span>
+                            <span v-if="e.classSessionDayKey" class="ml-1">
+                                {{ $t(`common.days.${e.classSessionDayKey}`) }}
+                                {{ e.classSessionStartTime?.slice(0, 5) }} -
+                                {{ e.classSessionEndTime?.slice(0, 5) }}
+                            </span>
+                        </p>
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                         <div class="space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
