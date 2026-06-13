@@ -1,19 +1,33 @@
 <template>
     <div class="student-reports-view p-6 max-w-7xl mx-auto">
-        <!-- Header with Back Button -->
-        <div class="mb-6">
-            <button @click="router.back()"
-                class="mb-4 text-gray-600 hover:text-emerald-600 font-medium flex items-center gap-2 transition">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                </svg>
-                {{ $t('common.back') }}
-            </button>
-            <h1 class="text-2xl font-bold text-gray-900">
-                <span v-if="enrollmentInfo">{{ enrollmentInfo.studentName }} - {{ enrollmentInfo.courseDisplay }}</span>
-                <span v-else>{{ $t('report.list_title') }}</span>
-            </h1>
+        <!-- Header with Back Button and Actions -->
+        <div class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <button @click="router.back()"
+                    class="mb-4 text-gray-600 hover:text-emerald-600 font-medium flex items-center gap-2 transition cursor-pointer">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                    {{ $t('common.back') }}
+                </button>
+                <h1 class="text-2xl font-bold text-gray-900">
+                    <span v-if="enrollmentInfo">{{ enrollmentInfo.studentName }} - {{ enrollmentInfo.courseDisplay }}</span>
+                    <span v-else>{{ $t('report.list_title') }}</span>
+                </h1>
+            </div>
+
+            <div v-if="enrollmentInfo?.externalLink" class="flex items-center">
+                <a :href="enrollmentInfo.externalLink"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-blue-100 text-blue-600 text-sm font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                    </svg>
+                    {{ $t("student.internal_courses.external_overview") }}
+                </a>
+            </div>
         </div>
 
         <!-- Incomplete Reports Module -->
