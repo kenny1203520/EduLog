@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-06-14
+
+### Added
+- Real-time collaborative report editor (Yjs + Supabase + Tiptap).
+- Student enrollment and scheduling management system.
+- Holiday management integration.
+- Global time zone configuration and support.
+- Koding code check workflow integration.
+- Remote selection visuals and presence tracking for collaboration.
+
+### Changed
+- Refactored `AggregateService` to introduce caching mechanisms.
+- Removed version display from the navigation bar.
+
+## [1.2.0] - 2026-05-18
+
+### Added
+- Report version history tracking and restoration functionality.
+- Global incomplete reports view with sidebar functionality.
+- About page with version information and changelog display.
+- Developer link to GitHub in the About view.
+- Support for variable mode selectors in report templates.
+
+### Changed
+- Major UI/UX improvements including responsiveness, better SVG icons, and consistent button layouts.
+- Replaced older layout patterns with `BasePageHeader` and `MainLayout` with sidebar navigation.
+
+### Removed
+- Unused old domain services directories (`Auth`, `Course`, `Classroom`, `Session`) as part of service architecture refactoring.
+
 ## [1.1.1] - 2026-05-03
 
 ### Added
