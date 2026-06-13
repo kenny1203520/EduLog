@@ -30,6 +30,7 @@ import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
+import KodingCodeCheckModal from '@/components/KodingCodeCheckModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
@@ -78,6 +79,10 @@ const makeupSearch = ref('')
 const selectedMakeupStudentId = ref<string | null>(null)
 const selectedMakeupEnrollmentId = ref<string | null>(null)
 const makeupJoinDate = ref(DateUtils.todayString(preferences.timeZone))
+
+const showKodingCheckModal = ref(false)
+const kodingTargetEnrollment = ref<Enrollment | null>(null)
+const kodingInitialLessonId = ref<string | null>(null)
 
 // Teacher Management State
 const occurrenceTeachers = ref<TeacherDTO[]>([])
@@ -518,8 +523,6 @@ const filteredTeachers = computed(() => {
         t.email.toLowerCase().includes(query)
     )
 })
-
-
 
 const selectedMakeupEnrollment = computed(() => {
     return makeupCandidates.value.find(item => item.id === selectedMakeupEnrollmentId.value) || null
@@ -1325,6 +1328,12 @@ async function closeSplitView() {
     await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
     showSplitView.value = false
     selectedEnrollmentId.value = null
+}
+
+async function openKodingCheck(enrollment: Enrollment) {
+    kodingTargetEnrollment.value = enrollment
+    kodingInitialLessonId.value = reportMap.value.get(enrollment.id!)?.lessonId || null
+    showKodingCheckModal.value = true
 }
 
 async function openAddStudentModal() {
@@ -2154,6 +2163,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </button>
                                 </div>
 
+                                <button @click="openKodingCheck(e)"
+                                    class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-amber-50 text-amber-700 border border-amber-100 active:scale-95 transition-all"
+                                    :title="$t('classroom.koding_check')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
+                                    </svg>
+                                    <span class="text-xs font-black tracking-wide">{{ $t('classroom.koding_check') }}</span>
+                                </button>
+
                                 <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
                                     class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 no-underline active:scale-95 transition-all"
                                     :title="$t('classroom.view_profile')">
@@ -2370,6 +2390,16 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                                         d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                                 </svg>
                                             </button>
+                                            <button @click="openKodingCheck(e)"
+                                                class="p-2.5 xl:p-3 rounded-2xl bg-amber-50 text-amber-600 hover:text-amber-700 hover:bg-amber-100 border border-amber-100 transition-all active:scale-90"
+                                                :title="$t('classroom.koding_check')">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                    viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2"
+                                                        d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
+                                                </svg>
+                                            </button>
                                             <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
                                                 class="p-2.5 xl:p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"
                                                 :title="$t('classroom.view_profile')">
@@ -2489,6 +2519,9 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
         <ConfirmModal v-if="showRefreshConfirm" :is-open="showRefreshConfirm" :title="$t('classroom.refresh_schedule')"
             :message="$t('classroom.refresh_confirm')" :confirm-text="$t('common.refresh')" confirm-type="warning"
             :is-loading="isRefreshing" @confirm="handleConfirmRefresh" @close="showRefreshConfirm = false" />
+
+        <KodingCodeCheckModal :is-open="showKodingCheckModal" :target="kodingTargetEnrollment"
+            :initial-lesson-id="kodingInitialLessonId" @close="showKodingCheckModal = false" />
 
         <div v-if="showAddStudentModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div

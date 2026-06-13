@@ -7,6 +7,7 @@ import { useStudentStore } from '@/stores/useStudentStore'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
 
 const props = defineProps<{
     studentId: string
@@ -24,7 +25,7 @@ const editCredentialForm = ref({ platform: '', username: '', password: '', url: 
 const visiblePasswords = ref(new Set<string>())
 
 const platformOptions = [
-    { label: t('student.credentials.platforms.Orange Apple'), value: 'Orange Apple' },
+    { label: t('student.credentials.platforms.koding_school_orange_apple'), value: KODING_PLATFORM },
     { label: t('student.credentials.platforms.Roblox'), value: 'Roblox' },
     { label: t('student.credentials.platforms.Minecraft'), value: 'Minecraft' },
     { label: t('student.credentials.platforms.Anydesk'), value: 'Anydesk' },
@@ -43,14 +44,16 @@ const showDeleteConfirm = ref(false)
 const credentialToDelete = ref<string | null>(null)
 
 async function addCredential() {
-    if (!newCredential.value.platform || !newCredential.value.username || !newCredential.value.password) {
+    const platformValue = newCredential.value.platform === 'Other' ? otherPlatformAdd.value.trim() : newCredential.value.platform
+    const requiresPassword = !isKodingPlatform(platformValue)
+
+    if (!platformValue || !newCredential.value.username || (requiresPassword && !newCredential.value.password)) {
         toast.error(t('student.errors.platform_required'))
         return
     }
 
     try {
         isModifying.value = true
-        const platformValue = newCredential.value.platform === 'Other' ? otherPlatformAdd.value : newCredential.value.platform
         await StudentService.addCredential({ ...newCredential.value, platform: platformValue, student_id: props.studentId })
         newCredential.value = { platform: '', username: '', password: '', url: '' }
         otherPlatformAdd.value = ''
@@ -67,12 +70,16 @@ async function addCredential() {
 
 function startEditCredential(cred: any) {
     editingCredentialId.value = cred.id
-    const isPredefined = platformOptions.some(opt => opt.value === cred.platform && opt.value !== 'Other')
+    const normalizedCredential = {
+        ...cred,
+        platform: isKodingPlatform(cred.platform) ? KODING_PLATFORM : cred.platform
+    }
+    const isPredefined = platformOptions.some(opt => opt.value === normalizedCredential.platform && opt.value !== 'Other')
     if (isPredefined) {
-        editCredentialForm.value = { ...cred }
+        editCredentialForm.value = normalizedCredential
         isOtherPlatformEdit.value = false
     } else {
-        editCredentialForm.value = { ...cred, platform: 'Other' }
+        editCredentialForm.value = { ...normalizedCredential, platform: 'Other' }
         otherPlatformEdit.value = cred.platform
         isOtherPlatformEdit.value = true
     }

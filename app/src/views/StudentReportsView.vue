@@ -354,14 +354,25 @@
                     <!-- Occurrence Info Card -->
                     <div
                         class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-5 mb-6 border border-emerald-100 shadow-sm">
-                        <h2 class="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-emerald-600" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            {{ formatOccurrenceDateTime(selectedOccurrence) }}
-                        </h2>
+                        <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <h2 class="font-bold text-gray-900 text-lg flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 text-emerald-600"
+                                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                <span>{{ formatOccurrenceDateTime(selectedOccurrence) }}</span>
+                            </h2>
+                            <button type="button" @click="showKodingCheckModal = true"
+                                class="inline-flex items-center justify-center gap-2 rounded-xl border border-orange-100 bg-white px-4 py-2 text-xs font-black uppercase tracking-widest text-orange-600 shadow-sm transition hover:border-orange-200 hover:bg-orange-50 active:scale-95">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
+                                </svg>
+                                {{ $t('classroom.koding_check') }}
+                            </button>
+                        </div>
                         <div class="text-sm text-gray-600 grid grid-cols-2 gap-4">
                             <div v-if="selectedOccurrence.classroomName" class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
@@ -461,11 +472,14 @@
             :confirm-text="$t('common.continue')" :is-loading="isCreatingReport" @confirm="handleConfirmCreate"
             @close="handleCancelCreate" />
 
+        <KodingCodeCheckModal :is-open="showKodingCheckModal" :target="kodingCheckTarget"
+            :initial-lesson-id="selectedReport?.lessonId || null" @close="showKodingCheckModal = false" />
+
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { supabase } from '@/lib/supabase'
@@ -474,6 +488,7 @@ import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import KodingCodeCheckModal from '@/components/KodingCodeCheckModal.vue'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
@@ -513,6 +528,7 @@ const conflictServerReport = ref<OccurrenceReportDTO | null>(null)
 const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
 const enrollmentInfo = ref<{
     id: string,
+    courseId?: string,
     studentName: string,
     courseName: string,
     courseStage?: string,
@@ -521,7 +537,8 @@ const enrollmentInfo = ref<{
     sessionName?: string,
     status?: string,
     externalLink?: string,
-    studentId?: string
+    studentId?: string,
+    kodingAdmissionId?: string
 } | null>(null)
 const isEnrollmentActive = ref(false)
 const courseLessons = ref<any[]>([])
@@ -531,6 +548,7 @@ let reportSubscription: RealtimeChannel | null = null
 const showCreateConfirm = ref(false)
 const isCreatingReport = ref(false)
 const pendingOccurrence = ref<ClassOccurrence | null>(null)
+const showKodingCheckModal = ref(false)
 const pendingSelectionState = ref<{
     occurrence: ClassOccurrence | null
     report: OccurrenceReport | null
@@ -615,7 +633,6 @@ async function handleConfirmCreate() {
 }
 
 // List View State
-import { computed } from 'vue'
 const viewMode = ref<'calendar' | 'list'>('calendar')
 const listLoading = ref(false)
 const allReports = ref<any[]>([])
@@ -747,6 +764,19 @@ const allReportDisplay = computed(() => {
 
 const existingReportIds = computed(() => {
     return new Set(allReports.value.map(r => r.class_occurrence_id))
+})
+
+const kodingCheckTarget = computed(() => {
+    if (!enrollmentInfo.value) return null
+    return {
+        id: enrollmentInfo.value.id,
+        enrollmentId: enrollmentInfo.value.id,
+        studentName: enrollmentInfo.value.studentName,
+        courseDisplayName: enrollmentInfo.value.courseDisplay || enrollmentInfo.value.courseName,
+        displayName: enrollmentInfo.value.courseDisplay || enrollmentInfo.value.courseName,
+        courseId: enrollmentInfo.value.courseId,
+        kodingAdmissionId: enrollmentInfo.value.kodingAdmissionId
+    }
 })
 
 const occurrenceStatuses = computed(() => {
@@ -925,6 +955,7 @@ async function loadOccurrences() {
         // Store enrollment info for display
         enrollmentInfo.value = {
             id: enrollment.id || '',
+            courseId: enrollment.courseId,
             studentName: enrollment.studentName || 'Student',
             courseName: enrollment.courseSubject || 'Course',
             courseStage: enrollment.courseStage,
@@ -933,7 +964,8 @@ async function loadOccurrences() {
             sessionName: enrollment.classSessionName,
             status: enrollment.status,
             externalLink: enrollment.externalLink,
-            studentId: enrollment.studentId
+            studentId: enrollment.studentId,
+            kodingAdmissionId: enrollment.kodingAdmissionId
         }
         isEnrollmentActive.value = enrollment.status === 'regular'
 

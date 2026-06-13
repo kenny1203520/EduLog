@@ -147,6 +147,7 @@
         "session_capacity": "人數",
         "session_full": "已滿",
         "external_link": "外部報告總覽連結",
+        "koding_admission_id": "Koding admission ID",
         "transfer_date_placeholder": "-- 請選擇生效日期 --",
         "last_lesson": "最後上課日",
         "first_lesson": "首堂上課日",
@@ -232,7 +233,7 @@
         "delete": "刪除帳號密碼",
         "confirm_delete": "確定要刪除此帳號嗎？",
         "platforms": {
-            "Orange Apple": "橘子蘋果學苑",
+            "koding_school_orange_apple": "橘蘋學習平台",
             "Roblox": "Roblox",
             "Minecraft": "Minecraft",
             "Anydesk": "Anydesk",
@@ -272,7 +273,7 @@
         "delete_student_failed": "刪除學生失敗",
         "update_enrollment_failed": "更新報名記錄失敗",
         "delete_enrollment_failed": "刪除報名記錄失敗",
-        "platform_required": "平台、使用者名稱與密碼皆為必填",
+        "platform_required": "平台與使用者名稱為必填；非橘蘋學習平台帳號也需填寫密碼",
         "session_full": "所選時段在該區間已滿額"
     }
 }
