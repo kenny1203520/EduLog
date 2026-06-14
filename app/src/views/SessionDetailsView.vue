@@ -1891,6 +1891,33 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </p>
                                 </div>
                             </div>
+                            <div class="hidden md:flex items-center gap-2">
+                                <div
+                                    class="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 min-w-[72px]">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                                        {{ $t('classroom.attendance_present_count') }}
+                                    </p>
+                                    <p class="text-xl font-black text-emerald-700 leading-none mt-1">
+                                        {{ attendanceCounts.present }}
+                                    </p>
+                                </div>
+                                <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 min-w-[72px]">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                                        {{ $t('classroom.attendance_pending_count') }}
+                                    </p>
+                                    <p class="text-xl font-black text-gray-700 leading-none mt-1">
+                                        {{ attendanceCounts.pending }}
+                                    </p>
+                                </div>
+                                <div class="rounded-xl border border-red-100 bg-red-50 px-3 py-2 min-w-[72px]">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-red-700">
+                                        {{ $t('classroom.attendance_absent_count') }}
+                                    </p>
+                                    <p class="text-xl font-black text-red-700 leading-none mt-1">
+                                        {{ attendanceCounts.absent }}
+                                    </p>
+                                </div>
+                            </div>
                             <div class="flex items-center gap-4">
                                 <button @click.stop="openAddStudentModal"
                                     class="px-4 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
@@ -1914,7 +1941,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <!-- Expandable Content -->
                         <div v-show="isQuickAttendanceExpanded"
                             class="px-6 md:px-8 pb-8 pt-2 space-y-8 border-t border-gray-50">
-                            <div class="grid grid-cols-3 gap-3">
+                            <div class="grid grid-cols-3 gap-3 md:hidden">
                                 <div class="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
                                     <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700">
                                         {{ $t('classroom.attendance_present_count') }}

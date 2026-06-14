@@ -73,4 +73,29 @@ describe('AggregateService', () => {
 
     await expect(AggregateService.getUserPreferencesAggregate()).rejects.toThrow('AggregateService error: 500 Internal Server Error')
   })
+
+  it('keeps incomplete report aggregate cache entries separated by scope', async () => {
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: { session: { access_token: 'test-token' } }
+    } as any)
+
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 'my-report' }],
+        text: async () => ''
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{ id: 'all-report' }],
+        text: async () => ''
+      } as any)
+
+    await AggregateService.getIncompleteReportsAggregate(90, 'my_present')
+    await AggregateService.getIncompleteReportsAggregate(90, 'all')
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toContain('scope=my_present')
+    expect(vi.mocked(globalThis.fetch).mock.calls[1][0]).toContain('scope=all')
+  })
 })
