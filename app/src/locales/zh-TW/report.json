@@ -36,6 +36,7 @@
     "select_to_complete": "請選擇以補完",
     "incomplete_reports_title": "未完成報告列表",
     "incomplete_reports_subtitle": "檢視並補全所有學生的漏寫報告。",
+    "only_my_present_students": "僅自己的學生",
     "incomplete_reports_desc": "您有 {count} 份報告需要處理",
     "all_caught_up": "全部補完了！",
     "no_incomplete_reports": "目前沒有未完成報告。",
@@ -289,7 +290,8 @@
     "is_student_active_hint": "該學員目前是否為在學狀態？",
     "error": {
         "cannot_set_conducted_during_holiday": "國定假期期間無法將課程設為已進行",
-        "cannot_set_teacher_present_during_holiday": "國定假期期間無法將教師設為出席"
+        "cannot_set_teacher_present_during_holiday": "國定假期期間無法將教師設為出席",
+        "cannot_set_teacher_present_during_leave": "教師請假期間無法將教師設為出席"
     },
     "refresh_all": "重新整理全部",
     "refresh_all_confirm": "確定要重新整理全部嗎？這將重新整理目前列表並重新載入編輯器內容，未儲存的變更將會遺失。",

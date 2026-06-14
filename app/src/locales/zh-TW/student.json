@@ -1,6 +1,7 @@
 {
     "add_title": "新增學生",
     "enroll_btn": "選修課程",
+    "activate_trial_btn": "轉為正式學員",
     "profile": "學生個人檔案",
     "profile_subtitle": "管理學生基本資料與修課紀錄",
     "not_found": "找不到該學生",
@@ -217,8 +218,11 @@
     "activate_trial_modal": {
         "title": "轉為正式學員",
         "subtitle": "將試聽狀態轉換為正式報名",
+        "classroom_filter": "教室篩選",
         "to_classroom": "目標班級時段",
         "effective_date": "生效日期",
+        "target_total_reports": "預計啟用課堂數",
+        "target_total_reports_hint": "預設為課程長度：{count} 堂。系統僅會補足缺少的報告。",
         "note": "報名狀態將更新為「正式」，並可分配到新的班級時段。"
     },
     "credentials": {
