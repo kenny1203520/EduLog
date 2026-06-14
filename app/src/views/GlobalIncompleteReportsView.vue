@@ -411,7 +411,7 @@ const selectedReport = ref<any>(null)
 const editorLoading = ref(false)
 const activeLessons = ref<any[]>([])
 const searchQuery = ref('')
-const onlyMyPresentStudents = ref(false)
+const onlyMyPresentStudents = ref(true)
 
 const filteredReports = computed(() => {
     if (!searchQuery.value) return incompleteReports.value

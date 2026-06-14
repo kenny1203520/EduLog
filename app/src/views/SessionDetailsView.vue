@@ -37,6 +37,7 @@ import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<void>
@@ -1276,9 +1277,12 @@ async function toggleIsConducted(event: any) {
 
 function isTeacherPresent(teacherId: string | undefined, userId: string | null | undefined): boolean {
     if (!teacherId || !todayOccurrence.value?.teacherAttendance) return false
-    // Fallback checks for backward compatibility if user_id was stored as key
-    if (userId && todayOccurrence.value.teacherAttendance[userId]) return true
-    return !!todayOccurrence.value.teacherAttendance[teacherId]
+    return isTeacherPresentForScope({
+        teacherId,
+        teacherUserId: userId,
+        occurrenceTeacherIds: todayOccurrence.value.teacherIds,
+        teacherAttendance: todayOccurrence.value.teacherAttendance
+    })
 }
 
 async function toggleTeacherAttendance(teacherId: string | undefined, event: any) {

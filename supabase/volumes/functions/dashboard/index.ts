@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function isTeacherPresentForScope(
+  teacherId: string,
+  teacherUserId: string | null | undefined,
+  occurrenceTeacherIds: string[] = [],
+  teacherAttendance: Record<string, boolean> = {},
+): boolean {
+  const teacherKeys = [teacherId, teacherUserId].filter(Boolean) as string[]
+  const isAssigned = teacherKeys.some((key) => occurrenceTeacherIds.includes(key))
+  if (!isAssigned) return false
+
+  const attendanceValues = teacherKeys
+    .filter((key) => Object.prototype.hasOwnProperty.call(teacherAttendance, key))
+    .map((key) => teacherAttendance[key])
+
+  if (attendanceValues.some((value) => value === false)) return false
+  return attendanceValues.some((value) => value === true)
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -39,10 +57,11 @@ serve(async (req: Request) => {
     // Look up teacher profile matching user_id
     const { data: teacher } = await client
       .from('teachers')
-      .select('id')
+      .select('id, user_id')
       .eq('user_id', userId)
       .maybeSingle()
     const teacherId = teacher?.id
+    const teacherUserId = teacher?.user_id || userId
 
     // Counts (students & active courses)
     const studentsRes = await client.from('students').select('id', { count: 'exact' }).range(0, 0)
@@ -78,7 +97,12 @@ serve(async (req: Request) => {
     const pending = (pendingRes.data || []).filter((r: any) => {
       if (!teacherId) return false
       const occ = r.class_occurrences
-      return (occ?.teacher_ids || []).includes(teacherId) && occ?.teacher_attendance?.[teacherId] === true
+      return isTeacherPresentForScope(
+        teacherId,
+        teacherUserId,
+        occ?.teacher_ids || [],
+        occ?.teacher_attendance || {},
+      )
     }).map((r: any) => {
       const occ = r.class_occurrences
       const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
@@ -144,9 +168,12 @@ serve(async (req: Request) => {
       occurrences = rawOccurrences.filter((occ: any) => {
         if (occ.is_conducted !== true) return false
         if (teacherId) {
-          const isAssigned = occ.teacher_ids?.includes(teacherId)
-          const isAttending = occ.teacher_attendance?.[teacherId] === true
-          return isAssigned && isAttending
+          return isTeacherPresentForScope(
+            teacherId,
+            teacherUserId,
+            occ.teacher_ids || [],
+            occ.teacher_attendance || {},
+          )
         }
         return true
       })
@@ -154,10 +181,12 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
+        pendingReportsScope: 'my_present',
         stats: {
           totalStudents,
           activeCourses,
-          pendingReportsCount
+          pendingReportsCount,
+          pendingReportsScope: 'my_present'
         },
         pendingReports: pending,
         occurrences

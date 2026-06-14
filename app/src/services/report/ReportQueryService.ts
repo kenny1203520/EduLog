@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { OccurrenceReport, ReportVersion, type OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 import { AggregateService } from '@/services/AggregateService'
+import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
 
 export class ReportQueryService {
     private static getOccurrenceSortKey(report: any): string {
@@ -182,8 +183,8 @@ export class ReportQueryService {
         return data || []
     }
 
-    static async getPendingReports(): Promise<any[]> {
-        const results = await this.fetchIncompleteReportsInternal(90, 'all')
+    static async getPendingReports(scope: 'all' | 'my_present' = 'my_present'): Promise<any[]> {
+        const results = await this.fetchIncompleteReportsInternal(90, scope)
         return results.map(r => ({
             id: r.id,
             studentName: r.studentName,
@@ -209,24 +210,24 @@ export class ReportQueryService {
         return this.fetchIncompleteReportsInternal(90, scope)
     }
 
-    private static async getCurrentTeacherId(): Promise<string | null> {
+    private static async getCurrentTeacherIdentity(): Promise<{ id: string, userId: string | null } | null> {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return null
 
         const { data: teacher } = await supabase
             .from('teachers')
-            .select('id')
+            .select('id, user_id')
             .eq('user_id', user.id)
             .maybeSingle()
 
-        return teacher?.id || null
+        return teacher?.id ? { id: teacher.id, userId: teacher.user_id || user.id } : null
     }
 
     private static async fetchIncompleteReportsInternal(daysBack: number, scope: 'all' | 'my_present'): Promise<any[]> {
         const todayStr = DateUtils.todayString()
         const dateStr = DateUtils.addDaysToDateString(todayStr, -daysBack)
-        const teacherId = scope === 'my_present' ? await this.getCurrentTeacherId() : null
-        if (scope === 'my_present' && !teacherId) return []
+        const teacherIdentity = scope === 'my_present' ? await this.getCurrentTeacherIdentity() : null
+        if (scope === 'my_present' && !teacherIdentity) return []
 
         // Fetch reports with attendance_status = 'present'
         // Join with everything needed to determine incompleteness and show details
@@ -268,9 +269,12 @@ export class ReportQueryService {
             if (isIncomplete) {
                 const occ = report.class_occurrences
                 if (scope === 'my_present') {
-                    const teacherIds = occ?.teacher_ids || []
-                    const teacherAttendance = occ?.teacher_attendance || {}
-                    if (!teacherId || !teacherIds.includes(teacherId) || teacherAttendance[teacherId] !== true) {
+                    if (!isTeacherPresentForScope({
+                        teacherId: teacherIdentity?.id,
+                        teacherUserId: teacherIdentity?.userId,
+                        occurrenceTeacherIds: occ?.teacher_ids,
+                        teacherAttendance: occ?.teacher_attendance
+                    })) {
                         continue
                     }
                 }

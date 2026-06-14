@@ -36,7 +36,7 @@
     "select_to_complete": "Select to complete",
     "incomplete_reports_title": "Incomplete Reports",
     "incomplete_reports_subtitle": "Review and complete missing reports across all students.",
-    "only_my_present_students": "My students only",
+    "only_my_present_students": "My students only (teacher present)",
     "incomplete_reports_desc": "You have {count} report(s) needing attention",
     "all_caught_up": "All caught up!",
     "no_incomplete_reports": "No incomplete reports found.",

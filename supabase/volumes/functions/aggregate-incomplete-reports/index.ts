@@ -6,6 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function isTeacherPresentForScope(
+  teacherId: string,
+  teacherUserId: string | null | undefined,
+  occurrenceTeacherIds: string[] = [],
+  teacherAttendance: Record<string, boolean> = {},
+): boolean {
+  const teacherKeys = [teacherId, teacherUserId].filter(Boolean) as string[]
+  const isAssigned = teacherKeys.some((key) => occurrenceTeacherIds.includes(key))
+  if (!isAssigned) return false
+
+  const attendanceValues = teacherKeys
+    .filter((key) => Object.prototype.hasOwnProperty.call(teacherAttendance, key))
+    .map((key) => teacherAttendance[key])
+
+  if (attendanceValues.some((value) => value === false)) return false
+  return attendanceValues.some((value) => value === true)
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -35,15 +53,17 @@ serve(async (req: Request) => {
 
     const userId = userRes.data.user.id
     let teacherId = ''
+    let teacherUserId = ''
     if (scope === 'my_present') {
       const { data: teacher, error: teacherError } = await client
         .from('teachers')
-        .select('id')
+        .select('id, user_id')
         .eq('user_id', userId)
         .maybeSingle()
 
       if (teacherError) throw teacherError
       teacherId = teacher?.id || ''
+      teacherUserId = teacher?.user_id || userId
       if (!teacherId) {
         return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
@@ -84,9 +104,12 @@ serve(async (req: Request) => {
 
       const occ = report.class_occurrences
       if (scope === 'my_present') {
-        const teacherIds = occ?.teacher_ids || []
-        const teacherAttendance = occ?.teacher_attendance || {}
-        if (!teacherIds.includes(teacherId) || teacherAttendance[teacherId] !== true) continue
+        if (!isTeacherPresentForScope(
+          teacherId,
+          teacherUserId,
+          occ?.teacher_ids || [],
+          occ?.teacher_attendance || {},
+        )) continue
       }
 
       const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
