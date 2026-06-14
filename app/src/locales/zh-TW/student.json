@@ -228,7 +228,7 @@
         "password": "密碼",
         "url": "連結 URL",
         "platform_name": "平台名稱",
-        "add_title": "新增平台帳號",
+        "add_title": "新增帳號",
         "add_btn": "新增帳號",
         "delete": "刪除帳號密碼",
         "confirm_delete": "確定要刪除此帳號嗎？",

@@ -19,6 +19,7 @@ const studentStore = useStudentStore()
 const { validateEmail, getEmailError } = useEmailValidation()
 
 const isModifying = ref(false)
+const isAddFormOpen = ref(false)
 const newContact = ref({ name: '', relation: '', phone: '', email: '' })
 const contactEmailTouched = ref(false)
 const contactEmailError = computed(() => contactEmailTouched.value ? getEmailError(newContact.value.email) : null)
@@ -29,6 +30,16 @@ const editContactForm = ref({ name: '', relation: '', phone: '', email: '' })
 // Confirm Modal state for deletion
 const showDeleteConfirm = ref(false)
 const contactToDelete = ref<string | null>(null)
+
+function resetNewContactForm() {
+    newContact.value = { name: '', relation: '', phone: '', email: '' }
+    contactEmailTouched.value = false
+}
+
+function closeAddContactForm() {
+    isAddFormOpen.value = false
+    resetNewContactForm()
+}
 
 async function addContact() {
     if (!newContact.value.name) return
@@ -42,8 +53,7 @@ async function addContact() {
     try {
         isModifying.value = true
         await StudentService.addContact({ ...newContact.value, student_id: props.studentId })
-        newContact.value = { name: '', relation: '', phone: '', email: '' }
-        contactEmailTouched.value = false
+        closeAddContactForm()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('student.contacts.add_btn') + ' ' + t('common.success'))
     } catch (e: any) {
@@ -226,53 +236,72 @@ async function copyToClipboard(text: string) {
         </ul>
 
         <div class="border-t border-gray-100 pt-8 mt-4">
-            <h3 class="text-sm font-black text-gray-400 mb-4 uppercase tracking-widest flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                {{ $t('student.contacts.add_title') }}
-            </h3>
-            <div
-                class="bg-gray-50 p-6 rounded-2xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <div class="space-y-1">
-                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.name') }}</label>
-                        <input v-model="newContact.name" :placeholder="$t('student.contacts.name')"
-                            class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.relation') }}</label>
-                        <input v-model="newContact.relation" :placeholder="$t('student.contacts.relation')"
-                            class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.phone') }}</label>
-                        <input v-model="newContact.phone" :placeholder="$t('student.contacts.phone')"
-                            class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
-                    </div>
-                    <div class="space-y-1">
-                        <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.email') }}</label>
-                        <div class="relative">
-                            <input v-model="newContact.email" type="email" @blur="contactEmailTouched = true"
-                                :placeholder="$t('student.contacts.email')"
-                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm"
-                                :class="{ 'border-red-500 focus:ring-red-500': contactEmailError }">
-                            <p v-if="contactEmailError" class="text-xs text-red-500 mt-1">{{ contactEmailError }}</p>
+            <button type="button" data-testid="student-contact-add-toggle" @click="isAddFormOpen = !isAddFormOpen"
+                class="mb-4 flex w-full items-center justify-between rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-black uppercase tracking-widest text-gray-500 transition-colors hover:border-emerald-200 hover:bg-emerald-50/50 hover:text-emerald-700">
+                <span class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    {{ $t('student.contacts.add_title') }}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+                    :class="{ 'rotate-180': isAddFormOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
+                </svg>
+            </button>
+            <div v-if="isAddFormOpen" data-testid="student-contact-add-form">
+                <h3 class="sr-only">
+                    {{ $t('student.contacts.add_title') }}
+                </h3>
+                <div
+                    class="bg-gray-50 p-6 rounded-2xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div class="space-y-1">
+                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.name') }}</label>
+                            <input v-model="newContact.name" :placeholder="$t('student.contacts.name')"
+                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.relation') }}</label>
+                            <input v-model="newContact.relation" :placeholder="$t('student.contacts.relation')"
+                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.phone') }}</label>
+                            <input v-model="newContact.phone" :placeholder="$t('student.contacts.phone')"
+                                class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.contacts.email') }}</label>
+                            <div class="relative">
+                                <input v-model="newContact.email" type="email" @blur="contactEmailTouched = true"
+                                    :placeholder="$t('student.contacts.email')"
+                                    class="w-full border-gray-200 rounded-xl px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm"
+                                    :class="{ 'border-red-500 focus:ring-red-500': contactEmailError }">
+                                <p v-if="contactEmailError" class="text-xs text-red-500 mt-1">{{ contactEmailError }}</p>
+                            </div>
                         </div>
                     </div>
+                    <div class="flex flex-col gap-3 sm:flex-row">
+                        <button @click="closeAddContactForm" :disabled="isModifying"
+                            class="w-full rounded-xl border border-gray-200 bg-white py-4 text-base font-black uppercase tracking-widest text-gray-500 transition-all hover:bg-gray-50 disabled:opacity-50 sm:w-40">
+                            {{ $t('common.cancel') }}
+                        </button>
+                        <button @click="addContact" :disabled="isModifying"
+                            class="w-full bg-emerald-600 text-white py-4 rounded-xl hover:bg-emerald-700 text-base font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
+                            </svg>
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            {{ $t('student.contacts.add_btn') }}
+                        </button>
+                    </div>
                 </div>
-                <button @click="addContact" :disabled="isModifying"
-                    class="w-full bg-emerald-600 text-white py-4 rounded-xl hover:bg-emerald-700 text-base font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                    <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                        </path>
-                    </svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
-                        stroke="currentColor" class="w-4 h-4">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    {{ $t('student.contacts.add_btn') }}
-                </button>
             </div>
         </div>
 
