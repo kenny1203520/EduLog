@@ -66,7 +66,7 @@ serve(async (req: Request) => {
         class_participation,
         classroom_behavior,
         enrollments!inner(id, student_id, course_id, students(id, name)),
-        class_occurrences!inner(id, occurrence_date, actual_start_time, original_start_time, class_session_id, class_sessions(id, name, classroom_id, classrooms(id, name))),
+        class_occurrences!inner(id, occurrence_date, actual_start_time, original_start_time, class_session_id, teacher_ids, teacher_attendance, class_sessions(id, name, classroom_id, classrooms(id, name))),
         is_completed, updated_at, attendance_status
       `)
       .eq('attendance_status', 'present')
@@ -75,7 +75,11 @@ serve(async (req: Request) => {
       .order('class_occurrences(occurrence_date)', { ascending: false })
     //   .limit(20)
 
-    const pending = (pendingRes.data || []).map((r: any) => {
+    const pending = (pendingRes.data || []).filter((r: any) => {
+      if (!teacherId) return false
+      const occ = r.class_occurrences
+      return (occ?.teacher_ids || []).includes(teacherId) && occ?.teacher_attendance?.[teacherId] === true
+    }).map((r: any) => {
       const occ = r.class_occurrences
       const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
       const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms

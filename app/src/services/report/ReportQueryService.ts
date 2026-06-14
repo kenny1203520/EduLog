@@ -183,7 +183,7 @@ export class ReportQueryService {
     }
 
     static async getPendingReports(): Promise<any[]> {
-        const results = await this.fetchIncompleteReportsInternal(90)
+        const results = await this.fetchIncompleteReportsInternal(90, 'all')
         return results.map(r => ({
             id: r.id,
             studentName: r.studentName,
@@ -197,21 +197,36 @@ export class ReportQueryService {
         }))
     }
 
-    static async getGlobalIncompleteReports(): Promise<any[]> {
+    static async getGlobalIncompleteReports(scope: 'all' | 'my_present' = 'all'): Promise<any[]> {
         // Try aggregate endpoint first
         try {
-            const agg = await AggregateService.getIncompleteReportsAggregate(90)
+            const agg = await AggregateService.getIncompleteReportsAggregate(90, scope)
             if (Array.isArray(agg)) return agg
         } catch (e) {
             // ignore and fallback
         }
 
-        return this.fetchIncompleteReportsInternal(90)
+        return this.fetchIncompleteReportsInternal(90, scope)
     }
 
-    private static async fetchIncompleteReportsInternal(daysBack: number): Promise<any[]> {
+    private static async getCurrentTeacherId(): Promise<string | null> {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return null
+
+        const { data: teacher } = await supabase
+            .from('teachers')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+        return teacher?.id || null
+    }
+
+    private static async fetchIncompleteReportsInternal(daysBack: number, scope: 'all' | 'my_present'): Promise<any[]> {
         const todayStr = DateUtils.todayString()
         const dateStr = DateUtils.addDaysToDateString(todayStr, -daysBack)
+        const teacherId = scope === 'my_present' ? await this.getCurrentTeacherId() : null
+        if (scope === 'my_present' && !teacherId) return []
 
         // Fetch reports with attendance_status = 'present'
         // Join with everything needed to determine incompleteness and show details
@@ -224,7 +239,7 @@ export class ReportQueryService {
                     students (id, name)
                 ),
                 class_occurrences!inner (
-                    id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, time_zone, is_conducted, status,
+                    id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, time_zone, is_conducted, status, teacher_ids, teacher_attendance,
                     class_sessions (
                         id, name,
                         classrooms (id, name)
@@ -252,6 +267,14 @@ export class ReportQueryService {
             
             if (isIncomplete) {
                 const occ = report.class_occurrences
+                if (scope === 'my_present') {
+                    const teacherIds = occ?.teacher_ids || []
+                    const teacherAttendance = occ?.teacher_attendance || {}
+                    if (!teacherId || !teacherIds.includes(teacherId) || teacherAttendance[teacherId] !== true) {
+                        continue
+                    }
+                }
+
                 const session = Array.isArray(occ.class_sessions) ? occ.class_sessions[0] : occ.class_sessions
                 const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
                 const student = Array.isArray(report.enrollments?.students) ? report.enrollments.students[0] : report.enrollments?.students

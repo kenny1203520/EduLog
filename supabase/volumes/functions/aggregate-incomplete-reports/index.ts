@@ -11,6 +11,7 @@ serve(async (req: Request) => {
 
   const url = new URL(req.url)
   const daysBack = Number(url.searchParams.get('daysBack') || '90')
+  const scope = url.searchParams.get('scope') === 'my_present' ? 'my_present' : 'all'
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
 
@@ -32,6 +33,22 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    const userId = userRes.data.user.id
+    let teacherId = ''
+    if (scope === 'my_present') {
+      const { data: teacher, error: teacherError } = await client
+        .from('teachers')
+        .select('id')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (teacherError) throw teacherError
+      teacherId = teacher?.id || ''
+      if (!teacherId) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+    }
+
     const todayStr = new Date().toISOString().slice(0, 10)
     const dateStr = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
@@ -43,7 +60,7 @@ serve(async (req: Request) => {
           id, student_id, course_id, students (id, name)
         ),
         class_occurrences!inner (
-          id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, time_zone, is_conducted,
+          id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, time_zone, is_conducted, teacher_ids, teacher_attendance,
           class_sessions ( id, name, classroom_id, classrooms ( id, name ) )
         )
       `)
@@ -66,6 +83,12 @@ serve(async (req: Request) => {
       if (!isIncomplete) continue
 
       const occ = report.class_occurrences
+      if (scope === 'my_present') {
+        const teacherIds = occ?.teacher_ids || []
+        const teacherAttendance = occ?.teacher_attendance || {}
+        if (!teacherIds.includes(teacherId) || teacherAttendance[teacherId] !== true) continue
+      }
+
       const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
       const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
       const student = Array.isArray(report.enrollments?.students) ? report.enrollments.students[0] : report.enrollments?.students

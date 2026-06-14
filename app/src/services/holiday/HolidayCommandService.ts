@@ -5,10 +5,13 @@ import { DateUtils } from '@/utils/DateUtils'
 type HolidayOccurrence = {
     id: string
     teacher_ids?: string[] | null
+    teacher_attendance?: Record<string, boolean> | null
     class_session_id?: string | null
     occurrence_date: string
     class_sessions?: { classroom_id?: string | null } | { classroom_id?: string | null }[] | null
 }
+
+type HolidayKind = 'closure' | 'teacher_leave'
 
 /**
  * Command service for holidays
@@ -23,9 +26,12 @@ export class HolidayCommandService {
         endDate: string,
         name?: string,
         timeZone?: string,
+        kind?: HolidayKind,
         classroomIds?: string[],
-        classSessionIds?: string[]
+        classSessionIds?: string[],
+        teacherIds?: string[]
     }): Promise<Holiday> {
+        const kind = params.kind === 'teacher_leave' ? 'teacher_leave' : 'closure'
         const { data, error } = await supabase
             .from('holidays')
             .insert({
@@ -33,8 +39,10 @@ export class HolidayCommandService {
                 end_date: params.endDate,
                 time_zone: DateUtils.isValidTimeZone(params.timeZone) ? params.timeZone : DateUtils.getDefaultTimeZone(),
                 name: params.name,
+                kind,
                 classroom_ids: params.classroomIds || [],
-                class_session_ids: params.classSessionIds || []
+                class_session_ids: params.classSessionIds || [],
+                teacher_ids: kind === 'teacher_leave' ? (params.teacherIds || []) : []
             })
             .select()
             .single()
@@ -106,7 +114,7 @@ export class HolidayCommandService {
     private static async getOccurrencesForHoliday(holiday: Holiday): Promise<HolidayOccurrence[]> {
         let query = supabase
             .from('class_occurrences')
-            .select('id, teacher_ids, class_session_id, occurrence_date, class_sessions(classroom_id)')
+            .select('id, teacher_ids, teacher_attendance, class_session_id, occurrence_date, class_sessions(classroom_id)')
             .gte('occurrence_date', holiday.startDate)
             .lte('occurrence_date', holiday.endDate)
 
@@ -132,7 +140,17 @@ export class HolidayCommandService {
             throw new Error(`Failed to fetch occurrences for holiday: ${error.message}`)
         }
 
-        return (data || []) as HolidayOccurrence[]
+        const occurrences = (data || []) as HolidayOccurrence[]
+        if (holiday.kind !== 'teacher_leave') {
+            return occurrences
+        }
+
+        const teacherIds = new Set(holiday.teacherIds)
+        if (teacherIds.size === 0) return []
+
+        return occurrences.filter(occurrence =>
+            (occurrence.teacher_ids || []).some(teacherId => teacherIds.has(teacherId))
+        )
     }
 
     private static getOccurrenceClassroomId(occurrence: HolidayOccurrence): string | undefined {
@@ -160,10 +178,10 @@ export class HolidayCommandService {
         return !!classroomId && classroomIds.includes(classroomId)
     }
 
-    private static async isStillHoliday(occurrence: HolidayOccurrence): Promise<boolean> {
+    private static async isStillClosureHoliday(occurrence: HolidayOccurrence): Promise<boolean> {
         const { data, error } = await supabase
             .from('holidays')
-            .select('id, start_date, end_date, classroom_ids, class_session_ids')
+            .select('id, start_date, end_date, kind, classroom_ids, class_session_ids')
             .lte('start_date', occurrence.occurrence_date)
             .gte('end_date', occurrence.occurrence_date)
 
@@ -171,7 +189,81 @@ export class HolidayCommandService {
             throw new Error(`Failed to check remaining holidays: ${error.message}`)
         }
 
-        return (data || []).some(holiday => this.holidayAppliesToOccurrence(holiday as HolidayDTO, occurrence))
+        return (data || [])
+            .filter((holiday: any) => (holiday.kind || 'closure') === 'closure')
+            .some(holiday => this.holidayAppliesToOccurrence(holiday as HolidayDTO, occurrence))
+    }
+
+    private static async getStillAbsentTeacherIds(occurrence: HolidayOccurrence, teacherIds: string[]): Promise<Set<string>> {
+        if (teacherIds.length === 0) return new Set()
+
+        const { data, error } = await supabase
+            .from('holidays')
+            .select('id, start_date, end_date, kind, classroom_ids, class_session_ids, teacher_ids')
+            .lte('start_date', occurrence.occurrence_date)
+            .gte('end_date', occurrence.occurrence_date)
+
+        if (error) {
+            throw new Error(`Failed to check remaining teacher leave: ${error.message}`)
+        }
+
+        const requested = new Set(teacherIds)
+        const stillAbsent = new Set<string>()
+
+        ;(data || [])
+            .filter((holiday: any) => this.holidayAppliesToOccurrence(holiday as HolidayDTO, occurrence))
+            .forEach((holiday: any) => {
+                if ((holiday.kind || 'closure') === 'closure') {
+                    requested.forEach(teacherId => stillAbsent.add(teacherId))
+                } else if (holiday.kind === 'teacher_leave') {
+                    ;(holiday.teacher_ids || []).forEach((teacherId: string) => {
+                        if (requested.has(teacherId)) {
+                            stillAbsent.add(teacherId)
+                        }
+                    })
+                }
+            })
+
+        return stillAbsent
+    }
+
+    private static async updateHolidayControlledReports(
+        occurrenceIds: string[],
+        attendanceStatus: 'absent' | 'pending',
+        absenceReason: 'holiday' | null
+    ): Promise<void> {
+        if (occurrenceIds.length === 0) return
+
+        let query = supabase
+            .from('occurrence_reports')
+            .select('id, version')
+            .in('class_occurrence_id', occurrenceIds)
+
+        if (attendanceStatus === 'pending') {
+            query = query.eq('attendance_status', 'absent').eq('absence_reason', 'holiday')
+        }
+
+        const { data: reports, error: fetchError } = await query
+        if (fetchError) {
+            throw new Error(`Failed to fetch reports for holiday sync: ${fetchError.message}`)
+        }
+
+        for (const report of reports || []) {
+            const { error: updateError } = await supabase
+                .from('occurrence_reports')
+                .update({
+                    attendance_status: attendanceStatus,
+                    absence_reason: absenceReason,
+                    version: (report.version || 1) + 1
+                })
+                .eq('id', report.id)
+                .eq('version', report.version || 1)
+
+            if (updateError) {
+                const action = attendanceStatus === 'pending' ? 'release' : 'sync'
+                throw new Error(`Failed to ${action} reports for holiday: ${updateError.message}`)
+            }
+        }
     }
 
     /**
@@ -181,31 +273,42 @@ export class HolidayCommandService {
         const occurrences = await this.getOccurrencesForHoliday(holiday)
         if (occurrences.length === 0) return
 
-        const releasableOccurrences: HolidayOccurrence[] = []
-        for (const occurrence of occurrences) {
-            const stillHoliday = await this.isStillHoliday(occurrence)
-            if (!stillHoliday) {
-                releasableOccurrences.push(occurrence)
+        if (holiday.kind === 'teacher_leave') {
+            for (const occurrence of occurrences) {
+                const stillAbsentIds = await this.getStillAbsentTeacherIds(occurrence, holiday.teacherIds)
+                const nextAttendance = { ...(occurrence.teacher_attendance || {}) }
+                let changed = false
+
+                holiday.teacherIds.forEach(teacherId => {
+                    if (!stillAbsentIds.has(teacherId) && nextAttendance[teacherId] === false) {
+                        nextAttendance[teacherId] = true
+                        changed = true
+                    }
+                })
+
+                if (!changed) continue
+
+                const { error: updateError } = await supabase
+                    .from('class_occurrences')
+                    .update({ teacher_attendance: nextAttendance })
+                    .eq('id', occurrence.id)
+
+                if (updateError) {
+                    throw new Error(`Failed to restore teacher attendance for occurrence ${occurrence.id}: ${updateError.message}`)
+                }
             }
+            return
         }
 
+        const releasableOccurrences: HolidayOccurrence[] = []
+        for (const occurrence of occurrences) {
+            const stillHoliday = await this.isStillClosureHoliday(occurrence)
+            if (!stillHoliday) releasableOccurrences.push(occurrence)
+        }
         if (releasableOccurrences.length === 0) return
 
         const occurrenceIds = releasableOccurrences.map(o => o.id)
-
-        const { error: reportError } = await supabase
-            .from('occurrence_reports')
-            .update({
-                attendance_status: 'pending',
-                absence_reason: null
-            })
-            .in('class_occurrence_id', occurrenceIds)
-            .eq('attendance_status', 'absent')
-            .eq('absence_reason', 'holiday')
-
-        if (reportError) {
-            throw new Error(`Failed to release reports after holiday removal: ${reportError.message}`)
-        }
+        await this.updateHolidayControlledReports(occurrenceIds, 'pending', null)
 
         for (const occ of releasableOccurrences) {
             const teacherAttendance = (occ.teacher_ids || []).reduce((acc: Record<string, boolean>, teacherId: string) => {
@@ -234,20 +337,35 @@ export class HolidayCommandService {
         const occurrences = await this.getOccurrencesForHoliday(holiday)
 
         if (!occurrences || occurrences.length === 0) return
-        const occurrenceIds = occurrences.map(o => o.id)
 
-        // 2. Update reports: mark all affected reports as absent for the holiday
-        const { error: reportError } = await supabase
-            .from('occurrence_reports')
-            .update({
-                attendance_status: 'absent',
-                absence_reason: 'holiday'
-            })
-            .in('class_occurrence_id', occurrenceIds)
+        if (holiday.kind === 'teacher_leave') {
+            for (const occ of occurrences) {
+                const teacherAttendance = { ...(occ.teacher_attendance || {}) }
+                let changed = false
 
-        if (reportError) {
-            throw new Error(`Failed to sync reports for holiday: ${reportError.message}`)
+                holiday.teacherIds.forEach(teacherId => {
+                    if ((occ.teacher_ids || []).includes(teacherId) && teacherAttendance[teacherId] !== false) {
+                        teacherAttendance[teacherId] = false
+                        changed = true
+                    }
+                })
+
+                if (!changed) continue
+
+                const { error: updateError } = await supabase
+                    .from('class_occurrences')
+                    .update({ teacher_attendance: teacherAttendance })
+                    .eq('id', occ.id)
+
+                if (updateError) {
+                    throw new Error(`Failed to update teacher leave for occurrence ${occ.id}: ${updateError.message}`)
+                }
+            }
+            return
         }
+
+        const occurrenceIds = occurrences.map(o => o.id)
+        await this.updateHolidayControlledReports(occurrenceIds, 'absent', 'holiday')
 
         // 3. Mark occurrences as not conducted and disable all teacher attendance
         for (const occ of occurrences) {

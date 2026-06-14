@@ -172,7 +172,7 @@ export class AggregateService {
     })
   }
 
-  static async getIncompleteReportsAggregate(daysBack: number = 90) {
+  static async getIncompleteReportsAggregate(daysBack: number = 90, scope: 'all' | 'my_present' = 'all') {
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 
@@ -182,9 +182,10 @@ export class AggregateService {
     if (token) headers['Authorization'] = `Bearer ${token}`
 
     const base = this.getFunctionsBaseUrl()
-    const url = base ? `${base}/aggregate-incomplete-reports?daysBack=${daysBack}` : `/aggregate-incomplete-reports?daysBack=${daysBack}`
+    const qs = `daysBack=${daysBack}&scope=${encodeURIComponent(scope)}`
+    const url = base ? `${base}/aggregate-incomplete-reports?${qs}` : `/aggregate-incomplete-reports?${qs}`
 
-    const cacheKey = `incomplete_reports:back${daysBack}:t${token || 'anon'}`
+    const cacheKey = `incomplete_reports:back${daysBack}:scope${scope}:t${token || 'anon'}`
     return this.withCache(cacheKey, this.DEFAULT_TTL_MS, async () => {
       const resp = await fetch(url, { method: 'GET', headers })
       if (!resp.ok) {

@@ -15,13 +15,24 @@ export class HolidayService {
         return HolidayQueryService.isHoliday(dateStr, classroomId, sessionId)
     }
 
+    static async isTeacherOnLeave(
+        dateStr: string,
+        teacherId: string,
+        classroomId?: string,
+        sessionId?: string
+    ): Promise<boolean> {
+        return HolidayQueryService.isTeacherOnLeave(dateStr, teacherId, classroomId, sessionId)
+    }
+
     static async createHoliday(params: {
         startDate: string,
         endDate: string,
         name?: string,
         timeZone?: string,
+        kind?: 'closure' | 'teacher_leave',
         classroomIds?: string[],
-        classSessionIds?: string[]
+        classSessionIds?: string[],
+        teacherIds?: string[]
     }): Promise<Holiday> {
         return HolidayCommandService.createHoliday(params)
     }
