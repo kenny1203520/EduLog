@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-06-14
+
+### Added
+- Student management module with student profiles, contact management, school history, and course enrollment workflows.
+- Native HTTPS support for the EduLog frontend with externally mounted certificate and key files.
+- External GitHub changelog link from the in-app changelog view.
+
+### Changed
+- Updated EduLog frontend proxy and security header deployment configuration for Caddy, Nginx, and HTTPS upstream scenarios.
+- Expanded `.env.example` with frontend hostname, HTTPS, SSL, HSTS, and CSP deployment settings.
+
+### Fixed
+- Ensured holiday updates and deletions release class occurrence locks and student attendance states after holiday ranges change.
+- Fixed `aggregate-classroom-session-manager` visible/hidden filtering errors that could return 500 responses.
+- Added HSTS and CSP headers for the EduLog frontend while keeping the default CSP free of `unsafe-eval`.
+
+### Tests
+- Added coverage for aggregate classroom session manager edge function behavior, holiday sync/release logic, and Vite security helpers.
+
+### Deployment Notes
+- No database migration required.
+- To enable native EduLog HTTPS, mount certificate files into `/app/ssl` and set `EDULOG_HTTPS_ENABLED=true`.
+
 ## [1.3.3] - 2026-06-14
 
 ### Fixed
