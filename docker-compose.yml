@@ -696,9 +696,9 @@ services:
       EDULOG_HSTS_HEADER: "${EDULOG_HSTS_HEADER}"
       EDULOG_CSP_HEADER: "${EDULOG_CSP_HEADER}"
       EDULOG_HTTPS_ENABLED: ${EDULOG_HTTPS_ENABLED:-false}
-      EDULOG_SSL_CERT_PATH: ${EDULOG_SSL_CERT_PATH:-/app/ssl/fullchain.pem}
-      EDULOG_SSL_KEY_PATH: ${EDULOG_SSL_KEY_PATH:-/app/ssl/privkey.pem}
-      EDULOG_SSL_CA_PATH: ${EDULOG_SSL_CA_PATH:-}
+      EDULOG_SSL_CERT_PATH: ${EDULOG_SSL_CERT_PATH}
+      EDULOG_SSL_KEY_PATH: ${EDULOG_SSL_KEY_PATH}
+      EDULOG_SSL_CA_PATH: ${EDULOG_SSL_CA_PATH}
     volumes:
       - ${EDULOG_SSL_DIR:-./ssl}:/app/ssl:ro
     restart: unless-stopped
