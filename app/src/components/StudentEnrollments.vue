@@ -174,16 +174,16 @@ async function refreshData() {
 
         <div v-else class="grid grid-cols-1 gap-4 mb-6">
             <div v-for="e in enrollments" :key="e.id"
-                class="bg-gray-50 p-6 rounded-2xl border border-transparent hover:border-emerald-100 transition-all group hover:shadow-lg hover:shadow-emerald-50/50">
+                class="bg-gray-50 p-4 sm:p-6 rounded-2xl border border-transparent hover:border-emerald-100 transition-all group hover:shadow-lg hover:shadow-emerald-50/50">
                 <div v-if="editingEnrollmentId !== e.id">
-                    <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                    <div class="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,auto)] xl:items-start">
                         <div class="min-w-0 space-y-3">
                             <div>
-                                <div class="break-words font-black text-gray-900 text-2xl tracking-tight leading-tight">
+                                <div class="min-w-0 break-words font-black text-gray-900 text-xl sm:text-2xl tracking-tight leading-tight">
                                     {{ e.courseDisplayName || e.courseSubject }}
                                 </div>
                                 <div
-                                    class="text-sm font-bold text-gray-400 uppercase tracking-widest mt-2 flex flex-wrap gap-x-2">
+                                    class="min-w-0 text-sm font-bold text-gray-400 uppercase tracking-widest mt-2 flex flex-wrap gap-x-2 gap-y-1 leading-relaxed">
                                     <span>{{ e.classroomName || "No Classroom" }}</span>
                                     <span v-if="e.classSessionName || e.formattedSchedule"
                                         class="text-gray-300">•</span>
@@ -223,7 +223,7 @@ async function refreshData() {
                             </div>
                         </div>
 
-                        <div class="flex w-full flex-col gap-3 xl:w-auto xl:shrink-0 xl:items-end">
+                        <div class="flex w-full min-w-0 flex-col gap-3 xl:items-end">
                             <div
                                 class="flex items-center justify-end gap-1 opacity-100 transition-all sm:opacity-0 sm:group-hover:opacity-100">
                                 <button @click="openSuspensions(e.id)"
@@ -256,9 +256,9 @@ async function refreshData() {
                             </div>
 
                             <div
-                                class="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 xl:flex xl:w-auto xl:flex-wrap xl:justify-end">
+                                class="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(8.5rem,1fr))] gap-2 xl:max-w-[42rem]">
                                 <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: e.id } }"
-                                    class="inline-flex justify-center whitespace-nowrap px-4 py-2 bg-emerald-600 border border-emerald-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-all shadow-sm cursor-pointer active:scale-95 items-center gap-1.5">
+                                    class="inline-flex min-h-10 justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-emerald-600 border border-emerald-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-all shadow-sm cursor-pointer active:scale-95 items-center gap-1.5">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                                     </svg>
@@ -268,22 +268,22 @@ async function refreshData() {
                                     :href="e.externalLink"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    class="inline-flex justify-center whitespace-nowrap px-4 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95 items-center gap-1.5">
+                                    class="inline-flex min-h-10 justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95 items-center gap-1.5">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
                                     </svg>
                                     {{ $t("student.internal_courses.external_overview") }}
                                 </a>
                                 <button @click="openTransfer(e.id)"
-                                    class="inline-flex items-center justify-center whitespace-nowrap px-4 py-2 bg-white border border-amber-100 text-amber-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    class="inline-flex min-h-10 items-center justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-white border border-amber-100 text-amber-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("student.internal_courses.transfer_btn") }}
                                 </button>
                                 <button @click="openKodingCheck(e)"
-                                    class="inline-flex items-center justify-center whitespace-nowrap px-4 py-2 bg-white border border-orange-100 text-orange-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-orange-50 hover:border-orange-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    class="inline-flex min-h-10 items-center justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-white border border-orange-100 text-orange-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-orange-50 hover:border-orange-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("classroom.koding_check") }}
                                 </button>
                                 <button v-if="e.status === 'trial'" @click="openActivateTrial(e.id)"
-                                    class="inline-flex items-center justify-center whitespace-nowrap px-4 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    class="inline-flex min-h-10 items-center justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-white border border-blue-100 text-blue-600 text-xs font-black uppercase tracking-widest rounded-xl hover:bg-blue-50 hover:border-blue-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("student.activate_trial_btn") }}
                                 </button>
                             </div>

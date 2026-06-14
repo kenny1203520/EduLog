@@ -86,6 +86,13 @@
                             :placeholder="t('report.search_placeholder')" />
                     </div>
 
+                    <label
+                        class="hidden sm:flex shrink-0 items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-xs font-black uppercase tracking-widest text-gray-500 shadow-sm">
+                        <input v-model="onlyMyPresentStudents" type="checkbox"
+                            class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                        <span>{{ t('report.only_my_present_students') }}</span>
+                    </label>
+
                     <!-- Refresh Button -->
                     <button @click="loadReports(false)"
                         class="shrink-0 p-2.5 rounded-xl bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-emerald-600 hover:border-emerald-100 transition-all active:scale-95"
@@ -98,6 +105,13 @@
                         </svg>
                     </button>
                 </div>
+
+                <label
+                    class="sm:hidden mx-4 mt-3 flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2.5 text-xs font-black uppercase tracking-widest text-gray-500 shadow-sm">
+                    <input v-model="onlyMyPresentStudents" type="checkbox"
+                        class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                    <span>{{ t('report.only_my_present_students') }}</span>
+                </label>
 
                 <div v-if="loading" class="flex-1 flex flex-col items-center justify-center p-8 text-gray-500">
                     <div class="relative w-12 h-12 mb-2">
@@ -397,6 +411,7 @@ const selectedReport = ref<any>(null)
 const editorLoading = ref(false)
 const activeLessons = ref<any[]>([])
 const searchQuery = ref('')
+const onlyMyPresentStudents = ref(false)
 
 const filteredReports = computed(() => {
     if (!searchQuery.value) return incompleteReports.value
@@ -416,7 +431,9 @@ async function loadReports(refreshEditor = true) {
     }
 
     try {
-        const raw = await OccurrenceReportService.getGlobalIncompleteReports()
+        const raw = await OccurrenceReportService.getGlobalIncompleteReports(
+            onlyMyPresentStudents.value ? 'my_present' : 'all'
+        )
         const normalized = (raw || []).map((r: any) => {
             const progress = r.progressLetter || r.progress_letter || ''
             let start = ''
@@ -528,6 +545,11 @@ watch(selectedReport, async (newVal) => {
     } finally {
         editorLoading.value = false
     }
+})
+
+watch(onlyMyPresentStudents, () => {
+    selectedReport.value = null
+    loadReports(false)
 })
 
 async function handleSaveSuccess(updatedReport: any) {

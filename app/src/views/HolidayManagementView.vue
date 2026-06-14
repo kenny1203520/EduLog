@@ -4,6 +4,7 @@ import { HolidayService } from '@/services/holiday/HolidayService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
+import { TeacherService, type TeacherDTO } from '@/services/teacher/TeacherService'
 import { Holiday } from '@/models/Holiday'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
@@ -21,6 +22,7 @@ const preferences = usePreferencesStore()
 const holidays = ref<Holiday[]>([])
 const classrooms = ref<ClassroomDTO[]>([])
 const sessions = ref<ClassSessionDTO[]>([])
+const teachers = ref<TeacherDTO[]>([])
 const loading = ref(true)
 const isSaving = ref(false)
 const isDeleting = ref(false)
@@ -34,11 +36,13 @@ const deleteId = ref<string | null>(null)
 
 const scopeType = ref<'global' | 'classroom' | 'session'>('global')
 const holidayForm = ref({
+    kind: 'closure' as 'closure' | 'teacher_leave',
     startDate: DateUtils.todayString(preferences.timeZone),
     endDate: DateUtils.todayString(preferences.timeZone),
     name: '',
     classroomIds: [] as string[],
-    classSessionIds: [] as string[]
+    classSessionIds: [] as string[],
+    teacherIds: [] as string[]
 })
 
 const classroomFilterOptions = computed(() => [
@@ -82,13 +86,16 @@ async function loadAuxData() {
             ])
             classrooms.value = (roomsRes.classrooms || []).map((d: any) => d)
             sessions.value = sessionsRes.data
+            teachers.value = await TeacherService.getAllTeachers()
         } catch (e) {
-            const [roomsRes, sessionsRes] = await Promise.all([
+            const [roomsRes, sessionsRes, teachersRes] = await Promise.all([
                 ClassroomService.getClassrooms(1, 1000),
-                SessionService.getClassSessions(1, 1000)
+                SessionService.getClassSessions(1, 1000),
+                TeacherService.getAllTeachers()
             ])
             classrooms.value = roomsRes.data
             sessions.value = sessionsRes.data
+            teachers.value = teachersRes
         }
     } catch (e) {
         console.error('Failed to load classrooms/sessions:', e)
@@ -106,8 +113,10 @@ async function loadHolidays() {
                 end_date: d.end_date,
                 time_zone: d.time_zone,
                 name: d.name,
+                kind: d.kind,
                 classroom_ids: d.classroom_ids || [],
-                class_session_ids: d.class_session_ids || []
+                class_session_ids: d.class_session_ids || [],
+                teacher_ids: d.teacher_ids || []
             }))
         } catch (e) {
             holidays.value = await HolidayService.listHolidays()
@@ -125,6 +134,10 @@ function getNamesForIds(type: 'classroom' | 'session', ids: string[]) {
     } else {
         return ids.map(id => sessions.value.find(s => s.id === id)?.name).filter(Boolean).join(', ')
     }
+}
+
+function getTeacherNames(ids: string[]) {
+    return ids.map(id => teachers.value.find(teacher => teacher.id === id)?.name).filter(Boolean).join(', ')
 }
 
 function getRoomName(id?: string | null) {
@@ -159,8 +172,15 @@ async function handleSaveHoliday() {
             end_date: holidayForm.value.endDate,
             time_zone: preferences.timeZone,
             name: holidayForm.value.name,
+            kind: holidayForm.value.kind,
             classroom_ids: scopeType.value === 'classroom' ? holidayForm.value.classroomIds : [],
-            class_session_ids: scopeType.value === 'session' ? holidayForm.value.classSessionIds : []
+            class_session_ids: scopeType.value === 'session' ? holidayForm.value.classSessionIds : [],
+            teacher_ids: holidayForm.value.kind === 'teacher_leave' ? holidayForm.value.teacherIds : []
+        }
+
+        if (payload.kind === 'teacher_leave' && payload.teacher_ids.length === 0) {
+            toast.error(t('holiday.teacher_required'))
+            return
         }
 
         if (editingId.value) {
@@ -171,8 +191,10 @@ async function handleSaveHoliday() {
                 endDate: payload.end_date,
                 timeZone: payload.time_zone,
                 name: payload.name,
+                kind: payload.kind,
                 classroomIds: payload.classroom_ids,
-                classSessionIds: payload.class_session_ids
+                classSessionIds: payload.class_session_ids,
+                teacherIds: payload.teacher_ids
             })
         }
         await loadHolidays()
@@ -211,11 +233,13 @@ function openAddModal() {
     scopeType.value = 'global'
     selectedSessionClassroomFilter.value = ''
     holidayForm.value = {
+        kind: 'closure',
         startDate: DateUtils.todayString(preferences.timeZone),
         endDate: DateUtils.todayString(preferences.timeZone),
         name: '',
         classroomIds: [],
-        classSessionIds: []
+        classSessionIds: [],
+        teacherIds: []
     }
     isAddModalOpen.value = true
 }
@@ -231,11 +255,13 @@ function openEditModal(holiday: Holiday) {
     }
 
     holidayForm.value = {
+        kind: holiday.kind,
         startDate: holiday.startDate,
         endDate: holiday.endDate,
         name: holiday.name || '',
         classroomIds: holiday.classroomIds ? [...holiday.classroomIds] : [],
-        classSessionIds: holiday.classSessionIds ? [...holiday.classSessionIds] : []
+        classSessionIds: holiday.classSessionIds ? [...holiday.classSessionIds] : [],
+        teacherIds: holiday.teacherIds ? [...holiday.teacherIds] : []
     }
     isAddModalOpen.value = true
 }
@@ -307,7 +333,11 @@ function closeModal() {
                 <div class="flex justify-between items-start mb-4">
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 mb-1">
-                            <span v-if="holiday.classSessionIds.length > 0"
+                            <span v-if="holiday.kind === 'teacher_leave'"
+                                class="px-3 py-1 bg-amber-50 text-amber-700 rounded-full text-[12px] font-black uppercase tracking-widest border border-amber-100">
+                                {{ $t('holiday.kind_teacher_leave') }}
+                            </span>
+                            <span v-else-if="holiday.classSessionIds.length > 0"
                                 class="px-3 py-1 bg-purple-50 text-purple-700 rounded-full text-[12px] font-black uppercase tracking-widest border border-purple-100">
                                 {{ $t('holiday.scope_session') }}
                             </span>
@@ -369,6 +399,15 @@ function closeModal() {
                     </div>
 
                     <!-- Target Detail -->
+                    <div v-if="holiday.kind === 'teacher_leave'"
+                        class="pt-3 border-t border-gray-50">
+                        <p class="text-[12px] font-black text-gray-400 uppercase tracking-widest mb-2">
+                            {{ $t('holiday.teacher_leave_teachers') }}</p>
+                        <p class="text-xs font-medium text-gray-600 line-clamp-2 italic">
+                            {{ getTeacherNames(holiday.teacherIds) || '-' }}
+                        </p>
+                    </div>
+
                     <div v-if="holiday.classroomIds.length > 0 || holiday.classSessionIds.length > 0"
                         class="pt-3 border-t border-gray-50">
                         <p class="text-[12px] font-black text-gray-400 uppercase tracking-widest mb-2">{{
@@ -402,7 +441,8 @@ function closeModal() {
 
                 <!-- Card Bottom Accent -->
                 <div class="absolute bottom-0 left-0 right-0 h-1.5" :class="[
-                    holiday.classSessionIds.length > 0 ? 'bg-purple-500/20' :
+                    holiday.kind === 'teacher_leave' ? 'bg-amber-500/20' :
+                        holiday.classSessionIds.length > 0 ? 'bg-purple-500/20' :
                         holiday.classroomIds.length > 0 ? 'bg-blue-500/20' : 'bg-emerald-500/20'
                 ]"></div>
             </div>
@@ -431,6 +471,42 @@ function closeModal() {
                     $t('holiday.add_holiday') }}</h3>
 
                 <div class="space-y-8">
+                    <div class="space-y-3">
+                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
+                            $t('holiday.kind_label') }}</label>
+                        <div class="grid grid-cols-2 gap-1 bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
+                            <button @click="holidayForm.kind = 'closure'"
+                                class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
+                                :class="holidayForm.kind === 'closure' ? 'bg-white text-emerald-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'">
+                                {{ $t('holiday.kind_closure') }}
+                            </button>
+                            <button @click="holidayForm.kind = 'teacher_leave'"
+                                class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all"
+                                :class="holidayForm.kind === 'teacher_leave' ? 'bg-white text-amber-600 shadow-sm border border-gray-100' : 'text-gray-400 hover:text-gray-600'">
+                                {{ $t('holiday.kind_teacher_leave') }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="holidayForm.kind === 'teacher_leave'"
+                        class="space-y-3 animate-in fade-in slide-in-from-top-2">
+                        <label class="block text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1">{{
+                            $t('holiday.teacher_leave_teachers') }}</label>
+                        <div
+                            class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-3 border border-amber-100 rounded-2xl bg-amber-50/50 custom-scrollbar">
+                            <label v-for="teacher in teachers" :key="teacher.id"
+                                class="flex items-center gap-3 p-3 hover:bg-white rounded-xl cursor-pointer transition-all border border-transparent hover:border-amber-100 select-none"
+                                :class="holidayForm.teacherIds.includes(teacher.id!) ? 'bg-white border-amber-100 ring-1 ring-amber-50' : ''">
+                                <input type="checkbox" :value="teacher.id" v-model="holidayForm.teacherIds"
+                                    class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-gray-300">
+                                <span class="text-sm font-bold text-gray-700 truncate">{{ teacher.name }}</span>
+                            </label>
+                        </div>
+                        <p class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                            {{ $t('holiday.teacher_leave_hint') }}
+                        </p>
+                    </div>
+
                     <!-- Scope Selection -->
                     <div class="space-y-3">
                         <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
