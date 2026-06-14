@@ -11,9 +11,11 @@ const props = withDefaults(defineProps<{
     options: Option[]
     placeholder?: string
     fontSizeClass?: string
+    multiple?: boolean
 }>(), {
     placeholder: '',
-    fontSizeClass: 'text-sm'
+    fontSizeClass: 'text-sm',
+    multiple: false
 })
 
 const emit = defineEmits<{
@@ -24,8 +26,14 @@ const isOpen = ref(false)
 const searchQuery = ref('')
 const containerRef = ref<HTMLElement | null>(null)
 
-const selectedOption = computed(() => {
-    return props.options.find(o => o.value === props.modelValue)
+const selectedLabel = computed(() => {
+    if (props.multiple) {
+        if (!Array.isArray(props.modelValue) || props.modelValue.length === 0) return ''
+        return props.modelValue.map((val: any) => props.options.find(o => o.value === val)?.label).filter(Boolean).join(', ')
+    } else {
+        const opt = props.options.find(o => o.value === props.modelValue)
+        return opt ? opt.label : ''
+    }
 })
 
 const filteredOptions = computed(() => {
@@ -34,11 +42,29 @@ const filteredOptions = computed(() => {
     return props.options.filter(o => o.label.toLowerCase().includes(q))
 })
 
+function isSelected(opt: Option) {
+    if (props.multiple) {
+        return Array.isArray(props.modelValue) && props.modelValue.includes(opt.value)
+    }
+    return props.modelValue === opt.value
+}
+
 // Handle select
 function selectOption(option: Option) {
-    emit('update:modelValue', option.value)
-    isOpen.value = false
-    searchQuery.value = ''
+    if (props.multiple) {
+        const current = Array.isArray(props.modelValue) ? [...props.modelValue] : []
+        const idx = current.indexOf(option.value)
+        if (idx >= 0) {
+            current.splice(idx, 1)
+        } else {
+            current.push(option.value)
+        }
+        emit('update:modelValue', current)
+    } else {
+        emit('update:modelValue', option.value)
+        isOpen.value = false
+        searchQuery.value = ''
+    }
 }
 
 // Click outside to close
@@ -76,10 +102,10 @@ function toggleDropdown() {
             :class="fontSizeClass">
             <input v-if="isOpen" v-model="searchQuery" ref="searchInput"
                 class="w-full outline-none bg-transparent placeholder-gray-400"
-                :placeholder="selectedOption ? selectedOption.label : (placeholder || $t('common.select_placeholder'))" @click.stop
+                :placeholder="selectedLabel || (placeholder || $t('common.select_placeholder'))" @click.stop
                 auto-focus />
-            <span v-else class="truncate w-full" :class="!selectedOption ? 'text-gray-400' : 'text-gray-700'">
-                {{ selectedOption ? selectedOption.label : (placeholder || $t('common.select_placeholder')) }}
+            <span v-else class="truncate w-full" :class="!selectedLabel ? 'text-gray-400' : 'text-gray-700'">
+                {{ selectedLabel || (placeholder || $t('common.select_placeholder')) }}
             </span>
 
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 shrink-0 transition-transform"
@@ -92,13 +118,16 @@ function toggleDropdown() {
         <div v-if="isOpen"
             class="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
             <ul v-if="filteredOptions.length > 0" class="py-1">
-                <li v-for="opt in filteredOptions" :key="opt.value" @click="selectOption(opt)"
-                    class="px-3 py-2 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer truncate"
+                <li v-for="opt in filteredOptions" :key="opt.value" @click.stop="selectOption(opt)"
+                    class="px-3 py-2 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 cursor-pointer truncate flex justify-between items-center"
                     :class="[
-                        modelValue === opt.value ? 'bg-emerald-50 text-emerald-700 font-medium' : '',
+                        isSelected(opt) ? 'bg-emerald-50 text-emerald-700 font-medium' : '',
                         fontSizeClass
                     ]">
-                    {{ opt.label }}
+                    <span class="truncate">{{ opt.label }}</span>
+                    <svg v-if="isSelected(opt) && multiple" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-600 shrink-0 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                    </svg>
                 </li>
             </ul>
             <div v-else class="px-3 py-2 text-sm text-gray-400 italic">
@@ -107,3 +136,4 @@ function toggleDropdown() {
         </div>
     </div>
 </template>
+

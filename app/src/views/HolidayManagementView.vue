@@ -11,7 +11,7 @@ import { useToast } from 'vue-toastification'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
-import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
@@ -45,11 +45,19 @@ const holidayForm = ref({
     teacherIds: [] as string[]
 })
 
+const teacherOptions = computed(() => teachers.value.map(t => ({
+    label: t.name + (t.email ? ` (${t.email})` : ''),
+    value: t.id
+})))
+
+const classroomOptions = computed(() => classrooms.value
+    .filter(room => Boolean(room.id))
+    .map(room => ({ label: room.name, value: room.id }))
+)
+
 const classroomFilterOptions = computed(() => [
     { label: t('classroom.all_rooms'), value: '' },
-    ...classrooms.value
-        .filter(room => Boolean(room.id))
-        .map(room => ({ label: room.name, value: room.id }))
+    ...classroomOptions.value
 ])
 
 const filteredSessions = computed(() => {
@@ -417,8 +425,8 @@ function closeModal() {
                                 class="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
                                 <div class="flex items-start justify-between gap-2">
                                     <div class="min-w-0">
-                                        <p class="text-xs font-black text-gray-800 truncate">{{ session.name }}</p>
-                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
+                                        <p class="text-xs font-black text-gray-800 break-words">{{ session.name }}</p>
+                                        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider break-words mt-1">
                                             {{ getRoomName(session.classroom_id) }}
                                         </p>
                                     </div>
@@ -492,17 +500,16 @@ function closeModal() {
                         class="space-y-3 animate-in fade-in slide-in-from-top-2">
                         <label class="block text-[10px] font-black text-amber-600 uppercase tracking-widest ml-1">{{
                             $t('holiday.teacher_leave_teachers') }}</label>
-                        <div
-                            class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-3 border border-amber-100 rounded-2xl bg-amber-50/50 custom-scrollbar">
-                            <label v-for="teacher in teachers" :key="teacher.id"
-                                class="flex items-center gap-3 p-3 hover:bg-white rounded-xl cursor-pointer transition-all border border-transparent hover:border-amber-100 select-none"
-                                :class="holidayForm.teacherIds.includes(teacher.id!) ? 'bg-white border-amber-100 ring-1 ring-amber-50' : ''">
-                                <input type="checkbox" :value="teacher.id" v-model="holidayForm.teacherIds"
-                                    class="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-gray-300">
-                                <span class="text-sm font-bold text-gray-700 truncate">{{ teacher.name }}</span>
-                            </label>
-                        </div>
-                        <p class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                        
+                        <SearchableSelect 
+                            v-model="holidayForm.teacherIds" 
+                            :options="teacherOptions" 
+                            :multiple="true" 
+                            :placeholder="$t('holiday.teacher_leave_teachers')" 
+                            font-size-class="text-sm font-bold text-gray-700"
+                        />
+
+                        <p class="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 mt-2">
                             {{ $t('holiday.teacher_leave_hint') }}
                         </p>
                     </div>
@@ -534,16 +541,13 @@ function closeModal() {
                     <div v-if="scopeType === 'classroom'" class="space-y-3 animate-in fade-in slide-in-from-top-2">
                         <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
                             $t('holiday.scope_classroom') }}</label>
-                        <div
-                            class="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-3 border border-gray-100 rounded-2xl bg-gray-50 custom-scrollbar">
-                            <label v-for="room in classrooms" :key="room.id"
-                                class="flex items-center gap-3 p-3 hover:bg-white rounded-xl cursor-pointer transition-all border border-transparent hover:border-emerald-100 select-none"
-                                :class="holidayForm.classroomIds.includes(room.id!) ? 'bg-white border-emerald-100 ring-1 ring-emerald-50' : ''">
-                                <input type="checkbox" :value="room.id" v-model="holidayForm.classroomIds"
-                                    class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300">
-                                <span class="text-sm font-bold text-gray-700 truncate">{{ room.name }}</span>
-                            </label>
-                        </div>
+                        <SearchableSelect 
+                            v-model="holidayForm.classroomIds" 
+                            :options="classroomOptions" 
+                            :multiple="true" 
+                            :placeholder="$t('holiday.scope_classroom')" 
+                            font-size-class="text-sm font-bold text-gray-700"
+                        />
                     </div>
 
                     <div v-if="scopeType === 'session'" class="space-y-3 animate-in fade-in slide-in-from-top-2">
@@ -558,8 +562,8 @@ function closeModal() {
                                     class="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 ml-1">
                                     {{ $t('holiday.filter_by_classroom') }}
                                 </label>
-                                <BaseDropdown v-model="selectedSessionClassroomFilter" :options="classroomFilterOptions"
-                                    theme="emerald" :placeholder="$t('classroom.all_rooms')" />
+                                <SearchableSelect v-model="selectedSessionClassroomFilter" :options="classroomFilterOptions"
+                                    :placeholder="$t('classroom.all_rooms')" font-size-class="text-sm font-bold text-gray-700" />
                             </div>
                         </div>
                         <div
@@ -571,13 +575,13 @@ function closeModal() {
                                     class="mt-1 w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300">
                                 <div class="flex flex-col min-w-0 flex-1">
                                     <div class="flex items-start justify-between gap-2">
-                                        <span class="text-sm font-black text-gray-900 truncate">{{ s.name }}</span>
+                                        <span class="text-sm font-black text-gray-900 break-words">{{ s.name }}</span>
                                         <span
-                                            class="shrink-0 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 whitespace-nowrap">
+                                            class="shrink-0 text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1 whitespace-nowrap mt-0.5">
                                             {{ formatSessionSchedule(s) }}
                                         </span>
                                     </div>
-                                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">
+                                    <span class="text-[10px] font-bold text-gray-400 uppercase tracking-wider break-words mt-1">
                                         {{ getRoomName(s.classroom_id) }} · {{ s.time_zone || preferences.timeZone }}
                                     </span>
                                 </div>
