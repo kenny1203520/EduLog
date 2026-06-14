@@ -1,6 +1,33 @@
 {
     "entries": [
         {
+            "version": "1.4.0",
+            "date": "2026-06-14",
+            "changes": {
+                "added": [
+                    "Student management module with profiles, contacts, school history, and course enrollment workflows.",
+                    "Native HTTPS support for the EduLog frontend with externally mounted certificate and key files.",
+                    "External GitHub changelog link from the in-app changelog view."
+                ],
+                "changed": [
+                    "Updated frontend proxy and security header deployment settings for Caddy, Nginx, and HTTPS upstream scenarios.",
+                    "Expanded environment examples for frontend hostname, HTTPS, SSL, HSTS, and CSP settings."
+                ],
+                "fixed": [
+                    "Ensured holiday updates and deletions release class occurrence locks and student attendance states after holiday ranges change.",
+                    "Fixed aggregate classroom session manager visible and hidden filtering errors that could return 500 responses.",
+                    "Added HSTS and CSP headers for the EduLog frontend while keeping the default CSP free of unsafe-eval."
+                ],
+                "tests": [
+                    "Added coverage for aggregate classroom session manager edge function behavior, holiday sync/release logic, and Vite security helpers."
+                ],
+                "deployment": [
+                    "No database migration required.",
+                    "To enable native EduLog HTTPS, mount certificate files into /app/ssl and set EDULOG_HTTPS_ENABLED=true."
+                ]
+            }
+        },
+        {
             "version": "1.3.3",
             "date": "2026-06-14",
             "changes": {
