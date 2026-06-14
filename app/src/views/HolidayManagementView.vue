@@ -5,7 +5,7 @@ import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { TeacherService, type TeacherDTO } from '@/services/teacher/TeacherService'
-import { Holiday } from '@/models/Holiday'
+import { Holiday, type HolidayDTO } from '@/models/Holiday'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
@@ -217,17 +217,12 @@ async function loadHolidays() {
         loading.value = true
         try {
             const agg = await AggregateService.getHolidaysAggregate(true)
-            holidays.value = (agg || []).map((d: any) => new Holiday({
-                id: d.id,
-                start_date: d.start_date,
-                end_date: d.end_date,
-                time_zone: d.time_zone,
-                name: d.name,
-                kind: d.kind,
-                classroom_ids: d.classroom_ids || [],
-                class_session_ids: d.class_session_ids || [],
-                teacher_ids: d.teacher_ids || []
-            }))
+            const rows = Array.isArray(agg) ? agg : []
+            if (rows.length > 0 && rows.some((row: any) => !hasHolidayKindFields(row))) {
+                holidays.value = await HolidayService.listHolidays()
+            } else {
+                holidays.value = rows.map((d: any) => new Holiday(normalizeHolidayDTO(d)))
+            }
         } catch (e) {
             holidays.value = await HolidayService.listHolidays()
         }
@@ -235,6 +230,27 @@ async function loadHolidays() {
         console.error(e)
     } finally {
         loading.value = false
+    }
+}
+
+function hasHolidayKindFields(row: any) {
+    return Object.prototype.hasOwnProperty.call(row, 'kind')
+        && Object.prototype.hasOwnProperty.call(row, 'teacher_ids')
+}
+
+function normalizeHolidayDTO(row: any): HolidayDTO {
+    return {
+        id: row.id,
+        start_date: row.start_date ?? row.startDate,
+        end_date: row.end_date ?? row.endDate,
+        time_zone: row.time_zone ?? row.timeZone,
+        name: row.name,
+        kind: row.kind,
+        classroom_ids: row.classroom_ids ?? row.classroomIds ?? [],
+        class_session_ids: row.class_session_ids ?? row.classSessionIds ?? [],
+        teacher_ids: row.teacher_ids ?? row.teacherIds ?? [],
+        created_at: row.created_at ?? row.createdAt,
+        updated_at: row.updated_at ?? row.updatedAt
     }
 }
 

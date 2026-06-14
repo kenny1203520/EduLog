@@ -4,6 +4,8 @@ import HolidayManagementView from '@/views/HolidayManagementView.vue'
 import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { TeacherService } from '@/services/teacher/TeacherService'
+import { HolidayService } from '@/services/holiday/HolidayService'
+import { Holiday } from '@/models/Holiday'
 
 vi.mock('vue-i18n', () => ({
   createI18n: () => ({
@@ -142,6 +144,7 @@ describe('HolidayManagementView tabs', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(AggregateService.getHolidaysAggregate).mockResolvedValue(holidays)
+    vi.mocked(HolidayService.listHolidays).mockResolvedValue(holidays.map(holiday => new Holiday(holiday as any)))
     vi.mocked(AggregateService.getClassroomSessionManagerAggregate).mockResolvedValue({
       classrooms: rooms,
       count: rooms.length
@@ -205,5 +208,22 @@ describe('HolidayManagementView tabs', () => {
       .find(select => select.attributes('data-model')?.includes('teacher-b'))
 
     expect(teacherSelect?.exists()).toBe(true)
+  })
+
+  it('falls back to direct holiday rows when aggregate output omits teacher leave fields', async () => {
+    vi.mocked(AggregateService.getHolidaysAggregate).mockResolvedValue(holidays.map(({ kind, teacher_ids, ...holiday }) => holiday))
+
+    const wrapper = mount(HolidayManagementView, {
+      global: globalOptions
+    })
+    await flushPromises()
+
+    expect(HolidayService.listHolidays).toHaveBeenCalled()
+
+    await wrapper.findAll('button').find(button => button.text().includes('holiday.tab_teacher_leaves'))?.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Teacher Family Leave')
+    expect(wrapper.text()).toContain('Shared Training Leave')
   })
 })
