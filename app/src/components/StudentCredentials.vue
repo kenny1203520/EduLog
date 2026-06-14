@@ -19,6 +19,7 @@ const toast = useToast()
 const studentStore = useStudentStore()
 
 const isModifying = ref(false)
+const isAddFormOpen = ref(false)
 const newCredential = ref({ platform: '', username: '', password: '', url: '' })
 const editingCredentialId = ref<string | null>(null)
 const editCredentialForm = ref({ platform: '', username: '', password: '', url: '' })
@@ -43,6 +44,17 @@ const otherPlatformEdit = ref('')
 const showDeleteConfirm = ref(false)
 const credentialToDelete = ref<string | null>(null)
 
+function resetNewCredentialForm() {
+    newCredential.value = { platform: '', username: '', password: '', url: '' }
+    otherPlatformAdd.value = ''
+    isOtherPlatformAdd.value = false
+}
+
+function closeAddCredentialForm() {
+    isAddFormOpen.value = false
+    resetNewCredentialForm()
+}
+
 async function addCredential() {
     const platformValue = newCredential.value.platform === 'Other' ? otherPlatformAdd.value.trim() : newCredential.value.platform
     const requiresPassword = !isKodingPlatform(platformValue)
@@ -55,9 +67,7 @@ async function addCredential() {
     try {
         isModifying.value = true
         await StudentService.addCredential({ ...newCredential.value, platform: platformValue, student_id: props.studentId })
-        newCredential.value = { platform: '', username: '', password: '', url: '' }
-        otherPlatformAdd.value = ''
-        isOtherPlatformAdd.value = false
+        closeAddCredentialForm()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('student.credentials.add_btn') + ' ' + t('common.success'))
     } catch (e: any) {
@@ -318,11 +328,20 @@ async function copyToClipboard(text: string) {
         </ul>
 
         <div class="border-t border-gray-100 pt-6">
-            <h3 class="text-xs font-bold text-gray-400 mb-3 uppercase tracking-wider flex items-center gap-2">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                {{ $t('student.credentials.add_title') }}
-            </h3>
+            <button type="button" data-testid="student-credential-add-toggle" @click="isAddFormOpen = !isAddFormOpen"
+                class="mb-3 flex w-full items-center justify-between rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-gray-500 transition-colors hover:border-emerald-200 hover:bg-emerald-50/50 hover:text-emerald-700">
+                <span class="flex items-center gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    {{ $t('student.credentials.add_btn') }}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+                    :class="{ 'rotate-180': isAddFormOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
+                </svg>
+            </button>
             <div
+                v-if="isAddFormOpen" data-testid="student-credential-add-form"
                 class="bg-gray-50 p-6 rounded-2xl border-2 border-dashed border-gray-200 hover:border-emerald-200 transition-all space-y-4">
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -360,21 +379,27 @@ async function copyToClipboard(text: string) {
                     </div>
                 </div>
 
-                <button @click="addCredential" :disabled="isModifying"
-                    class="w-full bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 text-sm font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                    <svg v-if="isModifying" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                        </circle>
-                        <path class="opacity-75" fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                        </path>
-                    </svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
-                        stroke="currentColor" class="w-5 h-5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    {{ $t('student.credentials.add_btn') }}
-                </button>
+                <div class="flex flex-col gap-3 sm:flex-row">
+                    <button @click="closeAddCredentialForm" :disabled="isModifying"
+                        class="w-full rounded-xl border border-gray-200 bg-white py-3 text-sm font-black uppercase tracking-widest text-gray-500 transition-all hover:bg-gray-50 disabled:opacity-50 sm:w-40">
+                        {{ $t('common.cancel') }}
+                    </button>
+                    <button @click="addCredential" :disabled="isModifying"
+                        class="w-full bg-emerald-600 text-white py-3 rounded-xl hover:bg-emerald-700 text-sm font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg v-if="isModifying" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
+                            stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        {{ $t('student.credentials.add_btn') }}
+                    </button>
+                </div>
             </div>
         </div>
 

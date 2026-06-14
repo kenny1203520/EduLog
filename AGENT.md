@@ -146,3 +146,25 @@ src/
 ### Split-Pane View
 - This is a layout concern. Ensure the "Main Editor" and "Reference View" are decoupled.
 - They should verify data via the Store, not passed props deeper than 2 levels.
+
+---
+
+## 6. Quality Assurance & Version Control (CRITICAL)
+
+### Testing & Verification
+1. **Write Tests**: You must proactively write unit tests (`spec.ts`) for all new features, stores, services, and complex components.
+2. **Pre-Release Checks**: Before any release or major merge, you **MUST** run `npm run test` and `npm run build` (inside the `app` directory) to catch any TypeScript, syntax, or logic errors. 
+3. **Docker Verification**: Always verify that the Docker image build process works smoothly as part of the release checklist.
+
+### Version Control (Git Flow)
+1. **Strict Git Flow**: ALL Git operations must strictly adhere to the Git Flow standard.
+2. **Branching**: Use `feature/`, `release/`, and `hotfix/` branches branching from `develop` (or `master` for hotfixes).
+3. **Merging**: Never merge `develop` directly into `master`. Always merge `release/` or `hotfix/` branches into `master` and `develop` using the `--no-ff` flag to preserve branch topology.
+
+### Release Management
+1. **Release Branch Checklist**: When creating a `release/vX.Y.Z` branch, you MUST:
+   - Bump the `"version"` field in `app/package.json` to match the new release version.
+   - Update the root `CHANGELOG.md` with the new version's features, fixes, and notes.
+   - Update the in-app changelog (e.g., `app/src/locales/en/changelog.json` & `zh-TW/changelog.json`) so users can see updates in the UI.
+2. **GitHub Releases**: When a new version is released (i.e. tagging `master`), you MUST create a corresponding **GitHub Release** on the repository.
+3. **Release Notes**: The release description must clearly document the version update contents (Changelog) and include any **Database/System Migration Manuals** if applicable.

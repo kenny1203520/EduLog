@@ -9,5 +9,6 @@
     "resources": "資源與連結",
     "github": "GitHub 原始碼",
     "docker": "Docker Image",
+    "github_changelog": "在 GitHub 上查看完整更新日誌",
     "copyright": "© 2026 EduLog. 保留所有權利。"
 }

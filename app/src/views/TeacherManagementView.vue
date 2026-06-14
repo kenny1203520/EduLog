@@ -46,6 +46,7 @@ const userSearchResults = ref<AuthUserSearchResultDTO[]>([])
 const isSearchingUsers = ref(false)
 const userSearchMessage = ref('')
 const userSearchOnlyUnlinked = ref(true)
+const isAddCredentialFormOpen = ref(false)
 
 const form = ref<Partial<TeacherDTO>>({
     user_id: '',
@@ -173,6 +174,7 @@ function openCreateModal() {
     form.value = createEmptyForm()
     editingCredentials.value = []
     newCredential.value = createEmptyCredentialForm()
+    isAddCredentialFormOpen.value = false
     resetUserSearchState()
     isModalOpen.value = true
 }
@@ -191,6 +193,7 @@ function openEditModal(teacher: TeacherDTO) {
     }
     editingCredentials.value = getTeacherCredentials(teacher).map(toEditableCredential)
     newCredential.value = createEmptyCredentialForm()
+    isAddCredentialFormOpen.value = false
     resetUserSearchState()
     isModalOpen.value = true
 }
@@ -201,6 +204,7 @@ function closeModal() {
     form.value = createEmptyForm()
     editingCredentials.value = []
     newCredential.value = createEmptyCredentialForm()
+    isAddCredentialFormOpen.value = false
     resetUserSearchState()
 }
 
@@ -410,6 +414,11 @@ function createEmptyCredentialForm() {
     }
 }
 
+function closeAddCredentialForm() {
+    isAddCredentialFormOpen.value = false
+    newCredential.value = createEmptyCredentialForm()
+}
+
 function getTeacherCredentials(teacher: TeacherDTO | null): TeacherCredentialDTO[] {
     return teacher?.teacher_credentials || []
 }
@@ -471,6 +480,7 @@ async function addTeacherCredential() {
             url: newCredential.value.url.trim()
         })
         newCredential.value = createEmptyCredentialForm()
+        isAddCredentialFormOpen.value = false
         await loadTeachers()
         const refreshed = teachers.value.find(teacher => teacher.id === editingTeacher.value?.id)
         if (refreshed) {
@@ -1010,7 +1020,19 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                             {{ t('teacher.credentials_empty') }}
                         </div>
 
-                        <div class="mt-4 space-y-4 rounded-2xl border border-dashed border-emerald-200 bg-white/80 p-4">
+                        <button type="button" data-testid="teacher-credential-add-toggle"
+                            @click="isAddCredentialFormOpen = !isAddCredentialFormOpen"
+                            class="mt-4 flex w-full items-center justify-between rounded-2xl border border-dashed border-emerald-200 bg-white/80 px-4 py-3 text-left text-sm font-black text-emerald-700 transition hover:border-emerald-300 hover:bg-white">
+                            <span>{{ t('teacher.credentials_add') }}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+                                :class="{ 'rotate-180': isAddCredentialFormOpen }" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        <div v-if="isAddCredentialFormOpen" data-testid="teacher-credential-add-form"
+                            class="mt-3 space-y-4 rounded-2xl border border-dashed border-emerald-200 bg-white/80 p-4">
                             <div class="grid gap-3 md:grid-cols-2">
                                 <div>
                                     <label class="mb-1 block text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -1051,10 +1073,16 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                                     <input v-model="newCredential.url" type="url"
                                         class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100" />
                                 </div>
-                                <button @click="addTeacherCredential" :disabled="isCredentialSaving"
-                                    class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
-                                    {{ t('teacher.credentials_add') }}
-                                </button>
+                                <div class="flex gap-2">
+                                    <button @click="closeAddCredentialForm" :disabled="isCredentialSaving"
+                                        class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-500 transition hover:bg-slate-50 disabled:opacity-50">
+                                        {{ t('common.cancel') }}
+                                    </button>
+                                    <button @click="addTeacherCredential" :disabled="isCredentialSaving"
+                                        class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-800 disabled:opacity-50">
+                                        {{ t('teacher.credentials_add') }}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

@@ -228,8 +228,8 @@
         "password": "Password",
         "url": "URL",
         "platform_name": "Platform Name",
-        "add_title": "Add Credential",
-        "add_btn": "Add Credential",
+        "add_title": "Add Account",
+        "add_btn": "Add Account",
         "delete": "Delete Credential",
         "confirm_delete": "Are you sure you want to delete this credential?",
         "platforms": {

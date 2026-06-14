@@ -22,6 +22,7 @@ const studentStore = useStudentStore()
 const preferences = usePreferencesStore()
 
 const isModifying = ref(false)
+const isAddFormOpen = ref(false)
 const newSchool = ref({ name: '', status: '', grade: '', class: '', start_date: '', end_date: '', time_zone: preferences.timeZone, school_student_id: '' })
 const editingSchoolId = ref<string | null>(null)
 const editSchoolForm = ref({ name: '', status: '', grade: '', class: '', start_date: '', end_date: '', time_zone: preferences.timeZone, school_student_id: '' })
@@ -36,6 +37,15 @@ const schoolStatusOptions = computed(() => [
     { label: t('student.schools.status_options.incomplete'), value: 'incomplete' },
     { label: t('student.schools.status_options.suspended'), value: 'suspended' }
 ])
+
+function resetNewSchoolForm() {
+    newSchool.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', time_zone: preferences.timeZone, school_student_id: '' }
+}
+
+function closeAddSchoolForm() {
+    isAddFormOpen.value = false
+    resetNewSchoolForm()
+}
 
 async function addSchool() {
     if (!newSchool.value.status) {
@@ -62,7 +72,7 @@ async function addSchool() {
     try {
         isModifying.value = true
         await StudentService.addSchool({ ...newSchool.value, student_id: props.studentId })
-        newSchool.value = { name: '', status: '', grade: '', class: '', start_date: '', end_date: '', time_zone: preferences.timeZone, school_student_id: '' }
+        closeAddSchoolForm()
         await studentStore.loadStudent(props.studentId)
         toast.success(t('student.schools.add_btn') + ' ' + t('common.success'))
     } catch (e: any) {
@@ -346,12 +356,21 @@ function formatSchoolDate(date: string | undefined, timeZone?: string) {
         </ul>
 
         <div class="border-t border-gray-100 pt-8 mt-4">
-            <h3 class="text-sm font-black text-gray-400 mb-4 uppercase tracking-widest flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                {{ $t('student.schools.add_title') }}
-            </h3>
+            <button type="button" data-testid="student-school-add-toggle" @click="isAddFormOpen = !isAddFormOpen"
+                class="mb-4 flex w-full items-center justify-between rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-3 text-left text-sm font-black uppercase tracking-widest text-gray-500 transition-colors hover:border-emerald-200 hover:bg-emerald-50/50 hover:text-emerald-700">
+                <span class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    {{ $t('student.schools.add_title') }}
+                </span>
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform"
+                    :class="{ 'rotate-180': isAddFormOpen }" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                    stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
+                </svg>
+            </button>
 
             <div
+                v-if="isAddFormOpen" data-testid="student-school-add-form"
                 class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-200 hover:border-emerald-200 transition-colors">
                 <div class="grid grid-cols-2 md:grid-cols-2 gap-4 mb-4">
                     <div class="space-y-1">
@@ -417,21 +436,27 @@ function formatSchoolDate(date: string | undefined, timeZone?: string) {
                     <TimeZoneSelect v-model="newSchool.time_zone" :label="$t('common.time_zone')" dense />
                 </div>
 
-                <button @click="addSchool" :disabled="isModifying"
-                    class="w-full bg-emerald-600 text-white py-4 rounded-xl hover:bg-emerald-700 text-base font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                    <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                            stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                        </path>
-                    </svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                        stroke-width="2" stroke="currentColor" class="w-4 h-4">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                    {{ $t('student.schools.add_btn') }}
-                </button>
+                <div class="flex flex-col gap-3 sm:flex-row">
+                    <button @click="closeAddSchoolForm" :disabled="isModifying"
+                        class="w-full rounded-xl border border-gray-200 bg-white py-4 text-base font-black uppercase tracking-widest text-gray-500 transition-all hover:bg-gray-50 disabled:opacity-50 sm:w-40">
+                        {{ $t('common.cancel') }}
+                    </button>
+                    <button @click="addSchool" :disabled="isModifying"
+                        class="w-full bg-emerald-600 text-white py-4 rounded-xl hover:bg-emerald-700 text-base font-black uppercase tracking-widest transition-all shadow-lg shadow-emerald-50 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                        <svg v-if="isModifying" class="animate-spin h-4 w-4 text-emerald-600" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                            stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        {{ $t('student.schools.add_btn') }}
+                    </button>
+                </div>
             </div>
         </div>
 

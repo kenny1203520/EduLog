@@ -1,6 +1,33 @@
 {
     "entries": [
         {
+            "version": "1.4.0",
+            "date": "2026-06-14",
+            "changes": {
+                "added": [
+                    "新增學生管理模組，包含學生個人資料、聯絡人、學校經歷與課程報名流程。",
+                    "新增 EduLog 前端原生 HTTPS 支援，可透過外部掛載憑證與私鑰啟用。",
+                    "在應用程式內更新日誌頁新增外部 GitHub changelog 連結。"
+                ],
+                "changed": [
+                    "更新 Caddy、Nginx 與 HTTPS upstream 情境下的前端 proxy 與安全 header 部署設定。",
+                    "擴充環境變數範例，加入前端 hostname、HTTPS、SSL、HSTS 與 CSP 設定。"
+                ],
+                "fixed": [
+                    "確保休假更新與刪除後，會釋放受影響的班級鎖定與學生出席狀態。",
+                    "修正 aggregate classroom session manager 在 visible/hidden 篩選時可能回傳 500 的錯誤。",
+                    "為 EduLog 前端加入 HSTS 與 CSP header，並維持預設 CSP 不使用 unsafe-eval。"
+                ],
+                "tests": [
+                    "新增 aggregate classroom session manager edge function、休假同步/釋放邏輯與 Vite security helper 測試覆蓋。"
+                ],
+                "deployment": [
+                    "不需要資料庫 migration。",
+                    "若要啟用 EduLog 原生 HTTPS，請將憑證檔掛載到 /app/ssl，並設定 EDULOG_HTTPS_ENABLED=true。"
+                ]
+            }
+        },
+        {
             "version": "1.3.3",
             "date": "2026-06-14",
             "changes": {

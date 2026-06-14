@@ -74,12 +74,13 @@ serve(async (req: Request) => {
       .from('user_entity_visibility_preferences')
       .select('entity_type, entity_id')
       .eq('user_id', user.id)
+      .eq('is_hidden', true)
       .in('entity_type', ['classroom', 'class_session'])
 
     if (visError) throw visError
 
-    const hiddenClassroomIds = new Set<string>()
-    const hiddenSessionIds = new Set<string>()
+    const hiddenClassroomIds = new Set<string>();
+    const hiddenSessionIds = new Set<string>();
     (visData || []).forEach((r: any) => {
       if (r.entity_type === 'classroom') hiddenClassroomIds.add(r.entity_id)
       else if (r.entity_type === 'class_session') hiddenSessionIds.add(r.entity_id)
