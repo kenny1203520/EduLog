@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getRuntimeConfigValue } from '@/lib/runtimeConfig'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { StudentService } from '@/services/student/StudentService'
 
@@ -19,10 +20,11 @@ export class AggregateService {
   private static MEDIUM_TTL_MS = 60 * 1000 // 60 seconds for catalog/counts
 
   private static getFunctionsBaseUrl(): string {
-    if (import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL) {
-      return import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL
+    const configuredBaseUrl = getRuntimeConfigValue('VITE_SUPABASE_FUNCTIONS_BASE_URL')
+    if (configuredBaseUrl) {
+      return configuredBaseUrl
     }
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    const supabaseUrl = getRuntimeConfigValue('VITE_SUPABASE_URL')
     if (supabaseUrl) {
       const cleanUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl
       return `${cleanUrl}/functions/v1`

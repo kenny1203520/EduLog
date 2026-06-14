@@ -28,7 +28,10 @@ cp .env.example .env
 
 2. **EduLog 前端設定**（位於檔案最底部）：
    - `EDULOG_PORT`：前端網站對外開放的 Port（預設為 `4173`）。
+   - `EDULOG_HTTPS_PORT`：前端原生 HTTPS 對外開放的 Port（預設為 `4174`）。
    - `EDULOG_IMAGE_TAG`：欲使用的 EduLog 版本標籤，您可以指定特定的版本號（如 `v1.3.0`），或保持為 `latest`。
+   - `EDULOG_HTTP_ENABLED` / `EDULOG_HTTPS_ENABLED`：控制前端 Nginx 是否啟用 HTTP 與 HTTPS。HTTPS 會使用 `EDULOG_SSL_*` 指定的憑證。
+   - `EDULOG_CSP_HEADER` / `EDULOG_HSTS_HEADER`：前端 Nginx 的安全 header；未覆寫時會使用安全預設值。
 
 ## 第二步：啟動服務
 
@@ -45,6 +48,7 @@ Docker 將會自動拉取所需的映像檔（其中前端 `edulog` 的映像檔
 啟動完成後，您可以透過瀏覽器造訪下列網址來確認各項服務是否正常運作：
 
 - **EduLog 前端網站**：`http://localhost:4173` (或您設定的 `EDULOG_PORT`)
+- **EduLog 前端 HTTPS**：`https://localhost:4174` (啟用 `EDULOG_HTTPS_ENABLED=true` 後，或您設定的 `EDULOG_HTTPS_PORT`)
 - **Supabase Studio (資料庫管理介面)**：`http://localhost:8000` (或您設定的 `KONG_HTTP_PORT`)
 - **API 端點**：`http://localhost:8000/rest/v1/`
 
@@ -60,6 +64,8 @@ docker compose down
 docker compose pull
 docker compose up -d
 ```
+
+前端 image 使用 Nginx 服務靜態檔，不使用 `vite preview`。`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 與 `VITE_SUPABASE_FUNCTIONS_BASE_URL` 會在容器啟動時寫入 runtime config；修改這些環境變數後重啟容器即可，不需要重新 build image。
 
 > **注意：** 為了確保資料安全，若您需要完全移除環境（包含資料庫資料），請加上 `-v` 參數（**警告：這將會清除所有資料！**）：
 > `docker compose down -v`

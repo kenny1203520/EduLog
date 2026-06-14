@@ -20,7 +20,7 @@ EduLog 前端使用 Vue 3 + TypeScript + Vite，提供教師/助教的日常報�
 
 ## 環境變數
 
-建立 `.env`：
+本機開發時建立 `.env`：
 
 ```bash
 cp .env.example .env
@@ -34,6 +34,10 @@ VITE_SUPABASE_ANON_KEY=<your_supabase_anon_key>
 ```
 
 `VITE_SUPABASE_ANON_KEY` 請對應 `../supabase/.env` 的 `ANON_KEY`。
+
+Docker production image 會在容器啟動時產生 `/runtime-config.js`，因此
+`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`、`VITE_SUPABASE_FUNCTIONS_BASE_URL`
+可由 `docker-compose.yml` 的 environment 設定。修改這些環境變數後只需要重啟容器，不需要重新建置 image。
 
 ## 開發
 
@@ -49,12 +53,14 @@ npm run build
 npm run preview
 ```
 
+Production Docker image 使用 Nginx 服務 `dist` 靜態檔，不使用 `vite preview` 作為 Web server。
+
 ## 可用腳本
 
 - `npm run dev`：啟動 Vite 開發伺服器
 - `npm run build`：執行 `vue-tsc -b` 後進行 Vite build
 - `npm run preview`：預覽建置輸出
-- `npm run start`：使用 `vite preview --host` 啟動預覽
+- `npm run start`：使用 `vite preview --host` 啟動本機預覽，不用於 production image
 
 ## 目錄重點
 
