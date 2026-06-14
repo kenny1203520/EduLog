@@ -13,7 +13,7 @@ vi.mock('@/lib/supabase', () => ({
 
 function createHolidayQuery(data: any[] = [], error: any = null) {
     const query: Record<string, any> = {}
-    const chainMethods = ['select', 'lte', 'gte', 'or', 'limit']
+    const chainMethods = ['select', 'lte', 'gte', 'eq', 'contains', 'or', 'limit']
 
     for (const method of chainMethods) {
         query[method] = vi.fn(() => query)
@@ -52,5 +52,17 @@ describe('HolidayQueryService', () => {
 
         expect(consoleError).toHaveBeenCalledWith('Error checking holiday:', { message: 'query failed' })
         consoleError.mockRestore()
+    })
+
+    it('checks teacher leave by date, teacher, and scope', async () => {
+        const query = createHolidayQuery([{ id: 'leave-1' }])
+        fromMock.mockReturnValue(query)
+
+        await expect(HolidayQueryService.isTeacherOnLeave('2026-06-01', 'teacher-1', 'classroom-1', 'session-1'))
+            .resolves.toBe(true)
+
+        expect(query.eq).toHaveBeenCalledWith('kind', 'teacher_leave')
+        expect(query.contains).toHaveBeenCalledWith('teacher_ids', ['teacher-1'])
+        expect(query.or).toHaveBeenCalledWith(expect.stringContaining('class_session_ids.cs.{session-1}'))
     })
 })
