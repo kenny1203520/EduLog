@@ -18,6 +18,9 @@ services:
     environment:
       KONG_PORT_MAPS: "443:8000,443:8443"
 
+  edulog:
+    ports: !reset []
+
   nginx:
     container_name: supabase-nginx
     image: jonasal/nginx-certbot:6.0.1-nginx1.29.5
@@ -32,17 +35,25 @@ services:
         condition: service_healthy
       studio:
         condition: service_healthy
+      edulog:
+        condition: service_started
     environment:
       PROXY_DOMAIN: ${PROXY_DOMAIN}
+      EDULOG_PROXY_DOMAIN: ${EDULOG_PROXY_DOMAIN}
+      EDULOG_PROXY_UPSTREAM_URL: ${EDULOG_PROXY_UPSTREAM_URL:-http://edulog:4173}
+      EDULOG_HSTS_HEADER: "${EDULOG_HSTS_HEADER:-max-age=31536000; includeSubDomains; preload}"
+      EDULOG_CSP_HEADER: "${EDULOG_CSP_HEADER:-default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*; font-src 'self' data:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests}"
       CERTBOT_EMAIL: ${CERTBOT_EMAIL}
       PROXY_AUTH_USERNAME: ${DASHBOARD_USERNAME}
       PROXY_AUTH_PASSWORD: ${DASHBOARD_PASSWORD}
+    networks:
+      - edulog
     command:
       - /bin/bash
       - -c
       - |
         printf '%s:%s\n' "$${PROXY_AUTH_USERNAME}" "$$(openssl passwd -apr1 "$${PROXY_AUTH_PASSWORD}")" > /etc/nginx/user_conf.d/dashboard-passwd && \
-        envsubst '$${PROXY_DOMAIN}' < /etc/nginx/supabase-nginx.conf.tpl > /etc/nginx/user_conf.d/nginx.conf && \
+        envsubst '$${PROXY_DOMAIN} $${EDULOG_PROXY_DOMAIN} $${EDULOG_PROXY_UPSTREAM_URL} $${EDULOG_HSTS_HEADER} $${EDULOG_CSP_HEADER}' < /etc/nginx/supabase-nginx.conf.tpl > /etc/nginx/user_conf.d/nginx.conf && \
         /scripts/start_nginx_certbot.sh
     volumes:
       - ./volumes/proxy/nginx/supabase-nginx.conf.tpl:/etc/nginx/supabase-nginx.conf.tpl:ro
@@ -50,3 +61,7 @@ services:
 
 volumes:
   nginx_letsencrypt:
+
+networks:
+  edulog:
+    external: false

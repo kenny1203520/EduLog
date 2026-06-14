@@ -690,8 +690,17 @@ services:
     ports:
       - "${EDULOG_PORT:-4173}:4173"
     environment:
-      - VITE_SUPABASE_URL=${SUPABASE_PUBLIC_URL}
-      - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
+      VITE_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+      VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
+      EDULOG_ALLOWED_HOSTS: ${EDULOG_ALLOWED_HOSTS}
+      EDULOG_HSTS_HEADER: "${EDULOG_HSTS_HEADER}"
+      EDULOG_CSP_HEADER: "${EDULOG_CSP_HEADER}"
+      EDULOG_HTTPS_ENABLED: ${EDULOG_HTTPS_ENABLED:-false}
+      EDULOG_SSL_CERT_PATH: ${EDULOG_SSL_CERT_PATH}
+      EDULOG_SSL_KEY_PATH: ${EDULOG_SSL_KEY_PATH}
+      EDULOG_SSL_CA_PATH: ${EDULOG_SSL_CA_PATH}
+    volumes:
+      - ${EDULOG_SSL_DIR:-./ssl}:/app/ssl:ro
     restart: unless-stopped
     networks:
       - frontend

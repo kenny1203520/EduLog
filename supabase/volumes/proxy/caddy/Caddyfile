@@ -16,3 +16,19 @@
 
     header -server
 }
+
+{$EDULOG_PROXY_DOMAIN} {
+    reverse_proxy {$EDULOG_PROXY_UPSTREAM_URL} {
+        transport http {
+            tls_insecure_skip_verify
+        }
+        header_down -Strict-Transport-Security
+        header_down -Content-Security-Policy
+    }
+
+    header {
+        Strict-Transport-Security "{$EDULOG_HSTS_HEADER}"
+        Content-Security-Policy "{$EDULOG_CSP_HEADER}"
+        -server
+    }
+}

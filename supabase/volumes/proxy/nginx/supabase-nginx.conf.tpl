@@ -93,3 +93,41 @@ server {
         proxy_pass http://kong_upstream;
     }
 }
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    server_name ${EDULOG_PROXY_DOMAIN};
+    server_tokens off;
+
+    proxy_http_version 1.1;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host $http_host;
+    proxy_set_header X-Forwarded-Port $server_port;
+
+    ssl_certificate /etc/letsencrypt/live/${EDULOG_PROXY_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${EDULOG_PROXY_DOMAIN}/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/${EDULOG_PROXY_DOMAIN}/chain.pem;
+
+    ssl_dhparam /etc/letsencrypt/dhparams/dhparam.pem;
+
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    add_header Strict-Transport-Security "${EDULOG_HSTS_HEADER}" always;
+    add_header Content-Security-Policy "${EDULOG_CSP_HEADER}" always;
+    proxy_hide_header Strict-Transport-Security;
+    proxy_hide_header Content-Security-Policy;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify off;
+
+    location / {
+        proxy_pass ${EDULOG_PROXY_UPSTREAM_URL};
+    }
+}

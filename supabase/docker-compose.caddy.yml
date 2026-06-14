@@ -18,6 +18,9 @@ services:
     environment:
       KONG_PORT_MAPS: "443:8000,443:8443"
 
+  edulog:
+    ports: !reset []
+
   caddy:
     container_name: supabase-caddy
     image: caddy:2
@@ -33,10 +36,18 @@ services:
         condition: service_healthy
       studio:
         condition: service_healthy
+      edulog:
+        condition: service_started
     environment:
       PROXY_DOMAIN: ${PROXY_DOMAIN}
+      EDULOG_PROXY_DOMAIN: ${EDULOG_PROXY_DOMAIN}
+      EDULOG_PROXY_UPSTREAM_URL: ${EDULOG_PROXY_UPSTREAM_URL:-http://edulog:4173}
+      EDULOG_HSTS_HEADER: "${EDULOG_HSTS_HEADER:-max-age=31536000; includeSubDomains; preload}"
+      EDULOG_CSP_HEADER: "${EDULOG_CSP_HEADER:-default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*; font-src 'self' data:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; upgrade-insecure-requests}"
       PROXY_AUTH_USERNAME: ${DASHBOARD_USERNAME}
       PROXY_AUTH_PASSWORD: ${DASHBOARD_PASSWORD}
+    networks:
+      - edulog
     command:
       - /bin/sh
       - -c
@@ -51,3 +62,7 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  edulog:
+    external: false
