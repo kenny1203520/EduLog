@@ -176,6 +176,7 @@
         "subtitle": "為學生註冊新的課程時段",
         "course": "選擇課程",
         "classroom": "教室",
+        "class_session": "班級",
         "capacity": "班級人數",
         "type": "報名類型",
         "type_regular": "正式",
