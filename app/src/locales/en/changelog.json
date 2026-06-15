@@ -1,6 +1,22 @@
 {
     "entries": [
         {
+            "version": "1.5.1",
+            "date": "2026-06-15",
+            "changes": {
+                "added": [
+                    "Added an external report overview URL field to the new student enrollment modal."
+                ],
+                "fixed": [
+                    "Constrained the student enrollment modal height so its form content scrolls correctly on smaller devices.",
+                    "Corrected the PWA manifest app name to display as EduLog."
+                ],
+                "deployment": [
+                    "No database migration required."
+                ]
+            }
+        },
+        {
             "version": "1.5.0",
             "date": "2026-06-15",
             "changes": {
