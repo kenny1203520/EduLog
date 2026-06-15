@@ -1,6 +1,19 @@
 {
     "entries": [
         {
+            "version": "1.5.2",
+            "date": "2026-06-15",
+            "changes": {
+                "fixed": [
+                    "Added classroom filtering to the student enrollment modal.",
+                    "Expanded student enrollment class session options to show weekday and time range."
+                ],
+                "deployment": [
+                    "No database migration required."
+                ]
+            }
+        },
+        {
             "version": "1.5.1",
             "date": "2026-06-15",
             "changes": {
