@@ -176,6 +176,7 @@
         "subtitle": "Register student for a new course session",
         "course": "Course Catalog",
         "classroom": "Classroom",
+        "class_session": "Class Session",
         "capacity": "Capacity",
         "type": "Enrollment Type",
         "type_regular": "Regular",

@@ -5,6 +5,7 @@ import { useToast } from 'vue-toastification'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
+import { ClassroomService } from '@/services/classroom/ClassroomService'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import { useCapacityCheck } from '@/composables/useCapacityCheck'
@@ -36,8 +37,22 @@ const enrollForm = ref({
 })
 
 const catalogOptions = ref<any[]>([])
-const sessionOptions = ref<any[]>([])
+const classroomOptions = ref<any[]>([])
+const sessions = ref<any[]>([])
 const fullCourses = ref<any[]>([])
+const selectedClassroomId = ref('')
+
+const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+
+const sessionOptions = computed(() => {
+    return sessions.value
+        .filter(s => !selectedClassroomId.value || s.classroom_id === selectedClassroomId.value)
+        .map(s => ({
+            id: s.id,
+            value: s.id,
+            label: formatSessionLabel(s)
+        }))
+})
 
 // Capacity Check Composable
 const { maxEnrollment, capacity, isChecking, isFull } = useCapacityCheck(
@@ -48,23 +63,37 @@ const { maxEnrollment, capacity, isChecking, isFull } = useCapacityCheck(
 
 async function fetchOptions() {
     try {
-        const [{ data: catalogs }, { data: sessions }] = await Promise.all([
+        const [{ data: catalogs }, { data: classSessions }, { data: classrooms }] = await Promise.all([
             AggregateService.getCoursesCached(),
-            SessionService.getClassSessions()
+            SessionService.getClassSessions(1, 1000),
+            ClassroomService.getClassrooms(1, 1000)
         ])
         fullCourses.value = catalogs
         catalogOptions.value = catalogs.map(c => ({
             value: c.id,
             label: c.displayName
         }))
-        sessionOptions.value = sessions.map(s => ({
-            id: s.id,
-            value: s.id,
-            label: s.name
+        classroomOptions.value = classrooms.map(c => ({
+            value: c.id,
+            label: c.name
         }))
+        sessions.value = classSessions
     } catch (e) {
         console.error(e)
     }
+}
+
+function formatTime(value?: string) {
+    return value?.slice(0, 5) || ''
+}
+
+function formatSessionLabel(session: any) {
+    const dayKey = dayKeys[session.day_of_week]
+    const dayLabel = dayKey ? t(`common.days.${dayKey}`) : ''
+    const start = formatTime(session.start_time)
+    const end = formatTime(session.end_time)
+    const schedule = [dayLabel, start && end ? `${start}-${end}` : ''].filter(Boolean).join(' ')
+    return schedule ? `${session.name} · ${schedule}` : session.name
 }
 
 watch(() => enrollForm.value.course_catalog_id, (newId) => {
@@ -87,9 +116,19 @@ watch(() => enrollForm.value.enrollment_type, (newType) => {
     }
 })
 
+watch(selectedClassroomId, () => {
+    if (
+        enrollForm.value.class_session_id &&
+        !sessionOptions.value.some(option => option.value === enrollForm.value.class_session_id)
+    ) {
+        enrollForm.value.class_session_id = ''
+    }
+})
+
 watch(() => props.isOpen, (val) => {
     if (val) {
         fetchOptions()
+        selectedClassroomId.value = ''
         enrollForm.value = {
             course_catalog_id: '',
             class_session_id: '',
@@ -189,10 +228,18 @@ async function submitEnrollment() {
                             :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg" />
                     </div>
 
-                    <div class="space-y-4">
+                    <div class="space-y-2">
                         <label
                             class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.enroll_modal.classroom') }}</label>
+                        <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
+                            :placeholder="$t('student.internal_courses.classroom_none')" fontSizeClass="text-lg" />
+                    </div>
+
+                    <div class="space-y-4">
+                        <label
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.enroll_modal.class_session') }}</label>
                         <SearchableSelect v-model="enrollForm.class_session_id" :options="sessionOptions"
                             :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg" />
 
