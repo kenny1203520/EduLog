@@ -30,6 +30,7 @@ const enrollForm = ref({
     class_session_id: '',
     enrollment_type: 'regular' as 'regular' | 'trial',
     start_date: DateUtils.todayString(preferences.timeZone),
+    external_link: '',
     koding_admission_id: '',
     generate_count: 10
 })
@@ -94,6 +95,7 @@ watch(() => props.isOpen, (val) => {
             class_session_id: '',
             enrollment_type: 'regular',
             start_date: DateUtils.todayString(preferences.timeZone),
+            external_link: '',
             koding_admission_id: '',
             generate_count: 10
         }
@@ -118,6 +120,7 @@ async function submitEnrollment() {
         status: enrollForm.value.enrollment_type as any,
         start_date: enrollForm.value.start_date,
         time_zone: preferences.timeZone,
+        external_link: enrollForm.value.external_link.trim() || undefined,
         koding_admission_id: enrollForm.value.koding_admission_id.trim() || undefined,
     }
 
@@ -141,10 +144,10 @@ async function submitEnrollment() {
 </script>
 
 <template>
-    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4"
+    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4 py-4 sm:py-6"
         @click.self="emit('close')">
         <div
-            class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
+            class="max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3rem)] bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
             <!-- Header -->
             <div class="flex items-center justify-between p-8 border-b border-gray-50 shrink-0">
                 <div class="flex items-center gap-4">
@@ -173,7 +176,7 @@ async function submitEnrollment() {
             </div>
 
             <!-- Body -->
-            <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
+            <div class="min-h-0 flex-1 p-8 overflow-y-auto custom-scrollbar space-y-8">
                 <!-- Course & Classroom -->
                 <div class="grid grid-cols-1 gap-6">
                     <TimeZoneSelect :label="$t('common.time_zone')" fontSizeClass="text-lg" />
@@ -219,7 +222,16 @@ async function submitEnrollment() {
                             class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.enroll_modal.start_date') }}</label>
                         <input type="date" v-model="enrollForm.start_date"
-                            class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
+                            class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
+                    </div>
+
+                    <div class="space-y-2 md:col-span-2">
+                        <label
+                            class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
+                                $t('student.internal_courses.external_link') }}</label>
+                        <input type="url" v-model="enrollForm.external_link"
+                            class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm"
+                            placeholder="https://">
                     </div>
 
                     <div class="space-y-2">
@@ -227,7 +239,7 @@ async function submitEnrollment() {
                             class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.internal_courses.koding_admission_id') }}</label>
                         <input type="text" v-model="enrollForm.koding_admission_id"
-                            class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm"
+                            class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm"
                             :placeholder="$t('common.optional')">
                     </div>
 
@@ -236,7 +248,7 @@ async function submitEnrollment() {
                             class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.enroll_modal.generate_count') || 'Expected Lessons' }}</label>
                         <input type="number" v-model.number="enrollForm.generate_count" min="1" max="100"
-                            class="px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
+                            class="w-full px-5 py-4 text-lg font-bold bg-gray-50 border-gray-100 rounded-2xl outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all text-gray-700 shadow-sm">
                     </div>
                 </div>
             </div>

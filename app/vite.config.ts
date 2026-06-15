@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
         },
         includeAssets: ['favicon.svg', 'robots.txt', 'apple-touch-icon.png'],
         manifest: {
-          name: 'EduLog - Tutor Report System',
+          name: 'EduLog',
           short_name: 'EduLog',
           description: 'Professional Tutor Report System for managing students, courses, and progress.',
           theme_color: '#10b981',
