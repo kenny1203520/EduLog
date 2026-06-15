@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-06-15
+
+### Added
+- Global incomplete report dashboard with filtering and attendance scoping.
+- SessionDetailsView and supporting report services for classroom management.
+- Holiday management view with tabbed closure and teacher leave tracking.
+- AggregateService for API data aggregation and environment-based runtime configuration with Docker support.
+- Automated report version snapshots.
+- `robots.txt` file to allow web crawlers.
+
+### Changed
+- Updated docker-compose environment variables to use standard Supabase configuration keys.
+- Ignored local ssl certificate directories in gitignore.
+
+### Tests
+- Added unit tests for HolidayCommandService and HolidayQueryService.
+
 ## [1.4.0] - 2026-06-14
 
 ### Added

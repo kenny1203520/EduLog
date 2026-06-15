@@ -1,6 +1,27 @@
 {
     "entries": [
         {
+            "version": "1.5.0",
+            "date": "2026-06-15",
+            "changes": {
+                "added": [
+                    "Global incomplete report dashboard with filtering and attendance scoping.",
+                    "SessionDetailsView and supporting report services for classroom management.",
+                    "Holiday management view with tabbed closure and teacher leave tracking.",
+                    "AggregateService for API data aggregation and environment-based runtime configuration with Docker support.",
+                    "Automated report version snapshots.",
+                    "robots.txt file to allow web crawlers."
+                ],
+                "changed": [
+                    "Updated docker-compose environment variables to use standard Supabase configuration keys.",
+                    "Ignored local ssl certificate directories in gitignore."
+                ],
+                "tests": [
+                    "Added unit tests for HolidayCommandService and HolidayQueryService."
+                ]
+            }
+        },
+        {
             "version": "1.4.0",
             "date": "2026-06-14",
             "changes": {
