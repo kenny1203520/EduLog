@@ -33,7 +33,7 @@ serve(async (req: Request) => {
     const { data, error } = await client
       .from('holidays')
       .select(`
-        id, start_date, end_date, time_zone, name, classroom_ids, class_session_ids, created_at, updated_at
+        id, start_date, end_date, time_zone, name, kind, classroom_ids, class_session_ids, teacher_ids, created_at, updated_at
       `)
       .order('start_date', { ascending: false })
 
@@ -49,6 +49,7 @@ serve(async (req: Request) => {
       // Flatten unique ids
       const classroomIds = Array.from(new Set(results.flatMap((r: any) => r.classroom_ids || [])))
       const sessionIds = Array.from(new Set(results.flatMap((r: any) => r.class_session_ids || [])))
+      const teacherIds = Array.from(new Set(results.flatMap((r: any) => r.teacher_ids || [])))
 
       const classroomsMap: Record<string, any> = {}
       if (classroomIds.length) {
@@ -62,10 +63,17 @@ serve(async (req: Request) => {
         for (const s of sRes.data || []) sessionsMap[s.id] = s
       }
 
+      const teachersMap: Record<string, any> = {}
+      if (teacherIds.length) {
+        const tRes = await client.from('teachers').select('id, name').in('id', teacherIds)
+        for (const t of tRes.data || []) teachersMap[t.id] = t
+      }
+
       results = results.map((r: any) => ({
         ...r,
         classroomNames: (r.classroom_ids || []).map((id: string) => classroomsMap[id]?.name || '').filter(Boolean),
-        classSessionNames: (r.class_session_ids || []).map((id: string) => sessionsMap[id]?.name || '').filter(Boolean)
+        classSessionNames: (r.class_session_ids || []).map((id: string) => sessionsMap[id]?.name || '').filter(Boolean),
+        teacherNames: (r.teacher_ids || []).map((id: string) => teachersMap[id]?.name || '').filter(Boolean)
       }))
     }
 

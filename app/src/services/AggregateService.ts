@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { getRuntimeConfigValue } from '@/lib/runtimeConfig'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { StudentService } from '@/services/student/StudentService'
 
@@ -19,10 +20,11 @@ export class AggregateService {
   private static MEDIUM_TTL_MS = 60 * 1000 // 60 seconds for catalog/counts
 
   private static getFunctionsBaseUrl(): string {
-    if (import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL) {
-      return import.meta.env.VITE_SUPABASE_FUNCTIONS_BASE_URL
+    const configuredBaseUrl = getRuntimeConfigValue('VITE_SUPABASE_FUNCTIONS_BASE_URL')
+    if (configuredBaseUrl) {
+      return configuredBaseUrl
     }
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+    const supabaseUrl = getRuntimeConfigValue('VITE_SUPABASE_URL')
     if (supabaseUrl) {
       const cleanUrl = supabaseUrl.endsWith('/') ? supabaseUrl.slice(0, -1) : supabaseUrl
       return `${cleanUrl}/functions/v1`
@@ -172,7 +174,7 @@ export class AggregateService {
     })
   }
 
-  static async getIncompleteReportsAggregate(daysBack: number = 90) {
+  static async getIncompleteReportsAggregate(daysBack: number = 90, scope: 'all' | 'my_present' = 'all') {
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 
@@ -182,9 +184,10 @@ export class AggregateService {
     if (token) headers['Authorization'] = `Bearer ${token}`
 
     const base = this.getFunctionsBaseUrl()
-    const url = base ? `${base}/aggregate-incomplete-reports?daysBack=${daysBack}` : `/aggregate-incomplete-reports?daysBack=${daysBack}`
+    const qs = `daysBack=${daysBack}&scope=${encodeURIComponent(scope)}`
+    const url = base ? `${base}/aggregate-incomplete-reports?${qs}` : `/aggregate-incomplete-reports?${qs}`
 
-    const cacheKey = `incomplete_reports:back${daysBack}:t${token || 'anon'}`
+    const cacheKey = `incomplete_reports:back${daysBack}:scope${scope}:t${token || 'anon'}`
     return this.withCache(cacheKey, this.DEFAULT_TTL_MS, async () => {
       const resp = await fetch(url, { method: 'GET', headers })
       if (!resp.ok) {

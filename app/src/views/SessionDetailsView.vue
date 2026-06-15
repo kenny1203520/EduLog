@@ -37,6 +37,7 @@ import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<void>
@@ -728,6 +729,20 @@ const visibleEnrollments = computed(() => {
     })
 })
 
+const attendanceCounts = computed(() => {
+    return visibleEnrollments.value.reduce((counts, enrollment) => {
+        const status = reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending'
+        if (status === 'present') {
+            counts.present += 1
+        } else if (status === 'absent') {
+            counts.absent += 1
+        } else {
+            counts.pending += 1
+        }
+        return counts
+    }, { present: 0, pending: 0, absent: 0 })
+})
+
 async function loadData() {
     try {
         loading.value = true
@@ -1262,9 +1277,12 @@ async function toggleIsConducted(event: any) {
 
 function isTeacherPresent(teacherId: string | undefined, userId: string | null | undefined): boolean {
     if (!teacherId || !todayOccurrence.value?.teacherAttendance) return false
-    // Fallback checks for backward compatibility if user_id was stored as key
-    if (userId && todayOccurrence.value.teacherAttendance[userId]) return true
-    return !!todayOccurrence.value.teacherAttendance[teacherId]
+    return isTeacherPresentForScope({
+        teacherId,
+        teacherUserId: userId,
+        occurrenceTeacherIds: todayOccurrence.value.teacherIds,
+        teacherAttendance: todayOccurrence.value.teacherAttendance
+    })
 }
 
 async function toggleTeacherAttendance(teacherId: string | undefined, event: any) {
@@ -1291,7 +1309,9 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
         console.error('Failed to update teacher attendance:', e)
         event.target.checked = !isPresent
         const msg = e.message || ''
-        if (msg.includes('Cannot set teacher attendance to present')) {
+        if (msg.includes('while the teacher is on leave')) {
+            toast.error(t('report.error.cannot_set_teacher_present_during_leave'))
+        } else if (msg.includes('Cannot set teacher attendance to present')) {
             toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
         } else {
             toast.error(t('common.save_error'))
@@ -1875,6 +1895,33 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </p>
                                 </div>
                             </div>
+                            <div class="hidden md:flex items-center gap-2">
+                                <div
+                                    class="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 min-w-[72px]">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                                        {{ $t('classroom.attendance_present_count') }}
+                                    </p>
+                                    <p class="text-xl font-black text-emerald-700 leading-none mt-1">
+                                        {{ attendanceCounts.present }}
+                                    </p>
+                                </div>
+                                <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 min-w-[72px]">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                                        {{ $t('classroom.attendance_pending_count') }}
+                                    </p>
+                                    <p class="text-xl font-black text-gray-700 leading-none mt-1">
+                                        {{ attendanceCounts.pending }}
+                                    </p>
+                                </div>
+                                <div class="rounded-xl border border-red-100 bg-red-50 px-3 py-2 min-w-[72px]">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-red-700">
+                                        {{ $t('classroom.attendance_absent_count') }}
+                                    </p>
+                                    <p class="text-xl font-black text-red-700 leading-none mt-1">
+                                        {{ attendanceCounts.absent }}
+                                    </p>
+                                </div>
+                            </div>
                             <div class="flex items-center gap-4">
                                 <button @click.stop="openAddStudentModal"
                                     class="px-4 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
@@ -1898,6 +1945,27 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <!-- Expandable Content -->
                         <div v-show="isQuickAttendanceExpanded"
                             class="px-6 md:px-8 pb-8 pt-2 space-y-8 border-t border-gray-50">
+                            <div class="grid grid-cols-3 gap-3 md:hidden">
+                                <div class="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700">
+                                        {{ $t('classroom.attendance_present_count') }}
+                                    </p>
+                                    <p class="mt-1 text-3xl font-black text-emerald-700">{{ attendanceCounts.present }}</p>
+                                </div>
+                                <div class="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                                        {{ $t('classroom.attendance_pending_count') }}
+                                    </p>
+                                    <p class="mt-1 text-3xl font-black text-gray-700">{{ attendanceCounts.pending }}</p>
+                                </div>
+                                <div class="rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
+                                    <p class="text-[10px] font-black uppercase tracking-widest text-red-700">
+                                        {{ $t('classroom.attendance_absent_count') }}
+                                    </p>
+                                    <p class="mt-1 text-3xl font-black text-red-700">{{ attendanceCounts.absent }}</p>
+                                </div>
+                            </div>
+
                             <!-- Batch Action Buttons -->
                             <div class="flex items-center gap-3">
                                 <button @click="batchSetAttendance('present')"

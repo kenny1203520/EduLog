@@ -1,6 +1,7 @@
 {
     "add_title": "Add Student",
     "enroll_btn": "Enroll Course",
+    "activate_trial_btn": "Convert to Regular",
     "profile": "Student Profile",
     "profile_subtitle": "Manage student information and class records",
     "not_found": "Student Not Found",
@@ -215,10 +216,13 @@
         "original_date_not_class_day": "The original date is not a teaching day for the current session."
     },
     "activate_trial_modal": {
-        "title": "Activate Trial",
+        "title": "Convert to Regular",
         "subtitle": "Convert trial enrollment to regular status",
+        "classroom_filter": "Classroom Filter",
         "to_classroom": "Target Session",
         "effective_date": "Effective Date",
+        "target_total_reports": "Expected active lessons",
+        "target_total_reports_hint": "Defaults to the course length: {count} lessons. The system only creates missing reports.",
         "note": "The enrollment status will be updated to 'Regular' and a new session can be assigned."
     },
     "credentials": {

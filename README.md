@@ -79,6 +79,8 @@ npm run build
 npm run preview
 ```
 
+正式 Docker image 會以 Nginx 服務前端靜態檔，並在容器啟動時由環境變數產生 runtime config。修改 `SUPABASE_PUBLIC_URL`、`ANON_KEY` 或 `EDULOG_SUPABASE_FUNCTIONS_BASE_URL` 後，重啟前端容器即可生效，不需要重新 build 前端 image。
+
 ## 資料庫 Migration
 
 EduLog 自定義 migration 位於 `supabase/migrations/`，請依序執行：
@@ -110,6 +112,7 @@ EduLog 自定義 migration 位於 `supabase/migrations/`，請依序執行：
 
 - `supabase/.env.example` 僅供本機開發，正式環境務必重新產生所有密鑰。
 - 請勿將真實金鑰、帳密與敏感資料提交到版本控制。
+- 前端 image 內建 Nginx CSP/HSTS 與 HTTP/HTTPS 雙模式；若啟用原生 HTTPS，請掛載憑證並設定 `EDULOG_HTTPS_ENABLED=true`。
 
 ## 延伸文件
 

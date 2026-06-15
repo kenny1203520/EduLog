@@ -6,11 +6,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function isTeacherPresentForScope(
+  teacherId: string,
+  teacherUserId: string | null | undefined,
+  occurrenceTeacherIds: string[] = [],
+  teacherAttendance: Record<string, boolean> = {},
+): boolean {
+  const teacherKeys = [teacherId, teacherUserId].filter(Boolean) as string[]
+  const isAssigned = teacherKeys.some((key) => occurrenceTeacherIds.includes(key))
+  if (!isAssigned) return false
+
+  const attendanceValues = teacherKeys
+    .filter((key) => Object.prototype.hasOwnProperty.call(teacherAttendance, key))
+    .map((key) => teacherAttendance[key])
+
+  if (attendanceValues.some((value) => value === false)) return false
+  return attendanceValues.some((value) => value === true)
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   const url = new URL(req.url)
   const daysBack = Number(url.searchParams.get('daysBack') || '90')
+  const scope = url.searchParams.get('scope') === 'my_present' ? 'my_present' : 'all'
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
 
@@ -32,6 +51,24 @@ serve(async (req: Request) => {
       return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
+    const userId = userRes.data.user.id
+    let teacherId = ''
+    let teacherUserId = ''
+    if (scope === 'my_present') {
+      const { data: teacher, error: teacherError } = await client
+        .from('teachers')
+        .select('id, user_id')
+        .eq('user_id', userId)
+        .maybeSingle()
+
+      if (teacherError) throw teacherError
+      teacherId = teacher?.id || ''
+      teacherUserId = teacher?.user_id || userId
+      if (!teacherId) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+    }
+
     const todayStr = new Date().toISOString().slice(0, 10)
     const dateStr = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
 
@@ -43,7 +80,7 @@ serve(async (req: Request) => {
           id, student_id, course_id, students (id, name)
         ),
         class_occurrences!inner (
-          id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, time_zone, is_conducted,
+          id, occurrence_date, actual_start_time, actual_end_time, original_start_time, original_end_time, time_zone, is_conducted, teacher_ids, teacher_attendance,
           class_sessions ( id, name, classroom_id, classrooms ( id, name ) )
         )
       `)
@@ -66,6 +103,15 @@ serve(async (req: Request) => {
       if (!isIncomplete) continue
 
       const occ = report.class_occurrences
+      if (scope === 'my_present') {
+        if (!isTeacherPresentForScope(
+          teacherId,
+          teacherUserId,
+          occ?.teacher_ids || [],
+          occ?.teacher_attendance || {},
+        )) continue
+      }
+
       const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
       const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
       const student = Array.isArray(report.enrollments?.students) ? report.enrollments.students[0] : report.enrollments?.students

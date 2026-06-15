@@ -32,6 +32,7 @@ export class HolidayQueryService {
             .select('id')
             .lte('start_date', dateStr)
             .gte('end_date', dateStr)
+            .eq('kind', 'closure')
         
         // Match Global (empty arrays) OR specific IDs in arrays
         const orConditions = [
@@ -51,6 +52,43 @@ export class HolidayQueryService {
 
         if (error) {
             console.error('Error checking holiday:', error)
+            return false
+        }
+
+        return (data || []).length > 0
+    }
+
+    static async isTeacherOnLeave(
+        dateStr: string,
+        teacherId: string,
+        classroomId?: string,
+        sessionId?: string
+    ): Promise<boolean> {
+        let query = supabase
+            .from('holidays')
+            .select('id')
+            .lte('start_date', dateStr)
+            .gte('end_date', dateStr)
+            .eq('kind', 'teacher_leave')
+            .contains('teacher_ids', [teacherId])
+
+        const orConditions = [
+            'and(classroom_ids.eq.{},class_session_ids.eq.{})'
+        ]
+
+        if (classroomId) {
+            orConditions.push(`classroom_ids.cs.{${classroomId}}`)
+        }
+        if (sessionId) {
+            orConditions.push(`class_session_ids.cs.{${sessionId}}`)
+        }
+
+        const { data, error } = await query
+            .or(orConditions.join(','))
+            .limit(1)
+
+        if (error) {
+            console.error('Error checking teacher leave:', error)
             return false
         }
 

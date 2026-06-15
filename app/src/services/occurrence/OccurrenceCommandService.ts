@@ -158,9 +158,15 @@ export class OccurrenceCommandService {
         const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
             ? DateUtils.formatLocalDate(occurrence.occurrenceDate)
             : occurrence.occurrenceDate
+        const { data: sessionInfo } = await supabase
+            .from('class_sessions')
+            .select('classroom_id')
+            .eq('id', occurrence.classSessionId)
+            .maybeSingle()
+        const classroomId = sessionInfo?.classroom_id || undefined
         const isHoliday = await HolidayService.isHoliday(
             occurrenceDateStr,
-            undefined,
+            classroomId,
             occurrence.classSessionId
         )
 
@@ -174,6 +180,23 @@ export class OccurrenceCommandService {
                 const hasAnyTrueAttendance = Object.values(updates.teacher_attendance).some(v => v === true)
                 if (hasAnyTrueAttendance) {
                     throw new Error('Cannot set teacher attendance to present (true) for an occurrence during a holiday period.')
+                }
+            }
+        }
+
+        if (updates.teacher_attendance) {
+            for (const [teacherId, isPresent] of Object.entries(updates.teacher_attendance)) {
+                if (!isPresent) continue
+
+                const isOnLeave = await HolidayService.isTeacherOnLeave(
+                    occurrenceDateStr,
+                    teacherId,
+                    classroomId,
+                    occurrence.classSessionId
+                )
+
+                if (isOnLeave) {
+                    throw new Error('Cannot set teacher attendance to present (true) while the teacher is on leave.')
                 }
             }
         }

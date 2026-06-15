@@ -5,6 +5,8 @@ dist-ssr
 *.local
 .npmrc
 .env
+ssl
+ssl/*
 
 # Supabase
 supabase_docker/.env

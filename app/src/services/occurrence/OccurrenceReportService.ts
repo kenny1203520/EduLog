@@ -129,8 +129,8 @@ export class OccurrenceReportService {
         return ReportQueryService.getReportsWithDetails(enrollmentId)
     }
 
-    static async getPendingReports(): Promise<any[]> {
-        return ReportQueryService.getPendingReports()
+    static async getPendingReports(scope: 'all' | 'my_present' = 'my_present'): Promise<any[]> {
+        return ReportQueryService.getPendingReports(scope)
     }
 
     static async getReportsByLesson(
@@ -162,7 +162,7 @@ export class OccurrenceReportService {
         return ReportQueryService.getReportsByStudent(studentId, params)
     }
 
-    static async getGlobalIncompleteReports(): Promise<any[]> {
-        return ReportQueryService.getGlobalIncompleteReports()
+    static async getGlobalIncompleteReports(scope: 'all' | 'my_present' = 'all'): Promise<any[]> {
+        return ReportQueryService.getGlobalIncompleteReports(scope)
     }
 }

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { SessionService } from '@/services/session/SessionService'
+import { ClassroomService } from '@/services/classroom/ClassroomService'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
@@ -22,19 +23,96 @@ const toast = useToast()
 const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
+const isLoadingClassrooms = ref(false)
+const isLoadingEnrollment = ref(false)
+const selectedClassroomId = ref('')
 const activateTrialForm = ref({
     class_session_id: '',
-    effective_date: DateUtils.todayString(preferences.timeZone)
+    effective_date: DateUtils.todayString(preferences.timeZone),
+    target_total_reports: 1
 })
 
+const classroomOptions = ref<any[]>([])
 const sessionOptions = ref<any[]>([])
+const currentEnrollment = ref<any | null>(null)
+
+const defaultReportCount = computed(() => Math.max(1, currentEnrollment.value?.lessonCount || 1))
+
+function formatTime(time: string | undefined | null): string {
+    return time ? time.slice(0, 5) : ''
+}
+
+function formatTimeRange(start?: string | null, end?: string | null): string {
+    const startText = formatTime(start)
+    if (!startText) return ''
+
+    const endText = formatTime(end)
+    return endText ? `${startText}-${endText}` : startText
+}
+
+function formatWeekdayFromIndex(dayOfWeek: number | undefined | null): string {
+    if (dayOfWeek === undefined || dayOfWeek === null) return ''
+
+    const anchor = new Date(2023, 0, 1 + dayOfWeek)
+    return anchor.toLocaleDateString(preferences.locale, { weekday: 'short' })
+}
+
+function formatSessionOptionLabel(session: any): string {
+    const scheduleParts = [
+        formatWeekdayFromIndex(session.day_of_week),
+        formatTimeRange(session.start_time, session.end_time)
+    ].filter(Boolean)
+
+    return scheduleParts.length > 0
+        ? `${session.name} · ${scheduleParts.join(' ')}`
+        : session.name
+}
+
+async function fetchCurrentEnrollment() {
+    currentEnrollment.value = null
+    if (!props.studentId || !props.fromEnrollmentId) return
+
+    try {
+        isLoadingEnrollment.value = true
+        const enrollments = await EnrollmentService.getByStudentId(props.studentId)
+        currentEnrollment.value = enrollments.find((enrollment: any) => enrollment.id === props.fromEnrollmentId) || null
+        activateTrialForm.value.target_total_reports = defaultReportCount.value
+    } catch (e) {
+        console.error(e)
+    } finally {
+        isLoadingEnrollment.value = false
+    }
+}
+
+async function fetchClassrooms() {
+    try {
+        isLoadingClassrooms.value = true
+        const { data: classrooms } = await ClassroomService.getClassrooms(1, 500)
+        classroomOptions.value = [
+            { value: '', label: t('classroom.all_rooms') },
+            ...classrooms.map((classroom: any) => ({
+                value: classroom.id,
+                label: classroom.name
+            }))
+        ]
+    } catch (e) {
+        console.error(e)
+    } finally {
+        isLoadingClassrooms.value = false
+    }
+}
 
 async function fetchSessions() {
     try {
-        const { data: sessions } = await SessionService.getClassSessions()
+        const { data: sessions } = await SessionService.getClassSessions(
+            1,
+            500,
+            undefined,
+            selectedClassroomId.value || null
+        )
         sessionOptions.value = sessions.map(s => ({
             value: s.id,
-            label: s.name
+            label: formatSessionOptionLabel(s)
         }))
     } catch (e) {
         console.error(e)
@@ -43,12 +121,21 @@ async function fetchSessions() {
 
 watch(() => props.isOpen, (val) => {
     if (val) {
+        selectedClassroomId.value = ''
+        fetchClassrooms()
         fetchSessions()
         activateTrialForm.value = {
             class_session_id: '',
-            effective_date: DateUtils.todayString(preferences.timeZone)
+            effective_date: DateUtils.todayString(preferences.timeZone),
+            target_total_reports: 1
         }
+        fetchCurrentEnrollment()
     }
+})
+
+watch(selectedClassroomId, async () => {
+    activateTrialForm.value.class_session_id = ''
+    await fetchSessions()
 })
 
 
@@ -65,6 +152,8 @@ async function submitActivateTrial() {
             class_session_id: activateTrialForm.value.class_session_id || undefined,
             start_date: activateTrialForm.value.effective_date,
             time_zone: preferences.timeZone
+        }, {
+            targetTotalReports: Math.max(1, Math.floor(Number(activateTrialForm.value.target_total_reports) || 1))
         })
 
         toast.success(t('common.success'))
@@ -81,24 +170,24 @@ async function submitActivateTrial() {
 </script>
 
 <template>
-    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md px-4"
+    <div v-if="isOpen" class="fixed inset-0 z-50 flex items-stretch justify-center bg-black/60 backdrop-blur-md p-2 sm:items-center sm:p-4"
         @click.self="emit('close')">
         <div
-            class="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-xl flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
+            class="bg-white rounded-[1.75rem] sm:rounded-[2.5rem] shadow-2xl w-full max-w-xl max-h-[calc(100dvh-1rem)] sm:max-h-[90dvh] min-h-0 flex flex-col overflow-hidden animate-in zoom-in fade-in duration-300">
             <!-- Header -->
-            <div class="flex items-center justify-between p-8 border-b border-gray-50 shrink-0">
-                <div class="flex items-center gap-4">
-                    <div class="p-3 bg-blue-50 rounded-2xl text-blue-600">
+            <div class="flex items-center justify-between gap-4 p-5 sm:p-8 border-b border-gray-50 shrink-0">
+                <div class="flex items-center gap-3 sm:gap-4 min-w-0">
+                    <div class="p-2.5 sm:p-3 bg-blue-50 rounded-2xl text-blue-600 shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
                             stroke="currentColor" class="w-6 h-6">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                         </svg>
                     </div>
-                    <div>
-                        <h2 class="text-2xl font-black text-gray-900 tracking-tight">{{
+                    <div class="min-w-0">
+                        <h2 class="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight truncate">{{
                             $t('student.activate_trial_modal.title') }}</h2>
-                        <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mt-0.5">{{
+                        <p class="text-xs sm:text-sm font-bold text-gray-400 uppercase tracking-widest mt-1 leading-snug">{{
                             $t('student.activate_trial_modal.subtitle') }}</p>
                     </div>
                 </div>
@@ -113,22 +202,40 @@ async function submitActivateTrial() {
             </div>
 
             <!-- Body -->
-            <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
-                <div class="space-y-6">
+            <div class="flex-1 min-h-0 p-5 sm:p-8 overflow-y-auto overscroll-contain custom-scrollbar space-y-6 sm:space-y-8">
+                <div class="space-y-5 sm:space-y-6">
                     <TimeZoneSelect :label="$t('common.time_zone')" dense />
 
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                            $t('student.activate_trial_modal.classroom_filter') }}</label>
+                        <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
+                            :placeholder="isLoadingClassrooms ? $t('common.loading') : $t('classroom.all_rooms')" />
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
                             $t('student.activate_trial_modal.to_classroom') }}</label>
                         <SearchableSelect v-model="activateTrialForm.class_session_id" :options="sessionOptions"
                             :placeholder="$t('common.select_placeholder')" />
                     </div>
 
                     <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
                             $t('student.activate_trial_modal.effective_date') }}</label>
                         <input type="date" v-model="activateTrialForm.effective_date"
                             class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-700 shadow-sm">
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
+                            $t('student.activate_trial_modal.target_total_reports') }}</label>
+                        <input type="number" min="1" step="1" v-model.number="activateTrialForm.target_total_reports"
+                            :disabled="isLoadingEnrollment"
+                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-700 shadow-sm disabled:opacity-60">
+                        <p class="text-xs font-bold text-gray-400 ml-1">
+                            {{ $t('student.activate_trial_modal.target_total_reports_hint', { count: defaultReportCount }) }}
+                        </p>
                     </div>
                 </div>
 
@@ -140,13 +247,13 @@ async function submitActivateTrial() {
             </div>
 
             <!-- Footer -->
-            <div class="p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex gap-4">
+            <div class="p-5 sm:p-8 border-t border-gray-50 shrink-0 bg-gray-50/50 flex gap-3 sm:gap-4">
                 <button @click="emit('close')"
-                    class="flex-1 px-8 py-4 text-sm font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
+                    class="flex-1 px-4 sm:px-8 py-4 text-sm sm:text-base font-black text-gray-400 hover:text-gray-600 transition-colors uppercase tracking-widest cursor-pointer">
                     {{ $t('common.cancel') }}
                 </button>
                 <button @click="submitActivateTrial()" :disabled="isSubmitting"
-                    class="flex-1 px-8 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-3 font-black shadow-xl shadow-blue-100 active:scale-95 cursor-pointer uppercase tracking-widest">
+                    class="flex-1 px-4 sm:px-8 py-4 bg-blue-600 text-white rounded-2xl hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center justify-center gap-3 text-sm sm:text-base font-black shadow-xl shadow-blue-100 active:scale-95 cursor-pointer uppercase tracking-widest">
                     <svg v-if="isSubmitting" class="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
                         </circle>
@@ -161,3 +268,29 @@ async function submitActivateTrial() {
 
     </div>
 </template>
+
+<style scoped>
+.custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(37 99 235 / 0.45) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgb(37 99 235 / 0.35);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(37 99 235 / 0.55);
+}
+</style>

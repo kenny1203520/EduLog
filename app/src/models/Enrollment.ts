@@ -19,6 +19,7 @@ export interface EnrollmentDTO {
         subject: string
         stage: string
         display_name?: string
+        lessons?: Array<unknown>
     }
     classrooms?: {
         name: string
@@ -61,6 +62,7 @@ export class Enrollment {
     classSessionTimeZone: string = ''
     studentName?: string
     studentEmail?: string
+    lessonCount: number = 0
 
     constructor(data: EnrollmentDTO) {
         this.id = data.id
@@ -79,6 +81,7 @@ export class Enrollment {
             this.courseSubject = data.courses.subject
             this.courseStage = data.courses.stage
             this.courseDisplayName = data.courses.display_name
+            this.lessonCount = Array.isArray(data.courses.lessons) ? data.courses.lessons.length : 0
         }
         if (data.classrooms) {
             this.classroomName = data.classrooms.name

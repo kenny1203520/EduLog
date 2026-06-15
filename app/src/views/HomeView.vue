@@ -5,6 +5,7 @@ import { AggregateService } from '@/services/AggregateService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
+import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 
 const router = useRouter()
 const preferences = usePreferencesStore()
@@ -51,8 +52,7 @@ onMounted(async () => {
         
         stats.value.totalStudents = agg.stats?.totalStudents || 0
         stats.value.activeCourses = agg.stats?.activeCourses || 0
-        pendingReports.value = agg.pendingReports || []
-        pendingReportsCount.value = agg.stats?.pendingReportsCount || 0
+        await applyDashboardPendingReports(agg)
 
         if (agg.occurrences && Array.isArray(agg.occurrences)) {
             const mappedOccs: ClassOccurrence[] = agg.occurrences.map((d: any) => {
@@ -85,10 +85,46 @@ onMounted(async () => {
         }
     } catch (e) {
         console.error('Failed to load dashboard data:', e)
+        await loadMyPresentPendingReports()
     } finally {
         loading.value = false
     }
 })
+
+async function applyDashboardPendingReports(agg: any) {
+    const pendingScope = agg?.pendingReportsScope || agg?.stats?.pendingReportsScope
+    if (pendingScope === 'my_present') {
+        pendingReports.value = (agg.pendingReports || []).map(normalizePendingReport)
+        pendingReportsCount.value = agg.stats?.pendingReportsCount ?? pendingReports.value.length
+        return
+    }
+
+    await loadMyPresentPendingReports()
+}
+
+async function loadMyPresentPendingReports() {
+    try {
+        const myReports = await OccurrenceReportService.getGlobalIncompleteReports('my_present')
+        pendingReports.value = (myReports || []).map(normalizePendingReport)
+        pendingReportsCount.value = pendingReports.value.length
+    } catch (fallbackError) {
+        console.error('Failed to load my present pending reports:', fallbackError)
+        pendingReports.value = []
+        pendingReportsCount.value = 0
+    }
+}
+
+function normalizePendingReport(report: any) {
+    return {
+        id: report.id || report.reportId,
+        studentName: report.studentName || report.fullStudent?.name || 'Unknown',
+        date: report.date || report.occurrenceDate,
+        className: report.className || report.sessionName || '-',
+        classroomName: report.classroomName || report.classroom || '-',
+        enrollmentId: report.enrollmentId,
+        isMissing: report.isMissing ?? true
+    }
+}
 
 function navigateToSession(id: string) {
     router.push({ name: 'session-details', params: { id } })

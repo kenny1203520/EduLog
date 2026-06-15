@@ -1,6 +1,27 @@
 {
     "entries": [
         {
+            "version": "1.5.0",
+            "date": "2026-06-15",
+            "changes": {
+                "added": [
+                    "全域未完成報告儀表板，支援篩選與出勤範圍控制。",
+                    "教室管理的 SessionDetailsView 與相關報告服務。",
+                    "包含分頁關閉與教師請假追蹤的休假管理視圖。",
+                    "用於 API 資料聚合的 AggregateService，並導入支援 Docker 的環境變數執行時期設定。",
+                    "自動化報告版本快照功能。",
+                    "允許網路爬蟲存取的 robots.txt 檔案。"
+                ],
+                "changed": [
+                    "更新 docker-compose 環境變數以使用標準的 Supabase 設定鍵值。",
+                    "在 gitignore 中忽略本機 SSL 憑證目錄。"
+                ],
+                "tests": [
+                    "新增 HolidayCommandService 與 HolidayQueryService 的單元測試。"
+                ]
+            }
+        },
+        {
             "version": "1.4.0",
             "date": "2026-06-14",
             "changes": {

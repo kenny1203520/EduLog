@@ -1,0 +1,209 @@
+#!/bin/sh
+
+set -eu
+
+DEFAULT_CSP_HEADER="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*; font-src 'self' data:; connect-src 'self' https: wss: http://localhost:* ws://localhost:* http://127.0.0.1:* ws://127.0.0.1:*; manifest-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests"
+DEFAULT_HSTS_HEADER="max-age=31536000; includeSubDomains; preload"
+
+is_enabled() {
+  case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+js_string() {
+  printf '"'
+  printf '%s' "${1:-}" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  printf '"'
+}
+
+write_runtime_config() {
+  runtime_config_path="/usr/share/nginx/html/runtime-config.js"
+  {
+    printf 'window.__EDULOG_CONFIG__ = Object.freeze({\n'
+    printf '  VITE_SUPABASE_URL: %s,\n' "$(js_string "${VITE_SUPABASE_URL:-}")"
+    printf '  VITE_SUPABASE_ANON_KEY: %s,\n' "$(js_string "${VITE_SUPABASE_ANON_KEY:-}")"
+    printf '  VITE_SUPABASE_FUNCTIONS_BASE_URL: %s\n' "$(js_string "${VITE_SUPABASE_FUNCTIONS_BASE_URL:-}")"
+    printf '});\n'
+  } > "$runtime_config_path"
+}
+
+write_security_headers() {
+  csp_header="${EDULOG_CSP_HEADER:-$DEFAULT_CSP_HEADER}"
+  hsts_header="${EDULOG_HSTS_HEADER:-$DEFAULT_HSTS_HEADER}"
+
+  cat > /etc/nginx/conf.d/edulog-security-headers.conf <<EOF
+add_header Content-Security-Policy "$csp_header" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()" always;
+add_header X-Frame-Options "DENY" always;
+EOF
+
+  cat > /etc/nginx/conf.d/edulog-hsts-header.conf <<EOF
+add_header Strict-Transport-Security "$hsts_header" always;
+EOF
+
+  cat > /etc/nginx/conf.d/edulog-https-security-headers.conf <<EOF
+include /etc/nginx/conf.d/edulog-security-headers.conf;
+include /etc/nginx/conf.d/edulog-hsts-header.conf;
+EOF
+}
+
+common_locations() {
+  headers_include="${1:-/etc/nginx/conf.d/edulog-security-headers.conf}"
+  cat <<EOF
+  root /usr/share/nginx/html;
+  index index.html;
+
+  include $headers_include;
+
+  location = /healthz {
+    access_log off;
+    default_type text/plain;
+    include $headers_include;
+    return 200 "ok\n";
+  }
+
+  location = /runtime-config.js {
+    try_files /runtime-config.js =404;
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate" always;
+    include $headers_include;
+  }
+
+  location /assets/ {
+    try_files \$uri =404;
+    add_header Cache-Control "public, max-age=31536000, immutable" always;
+    include $headers_include;
+  }
+
+  location / {
+    try_files \$uri \$uri/ /index.html;
+  }
+EOF
+}
+
+host_guard() {
+  allowed_hosts="${EDULOG_ALLOWED_HOSTS:-}"
+  if [ -z "$allowed_hosts" ] || [ "$allowed_hosts" = "*" ]; then
+    return 0
+  fi
+
+  regex="$(printf '%s' "$allowed_hosts" \
+    | tr ',' '\n' \
+    | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
+    | sed '/^$/d; s/[.[\*^$()+?{}|\\]/\\&/g' \
+    | paste -sd '|' -)"
+
+  if [ -n "$regex" ]; then
+    cat <<EOF
+  if (\$host !~* ^($regex)(:[0-9]+)?$) {
+    return 444;
+  }
+
+EOF
+  fi
+}
+
+http_app_server() {
+  cat <<EOF
+server {
+  listen 4173;
+  server_name _;
+EOF
+  host_guard
+  common_locations /etc/nginx/conf.d/edulog-security-headers.conf
+  cat <<'EOF'
+}
+EOF
+}
+
+http_redirect_server() {
+  redirect_port="${EDULOG_HTTPS_PORT:-4174}"
+  cat <<EOF
+server {
+  listen 4173;
+  server_name _;
+  return 308 https://\$host:$redirect_port\$request_uri;
+}
+EOF
+}
+
+https_app_server() {
+  cert_path="${EDULOG_SSL_CERT_PATH:-/app/ssl/fullchain.pem}"
+  key_path="${EDULOG_SSL_KEY_PATH:-/app/ssl/privkey.pem}"
+  ca_path="${EDULOG_SSL_CA_PATH:-}"
+
+  if [ ! -r "$cert_path" ]; then
+    echo "EduLog HTTPS certificate is not readable: $cert_path" >&2
+    return 1
+  fi
+  if [ ! -r "$key_path" ]; then
+    echo "EduLog HTTPS private key is not readable: $key_path" >&2
+    return 1
+  fi
+
+  cat <<EOF
+server {
+  listen 4174 ssl;
+  http2 on;
+  server_name _;
+
+  ssl_certificate $cert_path;
+  ssl_certificate_key $key_path;
+EOF
+
+  if [ -n "$ca_path" ]; then
+    if [ ! -r "$ca_path" ]; then
+      echo "EduLog HTTPS CA certificate is not readable: $ca_path" >&2
+      return 1
+    fi
+    printf '  ssl_trusted_certificate %s;\n' "$ca_path"
+  fi
+
+  cat <<'EOF'
+  ssl_protocols TLSv1.2 TLSv1.3;
+  ssl_prefer_server_ciphers off;
+  ssl_session_cache shared:EDULOGSSL:10m;
+  ssl_session_timeout 10m;
+  ssl_session_tickets off;
+
+EOF
+  host_guard
+  common_locations /etc/nginx/conf.d/edulog-https-security-headers.conf
+  cat <<'EOF'
+}
+EOF
+}
+
+write_runtime_config
+write_security_headers
+
+http_enabled="${EDULOG_HTTP_ENABLED:-true}"
+https_enabled="${EDULOG_HTTPS_ENABLED:-false}"
+https_redirect="${EDULOG_HTTPS_REDIRECT:-false}"
+
+if ! is_enabled "$http_enabled" && ! is_enabled "$https_enabled"; then
+  echo "At least one of EDULOG_HTTP_ENABLED or EDULOG_HTTPS_ENABLED must be enabled." >&2
+  return 1
+fi
+
+if is_enabled "$http_enabled"; then
+  if is_enabled "$https_enabled" && is_enabled "$https_redirect"; then
+    EDULOG_NGINX_HTTP_SERVER_BLOCK="$(http_redirect_server)"
+  else
+    EDULOG_NGINX_HTTP_SERVER_BLOCK="$(http_app_server)"
+  fi
+else
+  EDULOG_NGINX_HTTP_SERVER_BLOCK=""
+fi
+
+if is_enabled "$https_enabled"; then
+  EDULOG_NGINX_HTTPS_SERVER_BLOCK="$(https_app_server)"
+else
+  EDULOG_NGINX_HTTPS_SERVER_BLOCK=""
+fi
+
+export EDULOG_NGINX_HTTP_SERVER_BLOCK
+export EDULOG_NGINX_HTTPS_SERVER_BLOCK
