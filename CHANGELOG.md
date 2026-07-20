@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Detected nested Yjs text changes so report notes immediately become dirty and enter the save queue.
 - Serialized report auto-save requests so edits made during an in-flight save remain dirty and are persisted by the next request.
 - Synchronized report editor parent state from the authoritative database row after each successful save.
 - Prevented stale or unversioned Yjs snapshots from overriding newer report content.

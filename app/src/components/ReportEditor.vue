@@ -605,6 +605,7 @@ import {
 } from '@/utils/copyTemplate'
 import { copyToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
+import { observeXmlFragmentDeep } from '@/utils/yjsDeepObserver'
 
 import type { Lesson } from '@/models/Course'
 
@@ -1449,7 +1450,7 @@ const contactNotesEditorRef = ref<any>(null)
 const classNotesEditorRef = ref<any>(null)
 const contentEditorRef = ref<any>(null)
 const collabWatchStops: WatchStopHandle[] = []
-const collabXmlObservers: Array<{ fragment: any; observer: (event: any) => void }> = []
+const collabXmlObserverStops: Array<() => void> = []
 let collabMetaMap: any = null
 let collabMetaObserver: ((event: any) => void) | null = null
 let isApplyingRemoteCollab = false
@@ -1463,9 +1464,7 @@ function cleanupReportCollabBindings() {
     collabMetaMap = null
     collabMetaObserver = null
 
-    collabXmlObservers.splice(0).forEach(({ fragment, observer }) => {
-        fragment.unobserve(observer)
-    })
+    collabXmlObserverStops.splice(0).forEach((stop) => stop())
 }
 
 function withCollabGuard(fn: () => void) {
@@ -1635,8 +1634,8 @@ watch(ready, (isReady) => {
         // Setup text sync for saving
         const observeXmlFragment = (fieldName: string, onRemoteChange?: () => void) => {
             const fragment = ydoc.value!.getXmlFragment(fieldName)
-            const observer = (event: any) => {
-                if (event.transaction.local && !isApplyingRemoteCollab) {
+            const observer = (_events: any[], transaction: any) => {
+                if (transaction.local && !isApplyingRemoteCollab) {
                     handleInput()
                     return
                 }
@@ -1646,8 +1645,7 @@ watch(ready, (isReady) => {
                     onRemoteChange?.()
                 })
             }
-            fragment.observe(observer)
-            collabXmlObservers.push({ fragment, observer })
+            collabXmlObserverStops.push(observeXmlFragmentDeep(fragment, observer))
         }
 
         observeXmlFragment('content_xml', () => {
