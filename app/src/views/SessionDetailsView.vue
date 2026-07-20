@@ -40,7 +40,8 @@ import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
 
 type ReportEditorExpose = {
-    saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<void>
+    saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
+    replaceWithCanonicalReport: (report: OccurrenceReportDTO) => void
 }
 
 const { t } = useI18n()
@@ -1320,7 +1321,8 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
 }
 
 async function toggleSplitView(enrollmentId: string) {
-    await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
+    const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
+    if (saveSucceeded === false) return
 
     if (selectedEnrollmentId.value === enrollmentId && showSplitView.value) {
         showSplitView.value = false
@@ -1354,7 +1356,8 @@ async function toggleSplitView(enrollmentId: string) {
 
 async function closeSplitView() {
     const enrollmentIdToRestore = selectedEnrollmentId.value
-    await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
+    const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
+    if (saveSucceeded === false) return
     showSplitView.value = false
     selectedEnrollmentId.value = null
 
@@ -1468,10 +1471,10 @@ function handleReportExternalLinkUpdate(link: string, enrollmentId: string) {
     }
 }
 
-function handleSaveSuccess(version: number, enrollmentId: string) {
+function handleSaveSuccess(updatedReport: OccurrenceReportDTO, enrollmentId: string) {
     const report = reportMap.value.get(enrollmentId)
     if (report) {
-        report.version = version
+        report.applyDTO(updatedReport)
     }
 }
 
@@ -1516,6 +1519,8 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
                 break
             }
         }
+
+        quickReportEditorRef.value?.replaceWithCanonicalReport(report.toDTO())
 
         showConflictModal.value = false
         conflictReportId.value = null

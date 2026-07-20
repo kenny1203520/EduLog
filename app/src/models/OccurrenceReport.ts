@@ -31,6 +31,21 @@ export interface OccurrenceReportDTO {
     updated_at?: string
 }
 
+/** Immutable editor state used by the serialized report save queue. */
+export interface ReportDraftSnapshot {
+    lessonId: string
+    isCompleted: boolean
+    progressLetter: string
+    attendanceStatus: 'present' | 'absent' | 'pending'
+    absenceReason: string | null
+    classParticipation: number
+    classroomBehavior: number
+    contactNotes: string
+    classNotes: string
+    content: string
+    externalLink: string
+}
+
 export interface ReportVersionDTO {
     id?: string
     occurrence_report_id: string
@@ -70,6 +85,15 @@ export class OccurrenceReport {
     updatedAt?: Date
 
     constructor(data: OccurrenceReportDTO) {
+        this.enrollmentId = ''
+        this.classOccurrenceId = ''
+        this.content = ''
+        this.version = 1
+        this.applyDTO(data)
+    }
+
+    /** Applies an authoritative database representation to this model instance. */
+    applyDTO(data: OccurrenceReportDTO): void {
         this.id = data.id
         this.enrollmentId = data.enrollment_id
         this.classOccurrenceId = data.class_occurrence_id
@@ -241,4 +265,5 @@ export interface SaveReportResult {
     conflict?: boolean
     serverContent?: string
     serverReport?: OccurrenceReportDTO // Full server report for deep comparison
+    updatedReport?: OccurrenceReportDTO // Authoritative row returned after a successful save
 }

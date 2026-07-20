@@ -559,9 +559,23 @@ async function handleSaveSuccess(updatedReport: any) {
         item.content = updatedReport.content
         item.lessonId = updatedReport.lesson_id
         item.version = updatedReport.version
+        item.isCompleted = updatedReport.is_completed ?? false
+        item.attendanceStatus = updatedReport.attendance_status
+        item.absenceReason = updatedReport.absence_reason
+        item.classParticipation = updatedReport.class_participation
+        item.classroomBehavior = updatedReport.classroom_behavior
+        item.contactNotes = updatedReport.contact_notes
+        item.classNotes = updatedReport.class_notes
+        item.externalLink = updatedReport.external_link
+        item.progressLetter = updatedReport.progress_letter || ''
+        item.progressStart = item.progressLetter.split('-')[0] || ''
+        item.progressEnd = item.progressLetter.includes('-') ? (item.progressLetter.split('-')[1] || '') : ''
         item.missingContent = !updatedReport.content || updatedReport.content.trim().length === 0
         item.missingLesson = !updatedReport.lesson_id
-        item.updatedAt = new Date().toISOString()
+        item.missingProgress = !updatedReport.progress_letter
+        item.missingParticipation = !updatedReport.class_participation
+        item.missingBehavior = !updatedReport.classroom_behavior
+        item.updatedAt = updatedReport.updated_at || new Date().toISOString()
 
         if (!item.missingContent && !item.missingLesson) {
             incompleteReports.value.splice(idx, 1)

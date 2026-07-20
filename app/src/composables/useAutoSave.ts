@@ -1,41 +1,47 @@
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { ref } from 'vue'
 
-/**
- * Options for auto-save functionality
- */
-export interface AutoSaveOptions {
-    /** Debounce delay in milliseconds (default: 2000ms / 2 seconds) */
+export interface AutoSaveResult {
+    success: boolean
+    conflict?: boolean
+    newVersion?: number
+    serverVersion?: number
+    serverReport?: OccurrenceReportDTO | null
+    message?: string
+}
+
+export interface AutoSaveSuccess<TSnapshot, TResult extends AutoSaveResult> {
+    snapshot: TSnapshot
+    result: TResult
+    revision: number
+}
+
+export interface AutoSaveOptions<TSnapshot, TResult extends AutoSaveResult = AutoSaveResult> {
+    /** Delay after the latest edit before starting a save. */
     debounceMs?: number
-    
-    /** Callback function to save content, returns save result */
-    onSave: (content: string) => Promise<{ success: boolean, conflict?: boolean, newVersion?: number, serverVersion?: number, serverReport?: OccurrenceReportDTO | null, message?: string }>
-    
-    /** Callback when a conflict is detected */
-    onConflict?: (serverReport: OccurrenceReportDTO | null) => void
-    
-    /** Callback after successful save */
-    onSuccess?: (newVersion: number) => void
-    
-    /** Callback on save error */
+    /** Persists the exact immutable snapshot associated with a revision. */
+    onSave: (snapshot: TSnapshot) => Promise<TResult>
+    /** Called when optimistic locking reports a conflict. */
+    onConflict?: (serverReport: OccurrenceReportDTO | null, snapshot: TSnapshot) => void
+    /** Called only for the exact snapshot that completed successfully. */
+    onSuccess?: (saved: AutoSaveSuccess<TSnapshot, TResult>) => void | Promise<void>
+    /** Called when a save fails without a conflict. */
     onError?: (message: string) => void
 }
 
+interface PendingSave<TSnapshot> {
+    generation: number
+    revision: number
+    snapshot: TSnapshot
+}
+
 /**
- * Auto-save composable for real-time content saving
- * Implements debouncing, conflict detection, and status tracking
- * 
- * Usage:
- * ```ts
- * const { isSaving, lastSaved, triggerAutoSave } = useAutoSave({
- *   onSave: async (content) => await ReportService.saveReport(...),
- *   onConflict: (serverVersion) => showConflictModal(serverVersion)
- * })
- * 
- * watch(() => content.value, () => triggerAutoSave(content.value))
- * ```
+ * Serializes auto-save requests and coalesces edits to the latest pending snapshot.
+ * A successful request may only acknowledge the snapshot it actually submitted.
  */
-export function useAutoSave(options: AutoSaveOptions) {
+export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSaveResult>(
+    options: AutoSaveOptions<TSnapshot, TResult>
+) {
     const {
         debounceMs = 2000,
         onSave,
@@ -44,21 +50,19 @@ export function useAutoSave(options: AutoSaveOptions) {
         onError
     } = options
 
-    // State
     const isSaving = ref(false)
     const lastSaved = ref<Date | null>(null)
     const hasUnsavedChanges = ref(false)
     const saveError = ref<string | null>(null)
-    
-    // Debounce timer
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    let activeSavePromise: Promise<void> | null = null
-    let isDirtyWhileSaving = false
-    let saveRequestCounter = 0
 
-    /**
-     * Clears the existing debounce timer
-     */
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    let processingPromise: Promise<void> | null = null
+    let pendingSave: PendingSave<TSnapshot> | null = null
+    let generation = 0
+    let revision = 0
+    let persistedRevision = 0
+    let queueBlocked = false
+
     function clearTimer() {
         if (debounceTimer) {
             clearTimeout(debounceTimer)
@@ -66,105 +70,152 @@ export function useAutoSave(options: AutoSaveOptions) {
         }
     }
 
-    /**
-     * Saves content immediately without debouncing
-     */
-    async function saveNow(content: string): Promise<void> {
-        clearTimer()
+    function enqueue(snapshot: TSnapshot): PendingSave<TSnapshot> {
+        const job = {
+            generation,
+            revision: ++revision,
+            snapshot
+        }
+        pendingSave = job
+        hasUnsavedChanges.value = true
+        saveError.value = null
+        return job
+    }
 
-        const currentRequestId = ++saveRequestCounter
+    function restoreFailedJob(job: PendingSave<TSnapshot>) {
+        if (!pendingSave || pendingSave.revision < job.revision) {
+            pendingSave = job
+        }
+        hasUnsavedChanges.value = true
+    }
 
-        if (activeSavePromise) {
-            isDirtyWhileSaving = true
-            await activeSavePromise
-            
-            // 如果在等待期間有更新的儲存請求進來，放棄當前的請求
-            if (currentRequestId !== saveRequestCounter) {
+    async function processQueue(queueGeneration: number): Promise<void> {
+        while (
+            queueGeneration === generation &&
+            pendingSave &&
+            pendingSave.generation === queueGeneration
+        ) {
+            const job = pendingSave
+            pendingSave = null
+            isSaving.value = true
+            saveError.value = null
+
+            let result: TResult
+            try {
+                result = await onSave(job.snapshot)
+            } catch (error: any) {
+                if (queueGeneration !== generation) return
+                const message = error?.message || 'Unknown error during save'
+                saveError.value = message
+                restoreFailedJob(job)
+                queueBlocked = true
+                onError?.(message)
                 return
             }
-        }
 
-        if (!hasUnsavedChanges.value) {
-            return
-        }
+            if (queueGeneration !== generation) return
 
-        isSaving.value = true
-        saveError.value = null
-        isDirtyWhileSaving = false
-
-        activeSavePromise = (async () => {
-            try {
-                const result = await onSave(content)
-
-                if (result.conflict) {
-                    hasUnsavedChanges.value = true
-                    if (onConflict) {
-                        onConflict(result.serverReport || null)
-                    }
-                } else if (result.success) {
-                    lastSaved.value = new Date()
-                    // 只有在儲存期間沒有新變動時，才重置 hasUnsavedChanges
-                    if (!isDirtyWhileSaving) {
-                        hasUnsavedChanges.value = false
-                    }
-                    if (onSuccess && result.newVersion) {
-                        onSuccess(result.newVersion)
-                    }
-                } else {
-                    const errorMsg = result.message || 'Failed to save'
-                    saveError.value = errorMsg
-                    hasUnsavedChanges.value = true
-                    if (onError) {
-                        onError(errorMsg)
-                    }
-                }
-            } catch (error: any) {
-                const errorMsg = error.message || 'Unknown error during save'
-                saveError.value = errorMsg
-                hasUnsavedChanges.value = true
-                if (onError) {
-                    onError(errorMsg)
-                }
-            } finally {
-                isSaving.value = false
-                activeSavePromise = null
+            if (result.conflict) {
+                restoreFailedJob(job)
+                queueBlocked = true
+                onConflict?.(result.serverReport || null, job.snapshot)
+                return
             }
-        })()
 
-        await activeSavePromise
+            if (!result.success) {
+                const message = result.message || 'Failed to save'
+                saveError.value = message
+                restoreFailedJob(job)
+                queueBlocked = true
+                onError?.(message)
+                return
+            }
+
+            persistedRevision = Math.max(persistedRevision, job.revision)
+            lastSaved.value = new Date()
+            await onSuccess?.({ snapshot: job.snapshot, result, revision: job.revision })
+
+            // New input may have arrived while this request was in flight. Only the
+            // submitted revision is acknowledged; the latest pending revision remains dirty.
+            const latestPending = pendingSave as PendingSave<TSnapshot> | null
+            hasUnsavedChanges.value = Boolean(
+                latestPending &&
+                latestPending.generation === generation &&
+                latestPending.revision > persistedRevision
+            )
+        }
     }
 
-    /**
-     * Triggers auto-save with debouncing
-     * Waits for debounceMs milliseconds of inactivity before saving
-     */
-    function triggerAutoSave(content: string): void {
-        hasUnsavedChanges.value = true
-        
-        // If we are currently saving, mark it as dirty so it doesn't reset after save
-        if (isSaving.value) {
-            isDirtyWhileSaving = true
+    function ensureProcessing(): Promise<void> {
+        if (queueBlocked) return Promise.resolve()
+        if (processingPromise) return processingPromise
+
+        const queueGeneration = generation
+        const currentPromise = processQueue(queueGeneration).finally(() => {
+            if (processingPromise === currentPromise) {
+                processingPromise = null
+            }
+            if (queueGeneration === generation) {
+                isSaving.value = false
+            }
+        })
+        processingPromise = currentPromise
+        return currentPromise
+    }
+
+    /** Queues a snapshot after the configured inactivity delay. */
+    function triggerAutoSave(snapshot: TSnapshot): number {
+        const job = enqueue(snapshot)
+        clearTimer()
+
+        if (processingPromise) {
+            // The active request will immediately continue with the latest coalesced snapshot.
+            return job.revision
         }
 
-        clearTimer()
+        if (queueBlocked) {
+            return job.revision
+        }
 
         debounceTimer = setTimeout(() => {
-            saveNow(content)
+            debounceTimer = null
+            void ensureProcessing()
         }, debounceMs)
+        return job.revision
     }
 
     /**
-     * Cancels pending auto-save
+     * Immediately queues and drains the latest snapshot. Returns false when the target
+     * revision is still dirty because of an error, conflict, or document reset.
      */
-    function cancelAutoSave(): void {
+    async function saveNow(snapshot?: TSnapshot): Promise<boolean> {
+        const targetGeneration = generation
+        const target = snapshot === undefined ? pendingSave : enqueue(snapshot)
+        const targetRevision = target?.revision ?? persistedRevision
+        clearTimer()
+        queueBlocked = false
+
+        while (targetGeneration === generation && persistedRevision < targetRevision) {
+            if (!pendingSave && !processingPromise) break
+            await ensureProcessing()
+            if (queueBlocked) break
+        }
+
+        return targetGeneration === generation && persistedRevision >= targetRevision
+    }
+
+    function cancelAutoSave() {
         clearTimer()
     }
 
-    /**
-     * Resets the auto-save state (e.g. when switching documents)
-     */
-    function reset(): void {
+    /** Invalidates every queued/in-flight callback from the previous document. */
+    function reset() {
         clearTimer()
+        generation += 1
+        revision = 0
+        persistedRevision = 0
+        queueBlocked = false
+        pendingSave = null
         isSaving.value = false
         lastSaved.value = null
         hasUnsavedChanges.value = false
@@ -173,9 +224,8 @@ export function useAutoSave(options: AutoSaveOptions) {
 
     function getLastSavedString(): string {
         if (!lastSaved.value) return 'Never'
-        
-        const now = new Date()
-        const diff = now.getTime() - lastSaved.value.getTime()
+
+        const diff = Date.now() - lastSaved.value.getTime()
         const seconds = Math.floor(diff / 1000)
         const minutes = Math.floor(seconds / 60)
         const hours = Math.floor(minutes / 60)
@@ -188,13 +238,10 @@ export function useAutoSave(options: AutoSaveOptions) {
     }
 
     return {
-        // State
         isSaving,
         lastSaved,
         hasUnsavedChanges,
         saveError,
-        
-        // Methods
         saveNow,
         triggerAutoSave,
         cancelAutoSave,
@@ -203,21 +250,14 @@ export function useAutoSave(options: AutoSaveOptions) {
     }
 }
 
-/**
- * Utility: Creates a debounced function
- * (Alternative implementation if needed elsewhere)
- */
 export function debounce<T extends (...args: any[]) => any>(
     func: T,
     waitMs: number
 ): (...args: Parameters<T>) => void {
     let timeout: ReturnType<typeof setTimeout> | null = null
 
-    return function(...args: Parameters<T>) {
+    return (...args: Parameters<T>) => {
         if (timeout) clearTimeout(timeout)
-        
-        timeout = setTimeout(() => {
-            func(...args)
-        }, waitMs)
+        timeout = setTimeout(() => func(...args), waitMs)
     }
 }

@@ -393,7 +393,7 @@
 
         <!-- Manual Save Button (Optional) -->
         <div v-if="showManualSave" class="mt-4">
-            <button @click="saveNow" :disabled="isSaving || !hasUnsavedChanges || !canSave"
+            <button @click="() => saveNow()" :disabled="isSaving || !hasUnsavedChanges || !canSave"
                 class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
                 {{ isSaving ? $t('report.saving') : $t('report.editor.save_now') }}
             </button>
@@ -591,7 +591,11 @@ import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useToast } from 'vue-toastification'
 import { useReportCollab } from '@/composables/useReportCollab'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import type {
+    OccurrenceReportDTO,
+    ReportDraftSnapshot,
+    SaveReportResult
+} from '@/models/OccurrenceReport'
 import {
     COURSE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_COURSE_TEMPLATE,
@@ -679,7 +683,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
     'update:content': [content: string]
-    'save-success': [version: number]
+    'save-success': [report: OccurrenceReportDTO]
     'update:report-external-link': [value: string]
     'save-error': [error: string]
     'conflict': [serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO]
@@ -1431,7 +1435,15 @@ onMounted(() => {
 
 // Collab logic
 const reportIdRef = computed(() => props.reportId || '')
-const { ydoc, provider: awarenessProvider, ready, saveSnapshot } = useReportCollab(reportIdRef as any)
+const initialReportVersionRef = computed(() => props.initialVersion)
+const {
+    ydoc,
+    provider: awarenessProvider,
+    ready,
+    initialState: collabInitialState,
+    saveSnapshot,
+    setBaseReportVersion
+} = useReportCollab(reportIdRef as any, initialReportVersionRef)
 
 const contactNotesEditorRef = ref<any>(null)
 const classNotesEditorRef = ref<any>(null)
@@ -1535,6 +1547,7 @@ watch(ready, (isReady) => {
                 const remoteVersion = Number(metaMap.get('version') || 0)
                 if (remoteVersion > version.value) {
                     version.value = remoteVersion
+                    setBaseReportVersion(remoteVersion)
                 }
             } else {
                 metaMap.set('version', version.value)
@@ -1558,6 +1571,7 @@ watch(ready, (isReady) => {
                         const remoteVersion = Number(newVal || 0)
                         if (remoteVersion > version.value) {
                             version.value = remoteVersion
+                            setBaseReportVersion(remoteVersion)
                         }
                     }
                 })
@@ -1606,10 +1620,16 @@ watch(ready, (isReady) => {
                     seeded = true
                 }
 
-                if (seeded) {
+                syncTextRefsFromEditors()
+
+                if (seeded || collabInitialState.value !== 'loaded') {
                     void saveSnapshot()
                 }
             })
+
+            if (collabInitialState.value === 'loaded') {
+                queueRecoveredDraftWhenReady()
+            }
         })
 
         // Setup text sync for saving
@@ -1665,20 +1685,6 @@ const reportExternalLink = ref(props.initialReportExternalLink || '')
 
 type AttendanceStatus = 'present' | 'absent' | 'pending'
 
-interface ReportFieldSnapshot {
-    lessonId: string
-    isCompleted: boolean
-    progressLetter: string
-    attendanceStatus: AttendanceStatus
-    absenceReason: string | null
-    classParticipation: number
-    classroomBehavior: number
-    contactNotes: string
-    classNotes: string
-    content: string
-    externalLink: string
-}
-
 type ReportSavePayload = {
     lessonId?: string
     isCompleted?: boolean
@@ -1701,13 +1707,17 @@ function normalizeAbsenceReason(status: AttendanceStatus, reason: string | null 
     return status === 'absent' ? normalizeString(reason) : null
 }
 
-function buildCurrentSnapshot(overrides: Partial<ReportFieldSnapshot> = {}): ReportFieldSnapshot {
+function buildCurrentSnapshot(overrides: Partial<ReportDraftSnapshot> = {}): ReportDraftSnapshot {
+    const normalizedReason = attendanceStatus.value === 'absent'
+        ? (normalizeString(absenceReason.value) || t('report.editor.absence_reasons.reason_not_provided'))
+        : null
+
     return {
         lessonId: selectedLessonId.value || '',
         isCompleted: isCompleted.value,
         progressLetter: progressLetter.value || '',
         attendanceStatus: attendanceStatus.value,
-        absenceReason: normalizeAbsenceReason(attendanceStatus.value, absenceReason.value),
+        absenceReason: normalizedReason,
         classParticipation: classParticipation.value,
         classroomBehavior: classroomBehavior.value,
         contactNotes: contactNotes.value || '',
@@ -1718,7 +1728,7 @@ function buildCurrentSnapshot(overrides: Partial<ReportFieldSnapshot> = {}): Rep
     }
 }
 
-function buildSnapshotFromProps(): ReportFieldSnapshot {
+function buildSnapshotFromProps(): ReportDraftSnapshot {
     const initialStatus = props.initialAttendanceStatus || 'pending'
     const initialProgress = props.initialProgressStart && props.initialProgressEnd
         ? `${props.initialProgressStart}-${props.initialProgressEnd}`
@@ -1739,12 +1749,28 @@ function buildSnapshotFromProps(): ReportFieldSnapshot {
     }
 }
 
-function buildDirtyPayload(current: ReportFieldSnapshot): { keys: Array<keyof ReportFieldSnapshot>, payload: ReportSavePayload } {
+function buildSnapshotFromDto(report: OccurrenceReportDTO): ReportDraftSnapshot {
+    return {
+        lessonId: report.lesson_id || '',
+        isCompleted: report.is_completed ?? false,
+        progressLetter: report.progress_letter || '',
+        attendanceStatus: report.attendance_status || 'pending',
+        absenceReason: normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason),
+        classParticipation: report.class_participation ?? 0,
+        classroomBehavior: report.classroom_behavior ?? 0,
+        contactNotes: report.contact_notes || '',
+        classNotes: report.class_notes || '',
+        content: report.content || '',
+        externalLink: report.external_link || ''
+    }
+}
+
+function buildDirtyPayload(current: ReportDraftSnapshot): { keys: Array<keyof ReportDraftSnapshot>, payload: ReportSavePayload } {
     const previous = savedReportSnapshot.value
-    const keys: Array<keyof ReportFieldSnapshot> = []
+    const keys: Array<keyof ReportDraftSnapshot> = []
     const payload: ReportSavePayload = {}
 
-    const addIfChanged = <K extends keyof ReportFieldSnapshot>(
+    const addIfChanged = <K extends keyof ReportDraftSnapshot>(
         key: K,
         assign: () => void
     ) => {
@@ -1791,7 +1817,7 @@ function buildDirtyPayload(current: ReportFieldSnapshot): { keys: Array<keyof Re
     return { keys, payload }
 }
 
-const savedReportSnapshot = ref<ReportFieldSnapshot>(buildSnapshotFromProps())
+const savedReportSnapshot = ref<ReportDraftSnapshot>(buildSnapshotFromProps())
 
 
 // Computed progress letter for backend (combining start-end range)
@@ -1832,6 +1858,30 @@ const canSave = computed(() => {
     return true
 })
 
+function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportDTO {
+    return {
+        id: props.reportId,
+        enrollment_id: props.enrollmentId || '',
+        class_occurrence_id: props.classOccurrenceId || '',
+        lesson_id: snapshot.lessonId,
+        content: snapshot.content,
+        is_completed: snapshot.isCompleted,
+        progress_letter: snapshot.progressLetter,
+        attendance_status: snapshot.attendanceStatus,
+        absence_reason: snapshot.absenceReason || '',
+        class_participation: snapshot.classParticipation,
+        classroom_behavior: snapshot.classroomBehavior,
+        contact_notes: snapshot.contactNotes,
+        class_notes: snapshot.classNotes,
+        external_link: snapshot.externalLink,
+        version: version.value,
+        last_edited_at: new Date().toISOString(),
+        last_edited_by: authStore.user?.id,
+        created_at: props.initialCreatedAt,
+        updated_at: new Date().toISOString()
+    }
+}
+
 // Auto-save setup
 const {
     isSaving,
@@ -1842,9 +1892,9 @@ const {
     triggerAutoSave,
     getLastSavedString,
     reset
-} = useAutoSave({
+} = useAutoSave<ReportDraftSnapshot, SaveReportResult>({
     debounceMs: props.debounceMs,
-    onSave: async (content) => {
+    onSave: async (snapshot) => {
         if (!props.reportId) {
             return { success: false, message: 'No report ID provided' }
         }
@@ -1853,39 +1903,12 @@ const {
             return { success: false, message: t('report.editor.required_field_error') }
         }
 
-        // Auto-fill absence reason if missing, and clear reasons for present/pending.
-        let finalAbsenceReason = absenceReason.value
-        if (attendanceStatus.value === 'absent' && !finalAbsenceReason) {
-            finalAbsenceReason = t('report.editor.absence_reasons.reason_not_provided')
-            absenceReason.value = finalAbsenceReason
-        } else if (attendanceStatus.value !== 'absent' && finalAbsenceReason) {
-            finalAbsenceReason = ''
-            absenceReason.value = ''
-        }
-
-        const saveContent = (ydoc.value && contentEditorRef.value?.editor) ? contentEditorRef.value.editor.getText() : content
-        const saveContact = (ydoc.value && contactNotesEditorRef.value?.editor) ? contactNotesEditorRef.value.editor.getText() : contactNotes.value
-        const saveClass = (ydoc.value && classNotesEditorRef.value?.editor) ? classNotesEditorRef.value.editor.getText() : classNotes.value
-        localContent.value = saveContent
-        contactNotes.value = saveContact
-        classNotes.value = saveClass
-
         try {
-            const currentSnapshot = buildCurrentSnapshot({
-                content: saveContent,
-                contactNotes: saveContact,
-                classNotes: saveClass,
-                absenceReason: normalizeAbsenceReason(attendanceStatus.value, finalAbsenceReason)
-            })
-            const { keys, payload } = buildDirtyPayload(currentSnapshot)
+            const { keys, payload } = buildDirtyPayload(snapshot)
             const isAttendanceOnly = keys.length > 0 && keys.every(key => key === 'attendanceStatus' || key === 'absenceReason')
 
             if (keys.length === 0) {
                 return { success: true, newVersion: version.value }
-            }
-
-            if (!isAttendanceOnly && ready.value && props.reportId && authStore.user?.id) {
-                await saveSnapshot()
             }
 
             const result = isAttendanceOnly
@@ -1894,8 +1917,8 @@ const {
                     version.value,
                     authStore.user?.id,
                     {
-                        attendanceStatus: currentSnapshot.attendanceStatus,
-                        absenceReason: currentSnapshot.absenceReason
+                        attendanceStatus: snapshot.attendanceStatus,
+                        absenceReason: snapshot.absenceReason
                     }
                 )
                 : await OccurrenceReportService.saveReport(
@@ -1904,36 +1927,6 @@ const {
                     authStore.user?.id,
                     payload
                 )
-
-            const localReportPayload: OccurrenceReportDTO = {
-                id: props.reportId,
-                enrollment_id: props.enrollmentId || '',
-                class_occurrence_id: props.classOccurrenceId || '',
-                lesson_id: selectedLessonId.value || '',
-                content: saveContent,
-                is_completed: isCompleted.value,
-
-                progress_letter: progressLetter.value || '',
-                attendance_status: attendanceStatus.value,
-                absence_reason: currentSnapshot.absenceReason || '',
-                class_participation: classParticipation.value,
-                classroom_behavior: classroomBehavior.value,
-                contact_notes: saveContact,
-                class_notes: saveClass,
-                external_link: reportExternalLink.value,
-
-                version: version.value,
-                last_edited_at: new Date().toISOString(),
-                last_edited_by: authStore.user?.id,
-                created_at: props.initialCreatedAt,
-                updated_at: new Date().toISOString(),
-            }
-
-            if (result.conflict) {
-                emit('conflict', result.serverReport!, localReportPayload)
-                return result
-            }
-
             return result
         } catch (error: any) {
             const message = error.message || 'Failed to save report'
@@ -1941,44 +1934,30 @@ const {
             return { success: false, message }
         }
     },
-    onConflict: (serverReport) => {
-        // Construct local payload for comparison
-        const localReportPayload: OccurrenceReportDTO = {
-            id: props.reportId,
-            enrollment_id: props.enrollmentId || '',
-            class_occurrence_id: props.classOccurrenceId || '',
-            lesson_id: selectedLessonId.value || '',
-            content: localContent.value,
-            is_completed: isCompleted.value,
-
-            progress_letter: progressLetter.value || '',
-            attendance_status: attendanceStatus.value,
-            absence_reason: absenceReason.value || '',
-            class_participation: classParticipation.value,
-            classroom_behavior: classroomBehavior.value,
-            contact_notes: contactNotes.value,
-            class_notes: classNotes.value,
-            external_link: reportExternalLink.value,
-
-            version: version.value,
-            last_edited_at: new Date().toISOString(),
-            last_edited_by: authStore.user?.id,
-            created_at: props.initialCreatedAt,
-            updated_at: new Date().toISOString(),
+    onConflict: (serverReport, snapshot) => {
+        if (serverReport) {
+            emit('conflict', serverReport, snapshotToLocalReport(snapshot))
         }
-        emit('conflict', serverReport!, localReportPayload)
     },
-    onSuccess: (newVersion) => {
+    onSuccess: async ({ snapshot, result }) => {
+        const updatedReport = result.updatedReport
+        const newVersion = updatedReport?.version ?? result.newVersion ?? version.value
         version.value = newVersion
-        savedReportSnapshot.value = buildCurrentSnapshot()
+        savedReportSnapshot.value = updatedReport ? buildSnapshotFromDto(updatedReport) : snapshot
+        setBaseReportVersion(newVersion)
+
         if (ydoc.value) {
             const metaMap = ydoc.value.getMap('reportMeta')
             const currentMetaVer = metaMap.get('version') as number || 0
             if (newVersion > currentMetaVer) {
                 metaMap.set('version', newVersion)
             }
+            await saveSnapshot()
         }
-        emit('save-success', newVersion)
+
+        if (updatedReport) {
+            emit('save-success', updatedReport)
+        }
     },
     onError: (message) => {
         emit('save-error', message)
@@ -2004,50 +1983,51 @@ watch(() => props.initialContent, (newContent) => {
 
 watch(() => props.initialVersion, (newVersion) => {
     version.value = newVersion
+    setBaseReportVersion(newVersion)
 })
 
 watch(() => props.initialLessonId, (newVal) => {
-    selectedLessonId.value = newVal || ''
+    if (!hasUnsavedChanges.value) selectedLessonId.value = newVal || ''
 })
 
 watch(() => props.initialIsCompleted, (newVal) => {
-    isCompleted.value = newVal ?? false
+    if (!hasUnsavedChanges.value) isCompleted.value = newVal ?? false
 })
 
 watch(() => props.initialProgressStart, (newVal) => {
-    progressStart.value = newVal || ''
+    if (!hasUnsavedChanges.value) progressStart.value = newVal || ''
 })
 
 watch(() => props.initialProgressEnd, (newVal) => {
-    progressEnd.value = newVal || ''
+    if (!hasUnsavedChanges.value) progressEnd.value = newVal || ''
 })
 
 watch(() => props.initialAttendanceStatus, (newVal) => {
-    attendanceStatus.value = newVal
+    if (!hasUnsavedChanges.value) attendanceStatus.value = newVal
 })
 
 watch(() => props.initialAbsenceReason, (newVal) => {
-    absenceReason.value = newVal || ''
+    if (!hasUnsavedChanges.value) absenceReason.value = newVal || ''
 })
 
 watch(() => props.initialClassParticipation, (newVal) => {
-    classParticipation.value = newVal ?? 0
+    if (!hasUnsavedChanges.value) classParticipation.value = newVal ?? 0
 })
 
 watch(() => props.initialClassroomBehavior, (newVal) => {
-    classroomBehavior.value = newVal ?? 0
+    if (!hasUnsavedChanges.value) classroomBehavior.value = newVal ?? 0
 })
 
 watch(() => props.initialContactNotes, (newVal) => {
-    contactNotes.value = newVal || ''
+    if (!hasUnsavedChanges.value) contactNotes.value = newVal || ''
 })
 
 watch(() => props.initialClassNotes, (newVal) => {
-    classNotes.value = newVal || ''
+    if (!hasUnsavedChanges.value) classNotes.value = newVal || ''
 })
 
 watch(() => props.initialReportExternalLink, (newVal) => {
-    reportExternalLink.value = newVal || ''
+    if (!hasUnsavedChanges.value) reportExternalLink.value = newVal || ''
 })
 
 watch(attendanceStatus, (newStatus) => {
@@ -2136,20 +2116,40 @@ function handleInput() {
     emit('update:report-external-link', reportExternalLink.value)
 
     if (props.reportId) {
-        triggerAutoSave(localContent.value)
+        triggerAutoSave(buildCurrentSnapshot())
     }
 }
 
+function queueRecoveredDraftWhenReady(attempt = 0) {
+    if (isInitializing.value) {
+        if (attempt < 10) {
+            setTimeout(() => queueRecoveredDraftWhenReady(attempt + 1), 25)
+        }
+        return
+    }
 
-function saveNow() {
+    syncTextRefsFromEditors()
+    const recoveredSnapshot = buildCurrentSnapshot()
+    if (buildDirtyPayload(recoveredSnapshot).keys.length > 0) {
+        emit('update:content', recoveredSnapshot.content)
+        triggerAutoSave(recoveredSnapshot)
+    }
+}
+
+function saveNow(_options?: { reason?: 'manual' | 'switch' }): Promise<boolean> {
     if (!props.reportId || !canSave.value) {
-        return Promise.resolve()
+        return Promise.resolve(true)
     }
 
-    return autoSaveNow(localContent.value)
+    if (!hasUnsavedChanges.value) {
+        return Promise.resolve(true)
+    }
+
+    syncTextRefsFromEditors()
+    return autoSaveNow(buildCurrentSnapshot())
 }
 
-function handleReportRestored(report: OccurrenceReportDTO) {
+function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = false) {
     version.value = report.version
     localContent.value = report.content || ''
     selectedLessonId.value = report.lesson_id || ''
@@ -2163,6 +2163,8 @@ function handleReportRestored(report: OccurrenceReportDTO) {
     contactNotes.value = report.contact_notes || ''
     classNotes.value = report.class_notes || ''
     reportExternalLink.value = report.external_link || ''
+    savedReportSnapshot.value = buildSnapshotFromDto(report)
+    setBaseReportVersion(report.version)
 
     if (ydoc.value) {
         const metaMap = ydoc.value.getMap('reportMeta')
@@ -2175,15 +2177,21 @@ function handleReportRestored(report: OccurrenceReportDTO) {
         void saveSnapshot()
     }
 
-    // Emit the event to parent
-    emit('restored', report)
+    if (notifyParent) {
+        emit('restored', report)
+    }
 
     // Clear unsaved changes flag
     reset()
 }
 
+function handleReportRestored(report: OccurrenceReportDTO) {
+    replaceWithCanonicalReport(report, true)
+}
+
 defineExpose({
-    saveNow
+    saveNow,
+    replaceWithCanonicalReport
 })
 
 // Warn before leaving with unsaved changes

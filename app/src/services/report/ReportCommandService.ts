@@ -209,7 +209,8 @@ export class ReportCommandService {
         return {
             success: true,
             conflict: false,
-            newVersion: updated.version
+            newVersion: updated.version,
+            updatedReport: updated as OccurrenceReportDTO
         }
     }
 
@@ -301,7 +302,8 @@ export class ReportCommandService {
         return {
             success: true,
             conflict: false,
-            newVersion: updated.version
+            newVersion: updated.version,
+            updatedReport: updated as OccurrenceReportDTO
         }
     }
 

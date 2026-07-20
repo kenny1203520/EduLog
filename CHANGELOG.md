@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Serialized report auto-save requests so edits made during an in-flight save remain dirty and are persisted by the next request.
+- Synchronized report editor parent state from the authoritative database row after each successful save.
+- Prevented stale or unversioned Yjs snapshots from overriding newer report content.
+
+### Added
+- Added version-gated Yjs snapshot persistence and recovery for collaborative report drafts.
+- Added regression coverage for queued saves, conflicts, errors, resets, and manual draining.
+
+### Deployment Notes
+- Apply `1000022_report_collab_snapshot_versioning.sql` before deploying frontend code that uses versioned collaboration snapshots.
+- Legacy collaboration snapshots remain stored but are ignored until replaced from canonical report content.
+
 ## [1.5.2] - 2026-06-15
 
 ### Fixed

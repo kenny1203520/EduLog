@@ -504,7 +504,8 @@ import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type ReportEditorExpose = {
-    saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<void>
+    saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
+    replaceWithCanonicalReport: (report: OccurrenceReportDTO) => void
 }
 
 const route = useRoute()
@@ -1195,7 +1196,8 @@ async function selectOccurrence(
     occurrence: ClassOccurrence,
     options: { allowCreatePrompt?: boolean } = {}
 ) {
-    await reportEditorRef.value?.saveNow({ reason: 'switch' })
+    const saveSucceeded = await reportEditorRef.value?.saveNow({ reason: 'switch' })
+    if (saveSucceeded === false) return
 
     const previousSelectionState = {
         occurrence: selectedOccurrence.value,
@@ -1268,10 +1270,9 @@ async function refreshReport() {
     await selectOccurrence(selectedOccurrence.value)
 }
 
-function handleSaveSuccess(newVersion: number) {
+function handleSaveSuccess(updatedReport: OccurrenceReportDTO) {
     if (selectedReport.value) {
-        selectedReport.value.version = newVersion
-        selectedReport.value.updatedAt = new Date()
+        selectedReport.value.applyDTO(updatedReport)
     }
 
     switchToListView() // Refresh list view data
@@ -1323,6 +1324,7 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
         )
 
         selectedReport.value = report
+        reportEditorRef.value?.replaceWithCanonicalReport(report.toDTO())
         showConflictModal.value = false
 
         // Show success toast

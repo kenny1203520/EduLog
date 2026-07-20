@@ -46,6 +46,8 @@ interface ReportPresencePayload {
     updatedAt: string
 }
 
+export type ReportCollabInitialState = 'none' | 'loaded' | 'legacy' | 'stale' | 'error'
+
 export class SupabaseProvider {
     public awareness: Awareness
     public ready: Promise<void>
@@ -80,16 +82,20 @@ export class SupabaseProvider {
     public doc: Y.Doc
     private roomId: string
     private userId?: string
+    private baseReportVersion: number
+    public initialState: ReportCollabInitialState = 'none'
 
     constructor(
         supabase: SupabaseClient,
         doc: Y.Doc,
         roomId: string,
+        baseReportVersion: number,
         userId?: string
     ) {
         this.supabase = supabase
         this.doc = doc
         this.roomId = roomId
+        this.baseReportVersion = baseReportVersion
         this.userId = userId
         this.awareness = new Awareness(this.doc)
         this.ready = new Promise((resolve) => {
@@ -197,21 +203,39 @@ export class SupabaseProvider {
         try {
             const { data, error } = await this.supabase
                 .from('report_collab_docs')
-                .select('snapshot_base64')
+                .select('snapshot_base64, base_report_version')
                 .eq('occurrence_report_id', this.roomId)
                 .maybeSingle()
 
             if (error) {
                 console.error('loadInitialState db error:', error)
+                this.initialState = 'error'
                 return
             }
 
-            if (data?.snapshot_base64) {
+            if (!data?.snapshot_base64) {
+                this.initialState = 'none'
+                return
+            }
+
+            if (data.base_report_version === null || data.base_report_version === undefined) {
+                this.initialState = 'legacy'
+                return
+            }
+
+            if (Number(data.base_report_version) !== this.baseReportVersion) {
+                this.initialState = 'stale'
+                return
+            }
+
+            if (data.snapshot_base64) {
                 const update = base64ToUint8Array(data.snapshot_base64)
                 Y.applyUpdate(this.doc, update, this)
+                this.initialState = 'loaded'
             }
         } catch (err) {
             console.error('Failed to load document state:', err)
+            this.initialState = 'error'
         }
     }
 
@@ -228,28 +252,26 @@ export class SupabaseProvider {
             const stateUpdate = Y.encodeStateAsUpdate(this.doc)
             const base64State = uint8ArrayToBase64(stateUpdate)
             
-            const payload: any = {
-                occurrence_report_id: this.roomId,
-                snapshot_base64: base64State
-            }
-            if (this.userId) {
-                payload.last_updated_by = this.userId
-            }
-            
-            const { error } = await this.supabase.from('report_collab_docs').upsert(
-                payload, 
-                { onConflict: 'occurrence_report_id' }
-            )
+            const { data, error } = await this.supabase.rpc('save_report_collab_snapshot', {
+                p_occurrence_report_id: this.roomId,
+                p_snapshot_base64: base64State,
+                p_base_report_version: this.baseReportVersion
+            })
             
             if (error) {
                 console.error('Failed to save snapshot:', error)
                 return false
             }
-            return true
+            return data === true
         } catch (err) {
             console.error('saveSnapshot exception:', err)
             return false
         }
+    }
+
+    /** Advances the canonical version used to guard future snapshot writes. */
+    public setBaseReportVersion(version: number) {
+        this.baseReportVersion = version
     }
 
     private async trackLocalAwareness() {
