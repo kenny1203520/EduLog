@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prevented stale or unversioned Yjs snapshots from overriding newer report content.
 
 ### Added
+- Added shared plain-text and collaborative editor contracts with reusable appearance presets.
 - Added version-gated Yjs snapshot persistence and recovery for collaborative report drafts.
 - Added regression coverage for queued saves, conflicts, errors, resets, and manual draining.
 

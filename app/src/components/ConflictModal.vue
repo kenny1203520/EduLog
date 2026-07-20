@@ -185,8 +185,8 @@
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <textarea v-if="selectedStrategy === 'manual'" v-model="mergedReport.contact_notes"
-                        class="w-full h-40 p-6 md:p-8 bg-white border-2 border-emerald-100 rounded-[2.5rem] font-mono text-sm leading-relaxed focus:ring-8 focus:ring-emerald-500/5 focus:border-emerald-500 transition-all outline-none text-gray-900 shadow-sm resize-none" />
+                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedReport.contact_notes"
+                        preset="merge" :min-height="160" />
                 </div>
 
                 <hr v-if="(serverReport?.class_notes || localReport?.class_notes) && (serverReport?.class_notes != localReport?.class_notes)"
@@ -265,8 +265,8 @@
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <textarea v-if="selectedStrategy === 'manual'" v-model="mergedReport.class_notes"
-                        class="w-full h-40 p-6 md:p-8 bg-white border-2 border-emerald-100 rounded-[2.5rem] font-mono text-sm leading-relaxed focus:ring-8 focus:ring-emerald-500/5 focus:border-emerald-500 transition-all outline-none text-gray-900 shadow-sm resize-none" />
+                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedReport.class_notes"
+                        preset="merge" :min-height="160" />
                 </div>
 
                 <hr v-if="(serverReport?.content || localReport?.content) && (serverReport?.content != localReport?.content)"
@@ -345,8 +345,8 @@
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <textarea v-if="selectedStrategy === 'manual'" v-model="mergedReport.content"
-                        class="w-full h-60 p-6 md:p-8 bg-white border-2 border-emerald-100 rounded-[2.5rem] font-mono text-sm leading-relaxed focus:ring-8 focus:ring-emerald-500/5 focus:border-emerald-500 transition-all outline-none text-gray-900 shadow-sm resize-none"
+                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedReport.content"
+                        preset="merge" :min-height="240"
                         :placeholder="$t('report.conflict.merge_placeholder')" />
                 </div>
             </div>
@@ -372,6 +372,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { Lesson } from '@/models/Course'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
 
 interface Props {
     isOpen: boolean

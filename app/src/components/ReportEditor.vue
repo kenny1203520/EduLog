@@ -303,22 +303,25 @@
                 </svg>
                 {{ $t('report.editor.contact_notes_label') }}
             </label>
-            <TipTapCollabEditor 
+            <CollaborativeTextEditor
                 ref="contactNotesEditorRef"
                 v-if="ready && ydoc"
-                field-name="contactNotes_xml" 
-                :ydoc="ydoc" 
-                :provider="awarenessProvider" 
-                :disabled="props.disabled" 
+                v-model="contactNotes"
+                field-name="contactNotes_xml"
+                :ydoc="ydoc"
+                :provider="awarenessProvider"
+                :disabled="props.disabled"
+                preset="notes"
                 :font-scale="preferences.editorFontScale"
                 :min-height="90"
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#60A5FA' }"
-                :placeholder="$t('report.editor.contact_notes_placeholder')" />
+                :placeholder="$t('report.editor.contact_notes_placeholder')"
+                @change="handleTextEditorChange('contactNotes', $event)" />
             <!-- Fallback standard editor if ydoc not ready -->
-            <textarea v-else v-model="contactNotes" rows="2"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }"
-                :placeholder="$t('report.editor.contact_notes_placeholder')"></textarea>
+            <TextEditor v-else v-model="contactNotes" preset="notes" :disabled="props.disabled"
+                :font-scale="preferences.editorFontScale" :min-height="90"
+                :placeholder="$t('report.editor.contact_notes_placeholder')"
+                @change="handleTextEditorChange('contactNotes', $event)" />
         </div>
 
         <!-- Class Notes -->
@@ -331,22 +334,25 @@
                 {{ $t('report.editor.class_notes_label') }}
                 <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
             </label>
-            <TipTapCollabEditor 
+            <CollaborativeTextEditor
                 ref="classNotesEditorRef"
                 v-if="ready && ydoc"
-                field-name="classNotes_xml" 
-                :ydoc="ydoc" 
-                :provider="awarenessProvider" 
-                :disabled="props.disabled" 
+                v-model="classNotes"
+                field-name="classNotes_xml"
+                :ydoc="ydoc"
+                :provider="awarenessProvider"
+                :disabled="props.disabled"
+                preset="notes"
                 :font-scale="preferences.editorFontScale"
                 :min-height="140"
                 mono
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#A78BFA' }"
-                :placeholder="$t('report.editor.class_notes_placeholder')" />
-            <textarea v-else v-model="classNotes" rows="4"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y font-mono"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }"
-                :placeholder="$t('report.editor.class_notes_placeholder')"></textarea>
+                :placeholder="$t('report.editor.class_notes_placeholder')"
+                @change="handleTextEditorChange('classNotes', $event)" />
+            <TextEditor v-else v-model="classNotes" preset="notes" :disabled="props.disabled"
+                :font-scale="preferences.editorFontScale" :min-height="140" mono
+                :placeholder="$t('report.editor.class_notes_placeholder')"
+                @change="handleTextEditorChange('classNotes', $event)" />
         </div>
 
         <!-- Learning Report (Main Content) -->
@@ -366,24 +372,26 @@
                         $t('report.editor.character_count') }}
                 </span>
             </label>
-            <TipTapCollabEditor 
+            <CollaborativeTextEditor
                 ref="contentEditorRef"
                 v-if="ready && ydoc"
-                field-name="content_xml" 
-                :ydoc="ydoc" 
-                :provider="awarenessProvider" 
-                :disabled="props.disabled" 
+                v-model="localContent"
+                field-name="content_xml"
+                :ydoc="ydoc"
+                :provider="awarenessProvider"
+                :disabled="props.disabled"
+                preset="report"
                 :font-scale="preferences.editorFontScale"
                 :min-height="300"
                 mono
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#34D399' }"
-                :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')" />
-            <textarea v-else v-model="localContent" @input="handleInput"
+                :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
+                @change="handleTextEditorChange('content', $event)" />
+            <TextEditor v-else v-model="localContent" preset="report"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
-                class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono"
-                :class="{ 'bg-gray-50': props.disabled, 'opacity-50': props.disabled }"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }" />
+                :font-scale="preferences.editorFontScale" :min-height="300" mono
+                @change="handleTextEditorChange('content', $event)" />
         </div>
 
         <!-- Error Display -->
@@ -581,7 +589,9 @@ import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportS
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
-import TipTapCollabEditor from '@/components/common/TipTapCollabEditor.vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
+import CollaborativeTextEditor from '@/components/common/text-editor/CollaborativeTextEditor.vue'
+import { insertTextAtSelection, type TextEditorChange } from '@/components/common/text-editor/types'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
@@ -605,7 +615,6 @@ import {
 } from '@/utils/copyTemplate'
 import { copyToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
-import { observeXmlFragmentDeep } from '@/utils/yjsDeepObserver'
 
 import type { Lesson } from '@/models/Course'
 
@@ -779,11 +788,9 @@ const handleConfirmAction = async () => {
 
 const handleCopyContent = (text: string) => {
     if (!text) return
-    if (ydoc.value && contentEditorRef.value?.editor) {
-        const editor = contentEditorRef.value.editor
-        const current = editor.getText()
-        editor.commands.focus('end')
-        editor.commands.insertContent((current ? '\n\n' : '') + text)
+    if (contentEditorRef.value) {
+        const current = contentEditorRef.value.getText()
+        contentEditorRef.value.replaceText(current + (current ? '\n\n' : '') + text, { emitChange: true })
     } else {
         const current = localContent.value || ''
         localContent.value = current + (current ? '\n\n' : '') + text
@@ -975,18 +982,23 @@ const reportTemplateEditableFields = computed<Array<{ id: string; label: string;
     ]
 })
 
-function insertReportTemplateVariable(fieldId: string, variable: string) {
+function insertReportTemplateVariable(fieldId: string, variable: string, caret = -1, selectionEnd = -1) {
     const mode = selectedReportTemplateModes.value[variable]
     const token = formatCopyTemplateToken(variable, mode)
+    const insertAtSelection = (content: string) => {
+        const start = caret < 0 ? content.length : caret
+        const end = selectionEnd < 0 ? content.length : selectionEnd
+        return insertTextAtSelection(content, token, start, end)
+    }
     if (fieldId === 'contact') {
-        templateDraftContactNotes.value += token
+        templateDraftContactNotes.value = insertAtSelection(templateDraftContactNotes.value)
         return
     }
     if (fieldId === 'class') {
-        templateDraftClassNotes.value += token
+        templateDraftClassNotes.value = insertAtSelection(templateDraftClassNotes.value)
         return
     }
-    templateDraftContent.value += token
+    templateDraftContent.value = insertAtSelection(templateDraftContent.value)
 }
 
 function insertVariableToFocusedField(variable: string) {
@@ -1241,29 +1253,17 @@ function applyTemplate(template: Template) {
     let changed = false
 
     if (ydoc.value) {
-        if (renderedContent && contentEditorRef.value?.editor) {
-            const editor = contentEditorRef.value.editor
-            if (editor.isEmpty) editor.commands.setContent(renderedContent)
-            else {
-                editor.commands.focus('end')
-                editor.commands.insertContent('\n\n' + renderedContent)
-            }
+        if (renderedContent && contentEditorRef.value) {
+            const current = contentEditorRef.value.getText()
+            contentEditorRef.value.replaceText(current + (current ? '\n\n' : '') + renderedContent, { emitChange: true })
         }
-        if (renderedContactNotes && contactNotesEditorRef.value?.editor) {
-            const editor = contactNotesEditorRef.value.editor
-            if (editor.isEmpty) editor.commands.setContent(renderedContactNotes)
-            else {
-                editor.commands.focus('end')
-                editor.commands.insertContent('\n\n' + renderedContactNotes)
-            }
+        if (renderedContactNotes && contactNotesEditorRef.value) {
+            const current = contactNotesEditorRef.value.getText()
+            contactNotesEditorRef.value.replaceText(current + (current ? '\n\n' : '') + renderedContactNotes, { emitChange: true })
         }
-        if (renderedClassNotes && classNotesEditorRef.value?.editor) {
-            const editor = classNotesEditorRef.value.editor
-            if (editor.isEmpty) editor.commands.setContent(renderedClassNotes)
-            else {
-                editor.commands.focus('end')
-                editor.commands.insertContent('\n\n' + renderedClassNotes)
-            }
+        if (renderedClassNotes && classNotesEditorRef.value) {
+            const current = classNotesEditorRef.value.getText()
+            classNotesEditorRef.value.replaceText(current + (current ? '\n\n' : '') + renderedClassNotes, { emitChange: true })
         }
         changed = true
     } else {
@@ -1450,7 +1450,6 @@ const contactNotesEditorRef = ref<any>(null)
 const classNotesEditorRef = ref<any>(null)
 const contentEditorRef = ref<any>(null)
 const collabWatchStops: WatchStopHandle[] = []
-const collabXmlObserverStops: Array<() => void> = []
 let collabMetaMap: any = null
 let collabMetaObserver: ((event: any) => void) | null = null
 let isApplyingRemoteCollab = false
@@ -1464,7 +1463,6 @@ function cleanupReportCollabBindings() {
     collabMetaMap = null
     collabMetaObserver = null
 
-    collabXmlObserverStops.splice(0).forEach((stop) => stop())
 }
 
 function withCollabGuard(fn: () => void) {
@@ -1477,19 +1475,19 @@ function withCollabGuard(fn: () => void) {
 }
 
 function syncTextRefsFromEditors() {
-    if (contentEditorRef.value?.editor) {
-        localContent.value = contentEditorRef.value.editor.getText()
+    if (contentEditorRef.value) {
+        localContent.value = contentEditorRef.value.getText()
     }
-    if (contactNotesEditorRef.value?.editor) {
-        contactNotes.value = contactNotesEditorRef.value.editor.getText()
+    if (contactNotesEditorRef.value) {
+        contactNotes.value = contactNotesEditorRef.value.getText()
     }
-    if (classNotesEditorRef.value?.editor) {
-        classNotes.value = classNotesEditorRef.value.editor.getText()
+    if (classNotesEditorRef.value) {
+        classNotes.value = classNotesEditorRef.value.getText()
     }
 }
 
 function setEditorContentSilently(editorRef: any, content: string) {
-    editorRef.value?.editor?.commands.setContent(content, { emitUpdate: false })
+    editorRef.value?.replaceText(content)
 }
 
 function writeReportMeta(metaMap: any) {
@@ -1606,15 +1604,15 @@ watch(ready, (isReady) => {
             withCollabGuard(() => {
                 let seeded = false
 
-                if (contentEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
+                if (!contentEditorRef.value?.getText() && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
                     setEditorContentSilently(contentEditorRef, localContent.value)
                     seeded = true
                 }
-                if (contactNotesEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
+                if (!contactNotesEditorRef.value?.getText() && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
                     setEditorContentSilently(contactNotesEditorRef, contactNotes.value)
                     seeded = true
                 }
-                if (classNotesEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
+                if (!classNotesEditorRef.value?.getText() && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
                     setEditorContentSilently(classNotesEditorRef, classNotes.value)
                     seeded = true
                 }
@@ -1631,28 +1629,6 @@ watch(ready, (isReady) => {
             }
         })
 
-        // Setup text sync for saving
-        const observeXmlFragment = (fieldName: string, onRemoteChange?: () => void) => {
-            const fragment = ydoc.value!.getXmlFragment(fieldName)
-            const observer = (_events: any[], transaction: any) => {
-                if (transaction.local && !isApplyingRemoteCollab) {
-                    handleInput()
-                    return
-                }
-
-                nextTick(() => {
-                    syncTextRefsFromEditors()
-                    onRemoteChange?.()
-                })
-            }
-            collabXmlObserverStops.push(observeXmlFragmentDeep(fragment, observer))
-        }
-
-        observeXmlFragment('content_xml', () => {
-            emit('update:content', localContent.value)
-        })
-        observeXmlFragment('contactNotes_xml')
-        observeXmlFragment('classNotes_xml')
     }
 })
 
@@ -2098,24 +2074,22 @@ function handleInput() {
         return
     }
 
-    if (ydoc.value) {
-        if (contentEditorRef.value?.editor) {
-            localContent.value = contentEditorRef.value.editor.getText()
-        }
-        if (contactNotesEditorRef.value?.editor) {
-            contactNotes.value = contactNotesEditorRef.value.editor.getText()
-        }
-        if (classNotesEditorRef.value?.editor) {
-            classNotes.value = classNotesEditorRef.value.editor.getText()
-        }
-    }
-
     emit('update:content', localContent.value)
     emit('update:report-external-link', reportExternalLink.value)
 
     if (props.reportId) {
         triggerAutoSave(buildCurrentSnapshot())
     }
+}
+
+function handleTextEditorChange(
+    field: 'content' | 'contactNotes' | 'classNotes',
+    change: TextEditorChange
+) {
+    if (field === 'content') localContent.value = change.value
+    if (field === 'contactNotes') contactNotes.value = change.value
+    if (field === 'classNotes') classNotes.value = change.value
+    handleInput()
 }
 
 function queueRecoveredDraftWhenReady(attempt = 0) {

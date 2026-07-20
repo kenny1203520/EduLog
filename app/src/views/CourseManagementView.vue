@@ -7,6 +7,7 @@ import { useToast } from 'vue-toastification'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -596,8 +597,7 @@ async function deleteLesson(id: string) {
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
                         }}</label>
-                        <textarea v-model="courseForm.description" rows="3"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"></textarea>
+                        <TextEditor v-model="courseForm.description" preset="form" :min-height="96" />
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">

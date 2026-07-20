@@ -17,6 +17,7 @@ import {
 
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
 import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
 
 const { t, locale } = useI18n()
@@ -943,8 +944,8 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.bio_label') }}
                             </label>
-                            <textarea v-model="form.bio" rows="4" :placeholder="t('teacher.bio_placeholder')"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"></textarea>
+                            <TextEditor v-model="form.bio" preset="form" :min-height="112"
+                                :placeholder="t('teacher.bio_placeholder')" />
                         </div>
                     </div>
 

@@ -27,4 +27,25 @@ describe('observeXmlFragmentDeep', () => {
         expect(observer).toHaveBeenCalledTimes(1)
         doc.destroy()
     })
+
+    it('preserves the remote transaction source for applied updates', () => {
+        const localDoc = new Y.Doc()
+        const observer = vi.fn()
+        const stop = observeXmlFragmentDeep(localDoc.getXmlFragment('content_xml'), observer)
+        const remoteDoc = new Y.Doc()
+        const remoteFragment = remoteDoc.getXmlFragment('content_xml')
+        const paragraph = new Y.XmlElement('paragraph')
+        const text = new Y.XmlText('remote update')
+
+        paragraph.insert(0, [text])
+        remoteFragment.insert(0, [paragraph])
+        Y.applyUpdate(localDoc, Y.encodeStateAsUpdate(remoteDoc))
+
+        expect(observer).toHaveBeenCalledTimes(1)
+        expect(observer.mock.calls[0]?.[1].local).toBe(false)
+
+        stop()
+        localDoc.destroy()
+        remoteDoc.destroy()
+    })
 })

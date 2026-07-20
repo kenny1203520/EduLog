@@ -6,6 +6,7 @@ import { useRouter } from 'vue-router'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useEmailValidation } from '@/composables/useEmailValidation'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
 
 const props = defineProps<{
     studentId: string
@@ -262,8 +263,7 @@ watch(isEditingMainDetails, (val) => {
             <div class="space-y-1.5 md:col-span-2">
                 <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.notes')
                 }}</label>
-                <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
+                <TextEditor v-if="isEditingMainDetails" v-model="form.notes" preset="form" :min-height="86" />
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[86px] whitespace-pre-wrap">
                     {{ form.notes || '-' }}</div>

@@ -42,17 +42,13 @@
                                         <label class="block text-sm font-bold text-blue-900">{{ field.label }}</label>
                                         <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
                                     </div>
-                                    <textarea
-                                        :ref="el => setTextareaRef(field.id, el)"
-                                        :value="field.content"
-                                        rows="6"
-                                        :class="[
-                                            'w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 font-mono text-sm leading-6 outline-none focus:ring-2 focus:ring-emerald-500',
-                                            focusedFieldId === field.id ? 'ring-2 ring-emerald-500' : ''
-                                        ]"
-                                        @input="onFieldInput(field.id, $event)"
-                                        @focus="focusedFieldId = field.id"
-                                    ></textarea>
+                                    <TextEditor
+                                        :model-value="field.content"
+                                        preset="template"
+                                        :min-height="144"
+                                        @update:model-value="onFieldInput(field.id, $event)"
+                                        @activity="onFieldActivity(field.id, $event)"
+                                    />
                                 </div>
 
                                 <div class="flex flex-col rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
@@ -76,12 +72,13 @@
                                     <label class="block text-sm font-bold text-blue-900">{{ contentTitle }}</label>
                                     <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
                                 </div>
-                                <textarea
-                                    :value="templateText"
-                                    rows="14"
-                                    class="min-h-[18rem] w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 font-mono text-sm leading-6 outline-none focus:ring-2 focus:ring-emerald-500"
-                                    @input="onTemplateInput"
-                                ></textarea>
+                                <TextEditor
+                                    :model-value="templateText || ''"
+                                    preset="template"
+                                    :min-height="288"
+                                    @update:model-value="onTemplateInput"
+                                    @activity="onFieldActivity('template', $event)"
+                                />
                             </div>
 
                             <div class="flex min-h-[18rem] flex-col rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
@@ -156,6 +153,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
+import type { TextEditorActivity } from '@/components/common/text-editor/types'
 
 interface EditableField {
     id: string
@@ -203,7 +202,7 @@ const emit = defineEmits<{
     'update:modelValue': [value: boolean]
     'update:templateText': [value: string]
     'update:editableFieldsContent': [fields: EditableField[]]
-    'insertVariable': [fieldId: string, variable: string]
+    'insertVariable': [fieldId: string, variable: string, caret: number, selectionEnd: number]
     save: []
 }>()
 
@@ -215,7 +214,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 // State
 const focusedFieldId = ref<string | null>(null)
-const textareaRefs = ref<Record<string, HTMLTextAreaElement>>({})
+const fieldSelections = ref<Record<string, TextEditorActivity>>({})
 const showVariableTooltip = ref(false)
 const tooltipContent = ref('')
 const tooltipStyle = ref<Record<string, string>>({ top: '0px', left: '0px' })
@@ -233,28 +232,26 @@ onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown)
 })
 
-function setTextareaRef(fieldId: string, el: any) {
-    if (el) {
-        textareaRefs.value[fieldId] = el
-    }
-}
-
-function onFieldInput(fieldId: string, event: Event) {
-    const target = event.target as HTMLTextAreaElement
+function onFieldInput(fieldId: string, value: string) {
     const updatedFields = props.editableFields?.map(f => 
-        f.id === fieldId ? { ...f, content: target.value } : f
+        f.id === fieldId ? { ...f, content: value } : f
     ) || []
     emit('update:editableFieldsContent', updatedFields)
 }
 
-function onTemplateInput(event: Event) {
-    const target = event.target as HTMLTextAreaElement
-    emit('update:templateText', target.value)
+function onTemplateInput(value: string) {
+    emit('update:templateText', value)
+}
+
+function onFieldActivity(fieldId: string, activity: TextEditorActivity) {
+    focusedFieldId.value = fieldId
+    fieldSelections.value[fieldId] = activity
 }
 
 function insertVariableAtFocus(variable: string) {
     if (focusedFieldId.value) {
-        emit('insertVariable', focusedFieldId.value, variable)
+        const selection = fieldSelections.value[focusedFieldId.value] || { caret: 0, selectionEnd: 0 }
+        emit('insertVariable', focusedFieldId.value, variable, selection.caret, selection.selectionEnd)
     }
 }
 
