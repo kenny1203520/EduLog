@@ -12,10 +12,12 @@ const props = withDefaults(defineProps<{
     placeholder?: string
     fontSizeClass?: string
     multiple?: boolean
+    disabled?: boolean
 }>(), {
     placeholder: '',
     fontSizeClass: 'text-sm',
-    multiple: false
+    multiple: false,
+    disabled: false
 })
 
 const emit = defineEmits<{
@@ -84,6 +86,7 @@ onUnmounted(() => {
 })
 
 function toggleDropdown() {
+    if (props.disabled) return
     if (isOpen.value) {
         isOpen.value = false
         searchQuery.value = ''
@@ -98,8 +101,9 @@ function toggleDropdown() {
     <div ref="containerRef" class="relative">
         <!-- Trigger/Input -->
         <div @click="toggleDropdown"
+            role="button" :aria-disabled="disabled"
             class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus-within:ring-2 focus-within:ring-emerald-500 cursor-pointer flex items-center justify-between"
-            :class="fontSizeClass">
+            :class="[fontSizeClass, disabled ? 'cursor-not-allowed bg-gray-100 opacity-60' : '']">
             <input v-if="isOpen" v-model="searchQuery" ref="searchInput"
                 class="w-full outline-none bg-transparent placeholder-gray-400"
                 :placeholder="selectedLabel || (placeholder || $t('common.select_placeholder'))" @click.stop

@@ -25,14 +25,6 @@ export const base64ToUint8Array = (base64: string): Uint8Array => {
     return bytes
 }
 
-function debounce<T extends (...args: any[]) => any>(fn: T, ms: number) {
-    let timer: ReturnType<typeof setTimeout>
-    return (...args: Parameters<T>) => {
-        clearTimeout(timer)
-        timer = setTimeout(() => fn(...args), ms)
-    }
-}
-
 interface AwarenessChange {
     added: number[]
     updated: number[]
@@ -46,12 +38,22 @@ interface ReportPresencePayload {
     updatedAt: string
 }
 
+export type ReportCollabInitialState = 'none' | 'loaded' | 'legacy' | 'stale' | 'error'
+export type ReportCollabConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+
+export interface SupabaseProviderOptions {
+    snapshotDebounceMs?: number
+    presenceEnabled?: boolean
+    onStatus?: (status: ReportCollabConnectionStatus) => void
+}
+
 export class SupabaseProvider {
     public awareness: Awareness
     public ready: Promise<void>
     private channel: RealtimeChannel
     private isDestroyed = false
     private isSubscribed = false
+    private snapshotTimer: ReturnType<typeof setTimeout> | null = null
     private resolveReady!: () => void
     private readonly remoteClientIds = new Set<number>()
     private readonly docUpdateHandler = (update: Uint8Array, origin: any) => {
@@ -65,7 +67,7 @@ export class SupabaseProvider {
             })
         }
 
-        this.debouncedSave()
+        this.scheduleSnapshotSave()
     }
     private readonly awarenessUpdateHandler = (change: AwarenessChange, origin: any) => {
         if (origin === this || this.isDestroyed) return
@@ -80,17 +82,28 @@ export class SupabaseProvider {
     public doc: Y.Doc
     private roomId: string
     private userId?: string
+    private baseReportVersion: number
+    private readonly snapshotDebounceMs: number
+    private readonly presenceEnabled: boolean
+    private readonly onStatus?: (status: ReportCollabConnectionStatus) => void
+    public initialState: ReportCollabInitialState = 'none'
 
     constructor(
         supabase: SupabaseClient,
         doc: Y.Doc,
         roomId: string,
-        userId?: string
+        baseReportVersion: number,
+        userId?: string,
+        options: SupabaseProviderOptions = {}
     ) {
         this.supabase = supabase
         this.doc = doc
         this.roomId = roomId
+        this.baseReportVersion = baseReportVersion
         this.userId = userId
+        this.snapshotDebounceMs = Math.max(250, Math.min(30000, options.snapshotDebounceMs ?? 2500))
+        this.presenceEnabled = options.presenceEnabled ?? true
+        this.onStatus = options.onStatus
         this.awareness = new Awareness(this.doc)
         this.ready = new Promise((resolve) => {
             this.resolveReady = resolve
@@ -105,6 +118,7 @@ export class SupabaseProvider {
 
         this.setupYjs()
         this.setupSupabase()
+        this.onStatus?.('connecting')
 
         this.channel.subscribe(async (status) => {
             if (this.isDestroyed) return
@@ -112,17 +126,19 @@ export class SupabaseProvider {
             if (status === 'SUBSCRIBED') {
                 this.isSubscribed = true
                 await this.loadInitialState()
-                await this.trackLocalAwareness()
+                if (this.presenceEnabled) await this.trackLocalAwareness()
+                this.onStatus?.('connected')
                 this.resolveReady()
             } else {
                 this.isSubscribed = false
+                this.onStatus?.(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' ? 'error' : 'disconnected')
             }
         })
     }
 
     private setupYjs() {
         this.doc.on('update', this.docUpdateHandler)
-        this.awareness.on('update', this.awarenessUpdateHandler)
+        if (this.presenceEnabled) this.awareness.on('update', this.awarenessUpdateHandler)
     }
 
     private setupSupabase() {
@@ -134,6 +150,8 @@ export class SupabaseProvider {
             const update = base64ToUint8Array(encodedUpdate)
             Y.applyUpdate(this.doc, update, this)
         })
+
+        if (!this.presenceEnabled) return
 
         this.channel.on('presence', { event: 'sync' }, () => {
             if (this.isDestroyed) return
@@ -197,59 +215,85 @@ export class SupabaseProvider {
         try {
             const { data, error } = await this.supabase
                 .from('report_collab_docs')
-                .select('snapshot_base64')
+                .select('snapshot_base64, base_report_version')
                 .eq('occurrence_report_id', this.roomId)
                 .maybeSingle()
 
             if (error) {
                 console.error('loadInitialState db error:', error)
+                this.initialState = 'error'
                 return
             }
 
-            if (data?.snapshot_base64) {
+            if (!data?.snapshot_base64) {
+                this.initialState = 'none'
+                return
+            }
+
+            if (data.base_report_version === null || data.base_report_version === undefined) {
+                this.initialState = 'legacy'
+                return
+            }
+
+            if (Number(data.base_report_version) !== this.baseReportVersion) {
+                this.initialState = 'stale'
+                return
+            }
+
+            if (data.snapshot_base64) {
                 const update = base64ToUint8Array(data.snapshot_base64)
                 Y.applyUpdate(this.doc, update, this)
+                this.initialState = 'loaded'
             }
         } catch (err) {
             console.error('Failed to load document state:', err)
+            this.initialState = 'error'
         }
     }
 
-    private debouncedSave = debounce(async () => {
-        try {
-            await this.saveSnapshot()
-        } catch (err) {
-            console.error('Failed to auto-save document:', err)
-        }
-    }, 2500)
+    private scheduleSnapshotSave() {
+        if (this.snapshotTimer) clearTimeout(this.snapshotTimer)
+        this.snapshotTimer = setTimeout(() => {
+            this.snapshotTimer = null
+            void this.saveSnapshot().catch(err => console.error('Failed to auto-save document:', err))
+        }, this.snapshotDebounceMs)
+    }
 
     public async saveSnapshot(): Promise<boolean> {
         try {
             const stateUpdate = Y.encodeStateAsUpdate(this.doc)
             const base64State = uint8ArrayToBase64(stateUpdate)
             
-            const payload: any = {
-                occurrence_report_id: this.roomId,
-                snapshot_base64: base64State
-            }
-            if (this.userId) {
-                payload.last_updated_by = this.userId
-            }
-            
-            const { error } = await this.supabase.from('report_collab_docs').upsert(
-                payload, 
-                { onConflict: 'occurrence_report_id' }
-            )
+            const { data, error } = await this.supabase.rpc('save_report_collab_snapshot', {
+                p_occurrence_report_id: this.roomId,
+                p_snapshot_base64: base64State,
+                p_base_report_version: this.baseReportVersion
+            })
             
             if (error) {
                 console.error('Failed to save snapshot:', error)
                 return false
             }
-            return true
+            return data === true
         } catch (err) {
             console.error('saveSnapshot exception:', err)
             return false
         }
+    }
+
+    /** Advances the canonical version used to guard future snapshot writes. */
+    public setBaseReportVersion(version: number) {
+        this.baseReportVersion = version
+    }
+
+    public get connected(): boolean {
+        return this.isSubscribed
+    }
+
+    public getActivePeers(): Array<Record<string, any>> {
+        return [...this.awareness.getStates().entries()]
+            .filter(([clientId]) => clientId !== this.awareness.clientID)
+            .map(([, state]) => state.user || state)
     }
 
     private async trackLocalAwareness() {
@@ -273,9 +317,11 @@ export class SupabaseProvider {
         if (this.isDestroyed) return
 
         this.isDestroyed = true
+        if (this.snapshotTimer) clearTimeout(this.snapshotTimer)
+        this.snapshotTimer = null
         this.resolveReady()
         this.doc.off('update', this.docUpdateHandler)
-        this.awareness.off('update', this.awarenessUpdateHandler)
+        if (this.presenceEnabled) this.awareness.off('update', this.awarenessUpdateHandler)
         removeAwarenessStates(this.awareness, [...this.remoteClientIds], this)
         try {
             await this.channel.untrack()
@@ -290,5 +336,6 @@ export class SupabaseProvider {
         this.supabase.removeChannel(this.channel)
         this.awareness.destroy()
         this.remoteClientIds.clear()
+        this.onStatus?.('disconnected')
     }
 }

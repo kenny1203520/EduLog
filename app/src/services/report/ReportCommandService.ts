@@ -7,6 +7,20 @@ import {
 import { EnrollmentProgressService } from '../enrollment/EnrollmentProgressService'
 import { ReportLifecyclePolicy } from './ReportLifecyclePolicy'
 import { ReportQueryService } from './ReportQueryService'
+import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
+
+function assignRichTextPair(
+    target: Record<string, unknown>,
+    plainColumn: string,
+    documentColumn: string,
+    plainText: string | undefined,
+    document: RichTextDocumentV1 | null | undefined
+) {
+    const content = createTextEditorContent(document || plainText || '')
+    target[plainColumn] = content.plainText
+    target[documentColumn] = content.richText
+}
 
 type ReportSaveData = {
     lessonId?: string
@@ -17,8 +31,11 @@ type ReportSaveData = {
     classParticipation?: number
     classroomBehavior?: number
     contactNotes?: string
+    contactNotesDocument?: RichTextDocumentV1
     classNotes?: string
+    classNotesDocument?: RichTextDocumentV1
     content?: string
+    contentDocument?: RichTextDocumentV1
     externalLink?: string
 }
 
@@ -158,14 +175,14 @@ export class ReportCommandService {
             if (detailedData.classroomBehavior !== undefined) {
                 updateData.classroom_behavior = detailedData.classroomBehavior
             }
-            if (detailedData.contactNotes !== undefined) {
-                updateData.contact_notes = detailedData.contactNotes
+            if (detailedData.contactNotes !== undefined || detailedData.contactNotesDocument !== undefined) {
+                assignRichTextPair(updateData, 'contact_notes', 'contact_notes_document', detailedData.contactNotes, detailedData.contactNotesDocument)
             }
-            if (detailedData.classNotes !== undefined) {
-                updateData.class_notes = detailedData.classNotes
+            if (detailedData.classNotes !== undefined || detailedData.classNotesDocument !== undefined) {
+                assignRichTextPair(updateData, 'class_notes', 'class_notes_document', detailedData.classNotes, detailedData.classNotesDocument)
             }
-            if (detailedData.content !== undefined) {
-                updateData.content = detailedData.content
+            if (detailedData.content !== undefined || detailedData.contentDocument !== undefined) {
+                assignRichTextPair(updateData, 'content', 'content_document', detailedData.content, detailedData.contentDocument)
             }
         }
 
@@ -209,7 +226,8 @@ export class ReportCommandService {
         return {
             success: true,
             conflict: false,
-            newVersion: updated.version
+            newVersion: updated.version,
+            updatedReport: updated as OccurrenceReportDTO
         }
     }
 
@@ -301,7 +319,8 @@ export class ReportCommandService {
         return {
             success: true,
             conflict: false,
-            newVersion: updated.version
+            newVersion: updated.version,
+            updatedReport: updated as OccurrenceReportDTO
         }
     }
 
@@ -351,15 +370,13 @@ export class ReportCommandService {
                 absence_reason: snap.absence_reason,
                 class_participation: snap.class_participation,
                 classroom_behavior: snap.classroom_behavior,
-                contact_notes: snap.contact_notes,
-                class_notes: snap.class_notes,
-                content: snap.content,
                 external_link: snap.external_link
             }
+            assignRichTextPair(updatePayload, 'contact_notes', 'contact_notes_document', snap.contact_notes, snap.contact_notes_document)
+            assignRichTextPair(updatePayload, 'class_notes', 'class_notes_document', snap.class_notes, snap.class_notes_document)
+            assignRichTextPair(updatePayload, 'content', 'content_document', snap.content, snap.content_document)
         } else {
-            updatePayload = {
-                content: version.content
-            }
+            assignRichTextPair(updatePayload, 'content', 'content_document', version.content, null)
         }
 
         const newVersion = (current?.version || 0) + 1
@@ -411,14 +428,14 @@ export class ReportCommandService {
             absence_reason: resolvedReport.absence_reason,
             class_participation: resolvedReport.class_participation,
             classroom_behavior: resolvedReport.classroom_behavior,
-            contact_notes: resolvedReport.contact_notes,
-            class_notes: resolvedReport.class_notes,
-            content: resolvedReport.content,
             external_link: resolvedReport.external_link,
             version: newVersion,
             last_edited_by: userId,
             last_edited_at: new Date().toISOString()
         }
+        assignRichTextPair(updatePayload, 'contact_notes', 'contact_notes_document', resolvedReport.contact_notes, resolvedReport.contact_notes_document)
+        assignRichTextPair(updatePayload, 'class_notes', 'class_notes_document', resolvedReport.class_notes, resolvedReport.class_notes_document)
+        assignRichTextPair(updatePayload, 'content', 'content_document', resolvedReport.content, resolvedReport.content_document)
 
         const { data: updated, error: updateError } = await supabase
             .from('occurrence_reports')

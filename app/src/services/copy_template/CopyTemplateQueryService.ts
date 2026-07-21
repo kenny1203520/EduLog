@@ -5,6 +5,7 @@ import {
     SYSTEM_COURSE_TEMPLATE,
 } from '@/utils/copyTemplate'
 import type { CopyTemplateDTO, CopyTemplateScopeType, EffectiveTemplateResult, CopyTemplateLoadOption } from './CopyTemplateService'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
 
 /**
  * Query service for copy templates
@@ -75,16 +76,21 @@ export class CopyTemplateQueryService {
     static async getEffectiveAttendanceTemplate(classSessionId: string): Promise<EffectiveTemplateResult> {
         const classTemplate = await this.getAttendanceTemplateByScope('class_session', classSessionId)
         if (classTemplate) {
+            const row = await this.getTemplateForScope(await this.getCurrentUserId() || '', 'attendance_copy', 'class_session', classSessionId)
             return {
                 templateText: classTemplate,
+                templateDocument: row ? createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText : undefined,
                 source: 'class_session'
             }
         }
 
         const userDefault = await this.getAttendanceTemplateByScope('user_default')
         if (userDefault) {
+            const userId = await this.getCurrentUserId()
+            const row = userId ? await this.getTemplateForScope(userId, 'attendance_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID) : null
             return {
                 templateText: userDefault,
+                templateDocument: row ? createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText : undefined,
                 source: 'user_default'
             }
         }
@@ -98,8 +104,11 @@ export class CopyTemplateQueryService {
     static async getEffectiveCourseTemplate(): Promise<EffectiveTemplateResult> {
         const userDefault = await this.getCourseUserDefaultTemplate()
         if (userDefault) {
+            const userId = await this.getCurrentUserId()
+            const row = userId ? await this.getTemplateForScope(userId, 'course_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID) : null
             return {
                 templateText: userDefault,
+                templateDocument: row ? createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText : undefined,
                 source: 'user_default'
             }
         }
@@ -190,6 +199,7 @@ export class CopyTemplateQueryService {
                 scopeEntityId: item.scope_entity_id,
                 label,
                 templateText: item.template_text,
+                templateDocument: createTextEditorContent(item.template_document || item.template_text, { templateVariables: true }).richText,
                 updatedAt: item.updated_at
             } as CopyTemplateLoadOption
         })

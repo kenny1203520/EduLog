@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
+import { SessionService } from '../session/SessionService'
 
 export class EnrollmentStatusPolicyService {
     static async ensureEnrollmentReportsTarget(
@@ -94,8 +95,7 @@ export class EnrollmentStatusPolicyService {
             : Math.max(1, fallbackLessonCount)
 
         const start = new Date(startDate)
-        const endDate = new Date(start)
-        endDate.setDate(endDate.getDate() + (lessonCount * 7))
+        const endDate = await SessionService.getGenerationEndDate(sessionId, startDate, lessonCount)
 
         await OccurrenceService.generateOccurrences(sessionId, start, endDate).catch(() => {})
 

@@ -13,6 +13,8 @@ import BaseDatePicker from '@/components/common/BaseDatePicker.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { formatClassSessionOption } from '@/utils/sessionSchedule'
+import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 
 const props = defineProps<{
     isOpen: boolean
@@ -41,8 +43,8 @@ const transferForm = ref({
     target_date: DateUtils.todayString(preferences.timeZone)
 })
 
-const classroomOptions = ref<any[]>([])
-const sessionOptions = ref<any[]>([])
+const classrooms = ref<any[]>([])
+const sessions = ref<any[]>([])
 const reportOptions = ref<any[]>([])
 const currentEnrollment = ref<any | null>(null)
 const transferDateForCapacity = computed(() => (
@@ -50,6 +52,33 @@ const transferDateForCapacity = computed(() => (
         ? transferForm.value.target_date
         : transferForm.value.effective_date
 ))
+
+const eligibleSessions = computed(() => {
+    if (!currentEnrollment.value?.courseId) return []
+    return SessionEligibilityPolicy.filter(sessions.value, {
+        courseId: currentEnrollment.value.courseId,
+        classroomId: selectedClassroomId.value || null,
+        excludeSessionId: currentEnrollment.value.classSessionId || null
+    })
+})
+
+const classroomOptions = computed(() => {
+    const eligibleIds = SessionEligibilityPolicy.classroomIds(
+        sessions.value.filter(session => session.id !== currentEnrollment.value?.classSessionId),
+        currentEnrollment.value?.courseId || ''
+    )
+    return [
+        { value: '', label: t('classroom.all_rooms') },
+        ...classrooms.value
+            .filter(classroom => classroom.id && eligibleIds.has(classroom.id))
+            .map(classroom => ({ value: classroom.id, label: classroom.name }))
+    ]
+})
+
+const sessionOptions = computed(() => eligibleSessions.value.map((session: any) => ({
+    value: session.id,
+    label: formatSessionOptionLabel(session)
+})))
 
 // Capacity Check (Assuming 1 lesson for simple capacity check on transfer effective date)
 // Or we could pass a larger count if we want to check long-term capacity
@@ -89,14 +118,7 @@ function formatWeekdayFromDate(dateValue: string | Date | undefined): string {
 }
 
 function formatSessionOptionLabel(session: any): string {
-    const scheduleParts = [
-        formatWeekdayFromIndex(session.day_of_week),
-        formatTimeRange(session.start_time, session.end_time)
-    ].filter(Boolean)
-
-    return scheduleParts.length > 0
-        ? `${session.name} · ${scheduleParts.join(' ')}`
-        : session.name
+    return formatClassSessionOption(session, preferences.locale, t)
 }
 
 const currentEnrollmentDetails = computed(() => {
@@ -136,16 +158,8 @@ async function fetchCurrentEnrollment() {
 
 async function fetchSessions() {
     try {
-        const { data: sessions } = await SessionService.getClassSessions(
-            1,
-            500,
-            undefined,
-            selectedClassroomId.value || null
-        )
-        sessionOptions.value = sessions.map((s: any) => ({
-            value: s.id,
-            label: formatSessionOptionLabel(s)
-        }))
+        const { data } = await SessionService.getClassSessions(1, 500)
+        sessions.value = data
     } catch (e) {
         console.error(e)
     }
@@ -154,14 +168,8 @@ async function fetchSessions() {
 async function fetchClassrooms() {
     try {
         isLoadingClassrooms.value = true
-        const { data: classrooms } = await ClassroomService.getClassrooms(1, 500)
-        classroomOptions.value = [
-            { value: '', label: t('classroom.all_rooms') },
-            ...classrooms.map((classroom: any) => ({
-                value: classroom.id,
-                label: classroom.name
-            }))
-        ]
+        const { data } = await ClassroomService.getClassrooms(1, 500)
+        classrooms.value = data
     } catch (e) {
         console.error(e)
     } finally {
@@ -247,9 +255,19 @@ watch(() => props.isOpen, (val) => {
     }
 })
 
-watch(selectedClassroomId, async () => {
-    transferForm.value.to_session_id = ''
-    await fetchSessions()
+watch(selectedClassroomId, () => {
+    if (
+        transferForm.value.to_session_id &&
+        !sessionOptions.value.some(option => option.value === transferForm.value.to_session_id)
+    ) {
+        transferForm.value.to_session_id = ''
+    }
+})
+
+watch(() => transferForm.value.to_session_id, sessionId => {
+    if (!sessionId) return
+    const selectedSession = sessions.value.find(session => session.id === sessionId)
+    selectedClassroomId.value = selectedSession?.classroom_id || ''
 })
 
 watch(() => transferForm.value.mode, (mode) => {
@@ -336,6 +354,8 @@ async function submitTransfer() {
             toast.error(t('student.transfer_modal.target_report_exists'))
         } else if (message.includes('TARGET_SESSION_SAME_AS_CURRENT')) {
             toast.error(t('student.transfer_modal.same_session_error'))
+        } else if (message.includes('TARGET_SESSION_COURSE_MISMATCH')) {
+            toast.error(t('student.errors.session_course_mismatch'))
         } else if (message.includes('ORIGINAL_REPORT_NOT_FOUND')) {
             toast.error(t('student.transfer_modal.original_report_not_found'))
         } else if (message.includes('ORIGINAL_REPORT_AMBIGUOUS')) {
@@ -500,13 +520,14 @@ async function submitTransfer() {
                             <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.transfer_modal.classroom_filter') }}</label>
                             <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
-                                :placeholder="isLoadingClassrooms ? $t('common.loading') : $t('classroom.all_rooms')" />
+                                :placeholder="isLoadingClassrooms ? $t('common.loading') : $t('classroom.all_rooms')"
+                                :disabled="!currentEnrollment" />
                         </div>
 
                         <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                             $t('student.transfer_modal.to_classroom') }}</label>
                         <SearchableSelect v-model="transferForm.to_session_id" :options="sessionOptions"
-                            :placeholder="$t('common.select_placeholder')" />
+                            :placeholder="$t('common.select_placeholder')" :disabled="!currentEnrollment" />
 
                         <!-- Modular Capacity Progress Bar -->
                         <div v-if="transferForm.to_session_id" class="mt-4 p-4 bg-gray-50 rounded-2xl border border-gray-100 animate-in fade-in duration-500">

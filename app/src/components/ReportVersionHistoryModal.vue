@@ -187,11 +187,11 @@
                                             <span
                                                 class="text-[9px] font-black text-amber-600 uppercase tracking-widest mb-2 block">{{
                                                     $t('report.editor.contact_notes_label') }}</span>
-                                            <p class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap"
+                                            <RichTextViewer class="text-xs text-gray-600 leading-relaxed"
+                                                :content="version.snapshot.contact_notes_document || version.snapshot.contact_notes || ''"
+                                                preset="notes"
                                                 :class="(shouldShowToggle(version.snapshot.contact_notes, 'notes') && !isExpanded(version.id, 'contact')) ? 'line-clamp-3' : ''">
-                                                {{ version.snapshot.contact_notes || $t('report.editor.empty_content')
-                                                }}
-                                            </p>
+                                            </RichTextViewer>
                                             <!-- Individual Toggle for Contact -->
                                             <div v-if="shouldShowToggle(version.snapshot.contact_notes, 'notes')"
                                                 :class="isExpanded(version.id, 'contact') ? 'mt-4 flex justify-center' : 'absolute bottom-0 left-0 right-0 p-2 flex justify-center bg-gradient-to-t from-amber-50/95 to-transparent pt-8'">
@@ -218,10 +218,11 @@
                                             <span
                                                 class="text-[9px] font-black text-blue-600 uppercase tracking-widest mb-2 block">{{
                                                     $t('report.editor.class_notes_label') }}</span>
-                                            <p class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap"
+                                            <RichTextViewer class="text-xs text-gray-600 leading-relaxed"
+                                                :content="version.snapshot.class_notes_document || version.snapshot.class_notes || ''"
+                                                preset="notes"
                                                 :class="(shouldShowToggle(version.snapshot.class_notes, 'notes') && !isExpanded(version.id, 'class')) ? 'line-clamp-3' : ''">
-                                                {{ version.snapshot.class_notes || $t('report.editor.empty_content') }}
-                                            </p>
+                                            </RichTextViewer>
                                             <!-- Individual Toggle for Class -->
                                             <div v-if="shouldShowToggle(version.snapshot.class_notes, 'notes')"
                                                 :class="isExpanded(version.id, 'class') ? 'mt-4 flex justify-center' : 'absolute bottom-0 left-0 right-0 p-2 flex justify-center bg-gradient-to-t from-blue-50/90 to-transparent pt-8'">
@@ -248,11 +249,11 @@
                                             <span
                                                 class="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 block">{{
                                                     $t('report.fields.content') }}</span>
-                                            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium"
+                                            <RichTextViewer class="text-sm text-gray-700 leading-relaxed font-medium"
+                                                :content="version.snapshot.content_document || version.snapshot.content || version.content || ''"
+                                                preset="report"
                                                 :class="(shouldShowToggle(version.snapshot.content || version.content, 'content') && !isExpanded(version.id, 'content')) ? 'line-clamp-6' : ''">
-                                                {{ (version.snapshot.content || version.content) ||
-                                                    $t('report.editor.empty_content') }}
-                                            </p>
+                                            </RichTextViewer>
                                             <!-- Individual Toggle for Content -->
                                             <div v-if="shouldShowToggle(version.snapshot.content || version.content, 'content')"
                                                 :class="isExpanded(version.id, 'content') ? 'mt-4 flex justify-center' : 'absolute bottom-0 left-0 right-0 p-3 flex justify-center bg-gradient-to-t from-gray-50 to-transparent pt-10'">
@@ -328,6 +329,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import type { ReportVersion, OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
 
 const props = defineProps<{
     isOpen: boolean

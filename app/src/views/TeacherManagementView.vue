@@ -17,6 +17,10 @@ import {
 
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
+import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
+import type { TextEditorContent } from '@/components/common/text-editor/types'
 import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
 
 const { t, locale } = useI18n()
@@ -56,7 +60,15 @@ const form = ref<Partial<TeacherDTO>>({
     birthday: '',
     gov_id: '',
     address: '',
-    bio: ''
+    bio: '',
+    bio_document: createTextEditorContent('').richText
+})
+const teacherBioContent = computed<TextEditorContent>({
+    get: () => createTextEditorContent(form.value.bio_document || form.value.bio || ''),
+    set: (content) => {
+        form.value.bio = content.plainText
+        form.value.bio_document = content.richText
+    }
 })
 type EditableTeacherCredential = TeacherCredentialDTO & {
     platformSelection: string
@@ -165,7 +177,8 @@ function createEmptyForm(): Partial<TeacherDTO> {
         birthday: '',
         gov_id: '',
         address: '',
-        bio: ''
+        bio: '',
+        bio_document: createTextEditorContent('').richText
     }
 }
 
@@ -189,7 +202,8 @@ function openEditModal(teacher: TeacherDTO) {
         birthday: teacher.birthday ?? '',
         gov_id: teacher.gov_id ?? '',
         address: teacher.address ?? '',
-        bio: teacher.bio ?? ''
+        bio: teacher.bio ?? '',
+        bio_document: teacher.bio_document || createTextEditorContent(teacher.bio || '').richText
     }
     editingCredentials.value = getTeacherCredentials(teacher).map(toEditableCredential)
     newCredential.value = createEmptyCredentialForm()
@@ -265,7 +279,8 @@ function preparePayload(): Partial<TeacherDTO> {
         birthday: form.value.birthday?.toString().trim() || null,
         gov_id: form.value.gov_id?.trim() || null,
         address: form.value.address?.trim() || null,
-        bio: form.value.bio?.trim() || null
+        bio: teacherBioContent.value.plainText || null,
+        bio_document: teacherBioContent.value.richText
     }
 
     return payload
@@ -742,10 +757,8 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                         </div>
                     </div>
 
-                    <div v-if="teacher.bio"
-                        class="text-xs text-gray-400 line-clamp-2 leading-relaxed italic border-l-2 border-emerald-100 pl-3">
-                        "{{ teacher.bio }}"
-                    </div>
+                    <RichTextViewer v-if="teacher.bio" :content="{ plainText: teacher.bio, richText: teacher.bio_document || createTextEditorContent(teacher.bio).richText }"
+                        preset="notes" :min-height="0" class="text-xs text-gray-500" />
                 </div>
 
                 <!-- Action Footer -->
@@ -943,8 +956,8 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.bio_label') }}
                             </label>
-                            <textarea v-model="form.bio" rows="4" :placeholder="t('teacher.bio_placeholder')"
-                                class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100"></textarea>
+                            <TextEditor v-model="teacherBioContent" preset="form" :min-height="112"
+                                :placeholder="t('teacher.bio_placeholder')" />
                         </div>
                     </div>
 

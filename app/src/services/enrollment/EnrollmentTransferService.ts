@@ -5,7 +5,7 @@ import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { OccurrenceReportService } from '../occurrence/OccurrenceReportService'
 import { EnrollmentTransferQueryService, type TransferMigrationRow } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
-import { EnrollmentSupportService } from './EnrollmentSupportService'
+import { SessionService } from '../session/SessionService'
 
 export class EnrollmentTransferService {
     private static getOccurrenceInfo<T extends { class_occurrence: any }>(row: T): any {
@@ -55,10 +55,8 @@ export class EnrollmentTransferService {
     }
 
     private static async assertTargetDateMatchesSession(targetSessionId: string, targetDate: string): Promise<void> {
-        const sessionDayOfWeek = await EnrollmentTransferQueryService.getSessionDayOfWeek(targetSessionId)
-        const targetDayOfWeek = EnrollmentSupportService.dayOfWeekFromDateOnly(targetDate)
-
-        if (targetDayOfWeek !== sessionDayOfWeek) {
+        const isScheduled = await EnrollmentTransferQueryService.isSessionScheduledOn(targetSessionId, targetDate)
+        if (!isScheduled) {
             throw new Error('TARGET_DATE_NOT_CLASS_DAY')
         }
     }
@@ -82,6 +80,8 @@ export class EnrollmentTransferService {
             throw new Error('TARGET_SESSION_SAME_AS_CURRENT')
         }
 
+        const targetSession = await SessionService.getCompatibleClassSession(newSessionId, enrollment.course_id)
+
         const futureReports = await EnrollmentTransferQueryService.getReportsToMigrate(
             enrollmentId,
             oldSessionId,
@@ -91,7 +91,7 @@ export class EnrollmentTransferService {
         const lessonCount = await EnrollmentTransferQueryService.getLessonCount(enrollment.course_id, 12)
         const occurrenceCount = Math.max(lessonCount, reportsToMigrate.length)
         const start = DateUtils.parseLocalDate(transferDate) || new Date(transferDate)
-        const endDate = EnrollmentTransferToolService.buildTransferEndDate(transferDate, occurrenceCount)
+        const endDate = await SessionService.getGenerationEndDate(newSessionId, transferDate, occurrenceCount)
 
         await OccurrenceService.generateOccurrences(newSessionId, start, endDate).catch(() => {})
 
@@ -135,13 +135,16 @@ export class EnrollmentTransferService {
 
         const { data: updated, error: updateError } = await supabase
             .from('enrollments')
-            .update({ class_session_id: newSessionId })
+            .update({
+                class_session_id: newSessionId,
+                classroom_id: targetSession.classroom_id || null
+            })
             .eq('id', enrollmentId)
             .select(`
                 *,
                 courses (subject, stage, display_name),
                 classrooms (name),
-                class_sessions (id, name, day_of_week, start_time)
+                class_sessions (id, name, day_of_week, start_time, end_time, time_zone, session_type, schedule_mode, class_session_schedule_rules (*))
             `)
             .single()
 
@@ -188,10 +191,11 @@ export class EnrollmentTransferService {
             throw new Error('Enrollment has no current session to transfer from')
         }
 
-        const originalDayOfWeek = await EnrollmentTransferQueryService.getSessionDayOfWeek(originalSessionId)
-        const selectedOriginalDayOfWeek = EnrollmentSupportService.dayOfWeekFromDateOnly(originalDate)
 
-        if (selectedOriginalDayOfWeek !== originalDayOfWeek) {
+        await SessionService.getCompatibleClassSession(targetSessionId, enrollment.course_id)
+
+        const isOriginalDateScheduled = await EnrollmentTransferQueryService.isSessionScheduledOn(originalSessionId, originalDate)
+        if (!isOriginalDateScheduled) {
             throw new Error('ORIGINAL_DATE_NOT_CLASS_DAY')
         }
 
@@ -251,6 +255,8 @@ export class EnrollmentTransferService {
         await this.assertTargetDateMatchesSession(targetSessionId, targetDate)
 
         const report = await EnrollmentTransferQueryService.getReportTransferInfo(reportId)
+        const enrollment = await EnrollmentTransferQueryService.getEnrollmentSessionInfo(report.enrollment_id)
+        await SessionService.getCompatibleClassSession(targetSessionId, enrollment.course_id)
         const originalOccurrence = this.getOccurrenceInfo(report)
         const originalSessionId = originalOccurrence?.class_session_id || null
 

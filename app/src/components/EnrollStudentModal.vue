@@ -13,6 +13,8 @@ import CapacityProgressBar from '@/components/common/CapacityProgressBar.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { formatClassSessionOption } from '@/utils/sessionSchedule'
+import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 
 const props = defineProps<{
     isOpen: boolean
@@ -37,16 +39,31 @@ const enrollForm = ref({
 })
 
 const catalogOptions = ref<any[]>([])
-const classroomOptions = ref<any[]>([])
+const classrooms = ref<any[]>([])
 const sessions = ref<any[]>([])
 const fullCourses = ref<any[]>([])
 const selectedClassroomId = ref('')
 
-const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+const eligibleSessions = computed(() => {
+    if (!enrollForm.value.course_catalog_id) return []
+    return SessionEligibilityPolicy.filter(sessions.value, {
+        courseId: enrollForm.value.course_catalog_id
+    })
+})
+
+const classroomOptions = computed(() => {
+    const eligibleClassroomIds = SessionEligibilityPolicy.classroomIds(
+        sessions.value,
+        enrollForm.value.course_catalog_id
+    )
+    return classrooms.value
+        .filter(classroom => classroom.id && eligibleClassroomIds.has(classroom.id))
+        .map(classroom => ({ value: classroom.id, label: classroom.name }))
+})
 
 const sessionOptions = computed(() => {
-    return sessions.value
-        .filter(s => !selectedClassroomId.value || s.classroom_id === selectedClassroomId.value)
+    return eligibleSessions.value
+        .filter(session => !selectedClassroomId.value || session.classroom_id === selectedClassroomId.value)
         .map(s => ({
             id: s.id,
             value: s.id,
@@ -63,7 +80,7 @@ const { maxEnrollment, capacity, isChecking, isFull } = useCapacityCheck(
 
 async function fetchOptions() {
     try {
-        const [{ data: catalogs }, { data: classSessions }, { data: classrooms }] = await Promise.all([
+        const [{ data: catalogs }, { data: classSessions }, { data: classroomRows }] = await Promise.all([
             AggregateService.getCoursesCached(),
             SessionService.getClassSessions(1, 1000),
             ClassroomService.getClassrooms(1, 1000)
@@ -73,30 +90,20 @@ async function fetchOptions() {
             value: c.id,
             label: c.displayName
         }))
-        classroomOptions.value = classrooms.map(c => ({
-            value: c.id,
-            label: c.name
-        }))
+        classrooms.value = classroomRows
         sessions.value = classSessions
     } catch (e) {
         console.error(e)
     }
 }
 
-function formatTime(value?: string) {
-    return value?.slice(0, 5) || ''
-}
-
 function formatSessionLabel(session: any) {
-    const dayKey = dayKeys[session.day_of_week]
-    const dayLabel = dayKey ? t(`common.days.${dayKey}`) : ''
-    const start = formatTime(session.start_time)
-    const end = formatTime(session.end_time)
-    const schedule = [dayLabel, start && end ? `${start}-${end}` : ''].filter(Boolean).join(' ')
-    return schedule ? `${session.name} · ${schedule}` : session.name
+    return formatClassSessionOption(session, preferences.locale, t)
 }
 
 watch(() => enrollForm.value.course_catalog_id, (newId) => {
+    selectedClassroomId.value = ''
+    enrollForm.value.class_session_id = ''
     if (newId && enrollForm.value.enrollment_type === 'regular') {
         const course = fullCourses.value.find(c => c.id === newId)
         if (course && course.lessons) {
@@ -123,6 +130,12 @@ watch(selectedClassroomId, () => {
     ) {
         enrollForm.value.class_session_id = ''
     }
+})
+
+watch(() => enrollForm.value.class_session_id, (sessionId) => {
+    if (!sessionId) return
+    const selectedSession = eligibleSessions.value.find(session => session.id === sessionId)
+    selectedClassroomId.value = selectedSession?.classroom_id || ''
 })
 
 watch(() => props.isOpen, (val) => {
@@ -156,6 +169,7 @@ async function submitEnrollment() {
         student_id: props.studentId,
         course_id: enrollForm.value.course_catalog_id,
         class_session_id: enrollForm.value.class_session_id,
+        classroom_id: sessions.value.find(session => session.id === enrollForm.value.class_session_id)?.classroom_id || undefined,
         status: enrollForm.value.enrollment_type as any,
         start_date: enrollForm.value.start_date,
         time_zone: preferences.timeZone,
@@ -174,7 +188,9 @@ async function submitEnrollment() {
         emit('close')
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || 'Failed to enroll student')
+        toast.error(e.message?.includes('TARGET_SESSION_COURSE_MISMATCH')
+            ? t('student.errors.session_course_mismatch')
+            : (e.message || 'Failed to enroll student'))
     } finally {
         isSubmitting.value = false
     }
@@ -233,7 +249,8 @@ async function submitEnrollment() {
                             class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.enroll_modal.classroom') }}</label>
                         <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
-                            :placeholder="$t('student.internal_courses.classroom_none')" fontSizeClass="text-lg" />
+                            :placeholder="$t('student.internal_courses.classroom_none')" fontSizeClass="text-lg"
+                            :disabled="!enrollForm.course_catalog_id" />
                     </div>
 
                     <div class="space-y-4">
@@ -241,7 +258,8 @@ async function submitEnrollment() {
                             class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.enroll_modal.class_session') }}</label>
                         <SearchableSelect v-model="enrollForm.class_session_id" :options="sessionOptions"
-                            :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg" />
+                            :placeholder="$t('common.select_placeholder')" fontSizeClass="text-lg"
+                            :disabled="!enrollForm.course_catalog_id" />
 
                         <!-- Modular Capacity Progress Bar -->
                         <div v-if="enrollForm.class_session_id"

@@ -6,6 +6,10 @@ import { useRouter } from 'vue-router'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { useEmailValidation } from '@/composables/useEmailValidation'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
+import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
+import type { RichTextDocumentV1, TextEditorContent } from '@/components/common/text-editor/types'
 
 const props = defineProps<{
     studentId: string
@@ -34,6 +38,7 @@ interface StudentForm {
     birthday: string
     external_link: string
     notes: string
+    notes_document: RichTextDocumentV1
 }
 
 const form = ref<StudentForm>({
@@ -45,7 +50,16 @@ const form = ref<StudentForm>({
     mailing_address: '',
     birthday: '',
     external_link: '',
-    notes: ''
+    notes: '',
+    notes_document: createTextEditorContent('').richText
+})
+
+const notesContent = computed<TextEditorContent>({
+    get: () => createTextEditorContent(form.value.notes_document || form.value.notes),
+    set: (content) => {
+        form.value.notes = content.plainText
+        form.value.notes_document = content.richText
+    }
 })
 
 const emailTouched = ref(false)
@@ -63,7 +77,8 @@ function populateForm() {
         mailing_address: s.mailing_address,
         birthday: s.birthday,
         external_link: s.external_link,
-        notes: s.notes
+        notes: s.notes,
+        notes_document: s.notesDocument
     }
 }
 
@@ -262,11 +277,9 @@ watch(isEditingMainDetails, (val) => {
             <div class="space-y-1.5 md:col-span-2">
                 <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{ $t('student.notes')
                 }}</label>
-                <textarea v-if="isEditingMainDetails" v-model="form.notes" rows="3"
-                    class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 resize-y"></textarea>
-                <div v-else
-                    class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[86px] whitespace-pre-wrap">
-                    {{ form.notes || '-' }}</div>
+                <TextEditor v-if="isEditingMainDetails" v-model="notesContent" preset="form" :min-height="86" />
+                <RichTextViewer v-else-if="form.notes" :content="notesContent" :min-height="86" />
+                <div v-else class="text-gray-800 px-4 py-3">-</div>
             </div>
         </div>
 

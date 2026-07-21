@@ -1,84 +1,214 @@
-import { ref, shallowRef, watch, onBeforeUnmount, type Ref } from 'vue'
-import { SupabaseProvider } from '@/services/report/SupabaseProvider'
+import { computed, isRef, onBeforeUnmount, reactive, ref, shallowRef, watch, type Ref } from 'vue'
+import {
+    SupabaseProvider,
+    type ReportCollabConnectionStatus,
+    type ReportCollabInitialState,
+    type SupabaseProviderOptions
+} from '@/services/report/SupabaseProvider'
 import { supabase } from '@/lib/supabase'
 import * as Y from 'yjs'
 import { useAuthStore } from '@/stores/useAuthStore'
 
-export function useReportCollab(reportId: Ref<string> | string) {
+export type ReportCollaborationStatus = 'disabled' | 'connecting' | 'connected' | 'disconnected' | 'error'
+
+export interface ReportCollaborationConfiguration {
+    enabled: boolean
+    snapshotDebounceMs: number
+    presenceEnabled: boolean
+    connectOnMount: boolean
+}
+
+export interface ReportCollaborationOptions extends Partial<ReportCollaborationConfiguration> {
+    providerFactory?: (
+        doc: Y.Doc,
+        reportId: string,
+        reportVersion: number,
+        userId: string,
+        options: SupabaseProviderOptions
+    ) => SupabaseProvider
+}
+
+type MaybeRef<T> = T | Ref<T>
+
+function resolve<T>(value: MaybeRef<T> | undefined): T | undefined {
+    return isRef(value) ? value.value : value
+}
+
+export function useReportCollab(
+    reportId: Ref<string> | string,
+    reportVersion: Ref<number> | number,
+    inputOptions: MaybeRef<ReportCollaborationOptions> = {}
+) {
     const authStore = useAuthStore()
+    const initialOptions = resolve(inputOptions) || {}
+    const configuration = reactive<ReportCollaborationConfiguration>({
+        enabled: initialOptions.enabled ?? true,
+        snapshotDebounceMs: Math.max(250, Math.min(30000, initialOptions.snapshotDebounceMs ?? 2500)),
+        presenceEnabled: initialOptions.presenceEnabled ?? true,
+        connectOnMount: initialOptions.connectOnMount ?? true
+    })
+    const providerFactory = initialOptions.providerFactory || defaultProviderFactory
     const ydoc = shallowRef<Y.Doc | null>(null)
     const provider = shallowRef<SupabaseProvider | null>(null)
     const ready = ref(false)
+    const status = ref<ReportCollaborationStatus>(configuration.enabled ? 'disconnected' : 'disabled')
+    const error = ref<string | null>(null)
+    const initialState = ref<ReportCollabInitialState>('none')
+    const activePeers = ref<Array<Record<string, any>>>([])
+    const lastSyncedAt = ref<Date | null>(null)
     let generation = 0
+    let awarenessHandler: (() => void) | null = null
 
     const getReportId = () => (typeof reportId === 'string' ? reportId : reportId.value)
+    const getReportVersion = () => (typeof reportVersion === 'number' ? reportVersion : reportVersion.value)
 
-    const destroyCurrent = async () => {
+    function updatePeers(): void {
+        activePeers.value = provider.value?.getActivePeers() || []
+    }
+
+    async function destroyCurrent(flush = false) {
         ready.value = false
-
+        initialState.value = 'none'
+        activePeers.value = []
         if (provider.value) {
+            if (flush) await provider.value.saveSnapshot()
+            if (awarenessHandler) provider.value.awareness.off('change', awarenessHandler)
+            awarenessHandler = null
             await provider.value.destroy()
             provider.value = null
         }
-
         if (ydoc.value) {
             ydoc.value.destroy()
             ydoc.value = null
         }
     }
 
-    const initialize = async () => {
+    function handleStatus(next: ReportCollabConnectionStatus): void {
+        status.value = next
+        if (next === 'error') error.value = 'Collaboration connection failed'
+    }
+
+    const connect = async () => {
+        if (!configuration.enabled) {
+            status.value = 'disabled'
+            return false
+        }
         const token = ++generation
         await destroyCurrent()
-
         const reportIdValue = getReportId()
-        if (!reportIdValue) return
-        
+        if (!reportIdValue) {
+            status.value = 'disconnected'
+            return false
+        }
+
+        error.value = null
+        status.value = 'connecting'
         const doc = new Y.Doc()
         ydoc.value = doc
-        
         const userId = authStore.user?.id || ''
-        const supabaseProvider = new SupabaseProvider(supabase, doc, reportIdValue, userId)
-        provider.value = supabaseProvider
+        const nextProvider = providerFactory(doc, reportIdValue, getReportVersion(), userId, {
+            snapshotDebounceMs: configuration.snapshotDebounceMs,
+            presenceEnabled: configuration.presenceEnabled,
+            onStatus: handleStatus
+        })
+        provider.value = nextProvider
+        awarenessHandler = updatePeers
+        nextProvider.awareness.on('change', awarenessHandler)
 
-        await supabaseProvider.ready
+        try {
+            await nextProvider.ready
+        } catch (reason: any) {
+            if (token === generation) {
+                error.value = reason?.message || 'Collaboration initialization failed'
+                status.value = 'error'
+            }
+            return false
+        }
 
         if (token !== generation) {
-            await supabaseProvider.destroy()
+            await nextProvider.destroy()
             doc.destroy()
-            return
+            return false
         }
-        
+        initialState.value = nextProvider.initialState
         ready.value = true
+        status.value = nextProvider.connected ? 'connected' : status.value
+        updatePeers()
+        return true
+    }
+
+    const disconnect = async (options: { flush?: boolean } = {}) => {
+        generation += 1
+        await destroyCurrent(options.flush ?? true)
+        status.value = configuration.enabled ? 'disconnected' : 'disabled'
+    }
+
+    const reconnect = async () => {
+        await disconnect({ flush: false })
+        return connect()
     }
 
     const saveSnapshot = async () => {
         if (!provider.value) return false
-        return provider.value.saveSnapshot()
+        const saved = await provider.value.saveSnapshot()
+        if (saved) lastSyncedAt.value = new Date()
+        return saved
+    }
+
+    const setBaseReportVersion = (version: number) => provider.value?.setBaseReportVersion(version)
+
+    function setEnabled(enabled: boolean) {
+        configuration.enabled = enabled
+        if (!enabled) void disconnect({ flush: true })
+        else void connect()
+    }
+
+    function configure(updates: Partial<ReportCollaborationConfiguration>): ReportCollaborationConfiguration {
+        const requiresReconnect =
+            (updates.snapshotDebounceMs !== undefined && updates.snapshotDebounceMs !== configuration.snapshotDebounceMs) ||
+            (updates.presenceEnabled !== undefined && updates.presenceEnabled !== configuration.presenceEnabled)
+        if (updates.snapshotDebounceMs !== undefined) configuration.snapshotDebounceMs = Math.max(250, Math.min(30000, updates.snapshotDebounceMs))
+        if (updates.presenceEnabled !== undefined) configuration.presenceEnabled = updates.presenceEnabled
+        if (updates.connectOnMount !== undefined) configuration.connectOnMount = updates.connectOnMount
+        if (updates.enabled !== undefined && updates.enabled !== configuration.enabled) setEnabled(updates.enabled)
+        else if (requiresReconnect && configuration.enabled && provider.value) void reconnect()
+        return { ...configuration }
     }
 
     const destroy = async () => {
         generation += 1
         await destroyCurrent()
+        status.value = configuration.enabled ? 'disconnected' : 'disabled'
     }
 
     watch(
         () => getReportId(),
         () => {
-            void initialize()
+            if (configuration.enabled && configuration.connectOnMount) void connect()
+            else void disconnect({ flush: false })
         },
         { immediate: true }
     )
 
-    onBeforeUnmount(() => {
-        void destroy()
-    })
+    if (isRef(inputOptions)) {
+        watch(inputOptions, value => configure(value || {}), { deep: true })
+    }
+
+    onBeforeUnmount(() => { void destroy() })
 
     return {
-        ydoc,
-        provider,
-        ready,
-        saveSnapshot,
-        destroy
+        configuration, ydoc, provider, ready, status, error, initialState, activePeers,
+        activePeerCount: computed(() => activePeers.value.length), lastSyncedAt,
+        connect, disconnect, reconnect, saveSnapshot, setBaseReportVersion, setEnabled, configure, destroy
     }
+}
+
+function defaultProviderFactory(
+    doc: Y.Doc,
+    reportId: string,
+    reportVersion: number,
+    userId: string,
+    options: SupabaseProviderOptions
+): SupabaseProvider {
+    return new SupabaseProvider(supabase, doc, reportId, reportVersion, userId, options)
 }

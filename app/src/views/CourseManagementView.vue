@@ -7,6 +7,10 @@ import { useToast } from 'vue-toastification'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
+import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
+import type { TextEditorContent } from '@/components/common/text-editor/types'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -61,6 +65,15 @@ const courseForm = ref<Partial<CourseDTO>>({
     stage: '',
     display_name: '',
     description: ''
+    ,description_document: createTextEditorContent('').richText
+})
+
+const courseDescriptionContent = computed<TextEditorContent>({
+    get: () => createTextEditorContent(courseForm.value.description_document || courseForm.value.description || ''),
+    set: (content) => {
+        courseForm.value.description = content.plainText
+        courseForm.value.description_document = content.richText
+    }
 })
 
 const pagination = ref({ page: 1, perPage: 10, total: 0 })
@@ -119,7 +132,7 @@ watch(() => pagination.value.perPage, () => { pagination.value.page = 1; fetchCo
 // ... (rest of functions)
 
 function openCreateModal() {
-    courseForm.value = { subject: '', stage: '', display_name: '', description: '' }
+    courseForm.value = { subject: '', stage: '', display_name: '', description: '', description_document: createTextEditorContent('').richText }
     editingCourse.value = null
     iscreateModalOpen.value = true
 }
@@ -130,7 +143,8 @@ function openEditModal(course: Course) {
         subject: course.subject,
         stage: course.stage,
         display_name: course.displayNameValue,
-        description: course.description
+        description: course.description,
+        description_document: course.descriptionDocument
     }
     iscreateModalOpen.value = true
 }
@@ -378,8 +392,11 @@ async function deleteLesson(id: string) {
                                     class="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight leading-tight mb-2 break-words">
                                     {{
                                         selectedCourse.displayName }}</h2>
-                                <p class="text-gray-500 font-medium italic text-lg leading-relaxed max-w-2xl">
-                                    {{ selectedCourse.description || $t('common.no_description') }}
+                                <RichTextViewer v-if="selectedCourse.description" class="max-w-2xl"
+                                    :content="{ plainText: selectedCourse.description, richText: selectedCourse.descriptionDocument }"
+                                    :min-height="0" />
+                                <p v-else class="text-gray-500 font-medium italic text-lg leading-relaxed max-w-2xl">
+                                    {{ $t('common.no_description') }}
                                 </p>
                             </div>
                             <div class="flex gap-2 self-end lg:self-start">
@@ -596,8 +613,7 @@ async function deleteLesson(id: string) {
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('course.description')
                         }}</label>
-                        <textarea v-model="courseForm.description" rows="3"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500"></textarea>
+                        <TextEditor v-model="courseDescriptionContent" preset="form" :min-height="96" />
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">

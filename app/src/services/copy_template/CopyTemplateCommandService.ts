@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { USER_DEFAULT_SCOPE_ENTITY_ID } from '@/utils/copyTemplate'
 import type { CopyTemplateDTO, CopyTemplateScopeType } from './CopyTemplateService'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
+import type { TextEditorContentInput } from '@/components/common/text-editor/types'
 
 /**
  * Command service for copy templates
@@ -19,17 +21,19 @@ export class CopyTemplateCommandService {
         templateType: 'attendance_copy' | 'course_copy',
         scopeType: CopyTemplateScopeType,
         scopeEntityId: string,
-        templateText: string
+        template: TextEditorContentInput
     ): Promise<void> {
         const userId = await this.getCurrentUserId()
         if (!userId) throw new Error('User not authenticated')
 
+        const content = createTextEditorContent(template, { templateVariables: true })
         const payload: CopyTemplateDTO = {
             user_id: userId,
             template_type: templateType,
             scope_type: scopeType,
             scope_entity_id: scopeEntityId,
-            template_text: templateText
+            template_text: content.plainText,
+            template_document: content.richText
         }
 
         const { error } = await supabase
@@ -39,15 +43,15 @@ export class CopyTemplateCommandService {
         if (error) throw new Error(error.message)
     }
 
-    static async saveAttendanceTemplateForSession(classSessionId: string, templateText: string): Promise<void> {
-        await this.saveTemplate('attendance_copy', 'class_session', classSessionId, templateText)
+    static async saveAttendanceTemplateForSession(classSessionId: string, template: TextEditorContentInput): Promise<void> {
+        await this.saveTemplate('attendance_copy', 'class_session', classSessionId, template)
     }
 
-    static async saveAttendanceTemplateAsUserDefault(templateText: string): Promise<void> {
-        await this.saveTemplate('attendance_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID, templateText)
+    static async saveAttendanceTemplateAsUserDefault(template: TextEditorContentInput): Promise<void> {
+        await this.saveTemplate('attendance_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID, template)
     }
 
-    static async saveCourseTemplateAsUserDefault(templateText: string): Promise<void> {
-        await this.saveTemplate('course_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID, templateText)
+    static async saveCourseTemplateAsUserDefault(template: TextEditorContentInput): Promise<void> {
+        await this.saveTemplate('course_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID, template)
     }
 }

@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.6.0] - 2026-07-21
+
+### Fixed
+- Positioned rich-text placeholders inside the content body so formatting toolbars no longer cover them.
+- Localized rich-text editor toolbars, style controls, link prompts, accessibility labels, and template editor badges in English and Traditional Chinese.
+- Detected nested Yjs text changes so report notes immediately become dirty and enter the save queue.
+- Serialized report auto-save requests so edits made during an in-flight save remain dirty and are persisted by the next request.
+- Synchronized report editor parent state from the authoritative database row after each successful save.
+- Prevented stale or unversioned Yjs snapshots from overriding newer report content.
+- Filtered enrollment, trial activation, and transfer class options by course compatibility.
+- Automatically synchronized enrollment classrooms from their selected class sessions.
+- Made classroom selection optional during enrollment and filled it from the selected class.
+- Replaced the classroom session filter with a searchable selector.
+
+### Added
+- Added weekly multi-day, monthly day-of-month, and exact-date camp schedules with per-day class times.
+- Added draft camps with editable date ranges and atomic session schedule persistence.
+- Added safe future-occurrence reconciliation that preserves classes containing reports, attendance, notes, or actual times.
+- Added shared plain-text and collaborative editor contracts with reusable appearance presets.
+- Added versioned TipTap JSON documents, Unicode-aware metrics, formatting controls, rich/plain/HTML accessors, and reusable read-only rendering.
+- Persisted TipTap JSON and its canonical plain-text projection atomically for reports, templates, course descriptions, student notes, and teacher biographies.
+- Added rich clipboard output, atomic template variables, report field metrics, editor settings persistence, and rich-text conflict/version previews.
+- Added runtime auto-save and collaboration configuration, connection/presence status, and structured editor notification adapters.
+- Added version-gated Yjs snapshot persistence and recovery for collaborative report drafts.
+- Added local frontend and self-hosted Supabase environment templates.
+
+### Tests
+- Added regression coverage for queued saves, conflicts, errors, resets, and manual draining.
+- Added regression coverage for recurring and camp schedules, occurrence reconciliation, enrollment session eligibility, and classroom synchronization.
+
+### Deployment Notes
+- Apply `1000022_report_collab_snapshot_versioning.sql` before deploying frontend code that uses versioned collaboration snapshots.
+- Apply `1000023_rich_text_documents.sql` before deploying frontend code that reads or writes rich-text documents.
+- Apply `1000024_recurring_and_camp_sessions.sql` before deploying frontend code that manages recurring or camp schedules.
+- Apply `1000025_enrollment_classroom_consistency.sql` after `1000024` to backfill and synchronize enrollment classrooms and enforce course-compatible class selections.
+- Legacy collaboration snapshots remain stored but are ignored until replaced from canonical report content.
+
 ## [1.5.2] - 2026-06-15
 
 ### Fixed

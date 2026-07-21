@@ -303,22 +303,31 @@
                 </svg>
                 {{ $t('report.editor.contact_notes_label') }}
             </label>
-            <TipTapCollabEditor 
+            <CollaborativeTextEditor
                 ref="contactNotesEditorRef"
                 v-if="ready && ydoc"
-                field-name="contactNotes_xml" 
-                :ydoc="ydoc" 
-                :provider="awarenessProvider" 
-                :disabled="props.disabled" 
+                v-model="contactNotesEditorValue"
+                field-name="contactNotes_xml"
+                :ydoc="ydoc"
+                :provider="awarenessProvider"
+                :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
+                preset="notes"
                 :font-scale="preferences.editorFontScale"
-                :min-height="90"
+                :min-height="120"
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#60A5FA' }"
-                :placeholder="$t('report.editor.contact_notes_placeholder')" />
+                :placeholder="$t('report.editor.contact_notes_placeholder')"
+                @change="handleTextEditorChange('contactNotes', $event)" />
             <!-- Fallback standard editor if ydoc not ready -->
-            <textarea v-else v-model="contactNotes" rows="2"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-y"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }"
-                :placeholder="$t('report.editor.contact_notes_placeholder')"></textarea>
+            <TextEditor v-else v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
+                :font-scale="preferences.editorFontScale" :min-height="90"
+                :placeholder="$t('report.editor.contact_notes_placeholder')"
+                @change="handleTextEditorChange('contactNotes', $event)" />
         </div>
 
         <!-- Class Notes -->
@@ -331,22 +340,31 @@
                 {{ $t('report.editor.class_notes_label') }}
                 <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
             </label>
-            <TipTapCollabEditor 
+            <CollaborativeTextEditor
                 ref="classNotesEditorRef"
                 v-if="ready && ydoc"
-                field-name="classNotes_xml" 
-                :ydoc="ydoc" 
-                :provider="awarenessProvider" 
-                :disabled="props.disabled" 
+                v-model="classNotesEditorValue"
+                field-name="classNotes_xml"
+                :ydoc="ydoc"
+                :provider="awarenessProvider"
+                :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
+                preset="notes"
                 :font-scale="preferences.editorFontScale"
                 :min-height="140"
                 mono
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#A78BFA' }"
-                :placeholder="$t('report.editor.class_notes_placeholder')" />
-            <textarea v-else v-model="classNotes" rows="4"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-y font-mono"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }"
-                :placeholder="$t('report.editor.class_notes_placeholder')"></textarea>
+                :placeholder="$t('report.editor.class_notes_placeholder')"
+                @change="handleTextEditorChange('classNotes', $event)" />
+            <TextEditor v-else v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
+                :font-scale="preferences.editorFontScale" :min-height="140" mono
+                :placeholder="$t('report.editor.class_notes_placeholder')"
+                @change="handleTextEditorChange('classNotes', $event)" />
         </div>
 
         <!-- Learning Report (Main Content) -->
@@ -366,24 +384,32 @@
                         $t('report.editor.character_count') }}
                 </span>
             </label>
-            <TipTapCollabEditor 
+            <CollaborativeTextEditor
                 ref="contentEditorRef"
                 v-if="ready && ydoc"
-                field-name="content_xml" 
-                :ydoc="ydoc" 
-                :provider="awarenessProvider" 
-                :disabled="props.disabled" 
+                v-model="contentEditorValue"
+                field-name="content_xml"
+                :ydoc="ydoc"
+                :provider="awarenessProvider"
+                :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
+                preset="report"
                 :font-scale="preferences.editorFontScale"
                 :min-height="300"
                 mono
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#34D399' }"
-                :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')" />
-            <textarea v-else v-model="localContent" @input="handleInput"
+                :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
+                @change="handleTextEditorChange('content', $event)" />
+            <TextEditor v-else v-model="contentEditorValue" preset="report"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
-                class="w-full min-h-[300px] p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 resize-y font-mono"
-                :class="{ 'bg-gray-50': props.disabled, 'opacity-50': props.disabled }"
-                :style="{ fontSize: `${preferences.editorFontScale}%` }" />
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
+                :font-scale="preferences.editorFontScale" :min-height="300" mono
+                @change="handleTextEditorChange('content', $event)" />
         </div>
 
         <!-- Error Display -->
@@ -393,7 +419,7 @@
 
         <!-- Manual Save Button (Optional) -->
         <div v-if="showManualSave" class="mt-4">
-            <button @click="saveNow" :disabled="isSaving || !hasUnsavedChanges || !canSave"
+            <button @click="() => saveNow()" :disabled="isSaving || !hasUnsavedChanges || !canSave"
                 class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition">
                 {{ isSaving ? $t('report.saving') : $t('report.editor.save_now') }}
             </button>
@@ -407,7 +433,7 @@
             :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
             :is-loading="confirmState.isLoading" @confirm="handleConfirmAction" @close="confirmState.isOpen = false" />
 
-        <CopyTemplateEditorModal v-model="showCourseCopyTemplateModal"
+        <CopyTemplateEditorModal ref="courseTemplateModal" v-model="showCourseCopyTemplateModal"
             :title="$t('report.editor.copy_course_template_title')"
             :hint="$t('report.editor.copy_course_template_hint')"
             :variable-title="$t('report.editor.copy_course_template_variables')"
@@ -415,12 +441,13 @@
             :preview-title="$t('report.editor.copy_course_template_preview_title')"
             :preview-hint="$t('report.editor.copy_course_template_preview_hint')"
             :preview-empty="$t('report.editor.copy_course_template_preview_empty')"
-            :template-text="courseCopyTemplateText" :preview-text="courseTemplatePreviewText"
+            :template-text="courseCopyTemplateText" :template-document="courseCopyTemplateDocument" :preview-text="courseTemplatePreviewText"
             :variable-count="courseTemplateVariables.length" :is-loading="isLoadingCourseCopyTemplate"
             :loading-text="$t('report.editor.copy_course_template_loading')"
             :loading-hint="$t('report.editor.copy_course_template_loading_hint')"
             :save-loading="isSavingCourseCopyTemplate" :cancel-text="$t('common.cancel')" :save-text="$t('common.save')"
             :saving-text="$t('report.saving')" @update:template-text="courseCopyTemplateText = $event"
+            @update:template-document="courseCopyTemplateDocument = $event"
             @save="saveCourseCopyTemplate">
             <template #controls>
                 <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
@@ -581,7 +608,12 @@ import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportS
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
-import TipTapCollabEditor from '@/components/common/TipTapCollabEditor.vue'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
+import CollaborativeTextEditor from '@/components/common/text-editor/CollaborativeTextEditor.vue'
+import { insertTextAtSelection, type RichTextDocumentV1, type TextEditorChange, type TextEditorContent, type TextEditorHandle, type TextEditorMetrics } from '@/components/common/text-editor/types'
+import { calculateTextEditorMetrics, createTextEditorContent, renderTemplateContent } from '@/components/common/text-editor/content'
+import { createEditorNotifier, type EditorNotification } from '@/components/common/text-editor/notifier'
+import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings, type EditorUserSettings } from '@/components/common/text-editor/settings'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
@@ -591,7 +623,11 @@ import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { useToast } from 'vue-toastification'
 import { useReportCollab } from '@/composables/useReportCollab'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
-import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import type {
+    OccurrenceReportDTO,
+    ReportDraftSnapshot,
+    SaveReportResult
+} from '@/models/OccurrenceReport'
 import {
     COURSE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_COURSE_TEMPLATE,
@@ -599,7 +635,7 @@ import {
     renderCopyTemplate,
     createNumberFormatters
 } from '@/utils/copyTemplate'
-import { copyToClipboard } from '@/utils/clipboard'
+import { copyRichTextToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
 
 import type { Lesson } from '@/models/Course'
@@ -635,8 +671,14 @@ interface Props {
     initialClassParticipation?: number // 課堂參與
     initialClassroomBehavior?: number // 課堂秩序
     initialContactNotes?: string // 聯絡欄
+    initialContactNotesDocument?: RichTextDocumentV1 | null
     initialClassNotes?: string // 課堂筆記/紀錄
+    initialClassNotesDocument?: RichTextDocumentV1 | null
     initialContent?: string // 學習報告
+    initialContentDocument?: RichTextDocumentV1 | null
+    autoSaveEnabled?: boolean
+    collaborationEnabled?: boolean
+    notificationsEnabled?: boolean
     initialEnrollmentExternalLink?: string // 課程外部連結
     initialCreatedAt?: string // 建立時間
     compact?: boolean // 是否為緊湊模式 (for split view)
@@ -670,8 +712,14 @@ const props = withDefaults(defineProps<Props>(), {
     initialClassParticipation: 0,
     initialClassroomBehavior: 0,
     initialContactNotes: '',
+    initialContactNotesDocument: null,
     initialClassNotes: '',
+    initialClassNotesDocument: null,
     initialContent: '',
+    initialContentDocument: null,
+    autoSaveEnabled: undefined,
+    collaborationEnabled: undefined,
+    notificationsEnabled: undefined,
     initialEnrollmentExternalLink: '',
     initialCreatedAt: '',
     compact: false,
@@ -679,12 +727,14 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
     'update:content': [content: string]
-    'save-success': [version: number]
+    'save-success': [report: OccurrenceReportDTO]
     'update:report-external-link': [value: string]
     'save-error': [error: string]
     'conflict': [serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO]
     'deleted': []
     'restored': [report: OccurrenceReportDTO]
+    'notification': [notification: EditorNotification]
+    'metrics-change': [metrics: Record<'content' | 'contactNotes' | 'classNotes' | 'total', TextEditorMetrics>]
 }>()
 
 interface Template {
@@ -693,6 +743,9 @@ interface Template {
     content: string
     contactNotes?: string
     classNotes?: string
+    contentDocument?: RichTextDocumentV1
+    contactNotesDocument?: RichTextDocumentV1
+    classNotesDocument?: RichTextDocumentV1
 }
 
 interface ReportTemplateVariableItem {
@@ -712,6 +765,7 @@ const isSavingTemplate = ref(false)
 const isLoadingTemplateManager = ref(false)
 const showCourseCopyTemplateModal = ref(false)
 const courseCopyTemplateText = ref(SYSTEM_COURSE_TEMPLATE)
+const courseCopyTemplateDocument = ref(createTextEditorContent(SYSTEM_COURSE_TEMPLATE, { templateVariables: true }).richText)
 const isLoadingCourseCopyTemplate = ref(false)
 const isSavingCourseCopyTemplate = ref(false)
 const selectedCourseTemplateModes = ref<Record<string, string>>({
@@ -721,17 +775,26 @@ const courseTemplateLoadOptions = ref<Array<CopyTemplateLoadOption & { displayLa
 const selectedCourseTemplateLoadKey = ref('')
 const showReportTemplateManagerModal = ref(false)
 const reportTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
+const courseTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
 const selectedTemplateId = ref('')
 const templateDraftName = ref('')
 const templateDraftContent = ref('')
+const templateDraftContentDocument = ref(createTextEditorContent('', { templateVariables: true }).richText)
 const templateDraftContactNotes = ref('')
+const templateDraftContactNotesDocument = ref(createTextEditorContent('', { templateVariables: true }).richText)
 const templateDraftClassNotes = ref('')
+const templateDraftClassNotesDocument = ref(createTextEditorContent('', { templateVariables: true }).richText)
 const selectedReportTemplateModes = ref<Record<string, string>>({
     lesson: 'arabic'
 })
 
 const preferences = usePreferencesStore()
 const toast = useToast()
+const effectiveAutoSaveEnabled = computed(() => props.autoSaveEnabled ?? preferences.editorSettings.autoSave.enabled)
+const effectiveCollaborationEnabled = computed(() => props.collaborationEnabled ?? preferences.editorSettings.collaboration.enabled)
+const effectiveNotificationsEnabled = computed(() => props.notificationsEnabled ?? preferences.editorSettings.notificationsEnabled)
+const editorNotifier = createEditorNotifier(notification => emit('notification', notification), toast, effectiveNotificationsEnabled.value)
+watch(effectiveNotificationsEnabled, enabled => editorNotifier.setEnabled(enabled))
 
 // Confirm Modal State
 const confirmState = ref({
@@ -774,11 +837,9 @@ const handleConfirmAction = async () => {
 
 const handleCopyContent = (text: string) => {
     if (!text) return
-    if (ydoc.value && contentEditorRef.value?.editor) {
-        const editor = contentEditorRef.value.editor
-        const current = editor.getText()
-        editor.commands.focus('end')
-        editor.commands.insertContent((current ? '\n\n' : '') + text)
+    if (contentEditorRef.value) {
+        const current = contentEditorRef.value.getText()
+        contentEditorRef.value.replaceText(current + (current ? '\n\n' : '') + text, { emitChange: true })
     } else {
         const current = localContent.value || ''
         localContent.value = current + (current ? '\n\n' : '') + text
@@ -794,8 +855,11 @@ async function loadTemplates() {
             id: t.id!,
             name: t.name,
             content: t.content,
+            contentDocument: t.contentDocument,
             contactNotes: t.contactNotes,
-            classNotes: t.classNotes
+            contactNotesDocument: t.contactNotesDocument,
+            classNotes: t.classNotes,
+            classNotesDocument: t.classNotesDocument
         }))
     } catch (e) {
         console.error('Failed to load templates', e)
@@ -950,38 +1014,49 @@ const reportTemplateVariablePreview = computed<Record<string, string>>(() => {
 })
 
 // Editable fields structure for multi-field modal
-const reportTemplateEditableFields = computed<Array<{ id: string; label: string; content: string }>>(() => {
+const reportTemplateEditableFields = computed<Array<{ id: string; label: string; content: string; document: RichTextDocumentV1 }>>(() => {
     return [
         {
             id: 'contact',
             label: t('report.editor.contact_notes_label'),
             content: templateDraftContactNotes.value
+            ,document: templateDraftContactNotesDocument.value
         },
         {
             id: 'class',
             label: t('report.editor.class_notes_label'),
             content: templateDraftClassNotes.value
+            ,document: templateDraftClassNotesDocument.value
         },
         {
             id: 'report',
             label: t('report.editor.learning_report_label'),
             content: templateDraftContent.value
+            ,document: templateDraftContentDocument.value
         }
     ]
 })
 
-function insertReportTemplateVariable(fieldId: string, variable: string) {
+function insertReportTemplateVariable(fieldId: string, variable: string, caret = -1, selectionEnd = -1) {
     const mode = selectedReportTemplateModes.value[variable]
     const token = formatCopyTemplateToken(variable, mode)
+    const insertAtSelection = (content: string) => {
+        const start = caret < 0 ? content.length : caret
+        const end = selectionEnd < 0 ? content.length : selectionEnd
+        return insertTextAtSelection(content, token, start, end)
+    }
     if (fieldId === 'contact') {
-        templateDraftContactNotes.value += token
+        templateDraftContactNotes.value = insertAtSelection(templateDraftContactNotes.value)
+        templateDraftContactNotesDocument.value = createTextEditorContent(templateDraftContactNotes.value, { templateVariables: true }).richText
         return
     }
     if (fieldId === 'class') {
-        templateDraftClassNotes.value += token
+        templateDraftClassNotes.value = insertAtSelection(templateDraftClassNotes.value)
+        templateDraftClassNotesDocument.value = createTextEditorContent(templateDraftClassNotes.value, { templateVariables: true }).richText
         return
     }
-    templateDraftContent.value += token
+    templateDraftContent.value = insertAtSelection(templateDraftContent.value)
+    templateDraftContentDocument.value = createTextEditorContent(templateDraftContent.value, { templateVariables: true }).richText
 }
 
 function insertVariableToFocusedField(variable: string) {
@@ -996,14 +1071,17 @@ function handleTemplateVariableMouseLeave() {
     reportTemplateModal.value?.hideVariablePreview?.()
 }
 
-function onEditableFieldsUpdate(fields: Array<{ id: string; label: string; content: string }>) {
+function onEditableFieldsUpdate(fields: Array<{ id: string; label: string; content: string; document?: RichTextDocumentV1 }>) {
     fields.forEach(field => {
         if (field.id === 'contact') {
             templateDraftContactNotes.value = field.content
+            if (field.document) templateDraftContactNotesDocument.value = field.document
         } else if (field.id === 'class') {
             templateDraftClassNotes.value = field.content
+            if (field.document) templateDraftClassNotesDocument.value = field.document
         } else if (field.id === 'report') {
             templateDraftContent.value = field.content
+            if (field.document) templateDraftContentDocument.value = field.document
         }
     })
 }
@@ -1133,9 +1211,7 @@ function copyCourseInfo() {
         lesson_title: lesson.title
     }
 
-    const copyPromise = CopyTemplateService.getEffectiveCourseTemplate()
-        .then(({ templateText }) => {
-            const text = renderCopyTemplate(templateText, context, {
+    const formatters = {
                 course_primary_name: {
                     space: () => formatCoursePrimaryName(cName, dName, 'space'),
                     slash: () => formatCoursePrimaryName(cName, dName, 'slash'),
@@ -1143,12 +1219,23 @@ function copyCourseInfo() {
                     bullet: () => formatCoursePrimaryName(cName, dName, 'bullet')
                 },
                 lesson_sequence: createNumberFormatters('lesson_sequence')
-            }).trim()
+            }
+    const copyPromise = CopyTemplateService.getEffectiveCourseTemplate()
+        .then(({ templateText, templateDocument }) => {
+            const rendered = renderTemplateContent(
+                templateDocument || templateText,
+                (key, mode) => renderCopyTemplate(
+                    formatCopyTemplateToken(key, mode || undefined),
+                    context,
+                    formatters
+                ),
+                text => renderCopyTemplate(text, context, formatters)
+            )
             const fallback = `${coursePrimaryName} Lesson ${lesson.sequence} ${lesson.title}`.trim()
-            return text || fallback
+            return rendered.plainText.trim() ? rendered : createTextEditorContent(fallback)
         })
 
-    copyToClipboard(copyPromise)
+    copyRichTextToClipboard(copyPromise)
         .then((success) => {
             if (success) {
                 justCopiedCourse.value = true
@@ -1165,12 +1252,13 @@ function copyCourseInfo() {
 
 function insertCourseTemplateVariable(variable: string) {
     const mode = getSelectedCourseTemplateMode(variable)
-    courseCopyTemplateText.value += formatCopyTemplateToken(variable, mode)
+    courseTemplateModal.value?.insertVariableAtFocus?.(formatCopyTemplateToken(variable, mode))
 }
 
 async function openCourseCopyTemplateModal() {
     showCourseCopyTemplateModal.value = true
     courseCopyTemplateText.value = SYSTEM_COURSE_TEMPLATE
+    courseCopyTemplateDocument.value = createTextEditorContent(SYSTEM_COURSE_TEMPLATE, { templateVariables: true }).richText
     selectedCourseTemplateModes.value = {
         course_primary_name: 'space'
     }
@@ -1191,6 +1279,8 @@ async function openCourseCopyTemplateModal() {
         }))
         selectedCourseTemplateLoadKey.value = courseTemplateLoadOptions.value[0]?.key || ''
         courseCopyTemplateText.value = template || SYSTEM_COURSE_TEMPLATE
+        const loaded = courseTemplateLoadOptions.value.find(item => item.scopeType === 'user_default')
+        courseCopyTemplateDocument.value = loaded?.templateDocument || createTextEditorContent(courseCopyTemplateText.value, { templateVariables: true }).richText
     } catch (error) {
         console.error('Failed to load course copy template', error)
         toast.error(t('report.editor.copy_course_template_load_failed'))
@@ -1206,6 +1296,7 @@ function loadSelectedCourseTemplate() {
     }
 
     courseCopyTemplateText.value = option.templateText || SYSTEM_COURSE_TEMPLATE
+    courseCopyTemplateDocument.value = option.templateDocument || createTextEditorContent(courseCopyTemplateText.value, { templateVariables: true }).richText
 }
 
 async function saveCourseCopyTemplate() {
@@ -1217,7 +1308,7 @@ async function saveCourseCopyTemplate() {
 
     try {
         isSavingCourseCopyTemplate.value = true
-        await CopyTemplateService.saveCourseTemplateAsUserDefault(templateText)
+        await CopyTemplateService.saveCourseTemplateAsUserDefault({ plainText: templateText, richText: courseCopyTemplateDocument.value })
         toast.success(t('report.editor.copy_course_template_saved'))
         showCourseCopyTemplateModal.value = false
     } catch (error) {
@@ -1229,51 +1320,47 @@ async function saveCourseCopyTemplate() {
 }
 
 function applyTemplate(template: Template) {
-    const renderedContent = renderReportTemplateText(template.content || '')
-    const renderedContactNotes = renderReportTemplateText(template.contactNotes || '')
-    const renderedClassNotes = renderReportTemplateText(template.classNotes || '')
+    const renderContent = (value: RichTextDocumentV1 | string | undefined) => renderTemplateContent(
+        value || '',
+        (key, mode) => renderReportTemplateText(formatCopyTemplateToken(key, mode || selectedReportTemplateModes.value[key])),
+        renderReportTemplateText
+    )
+    const renderedContent = renderContent(template.contentDocument || template.content)
+    const renderedContactNotes = renderContent(template.contactNotesDocument || template.contactNotes)
+    const renderedClassNotes = renderContent(template.classNotesDocument || template.classNotes)
 
     let changed = false
 
     if (ydoc.value) {
-        if (renderedContent && contentEditorRef.value?.editor) {
-            const editor = contentEditorRef.value.editor
-            if (editor.isEmpty) editor.commands.setContent(renderedContent)
-            else {
-                editor.commands.focus('end')
-                editor.commands.insertContent('\n\n' + renderedContent)
-            }
+        if (renderedContent.plainText && contentEditorRef.value) {
+            if (contentEditorRef.value.getText()) contentEditorRef.value.insertText('\n\n')
+            contentEditorRef.value.insertContent(renderedContent)
         }
-        if (renderedContactNotes && contactNotesEditorRef.value?.editor) {
-            const editor = contactNotesEditorRef.value.editor
-            if (editor.isEmpty) editor.commands.setContent(renderedContactNotes)
-            else {
-                editor.commands.focus('end')
-                editor.commands.insertContent('\n\n' + renderedContactNotes)
-            }
+        if (renderedContactNotes.plainText && contactNotesEditorRef.value) {
+            if (contactNotesEditorRef.value.getText()) contactNotesEditorRef.value.insertText('\n\n')
+            contactNotesEditorRef.value.insertContent(renderedContactNotes)
         }
-        if (renderedClassNotes && classNotesEditorRef.value?.editor) {
-            const editor = classNotesEditorRef.value.editor
-            if (editor.isEmpty) editor.commands.setContent(renderedClassNotes)
-            else {
-                editor.commands.focus('end')
-                editor.commands.insertContent('\n\n' + renderedClassNotes)
-            }
+        if (renderedClassNotes.plainText && classNotesEditorRef.value) {
+            if (classNotesEditorRef.value.getText()) classNotesEditorRef.value.insertText('\n\n')
+            classNotesEditorRef.value.insertContent(renderedClassNotes)
         }
         changed = true
     } else {
-        if (!localContent.value.trim() && renderedContent) {
-            localContent.value = renderedContent
+        if (!localContent.value.trim() && renderedContent.plainText) {
+            localContent.value = renderedContent.plainText
+            contentDocument.value = renderedContent.richText
             changed = true
         }
 
-        if (!contactNotes.value.trim() && renderedContactNotes) {
-            contactNotes.value = renderedContactNotes
+        if (!contactNotes.value.trim() && renderedContactNotes.plainText) {
+            contactNotes.value = renderedContactNotes.plainText
+            contactNotesDocument.value = renderedContactNotes.richText
             changed = true
         }
 
-        if (!classNotes.value.trim() && renderedClassNotes) {
-            classNotes.value = renderedClassNotes
+        if (!classNotes.value.trim() && renderedClassNotes.plainText) {
+            classNotes.value = renderedClassNotes.plainText
+            classNotesDocument.value = renderedClassNotes.richText
             changed = true
         }
     }
@@ -1289,8 +1376,11 @@ function createNewTemplateDraft() {
     selectedTemplateId.value = ''
     templateDraftName.value = ''
     templateDraftContent.value = localContent.value || ''
+    templateDraftContentDocument.value = contentDocument.value
     templateDraftContactNotes.value = contactNotes.value || ''
+    templateDraftContactNotesDocument.value = contactNotesDocument.value
     templateDraftClassNotes.value = classNotes.value || ''
+    templateDraftClassNotesDocument.value = classNotesDocument.value
 }
 
 function syncTemplateDraftFromSelection() {
@@ -1302,8 +1392,11 @@ function syncTemplateDraftFromSelection() {
 
     templateDraftName.value = selected.name
     templateDraftContent.value = selected.content || ''
+    templateDraftContentDocument.value = selected.contentDocument || createTextEditorContent(selected.content || '', { templateVariables: true }).richText
     templateDraftContactNotes.value = selected.contactNotes || ''
+    templateDraftContactNotesDocument.value = selected.contactNotesDocument || createTextEditorContent(selected.contactNotes || '', { templateVariables: true }).richText
     templateDraftClassNotes.value = selected.classNotes || ''
+    templateDraftClassNotesDocument.value = selected.classNotesDocument || createTextEditorContent(selected.classNotes || '', { templateVariables: true }).richText
 }
 
 function handleTemplateSelectionChange() {
@@ -1341,8 +1434,11 @@ async function saveTemplateDraft() {
             id: selectedTemplateId.value || undefined,
             name: templateDraftName.value.trim(),
             content: templateDraftContent.value,
+            content_document: templateDraftContentDocument.value,
             contact_notes: templateDraftContactNotes.value,
+            contact_notes_document: templateDraftContactNotesDocument.value,
             class_notes: templateDraftClassNotes.value,
+            class_notes_document: templateDraftClassNotesDocument.value,
             instructor_id: authStore.user.id
         })
 
@@ -1375,8 +1471,11 @@ async function applyTemplateDraftToReport() {
         id: selectedTemplateId.value || 'draft',
         name: templateDraftName.value || t('report.editor.template_new_option'),
         content: templateDraftContent.value,
+        contentDocument: templateDraftContentDocument.value,
         contactNotes: templateDraftContactNotes.value,
-        classNotes: templateDraftClassNotes.value
+        contactNotesDocument: templateDraftContactNotesDocument.value,
+        classNotes: templateDraftClassNotes.value,
+        classNotesDocument: templateDraftClassNotesDocument.value
     }
     applyTemplate(draft)
 }
@@ -1431,13 +1530,28 @@ onMounted(() => {
 
 // Collab logic
 const reportIdRef = computed(() => props.reportId || '')
-const { ydoc, provider: awarenessProvider, ready, saveSnapshot } = useReportCollab(reportIdRef as any)
+const initialReportVersionRef = computed(() => props.initialVersion)
+const {
+    ydoc,
+    provider: awarenessProvider,
+    ready,
+    initialState: collabInitialState,
+    saveSnapshot,
+    setBaseReportVersion,
+    status: collaborationStatus,
+    activePeers,
+    setEnabled: setCollaborationEnabled,
+    configure: configureCollaboration
+} = useReportCollab(reportIdRef as any, initialReportVersionRef, computed(() => ({
+    enabled: effectiveCollaborationEnabled.value,
+    snapshotDebounceMs: preferences.editorSettings.collaboration.snapshotDebounceMs,
+    presenceEnabled: preferences.editorSettings.collaboration.presenceEnabled
+})))
 
-const contactNotesEditorRef = ref<any>(null)
-const classNotesEditorRef = ref<any>(null)
-const contentEditorRef = ref<any>(null)
+const contactNotesEditorRef = ref<TextEditorHandle | null>(null)
+const classNotesEditorRef = ref<TextEditorHandle | null>(null)
+const contentEditorRef = ref<TextEditorHandle | null>(null)
 const collabWatchStops: WatchStopHandle[] = []
-const collabXmlObservers: Array<{ fragment: any; observer: (event: any) => void }> = []
 let collabMetaMap: any = null
 let collabMetaObserver: ((event: any) => void) | null = null
 let isApplyingRemoteCollab = false
@@ -1451,9 +1565,6 @@ function cleanupReportCollabBindings() {
     collabMetaMap = null
     collabMetaObserver = null
 
-    collabXmlObservers.splice(0).forEach(({ fragment, observer }) => {
-        fragment.unobserve(observer)
-    })
 }
 
 function withCollabGuard(fn: () => void) {
@@ -1466,19 +1577,25 @@ function withCollabGuard(fn: () => void) {
 }
 
 function syncTextRefsFromEditors() {
-    if (contentEditorRef.value?.editor) {
-        localContent.value = contentEditorRef.value.editor.getText()
+    if (contentEditorRef.value) {
+        const content = contentEditorRef.value.getContent()
+        localContent.value = content.plainText
+        contentDocument.value = content.richText
     }
-    if (contactNotesEditorRef.value?.editor) {
-        contactNotes.value = contactNotesEditorRef.value.editor.getText()
+    if (contactNotesEditorRef.value) {
+        const content = contactNotesEditorRef.value.getContent()
+        contactNotes.value = content.plainText
+        contactNotesDocument.value = content.richText
     }
-    if (classNotesEditorRef.value?.editor) {
-        classNotes.value = classNotesEditorRef.value.editor.getText()
+    if (classNotesEditorRef.value) {
+        const content = classNotesEditorRef.value.getContent()
+        classNotes.value = content.plainText
+        classNotesDocument.value = content.richText
     }
 }
 
-function setEditorContentSilently(editorRef: any, content: string) {
-    editorRef.value?.editor?.commands.setContent(content, { emitUpdate: false })
+function setEditorContentSilently(editorRef: { value: TextEditorHandle | null }, content: TextEditorContent) {
+    editorRef.value?.replaceContent(content)
 }
 
 function writeReportMeta(metaMap: any) {
@@ -1535,6 +1652,7 @@ watch(ready, (isReady) => {
                 const remoteVersion = Number(metaMap.get('version') || 0)
                 if (remoteVersion > version.value) {
                     version.value = remoteVersion
+                    setBaseReportVersion(remoteVersion)
                 }
             } else {
                 metaMap.set('version', version.value)
@@ -1558,6 +1676,7 @@ watch(ready, (isReady) => {
                         const remoteVersion = Number(newVal || 0)
                         if (remoteVersion > version.value) {
                             version.value = remoteVersion
+                            setBaseReportVersion(remoteVersion)
                         }
                     }
                 })
@@ -1593,48 +1712,31 @@ watch(ready, (isReady) => {
             withCollabGuard(() => {
                 let seeded = false
 
-                if (contentEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
-                    setEditorContentSilently(contentEditorRef, localContent.value)
+                if (!contentEditorRef.value?.getText() && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
+                    setEditorContentSilently(contentEditorRef, contentEditorValue.value)
                     seeded = true
                 }
-                if (contactNotesEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
-                    setEditorContentSilently(contactNotesEditorRef, contactNotes.value)
+                if (!contactNotesEditorRef.value?.getText() && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
+                    setEditorContentSilently(contactNotesEditorRef, contactNotesEditorValue.value)
                     seeded = true
                 }
-                if (classNotesEditorRef.value?.editor?.isEmpty && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
-                    setEditorContentSilently(classNotesEditorRef, classNotes.value)
+                if (!classNotesEditorRef.value?.getText() && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
+                    setEditorContentSilently(classNotesEditorRef, classNotesEditorValue.value)
                     seeded = true
                 }
 
-                if (seeded) {
+                syncTextRefsFromEditors()
+
+                if (seeded || collabInitialState.value !== 'loaded') {
                     void saveSnapshot()
                 }
             })
-        })
 
-        // Setup text sync for saving
-        const observeXmlFragment = (fieldName: string, onRemoteChange?: () => void) => {
-            const fragment = ydoc.value!.getXmlFragment(fieldName)
-            const observer = (event: any) => {
-                if (event.transaction.local && !isApplyingRemoteCollab) {
-                    handleInput()
-                    return
-                }
-
-                nextTick(() => {
-                    syncTextRefsFromEditors()
-                    onRemoteChange?.()
-                })
+            if (collabInitialState.value === 'loaded') {
+                queueRecoveredDraftWhenReady()
             }
-            fragment.observe(observer)
-            collabXmlObservers.push({ fragment, observer })
-        }
-
-        observeXmlFragment('content_xml', () => {
-            emit('update:content', localContent.value)
         })
-        observeXmlFragment('contactNotes_xml')
-        observeXmlFragment('classNotes_xml')
+
     }
 })
 
@@ -1645,7 +1747,11 @@ const authStore = useAuthStore()
 const { t } = useI18n()
 
 // Local state
-const localContent = ref(props.initialContent)
+const initialMainContent = createTextEditorContent(props.initialContentDocument || props.initialContent)
+const initialContactContent = createTextEditorContent(props.initialContactNotesDocument || props.initialContactNotes)
+const initialClassContent = createTextEditorContent(props.initialClassNotesDocument || props.initialClassNotes)
+const localContent = ref(initialMainContent.plainText)
+const contentDocument = ref(initialMainContent.richText)
 const version = ref(props.initialVersion)
 
 
@@ -1659,25 +1765,26 @@ const attendanceStatus = ref<'present' | 'absent' | 'pending'>(props.initialAtte
 const absenceReason = ref(props.initialAbsenceReason || '')
 const classParticipation = ref(props.initialClassParticipation ?? 0)
 const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
-const contactNotes = ref(props.initialContactNotes || '')
-const classNotes = ref(props.initialClassNotes || '')
+const contactNotes = ref(initialContactContent.plainText)
+const contactNotesDocument = ref(initialContactContent.richText)
+const classNotes = ref(initialClassContent.plainText)
+const classNotesDocument = ref(initialClassContent.richText)
 const reportExternalLink = ref(props.initialReportExternalLink || '')
 
-type AttendanceStatus = 'present' | 'absent' | 'pending'
+const contentEditorValue = computed<TextEditorContent>({
+    get: () => ({ plainText: localContent.value, richText: contentDocument.value }),
+    set: value => { localContent.value = value.plainText; contentDocument.value = value.richText }
+})
+const contactNotesEditorValue = computed<TextEditorContent>({
+    get: () => ({ plainText: contactNotes.value, richText: contactNotesDocument.value }),
+    set: value => { contactNotes.value = value.plainText; contactNotesDocument.value = value.richText }
+})
+const classNotesEditorValue = computed<TextEditorContent>({
+    get: () => ({ plainText: classNotes.value, richText: classNotesDocument.value }),
+    set: value => { classNotes.value = value.plainText; classNotesDocument.value = value.richText }
+})
 
-interface ReportFieldSnapshot {
-    lessonId: string
-    isCompleted: boolean
-    progressLetter: string
-    attendanceStatus: AttendanceStatus
-    absenceReason: string | null
-    classParticipation: number
-    classroomBehavior: number
-    contactNotes: string
-    classNotes: string
-    content: string
-    externalLink: string
-}
+type AttendanceStatus = 'present' | 'absent' | 'pending'
 
 type ReportSavePayload = {
     lessonId?: string
@@ -1688,8 +1795,11 @@ type ReportSavePayload = {
     classParticipation?: number
     classroomBehavior?: number
     contactNotes?: string
+    contactNotesDocument?: RichTextDocumentV1
     classNotes?: string
+    classNotesDocument?: RichTextDocumentV1
     content?: string
+    contentDocument?: RichTextDocumentV1
     externalLink?: string
 }
 
@@ -1701,28 +1811,38 @@ function normalizeAbsenceReason(status: AttendanceStatus, reason: string | null 
     return status === 'absent' ? normalizeString(reason) : null
 }
 
-function buildCurrentSnapshot(overrides: Partial<ReportFieldSnapshot> = {}): ReportFieldSnapshot {
+function buildCurrentSnapshot(overrides: Partial<ReportDraftSnapshot> = {}): ReportDraftSnapshot {
+    const normalizedReason = attendanceStatus.value === 'absent'
+        ? (normalizeString(absenceReason.value) || t('report.editor.absence_reasons.reason_not_provided'))
+        : null
+
     return {
         lessonId: selectedLessonId.value || '',
         isCompleted: isCompleted.value,
         progressLetter: progressLetter.value || '',
         attendanceStatus: attendanceStatus.value,
-        absenceReason: normalizeAbsenceReason(attendanceStatus.value, absenceReason.value),
+        absenceReason: normalizedReason,
         classParticipation: classParticipation.value,
         classroomBehavior: classroomBehavior.value,
         contactNotes: contactNotes.value || '',
+        contactNotesDocument: contactNotesDocument.value,
         classNotes: classNotes.value || '',
+        classNotesDocument: classNotesDocument.value,
         content: localContent.value || '',
+        contentDocument: contentDocument.value,
         externalLink: reportExternalLink.value || '',
         ...overrides
     }
 }
 
-function buildSnapshotFromProps(): ReportFieldSnapshot {
+function buildSnapshotFromProps(): ReportDraftSnapshot {
     const initialStatus = props.initialAttendanceStatus || 'pending'
     const initialProgress = props.initialProgressStart && props.initialProgressEnd
         ? `${props.initialProgressStart}-${props.initialProgressEnd}`
         : (props.initialProgressStart || props.initialProgressEnd || '')
+    const contact = createTextEditorContent(props.initialContactNotesDocument || props.initialContactNotes || '')
+    const classNotesContent = createTextEditorContent(props.initialClassNotesDocument || props.initialClassNotes || '')
+    const main = createTextEditorContent(props.initialContentDocument || props.initialContent || '')
 
     return {
         lessonId: props.initialLessonId || '',
@@ -1732,23 +1852,48 @@ function buildSnapshotFromProps(): ReportFieldSnapshot {
         absenceReason: normalizeAbsenceReason(initialStatus, props.initialAbsenceReason),
         classParticipation: props.initialClassParticipation ?? 0,
         classroomBehavior: props.initialClassroomBehavior ?? 0,
-        contactNotes: props.initialContactNotes || '',
-        classNotes: props.initialClassNotes || '',
-        content: props.initialContent || '',
+        contactNotes: contact.plainText,
+        contactNotesDocument: contact.richText,
+        classNotes: classNotesContent.plainText,
+        classNotesDocument: classNotesContent.richText,
+        content: main.plainText,
+        contentDocument: main.richText,
         externalLink: props.initialReportExternalLink || ''
     }
 }
 
-function buildDirtyPayload(current: ReportFieldSnapshot): { keys: Array<keyof ReportFieldSnapshot>, payload: ReportSavePayload } {
+function buildSnapshotFromDto(report: OccurrenceReportDTO): ReportDraftSnapshot {
+    const contact = createTextEditorContent(report.contact_notes_document || report.contact_notes || '')
+    const classNotesContent = createTextEditorContent(report.class_notes_document || report.class_notes || '')
+    const main = createTextEditorContent(report.content_document || report.content || '')
+    return {
+        lessonId: report.lesson_id || '',
+        isCompleted: report.is_completed ?? false,
+        progressLetter: report.progress_letter || '',
+        attendanceStatus: report.attendance_status || 'pending',
+        absenceReason: normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason),
+        classParticipation: report.class_participation ?? 0,
+        classroomBehavior: report.classroom_behavior ?? 0,
+        contactNotes: contact.plainText,
+        contactNotesDocument: contact.richText,
+        classNotes: classNotesContent.plainText,
+        classNotesDocument: classNotesContent.richText,
+        content: main.plainText,
+        contentDocument: main.richText,
+        externalLink: report.external_link || ''
+    }
+}
+
+function buildDirtyPayload(current: ReportDraftSnapshot): { keys: Array<keyof ReportDraftSnapshot>, payload: ReportSavePayload } {
     const previous = savedReportSnapshot.value
-    const keys: Array<keyof ReportFieldSnapshot> = []
+    const keys: Array<keyof ReportDraftSnapshot> = []
     const payload: ReportSavePayload = {}
 
-    const addIfChanged = <K extends keyof ReportFieldSnapshot>(
+    const addIfChanged = <K extends keyof ReportDraftSnapshot>(
         key: K,
         assign: () => void
     ) => {
-        if (current[key] !== previous[key]) {
+        if (JSON.stringify(current[key] ?? null) !== JSON.stringify(previous[key] ?? null)) {
             keys.push(key)
             assign()
         }
@@ -1778,11 +1923,23 @@ function buildDirtyPayload(current: ReportFieldSnapshot): { keys: Array<keyof Re
     addIfChanged('contactNotes', () => {
         payload.contactNotes = current.contactNotes
     })
+    addIfChanged('contactNotesDocument', () => {
+        payload.contactNotes = current.contactNotes
+        payload.contactNotesDocument = current.contactNotesDocument
+    })
     addIfChanged('classNotes', () => {
         payload.classNotes = current.classNotes
     })
+    addIfChanged('classNotesDocument', () => {
+        payload.classNotes = current.classNotes
+        payload.classNotesDocument = current.classNotesDocument
+    })
     addIfChanged('content', () => {
         payload.content = current.content
+    })
+    addIfChanged('contentDocument', () => {
+        payload.content = current.content
+        payload.contentDocument = current.contentDocument
     })
     addIfChanged('externalLink', () => {
         payload.externalLink = current.externalLink
@@ -1791,7 +1948,7 @@ function buildDirtyPayload(current: ReportFieldSnapshot): { keys: Array<keyof Re
     return { keys, payload }
 }
 
-const savedReportSnapshot = ref<ReportFieldSnapshot>(buildSnapshotFromProps())
+const savedReportSnapshot = ref<ReportDraftSnapshot>(buildSnapshotFromProps())
 
 
 // Computed progress letter for backend (combining start-end range)
@@ -1832,19 +1989,56 @@ const canSave = computed(() => {
     return true
 })
 
+function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportDTO {
+    return {
+        id: props.reportId,
+        enrollment_id: props.enrollmentId || '',
+        class_occurrence_id: props.classOccurrenceId || '',
+        lesson_id: snapshot.lessonId,
+        content: snapshot.content,
+        content_document: snapshot.contentDocument,
+        is_completed: snapshot.isCompleted,
+        progress_letter: snapshot.progressLetter,
+        attendance_status: snapshot.attendanceStatus,
+        absence_reason: snapshot.absenceReason || '',
+        class_participation: snapshot.classParticipation,
+        classroom_behavior: snapshot.classroomBehavior,
+        contact_notes: snapshot.contactNotes,
+        contact_notes_document: snapshot.contactNotesDocument,
+        class_notes: snapshot.classNotes,
+        class_notes_document: snapshot.classNotesDocument,
+        external_link: snapshot.externalLink,
+        version: version.value,
+        last_edited_at: new Date().toISOString(),
+        last_edited_by: authStore.user?.id,
+        created_at: props.initialCreatedAt,
+        updated_at: new Date().toISOString()
+    }
+}
+
 // Auto-save setup
 const {
+    status: autoSaveStatus,
     isSaving,
     lastSaved,
     hasUnsavedChanges,
     saveError,
     saveNow: autoSaveNow,
     triggerAutoSave,
+    setEnabled: setAutoSaveEnabled,
+    configure: configureAutoSave,
+    retry: retrySave,
+    drain,
     getLastSavedString,
     reset
-} = useAutoSave({
-    debounceMs: props.debounceMs,
-    onSave: async (content) => {
+} = useAutoSave<ReportDraftSnapshot, SaveReportResult>({
+    enabled: effectiveAutoSaveEnabled,
+    debounceMs: computed(() => props.debounceMs ?? preferences.editorSettings.autoSave.debounceMs),
+    saveOnBlur: computed(() => preferences.editorSettings.autoSave.saveOnBlur),
+    saveOnSwitch: computed(() => preferences.editorSettings.autoSave.saveOnSwitch),
+    saveOnUnmount: computed(() => preferences.editorSettings.autoSave.saveOnUnmount),
+    onSave: async (snapshot) => {
+        editorNotifier.notify({ code: 'save-started', level: 'info', message: 'Saving report', toast: false })
         if (!props.reportId) {
             return { success: false, message: 'No report ID provided' }
         }
@@ -1853,39 +2047,12 @@ const {
             return { success: false, message: t('report.editor.required_field_error') }
         }
 
-        // Auto-fill absence reason if missing, and clear reasons for present/pending.
-        let finalAbsenceReason = absenceReason.value
-        if (attendanceStatus.value === 'absent' && !finalAbsenceReason) {
-            finalAbsenceReason = t('report.editor.absence_reasons.reason_not_provided')
-            absenceReason.value = finalAbsenceReason
-        } else if (attendanceStatus.value !== 'absent' && finalAbsenceReason) {
-            finalAbsenceReason = ''
-            absenceReason.value = ''
-        }
-
-        const saveContent = (ydoc.value && contentEditorRef.value?.editor) ? contentEditorRef.value.editor.getText() : content
-        const saveContact = (ydoc.value && contactNotesEditorRef.value?.editor) ? contactNotesEditorRef.value.editor.getText() : contactNotes.value
-        const saveClass = (ydoc.value && classNotesEditorRef.value?.editor) ? classNotesEditorRef.value.editor.getText() : classNotes.value
-        localContent.value = saveContent
-        contactNotes.value = saveContact
-        classNotes.value = saveClass
-
         try {
-            const currentSnapshot = buildCurrentSnapshot({
-                content: saveContent,
-                contactNotes: saveContact,
-                classNotes: saveClass,
-                absenceReason: normalizeAbsenceReason(attendanceStatus.value, finalAbsenceReason)
-            })
-            const { keys, payload } = buildDirtyPayload(currentSnapshot)
+            const { keys, payload } = buildDirtyPayload(snapshot)
             const isAttendanceOnly = keys.length > 0 && keys.every(key => key === 'attendanceStatus' || key === 'absenceReason')
 
             if (keys.length === 0) {
                 return { success: true, newVersion: version.value }
-            }
-
-            if (!isAttendanceOnly && ready.value && props.reportId && authStore.user?.id) {
-                await saveSnapshot()
             }
 
             const result = isAttendanceOnly
@@ -1894,8 +2061,8 @@ const {
                     version.value,
                     authStore.user?.id,
                     {
-                        attendanceStatus: currentSnapshot.attendanceStatus,
-                        absenceReason: currentSnapshot.absenceReason
+                        attendanceStatus: snapshot.attendanceStatus,
+                        absenceReason: snapshot.absenceReason
                     }
                 )
                 : await OccurrenceReportService.saveReport(
@@ -1904,36 +2071,6 @@ const {
                     authStore.user?.id,
                     payload
                 )
-
-            const localReportPayload: OccurrenceReportDTO = {
-                id: props.reportId,
-                enrollment_id: props.enrollmentId || '',
-                class_occurrence_id: props.classOccurrenceId || '',
-                lesson_id: selectedLessonId.value || '',
-                content: saveContent,
-                is_completed: isCompleted.value,
-
-                progress_letter: progressLetter.value || '',
-                attendance_status: attendanceStatus.value,
-                absence_reason: currentSnapshot.absenceReason || '',
-                class_participation: classParticipation.value,
-                classroom_behavior: classroomBehavior.value,
-                contact_notes: saveContact,
-                class_notes: saveClass,
-                external_link: reportExternalLink.value,
-
-                version: version.value,
-                last_edited_at: new Date().toISOString(),
-                last_edited_by: authStore.user?.id,
-                created_at: props.initialCreatedAt,
-                updated_at: new Date().toISOString(),
-            }
-
-            if (result.conflict) {
-                emit('conflict', result.serverReport!, localReportPayload)
-                return result
-            }
-
             return result
         } catch (error: any) {
             const message = error.message || 'Failed to save report'
@@ -1941,113 +2078,117 @@ const {
             return { success: false, message }
         }
     },
-    onConflict: (serverReport) => {
-        // Construct local payload for comparison
-        const localReportPayload: OccurrenceReportDTO = {
-            id: props.reportId,
-            enrollment_id: props.enrollmentId || '',
-            class_occurrence_id: props.classOccurrenceId || '',
-            lesson_id: selectedLessonId.value || '',
-            content: localContent.value,
-            is_completed: isCompleted.value,
-
-            progress_letter: progressLetter.value || '',
-            attendance_status: attendanceStatus.value,
-            absence_reason: absenceReason.value || '',
-            class_participation: classParticipation.value,
-            classroom_behavior: classroomBehavior.value,
-            contact_notes: contactNotes.value,
-            class_notes: classNotes.value,
-            external_link: reportExternalLink.value,
-
-            version: version.value,
-            last_edited_at: new Date().toISOString(),
-            last_edited_by: authStore.user?.id,
-            created_at: props.initialCreatedAt,
-            updated_at: new Date().toISOString(),
+    onConflict: (serverReport, snapshot) => {
+        editorNotifier.notify({ code: 'save-conflict', level: 'warning', message: 'Report save conflict', toast: true })
+        if (serverReport) {
+            emit('conflict', serverReport, snapshotToLocalReport(snapshot))
         }
-        emit('conflict', serverReport!, localReportPayload)
     },
-    onSuccess: (newVersion) => {
+    onSuccess: async ({ snapshot, result }) => {
+        const updatedReport = result.updatedReport
+        const newVersion = updatedReport?.version ?? result.newVersion ?? version.value
         version.value = newVersion
-        savedReportSnapshot.value = buildCurrentSnapshot()
+        savedReportSnapshot.value = updatedReport ? buildSnapshotFromDto(updatedReport) : snapshot
+        setBaseReportVersion(newVersion)
+
         if (ydoc.value) {
             const metaMap = ydoc.value.getMap('reportMeta')
             const currentMetaVer = metaMap.get('version') as number || 0
             if (newVersion > currentMetaVer) {
                 metaMap.set('version', newVersion)
             }
+            await saveSnapshot()
         }
-        emit('save-success', newVersion)
+
+        if (updatedReport) {
+            emit('save-success', updatedReport)
+        }
+        editorNotifier.notify({ code: 'save-succeeded', level: 'success', message: 'Report saved', toast: false })
     },
     onError: (message) => {
         emit('save-error', message)
+        editorNotifier.notify({ code: 'save-failed', level: 'error', message, toast: true })
     }
 })
 
 // Computed
-const wordCount = computed(() => {
-    if (!localContent.value) return 0
-    return localContent.value.trim().split(/\s+/).filter(w => w.length > 0).length
+const reportMetrics = computed(() => {
+    const content = calculateTextEditorMetrics(localContent.value)
+    const contact = calculateTextEditorMetrics(contactNotes.value)
+    const classMetric = calculateTextEditorMetrics(classNotes.value)
+    const total = Object.fromEntries(Object.keys(content).map(key => [key,
+        content[key as keyof TextEditorMetrics] + contact[key as keyof TextEditorMetrics] + classMetric[key as keyof TextEditorMetrics]
+    ])) as unknown as TextEditorMetrics
+    return { content, contactNotes: contact, classNotes: classMetric, total }
 })
-
-const characterCount = computed(() => {
-    return localContent.value.length
-})
+const wordCount = computed(() => reportMetrics.value.content.wordCount)
+const characterCount = computed(() => reportMetrics.value.content.characterCount)
+watch(reportMetrics, metrics => emit('metrics-change', metrics), { immediate: true })
 
 // Watchers to sync props to local state (important for Master-Detail views where component is reused)
 watch(() => props.initialContent, (newContent) => {
     if (newContent !== localContent.value && !hasUnsavedChanges.value) {
-        localContent.value = newContent
+        const content = createTextEditorContent(props.initialContentDocument || newContent)
+        localContent.value = content.plainText
+        contentDocument.value = content.richText
     }
 })
 
 watch(() => props.initialVersion, (newVersion) => {
     version.value = newVersion
+    setBaseReportVersion(newVersion)
 })
 
 watch(() => props.initialLessonId, (newVal) => {
-    selectedLessonId.value = newVal || ''
+    if (!hasUnsavedChanges.value) selectedLessonId.value = newVal || ''
 })
 
 watch(() => props.initialIsCompleted, (newVal) => {
-    isCompleted.value = newVal ?? false
+    if (!hasUnsavedChanges.value) isCompleted.value = newVal ?? false
 })
 
 watch(() => props.initialProgressStart, (newVal) => {
-    progressStart.value = newVal || ''
+    if (!hasUnsavedChanges.value) progressStart.value = newVal || ''
 })
 
 watch(() => props.initialProgressEnd, (newVal) => {
-    progressEnd.value = newVal || ''
+    if (!hasUnsavedChanges.value) progressEnd.value = newVal || ''
 })
 
 watch(() => props.initialAttendanceStatus, (newVal) => {
-    attendanceStatus.value = newVal
+    if (!hasUnsavedChanges.value) attendanceStatus.value = newVal
 })
 
 watch(() => props.initialAbsenceReason, (newVal) => {
-    absenceReason.value = newVal || ''
+    if (!hasUnsavedChanges.value) absenceReason.value = newVal || ''
 })
 
 watch(() => props.initialClassParticipation, (newVal) => {
-    classParticipation.value = newVal ?? 0
+    if (!hasUnsavedChanges.value) classParticipation.value = newVal ?? 0
 })
 
 watch(() => props.initialClassroomBehavior, (newVal) => {
-    classroomBehavior.value = newVal ?? 0
+    if (!hasUnsavedChanges.value) classroomBehavior.value = newVal ?? 0
 })
 
 watch(() => props.initialContactNotes, (newVal) => {
-    contactNotes.value = newVal || ''
+    if (!hasUnsavedChanges.value) {
+        const content = createTextEditorContent(props.initialContactNotesDocument || newVal || '')
+        contactNotes.value = content.plainText
+        contactNotesDocument.value = content.richText
+    }
 })
 
 watch(() => props.initialClassNotes, (newVal) => {
-    classNotes.value = newVal || ''
+    if (!hasUnsavedChanges.value) {
+        const content = createTextEditorContent(props.initialClassNotesDocument || newVal || '')
+        classNotes.value = content.plainText
+        classNotesDocument.value = content.richText
+    }
 })
 
 watch(() => props.initialReportExternalLink, (newVal) => {
-    reportExternalLink.value = newVal || ''
+    if (!hasUnsavedChanges.value) reportExternalLink.value = newVal || ''
 })
 
 watch(attendanceStatus, (newStatus) => {
@@ -2120,38 +2261,69 @@ function handleInput() {
         return
     }
 
-    if (ydoc.value) {
-        if (contentEditorRef.value?.editor) {
-            localContent.value = contentEditorRef.value.editor.getText()
-        }
-        if (contactNotesEditorRef.value?.editor) {
-            contactNotes.value = contactNotesEditorRef.value.editor.getText()
-        }
-        if (classNotesEditorRef.value?.editor) {
-            classNotes.value = classNotesEditorRef.value.editor.getText()
-        }
-    }
-
     emit('update:content', localContent.value)
     emit('update:report-external-link', reportExternalLink.value)
 
     if (props.reportId) {
-        triggerAutoSave(localContent.value)
+        triggerAutoSave(buildCurrentSnapshot())
     }
 }
 
+function handleTextEditorChange(
+    field: 'content' | 'contactNotes' | 'classNotes',
+    change: TextEditorChange
+) {
+    if (field === 'content') {
+        localContent.value = change.content.plainText
+        contentDocument.value = change.content.richText
+    }
+    if (field === 'contactNotes') {
+        contactNotes.value = change.content.plainText
+        contactNotesDocument.value = change.content.richText
+    }
+    if (field === 'classNotes') {
+        classNotes.value = change.content.plainText
+        classNotesDocument.value = change.content.richText
+    }
+    handleInput()
+}
 
-function saveNow() {
+function queueRecoveredDraftWhenReady(attempt = 0) {
+    if (isInitializing.value) {
+        if (attempt < 10) {
+            setTimeout(() => queueRecoveredDraftWhenReady(attempt + 1), 25)
+        }
+        return
+    }
+
+    syncTextRefsFromEditors()
+    const recoveredSnapshot = buildCurrentSnapshot()
+    if (buildDirtyPayload(recoveredSnapshot).keys.length > 0) {
+        emit('update:content', recoveredSnapshot.content)
+        triggerAutoSave(recoveredSnapshot)
+    }
+}
+
+function saveNow(_options?: { reason?: 'manual' | 'switch' }): Promise<boolean> {
     if (!props.reportId || !canSave.value) {
-        return Promise.resolve()
+        return Promise.resolve(true)
     }
 
-    return autoSaveNow(localContent.value)
+    if (!hasUnsavedChanges.value) {
+        return Promise.resolve(true)
+    }
+
+    syncTextRefsFromEditors()
+    return autoSaveNow(buildCurrentSnapshot())
 }
 
-function handleReportRestored(report: OccurrenceReportDTO) {
+function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = false) {
     version.value = report.version
-    localContent.value = report.content || ''
+    const main = createTextEditorContent(report.content_document || report.content || '')
+    const contact = createTextEditorContent(report.contact_notes_document || report.contact_notes || '')
+    const classNotesContent = createTextEditorContent(report.class_notes_document || report.class_notes || '')
+    localContent.value = main.plainText
+    contentDocument.value = main.richText
     selectedLessonId.value = report.lesson_id || ''
     isCompleted.value = report.is_completed ?? false
     progressStart.value = report.progress_letter ? report.progress_letter.split('-')[0] : ''
@@ -2160,36 +2332,80 @@ function handleReportRestored(report: OccurrenceReportDTO) {
     absenceReason.value = report.absence_reason || ''
     classParticipation.value = report.class_participation ?? 0
     classroomBehavior.value = report.classroom_behavior ?? 0
-    contactNotes.value = report.contact_notes || ''
-    classNotes.value = report.class_notes || ''
+    contactNotes.value = contact.plainText
+    contactNotesDocument.value = contact.richText
+    classNotes.value = classNotesContent.plainText
+    classNotesDocument.value = classNotesContent.richText
     reportExternalLink.value = report.external_link || ''
+    savedReportSnapshot.value = buildSnapshotFromDto(report)
+    setBaseReportVersion(report.version)
 
     if (ydoc.value) {
         const metaMap = ydoc.value.getMap('reportMeta')
         withCollabGuard(() => {
             writeReportMeta(metaMap)
-            setEditorContentSilently(contentEditorRef, report.content || '')
-            setEditorContentSilently(contactNotesEditorRef, report.contact_notes || '')
-            setEditorContentSilently(classNotesEditorRef, report.class_notes || '')
+            setEditorContentSilently(contentEditorRef, createTextEditorContent(report.content_document || report.content || ''))
+            setEditorContentSilently(contactNotesEditorRef, createTextEditorContent(report.contact_notes_document || report.contact_notes || ''))
+            setEditorContentSilently(classNotesEditorRef, createTextEditorContent(report.class_notes_document || report.class_notes || ''))
         })
         void saveSnapshot()
     }
 
-    // Emit the event to parent
-    emit('restored', report)
+    if (notifyParent) {
+        emit('restored', report)
+    }
 
     // Clear unsaved changes flag
     reset()
 }
 
+function handleReportRestored(report: OccurrenceReportDTO) {
+    replaceWithCanonicalReport(report, true)
+}
+
+function getEditorSettings(): EditorUserSettings {
+    return structuredClone(preferences.editorSettings)
+}
+
+function updateEditorSettings(settings: Partial<EditorUserSettings>): EditorUserSettings {
+    preferences.editorSettings = normalizeEditorUserSettings({
+        ...preferences.editorSettings,
+        ...settings,
+        appearance: { ...preferences.editorSettings.appearance, ...settings.appearance },
+        autoSave: { ...preferences.editorSettings.autoSave, ...settings.autoSave },
+        collaboration: { ...preferences.editorSettings.collaboration, ...settings.collaboration }
+    })
+    return getEditorSettings()
+}
+
+function resetEditorSettings(): EditorUserSettings {
+    preferences.editorSettings = normalizeEditorUserSettings(DEFAULT_EDITOR_USER_SETTINGS)
+    return getEditorSettings()
+}
+
 defineExpose({
-    saveNow
+    saveNow,
+    drain,
+    retrySave,
+    replaceWithCanonicalReport,
+    getSnapshot: buildCurrentSnapshot,
+    getMetrics: () => reportMetrics.value,
+    autoSaveStatus,
+    collaborationStatus,
+    activePeers,
+    setAutoSaveEnabled,
+    configureAutoSave,
+    setCollaborationEnabled,
+    configureCollaboration,
+    getEditorSettings,
+    updateEditorSettings,
+    resetEditorSettings
 })
 
 // Warn before leaving with unsaved changes
 onBeforeUnmount(() => {
     cleanupReportCollabBindings()
-    void saveNow()
+    if (preferences.editorSettings.autoSave.saveOnUnmount) void saveNow()
 })
 </script>
 

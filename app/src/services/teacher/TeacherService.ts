@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase'
+import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
 
 export interface TeacherDTO {
     id?: string
@@ -10,6 +12,7 @@ export interface TeacherDTO {
     gov_id?: string | null
     address?: string | null
     bio?: string | null
+    bio_document?: RichTextDocumentV1 | null
     teacher_credentials?: TeacherCredentialDTO[]
     created_at?: string
     updated_at?: string
@@ -39,6 +42,12 @@ type TeacherUpsertDTO = Omit<TeacherDTO, 'id' | 'created_at' | 'updated_at'>
 
 function normalizeTeacherPayload(payload: Partial<TeacherUpsertDTO>): Partial<TeacherUpsertDTO> {
     const normalized: Partial<TeacherUpsertDTO> = { ...payload }
+
+    if (normalized.bio_document || normalized.bio !== undefined) {
+        const bio = createTextEditorContent(normalized.bio_document || normalized.bio || '')
+        normalized.bio = bio.plainText || null
+        normalized.bio_document = bio.richText
+    }
 
     ;(['user_id', 'phone', 'birthday', 'gov_id', 'address', 'bio'] as const).forEach((key) => {
         const value = normalized[key]
