@@ -1,28 +1,29 @@
 <template>
     <fieldset class="text-editor-settings" :disabled="disabled">
-        <label><input type="checkbox" :checked="enabled" @change="toggleEnabled"> Style controls</label>
+        <label><input type="checkbox" :checked="enabled" @change="toggleEnabled"> {{ t('editor.settings.style_controls') }}</label>
         <template v-if="enabled">
-            <label>Preset
+            <label>{{ t('editor.settings.preset') }}
                 <select :value="preset" @change="emitPreset">
-                    <option v-for="value in presets" :key="value" :value="value">{{ value }}</option>
+                    <option v-for="value in presets" :key="value" :value="value">{{ t(`editor.settings.presets.${value}`) }}</option>
                 </select>
             </label>
-            <label>Font scale
+            <label>{{ t('editor.settings.font_scale') }}
                 <input type="number" min="70" max="200" step="10" :value="style.fontScale"
                     @change="emitNumber('fontScale', $event)">
             </label>
-            <label>Minimum height
+            <label>{{ t('editor.settings.minimum_height') }}
                 <input type="number" min="0" max="1200" step="10" :value="style.minHeight"
                     @change="emitNumber('minHeight', $event)">
             </label>
-            <label><input type="checkbox" :checked="style.mono" @change="emitBoolean('mono', $event)"> Monospace</label>
-            <label><input type="checkbox" :checked="style.resize === 'vertical'" @change="emitResize"> Resizable</label>
-            <button type="button" @click="$emit('reset')">Reset</button>
+            <label><input type="checkbox" :checked="style.mono" @change="emitBoolean('mono', $event)"> {{ t('editor.settings.monospace') }}</label>
+            <label><input type="checkbox" :checked="style.resize === 'vertical'" @change="emitResize"> {{ t('editor.settings.resizable') }}</label>
+            <button type="button" :aria-label="t('editor.settings.reset')" @click="$emit('reset')">{{ t('editor.settings.reset') }}</button>
         </template>
     </fieldset>
 </template>
 
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import type { TextEditorAppearance, TextEditorPreset } from './types'
 
 const props = withDefaults(defineProps<{
@@ -31,6 +32,8 @@ const props = withDefaults(defineProps<{
     preset: TextEditorPreset
     style: TextEditorAppearance
 }>(), { enabled: true, disabled: false })
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
     'update:enabled': [enabled: boolean]

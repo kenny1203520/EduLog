@@ -1,0 +1,16 @@
+{
+  "toolbar": {
+    "aria_label": "文字格式工具列", "bold": "粗體", "italic": "斜體", "underline": "底線",
+    "strikethrough": "刪除線", "paragraph": "一般段落", "heading_1": "標題 1",
+    "heading_2": "標題 2", "heading_3": "標題 3", "bullet_list": "項目清單",
+    "ordered_list": "編號清單", "blockquote": "引用", "highlight": "醒目提示",
+    "clear_formatting": "清除格式", "undo": "復原", "redo": "重做", "link": "加入連結",
+    "remove_link": "移除連結", "link_url_prompt": "連結網址"
+  },
+  "settings": {
+    "style_controls": "樣式控制", "preset": "外觀預設", "font_scale": "字級比例",
+    "minimum_height": "最小高度", "monospace": "等寬字型", "resizable": "可調整高度", "reset": "重設",
+    "presets": { "form": "表單", "notes": "筆記", "report": "報告", "template": "範本", "merge": "合併" }
+  },
+  "template": { "editor": "編輯器", "preview": "預覽", "variable_count": "{count} 個變數" }
+}

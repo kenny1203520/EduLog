@@ -26,7 +26,7 @@
                         <div class="space-y-3">
                             <div class="flex items-center justify-between gap-3">
                                 <p class="text-sm font-bold text-gray-700">{{ variableTitle }}</p>
-                                <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{{ variableCount }} vars</span>
+                                <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{{ t('editor.template.variable_count', { count: variableCount }) }}</span>
                             </div>
                             <slot name="variables" />
                         </div>
@@ -40,7 +40,7 @@
                                 <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
                                     <div class="mb-2 flex items-center justify-between gap-3">
                                         <label class="block text-sm font-bold text-blue-900">{{ field.label }}</label>
-                                        <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
+                                        <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">{{ t('editor.template.editor') }}</span>
                                     </div>
                                     <TextEditor
                                         :ref="(el) => setEditorRef(field.id, el)"
@@ -57,7 +57,7 @@
                                     <div class="mb-3 shrink-0">
                                         <div class="mb-1 flex items-center justify-between gap-3">
                                             <p class="text-sm font-bold text-emerald-900">{{ field.label }}</p>
-                                            <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Preview</span>
+                                            <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">{{ t('editor.template.preview') }}</span>
                                         </div>
                                         <p class="text-xs text-emerald-700/80">{{ previewHint }}</p>
                                     </div>
@@ -72,7 +72,7 @@
                             <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
                                 <div class="mb-2 flex items-center justify-between gap-3">
                                     <label class="block text-sm font-bold text-blue-900">{{ contentTitle }}</label>
-                                    <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
+                                    <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">{{ t('editor.template.editor') }}</span>
                                 </div>
                                 <TextEditor
                                     :ref="(el) => setEditorRef('template', el)"
@@ -89,7 +89,7 @@
                                 <div class="mb-3 shrink-0">
                                     <div class="mb-1 flex items-center justify-between gap-3">
                                         <p class="text-sm font-bold text-emerald-900">{{ previewTitle }}</p>
-                                        <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Preview</span>
+                                        <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">{{ t('editor.template.preview') }}</span>
                                     </div>
                                     <p class="text-xs text-emerald-700/80">{{ previewHint }}</p>
                                 </div>
@@ -157,9 +157,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import TextEditor from '@/components/common/text-editor/TextEditor.vue'
 import type { RichTextDocumentV1, TextEditorActivity, TextEditorContent, TextEditorHandle } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+
+const { t } = useI18n()
 
 interface EditableField {
     id: string
