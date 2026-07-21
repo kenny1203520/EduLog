@@ -13,6 +13,7 @@ import BaseDatePicker from '@/components/common/BaseDatePicker.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { formatClassSessionOption } from '@/utils/sessionSchedule'
 
 const props = defineProps<{
     isOpen: boolean
@@ -89,14 +90,7 @@ function formatWeekdayFromDate(dateValue: string | Date | undefined): string {
 }
 
 function formatSessionOptionLabel(session: any): string {
-    const scheduleParts = [
-        formatWeekdayFromIndex(session.day_of_week),
-        formatTimeRange(session.start_time, session.end_time)
-    ].filter(Boolean)
-
-    return scheduleParts.length > 0
-        ? `${session.name} · ${scheduleParts.join(' ')}`
-        : session.name
+    return formatClassSessionOption(session, preferences.locale, t)
 }
 
 const currentEnrollmentDetails = computed(() => {

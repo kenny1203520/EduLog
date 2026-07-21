@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Prevented stale or unversioned Yjs snapshots from overriding newer report content.
 
 ### Added
+- Added weekly multi-day, monthly day-of-month, and exact-date camp schedules with per-day class times.
+- Added draft camps with editable date ranges and atomic session schedule persistence.
+- Added safe future-occurrence reconciliation that preserves classes containing reports, attendance, notes, or actual times.
 - Added shared plain-text and collaborative editor contracts with reusable appearance presets.
 - Added versioned TipTap JSON documents, Unicode-aware metrics, formatting controls, rich/plain/HTML accessors, and reusable read-only rendering.
 - Persisted TipTap JSON and its canonical plain-text projection atomically for reports, templates, course descriptions, student notes, and teacher biographies.
@@ -25,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added regression coverage for queued saves, conflicts, errors, resets, and manual draining.
 
 ### Deployment Notes
+- Apply `1000024_recurring_and_camp_sessions.sql` before deploying frontend code that manages recurring or camp schedules.
 - Apply `1000022_report_collab_snapshot_versioning.sql` before deploying frontend code that uses versioned collaboration snapshots.
 - Apply `1000023_rich_text_documents.sql` before deploying frontend code that reads or writes rich-text documents.
 - Legacy collaboration snapshots remain stored but are ignored until replaced from canonical report content.

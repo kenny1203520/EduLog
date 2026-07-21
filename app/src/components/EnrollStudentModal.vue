@@ -13,6 +13,7 @@ import CapacityProgressBar from '@/components/common/CapacityProgressBar.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { formatClassSessionOption } from '@/utils/sessionSchedule'
 
 const props = defineProps<{
     isOpen: boolean
@@ -41,8 +42,6 @@ const classroomOptions = ref<any[]>([])
 const sessions = ref<any[]>([])
 const fullCourses = ref<any[]>([])
 const selectedClassroomId = ref('')
-
-const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
 const sessionOptions = computed(() => {
     return sessions.value
@@ -83,17 +82,8 @@ async function fetchOptions() {
     }
 }
 
-function formatTime(value?: string) {
-    return value?.slice(0, 5) || ''
-}
-
 function formatSessionLabel(session: any) {
-    const dayKey = dayKeys[session.day_of_week]
-    const dayLabel = dayKey ? t(`common.days.${dayKey}`) : ''
-    const start = formatTime(session.start_time)
-    const end = formatTime(session.end_time)
-    const schedule = [dayLabel, start && end ? `${start}-${end}` : ''].filter(Boolean).join(' ')
-    return schedule ? `${session.name} · ${schedule}` : session.name
+    return formatClassSessionOption(session, preferences.locale, t)
 }
 
 watch(() => enrollForm.value.course_catalog_id, (newId) => {
