@@ -20,6 +20,36 @@ afterEach(() => {
 })
 
 describe('useAutoSave', () => {
+    it('keeps edits dirty while disabled and allows a manual drain', async () => {
+        vi.useFakeTimers()
+        const onSave = vi.fn().mockResolvedValue({ success: true })
+        const autoSave = useAutoSave<Snapshot>({ enabled: false, debounceMs: 500, onSave })
+
+        autoSave.triggerAutoSave({ content: 'manual only' })
+        await vi.advanceTimersByTimeAsync(1000)
+        expect(onSave).not.toHaveBeenCalled()
+        expect(autoSave.status.value).toBe('disabled')
+        expect(autoSave.hasUnsavedChanges.value).toBe(true)
+
+        await expect(autoSave.drain()).resolves.toBe(true)
+        expect(onSave).toHaveBeenCalledWith({ content: 'manual only' })
+        expect(autoSave.hasUnsavedChanges.value).toBe(false)
+    })
+
+    it('reschedules a pending revision when runtime debounce configuration changes', async () => {
+        vi.useFakeTimers()
+        const onSave = vi.fn().mockResolvedValue({ success: true })
+        const autoSave = useAutoSave<Snapshot>({ debounceMs: 2000, onSave })
+        autoSave.triggerAutoSave({ content: 'configured' })
+        autoSave.configure({ debounceMs: 500 })
+
+        await vi.advanceTimersByTimeAsync(499)
+        expect(onSave).not.toHaveBeenCalled()
+        await vi.advanceTimersByTimeAsync(1)
+        expect(onSave).toHaveBeenCalledTimes(1)
+        expect(autoSave.getConfiguration().debounceMs).toBe(500)
+    })
+
     it('persists an edit made while an older snapshot is still saving', async () => {
         vi.useFakeTimers()
         const firstSave = deferred<AutoSaveResult>()
