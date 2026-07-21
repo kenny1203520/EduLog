@@ -17,6 +17,10 @@
     opacity: 0.72;
 }
 
+.text-editor-shell[data-readonly='true'] {
+    background: #f9fafb;
+}
+
 .text-editor-input,
 .text-editor-content .text-editor-tiptap {
     background: transparent;
@@ -26,7 +30,7 @@
     display: block;
     font-family: var(--text-editor-font-family);
     font-size: var(--text-editor-font-size);
-    line-height: 1.5;
+    line-height: var(--text-editor-line-height);
     min-height: var(--text-editor-min-height);
     outline: none;
     padding: var(--text-editor-padding);
@@ -41,7 +45,95 @@
 }
 
 .text-editor-content .text-editor-tiptap p + p {
-    margin-top: 0.125rem;
+    margin-top: 0.5rem;
+}
+
+.text-editor-content .text-editor-tiptap h1,
+.text-editor-content .text-editor-tiptap h2,
+.text-editor-content .text-editor-tiptap h3 {
+    font-weight: 700;
+    line-height: 1.25;
+    margin: 0.75rem 0 0.4rem;
+}
+
+.text-editor-content .text-editor-tiptap h1 { font-size: 1.5em; }
+.text-editor-content .text-editor-tiptap h2 { font-size: 1.3em; }
+.text-editor-content .text-editor-tiptap h3 { font-size: 1.15em; }
+
+.text-editor-content .text-editor-tiptap ul,
+.text-editor-content .text-editor-tiptap ol {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+}
+
+.text-editor-content .text-editor-tiptap ul { list-style: disc; }
+.text-editor-content .text-editor-tiptap ol { list-style: decimal; }
+
+.text-editor-content .text-editor-tiptap blockquote {
+    border-left: 3px solid #a7f3d0;
+    color: #4b5563;
+    margin: 0.75rem 0;
+    padding-left: 0.75rem;
+}
+
+.text-editor-content .text-editor-tiptap a {
+    color: #047857;
+    text-decoration: underline;
+}
+
+.text-editor-content .text-editor-tiptap mark {
+    background: #fef08a;
+    border-radius: 0.2rem;
+    padding: 0 0.08rem;
+}
+
+.text-editor-template-variable {
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 0.3rem;
+    color: #047857;
+    display: inline-block;
+    font-family: ui-monospace, monospace;
+    font-size: 0.9em;
+    padding: 0 0.2rem;
+}
+
+.text-editor-template-variable.ProseMirror-selectednode {
+    box-shadow: 0 0 0 2px #10b981;
+}
+
+.text-editor-toolbar {
+    align-items: center;
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    border-radius: var(--text-editor-radius) var(--text-editor-radius) 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding: 0.4rem;
+}
+
+.text-editor-toolbar button {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.35rem;
+    color: #374151;
+    cursor: pointer;
+    font-size: 0.75rem;
+    min-height: 1.75rem;
+    padding: 0.15rem 0.42rem;
+}
+
+.text-editor-toolbar button:hover:not(:disabled),
+.text-editor-toolbar button.active {
+    background: #ecfdf5;
+    border-color: #34d399;
+    color: #047857;
+}
+
+.text-editor-toolbar button:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
 }
 
 .text-editor-placeholder {

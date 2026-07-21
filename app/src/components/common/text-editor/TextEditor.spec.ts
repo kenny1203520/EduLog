@@ -2,73 +2,67 @@ import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import TextEditor from './TextEditor.vue'
+import { createTextEditorContent } from './content'
+import type { TextEditorHandle } from './types'
 
 describe('TextEditor', () => {
-    it('normalizes line endings and emits the shared change contract', async () => {
-        const wrapper = mount(TextEditor, {
-            props: { modelValue: 'first\r\nsecond' }
-        })
-        const input = wrapper.get('textarea')
+    it('upgrades legacy plain text and exposes rich, plain, and HTML content', async () => {
+        const wrapper = mount(TextEditor, { props: { modelValue: 'first\r\nsecond', toolbarVisible: false } })
+        await nextTick()
+        const handle = wrapper.vm as unknown as TextEditorHandle
 
-        expect((input.element as HTMLTextAreaElement).value).toBe('first\nsecond')
+        expect(handle.getText()).toBe('first\nsecond')
+        expect(handle.getJSON().schemaVersion).toBe(1)
+        expect(handle.getHTML()).toContain('<p>first</p><p>second</p>')
 
-        await input.setValue('updated\r\ncontent')
-
+        handle.replaceText('updated\r\ncontent', { emitChange: true })
         expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['updated\ncontent'])
-        expect(wrapper.emitted('change')?.at(-1)).toEqual([{
-            value: 'updated\ncontent',
-            source: 'local'
-        }])
+        expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ value: 'updated\ncontent', source: 'local' })
     })
 
     it('supports silent replacement and selection-aware insertion', async () => {
-        const wrapper = mount(TextEditor, {
-            props: { modelValue: 'abcd' }
-        })
-        const handle = wrapper.vm as unknown as {
-            replaceText: (value: string) => void
-            insertText: (value: string) => void
-        }
+        const wrapper = mount(TextEditor, { props: { modelValue: 'abcd', toolbarVisible: false } })
+        await nextTick()
+        const handle = wrapper.vm as unknown as TextEditorHandle & { editor: any }
 
         handle.replaceText('abcd')
         expect(wrapper.emitted('change')).toBeUndefined()
 
-        const input = wrapper.get('textarea').element as HTMLTextAreaElement
-        input.setSelectionRange(1, 3)
+        handle.editor.commands.setTextSelection({ from: 2, to: 4 })
         handle.insertText('X')
         await nextTick()
-
-        expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['aXd'])
-        expect(wrapper.emitted('change')?.at(-1)).toEqual([{ value: 'aXd', source: 'local' }])
+        expect(handle.getText()).toBe('aXd')
+        expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ value: 'aXd', source: 'local' })
     })
 
-    it('resolves preset styles and explicit appearance overrides', () => {
+    it('executes formatting commands and persists document appearance', async () => {
         const wrapper = mount(TextEditor, {
-            props: {
-                modelValue: '',
-                preset: 'template',
-                minHeight: 220,
-                fontScale: 110,
-                mono: false,
-                resize: 'none'
-            }
+            props: { modelValue: createTextEditorContent('hello'), toolbarVisible: false, preset: 'template' }
         })
-        const style = wrapper.attributes('style')
+        await nextTick()
+        const handle = wrapper.vm as unknown as TextEditorHandle & { editor: any }
+        handle.editor.commands.selectAll()
+        expect(handle.execute('bold')).toBe(true)
+        expect(handle.getJSON().doc.content?.[0]?.content?.[0]?.marks?.[0]?.type).toBe('bold')
 
-        expect(wrapper.attributes('data-preset')).toBe('template')
-        expect(style).toContain('--text-editor-min-height: 220px')
-        expect(style).toContain('--text-editor-font-size: 110%')
-        expect(style).toContain('--text-editor-font-family: inherit')
-        expect(style).toContain('--text-editor-resize: none')
+        handle.setStyle({ fontScale: 110, minHeight: 220, mono: false, resize: 'none' })
+        await nextTick()
+        expect(handle.getJSON().appearance).toMatchObject({ fontScale: 110, minHeight: 220, mono: false, resize: 'none' })
+        expect(wrapper.attributes('style')).toContain('--text-editor-font-size: 110%')
     })
 
-    it('forwards disabled and placeholder state to the native input', () => {
+    it('supports read and disabled modes plus placeholder state', async () => {
         const wrapper = mount(TextEditor, {
-            props: { modelValue: '', disabled: true, placeholder: 'Notes' }
+            props: { modelValue: '', disabled: true, placeholder: 'Notes', toolbarVisible: false }
         })
+        await nextTick()
+        const handle = wrapper.vm as unknown as TextEditorHandle
 
         expect(wrapper.attributes('data-disabled')).toBe('true')
-        expect(wrapper.get('textarea').attributes('disabled')).toBeDefined()
-        expect(wrapper.get('textarea').attributes('placeholder')).toBe('Notes')
+        expect(wrapper.text()).toContain('Notes')
+        expect(handle.getMode()).toBe('disabled')
+        handle.setMode('read')
+        expect(handle.getMode()).toBe('read')
+        expect(handle.execute('bold')).toBe(false)
     })
 })

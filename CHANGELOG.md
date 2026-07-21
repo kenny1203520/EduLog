@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Added shared plain-text and collaborative editor contracts with reusable appearance presets.
+- Added versioned TipTap JSON documents, Unicode-aware metrics, formatting controls, rich/plain/HTML accessors, and reusable read-only rendering.
 - Added version-gated Yjs snapshot persistence and recovery for collaborative report drafts.
 - Added regression coverage for queued saves, conflicts, errors, resets, and manual draining.
 
