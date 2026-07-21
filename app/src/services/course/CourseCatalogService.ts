@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { Course, type CourseDTO, Lesson, type LessonDTO } from '@/models/Course'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
 
 export interface LessonReportDTO {
     id?: string
@@ -40,15 +41,23 @@ export class CourseCatalogService {
     }
 
     static async createCourse(course: Partial<CourseDTO>): Promise<Course> {
-        const { data, error } = await supabase.from('courses').insert(course).select().single()
+        const { data, error } = await supabase.from('courses').insert(this.normalizeCourse(course)).select().single()
         if (error) throw new Error(error.message)
         return new Course(data)
     }
 
     static async updateCourse(id: string, updates: Partial<CourseDTO>): Promise<Course> {
-        const { data, error } = await supabase.from('courses').update(updates).eq('id', id).select().single()
+        const { data, error } = await supabase.from('courses').update(this.normalizeCourse(updates)).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return new Course(data)
+    }
+
+    private static normalizeCourse(course: Partial<CourseDTO>): Partial<CourseDTO> {
+        if (course.description_document || course.description !== undefined) {
+            const description = createTextEditorContent(course.description_document || course.description || '')
+            return { ...course, description: description.plainText, description_document: description.richText }
+        }
+        return course
     }
 
     static async deleteCourse(id: string): Promise<void> {

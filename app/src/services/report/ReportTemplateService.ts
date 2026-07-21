@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { ReportTemplate, type ReportTemplateDTO } from '@/models/ReportTemplate'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
 
 /**
  * ReportTemplateService handles database operations for report templates.
@@ -24,9 +25,21 @@ export class ReportTemplateService {
      * Saves or updates a template
      */
     static async saveTemplate(template: Partial<ReportTemplateDTO>): Promise<ReportTemplate> {
+        const content = createTextEditorContent(template.content_document || template.content || '', { templateVariables: true })
+        const contact = createTextEditorContent(template.contact_notes_document || template.contact_notes || '', { templateVariables: true })
+        const classNotes = createTextEditorContent(template.class_notes_document || template.class_notes || '', { templateVariables: true })
+        const payload = {
+            ...template,
+            content: content.plainText,
+            content_document: content.richText,
+            contact_notes: contact.plainText,
+            contact_notes_document: contact.richText,
+            class_notes: classNotes.plainText,
+            class_notes_document: classNotes.richText
+        }
         const { data, error } = await supabase
             .from('report_templates')
-            .upsert(template)
+            .upsert(payload)
             .select()
             .single()
 

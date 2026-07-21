@@ -6,6 +6,7 @@ import {
 } from '@/models/OccurrenceReport'
 import { ReportCommandService } from '../report/ReportCommandService'
 import { ReportQueryService } from '../report/ReportQueryService'
+import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 
 /**
  * Backward-compatible facade for report operations.
@@ -46,8 +47,11 @@ export class OccurrenceReportService {
             classParticipation?: number
             classroomBehavior?: number
             contactNotes?: string
+            contactNotesDocument?: RichTextDocumentV1
             classNotes?: string
+            classNotesDocument?: RichTextDocumentV1
             content?: string,
+            contentDocument?: RichTextDocumentV1
             externalLink?: string
         }
     ): Promise<SaveReportResult> {

@@ -1,0 +1,16 @@
+{
+  "toolbar": {
+    "aria_label": "Text formatting", "bold": "Bold", "italic": "Italic", "underline": "Underline",
+    "strikethrough": "Strikethrough", "paragraph": "Paragraph", "heading_1": "Heading 1",
+    "heading_2": "Heading 2", "heading_3": "Heading 3", "bullet_list": "Bullet list",
+    "ordered_list": "Ordered list", "blockquote": "Blockquote", "highlight": "Highlight",
+    "clear_formatting": "Clear formatting", "undo": "Undo", "redo": "Redo", "link": "Link",
+    "remove_link": "Remove link", "link_url_prompt": "Link URL"
+  },
+  "settings": {
+    "style_controls": "Style controls", "preset": "Preset", "font_scale": "Font scale",
+    "minimum_height": "Minimum height", "monospace": "Monospace", "resizable": "Resizable", "reset": "Reset",
+    "presets": { "form": "Form", "notes": "Notes", "report": "Report", "template": "Template", "merge": "Merge" }
+  },
+  "template": { "editor": "Editor", "preview": "Preview", "variable_count": "{count} variables" }
+}

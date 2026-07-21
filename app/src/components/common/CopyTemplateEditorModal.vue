@@ -26,7 +26,7 @@
                         <div class="space-y-3">
                             <div class="flex items-center justify-between gap-3">
                                 <p class="text-sm font-bold text-gray-700">{{ variableTitle }}</p>
-                                <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{{ variableCount }} vars</span>
+                                <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{{ t('editor.template.variable_count', { count: variableCount }) }}</span>
                             </div>
                             <slot name="variables" />
                         </div>
@@ -40,26 +40,24 @@
                                 <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
                                     <div class="mb-2 flex items-center justify-between gap-3">
                                         <label class="block text-sm font-bold text-blue-900">{{ field.label }}</label>
-                                        <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
+                                        <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">{{ t('editor.template.editor') }}</span>
                                     </div>
-                                    <textarea
-                                        :ref="el => setTextareaRef(field.id, el)"
-                                        :value="field.content"
-                                        rows="6"
-                                        :class="[
-                                            'w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 font-mono text-sm leading-6 outline-none focus:ring-2 focus:ring-emerald-500',
-                                            focusedFieldId === field.id ? 'ring-2 ring-emerald-500' : ''
-                                        ]"
-                                        @input="onFieldInput(field.id, $event)"
-                                        @focus="focusedFieldId = field.id"
-                                    ></textarea>
+                                    <TextEditor
+                                        :ref="(el) => setEditorRef(field.id, el)"
+                                        :model-value="createTextEditorContent(field.document || field.content, { templateVariables: true })"
+                                        preset="template"
+                                        template-variables
+                                        :min-height="144"
+                                        @update:model-value="onFieldInput(field.id, $event)"
+                                        @activity="onFieldActivity(field.id, $event)"
+                                    />
                                 </div>
 
                                 <div class="flex flex-col rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
                                     <div class="mb-3 shrink-0">
                                         <div class="mb-1 flex items-center justify-between gap-3">
                                             <p class="text-sm font-bold text-emerald-900">{{ field.label }}</p>
-                                            <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Preview</span>
+                                            <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">{{ t('editor.template.preview') }}</span>
                                         </div>
                                         <p class="text-xs text-emerald-700/80">{{ previewHint }}</p>
                                     </div>
@@ -74,21 +72,24 @@
                             <div class="rounded-2xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
                                 <div class="mb-2 flex items-center justify-between gap-3">
                                     <label class="block text-sm font-bold text-blue-900">{{ contentTitle }}</label>
-                                    <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
+                                    <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">{{ t('editor.template.editor') }}</span>
                                 </div>
-                                <textarea
-                                    :value="templateText"
-                                    rows="14"
-                                    class="min-h-[18rem] w-full rounded-2xl border border-blue-200 bg-white px-4 py-3 font-mono text-sm leading-6 outline-none focus:ring-2 focus:ring-emerald-500"
-                                    @input="onTemplateInput"
-                                ></textarea>
+                                <TextEditor
+                                    :ref="(el) => setEditorRef('template', el)"
+                                    :model-value="createTextEditorContent(templateDocument || templateText || '', { templateVariables: true })"
+                                    preset="template"
+                                    template-variables
+                                    :min-height="288"
+                                    @update:model-value="onTemplateInput"
+                                    @activity="onFieldActivity('template', $event)"
+                                />
                             </div>
 
                             <div class="flex min-h-[18rem] flex-col rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 shadow-sm">
                                 <div class="mb-3 shrink-0">
                                     <div class="mb-1 flex items-center justify-between gap-3">
                                         <p class="text-sm font-bold text-emerald-900">{{ previewTitle }}</p>
-                                        <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">Preview</span>
+                                        <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-emerald-700">{{ t('editor.template.preview') }}</span>
                                     </div>
                                     <p class="text-xs text-emerald-700/80">{{ previewHint }}</p>
                                 </div>
@@ -156,11 +157,18 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
+import TextEditor from '@/components/common/text-editor/TextEditor.vue'
+import type { RichTextDocumentV1, TextEditorActivity, TextEditorContent, TextEditorHandle } from '@/components/common/text-editor/types'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
+
+const { t } = useI18n()
 
 interface EditableField {
     id: string
     label: string
     content: string
+    document?: RichTextDocumentV1
 }
 
 interface Props {
@@ -173,6 +181,7 @@ interface Props {
     previewHint: string
     previewEmpty: string
     templateText?: string
+    templateDocument?: RichTextDocumentV1
     previewText?: string
     previewSections?: Array<{ title: string; content: string }>
     variableCount: number
@@ -202,8 +211,9 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
     'update:modelValue': [value: boolean]
     'update:templateText': [value: string]
+    'update:templateDocument': [value: RichTextDocumentV1]
     'update:editableFieldsContent': [fields: EditableField[]]
-    'insertVariable': [fieldId: string, variable: string]
+    'insertVariable': [fieldId: string, variable: string, caret: number, selectionEnd: number]
     save: []
 }>()
 
@@ -215,7 +225,8 @@ function handleKeydown(event: KeyboardEvent) {
 
 // State
 const focusedFieldId = ref<string | null>(null)
-const textareaRefs = ref<Record<string, HTMLTextAreaElement>>({})
+const fieldSelections = ref<Record<string, TextEditorActivity>>({})
+const editorRefs = new Map<string, TextEditorHandle>()
 const showVariableTooltip = ref(false)
 const tooltipContent = ref('')
 const tooltipStyle = ref<Record<string, string>>({ top: '0px', left: '0px' })
@@ -233,28 +244,40 @@ onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown)
 })
 
-function setTextareaRef(fieldId: string, el: any) {
-    if (el) {
-        textareaRefs.value[fieldId] = el
-    }
-}
-
-function onFieldInput(fieldId: string, event: Event) {
-    const target = event.target as HTMLTextAreaElement
+function onFieldInput(fieldId: string, value: TextEditorContent | string) {
+    const content = createTextEditorContent(value, { templateVariables: true })
     const updatedFields = props.editableFields?.map(f => 
-        f.id === fieldId ? { ...f, content: target.value } : f
+        f.id === fieldId ? { ...f, content: content.plainText, document: content.richText } : f
     ) || []
     emit('update:editableFieldsContent', updatedFields)
 }
 
-function onTemplateInput(event: Event) {
-    const target = event.target as HTMLTextAreaElement
-    emit('update:templateText', target.value)
+function onTemplateInput(value: TextEditorContent | string) {
+    const content = createTextEditorContent(value, { templateVariables: true })
+    emit('update:templateText', content.plainText)
+    emit('update:templateDocument', content.richText)
+}
+
+function onFieldActivity(fieldId: string, activity: TextEditorActivity) {
+    focusedFieldId.value = fieldId
+    fieldSelections.value[fieldId] = activity
+}
+
+function setEditorRef(fieldId: string, value: unknown) {
+    if (value) editorRefs.set(fieldId, value as TextEditorHandle)
+    else editorRefs.delete(fieldId)
 }
 
 function insertVariableAtFocus(variable: string) {
     if (focusedFieldId.value) {
-        emit('insertVariable', focusedFieldId.value, variable)
+        const editor = editorRefs.get(focusedFieldId.value)
+        const match = variable.match(/^\{\{\s*([a-zA-Z0-9_]+)(?:\s*\|\s*([a-zA-Z0-9_]+))?\s*\}\}$/)
+        if (editor && match) {
+            editor.insertContent({ type: 'templateVariable', attrs: { key: match[1], mode: match[2] || null } })
+            return
+        }
+        const selection = fieldSelections.value[focusedFieldId.value] || { caret: 0, selectionEnd: 0 }
+        emit('insertVariable', focusedFieldId.value, variable, selection.caret, selection.selectionEnd)
     }
 }
 

@@ -4,6 +4,8 @@
  */
 
 import { DateUtils } from '@/utils/DateUtils'
+import { calculateTextEditorMetrics, createTextEditorContent } from '@/components/common/text-editor/content'
+import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 
 export interface OccurrenceReportDTO {
     id?: string
@@ -21,6 +23,9 @@ export interface OccurrenceReportDTO {
     contact_notes?: string
     class_notes?: string
     content: string
+    contact_notes_document?: RichTextDocumentV1 | null
+    class_notes_document?: RichTextDocumentV1 | null
+    content_document?: RichTextDocumentV1 | null
     external_link?: string
 
     version: number
@@ -29,6 +34,24 @@ export interface OccurrenceReportDTO {
     last_edited_at?: string
     created_at?: string
     updated_at?: string
+}
+
+/** Immutable editor state used by the serialized report save queue. */
+export interface ReportDraftSnapshot {
+    lessonId: string
+    isCompleted: boolean
+    progressLetter: string
+    attendanceStatus: 'present' | 'absent' | 'pending'
+    absenceReason: string | null
+    classParticipation: number
+    classroomBehavior: number
+    contactNotes: string
+    contactNotesDocument: RichTextDocumentV1
+    classNotes: string
+    classNotesDocument: RichTextDocumentV1
+    content: string
+    contentDocument: RichTextDocumentV1
+    externalLink: string
 }
 
 export interface ReportVersionDTO {
@@ -58,8 +81,11 @@ export class OccurrenceReport {
     classParticipation?: number
     classroomBehavior?: number
     contactNotes?: string
+    contactNotesDocument: RichTextDocumentV1
     classNotes?: string
+    classNotesDocument: RichTextDocumentV1
     content: string
+    contentDocument: RichTextDocumentV1
     externalLink?: string
 
     version: number
@@ -70,6 +96,18 @@ export class OccurrenceReport {
     updatedAt?: Date
 
     constructor(data: OccurrenceReportDTO) {
+        this.enrollmentId = ''
+        this.classOccurrenceId = ''
+        this.content = ''
+        this.contentDocument = createTextEditorContent('').richText
+        this.contactNotesDocument = createTextEditorContent('').richText
+        this.classNotesDocument = createTextEditorContent('').richText
+        this.version = 1
+        this.applyDTO(data)
+    }
+
+    /** Applies an authoritative database representation to this model instance. */
+    applyDTO(data: OccurrenceReportDTO): void {
         this.id = data.id
         this.enrollmentId = data.enrollment_id
         this.classOccurrenceId = data.class_occurrence_id
@@ -84,7 +122,15 @@ export class OccurrenceReport {
         this.classroomBehavior = data.classroom_behavior
         this.contactNotes = data.contact_notes
         this.classNotes = data.class_notes
-        this.content = data.content
+        const contact = createTextEditorContent(data.contact_notes_document || data.contact_notes || '')
+        const classNotes = createTextEditorContent(data.class_notes_document || data.class_notes || '')
+        const content = createTextEditorContent(data.content_document || data.content || '')
+        this.contactNotes = contact.plainText
+        this.contactNotesDocument = contact.richText
+        this.classNotes = classNotes.plainText
+        this.classNotesDocument = classNotes.richText
+        this.content = content.plainText
+        this.contentDocument = content.richText
         this.externalLink = data.external_link
 
         this.version = data.version
@@ -113,8 +159,11 @@ export class OccurrenceReport {
             class_participation: this.classParticipation,
             classroom_behavior: this.classroomBehavior,
             contact_notes: this.contactNotes,
+            contact_notes_document: this.contactNotesDocument,
             class_notes: this.classNotes,
+            class_notes_document: this.classNotesDocument,
             content: this.content,
+            content_document: this.contentDocument,
             external_link: this.externalLink,
 
             version: this.version,
@@ -138,14 +187,14 @@ export class OccurrenceReport {
      */
     get wordCount(): number {
         if (this.isEmpty) return 0
-        return this.content.trim().split(/\s+/).length
+        return calculateTextEditorMetrics(this.content).wordCount
     }
 
     /**
      * Get character count
      */
     get characterCount(): number {
-        return this.content.length
+        return calculateTextEditorMetrics(this.content).characterCount
     }
 
     /**
@@ -241,4 +290,5 @@ export interface SaveReportResult {
     conflict?: boolean
     serverContent?: string
     serverReport?: OccurrenceReportDTO // Full server report for deep comparison
+    updatedReport?: OccurrenceReportDTO // Authoritative row returned after a successful save
 }

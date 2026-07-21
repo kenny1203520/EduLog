@@ -317,7 +317,9 @@
                     <div
                         class="flex-1 overflow-y-auto rounded-[3rem] bg-white shadow-2xl shadow-gray-200/50 border border-gray-100/50 relative min-h-0 custom-scrollbar">
                         <ReportEditor :key="selectedReport.id + '-' + editorRefreshKey" :report-id="selectedReport.id"
-                            :initial-content="selectedReport.content" :initial-version="selectedReport.version"
+                            :initial-content="selectedReport.content"
+                            :initial-content-document="selectedReport.contentDocument"
+                            :initial-version="selectedReport.version"
                             :loading="editorLoading"
                             :title="$t('report.report_for_date', { date: formatDateTime(selectedReport) })"
                             :show-manual-save="true" :available-lessons="activeLessons"
@@ -329,7 +331,9 @@
                             :initial-class-participation="selectedReport.classParticipation"
                             :initial-classroom-behavior="selectedReport.classroomBehavior"
                             :initial-contact-notes="selectedReport.contactNotes"
+                            :initial-contact-notes-document="selectedReport.contactNotesDocument"
                             :initial-class-notes="selectedReport.classNotes"
+                            :initial-class-notes-document="selectedReport.classNotesDocument"
                             :initial-progress-start="selectedReport.progressStart"
                             :initial-progress-end="selectedReport.progressEnd"
                             :initial-report-external-link="selectedReport.externalLink"
@@ -559,9 +563,23 @@ async function handleSaveSuccess(updatedReport: any) {
         item.content = updatedReport.content
         item.lessonId = updatedReport.lesson_id
         item.version = updatedReport.version
+        item.isCompleted = updatedReport.is_completed ?? false
+        item.attendanceStatus = updatedReport.attendance_status
+        item.absenceReason = updatedReport.absence_reason
+        item.classParticipation = updatedReport.class_participation
+        item.classroomBehavior = updatedReport.classroom_behavior
+        item.contactNotes = updatedReport.contact_notes
+        item.classNotes = updatedReport.class_notes
+        item.externalLink = updatedReport.external_link
+        item.progressLetter = updatedReport.progress_letter || ''
+        item.progressStart = item.progressLetter.split('-')[0] || ''
+        item.progressEnd = item.progressLetter.includes('-') ? (item.progressLetter.split('-')[1] || '') : ''
         item.missingContent = !updatedReport.content || updatedReport.content.trim().length === 0
         item.missingLesson = !updatedReport.lesson_id
-        item.updatedAt = new Date().toISOString()
+        item.missingProgress = !updatedReport.progress_letter
+        item.missingParticipation = !updatedReport.class_participation
+        item.missingBehavior = !updatedReport.classroom_behavior
+        item.updatedAt = updatedReport.updated_at || new Date().toISOString()
 
         if (!item.missingContent && !item.missingLesson) {
             incompleteReports.value.splice(idx, 1)

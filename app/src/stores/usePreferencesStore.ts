@@ -4,14 +4,21 @@ import i18n from '@/i18n'
 import { DateUtils } from '@/utils/DateUtils'
 import { UserPreferenceService } from '@/services/UserPreferenceService'
 import { AggregateService } from '@/services/AggregateService'
+import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings } from '@/components/common/text-editor/settings'
 
 export const usePreferencesStore = defineStore('preferences', () => {
     const globalFontScale = ref(Number(localStorage.getItem('globalFontScale')) || 100)
     const editorFontScale = ref(Number(localStorage.getItem('editorFontScale')) || 100)
+    const editorSettings = ref(normalizeEditorUserSettings(parseStoredEditorSettings()))
     const locale = ref(localStorage.getItem('locale') || 'zh-TW')
     const timeZone = ref(DateUtils.getDefaultTimeZone())
     const isLoadingRemotePreferences = ref(false)
     let isApplyingRemotePreferences = false
+
+    function parseStoredEditorSettings(): unknown {
+        try { return JSON.parse(localStorage.getItem('editorSettings') || 'null') }
+        catch { return DEFAULT_EDITOR_USER_SETTINGS }
+    }
 
     const MIN_SCALE = 70
     const MAX_SCALE = 200
@@ -51,7 +58,16 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     watch(editorFontScale, (val) => {
         localStorage.setItem('editorFontScale', val.toString())
+        editorSettings.value.appearance = { ...(editorSettings.value.appearance || {}), fontScale: val }
     })
+
+    watch(editorSettings, (value) => {
+        localStorage.setItem('editorSettings', JSON.stringify(value))
+        if (isApplyingRemotePreferences) return
+        UserPreferenceService.updateCurrentUserEditorSettings(value).catch(error => {
+            console.warn('Failed to save editor preferences:', error)
+        })
+    }, { deep: true })
     
     watch(locale, (val) => {
         localStorage.setItem('locale', val)
@@ -98,6 +114,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
                     localStorage.setItem('timeZone', remote.time_zone)
                     isApplyingRemotePreferences = false
                 }
+                if (remote?.editor_settings) {
+                    isApplyingRemotePreferences = true
+                    editorSettings.value = normalizeEditorUserSettings(remote.editor_settings)
+                    editorFontScale.value = editorSettings.value.appearance?.fontScale || editorFontScale.value
+                    isApplyingRemotePreferences = false
+                }
             } catch (e) {
                 // Fallback to previous direct service if aggregate endpoint fails
                 const remote = await UserPreferenceService.getCurrentUserPreferences()
@@ -105,6 +127,12 @@ export const usePreferencesStore = defineStore('preferences', () => {
                     isApplyingRemotePreferences = true
                     timeZone.value = remote.time_zone
                     localStorage.setItem('timeZone', remote.time_zone)
+                    isApplyingRemotePreferences = false
+                }
+                if (remote?.editor_settings) {
+                    isApplyingRemotePreferences = true
+                    editorSettings.value = normalizeEditorUserSettings(remote.editor_settings)
+                    editorFontScale.value = editorSettings.value.appearance?.fontScale || editorFontScale.value
                     isApplyingRemotePreferences = false
                 }
             }
@@ -119,6 +147,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     return {
         globalFontScale,
         editorFontScale,
+        editorSettings,
         adjustGlobalScale,
         adjustEditorScale,
         locale,

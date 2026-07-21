@@ -1,9 +1,13 @@
+import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
+
 export interface CourseDTO {
   id?: string
   subject: string
   stage: string
   display_name?: string
   description?: string
+  description_document?: RichTextDocumentV1 | null
   created_at?: string
   updated_at?: string
 }
@@ -41,6 +45,7 @@ export class Course {
   stage: string
   displayNameValue?: string
   description?: string
+  descriptionDocument: RichTextDocumentV1
   created_at?: string
   updated_at?: string
   lessons: Lesson[] = []
@@ -50,7 +55,9 @@ export class Course {
     this.subject = data.subject
     this.stage = data.stage
     this.displayNameValue = data.display_name
-    this.description = data.description
+    const description = createTextEditorContent(data.description_document || data.description || '')
+    this.description = description.plainText
+    this.descriptionDocument = description.richText
     this.created_at = data.created_at
     this.updated_at = data.updated_at
   }

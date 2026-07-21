@@ -91,3 +91,34 @@ export async function copyToClipboard(textOrPromise: string | Promise<string>): 
         }
     })
 }
+
+/**
+ * Copies the same canonical editor document as both rich HTML and plain text.
+ * Browsers without ClipboardItem support transparently fall back to plain text.
+ */
+export async function copyRichTextToClipboard(
+    contentOrPromise: TextEditorContentInput | Promise<TextEditorContentInput>
+): Promise<boolean> {
+    const contentPromise = Promise.resolve(contentOrPromise).then(createTextEditorContent)
+
+    if (navigator.clipboard?.write && window.isSecureContext && typeof ClipboardItem !== 'undefined') {
+        try {
+            const plainBlob = contentPromise.then(content =>
+                new Blob([content.plainText], { type: 'text/plain' })
+            )
+            const htmlBlob = contentPromise.then(content =>
+                new Blob([richTextToHTML(content.richText, true)], { type: 'text/html' })
+            )
+            await navigator.clipboard.write([
+                new ClipboardItem({ 'text/plain': plainBlob, 'text/html': htmlBlob })
+            ])
+            return true
+        } catch (error) {
+            console.warn('Rich clipboard API failed, trying plain-text fallback', error)
+        }
+    }
+
+    return copyToClipboard(contentPromise.then(content => content.plainText))
+}
+import { createTextEditorContent, richTextToHTML } from '@/components/common/text-editor/content'
+import type { TextEditorContentInput } from '@/components/common/text-editor/types'

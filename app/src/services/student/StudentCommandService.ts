@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { Student, type StudentDTO } from '@/models/Student'
 import { EnrollmentService } from '../enrollment/EnrollmentService'
 import { DateUtils } from '@/utils/DateUtils'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
 
 /**
  * Command service for students
@@ -17,7 +18,7 @@ export class StudentCommandService {
 
         const { data, error } = await supabase
             .from('students')
-            .insert({ ...student, user_id: user.id })
+            .insert({ ...this.normalizeStudent(student), user_id: user.id })
             .select()
             .single()
 
@@ -32,7 +33,7 @@ export class StudentCommandService {
     static async update(id: string, updates: Partial<StudentDTO>): Promise<Student> {
         const { data, error } = await supabase
             .from('students')
-            .update(updates)
+            .update(this.normalizeStudent(updates))
             .eq('id', id)
             .select()
             .single()
@@ -40,6 +41,14 @@ export class StudentCommandService {
         if (error) throw new Error(error.message)
 
         return new Student(data as StudentDTO)
+    }
+
+    private static normalizeStudent(student: Partial<StudentDTO>): Partial<StudentDTO> {
+        if (student.notes_document || student.notes !== undefined) {
+            const notes = createTextEditorContent(student.notes_document || student.notes || '')
+            return { ...student, notes: notes.plainText, notes_document: notes.richText }
+        }
+        return student
     }
 
     /**
