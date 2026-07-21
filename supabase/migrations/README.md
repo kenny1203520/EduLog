@@ -24,6 +24,8 @@
 17. `1000020_merge_orange_apple_koding_credentials.sql`
 18. `1000021_teacher_leave_and_safe_report_versions.sql`
 19. `1000022_report_collab_snapshot_versioning.sql`
+20. `1000023_rich_text_documents.sql`
+21. `1000024_recurring_and_camp_sessions.sql`
 
 ## 各檔案重點
 
@@ -67,6 +69,13 @@
 - 保留既有純文字欄位作為搜尋、摘要、匯出及舊版相容的文字投影
 - 使用者編輯器預設以 `user_preferences.editor_settings` 跨裝置保存
 - 更新報告版本快照 trigger，使富文字與外觀變更可恢復
+
+### 21) `1000024_recurring_and_camp_sessions.sql`
+
+- 新增一般班級與營隊類型，以及每週、每月、指定日期排程模式
+- 建立正規化班級排程規則、單日唯一限制與舊班級週排程回填
+- 新增原子化儲存班級與排程規則的 `save_class_session_with_schedule` RPC
+- 保留原有單日排程欄位作為部署期間的相容投影
 
 ## 執行方式
 
@@ -113,3 +122,4 @@ ORDER BY tablename, policyname;
 - 正式環境變更前請先備份資料庫。
 - 部署使用版本化報告協作快照的前端前，必須先套用 `1000022_report_collab_snapshot_versioning.sql`。
 - 部署讀寫富文字文件的前端前，必須先套用 `1000023_rich_text_documents.sql`。
+- 部署週期班與營隊排程前，必須先套用 `1000024_recurring_and_camp_sessions.sql`。
