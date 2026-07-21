@@ -279,6 +279,7 @@
         "update_enrollment_failed": "Failed to update enrollment",
         "delete_enrollment_failed": "Failed to delete enrollment",
         "platform_required": "Platform and username are required; password is also required for non-Koding School (Orange Apple) accounts",
-        "session_full": "Selected session is full in the chosen period"
+        "session_full": "Selected session is full in the chosen period",
+        "session_course_mismatch": "The selected class session cannot teach this course"
     }
 }

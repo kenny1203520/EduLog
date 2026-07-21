@@ -17,6 +17,29 @@ type EnrollmentUpdateOptions = {
 }
 
 export class EnrollmentCommandService {
+    private static async alignSessionContext(
+        enrollmentData: Partial<EnrollmentDTO>,
+        fallback?: Pick<EnrollmentDTO, 'course_id' | 'class_session_id'>
+    ): Promise<Partial<EnrollmentDTO>> {
+        const sessionId = enrollmentData.class_session_id !== undefined
+            ? enrollmentData.class_session_id
+            : fallback?.class_session_id
+        const courseId = enrollmentData.course_id || fallback?.course_id
+
+        if (!sessionId) {
+            return enrollmentData.class_session_id === null
+                ? { ...enrollmentData, classroom_id: null }
+                : enrollmentData
+        }
+        if (!courseId) throw new Error('COURSE_REQUIRED_FOR_SESSION')
+
+        const session = await SessionService.getCompatibleClassSession(sessionId, courseId)
+        return {
+            ...enrollmentData,
+            classroom_id: session.classroom_id || null
+        }
+    }
+
     static async create(
         enrollmentData: Partial<EnrollmentDTO>,
         options: EnrollmentCreateOptions = {}
@@ -24,12 +47,13 @@ export class EnrollmentCommandService {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
 
+        const alignedEnrollmentData = await this.alignSessionContext(enrollmentData)
         const { data: enrollment, error: enrollError } = await supabase
             .from('enrollments')
             .insert({
-                ...enrollmentData,
-                time_zone: DateUtils.isValidTimeZone(enrollmentData.time_zone)
-                    ? enrollmentData.time_zone
+                ...alignedEnrollmentData,
+                time_zone: DateUtils.isValidTimeZone(alignedEnrollmentData.time_zone)
+                    ? alignedEnrollmentData.time_zone
                     : DateUtils.getDefaultTimeZone(),
                 user_id: user.id,
                 status: enrollmentData.status || 'regular'
@@ -81,7 +105,7 @@ export class EnrollmentCommandService {
     ): Promise<Enrollment> {
         const { data: existing, error: existingError } = await supabase
             .from('enrollments')
-            .select('id, status, class_session_id, course_id, start_date, lesson_number')
+            .select('id, status, class_session_id, course_id, classroom_id, start_date, lesson_number')
             .eq('id', enrollmentId)
             .single()
 
@@ -89,11 +113,18 @@ export class EnrollmentCommandService {
             throw new Error(`Failed to fetch enrollment before update: ${existingError?.message || 'not found'}`)
         }
 
-        const updatePayload = {
+        let updatePayload: Partial<EnrollmentDTO> = {
             ...updates,
             ...(updates.time_zone !== undefined
                 ? { time_zone: DateUtils.isValidTimeZone(updates.time_zone) ? updates.time_zone : DateUtils.getDefaultTimeZone() }
                 : {})
+        }
+
+        if (
+            Object.prototype.hasOwnProperty.call(updates, 'class_session_id') ||
+            Object.prototype.hasOwnProperty.call(updates, 'course_id')
+        ) {
+            updatePayload = await this.alignSessionContext(updatePayload, existing)
         }
 
         const { data: updated, error: updateError } = await supabase

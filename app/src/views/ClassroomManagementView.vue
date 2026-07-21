@@ -723,8 +723,8 @@ function clearTeacherSelection() {
                 <label class="text-xs font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">{{
                     $t('classroom.filter_by_room') }}</label>
 
-                <BaseDropdown v-model="selectedSessionClassroomFilter" :options="classroomOptions" theme="emerald"
-                    class="min-w-[240px]" />
+                <SearchableSelect v-model="selectedSessionClassroomFilter" :options="classroomOptions"
+                    :placeholder="$t('classroom.all_rooms')" class="min-w-[240px]" />
 
                 <button v-if="selectedSessionClassroomFilter" @click="selectedSessionClassroomFilter = ''"
                     class="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all border border-transparent hover:border-red-100">

@@ -10,6 +10,7 @@ import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { formatClassSessionOption } from '@/utils/sessionSchedule'
+import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 
 const props = defineProps<{
     isOpen: boolean
@@ -33,11 +34,38 @@ const activateTrialForm = ref({
     target_total_reports: 1
 })
 
-const classroomOptions = ref<any[]>([])
-const sessionOptions = ref<any[]>([])
+const classrooms = ref<any[]>([])
+const sessions = ref<any[]>([])
 const currentEnrollment = ref<any | null>(null)
 
 const defaultReportCount = computed(() => Math.max(1, currentEnrollment.value?.lessonCount || 1))
+
+const eligibleSessions = computed(() => {
+    if (!currentEnrollment.value?.courseId) return []
+    return SessionEligibilityPolicy.filter(sessions.value, {
+        courseId: currentEnrollment.value.courseId,
+        classroomId: selectedClassroomId.value || null,
+        excludeSessionId: currentEnrollment.value.classSessionId || null
+    })
+})
+
+const classroomOptions = computed(() => {
+    const eligibleIds = SessionEligibilityPolicy.classroomIds(
+        sessions.value.filter(session => session.id !== currentEnrollment.value?.classSessionId),
+        currentEnrollment.value?.courseId || ''
+    )
+    return [
+        { value: '', label: t('classroom.all_rooms') },
+        ...classrooms.value
+            .filter(classroom => classroom.id && eligibleIds.has(classroom.id))
+            .map(classroom => ({ value: classroom.id, label: classroom.name }))
+    ]
+})
+
+const sessionOptions = computed(() => eligibleSessions.value.map(session => ({
+    value: session.id,
+    label: formatSessionOptionLabel(session)
+})))
 
 function formatSessionOptionLabel(session: any): string {
     return formatClassSessionOption(session, preferences.locale, t)
@@ -62,14 +90,8 @@ async function fetchCurrentEnrollment() {
 async function fetchClassrooms() {
     try {
         isLoadingClassrooms.value = true
-        const { data: classrooms } = await ClassroomService.getClassrooms(1, 500)
-        classroomOptions.value = [
-            { value: '', label: t('classroom.all_rooms') },
-            ...classrooms.map((classroom: any) => ({
-                value: classroom.id,
-                label: classroom.name
-            }))
-        ]
+        const { data } = await ClassroomService.getClassrooms(1, 500)
+        classrooms.value = data
     } catch (e) {
         console.error(e)
     } finally {
@@ -79,16 +101,8 @@ async function fetchClassrooms() {
 
 async function fetchSessions() {
     try {
-        const { data: sessions } = await SessionService.getClassSessions(
-            1,
-            500,
-            undefined,
-            selectedClassroomId.value || null
-        )
-        sessionOptions.value = sessions.map(s => ({
-            value: s.id,
-            label: formatSessionOptionLabel(s)
-        }))
+        const { data } = await SessionService.getClassSessions(1, 500)
+        sessions.value = data
     } catch (e) {
         console.error(e)
     }
@@ -108,9 +122,19 @@ watch(() => props.isOpen, (val) => {
     }
 })
 
-watch(selectedClassroomId, async () => {
-    activateTrialForm.value.class_session_id = ''
-    await fetchSessions()
+watch(selectedClassroomId, () => {
+    if (
+        activateTrialForm.value.class_session_id &&
+        !sessionOptions.value.some(option => option.value === activateTrialForm.value.class_session_id)
+    ) {
+        activateTrialForm.value.class_session_id = ''
+    }
+})
+
+watch(() => activateTrialForm.value.class_session_id, sessionId => {
+    if (!sessionId) return
+    const selectedSession = sessions.value.find(session => session.id === sessionId)
+    selectedClassroomId.value = selectedSession?.classroom_id || ''
 })
 
 
@@ -136,7 +160,9 @@ async function submitActivateTrial() {
         emit('close')
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || 'Failed to activate trial')
+        toast.error(e.message?.includes('TARGET_SESSION_COURSE_MISMATCH')
+            ? t('student.errors.session_course_mismatch')
+            : (e.message || 'Failed to activate trial'))
     } finally {
         isSubmitting.value = false
     }
@@ -185,14 +211,15 @@ async function submitActivateTrial() {
                         <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
                             $t('student.activate_trial_modal.classroom_filter') }}</label>
                         <SearchableSelect v-model="selectedClassroomId" :options="classroomOptions"
-                            :placeholder="isLoadingClassrooms ? $t('common.loading') : $t('classroom.all_rooms')" />
+                            :placeholder="isLoadingClassrooms ? $t('common.loading') : $t('classroom.all_rooms')"
+                            :disabled="!currentEnrollment" />
                     </div>
 
                     <div class="space-y-2">
                         <label class="block text-sm font-black text-gray-400 uppercase tracking-widest ml-1">{{
                             $t('student.activate_trial_modal.to_classroom') }}</label>
                         <SearchableSelect v-model="activateTrialForm.class_session_id" :options="sessionOptions"
-                            :placeholder="$t('common.select_placeholder')" />
+                            :placeholder="$t('common.select_placeholder')" :disabled="!currentEnrollment" />
                     </div>
 
                     <div class="space-y-2">

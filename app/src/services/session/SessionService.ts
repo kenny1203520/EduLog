@@ -3,6 +3,7 @@ import type { ClassSessionDTO } from '@/models/Classroom'
 import { ClassSessionFactory, type ClassSessionScheduleRuleDTO } from '@/models/ClassSession'
 import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
 import { DateUtils } from '@/utils/DateUtils'
+import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 
 export type SessionVisibilityFilterMode = 'all' | 'visible' | 'hidden'
 
@@ -148,6 +149,17 @@ export class SessionService {
             .single()
         if (error) throw new Error(error.message)
         return this.hydrateSession(data)
+    }
+
+    /**
+     * Loads a class session and verifies that it can teach the requested course.
+     */
+    static async getCompatibleClassSession(sessionId: string, courseId: string): Promise<ClassSessionDTO> {
+        const session = await this.getClassSession(sessionId)
+        if (!SessionEligibilityPolicy.supportsCourse(session, courseId)) {
+            throw new Error('TARGET_SESSION_COURSE_MISMATCH')
+        }
+        return session
     }
 
     static async isScheduledOn(sessionId: string, date: string): Promise<boolean> {
