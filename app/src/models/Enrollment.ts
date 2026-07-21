@@ -4,8 +4,8 @@ export interface EnrollmentDTO {
     id?: string
     student_id: string
     course_id: string
-    classroom_id?: string
-    class_session_id?: string
+    classroom_id?: string | null
+    class_session_id?: string | null
     status: 'regular' | 'completed' | 'dropped' | 'trial'
     start_date?: string
     time_zone?: string
@@ -45,8 +45,8 @@ export class Enrollment {
     id?: string
     studentId: string
     courseId: string
-    classroomId?: string
-    classSessionId?: string
+    classroomId?: string | null
+    classSessionId?: string | null
     status: string
     startDate?: string
     timeZone: string

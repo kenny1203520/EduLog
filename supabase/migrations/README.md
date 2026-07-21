@@ -77,6 +77,12 @@
 - 新增原子化儲存班級與排程規則的 `save_class_session_with_schedule` RPC
 - 保留原有單日排程欄位作為部署期間的相容投影
 
+### 22) `1000025_enrollment_classroom_consistency.sql`
+
+- 依班級回填既有報名資料的教室欄位
+- 驗證報名與轉班的目標班級能教授指定課程
+- 在報名換班或班級變更教室時持續同步教室欄位
+
 ## 執行方式
 
 ### 方法 A: Supabase Studio（建議）
@@ -123,3 +129,4 @@ ORDER BY tablename, policyname;
 - 部署使用版本化報告協作快照的前端前，必須先套用 `1000022_report_collab_snapshot_versioning.sql`。
 - 部署讀寫富文字文件的前端前，必須先套用 `1000023_rich_text_documents.sql`。
 - 部署週期班與營隊排程前，必須先套用 `1000024_recurring_and_camp_sessions.sql`。
+- 部署課程相容性篩選與教室同步前，必須先套用 `1000025_enrollment_classroom_consistency.sql`。

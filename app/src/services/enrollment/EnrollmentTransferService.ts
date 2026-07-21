@@ -80,6 +80,8 @@ export class EnrollmentTransferService {
             throw new Error('TARGET_SESSION_SAME_AS_CURRENT')
         }
 
+        const targetSession = await SessionService.getCompatibleClassSession(newSessionId, enrollment.course_id)
+
         const futureReports = await EnrollmentTransferQueryService.getReportsToMigrate(
             enrollmentId,
             oldSessionId,
@@ -133,7 +135,10 @@ export class EnrollmentTransferService {
 
         const { data: updated, error: updateError } = await supabase
             .from('enrollments')
-            .update({ class_session_id: newSessionId })
+            .update({
+                class_session_id: newSessionId,
+                classroom_id: targetSession.classroom_id || null
+            })
             .eq('id', enrollmentId)
             .select(`
                 *,
@@ -185,6 +190,9 @@ export class EnrollmentTransferService {
         if (!originalSessionId) {
             throw new Error('Enrollment has no current session to transfer from')
         }
+
+
+        await SessionService.getCompatibleClassSession(targetSessionId, enrollment.course_id)
 
         const isOriginalDateScheduled = await EnrollmentTransferQueryService.isSessionScheduledOn(originalSessionId, originalDate)
         if (!isOriginalDateScheduled) {
@@ -247,6 +255,8 @@ export class EnrollmentTransferService {
         await this.assertTargetDateMatchesSession(targetSessionId, targetDate)
 
         const report = await EnrollmentTransferQueryService.getReportTransferInfo(reportId)
+        const enrollment = await EnrollmentTransferQueryService.getEnrollmentSessionInfo(report.enrollment_id)
+        await SessionService.getCompatibleClassSession(targetSessionId, enrollment.course_id)
         const originalOccurrence = this.getOccurrenceInfo(report)
         const originalSessionId = originalOccurrence?.class_session_id || null
 
