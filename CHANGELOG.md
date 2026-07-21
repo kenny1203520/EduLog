@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Positioned rich-text placeholders inside the content body so formatting toolbars no longer cover them.
 - Localized rich-text editor toolbars, style controls, link prompts, accessibility labels, and template editor badges in English and Traditional Chinese.
 - Detected nested Yjs text changes so report notes immediately become dirty and enter the save queue.
 - Serialized report auto-save requests so edits made during an in-flight save remain dirty and are persisted by the next request.

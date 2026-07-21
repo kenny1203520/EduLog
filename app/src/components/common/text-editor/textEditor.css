@@ -21,6 +21,10 @@
     background: #f9fafb;
 }
 
+.text-editor-body {
+    position: relative;
+}
+
 .text-editor-input,
 .text-editor-content .text-editor-tiptap {
     background: transparent;

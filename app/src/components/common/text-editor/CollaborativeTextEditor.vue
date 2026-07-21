@@ -3,8 +3,10 @@
         :data-readonly="effectiveMode === 'read'" :data-preset="preset" :style="appearanceStyle">
         <TextEditorToolbar v-if="toolbarVisible && formattingEnabled && effectiveMode === 'edit'"
             :state="formattingState" :execute="execute" :can-execute="canExecute" />
-        <EditorContent :editor="editor" class="text-editor-content" />
-        <div v-if="showPlaceholder" class="text-editor-placeholder">{{ placeholder }}</div>
+        <div class="text-editor-body">
+            <EditorContent :editor="editor" class="text-editor-content" />
+            <div v-if="showPlaceholder" class="text-editor-placeholder">{{ placeholder }}</div>
+        </div>
     </div>
 </template>
 

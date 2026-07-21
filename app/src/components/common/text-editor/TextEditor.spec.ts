@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import TextEditor from './TextEditor.vue'
 import { createTextEditorContent } from './content'
 import type { TextEditorHandle } from './types'
+import i18n from '@/i18n'
 
 describe('TextEditor', () => {
     it('upgrades legacy plain text and exposes rich, plain, and HTML content', async () => {
@@ -64,5 +65,19 @@ describe('TextEditor', () => {
         handle.setMode('read')
         expect(handle.getMode()).toBe('read')
         expect(handle.execute('bold')).toBe(false)
+    })
+
+    it('positions the placeholder inside the editor body below the toolbar', async () => {
+        const wrapper = mount(TextEditor, {
+            props: { modelValue: '', placeholder: 'Start typing' },
+            global: { plugins: [i18n] }
+        })
+        await nextTick()
+
+        const toolbar = wrapper.get('.text-editor-toolbar')
+        const body = wrapper.get('.text-editor-body')
+        expect(body.get('.text-editor-placeholder').text()).toBe('Start typing')
+        expect(toolbar.element.nextElementSibling).toBe(body.element)
+        expect(body.element.contains(wrapper.get('.text-editor-content').element)).toBe(true)
     })
 })
