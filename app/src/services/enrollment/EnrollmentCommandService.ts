@@ -6,6 +6,7 @@ import { EnrollmentStatusPolicyService } from './EnrollmentStatusPolicyService'
 import { EnrollmentTransferService } from './EnrollmentTransferService'
 import { EnrollmentSupportService } from './EnrollmentSupportService'
 import { DateUtils } from '@/utils/DateUtils'
+import { SessionService } from '../session/SessionService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -47,7 +48,11 @@ export class EnrollmentCommandService {
                     name,
                     day_of_week,
                     start_time,
-                    end_time
+                    end_time,
+                    time_zone,
+                    session_type,
+                    schedule_mode,
+                    class_session_schedule_rules (*)
                 )
             `)
             .single()
@@ -99,7 +104,7 @@ export class EnrollmentCommandService {
                 *,
                 courses (subject, stage, display_name),
                 classrooms (name),
-                class_sessions (id, name, day_of_week, start_time)
+                class_sessions (id, name, day_of_week, start_time, end_time, time_zone, session_type, schedule_mode, class_session_schedule_rules (*))
             `)
             .single()
 
@@ -182,18 +187,7 @@ export class EnrollmentCommandService {
             throw new Error('Only regular enrollments can join a future class.')
         }
 
-        const { data: sessionInfo, error: sessionInfoError } = await supabase
-            .from('class_sessions')
-            .select('day_of_week')
-            .eq('id', targetSessionId)
-            .single()
-
-        if (sessionInfoError || !sessionInfo) {
-            throw new Error(`Failed to find target occurrence: ${sessionInfoError?.message || 'session not found'}`)
-        }
-
-        const selectedDayOfWeek = EnrollmentSupportService.dayOfWeekFromDateOnly(normalizedTargetDate)
-        if (selectedDayOfWeek !== sessionInfo.day_of_week) {
+        if (!await SessionService.isScheduledOn(targetSessionId, normalizedTargetDate)) {
             throw new Error('MAKEUP_DATE_NOT_CLASS_DAY')
         }
 

@@ -5,6 +5,7 @@ import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { HolidayService } from '../holiday/HolidayService'
 import { SuspensionService } from '../suspension/SuspensionService'
 import { DateUtils } from '@/utils/DateUtils'
+import { SessionService } from '../session/SessionService'
 
 export class ReportLifecyclePolicy {
     static async buildInitialReportPayload(enrollmentId: string, occurrenceId: string): Promise<Partial<OccurrenceReportDTO>> {
@@ -110,21 +111,24 @@ export class ReportLifecyclePolicy {
 
         if (!count || count === 0) {
             if (!isCompleted || !isActuallyLastLesson) {
-                const nextWeek = DateUtils.parseLocalDate(todayStr) || new Date(todayStr)
-                nextWeek.setDate(nextWeek.getDate() + 7)
-                const nextWeekStr = DateUtils.formatLocalDate(nextWeek)
+                const nextDateString = await SessionService.getNextScheduledDate(
+                    currentOcc.class_session_id,
+                    todayStr
+                )
+                if (!nextDateString) return
+                const nextDate = DateUtils.parseLocalDate(nextDateString) || new Date(nextDateString)
 
                 await OccurrenceService.generateOccurrences(
                     currentOcc.class_session_id,
-                    nextWeek,
-                    nextWeek
+                    nextDate,
+                    nextDate
                 )
 
                 const { data: nextOcc } = await supabase
                     .from('class_occurrences')
                     .select('id')
                     .eq('class_session_id', currentOcc.class_session_id)
-                    .eq('occurrence_date', nextWeekStr)
+                    .eq('occurrence_date', nextDateString)
                     .single()
 
                 if (nextOcc) {
