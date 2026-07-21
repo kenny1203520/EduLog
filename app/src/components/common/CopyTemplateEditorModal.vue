@@ -43,8 +43,10 @@
                                         <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
                                     </div>
                                     <TextEditor
-                                        :model-value="field.content"
+                                        :ref="(el) => setEditorRef(field.id, el)"
+                                        :model-value="createTextEditorContent(field.document || field.content, { templateVariables: true })"
                                         preset="template"
+                                        template-variables
                                         :min-height="144"
                                         @update:model-value="onFieldInput(field.id, $event)"
                                         @activity="onFieldActivity(field.id, $event)"
@@ -73,8 +75,10 @@
                                     <span class="rounded-full bg-blue-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-blue-700">Editor</span>
                                 </div>
                                 <TextEditor
-                                    :model-value="templateText || ''"
+                                    :ref="(el) => setEditorRef('template', el)"
+                                    :model-value="createTextEditorContent(templateDocument || templateText || '', { templateVariables: true })"
                                     preset="template"
+                                    template-variables
                                     :min-height="288"
                                     @update:model-value="onTemplateInput"
                                     @activity="onFieldActivity('template', $event)"
@@ -154,12 +158,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import TextEditor from '@/components/common/text-editor/TextEditor.vue'
-import type { TextEditorActivity } from '@/components/common/text-editor/types'
+import type { RichTextDocumentV1, TextEditorActivity, TextEditorContent, TextEditorHandle } from '@/components/common/text-editor/types'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
 
 interface EditableField {
     id: string
     label: string
     content: string
+    document?: RichTextDocumentV1
 }
 
 interface Props {
@@ -172,6 +178,7 @@ interface Props {
     previewHint: string
     previewEmpty: string
     templateText?: string
+    templateDocument?: RichTextDocumentV1
     previewText?: string
     previewSections?: Array<{ title: string; content: string }>
     variableCount: number
@@ -201,6 +208,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
     'update:modelValue': [value: boolean]
     'update:templateText': [value: string]
+    'update:templateDocument': [value: RichTextDocumentV1]
     'update:editableFieldsContent': [fields: EditableField[]]
     'insertVariable': [fieldId: string, variable: string, caret: number, selectionEnd: number]
     save: []
@@ -215,6 +223,7 @@ function handleKeydown(event: KeyboardEvent) {
 // State
 const focusedFieldId = ref<string | null>(null)
 const fieldSelections = ref<Record<string, TextEditorActivity>>({})
+const editorRefs = new Map<string, TextEditorHandle>()
 const showVariableTooltip = ref(false)
 const tooltipContent = ref('')
 const tooltipStyle = ref<Record<string, string>>({ top: '0px', left: '0px' })
@@ -232,15 +241,18 @@ onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown)
 })
 
-function onFieldInput(fieldId: string, value: string) {
+function onFieldInput(fieldId: string, value: TextEditorContent | string) {
+    const content = createTextEditorContent(value, { templateVariables: true })
     const updatedFields = props.editableFields?.map(f => 
-        f.id === fieldId ? { ...f, content: value } : f
+        f.id === fieldId ? { ...f, content: content.plainText, document: content.richText } : f
     ) || []
     emit('update:editableFieldsContent', updatedFields)
 }
 
-function onTemplateInput(value: string) {
-    emit('update:templateText', value)
+function onTemplateInput(value: TextEditorContent | string) {
+    const content = createTextEditorContent(value, { templateVariables: true })
+    emit('update:templateText', content.plainText)
+    emit('update:templateDocument', content.richText)
 }
 
 function onFieldActivity(fieldId: string, activity: TextEditorActivity) {
@@ -248,8 +260,19 @@ function onFieldActivity(fieldId: string, activity: TextEditorActivity) {
     fieldSelections.value[fieldId] = activity
 }
 
+function setEditorRef(fieldId: string, value: unknown) {
+    if (value) editorRefs.set(fieldId, value as TextEditorHandle)
+    else editorRefs.delete(fieldId)
+}
+
 function insertVariableAtFocus(variable: string) {
     if (focusedFieldId.value) {
+        const editor = editorRefs.get(focusedFieldId.value)
+        const match = variable.match(/^\{\{\s*([a-zA-Z0-9_]+)(?:\s*\|\s*([a-zA-Z0-9_]+))?\s*\}\}$/)
+        if (editor && match) {
+            editor.insertContent({ type: 'templateVariable', attrs: { key: match[1], mode: match[2] || null } })
+            return
+        }
         const selection = fieldSelections.value[focusedFieldId.value] || { caret: 0, selectionEnd: 0 }
         emit('insertVariable', focusedFieldId.value, variable, selection.caret, selection.selectionEnd)
     }

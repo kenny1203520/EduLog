@@ -5,6 +5,7 @@ import {
     plainTextToJSON,
     richTextToHTML,
     richTextToPlainText,
+    renderTemplateContent,
     sanitizeGeneratedHTML
 } from './content'
 
@@ -36,5 +37,27 @@ describe('rich text content utilities', () => {
         const sanitized = sanitizeGeneratedHTML('<p onclick="alert(1)">x</p><a href="javascript:alert(1)">bad</a>')
         expect(sanitized).not.toContain('onclick')
         expect(sanitized).not.toContain('javascript:')
+    })
+
+    it('replaces atomic template variables without losing surrounding marks', () => {
+        const source = createTextEditorContent({
+            schemaVersion: 1,
+            doc: {
+                type: 'doc',
+                content: [{
+                    type: 'paragraph',
+                    content: [{
+                        type: 'templateVariable',
+                        attrs: { key: 'student_name', mode: null },
+                        marks: [{ type: 'bold' }]
+                    }]
+                }]
+            }
+        })
+        const rendered = renderTemplateContent(source, key => key === 'student_name' ? '王小明' : '')
+        expect(rendered.plainText).toBe('王小明')
+        expect(rendered.richText.doc.content?.[0]?.content?.[0]).toMatchObject({
+            type: 'text', text: '王小明', marks: [{ type: 'bold' }]
+        })
     })
 })

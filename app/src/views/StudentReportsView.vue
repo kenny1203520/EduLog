@@ -433,7 +433,11 @@
                         :initial-class-participation="selectedReport.classParticipation"
                         :initial-classroom-behavior="selectedReport.classroomBehavior"
                         :initial-contact-notes="selectedReport.contactNotes"
-                        :initial-class-notes="selectedReport.classNotes" :initial-content="selectedReport.content"
+                        :initial-contact-notes-document="selectedReport.contactNotesDocument"
+                        :initial-class-notes="selectedReport.classNotes"
+                        :initial-class-notes-document="selectedReport.classNotesDocument"
+                        :initial-content="selectedReport.content"
+                        :initial-content-document="selectedReport.contentDocument"
                         :initial-enrollment-external-link="enrollmentInfo?.externalLink"
                         @save-success="handleSaveSuccess" @save-error="handleSaveError" @conflict="handleConflict"
                         @restored="handleReportRestored" @deleted="handleDeleted" />

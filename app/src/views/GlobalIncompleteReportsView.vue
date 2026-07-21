@@ -317,7 +317,9 @@
                     <div
                         class="flex-1 overflow-y-auto rounded-[3rem] bg-white shadow-2xl shadow-gray-200/50 border border-gray-100/50 relative min-h-0 custom-scrollbar">
                         <ReportEditor :key="selectedReport.id + '-' + editorRefreshKey" :report-id="selectedReport.id"
-                            :initial-content="selectedReport.content" :initial-version="selectedReport.version"
+                            :initial-content="selectedReport.content"
+                            :initial-content-document="selectedReport.contentDocument"
+                            :initial-version="selectedReport.version"
                             :loading="editorLoading"
                             :title="$t('report.report_for_date', { date: formatDateTime(selectedReport) })"
                             :show-manual-save="true" :available-lessons="activeLessons"
@@ -329,7 +331,9 @@
                             :initial-class-participation="selectedReport.classParticipation"
                             :initial-classroom-behavior="selectedReport.classroomBehavior"
                             :initial-contact-notes="selectedReport.contactNotes"
+                            :initial-contact-notes-document="selectedReport.contactNotesDocument"
                             :initial-class-notes="selectedReport.classNotes"
+                            :initial-class-notes-document="selectedReport.classNotesDocument"
                             :initial-progress-start="selectedReport.progressStart"
                             :initial-progress-end="selectedReport.progressEnd"
                             :initial-report-external-link="selectedReport.externalLink"

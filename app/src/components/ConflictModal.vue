@@ -127,7 +127,7 @@
                                 <span class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.server_version') }}</span>
                                 <button
-                                    @click="mergedReport.contact_notes = serverReport?.contact_notes || ''; selectedStrategy = 'manual'"
+                                    @click="selectRichField('contact_notes', 'server')"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
@@ -157,7 +157,7 @@
                                 <span class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.local_version') }}</span>
                                 <button
-                                    @click="mergedReport.contact_notes = localReport?.contact_notes || ''; selectedStrategy = 'manual'"
+                                    @click="selectRichField('contact_notes', 'local')"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
@@ -185,7 +185,7 @@
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedReport.contact_notes"
+                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedContactNotes"
                         preset="merge" :min-height="160" />
                 </div>
 
@@ -207,7 +207,7 @@
                                 <span class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.server_version') }}</span>
                                 <button
-                                    @click="mergedReport.class_notes = serverReport?.class_notes || ''; selectedStrategy = 'manual'"
+                                    @click="selectRichField('class_notes', 'server')"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
@@ -237,7 +237,7 @@
                                 <span class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.local_version') }}</span>
                                 <button
-                                    @click="mergedReport.class_notes = localReport?.class_notes || ''; selectedStrategy = 'manual'"
+                                    @click="selectRichField('class_notes', 'local')"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
@@ -265,7 +265,7 @@
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedReport.class_notes"
+                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedClassNotes"
                         preset="merge" :min-height="160" />
                 </div>
 
@@ -287,7 +287,7 @@
                                 <span class="text-[10px] font-black text-rose-500 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.server_version') }}</span>
                                 <button
-                                    @click="mergedReport.content = serverReport?.content || ''; selectedStrategy = 'manual'"
+                                    @click="selectRichField('content', 'server')"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
@@ -317,7 +317,7 @@
                                 <span class="text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
                                     $t('report.conflict.local_version') }}</span>
                                 <button
-                                    @click="mergedReport.content = localReport?.content || ''; selectedStrategy = 'manual'"
+                                    @click="selectRichField('content', 'local')"
                                     class="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 uppercase tracking-widest bg-emerald-50 px-3 py-1 rounded-lg hover:bg-emerald-100 transition-colors">
                                     {{ $t('report.conflict.use_this') || 'Use This' }}
                                 </button>
@@ -345,7 +345,7 @@
                         class="flex items-center gap-2 text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-4 ml-1">
                         {{ $t('report.conflict.merged_content') }}
                     </label>
-                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedReport.content"
+                    <TextEditor v-if="selectedStrategy === 'manual'" v-model="mergedContent"
                         preset="merge" :min-height="240"
                         :placeholder="$t('report.conflict.merge_placeholder')" />
                 </div>
@@ -373,6 +373,8 @@ import { useI18n } from 'vue-i18n'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { Lesson } from '@/models/Course'
 import TextEditor from '@/components/common/text-editor/TextEditor.vue'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
+import type { TextEditorContent, TextEditorContentInput } from '@/components/common/text-editor/types'
 
 interface Props {
     isOpen: boolean
@@ -398,6 +400,39 @@ function handleKeydown(event: KeyboardEvent) {
 // State
 const selectedStrategy = ref<'keep-local' | 'keep-server' | 'manual'>('manual')
 const mergedReport = ref<OccurrenceReportDTO>(props.localReport ? { ...props.localReport } : {} as OccurrenceReportDTO);
+
+type RichField = 'contact_notes' | 'class_notes' | 'content'
+const documentField: Record<RichField, 'contact_notes_document' | 'class_notes_document' | 'content_document'> = {
+    contact_notes: 'contact_notes_document',
+    class_notes: 'class_notes_document',
+    content: 'content_document'
+}
+
+function richFieldModel(field: RichField) {
+    return computed<TextEditorContent>({
+        get: () => createTextEditorContent(
+            mergedReport.value[documentField[field]] || mergedReport.value[field] || ''
+        ),
+        set: (value: TextEditorContentInput) => {
+            const content = createTextEditorContent(value)
+            mergedReport.value[field] = content.plainText
+            mergedReport.value[documentField[field]] = content.richText
+        }
+    })
+}
+
+const mergedContactNotes = richFieldModel('contact_notes')
+const mergedClassNotes = richFieldModel('class_notes')
+const mergedContent = richFieldModel('content')
+
+function selectRichField(field: RichField, source: 'server' | 'local') {
+    const report = source === 'server' ? props.serverReport : props.localReport
+    if (!report) return
+    const content = createTextEditorContent(report[documentField[field]] || report[field] || '')
+    mergedReport.value[field] = content.plainText
+    mergedReport.value[documentField[field]] = content.richText
+    selectedStrategy.value = 'manual'
+}
 
 const getMergedValue = (field: keyof OccurrenceReportDTO) => {
     const val = (mergedReport.value as any)[field]

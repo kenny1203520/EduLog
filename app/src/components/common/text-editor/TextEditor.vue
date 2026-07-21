@@ -142,6 +142,10 @@ function insertText(value: string): void {
 }
 function insertContent(value: TextEditorContentInput): void {
     if (effectiveMode.value !== 'edit') return
+    if (value && typeof value === 'object' && 'type' in value && value.type && value.type !== 'doc' && !('schemaVersion' in value) && !('richText' in value)) {
+        editor.chain().focus().insertContent(value as any).run()
+        return
+    }
     const resolved = createTextEditorContent(value, { templateVariables: props.templateVariables })
     editor.chain().focus().insertContent(resolved.richText.doc.content || []).run()
 }

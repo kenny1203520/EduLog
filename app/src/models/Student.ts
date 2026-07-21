@@ -1,4 +1,6 @@
 import { Enrollment, type EnrollmentDTO } from './Enrollment'
+import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
+import { createTextEditorContent } from '@/components/common/text-editor/content'
 
 export interface StudentContactDTO {
   id?: string
@@ -40,6 +42,7 @@ export interface StudentDTO {
   updated_at?: string
   name: string
   notes?: string
+  notes_document?: RichTextDocumentV1 | null
   // New Fields
   gov_id?: string
   email?: string
@@ -61,6 +64,7 @@ export class Student {
   public updated_at?: Date
   public name: string
   public notes: string
+  public notesDocument: RichTextDocumentV1
   
   public gov_id: string
   public email: string
@@ -80,7 +84,9 @@ export class Student {
     this.created_at = new Date(dto.created_at)
     if (dto.updated_at) this.updated_at = new Date(dto.updated_at)
     this.name = dto.name
-    this.notes = dto.notes || ''
+    const notes = createTextEditorContent(dto.notes_document || dto.notes || '')
+    this.notes = notes.plainText
+    this.notesDocument = notes.richText
     
     this.gov_id = dto.gov_id || ''
     this.email = dto.email || ''

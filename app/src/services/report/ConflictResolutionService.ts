@@ -43,13 +43,16 @@ export class ConflictResolutionService {
     ): string[] {
         const fieldsThatMatter = [
             'content',
+            'content_document',
             'attendance_status',
             'is_completed',
             'progress_letter',
             'class_participation',
             'classroom_behavior',
             'contact_notes',
+            'contact_notes_document',
             'class_notes',
+            'class_notes_document',
             'lesson_id',
             'external_link'
         ]
@@ -60,7 +63,7 @@ export class ConflictResolutionService {
             const serverValue = (server as Record<string, any>)[field]
             const clientValue = (client as Record<string, any>)[field]
 
-            if (serverValue !== clientValue) {
+            if (JSON.stringify(serverValue ?? null) !== JSON.stringify(clientValue ?? null)) {
                 conflicts.push(field)
             }
         })
@@ -128,19 +131,22 @@ export class ConflictResolutionService {
         const clientContentTime = new Date(clientVersion.updated_at || 0).getTime()
         if (clientContentTime > serverContentTime && clientVersion.content) {
             merged.content = clientVersion.content
+            merged.content_document = clientVersion.content_document
         }
 
         // Metadata: server priority (attendance_status, is_completed)
         merged.attendance_status = serverVersion.attendance_status
         merged.is_completed = serverVersion.is_completed
 
-        // Notes: merge (concatenate if both have content)
+        // Rich text fields are never concatenated as plain text because that would discard marks/nodes.
         if (clientVersion.contact_notes && clientVersion.contact_notes !== serverVersion.contact_notes) {
-            merged.contact_notes = this.mergeNotes(serverVersion.contact_notes || null, clientVersion.contact_notes)
+            merged.contact_notes = clientContentTime > serverContentTime ? clientVersion.contact_notes : serverVersion.contact_notes
+            merged.contact_notes_document = clientContentTime > serverContentTime ? clientVersion.contact_notes_document : serverVersion.contact_notes_document
         }
 
         if (clientVersion.class_notes && clientVersion.class_notes !== serverVersion.class_notes) {
-            merged.class_notes = this.mergeNotes(serverVersion.class_notes || null, clientVersion.class_notes)
+            merged.class_notes = clientContentTime > serverContentTime ? clientVersion.class_notes : serverVersion.class_notes
+            merged.class_notes_document = clientContentTime > serverContentTime ? clientVersion.class_notes_document : serverVersion.class_notes_document
         }
 
         // Ratings/selects: client priority
@@ -161,18 +167,6 @@ export class ConflictResolutionService {
         merged.external_link = serverVersion.external_link
 
         return merged
-    }
-
-    /**
-     * Merge note fields by combining both
-     */
-    private static mergeNotes(serverNotes: string | null, clientNotes: string | null): string {
-        const parts = []
-
-        if (serverNotes) parts.push(`[Server]: ${serverNotes}`)
-        if (clientNotes) parts.push(`[Client]: ${clientNotes}`)
-
-        return parts.join('\n\n')
     }
 
     /**
@@ -202,7 +196,7 @@ export class ConflictResolutionService {
      */
     static canAutoResolve(conflict: ConflictInfo): boolean {
         // Auto-resolve if only non-critical fields conflict
-        const nonCriticalFields = ['contact_notes', 'class_notes', 'external_link']
+        const nonCriticalFields = ['external_link']
         
         return conflict.conflictingFields.every((field) =>
             nonCriticalFields.includes(field)

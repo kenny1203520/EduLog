@@ -16,12 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Added shared plain-text and collaborative editor contracts with reusable appearance presets.
 - Added versioned TipTap JSON documents, Unicode-aware metrics, formatting controls, rich/plain/HTML accessors, and reusable read-only rendering.
+- Persisted TipTap JSON and its canonical plain-text projection atomically for reports, templates, course descriptions, student notes, and teacher biographies.
+- Added rich clipboard output, atomic template variables, report field metrics, editor settings persistence, and rich-text conflict/version previews.
 - Added runtime auto-save and collaboration configuration, connection/presence status, and structured editor notification adapters.
 - Added version-gated Yjs snapshot persistence and recovery for collaborative report drafts.
 - Added regression coverage for queued saves, conflicts, errors, resets, and manual draining.
 
 ### Deployment Notes
 - Apply `1000022_report_collab_snapshot_versioning.sql` before deploying frontend code that uses versioned collaboration snapshots.
+- Apply `1000023_rich_text_documents.sql` before deploying frontend code that reads or writes rich-text documents.
 - Legacy collaboration snapshots remain stored but are ignored until replaced from canonical report content.
 
 ## [1.5.2] - 2026-06-15

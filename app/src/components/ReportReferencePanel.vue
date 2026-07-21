@@ -200,10 +200,11 @@
                                             class="text-[12px] sm:text-[13px] font-black text-amber-600 uppercase tracking-widest block mb-0.5 sm:mb-1">
                                             {{ $t('report.reference_panel.contact') }}
                                         </span>
-                                        <p class="text-[13px] sm:text-[14px] text-gray-600 font-medium leading-relaxed"
+                                        <RichTextViewer class="text-[13px] sm:text-[14px] text-gray-600 font-medium leading-relaxed"
+                                            :content="report.contact_notes_document || report.contact_notes"
+                                            preset="notes"
                                             :class="(shouldShowToggle(report.contact_notes, 'notes') && !isExpanded(report.id, 'contact')) ? 'line-clamp-2' : ''">
-                                            {{ report.contact_notes }}
-                                        </p>
+                                        </RichTextViewer>
                                     </div>
                                 </div>
                                 <!-- Toggle for Contact -->
@@ -237,10 +238,11 @@
                                             class="text-[12px] sm:text-[13px] font-black text-blue-600 uppercase tracking-widest block mb-0.5 sm:mb-1">
                                             {{ $t('report.reference_panel.class_notes') }}
                                         </span>
-                                        <p class="text-[13px] sm:text-[14px] text-gray-600 font-medium leading-relaxed"
+                                        <RichTextViewer class="text-[13px] sm:text-[14px] text-gray-600 font-medium leading-relaxed"
+                                            :content="report.class_notes_document || report.class_notes"
+                                            preset="notes"
                                             :class="(shouldShowToggle(report.class_notes, 'notes') && !isExpanded(report.id, 'class')) ? 'line-clamp-2' : ''">
-                                            {{ report.class_notes }}
-                                        </p>
+                                        </RichTextViewer>
                                     </div>
                                 </div>
                                 <!-- Toggle for Class -->
@@ -263,10 +265,10 @@
 
                         <!-- Main Content Section -->
                         <div class="p-5 sm:p-7 bg-white relative">
-                            <div class="text-[14px] sm:text-[15px] text-gray-700 whitespace-pre-wrap font-medium leading-relaxed transition-all duration-500"
+                            <RichTextViewer class="text-[14px] sm:text-[15px] text-gray-700 font-medium leading-relaxed transition-all duration-500"
+                                :content="report.content_document || report.content" preset="report"
                                 :class="shouldShowToggle(report.content, 'content') ? (isExpanded(report.id, 'content') ? 'pb-14 sm:pb-16' : 'line-clamp-[10] sm:line-clamp-[12] max-h-[350px] sm:max-h-[420px] overflow-hidden pb-20 sm:pb-24') : ''">
-                                {{ report.content }}
-                            </div>
+                            </RichTextViewer>
 
                             <!-- Toggle for Content -->
                             <div v-if="shouldShowToggle(report.content, 'content')"
@@ -365,6 +367,7 @@ import { AggregateService } from '@/services/AggregateService'
 import { SessionService } from '@/services/session/SessionService'
 import { useI18n } from 'vue-i18n'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
+import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
 
 const { t } = useI18n()
 

@@ -23,13 +23,15 @@ import {
     formatCopyTemplateToken,
     renderCopyTemplate
 } from '@/utils/copyTemplate'
-import { copyToClipboard } from '@/utils/clipboard'
+import { copyRichTextToClipboard } from '@/utils/clipboard'
 
 import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
+import { createTextEditorContent, renderTemplateContent } from '@/components/common/text-editor/content'
+import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import KodingCodeCheckModal from '@/components/KodingCodeCheckModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
@@ -64,10 +66,19 @@ const selectedEnrollmentIds = ref<Set<string>>(new Set())
 const isQuickAttendanceExpanded = ref(false)
 const showAttendanceTemplateModal = ref(false)
 const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
+const attendanceTemplateDocument = ref<RichTextDocumentV1>(
+    createTextEditorContent(SYSTEM_ATTENDANCE_TEMPLATE, { templateVariables: true }).richText
+)
+const attendanceTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
 const attendanceTemplateScope = ref<'class_session' | 'user_default'>('class_session')
 const isLoadingAttendanceTemplate = ref(false)
 const isSavingAttendanceTemplate = ref(false)
-const attendanceTemplateLoadOptions = ref<Array<{ key: string; label: string; templateText: string }>>([])
+const attendanceTemplateLoadOptions = ref<Array<{
+    key: string
+    label: string
+    templateText: string
+    templateDocument?: RichTextDocumentV1
+}>>([])
 const selectedAttendanceTemplateLoadKey = ref('')
 const selectedAttendanceTemplateModes = ref<Record<string, string>>({
     present_list: 'comma',
@@ -1071,7 +1082,7 @@ function buildAttendanceTemplateContext() {
 
 function insertAttendanceTemplateVariable(variable: string) {
     const mode = getSelectedAttendanceTemplateMode(variable)
-    attendanceTemplateText.value += formatCopyTemplateToken(variable, mode)
+    attendanceTemplateModal.value?.insertVariableAtFocus(formatCopyTemplateToken(variable, mode))
 }
 
 function loadSelectedAttendanceTemplate() {
@@ -1081,12 +1092,20 @@ function loadSelectedAttendanceTemplate() {
     }
 
     attendanceTemplateText.value = selected.templateText || SYSTEM_ATTENDANCE_TEMPLATE
+    attendanceTemplateDocument.value = createTextEditorContent(
+        selected.templateDocument || attendanceTemplateText.value,
+        { templateVariables: true }
+    ).richText
 }
 
 async function openAttendanceTemplateModal() {
     showAttendanceTemplateModal.value = true
     attendanceTemplateScope.value = 'class_session'
     attendanceTemplateText.value = SYSTEM_ATTENDANCE_TEMPLATE
+    attendanceTemplateDocument.value = createTextEditorContent(
+        SYSTEM_ATTENDANCE_TEMPLATE,
+        { templateVariables: true }
+    ).richText
     selectedAttendanceTemplateModes.value = {
         present_list: 'comma',
         absent_list: 'comma',
@@ -1114,7 +1133,8 @@ async function openAttendanceTemplateModal() {
             return {
                 key: item.key,
                 label,
-                templateText: item.templateText
+                templateText: item.templateText,
+                templateDocument: item.templateDocument
             }
         })
         selectedAttendanceTemplateLoadKey.value = attendanceTemplateLoadOptions.value[0]?.key || ''
@@ -1122,16 +1142,32 @@ async function openAttendanceTemplateModal() {
         if (classTemplate) {
             attendanceTemplateScope.value = 'class_session'
             attendanceTemplateText.value = classTemplate
+            const option = loadOptions.find(item =>
+                item.scopeType === 'class_session' && item.scopeEntityId === sessionId
+            )
+            attendanceTemplateDocument.value = createTextEditorContent(
+                option?.templateDocument || classTemplate,
+                { templateVariables: true }
+            ).richText
             return
         }
 
         if (userTemplate) {
             attendanceTemplateScope.value = 'user_default'
             attendanceTemplateText.value = userTemplate
+            const option = loadOptions.find(item => item.scopeType === 'user_default')
+            attendanceTemplateDocument.value = createTextEditorContent(
+                option?.templateDocument || userTemplate,
+                { templateVariables: true }
+            ).richText
             return
         }
 
         attendanceTemplateText.value = SYSTEM_ATTENDANCE_TEMPLATE
+        attendanceTemplateDocument.value = createTextEditorContent(
+            SYSTEM_ATTENDANCE_TEMPLATE,
+            { templateVariables: true }
+        ).richText
     } catch (error) {
         console.error('Failed to load attendance copy template', error)
         toast.error(t('classroom.copy_template_load_failed'))
@@ -1141,8 +1177,8 @@ async function openAttendanceTemplateModal() {
 }
 
 async function saveAttendanceTemplate() {
-    const templateText = attendanceTemplateText.value.trim()
-    if (!templateText) {
+    const content = createTextEditorContent(attendanceTemplateDocument.value, { templateVariables: true })
+    if (!content.plainText.trim()) {
         toast.error(t('classroom.copy_template_empty_error'))
         return
     }
@@ -1150,10 +1186,10 @@ async function saveAttendanceTemplate() {
     try {
         isSavingAttendanceTemplate.value = true
         if (attendanceTemplateScope.value === 'class_session') {
-            await CopyTemplateService.saveAttendanceTemplateForSession(sessionId, templateText)
+            await CopyTemplateService.saveAttendanceTemplateForSession(sessionId, content)
             toast.success(t('classroom.copy_template_saved_session'))
         } else {
-            await CopyTemplateService.saveAttendanceTemplateAsUserDefault(templateText)
+            await CopyTemplateService.saveAttendanceTemplateAsUserDefault(content)
             toast.success(t('classroom.copy_template_saved_user'))
         }
 
@@ -1206,12 +1242,19 @@ function copyAttendanceInfo() {
         pending_list: pendingList
     }
 
+    const formatters = buildAttendanceTemplateContext().formatters
     const copyPromise = CopyTemplateService.getEffectiveAttendanceTemplate(sessionId)
-        .then(({ templateText }) => {
-            return renderCopyTemplate(templateText, context, buildAttendanceTemplateContext().formatters).trim()
-        })
+        .then(({ templateText, templateDocument }) => renderTemplateContent(
+            templateDocument || templateText,
+            (key, mode) => renderCopyTemplate(
+                formatCopyTemplateToken(key, mode || undefined),
+                context,
+                formatters
+            ),
+            text => renderCopyTemplate(text, context, formatters)
+        ))
 
-    copyToClipboard(copyPromise).then(success => {
+    copyRichTextToClipboard(copyPromise).then(success => {
         if (success) {
             toast.success(t('classroom.copy_success'))
         } else {
@@ -2587,8 +2630,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :initial-class-participation="parseFloat(reportMap.get(selectedEnrollmentId)?.classParticipation || '0')"
                                 :initial-classroom-behavior="parseFloat(reportMap.get(selectedEnrollmentId)?.classroomBehavior || '0')"
                                 :initial-contact-notes="reportMap.get(selectedEnrollmentId)?.contactNotes"
+                                :initial-contact-notes-document="reportMap.get(selectedEnrollmentId)?.contactNotesDocument"
                                 :initial-class-notes="reportMap.get(selectedEnrollmentId)?.classNotes"
+                                :initial-class-notes-document="reportMap.get(selectedEnrollmentId)?.classNotesDocument"
                                 :initial-content="reportMap.get(selectedEnrollmentId)?.content"
+                                :initial-content-document="reportMap.get(selectedEnrollmentId)?.contentDocument"
                                 :initial-enrollment-external-link="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
                                 @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                                 @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
@@ -2698,17 +2744,19 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
             </div>
         </div>
 
-        <CopyTemplateEditorModal v-model="showAttendanceTemplateModal" :title="$t('classroom.copy_template_title')"
+        <CopyTemplateEditorModal ref="attendanceTemplateModal" v-model="showAttendanceTemplateModal" :title="$t('classroom.copy_template_title')"
             :hint="$t('classroom.copy_template_hint')" :variable-title="$t('classroom.copy_template_variables')"
             :content-title="$t('classroom.copy_template_content')"
             :preview-title="$t('classroom.copy_template_preview_title')"
             :preview-hint="$t('classroom.copy_template_preview_hint')"
             :preview-empty="$t('classroom.copy_template_preview_empty')" :template-text="attendanceTemplateText"
+            :template-document="attendanceTemplateDocument"
             :preview-text="attendanceTemplatePreviewText" :variable-count="attendanceTemplateVariables.length"
             :is-loading="isLoadingAttendanceTemplate" :loading-text="$t('classroom.copy_template_loading')"
             :loading-hint="$t('classroom.copy_template_loading_hint')" :save-loading="isSavingAttendanceTemplate"
             :cancel-text="$t('common.cancel')" :save-text="$t('common.save')" :saving-text="$t('common.saving')"
-            @update:template-text="attendanceTemplateText = $event" @save="saveAttendanceTemplate">
+            @update:template-text="attendanceTemplateText = $event"
+            @update:template-document="attendanceTemplateDocument = $event" @save="saveAttendanceTemplate">
             <template #controls>
                 <div class="space-y-3 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
                     <div class="space-y-2">

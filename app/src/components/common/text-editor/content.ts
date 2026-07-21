@@ -179,3 +179,33 @@ export function contentEquals(left: TextEditorContentInput, right: TextEditorCon
     const b = createTextEditorContent(right)
     return a.plainText === b.plainText && JSON.stringify(a.richText) === JSON.stringify(b.richText)
 }
+
+/** Resolves atomic template-variable nodes while preserving surrounding document structure and marks. */
+export function renderTemplateContent(
+    value: TextEditorContentInput,
+    resolveVariable: (key: string, mode?: string | null) => string,
+    renderLegacyText?: (text: string) => string
+): TextEditorContent {
+    const source = createTextEditorContent(value, { templateVariables: true })
+    const transform = (node: JSONContent): JSONContent => {
+        if (node.type === 'templateVariable') {
+            return {
+                type: 'text',
+                text: resolveVariable(String(node.attrs?.key || ''), node.attrs?.mode || null),
+                ...(node.marks ? { marks: structuredCloneSafe(node.marks) } : {})
+            }
+        }
+        if (node.type === 'text' && typeof node.text === 'string' && renderLegacyText) {
+            return { ...structuredCloneSafe(node), text: renderLegacyText(node.text) }
+        }
+        return {
+            ...structuredCloneSafe(node),
+            ...(node.content ? { content: node.content.map(transform) } : {})
+        }
+    }
+    return createTextEditorContent({
+        schemaVersion: 1,
+        doc: transform(source.richText.doc),
+        appearance: source.richText.appearance
+    })
+}

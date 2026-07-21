@@ -306,11 +306,14 @@
             <CollaborativeTextEditor
                 ref="contactNotesEditorRef"
                 v-if="ready && ydoc"
-                v-model="contactNotes"
+                v-model="contactNotesEditorValue"
                 field-name="contactNotes_xml"
                 :ydoc="ydoc"
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
                 :min-height="90"
@@ -318,7 +321,10 @@
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
                 @change="handleTextEditorChange('contactNotes', $event)" />
             <!-- Fallback standard editor if ydoc not ready -->
-            <TextEditor v-else v-model="contactNotes" preset="notes" :disabled="props.disabled"
+            <TextEditor v-else v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="90"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
                 @change="handleTextEditorChange('contactNotes', $event)" />
@@ -337,11 +343,14 @@
             <CollaborativeTextEditor
                 ref="classNotesEditorRef"
                 v-if="ready && ydoc"
-                v-model="classNotes"
+                v-model="classNotesEditorValue"
                 field-name="classNotes_xml"
                 :ydoc="ydoc"
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
                 :min-height="140"
@@ -349,7 +358,10 @@
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#A78BFA' }"
                 :placeholder="$t('report.editor.class_notes_placeholder')"
                 @change="handleTextEditorChange('classNotes', $event)" />
-            <TextEditor v-else v-model="classNotes" preset="notes" :disabled="props.disabled"
+            <TextEditor v-else v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="140" mono
                 :placeholder="$t('report.editor.class_notes_placeholder')"
                 @change="handleTextEditorChange('classNotes', $event)" />
@@ -375,11 +387,14 @@
             <CollaborativeTextEditor
                 ref="contentEditorRef"
                 v-if="ready && ydoc"
-                v-model="localContent"
+                v-model="contentEditorValue"
                 field-name="content_xml"
                 :ydoc="ydoc"
                 :provider="awarenessProvider"
                 :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="report"
                 :font-scale="preferences.editorFontScale"
                 :min-height="300"
@@ -387,9 +402,12 @@
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#34D399' }"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 @change="handleTextEditorChange('content', $event)" />
-            <TextEditor v-else v-model="localContent" preset="report"
+            <TextEditor v-else v-model="contentEditorValue" preset="report"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
+                :formatting-enabled="preferences.editorSettings.formattingEnabled"
+                :toolbar-visible="preferences.editorSettings.toolbarVisible"
+                :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 :font-scale="preferences.editorFontScale" :min-height="300" mono
                 @change="handleTextEditorChange('content', $event)" />
         </div>
@@ -415,7 +433,7 @@
             :confirm-text="confirmState.confirmText" :is-dangerous="confirmState.isDangerous"
             :is-loading="confirmState.isLoading" @confirm="handleConfirmAction" @close="confirmState.isOpen = false" />
 
-        <CopyTemplateEditorModal v-model="showCourseCopyTemplateModal"
+        <CopyTemplateEditorModal ref="courseTemplateModal" v-model="showCourseCopyTemplateModal"
             :title="$t('report.editor.copy_course_template_title')"
             :hint="$t('report.editor.copy_course_template_hint')"
             :variable-title="$t('report.editor.copy_course_template_variables')"
@@ -423,12 +441,13 @@
             :preview-title="$t('report.editor.copy_course_template_preview_title')"
             :preview-hint="$t('report.editor.copy_course_template_preview_hint')"
             :preview-empty="$t('report.editor.copy_course_template_preview_empty')"
-            :template-text="courseCopyTemplateText" :preview-text="courseTemplatePreviewText"
+            :template-text="courseCopyTemplateText" :template-document="courseCopyTemplateDocument" :preview-text="courseTemplatePreviewText"
             :variable-count="courseTemplateVariables.length" :is-loading="isLoadingCourseCopyTemplate"
             :loading-text="$t('report.editor.copy_course_template_loading')"
             :loading-hint="$t('report.editor.copy_course_template_loading_hint')"
             :save-loading="isSavingCourseCopyTemplate" :cancel-text="$t('common.cancel')" :save-text="$t('common.save')"
             :saving-text="$t('report.saving')" @update:template-text="courseCopyTemplateText = $event"
+            @update:template-document="courseCopyTemplateDocument = $event"
             @save="saveCourseCopyTemplate">
             <template #controls>
                 <div class="rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
@@ -591,7 +610,10 @@ import RatingInput from '@/components/common/RatingInput.vue'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import TextEditor from '@/components/common/text-editor/TextEditor.vue'
 import CollaborativeTextEditor from '@/components/common/text-editor/CollaborativeTextEditor.vue'
-import { insertTextAtSelection, type TextEditorChange } from '@/components/common/text-editor/types'
+import { insertTextAtSelection, type RichTextDocumentV1, type TextEditorChange, type TextEditorContent, type TextEditorHandle, type TextEditorMetrics } from '@/components/common/text-editor/types'
+import { calculateTextEditorMetrics, createTextEditorContent, renderTemplateContent } from '@/components/common/text-editor/content'
+import { createEditorNotifier, type EditorNotification } from '@/components/common/text-editor/notifier'
+import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings, type EditorUserSettings } from '@/components/common/text-editor/settings'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
 import ReportReferencePanel from '@/components/ReportReferencePanel.vue'
 import ReportVersionHistoryModal from '@/components/ReportVersionHistoryModal.vue'
@@ -613,7 +635,7 @@ import {
     renderCopyTemplate,
     createNumberFormatters
 } from '@/utils/copyTemplate'
-import { copyToClipboard } from '@/utils/clipboard'
+import { copyRichTextToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
 
 import type { Lesson } from '@/models/Course'
@@ -649,8 +671,14 @@ interface Props {
     initialClassParticipation?: number // 課堂參與
     initialClassroomBehavior?: number // 課堂秩序
     initialContactNotes?: string // 聯絡欄
+    initialContactNotesDocument?: RichTextDocumentV1 | null
     initialClassNotes?: string // 課堂筆記/紀錄
+    initialClassNotesDocument?: RichTextDocumentV1 | null
     initialContent?: string // 學習報告
+    initialContentDocument?: RichTextDocumentV1 | null
+    autoSaveEnabled?: boolean
+    collaborationEnabled?: boolean
+    notificationsEnabled?: boolean
     initialEnrollmentExternalLink?: string // 課程外部連結
     initialCreatedAt?: string // 建立時間
     compact?: boolean // 是否為緊湊模式 (for split view)
@@ -684,8 +712,14 @@ const props = withDefaults(defineProps<Props>(), {
     initialClassParticipation: 0,
     initialClassroomBehavior: 0,
     initialContactNotes: '',
+    initialContactNotesDocument: null,
     initialClassNotes: '',
+    initialClassNotesDocument: null,
     initialContent: '',
+    initialContentDocument: null,
+    autoSaveEnabled: undefined,
+    collaborationEnabled: undefined,
+    notificationsEnabled: undefined,
     initialEnrollmentExternalLink: '',
     initialCreatedAt: '',
     compact: false,
@@ -699,6 +733,8 @@ const emit = defineEmits<{
     'conflict': [serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO]
     'deleted': []
     'restored': [report: OccurrenceReportDTO]
+    'notification': [notification: EditorNotification]
+    'metrics-change': [metrics: Record<'content' | 'contactNotes' | 'classNotes' | 'total', TextEditorMetrics>]
 }>()
 
 interface Template {
@@ -707,6 +743,9 @@ interface Template {
     content: string
     contactNotes?: string
     classNotes?: string
+    contentDocument?: RichTextDocumentV1
+    contactNotesDocument?: RichTextDocumentV1
+    classNotesDocument?: RichTextDocumentV1
 }
 
 interface ReportTemplateVariableItem {
@@ -726,6 +765,7 @@ const isSavingTemplate = ref(false)
 const isLoadingTemplateManager = ref(false)
 const showCourseCopyTemplateModal = ref(false)
 const courseCopyTemplateText = ref(SYSTEM_COURSE_TEMPLATE)
+const courseCopyTemplateDocument = ref(createTextEditorContent(SYSTEM_COURSE_TEMPLATE, { templateVariables: true }).richText)
 const isLoadingCourseCopyTemplate = ref(false)
 const isSavingCourseCopyTemplate = ref(false)
 const selectedCourseTemplateModes = ref<Record<string, string>>({
@@ -735,17 +775,26 @@ const courseTemplateLoadOptions = ref<Array<CopyTemplateLoadOption & { displayLa
 const selectedCourseTemplateLoadKey = ref('')
 const showReportTemplateManagerModal = ref(false)
 const reportTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
+const courseTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
 const selectedTemplateId = ref('')
 const templateDraftName = ref('')
 const templateDraftContent = ref('')
+const templateDraftContentDocument = ref(createTextEditorContent('', { templateVariables: true }).richText)
 const templateDraftContactNotes = ref('')
+const templateDraftContactNotesDocument = ref(createTextEditorContent('', { templateVariables: true }).richText)
 const templateDraftClassNotes = ref('')
+const templateDraftClassNotesDocument = ref(createTextEditorContent('', { templateVariables: true }).richText)
 const selectedReportTemplateModes = ref<Record<string, string>>({
     lesson: 'arabic'
 })
 
 const preferences = usePreferencesStore()
 const toast = useToast()
+const effectiveAutoSaveEnabled = computed(() => props.autoSaveEnabled ?? preferences.editorSettings.autoSave.enabled)
+const effectiveCollaborationEnabled = computed(() => props.collaborationEnabled ?? preferences.editorSettings.collaboration.enabled)
+const effectiveNotificationsEnabled = computed(() => props.notificationsEnabled ?? preferences.editorSettings.notificationsEnabled)
+const editorNotifier = createEditorNotifier(notification => emit('notification', notification), toast, effectiveNotificationsEnabled.value)
+watch(effectiveNotificationsEnabled, enabled => editorNotifier.setEnabled(enabled))
 
 // Confirm Modal State
 const confirmState = ref({
@@ -806,8 +855,11 @@ async function loadTemplates() {
             id: t.id!,
             name: t.name,
             content: t.content,
+            contentDocument: t.contentDocument,
             contactNotes: t.contactNotes,
-            classNotes: t.classNotes
+            contactNotesDocument: t.contactNotesDocument,
+            classNotes: t.classNotes,
+            classNotesDocument: t.classNotesDocument
         }))
     } catch (e) {
         console.error('Failed to load templates', e)
@@ -962,22 +1014,25 @@ const reportTemplateVariablePreview = computed<Record<string, string>>(() => {
 })
 
 // Editable fields structure for multi-field modal
-const reportTemplateEditableFields = computed<Array<{ id: string; label: string; content: string }>>(() => {
+const reportTemplateEditableFields = computed<Array<{ id: string; label: string; content: string; document: RichTextDocumentV1 }>>(() => {
     return [
         {
             id: 'contact',
             label: t('report.editor.contact_notes_label'),
             content: templateDraftContactNotes.value
+            ,document: templateDraftContactNotesDocument.value
         },
         {
             id: 'class',
             label: t('report.editor.class_notes_label'),
             content: templateDraftClassNotes.value
+            ,document: templateDraftClassNotesDocument.value
         },
         {
             id: 'report',
             label: t('report.editor.learning_report_label'),
             content: templateDraftContent.value
+            ,document: templateDraftContentDocument.value
         }
     ]
 })
@@ -992,13 +1047,16 @@ function insertReportTemplateVariable(fieldId: string, variable: string, caret =
     }
     if (fieldId === 'contact') {
         templateDraftContactNotes.value = insertAtSelection(templateDraftContactNotes.value)
+        templateDraftContactNotesDocument.value = createTextEditorContent(templateDraftContactNotes.value, { templateVariables: true }).richText
         return
     }
     if (fieldId === 'class') {
         templateDraftClassNotes.value = insertAtSelection(templateDraftClassNotes.value)
+        templateDraftClassNotesDocument.value = createTextEditorContent(templateDraftClassNotes.value, { templateVariables: true }).richText
         return
     }
     templateDraftContent.value = insertAtSelection(templateDraftContent.value)
+    templateDraftContentDocument.value = createTextEditorContent(templateDraftContent.value, { templateVariables: true }).richText
 }
 
 function insertVariableToFocusedField(variable: string) {
@@ -1013,14 +1071,17 @@ function handleTemplateVariableMouseLeave() {
     reportTemplateModal.value?.hideVariablePreview?.()
 }
 
-function onEditableFieldsUpdate(fields: Array<{ id: string; label: string; content: string }>) {
+function onEditableFieldsUpdate(fields: Array<{ id: string; label: string; content: string; document?: RichTextDocumentV1 }>) {
     fields.forEach(field => {
         if (field.id === 'contact') {
             templateDraftContactNotes.value = field.content
+            if (field.document) templateDraftContactNotesDocument.value = field.document
         } else if (field.id === 'class') {
             templateDraftClassNotes.value = field.content
+            if (field.document) templateDraftClassNotesDocument.value = field.document
         } else if (field.id === 'report') {
             templateDraftContent.value = field.content
+            if (field.document) templateDraftContentDocument.value = field.document
         }
     })
 }
@@ -1150,9 +1211,7 @@ function copyCourseInfo() {
         lesson_title: lesson.title
     }
 
-    const copyPromise = CopyTemplateService.getEffectiveCourseTemplate()
-        .then(({ templateText }) => {
-            const text = renderCopyTemplate(templateText, context, {
+    const formatters = {
                 course_primary_name: {
                     space: () => formatCoursePrimaryName(cName, dName, 'space'),
                     slash: () => formatCoursePrimaryName(cName, dName, 'slash'),
@@ -1160,12 +1219,23 @@ function copyCourseInfo() {
                     bullet: () => formatCoursePrimaryName(cName, dName, 'bullet')
                 },
                 lesson_sequence: createNumberFormatters('lesson_sequence')
-            }).trim()
+            }
+    const copyPromise = CopyTemplateService.getEffectiveCourseTemplate()
+        .then(({ templateText, templateDocument }) => {
+            const rendered = renderTemplateContent(
+                templateDocument || templateText,
+                (key, mode) => renderCopyTemplate(
+                    formatCopyTemplateToken(key, mode || undefined),
+                    context,
+                    formatters
+                ),
+                text => renderCopyTemplate(text, context, formatters)
+            )
             const fallback = `${coursePrimaryName} Lesson ${lesson.sequence} ${lesson.title}`.trim()
-            return text || fallback
+            return rendered.plainText.trim() ? rendered : createTextEditorContent(fallback)
         })
 
-    copyToClipboard(copyPromise)
+    copyRichTextToClipboard(copyPromise)
         .then((success) => {
             if (success) {
                 justCopiedCourse.value = true
@@ -1182,12 +1252,13 @@ function copyCourseInfo() {
 
 function insertCourseTemplateVariable(variable: string) {
     const mode = getSelectedCourseTemplateMode(variable)
-    courseCopyTemplateText.value += formatCopyTemplateToken(variable, mode)
+    courseTemplateModal.value?.insertVariableAtFocus?.(formatCopyTemplateToken(variable, mode))
 }
 
 async function openCourseCopyTemplateModal() {
     showCourseCopyTemplateModal.value = true
     courseCopyTemplateText.value = SYSTEM_COURSE_TEMPLATE
+    courseCopyTemplateDocument.value = createTextEditorContent(SYSTEM_COURSE_TEMPLATE, { templateVariables: true }).richText
     selectedCourseTemplateModes.value = {
         course_primary_name: 'space'
     }
@@ -1208,6 +1279,8 @@ async function openCourseCopyTemplateModal() {
         }))
         selectedCourseTemplateLoadKey.value = courseTemplateLoadOptions.value[0]?.key || ''
         courseCopyTemplateText.value = template || SYSTEM_COURSE_TEMPLATE
+        const loaded = courseTemplateLoadOptions.value.find(item => item.scopeType === 'user_default')
+        courseCopyTemplateDocument.value = loaded?.templateDocument || createTextEditorContent(courseCopyTemplateText.value, { templateVariables: true }).richText
     } catch (error) {
         console.error('Failed to load course copy template', error)
         toast.error(t('report.editor.copy_course_template_load_failed'))
@@ -1223,6 +1296,7 @@ function loadSelectedCourseTemplate() {
     }
 
     courseCopyTemplateText.value = option.templateText || SYSTEM_COURSE_TEMPLATE
+    courseCopyTemplateDocument.value = option.templateDocument || createTextEditorContent(courseCopyTemplateText.value, { templateVariables: true }).richText
 }
 
 async function saveCourseCopyTemplate() {
@@ -1234,7 +1308,7 @@ async function saveCourseCopyTemplate() {
 
     try {
         isSavingCourseCopyTemplate.value = true
-        await CopyTemplateService.saveCourseTemplateAsUserDefault(templateText)
+        await CopyTemplateService.saveCourseTemplateAsUserDefault({ plainText: templateText, richText: courseCopyTemplateDocument.value })
         toast.success(t('report.editor.copy_course_template_saved'))
         showCourseCopyTemplateModal.value = false
     } catch (error) {
@@ -1246,39 +1320,47 @@ async function saveCourseCopyTemplate() {
 }
 
 function applyTemplate(template: Template) {
-    const renderedContent = renderReportTemplateText(template.content || '')
-    const renderedContactNotes = renderReportTemplateText(template.contactNotes || '')
-    const renderedClassNotes = renderReportTemplateText(template.classNotes || '')
+    const renderContent = (value: RichTextDocumentV1 | string | undefined) => renderTemplateContent(
+        value || '',
+        (key, mode) => renderReportTemplateText(formatCopyTemplateToken(key, mode || selectedReportTemplateModes.value[key])),
+        renderReportTemplateText
+    )
+    const renderedContent = renderContent(template.contentDocument || template.content)
+    const renderedContactNotes = renderContent(template.contactNotesDocument || template.contactNotes)
+    const renderedClassNotes = renderContent(template.classNotesDocument || template.classNotes)
 
     let changed = false
 
     if (ydoc.value) {
-        if (renderedContent && contentEditorRef.value) {
-            const current = contentEditorRef.value.getText()
-            contentEditorRef.value.replaceText(current + (current ? '\n\n' : '') + renderedContent, { emitChange: true })
+        if (renderedContent.plainText && contentEditorRef.value) {
+            if (contentEditorRef.value.getText()) contentEditorRef.value.insertText('\n\n')
+            contentEditorRef.value.insertContent(renderedContent)
         }
-        if (renderedContactNotes && contactNotesEditorRef.value) {
-            const current = contactNotesEditorRef.value.getText()
-            contactNotesEditorRef.value.replaceText(current + (current ? '\n\n' : '') + renderedContactNotes, { emitChange: true })
+        if (renderedContactNotes.plainText && contactNotesEditorRef.value) {
+            if (contactNotesEditorRef.value.getText()) contactNotesEditorRef.value.insertText('\n\n')
+            contactNotesEditorRef.value.insertContent(renderedContactNotes)
         }
-        if (renderedClassNotes && classNotesEditorRef.value) {
-            const current = classNotesEditorRef.value.getText()
-            classNotesEditorRef.value.replaceText(current + (current ? '\n\n' : '') + renderedClassNotes, { emitChange: true })
+        if (renderedClassNotes.plainText && classNotesEditorRef.value) {
+            if (classNotesEditorRef.value.getText()) classNotesEditorRef.value.insertText('\n\n')
+            classNotesEditorRef.value.insertContent(renderedClassNotes)
         }
         changed = true
     } else {
-        if (!localContent.value.trim() && renderedContent) {
-            localContent.value = renderedContent
+        if (!localContent.value.trim() && renderedContent.plainText) {
+            localContent.value = renderedContent.plainText
+            contentDocument.value = renderedContent.richText
             changed = true
         }
 
-        if (!contactNotes.value.trim() && renderedContactNotes) {
-            contactNotes.value = renderedContactNotes
+        if (!contactNotes.value.trim() && renderedContactNotes.plainText) {
+            contactNotes.value = renderedContactNotes.plainText
+            contactNotesDocument.value = renderedContactNotes.richText
             changed = true
         }
 
-        if (!classNotes.value.trim() && renderedClassNotes) {
-            classNotes.value = renderedClassNotes
+        if (!classNotes.value.trim() && renderedClassNotes.plainText) {
+            classNotes.value = renderedClassNotes.plainText
+            classNotesDocument.value = renderedClassNotes.richText
             changed = true
         }
     }
@@ -1294,8 +1376,11 @@ function createNewTemplateDraft() {
     selectedTemplateId.value = ''
     templateDraftName.value = ''
     templateDraftContent.value = localContent.value || ''
+    templateDraftContentDocument.value = contentDocument.value
     templateDraftContactNotes.value = contactNotes.value || ''
+    templateDraftContactNotesDocument.value = contactNotesDocument.value
     templateDraftClassNotes.value = classNotes.value || ''
+    templateDraftClassNotesDocument.value = classNotesDocument.value
 }
 
 function syncTemplateDraftFromSelection() {
@@ -1307,8 +1392,11 @@ function syncTemplateDraftFromSelection() {
 
     templateDraftName.value = selected.name
     templateDraftContent.value = selected.content || ''
+    templateDraftContentDocument.value = selected.contentDocument || createTextEditorContent(selected.content || '', { templateVariables: true }).richText
     templateDraftContactNotes.value = selected.contactNotes || ''
+    templateDraftContactNotesDocument.value = selected.contactNotesDocument || createTextEditorContent(selected.contactNotes || '', { templateVariables: true }).richText
     templateDraftClassNotes.value = selected.classNotes || ''
+    templateDraftClassNotesDocument.value = selected.classNotesDocument || createTextEditorContent(selected.classNotes || '', { templateVariables: true }).richText
 }
 
 function handleTemplateSelectionChange() {
@@ -1346,8 +1434,11 @@ async function saveTemplateDraft() {
             id: selectedTemplateId.value || undefined,
             name: templateDraftName.value.trim(),
             content: templateDraftContent.value,
+            content_document: templateDraftContentDocument.value,
             contact_notes: templateDraftContactNotes.value,
+            contact_notes_document: templateDraftContactNotesDocument.value,
             class_notes: templateDraftClassNotes.value,
+            class_notes_document: templateDraftClassNotesDocument.value,
             instructor_id: authStore.user.id
         })
 
@@ -1380,8 +1471,11 @@ async function applyTemplateDraftToReport() {
         id: selectedTemplateId.value || 'draft',
         name: templateDraftName.value || t('report.editor.template_new_option'),
         content: templateDraftContent.value,
+        contentDocument: templateDraftContentDocument.value,
         contactNotes: templateDraftContactNotes.value,
-        classNotes: templateDraftClassNotes.value
+        contactNotesDocument: templateDraftContactNotesDocument.value,
+        classNotes: templateDraftClassNotes.value,
+        classNotesDocument: templateDraftClassNotesDocument.value
     }
     applyTemplate(draft)
 }
@@ -1443,12 +1537,20 @@ const {
     ready,
     initialState: collabInitialState,
     saveSnapshot,
-    setBaseReportVersion
-} = useReportCollab(reportIdRef as any, initialReportVersionRef)
+    setBaseReportVersion,
+    status: collaborationStatus,
+    activePeers,
+    setEnabled: setCollaborationEnabled,
+    configure: configureCollaboration
+} = useReportCollab(reportIdRef as any, initialReportVersionRef, computed(() => ({
+    enabled: effectiveCollaborationEnabled.value,
+    snapshotDebounceMs: preferences.editorSettings.collaboration.snapshotDebounceMs,
+    presenceEnabled: preferences.editorSettings.collaboration.presenceEnabled
+})))
 
-const contactNotesEditorRef = ref<any>(null)
-const classNotesEditorRef = ref<any>(null)
-const contentEditorRef = ref<any>(null)
+const contactNotesEditorRef = ref<TextEditorHandle | null>(null)
+const classNotesEditorRef = ref<TextEditorHandle | null>(null)
+const contentEditorRef = ref<TextEditorHandle | null>(null)
 const collabWatchStops: WatchStopHandle[] = []
 let collabMetaMap: any = null
 let collabMetaObserver: ((event: any) => void) | null = null
@@ -1476,18 +1578,24 @@ function withCollabGuard(fn: () => void) {
 
 function syncTextRefsFromEditors() {
     if (contentEditorRef.value) {
-        localContent.value = contentEditorRef.value.getText()
+        const content = contentEditorRef.value.getContent()
+        localContent.value = content.plainText
+        contentDocument.value = content.richText
     }
     if (contactNotesEditorRef.value) {
-        contactNotes.value = contactNotesEditorRef.value.getText()
+        const content = contactNotesEditorRef.value.getContent()
+        contactNotes.value = content.plainText
+        contactNotesDocument.value = content.richText
     }
     if (classNotesEditorRef.value) {
-        classNotes.value = classNotesEditorRef.value.getText()
+        const content = classNotesEditorRef.value.getContent()
+        classNotes.value = content.plainText
+        classNotesDocument.value = content.richText
     }
 }
 
-function setEditorContentSilently(editorRef: any, content: string) {
-    editorRef.value?.replaceText(content)
+function setEditorContentSilently(editorRef: { value: TextEditorHandle | null }, content: TextEditorContent) {
+    editorRef.value?.replaceContent(content)
 }
 
 function writeReportMeta(metaMap: any) {
@@ -1605,15 +1713,15 @@ watch(ready, (isReady) => {
                 let seeded = false
 
                 if (!contentEditorRef.value?.getText() && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
-                    setEditorContentSilently(contentEditorRef, localContent.value)
+                    setEditorContentSilently(contentEditorRef, contentEditorValue.value)
                     seeded = true
                 }
                 if (!contactNotesEditorRef.value?.getText() && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
-                    setEditorContentSilently(contactNotesEditorRef, contactNotes.value)
+                    setEditorContentSilently(contactNotesEditorRef, contactNotesEditorValue.value)
                     seeded = true
                 }
                 if (!classNotesEditorRef.value?.getText() && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
-                    setEditorContentSilently(classNotesEditorRef, classNotes.value)
+                    setEditorContentSilently(classNotesEditorRef, classNotesEditorValue.value)
                     seeded = true
                 }
 
@@ -1639,7 +1747,11 @@ const authStore = useAuthStore()
 const { t } = useI18n()
 
 // Local state
-const localContent = ref(props.initialContent)
+const initialMainContent = createTextEditorContent(props.initialContentDocument || props.initialContent)
+const initialContactContent = createTextEditorContent(props.initialContactNotesDocument || props.initialContactNotes)
+const initialClassContent = createTextEditorContent(props.initialClassNotesDocument || props.initialClassNotes)
+const localContent = ref(initialMainContent.plainText)
+const contentDocument = ref(initialMainContent.richText)
 const version = ref(props.initialVersion)
 
 
@@ -1653,9 +1765,24 @@ const attendanceStatus = ref<'present' | 'absent' | 'pending'>(props.initialAtte
 const absenceReason = ref(props.initialAbsenceReason || '')
 const classParticipation = ref(props.initialClassParticipation ?? 0)
 const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
-const contactNotes = ref(props.initialContactNotes || '')
-const classNotes = ref(props.initialClassNotes || '')
+const contactNotes = ref(initialContactContent.plainText)
+const contactNotesDocument = ref(initialContactContent.richText)
+const classNotes = ref(initialClassContent.plainText)
+const classNotesDocument = ref(initialClassContent.richText)
 const reportExternalLink = ref(props.initialReportExternalLink || '')
+
+const contentEditorValue = computed<TextEditorContent>({
+    get: () => ({ plainText: localContent.value, richText: contentDocument.value }),
+    set: value => { localContent.value = value.plainText; contentDocument.value = value.richText }
+})
+const contactNotesEditorValue = computed<TextEditorContent>({
+    get: () => ({ plainText: contactNotes.value, richText: contactNotesDocument.value }),
+    set: value => { contactNotes.value = value.plainText; contactNotesDocument.value = value.richText }
+})
+const classNotesEditorValue = computed<TextEditorContent>({
+    get: () => ({ plainText: classNotes.value, richText: classNotesDocument.value }),
+    set: value => { classNotes.value = value.plainText; classNotesDocument.value = value.richText }
+})
 
 type AttendanceStatus = 'present' | 'absent' | 'pending'
 
@@ -1668,8 +1795,11 @@ type ReportSavePayload = {
     classParticipation?: number
     classroomBehavior?: number
     contactNotes?: string
+    contactNotesDocument?: RichTextDocumentV1
     classNotes?: string
+    classNotesDocument?: RichTextDocumentV1
     content?: string
+    contentDocument?: RichTextDocumentV1
     externalLink?: string
 }
 
@@ -1695,8 +1825,11 @@ function buildCurrentSnapshot(overrides: Partial<ReportDraftSnapshot> = {}): Rep
         classParticipation: classParticipation.value,
         classroomBehavior: classroomBehavior.value,
         contactNotes: contactNotes.value || '',
+        contactNotesDocument: contactNotesDocument.value,
         classNotes: classNotes.value || '',
+        classNotesDocument: classNotesDocument.value,
         content: localContent.value || '',
+        contentDocument: contentDocument.value,
         externalLink: reportExternalLink.value || '',
         ...overrides
     }
@@ -1707,6 +1840,9 @@ function buildSnapshotFromProps(): ReportDraftSnapshot {
     const initialProgress = props.initialProgressStart && props.initialProgressEnd
         ? `${props.initialProgressStart}-${props.initialProgressEnd}`
         : (props.initialProgressStart || props.initialProgressEnd || '')
+    const contact = createTextEditorContent(props.initialContactNotesDocument || props.initialContactNotes || '')
+    const classNotesContent = createTextEditorContent(props.initialClassNotesDocument || props.initialClassNotes || '')
+    const main = createTextEditorContent(props.initialContentDocument || props.initialContent || '')
 
     return {
         lessonId: props.initialLessonId || '',
@@ -1716,14 +1852,20 @@ function buildSnapshotFromProps(): ReportDraftSnapshot {
         absenceReason: normalizeAbsenceReason(initialStatus, props.initialAbsenceReason),
         classParticipation: props.initialClassParticipation ?? 0,
         classroomBehavior: props.initialClassroomBehavior ?? 0,
-        contactNotes: props.initialContactNotes || '',
-        classNotes: props.initialClassNotes || '',
-        content: props.initialContent || '',
+        contactNotes: contact.plainText,
+        contactNotesDocument: contact.richText,
+        classNotes: classNotesContent.plainText,
+        classNotesDocument: classNotesContent.richText,
+        content: main.plainText,
+        contentDocument: main.richText,
         externalLink: props.initialReportExternalLink || ''
     }
 }
 
 function buildSnapshotFromDto(report: OccurrenceReportDTO): ReportDraftSnapshot {
+    const contact = createTextEditorContent(report.contact_notes_document || report.contact_notes || '')
+    const classNotesContent = createTextEditorContent(report.class_notes_document || report.class_notes || '')
+    const main = createTextEditorContent(report.content_document || report.content || '')
     return {
         lessonId: report.lesson_id || '',
         isCompleted: report.is_completed ?? false,
@@ -1732,9 +1874,12 @@ function buildSnapshotFromDto(report: OccurrenceReportDTO): ReportDraftSnapshot 
         absenceReason: normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason),
         classParticipation: report.class_participation ?? 0,
         classroomBehavior: report.classroom_behavior ?? 0,
-        contactNotes: report.contact_notes || '',
-        classNotes: report.class_notes || '',
-        content: report.content || '',
+        contactNotes: contact.plainText,
+        contactNotesDocument: contact.richText,
+        classNotes: classNotesContent.plainText,
+        classNotesDocument: classNotesContent.richText,
+        content: main.plainText,
+        contentDocument: main.richText,
         externalLink: report.external_link || ''
     }
 }
@@ -1748,7 +1893,7 @@ function buildDirtyPayload(current: ReportDraftSnapshot): { keys: Array<keyof Re
         key: K,
         assign: () => void
     ) => {
-        if (current[key] !== previous[key]) {
+        if (JSON.stringify(current[key] ?? null) !== JSON.stringify(previous[key] ?? null)) {
             keys.push(key)
             assign()
         }
@@ -1778,11 +1923,23 @@ function buildDirtyPayload(current: ReportDraftSnapshot): { keys: Array<keyof Re
     addIfChanged('contactNotes', () => {
         payload.contactNotes = current.contactNotes
     })
+    addIfChanged('contactNotesDocument', () => {
+        payload.contactNotes = current.contactNotes
+        payload.contactNotesDocument = current.contactNotesDocument
+    })
     addIfChanged('classNotes', () => {
         payload.classNotes = current.classNotes
     })
+    addIfChanged('classNotesDocument', () => {
+        payload.classNotes = current.classNotes
+        payload.classNotesDocument = current.classNotesDocument
+    })
     addIfChanged('content', () => {
         payload.content = current.content
+    })
+    addIfChanged('contentDocument', () => {
+        payload.content = current.content
+        payload.contentDocument = current.contentDocument
     })
     addIfChanged('externalLink', () => {
         payload.externalLink = current.externalLink
@@ -1839,6 +1996,7 @@ function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportD
         class_occurrence_id: props.classOccurrenceId || '',
         lesson_id: snapshot.lessonId,
         content: snapshot.content,
+        content_document: snapshot.contentDocument,
         is_completed: snapshot.isCompleted,
         progress_letter: snapshot.progressLetter,
         attendance_status: snapshot.attendanceStatus,
@@ -1846,7 +2004,9 @@ function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportD
         class_participation: snapshot.classParticipation,
         classroom_behavior: snapshot.classroomBehavior,
         contact_notes: snapshot.contactNotes,
+        contact_notes_document: snapshot.contactNotesDocument,
         class_notes: snapshot.classNotes,
+        class_notes_document: snapshot.classNotesDocument,
         external_link: snapshot.externalLink,
         version: version.value,
         last_edited_at: new Date().toISOString(),
@@ -1858,17 +2018,27 @@ function snapshotToLocalReport(snapshot: ReportDraftSnapshot): OccurrenceReportD
 
 // Auto-save setup
 const {
+    status: autoSaveStatus,
     isSaving,
     lastSaved,
     hasUnsavedChanges,
     saveError,
     saveNow: autoSaveNow,
     triggerAutoSave,
+    setEnabled: setAutoSaveEnabled,
+    configure: configureAutoSave,
+    retry: retrySave,
+    drain,
     getLastSavedString,
     reset
 } = useAutoSave<ReportDraftSnapshot, SaveReportResult>({
-    debounceMs: props.debounceMs,
+    enabled: effectiveAutoSaveEnabled,
+    debounceMs: computed(() => props.debounceMs ?? preferences.editorSettings.autoSave.debounceMs),
+    saveOnBlur: computed(() => preferences.editorSettings.autoSave.saveOnBlur),
+    saveOnSwitch: computed(() => preferences.editorSettings.autoSave.saveOnSwitch),
+    saveOnUnmount: computed(() => preferences.editorSettings.autoSave.saveOnUnmount),
     onSave: async (snapshot) => {
+        editorNotifier.notify({ code: 'save-started', level: 'info', message: 'Saving report', toast: false })
         if (!props.reportId) {
             return { success: false, message: 'No report ID provided' }
         }
@@ -1909,6 +2079,7 @@ const {
         }
     },
     onConflict: (serverReport, snapshot) => {
+        editorNotifier.notify({ code: 'save-conflict', level: 'warning', message: 'Report save conflict', toast: true })
         if (serverReport) {
             emit('conflict', serverReport, snapshotToLocalReport(snapshot))
         }
@@ -1932,26 +2103,34 @@ const {
         if (updatedReport) {
             emit('save-success', updatedReport)
         }
+        editorNotifier.notify({ code: 'save-succeeded', level: 'success', message: 'Report saved', toast: false })
     },
     onError: (message) => {
         emit('save-error', message)
+        editorNotifier.notify({ code: 'save-failed', level: 'error', message, toast: true })
     }
 })
 
 // Computed
-const wordCount = computed(() => {
-    if (!localContent.value) return 0
-    return localContent.value.trim().split(/\s+/).filter(w => w.length > 0).length
+const reportMetrics = computed(() => {
+    const content = calculateTextEditorMetrics(localContent.value)
+    const contact = calculateTextEditorMetrics(contactNotes.value)
+    const classMetric = calculateTextEditorMetrics(classNotes.value)
+    const total = Object.fromEntries(Object.keys(content).map(key => [key,
+        content[key as keyof TextEditorMetrics] + contact[key as keyof TextEditorMetrics] + classMetric[key as keyof TextEditorMetrics]
+    ])) as unknown as TextEditorMetrics
+    return { content, contactNotes: contact, classNotes: classMetric, total }
 })
-
-const characterCount = computed(() => {
-    return localContent.value.length
-})
+const wordCount = computed(() => reportMetrics.value.content.wordCount)
+const characterCount = computed(() => reportMetrics.value.content.characterCount)
+watch(reportMetrics, metrics => emit('metrics-change', metrics), { immediate: true })
 
 // Watchers to sync props to local state (important for Master-Detail views where component is reused)
 watch(() => props.initialContent, (newContent) => {
     if (newContent !== localContent.value && !hasUnsavedChanges.value) {
-        localContent.value = newContent
+        const content = createTextEditorContent(props.initialContentDocument || newContent)
+        localContent.value = content.plainText
+        contentDocument.value = content.richText
     }
 })
 
@@ -1993,11 +2172,19 @@ watch(() => props.initialClassroomBehavior, (newVal) => {
 })
 
 watch(() => props.initialContactNotes, (newVal) => {
-    if (!hasUnsavedChanges.value) contactNotes.value = newVal || ''
+    if (!hasUnsavedChanges.value) {
+        const content = createTextEditorContent(props.initialContactNotesDocument || newVal || '')
+        contactNotes.value = content.plainText
+        contactNotesDocument.value = content.richText
+    }
 })
 
 watch(() => props.initialClassNotes, (newVal) => {
-    if (!hasUnsavedChanges.value) classNotes.value = newVal || ''
+    if (!hasUnsavedChanges.value) {
+        const content = createTextEditorContent(props.initialClassNotesDocument || newVal || '')
+        classNotes.value = content.plainText
+        classNotesDocument.value = content.richText
+    }
 })
 
 watch(() => props.initialReportExternalLink, (newVal) => {
@@ -2086,9 +2273,18 @@ function handleTextEditorChange(
     field: 'content' | 'contactNotes' | 'classNotes',
     change: TextEditorChange
 ) {
-    if (field === 'content') localContent.value = change.value
-    if (field === 'contactNotes') contactNotes.value = change.value
-    if (field === 'classNotes') classNotes.value = change.value
+    if (field === 'content') {
+        localContent.value = change.content.plainText
+        contentDocument.value = change.content.richText
+    }
+    if (field === 'contactNotes') {
+        contactNotes.value = change.content.plainText
+        contactNotesDocument.value = change.content.richText
+    }
+    if (field === 'classNotes') {
+        classNotes.value = change.content.plainText
+        classNotesDocument.value = change.content.richText
+    }
     handleInput()
 }
 
@@ -2123,7 +2319,11 @@ function saveNow(_options?: { reason?: 'manual' | 'switch' }): Promise<boolean> 
 
 function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = false) {
     version.value = report.version
-    localContent.value = report.content || ''
+    const main = createTextEditorContent(report.content_document || report.content || '')
+    const contact = createTextEditorContent(report.contact_notes_document || report.contact_notes || '')
+    const classNotesContent = createTextEditorContent(report.class_notes_document || report.class_notes || '')
+    localContent.value = main.plainText
+    contentDocument.value = main.richText
     selectedLessonId.value = report.lesson_id || ''
     isCompleted.value = report.is_completed ?? false
     progressStart.value = report.progress_letter ? report.progress_letter.split('-')[0] : ''
@@ -2132,8 +2332,10 @@ function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = 
     absenceReason.value = report.absence_reason || ''
     classParticipation.value = report.class_participation ?? 0
     classroomBehavior.value = report.classroom_behavior ?? 0
-    contactNotes.value = report.contact_notes || ''
-    classNotes.value = report.class_notes || ''
+    contactNotes.value = contact.plainText
+    contactNotesDocument.value = contact.richText
+    classNotes.value = classNotesContent.plainText
+    classNotesDocument.value = classNotesContent.richText
     reportExternalLink.value = report.external_link || ''
     savedReportSnapshot.value = buildSnapshotFromDto(report)
     setBaseReportVersion(report.version)
@@ -2142,9 +2344,9 @@ function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = 
         const metaMap = ydoc.value.getMap('reportMeta')
         withCollabGuard(() => {
             writeReportMeta(metaMap)
-            setEditorContentSilently(contentEditorRef, report.content || '')
-            setEditorContentSilently(contactNotesEditorRef, report.contact_notes || '')
-            setEditorContentSilently(classNotesEditorRef, report.class_notes || '')
+            setEditorContentSilently(contentEditorRef, createTextEditorContent(report.content_document || report.content || ''))
+            setEditorContentSilently(contactNotesEditorRef, createTextEditorContent(report.contact_notes_document || report.contact_notes || ''))
+            setEditorContentSilently(classNotesEditorRef, createTextEditorContent(report.class_notes_document || report.class_notes || ''))
         })
         void saveSnapshot()
     }
@@ -2161,15 +2363,49 @@ function handleReportRestored(report: OccurrenceReportDTO) {
     replaceWithCanonicalReport(report, true)
 }
 
+function getEditorSettings(): EditorUserSettings {
+    return structuredClone(preferences.editorSettings)
+}
+
+function updateEditorSettings(settings: Partial<EditorUserSettings>): EditorUserSettings {
+    preferences.editorSettings = normalizeEditorUserSettings({
+        ...preferences.editorSettings,
+        ...settings,
+        appearance: { ...preferences.editorSettings.appearance, ...settings.appearance },
+        autoSave: { ...preferences.editorSettings.autoSave, ...settings.autoSave },
+        collaboration: { ...preferences.editorSettings.collaboration, ...settings.collaboration }
+    })
+    return getEditorSettings()
+}
+
+function resetEditorSettings(): EditorUserSettings {
+    preferences.editorSettings = normalizeEditorUserSettings(DEFAULT_EDITOR_USER_SETTINGS)
+    return getEditorSettings()
+}
+
 defineExpose({
     saveNow,
-    replaceWithCanonicalReport
+    drain,
+    retrySave,
+    replaceWithCanonicalReport,
+    getSnapshot: buildCurrentSnapshot,
+    getMetrics: () => reportMetrics.value,
+    autoSaveStatus,
+    collaborationStatus,
+    activePeers,
+    setAutoSaveEnabled,
+    configureAutoSave,
+    setCollaborationEnabled,
+    configureCollaboration,
+    getEditorSettings,
+    updateEditorSettings,
+    resetEditorSettings
 })
 
 // Warn before leaving with unsaved changes
 onBeforeUnmount(() => {
     cleanupReportCollabBindings()
-    void saveNow()
+    if (preferences.editorSettings.autoSave.saveOnUnmount) void saveNow()
 })
 </script>
 

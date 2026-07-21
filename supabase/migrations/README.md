@@ -61,6 +61,13 @@
 - 新增原子化 `save_report_collab_snapshot` RPC，拒絕過期版本的 Yjs 快照
 - 舊有未標記版本的快照會保留，但新版前端不會直接載入
 
+### 20) `1000023_rich_text_documents.sql`
+
+- 為報告、範本、課程描述、學生備註及教師簡介加入版本化 TipTap JSONB 欄位
+- 保留既有純文字欄位作為搜尋、摘要、匯出及舊版相容的文字投影
+- 使用者編輯器預設以 `user_preferences.editor_settings` 跨裝置保存
+- 更新報告版本快照 trigger，使富文字與外觀變更可恢復
+
 ## 執行方式
 
 ### 方法 A: Supabase Studio（建議）
@@ -105,3 +112,4 @@ ORDER BY tablename, policyname;
 - 若開發環境 schema 已偏離，建議重建資料庫後重新套用 migration。
 - 正式環境變更前請先備份資料庫。
 - 部署使用版本化報告協作快照的前端前，必須先套用 `1000022_report_collab_snapshot_versioning.sql`。
+- 部署讀寫富文字文件的前端前，必須先套用 `1000023_rich_text_documents.sql`。
