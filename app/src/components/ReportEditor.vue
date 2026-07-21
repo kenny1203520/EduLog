@@ -316,7 +316,7 @@
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
-                :min-height="90"
+                :min-height="120"
                 :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#60A5FA' }"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
                 @change="handleTextEditorChange('contactNotes', $event)" />
