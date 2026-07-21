@@ -1,6 +1,37 @@
 {
     "entries": [
         {
+            "version": "1.6.0",
+            "date": "2026-07-21",
+            "changes": {
+                "added": [
+                    "Added weekly multi-day, monthly day-of-month, and exact-date camp schedules with per-day class times.",
+                    "Added draft camps with editable ranges and safe future-occurrence reconciliation.",
+                    "Added versioned rich-text documents, collaborative snapshot recovery, editor appearance settings, and reusable read-only rendering.",
+                    "Added frontend and self-hosted Supabase environment templates."
+                ],
+                "changed": [
+                    "Unified enrollment, trial activation, transfer, make-up, and class displays around the new schedule rules.",
+                    "Made classroom selection optional during enrollment and automatically filled it from the selected class session."
+                ],
+                "fixed": [
+                    "Filtered enrollment and transfer class options so only classes capable of teaching the selected course are shown.",
+                    "Backfilled and continuously synchronized enrollment classroom references with their class sessions.",
+                    "Made the classroom session filter searchable.",
+                    "Improved rich-text placeholder positioning, localization, queued auto-save, parent-state synchronization, and stale snapshot protection."
+                ],
+                "tests": [
+                    "Added coverage for recurring and camp schedules, occurrence reconciliation, editor save behavior, session eligibility, and classroom synchronization."
+                ],
+                "deployment": [
+                    "Apply 1000022_report_collab_snapshot_versioning.sql.",
+                    "Apply 1000023_rich_text_documents.sql.",
+                    "Apply 1000024_recurring_and_camp_sessions.sql.",
+                    "Apply 1000025_enrollment_classroom_consistency.sql after 1000024."
+                ]
+            }
+        },
+        {
             "version": "1.5.2",
             "date": "2026-06-15",
             "changes": {
