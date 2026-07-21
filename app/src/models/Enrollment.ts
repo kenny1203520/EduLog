@@ -1,4 +1,5 @@
 import { DateUtils } from '@/utils/DateUtils'
+import type { ClassSessionScheduleRuleDTO, ScheduleMode, SessionType } from './ClassSession'
 export interface EnrollmentDTO {
     id?: string
     student_id: string
@@ -30,6 +31,9 @@ export interface EnrollmentDTO {
         start_time?: string
         end_time?: string
         time_zone?: string
+        session_type?: SessionType
+        schedule_mode?: ScheduleMode
+        class_session_schedule_rules?: ClassSessionScheduleRuleDTO[]
     }
     students?: {
         name: string
@@ -60,6 +64,9 @@ export class Enrollment {
     classSessionStartTime?: string
     classSessionEndTime?: string
     classSessionTimeZone: string = ''
+    classSessionType: SessionType = 'regular'
+    classSessionScheduleMode: ScheduleMode = 'weekly'
+    classSessionScheduleRules: ClassSessionScheduleRuleDTO[] = []
     studentName?: string
     studentEmail?: string
     lessonCount: number = 0
@@ -92,6 +99,9 @@ export class Enrollment {
             this.classSessionStartTime = data.class_sessions.start_time
             this.classSessionEndTime = data.class_sessions.end_time
             this.classSessionTimeZone = data.class_sessions.time_zone || 'Asia/Taipei'
+            this.classSessionType = data.class_sessions.session_type || 'regular'
+            this.classSessionScheduleMode = data.class_sessions.schedule_mode || 'weekly'
+            this.classSessionScheduleRules = data.class_sessions.class_session_schedule_rules || []
         }
         if (data.students) {
             this.studentName = data.students.name
@@ -109,6 +119,17 @@ export class Enrollment {
     }
 
     get formattedSchedule(): string {
+        if (this.classSessionScheduleRules.length > 0) {
+            return this.classSessionScheduleRules.map(rule => {
+                const time = `${rule.start_time.slice(0, 5)}-${rule.end_time.slice(0, 5)}`
+                if (rule.schedule_kind === 'weekly') {
+                    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                    return `${days[rule.day_of_week ?? 0]} ${time}`
+                }
+                if (rule.schedule_kind === 'monthly') return `Day ${rule.day_of_month} ${time}`
+                return `${rule.occurrence_date} ${time}`
+            }).join(', ')
+        }
         if (this.classSessionDayOfWeek === undefined || !this.classSessionStartTime) return ''
         const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         const dayName = days[this.classSessionDayOfWeek]

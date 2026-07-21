@@ -792,7 +792,11 @@ async function loadData() {
         const todayOccurrenceFromList = findOccurrenceByDate(today)
 
         // Check if session runs today and generate missing teaching day occurrence
-        if (session.value && session.value.day_of_week === today.getDay() && !todayOccurrenceFromList) {
+        if (
+            session.value
+            && await SessionService.isScheduledOn(sessionId, DateUtils.formatLocalDate(today))
+            && !todayOccurrenceFromList
+        ) {
             await OccurrenceService.generateOccurrences(sessionId, today, today)
             await loadSessionOccurrences(today)
         }

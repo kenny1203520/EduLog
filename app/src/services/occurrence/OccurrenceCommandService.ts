@@ -4,29 +4,9 @@ import { OccurrenceQueryService } from './OccurrenceQueryService'
 import { HolidayService } from '../holiday/HolidayService'
 import { TeacherService } from '../teacher/TeacherService'
 import { DateUtils } from '@/utils/DateUtils'
+import { ClassSessionFactory } from '@/models/ClassSession'
 
 export class OccurrenceCommandService {
-    private static generateOccurrenceDates(
-        dayOfWeek: number,
-        startDate: Date,
-        endDate: Date
-    ): Date[] {
-        const dates: Date[] = []
-        const current = new Date(startDate)
-        current.setHours(0, 0, 0, 0)
-
-        while (current.getDay() !== dayOfWeek && current <= endDate) {
-            current.setDate(current.getDate() + 1)
-        }
-
-        while (current <= endDate) {
-            dates.push(new Date(current))
-            current.setDate(current.getDate() + 7)
-        }
-
-        return dates
-    }
-
     private static formatDate(date: Date): string {
         return DateUtils.formatLocalDate(date)
     }
@@ -34,41 +14,26 @@ export class OccurrenceCommandService {
     static async generateOccurrences(
         sessionId: string,
         startDate: Date,
-        endDate: Date
+        endDate: Date,
+        options: { skipExistingDates?: Set<string> } = {}
     ): Promise<ClassOccurrence[]> {
         const { data: session, error: sessionError } = await supabase
             .from('class_sessions')
-            .select('*')
+            .select('*, class_session_schedule_rules(*)')
             .eq('id', sessionId)
             .single()
 
         if (sessionError) throw new Error(`Failed to fetch session: ${sessionError.message}`)
+        const sessionModel = ClassSessionFactory.create({
+            ...(session as any),
+            schedule_rules: (session as any).class_session_schedule_rules || []
+        })
+        const timeZone = sessionModel.timeZone
+        const plannedOccurrences = sessionModel
+            .plannedOccurrences(startDate, endDate)
+            .filter(planned => !options.skipExistingDates?.has(planned.occurrenceDate))
 
-        let effectiveStartDate = startDate
-        if (session.start_date) {
-            const sessionStart = DateUtils.parseLocalDate(session.start_date) || new Date(session.start_date)
-            if (effectiveStartDate < sessionStart) {
-                effectiveStartDate = sessionStart
-            }
-        }
-
-        let effectiveEndDate = endDate
-        if (session.end_date) {
-            const sessionEnd = DateUtils.parseLocalDate(session.end_date) || new Date(session.end_date)
-            // Ensure sessionEnd is at the end of the day to avoid missing occurrences on the exact end_date
-            sessionEnd.setHours(23, 59, 59, 999)
-            if (effectiveEndDate > sessionEnd) {
-                effectiveEndDate = sessionEnd
-            }
-        }
-
-        if (effectiveStartDate > effectiveEndDate) return []
-
-        const dayOfWeek = (session as any).day_of_week
-        const timeZone = DateUtils.isValidTimeZone((session as any).time_zone)
-            ? (session as any).time_zone
-            : DateUtils.getDefaultTimeZone()
-        const occurrenceDates = this.generateOccurrenceDates(dayOfWeek, effectiveStartDate, effectiveEndDate)
+        if (plannedOccurrences.length === 0) return []
 
         // Fetch all session teachers with their effective periods
         let sessionTeachers: any[] = []
@@ -83,8 +48,8 @@ export class OccurrenceCommandService {
             .from('class_occurrences')
             .select('occurrence_date, teacher_attendance, time_zone')
             .eq('class_session_id', sessionId)
-            .gte('occurrence_date', this.formatDate(effectiveStartDate))
-            .lte('occurrence_date', this.formatDate(effectiveEndDate))
+            .gte('occurrence_date', this.formatDate(startDate))
+            .lte('occurrence_date', this.formatDate(endDate))
 
         const existingOccurrenceMap: Record<string, any> = {}
         if (existingOccs) {
@@ -93,8 +58,8 @@ export class OccurrenceCommandService {
             })
         }
 
-        const occurrences: Partial<ClassOccurrenceDTO>[] = occurrenceDates.map(date => {
-            const dateStr = this.formatDate(date)
+        const occurrences: Partial<ClassOccurrenceDTO>[] = plannedOccurrences.map(planned => {
+            const dateStr = planned.occurrenceDate
             
             // Find teachers active on this date
             const activeTeachers = sessionTeachers.filter(st => {
@@ -130,8 +95,8 @@ export class OccurrenceCommandService {
                 class_session_id: sessionId,
                 occurrence_date: dateStr,
                 status: 'scheduled',
-                original_start_time: (session as any).start_time,
-                original_end_time: (session as any).end_time,
+                original_start_time: planned.startTime,
+                original_end_time: planned.endTime,
                 time_zone: DateUtils.isValidTimeZone(existingOccurrence?.time_zone) ? existingOccurrence.time_zone : timeZone,
                 is_conducted: true,
                 teacher_ids: teacherIds,

@@ -2,6 +2,7 @@ import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurren
 import { OccurrenceCommandService } from './OccurrenceCommandService'
 import { OccurrenceQueryService } from './OccurrenceQueryService'
 import { OccurrenceSyncService } from './OccurrenceSyncService'
+import type { OccurrenceReconciliationResult } from './OccurrenceSyncService'
 
 /**
  * Backward-compatible facade for class occurrence operations.
@@ -77,7 +78,7 @@ export class OccurrenceService {
     static async syncSessionOccurrences(
         sessionId: string,
         scope: 'future' | 'all' = 'future'
-    ): Promise<void> {
+    ): Promise<OccurrenceReconciliationResult> {
         return OccurrenceSyncService.syncSessionOccurrences(sessionId, scope)
     }
 }

@@ -15,6 +15,7 @@ import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
+import { formatClassSessionSchedule } from '@/utils/sessionSchedule'
 
 type HolidayTab = 'closures' | 'teacherLeaves'
 type HolidayStatus = 'active' | 'upcoming' | 'ended'
@@ -169,8 +170,10 @@ const filteredSessions = computed(() => {
             const roomCompare = getRoomName(a.classroom_id).localeCompare(getRoomName(b.classroom_id))
             if (roomCompare !== 0) return roomCompare
 
-            const dayA = a.day_of_week === 0 ? 7 : a.day_of_week
-            const dayB = b.day_of_week === 0 ? 7 : b.day_of_week
+            const rawDayA = a.schedule_rules?.[0]?.day_of_week ?? a.day_of_week ?? 7
+            const rawDayB = b.schedule_rules?.[0]?.day_of_week ?? b.day_of_week ?? 7
+            const dayA = rawDayA === 0 ? 7 : rawDayA
+            const dayB = rawDayB === 0 ? 7 : rawDayB
             if (dayA !== dayB) return dayA - dayB
 
             const timeCompare = (a.start_time || '').localeCompare(b.start_time || '')
@@ -306,16 +309,8 @@ function getRoomName(id?: string | null) {
     return classrooms.value.find(room => room.id === id)?.name || t('common.unknown_room')
 }
 
-function getDayLabel(day: number) {
-    return t(`classroom.days.${day}`)
-}
-
-function formatSessionTime(time?: string) {
-    return time ? time.slice(0, 5) : '--:--'
-}
-
 function formatSessionSchedule(session: ClassSessionDTO) {
-    return `${getDayLabel(session.day_of_week)} ${formatSessionTime(session.start_time)}-${formatSessionTime(session.end_time)}`
+    return formatClassSessionSchedule(session, preferences.locale, t)
 }
 
 function getSessionsForIds(ids: string[]) {

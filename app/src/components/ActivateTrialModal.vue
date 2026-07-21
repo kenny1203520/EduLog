@@ -9,6 +9,7 @@ import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { formatClassSessionOption } from '@/utils/sessionSchedule'
 
 const props = defineProps<{
     isOpen: boolean
@@ -38,34 +39,8 @@ const currentEnrollment = ref<any | null>(null)
 
 const defaultReportCount = computed(() => Math.max(1, currentEnrollment.value?.lessonCount || 1))
 
-function formatTime(time: string | undefined | null): string {
-    return time ? time.slice(0, 5) : ''
-}
-
-function formatTimeRange(start?: string | null, end?: string | null): string {
-    const startText = formatTime(start)
-    if (!startText) return ''
-
-    const endText = formatTime(end)
-    return endText ? `${startText}-${endText}` : startText
-}
-
-function formatWeekdayFromIndex(dayOfWeek: number | undefined | null): string {
-    if (dayOfWeek === undefined || dayOfWeek === null) return ''
-
-    const anchor = new Date(2023, 0, 1 + dayOfWeek)
-    return anchor.toLocaleDateString(preferences.locale, { weekday: 'short' })
-}
-
 function formatSessionOptionLabel(session: any): string {
-    const scheduleParts = [
-        formatWeekdayFromIndex(session.day_of_week),
-        formatTimeRange(session.start_time, session.end_time)
-    ].filter(Boolean)
-
-    return scheduleParts.length > 0
-        ? `${session.name} · ${scheduleParts.join(' ')}`
-        : session.name
+    return formatClassSessionOption(session, preferences.locale, t)
 }
 
 async function fetchCurrentEnrollment() {

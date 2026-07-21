@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { ClassSessionFactory } from '@/models/ClassSession'
 
 export type TransferMigrationRow = {
     id: string
@@ -129,18 +130,21 @@ export class EnrollmentTransferQueryService {
         return data as SingleLessonTransferReportRow
     }
 
-    static async getSessionDayOfWeek(sessionId: string): Promise<number> {
+    static async isSessionScheduledOn(sessionId: string, date: string): Promise<boolean> {
         const { data, error } = await supabase
             .from('class_sessions')
-            .select('day_of_week')
+            .select('*, class_session_schedule_rules(*)')
             .eq('id', sessionId)
             .single()
 
-        if (error || data?.day_of_week === null || data?.day_of_week === undefined) {
-            throw new Error(`Failed to fetch target session: ${error?.message || 'missing day of week'}`)
+        if (error || !data) {
+            throw new Error(`Failed to fetch target session: ${error?.message || 'not found'}`)
         }
 
-        return data.day_of_week
+        return ClassSessionFactory.create({
+            ...(data as any),
+            schedule_rules: (data as any).class_session_schedule_rules || []
+        }).isScheduledOn(date)
     }
 
     static async getLessonCount(courseId: string, fallbackCount: number): Promise<number> {

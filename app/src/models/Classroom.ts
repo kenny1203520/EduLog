@@ -9,24 +9,12 @@ export interface ClassroomDTO {
     external_link?: string
 }
 
-export interface ClassSessionDTO {
-    id?: string
-    name: string
-    classroom_id?: string | null
-    course_ids: string[]
-    day_of_week: number
-    start_time: string
-    end_time: string
-    time_zone?: string
-    capacity: number
-    lesson_number?: number
-    user_id?: string // Teacher ID
-    start_date: string
-    end_date?: string | null
-    created_at?: string
-    updated_at?: string
-    external_link?: string
-}
+export type {
+    ClassSessionDTO,
+    ClassSessionScheduleRuleDTO,
+    ScheduleMode,
+    SessionType
+} from './ClassSession'
 
 export interface ClassroomScheduleDTO {
     id?: string

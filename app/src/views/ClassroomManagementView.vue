@@ -9,6 +9,12 @@ import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceServ
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
+import {
+    ClassSessionFactory,
+    type ClassSessionScheduleRuleDTO,
+    type ScheduleMode,
+    type SessionType
+} from '@/models/ClassSession'
 import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
@@ -117,7 +123,10 @@ const newSession = ref<Partial<ClassSessionDTO>>({
     time_zone: preferences.timeZone,
     capacity: 10,
     lesson_number: 1,
-    external_link: ''
+    external_link: '',
+    session_type: 'regular',
+    schedule_mode: 'weekly',
+    schedule_rules: [{ schedule_kind: 'weekly', day_of_week: 1, start_time: '10:00', end_time: '12:00' }]
 })
 const editingSession = ref<ClassSessionDTO | null>(null)
 
@@ -276,13 +285,75 @@ const sortedSessions = computed(() => {
         const roomCompare = roomA.localeCompare(roomB)
         if (roomCompare !== 0) return roomCompare
 
-        const dayA = a.day_of_week === 0 ? 7 : a.day_of_week
-        const dayB = b.day_of_week === 0 ? 7 : b.day_of_week
+        const firstA = a.schedule_rules?.[0]
+        const firstB = b.schedule_rules?.[0]
+        const rawDayA = firstA?.day_of_week ?? a.day_of_week ?? 7
+        const rawDayB = firstB?.day_of_week ?? b.day_of_week ?? 7
+        const dayA = rawDayA === 0 ? 7 : rawDayA
+        const dayB = rawDayB === 0 ? 7 : rawDayB
         if (dayA !== dayB) return dayA - dayB
 
-        return a.start_time.localeCompare(b.start_time)
+        return (firstA?.start_time || a.start_time || '').localeCompare(firstB?.start_time || b.start_time || '')
     })
 })
+
+function createScheduleRule(mode: ScheduleMode): ClassSessionScheduleRuleDTO {
+    const base = { schedule_kind: mode, start_time: '10:00', end_time: '12:00' } as ClassSessionScheduleRuleDTO
+    if (mode === 'weekly') {
+        const used = new Set((newSession.value.schedule_rules || []).map(rule => rule.day_of_week))
+        base.day_of_week = [1, 2, 3, 4, 5, 6, 0].find(day => !used.has(day)) ?? 1
+    } else if (mode === 'monthly') {
+        const used = new Set((newSession.value.schedule_rules || []).map(rule => rule.day_of_month))
+        base.day_of_month = Array.from({ length: 31 }, (_, index) => index + 1).find(day => !used.has(day)) ?? 1
+    } else {
+        base.occurrence_date = newSession.value.start_date || DateUtils.todayString(newSession.value.time_zone || preferences.timeZone)
+    }
+    return base
+}
+
+function setSessionType(type: SessionType) {
+    newSession.value.session_type = type
+    const mode: ScheduleMode = type === 'camp' ? 'specific_dates' : 'weekly'
+    newSession.value.schedule_mode = mode
+    newSession.value.schedule_rules = [createScheduleRule(mode)]
+    if (type === 'camp') {
+        newSession.value.start_date = null
+        newSession.value.end_date = null
+    } else if (!newSession.value.start_date) {
+        newSession.value.start_date = DateUtils.todayString(newSession.value.time_zone || preferences.timeZone)
+    }
+}
+
+function setScheduleMode(mode: ScheduleMode) {
+    newSession.value.schedule_mode = mode
+    newSession.value.schedule_rules = [createScheduleRule(mode)]
+}
+
+function addScheduleRule() {
+    const mode = newSession.value.schedule_mode || 'weekly'
+    newSession.value.schedule_rules = [...(newSession.value.schedule_rules || []), createScheduleRule(mode)]
+}
+
+function removeScheduleRule(index: number) {
+    newSession.value.schedule_rules = (newSession.value.schedule_rules || []).filter((_, ruleIndex) => ruleIndex !== index)
+}
+
+function primaryScheduleDay(session: ClassSessionDTO): number {
+    return session.schedule_rules?.find(rule => rule.day_of_week !== null && rule.day_of_week !== undefined)?.day_of_week
+        ?? session.day_of_week
+        ?? 1
+}
+
+function formatScheduleSummary(session: ClassSessionDTO): string {
+    const model = ClassSessionFactory.create(session)
+    if (model.isDraft) return t('classroom.schedule_draft')
+    return model.scheduleRules.map(rule => {
+        const time = `${rule.start_time.slice(0, 5)}-${rule.end_time.slice(0, 5)}`
+        if (rule.schedule_kind === 'weekly') return `${getDayLabel(rule.day_of_week ?? 0)} ${time}`
+        if (rule.schedule_kind === 'monthly') return t('classroom.monthly_day_summary', { day: rule.day_of_month, time })
+        return `${rule.occurrence_date} ${time}`
+    }).join('、')
+}
 
 
 
@@ -393,7 +464,13 @@ async function toggleSessionVisibility(id?: string) {
 
 async function saveSession() {
     if (!newSession.value.name) return
-    const payload = { ...newSession.value }
+    const payload = {
+        ...newSession.value,
+        schedule_rules: (newSession.value.schedule_rules || []).map(rule => ({
+            ...rule,
+            schedule_kind: newSession.value.schedule_mode || 'weekly'
+        }))
+    }
     if (!DateUtils.isValidTimeZone(payload.time_zone)) {
         payload.time_zone = preferences.timeZone
     }
@@ -417,28 +494,14 @@ async function saveSession() {
 
         await TeacherService.replaceTeachersForSession(sessionId, selectedTeacherConfigs.value.filter(c => c.teacher_id))
 
-        if (editingSession.value?.id) {
-            // Sync occurrences if the schedule might have changed
-            // This will create occurrences for the entire defined interval
-            const genStart = DateUtils.parseLocalDate(payload.start_date) || DateUtils.todayDate(payload.time_zone)
-            const genEnd = payload.end_date ? (DateUtils.parseLocalDate(payload.end_date) || DateUtils.todayDate(payload.time_zone)) : DateUtils.todayDate(payload.time_zone)
-            if (!payload.end_date) {
-                genEnd.setMonth(genEnd.getMonth() + 6)
-            }
-            await OccurrenceService.generateOccurrences(sessionId, genStart, genEnd).catch(console.error)
-        } else {
-            // Generate occurrences for new sessions
-            const genStart = DateUtils.parseLocalDate(payload.start_date) || DateUtils.todayDate(payload.time_zone)
-            const genEnd = payload.end_date ? (DateUtils.parseLocalDate(payload.end_date) || DateUtils.todayDate(payload.time_zone)) : DateUtils.todayDate(payload.time_zone)
-            if (!payload.end_date) {
-                genEnd.setMonth(genEnd.getMonth() + 6)
-            }
-            await OccurrenceService.generateOccurrences(sessionId, genStart, genEnd)
-        }
+        const reconciliation = await OccurrenceService.syncSessionOccurrences(sessionId)
 
         await loadSessions()
         closeSessionModal()
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
+        if (reconciliation.preserved > 0) {
+            toast.info(t('classroom.schedule_preserved_notice', { count: reconciliation.preserved }))
+        }
     } catch (e: any) {
         toast.error(e.message || String(e))
     } finally {
@@ -448,7 +511,13 @@ async function saveSession() {
 
 async function openEditSession(session: ClassSessionDTO) {
     editingSession.value = session
-    newSession.value = { ...session, time_zone: session.time_zone || preferences.timeZone }
+    newSession.value = {
+        ...session,
+        time_zone: session.time_zone || preferences.timeZone,
+        session_type: session.session_type || 'regular',
+        schedule_mode: session.schedule_mode || 'weekly',
+        schedule_rules: (session.schedule_rules || []).map(rule => ({ ...rule }))
+    }
     try {
         const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
         selectedTeacherConfigs.value = assignedTeachers.map(t => ({
@@ -479,7 +548,10 @@ function openCreateSessionModal() {
         external_link: '',
         user_id: undefined,
         start_date: DateUtils.todayString(preferences.timeZone),
-        end_date: null
+        end_date: null,
+        session_type: 'regular',
+        schedule_mode: 'weekly',
+        schedule_rules: [{ schedule_kind: 'weekly', day_of_week: 1, start_time: '10:00', end_time: '12:00' }]
     }
     isCreateSessionModalOpen.value = true
 }
@@ -499,7 +571,10 @@ function closeSessionModal() {
         capacity: 10,
         lesson_number: 1,
         external_link: '',
-        user_id: undefined
+        user_id: undefined,
+        session_type: 'regular',
+        schedule_mode: 'weekly',
+        schedule_rules: [{ schedule_kind: 'weekly', day_of_week: 1, start_time: '10:00', end_time: '12:00' }]
     }
 }
 
@@ -809,7 +884,7 @@ function clearTeacherSelection() {
                         <div class="flex items-center gap-4">
                             <!-- Session Indicator Icon -->
                             <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform shadow-inner"
-                                :style="{ backgroundColor: `${getDayColor(session.day_of_week)}15`, color: getDayColor(session.day_of_week) }">
+                                :style="{ backgroundColor: `${getDayColor(primaryScheduleDay(session))}15`, color: getDayColor(primaryScheduleDay(session)) }">
                                 {{ session.name.charAt(0) }}
                             </div>
                             <!-- Session Name & Info -->
@@ -821,11 +896,11 @@ function clearTeacherSelection() {
                                 <div class="flex items-center gap-2 mt-0.5">
                                     <span
                                         class="text-[12px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-widest"
-                                        :style="{ backgroundColor: `${getDayColor(session.day_of_week)}10`, color: getDayColor(session.day_of_week), borderColor: `${getDayColor(session.day_of_week)}30` }">
-                                        {{ getDayLabel(session.day_of_week) }}
+                                        :style="{ backgroundColor: `${getDayColor(primaryScheduleDay(session))}10`, color: getDayColor(primaryScheduleDay(session)), borderColor: `${getDayColor(primaryScheduleDay(session))}30` }">
+                                        {{ session.session_type === 'camp' ? $t('classroom.camp') : $t('classroom.regular_session') }}
                                     </span>
-                                    <span class="text-[12px] font-black text-gray-400 uppercase tracking-widest">
-                                        {{ session.start_time.slice(0, 5) }}-{{ session.end_time.slice(0, 5) }}
+                                    <span class="text-[11px] font-bold text-gray-400">
+                                        {{ formatScheduleSummary(session) }}
                                     </span>
                                     <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
                                         {{ session.time_zone || 'Asia/Taipei' }}
@@ -931,7 +1006,7 @@ function clearTeacherSelection() {
                     <div class="px-5 py-4 flex gap-2">
                         <button @click="navigateToSession(session.id!)"
                             class="flex-1 py-2.5 rounded-xl text-sm font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-white"
-                            :style="{ backgroundColor: getDayColor(session.day_of_week) }">
+                            :style="{ backgroundColor: getDayColor(primaryScheduleDay(session)) }">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                                 stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
@@ -1023,13 +1098,29 @@ function clearTeacherSelection() {
             class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div
                 class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl m-4 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
-                <h3 class="text-xl font-bold mb-6 text-gray-800">{{ $t('classroom.add_session') }}</h3>
+                <h3 class="text-xl font-bold mb-6 text-gray-800">{{ editingSession ? $t('classroom.edit_session') : $t('classroom.add_session') }}</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.session_name')
                             }}</label>
                         <input v-model="newSession.name" :placeholder="$t('classroom.session_placeholder')"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                    </div>
+
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.session_type') }}</label>
+                        <div class="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
+                            <button type="button" @click="setSessionType('regular')"
+                                class="rounded-lg px-4 py-2 text-sm font-bold transition"
+                                :class="newSession.session_type !== 'camp' ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500'">
+                                {{ $t('classroom.regular_session') }}
+                            </button>
+                            <button type="button" @click="setSessionType('camp')"
+                                class="rounded-lg px-4 py-2 text-sm font-bold transition"
+                                :class="newSession.session_type === 'camp' ? 'bg-white text-purple-700 shadow-sm' : 'text-gray-500'">
+                                {{ $t('classroom.camp') }}
+                            </button>
+                        </div>
                     </div>
 
                     <div>
@@ -1056,8 +1147,8 @@ function clearTeacherSelection() {
 
                     <div>
                         <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('common.start_date') }}
-                            <span class="text-red-500">*</span></label>
-                        <input type="date" v-model="newSession.start_date" required
+                            <span v-if="newSession.session_type !== 'camp'" class="text-red-500">*</span></label>
+                        <input type="date" v-model="newSession.start_date" :required="newSession.session_type !== 'camp'"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
                     </div>
 
@@ -1071,7 +1162,7 @@ function clearTeacherSelection() {
                         </div>
                         <input type="date" v-model="newSession.end_date"
                             class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                        <p class="text-xs text-gray-500 mt-1">{{ $t('classroom.long_term_hint') }}</p>
+                        <p class="text-xs text-gray-500 mt-1">{{ newSession.session_type === 'camp' ? $t('classroom.camp_date_hint') : $t('classroom.long_term_hint') }}</p>
                     </div>
 
                     <div class="md:col-span-2">
@@ -1085,16 +1176,48 @@ function clearTeacherSelection() {
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{ $t('classroom.schedule')
                             }}</label>
-                        <div class="flex flex-wrap gap-2">
-                            <BaseDropdown v-model="newSession.day_of_week" :options="dayOptions" theme="emerald" />
-                            <div class="flex items-center gap-2">
-                                <input type="time" v-model="newSession.start_time"
+                        <div v-if="newSession.session_type !== 'camp'" class="flex gap-2 mb-3">
+                            <button type="button" @click="setScheduleMode('weekly')"
+                                class="rounded-lg border px-3 py-1.5 text-sm font-bold"
+                                :class="newSession.schedule_mode === 'weekly' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500'">
+                                {{ $t('classroom.weekly') }}
+                            </button>
+                            <button type="button" @click="setScheduleMode('monthly')"
+                                class="rounded-lg border px-3 py-1.5 text-sm font-bold"
+                                :class="newSession.schedule_mode === 'monthly' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500'">
+                                {{ $t('classroom.monthly') }}
+                            </button>
+                        </div>
+                        <div class="space-y-2">
+                            <div v-for="(rule, index) in newSession.schedule_rules" :key="rule.id || index"
+                                class="grid grid-cols-1 sm:grid-cols-[minmax(120px,1fr)_auto_auto_auto] items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                                <BaseDropdown v-if="newSession.schedule_mode === 'weekly'"
+                                    v-model="rule.day_of_week" :options="dayOptions" theme="emerald" />
+                                <label v-else-if="newSession.schedule_mode === 'monthly'" class="flex items-center gap-2 text-sm text-gray-600">
+                                    {{ $t('classroom.monthly_day_prefix') }}
+                                    <input type="number" min="1" max="31" v-model.number="rule.day_of_month"
+                                        class="w-20 border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                                    {{ $t('classroom.monthly_day_suffix') }}
+                                </label>
+                                <input v-else type="date" v-model="rule.occurrence_date"
+                                    class="border-gray-300 rounded-lg focus:ring-purple-500 focus:border-purple-500">
+                                <input type="time" v-model="rule.start_time"
                                     class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                                <span class="text-gray-400 font-bold">-</span>
-                                <input type="time" v-model="newSession.end_time"
+                                <input type="time" v-model="rule.end_time"
                                     class="border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
+                                <button type="button" @click="removeScheduleRule(index)"
+                                    class="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                                    :title="$t('common.delete')">×</button>
                             </div>
                         </div>
+                        <button type="button" @click="addScheduleRule"
+                            class="mt-3 w-full rounded-xl border-2 border-dashed border-gray-300 py-2 text-sm font-bold text-gray-500 hover:border-emerald-500 hover:text-emerald-600">
+                            + {{ $t('classroom.add_schedule_rule') }}
+                        </button>
+                        <p v-if="newSession.session_type === 'camp' && (!newSession.start_date || !newSession.end_date || !newSession.schedule_rules?.length)"
+                            class="mt-2 text-xs font-medium text-amber-600">
+                            {{ $t('classroom.camp_draft_hint') }}
+                        </p>
                     </div>
 
                     <div class="md:col-span-2">
