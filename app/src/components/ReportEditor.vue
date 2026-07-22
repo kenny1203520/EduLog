@@ -325,7 +325,7 @@
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
                 :toolbar-visible="preferences.editorSettings.toolbarVisible"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
-                :font-scale="preferences.editorFontScale" :min-height="90"
+                :font-scale="preferences.editorFontScale" :min-height="120"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
                 @change="handleTextEditorChange('contactNotes', $event)" />
         </div>
