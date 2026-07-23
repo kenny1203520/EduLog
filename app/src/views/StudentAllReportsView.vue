@@ -43,8 +43,9 @@
             </div>
 
             <!-- Enrollment Cards -->
-            <div v-for="enrollment in enrollments" :key="enrollment.id" @click="navigateToReports(enrollment.id!)"
-                class="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-xl hover:border-emerald-300 transition-all cursor-pointer group">
+            <router-link v-for="enrollment in enrollments" :key="enrollment.id"
+                :to="{ name: 'lesson-reports', params: { enrollmentId: enrollment.id! } }"
+                class="block bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-xl hover:border-emerald-300 transition-all cursor-pointer group">
                 <div class="flex items-start justify-between">
                     <div class="flex-1">
                         <h3 class="text-xl font-bold text-gray-900 group-hover:text-emerald-700 transition mb-2">
@@ -79,7 +80,7 @@
                         </svg>
                     </div>
                 </div>
-            </div>
+            </router-link>
         </div>
     </div>
 </template>
@@ -121,7 +122,4 @@ async function loadData() {
     }
 }
 
-function navigateToReports(enrollmentId: string) {
-    router.push({ name: 'lesson-reports', params: { enrollmentId } })
-}
 </script>
