@@ -6,6 +6,8 @@
     "saving": "Saving...",
     "placeholder": "Write your report here...",
     "no_history": "No past reports.",
+    "hide_scheduled_reports": "Hide scheduled reports",
+    "no_reports_match_filter": "No reports match the current filter.",
     "loading_full": "Loading reports...",
     "no_occurrences": "No occurrences found.",
     "status": "Status",

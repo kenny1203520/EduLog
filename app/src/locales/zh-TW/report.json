@@ -6,6 +6,8 @@
     "saving": "儲存中...",
     "placeholder": "請在此撰寫報告內容...",
     "no_history": "尚無歷史報告",
+    "hide_scheduled_reports": "隱藏預訂報告",
+    "no_reports_match_filter": "目前沒有符合篩選條件的報告。",
     "loading_full": "載入報告中...",
     "no_occurrences": "目前沒有任何課堂紀錄",
     "status": "狀態",
