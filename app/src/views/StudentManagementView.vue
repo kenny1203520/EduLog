@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useStudentStore } from '@/stores/useStudentStore'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
@@ -11,7 +10,6 @@ import BasePageHeader from '@/components/common/BasePageHeader.vue'
 const { t } = useI18n()
 const toast = useToast()
 const studentStore = useStudentStore()
-const router = useRouter()
 
 const showCreateModal = ref(false)
 const newStudentName = ref('')
