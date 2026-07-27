@@ -4,6 +4,8 @@ import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
+import TeacherRoleSettings from '@/components/settings/TeacherRoleSettings.vue'
+import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 
 const preferences = usePreferencesStore()
 const search = ref('')
@@ -78,6 +80,12 @@ onMounted(() => {
                                 d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
                         </svg>
                         {{ $t('settings.appearance.title') }}
+                    </a>
+                    <a href="#teacher-roles" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-gray-400 hover:bg-gray-50 font-bold transition-all">
+                        <span class="flex h-5 w-5 items-center justify-center">♙</span>{{ $t('settings.teacher_roles.title') }}
+                    </a>
+                    <a href="#incomplete-notifications" class="flex items-center gap-3 px-4 py-3 rounded-2xl text-gray-400 hover:bg-gray-50 font-bold transition-all">
+                        <span class="flex h-5 w-5 items-center justify-center">!</span>{{ $t('settings.incomplete_notifications.title') }}
                     </a>
                 </nav>
             </div>
@@ -245,6 +253,8 @@ onMounted(() => {
                         </div>
                     </div>
                 </section>
+                <TeacherRoleSettings />
+                <IncompleteReportNotificationSettings />
             </div>
         </div>
     </div>

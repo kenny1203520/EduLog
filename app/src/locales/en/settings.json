@@ -13,5 +13,24 @@
         "font_scale": "Global Font Size",
         "font_scale_hint": "Changes will be applied immediately to all pages.",
         "language": "Interface Language"
+    },
+    "teacher_roles": {
+        "title": "Teacher Role Types",
+        "description": "Manage roles available for class assignments. Built-in roles cannot be removed.",
+        "placeholder": "New custom role name",
+        "system": "System role",
+        "custom": "Custom role",
+        "saved": "Role added",
+        "deleted": "Role deleted"
+    },
+    "incomplete_notifications": {
+        "title": "Incomplete Report Notifications",
+        "description": "Choose which assigned roles receive incomplete-report reminders on the dashboard.",
+        "scope": "Configuration scope",
+        "global": "Global default",
+        "classroom": "Specific classroom",
+        "class_session": "Specific class",
+        "inheritance_hint": "Class settings override classroom settings, and classroom settings override the global default. Selecting no roles removes this override.",
+        "saved": "Notification recipients saved"
     }
 }

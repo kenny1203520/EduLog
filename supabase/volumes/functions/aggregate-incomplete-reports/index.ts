@@ -24,12 +24,21 @@ function isTeacherPresentForScope(
   return attendanceValues.some((value) => value === true)
 }
 
+function resolveNotificationRoleIds(rules: any[], classroomId?: string, sessionId?: string): string[] {
+  const sessionRules = rules.filter(rule => rule.scope_type === 'class_session' && rule.class_session_id === sessionId)
+  if (sessionRules.length) return [...new Set(sessionRules.map(rule => rule.role_type_id))] as string[]
+  const classroomRules = rules.filter(rule => rule.scope_type === 'classroom' && rule.classroom_id === classroomId)
+  if (classroomRules.length) return [...new Set(classroomRules.map(rule => rule.role_type_id))] as string[]
+  return [...new Set(rules.filter(rule => rule.scope_type === 'global').map(rule => rule.role_type_id))] as string[]
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   const url = new URL(req.url)
   const daysBack = Number(url.searchParams.get('daysBack') || '90')
-  const scope = url.searchParams.get('scope') === 'my_present' ? 'my_present' : 'all'
+  const requestedScope = url.searchParams.get('scope')
+  const scope = requestedScope === 'my_present' || requestedScope === 'my_notifications' ? requestedScope : 'all'
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
 
@@ -54,7 +63,7 @@ serve(async (req: Request) => {
     const userId = userRes.data.user.id
     let teacherId = ''
     let teacherUserId = ''
-    if (scope === 'my_present') {
+    if (scope === 'my_present' || scope === 'my_notifications') {
       const { data: teacher, error: teacherError } = await client
         .from('teachers')
         .select('id, user_id')
@@ -91,6 +100,26 @@ serve(async (req: Request) => {
     if (error) throw error
     if (!data) return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
+    let notificationAssignments: any[] = []
+    let notificationRules: any[] = []
+    if (scope === 'my_notifications') {
+      const sessionIds = [...new Set(data.map((report: any) => {
+        const occurrence = report.class_occurrences
+        const relatedSession = Array.isArray(occurrence?.class_sessions) ? occurrence.class_sessions[0] : occurrence?.class_sessions
+        return relatedSession?.id
+      }).filter(Boolean))] as string[]
+      const [assignmentsResult, rulesResult] = await Promise.all([
+        sessionIds.length
+          ? client.from('class_session_teachers').select('class_session_id, role_type_id, effective_from, effective_to').eq('teacher_id', teacherId).in('class_session_id', sessionIds)
+          : Promise.resolve({ data: [], error: null }),
+        client.from('incomplete_report_notification_rules').select('scope_type, classroom_id, class_session_id, role_type_id')
+      ])
+      if (assignmentsResult.error) throw assignmentsResult.error
+      if (rulesResult.error) throw rulesResult.error
+      notificationAssignments = assignmentsResult.data || []
+      notificationRules = rulesResult.data || []
+    }
+
     const results: any[] = []
     for (const report of data) {
       const hasContent = !!(report.content && report.content.trim().length > 0)
@@ -103,17 +132,26 @@ serve(async (req: Request) => {
       if (!isIncomplete) continue
 
       const occ = report.class_occurrences
-      if (scope === 'my_present') {
-        if (!isTeacherPresentForScope(
-          teacherId,
-          teacherUserId,
-          occ?.teacher_ids || [],
-          occ?.teacher_attendance || {},
-        )) continue
-      }
-
       const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
       const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
+      if (scope === 'my_present') {
+        if (!isTeacherPresentForScope(teacherId, teacherUserId, occ?.teacher_ids || [], occ?.teacher_attendance || {})) continue
+      }
+      if (scope === 'my_notifications') {
+        const targetRoleIds = resolveNotificationRoleIds(notificationRules, classroom?.id || session?.classroom_id, session?.id)
+        if (targetRoleIds.length === 0) {
+          // No rules configured yet: keep the legacy "teacher present" behavior.
+          if (!isTeacherPresentForScope(teacherId, teacherUserId, occ?.teacher_ids || [], occ?.teacher_attendance || {})) continue
+        } else {
+          const assignmentMatches = notificationAssignments.some(assignment =>
+            assignment.class_session_id === session?.id
+            && assignment.effective_from <= occ?.occurrence_date
+            && (!assignment.effective_to || assignment.effective_to >= occ?.occurrence_date)
+            && targetRoleIds.includes(assignment.role_type_id)
+          )
+          if (!assignmentMatches) continue
+        }
+      }
       const student = Array.isArray(report.enrollments?.students) ? report.enrollments.students[0] : report.enrollments?.students
 
       results.push({

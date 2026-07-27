@@ -91,20 +91,14 @@ onMounted(async () => {
     }
 })
 
-async function applyDashboardPendingReports(agg: any) {
-    const pendingScope = agg?.pendingReportsScope || agg?.stats?.pendingReportsScope
-    if (pendingScope === 'my_present') {
-        pendingReports.value = (agg.pendingReports || []).map(normalizePendingReport)
-        pendingReportsCount.value = agg.stats?.pendingReportsCount ?? pendingReports.value.length
-        return
-    }
-
+async function applyDashboardPendingReports(_agg: any) {
+    // Role-aware recipient rules are resolved by the dedicated incomplete-report endpoint.
     await loadMyPresentPendingReports()
 }
 
 async function loadMyPresentPendingReports() {
     try {
-        const myReports = await OccurrenceReportService.getGlobalIncompleteReports('my_present')
+        const myReports = await OccurrenceReportService.getGlobalIncompleteReports('my_notifications')
         pendingReports.value = (myReports || []).map(normalizePendingReport)
         pendingReportsCount.value = pendingReports.value.length
     } catch (fallbackError) {

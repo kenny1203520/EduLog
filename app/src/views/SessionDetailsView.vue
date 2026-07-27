@@ -16,7 +16,7 @@ import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 import { TeacherService } from '@/services/teacher/TeacherService'
-import type { TeacherDTO } from '@/services/teacher/TeacherService'
+import type { SessionTeacherAssignmentDTO, TeacherDTO } from '@/services/teacher/TeacherService'
 import {
     ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_ATTENDANCE_TEMPLATE,
@@ -56,7 +56,7 @@ const auth = useAuthStore()
 const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
-const sessionTeachers = ref<(TeacherDTO & { effective_from: string; effective_to: string | null })[]>([])
+const sessionTeachers = ref<SessionTeacherAssignmentDTO[]>([])
 const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
 const isCalendarExpanded = ref(false)
 const isOccurrenceInHoliday = ref(false)
@@ -122,6 +122,8 @@ const conflictLocalReport = ref<OccurrenceReportDTO | null>(null)
 const session = ref<any>(null)
 const sessionTimeZone = computed(() => DateUtils.isValidTimeZone(session.value?.time_zone) ? session.value.time_zone : preferences.timeZone)
 const enrollments = ref<Enrollment[]>([])
+const studentSearchQuery = ref('')
+const studentAttendanceFilter = ref<'all' | 'present' | 'absent' | 'pending'>('all')
 const courseLessons = ref<any[]>([])
 const courseLessonsByCourseId = ref<Record<string, Lesson[]>>({})
 const studentProgressSummaries = ref<Record<string, StudentProgressSummary>>({})
@@ -737,7 +739,12 @@ const visibleEnrollments = computed(() => {
     return enrollments.value.filter(e => {
         // Must have a valid report in the map to be visible
         // (Null means checked but no report exists)
-        return reportMap.value.get(e.id!)
+        const report = reportMap.value.get(e.id!)
+        if (!report) return false
+        const query = studentSearchQuery.value.trim().toLocaleLowerCase()
+        if (query && !e.studentName?.toLocaleLowerCase().includes(query)) return false
+        const status = report.attendanceStatus || 'pending'
+        return studentAttendanceFilter.value === 'all' || status === studentAttendanceFilter.value
     })
 })
 
@@ -2135,6 +2142,26 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </div>
                     </div>
 
+                    <div class="flex flex-col gap-3 rounded-[2rem] border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
+                        <label class="relative min-w-0 flex-1">
+                            <span class="sr-only">{{ $t('classroom.student_search') }}</span>
+                            <svg class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                            </svg>
+                            <input v-model="studentSearchQuery" type="search" :placeholder="$t('classroom.student_search_placeholder')"
+                                class="w-full rounded-2xl border border-gray-100 bg-gray-50 py-3 pl-12 pr-10 font-bold text-gray-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10">
+                            <button v-if="studentSearchQuery" type="button" @click="studentSearchQuery = ''"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" :aria-label="$t('common.clear')">×</button>
+                        </label>
+                        <select v-model="studentAttendanceFilter" class="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 font-black text-gray-700 outline-none focus:border-emerald-500">
+                            <option value="all">{{ $t('classroom.student_filter_all') }}</option>
+                            <option value="present">{{ $t('attendance.present') }}</option>
+                            <option value="absent">{{ $t('attendance.absent') }}</option>
+                            <option value="pending">{{ $t('attendance.pending') }}</option>
+                        </select>
+                        <span class="shrink-0 px-2 text-center text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.student_filter_count', { count: visibleEnrollments.length }) }}</span>
+                    </div>
+
                     <!-- Responsive Card List -->
                     <div class="grid grid-cols-1 gap-4" :class="showSplitView ? '2xl:hidden' : 'xl:hidden'">
                         <div v-for="e in visibleEnrollments" :key="e.id" :data-enrollment-id="e.id"
@@ -2881,6 +2908,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </div>
                                     <div>
                                         <div class="text-sm font-black text-gray-900">{{ st.name }}</div>
+                                        <div v-if="st.role_type?.name" class="mt-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-600">{{ st.role_type.name }}</div>
                                         <div class="text-[10px] font-bold text-gray-400">
                                             {{ st.effective_to ? `${st.effective_from} ~ ${st.effective_to}` :
                                                 `${st.effective_from} ~ ${$t('classroom.default_teacher')}` }}
