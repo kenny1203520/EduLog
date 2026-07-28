@@ -24,14 +24,6 @@ function isTeacherPresentForScope(
   return attendanceValues.some((value) => value === true)
 }
 
-function resolveNotificationRoleIds(rules: any[], classroomId?: string, sessionId?: string): string[] {
-  const sessionRules = rules.filter(rule => rule.scope_type === 'class_session' && rule.class_session_id === sessionId)
-  if (sessionRules.length) return [...new Set(sessionRules.map(rule => rule.role_type_id))] as string[]
-  const classroomRules = rules.filter(rule => rule.scope_type === 'classroom' && rule.classroom_id === classroomId)
-  if (classroomRules.length) return [...new Set(classroomRules.map(rule => rule.role_type_id))] as string[]
-  return [...new Set(rules.filter(rule => rule.scope_type === 'global').map(rule => rule.role_type_id))] as string[]
-}
-
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -73,7 +65,7 @@ serve(async (req: Request) => {
       if (teacherError) throw teacherError
       teacherId = teacher?.id || ''
       teacherUserId = teacher?.user_id || userId
-      if (!teacherId) {
+      if (scope === 'my_present' && !teacherId) {
         return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
     }
@@ -100,25 +92,7 @@ serve(async (req: Request) => {
     if (error) throw error
     if (!data) return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
-    let notificationAssignments: any[] = []
-    let notificationRules: any[] = []
-    if (scope === 'my_notifications') {
-      const sessionIds = [...new Set(data.map((report: any) => {
-        const occurrence = report.class_occurrences
-        const relatedSession = Array.isArray(occurrence?.class_sessions) ? occurrence.class_sessions[0] : occurrence?.class_sessions
-        return relatedSession?.id
-      }).filter(Boolean))] as string[]
-      const [assignmentsResult, rulesResult] = await Promise.all([
-        sessionIds.length
-          ? client.from('class_session_teachers').select('class_session_id, role_type_id, effective_from, effective_to').eq('teacher_id', teacherId).in('class_session_id', sessionIds)
-          : Promise.resolve({ data: [], error: null }),
-        client.from('incomplete_report_notification_rules').select('scope_type, classroom_id, class_session_id, role_type_id')
-      ])
-      if (assignmentsResult.error) throw assignmentsResult.error
-      if (rulesResult.error) throw rulesResult.error
-      notificationAssignments = assignmentsResult.data || []
-      notificationRules = rulesResult.data || []
-    }
+    const permissionCache = new Map<string, { is_allowed: boolean; is_denied: boolean; policy_configured: boolean }>()
 
     const results: any[] = []
     for (const report of data) {
@@ -138,18 +112,37 @@ serve(async (req: Request) => {
         if (!isTeacherPresentForScope(teacherId, teacherUserId, occ?.teacher_ids || [], occ?.teacher_attendance || {})) continue
       }
       if (scope === 'my_notifications') {
-        const targetRoleIds = resolveNotificationRoleIds(notificationRules, classroom?.id || session?.classroom_id, session?.id)
-        if (targetRoleIds.length === 0) {
-          // No rules configured yet: keep the legacy "teacher present" behavior.
-          if (!isTeacherPresentForScope(teacherId, teacherUserId, occ?.teacher_ids || [], occ?.teacher_attendance || {})) continue
-        } else {
-          const assignmentMatches = notificationAssignments.some(assignment =>
-            assignment.class_session_id === session?.id
-            && assignment.effective_from <= occ?.occurrence_date
-            && (!assignment.effective_to || assignment.effective_to >= occ?.occurrence_date)
-            && targetRoleIds.includes(assignment.role_type_id)
-          )
-          if (!assignmentMatches) continue
+        const classroomId = classroom?.id || session?.classroom_id || null
+        const sessionId = session?.id || null
+        const policyKey = [classroomId, sessionId, occ?.occurrence_date].join(':')
+        let decision = permissionCache.get(policyKey)
+        if (!decision) {
+          const { data: resolved, error: resolveError } = await client.rpc('resolve_user_permission', {
+            p_user_id: userId,
+            p_permission_key: 'reports.incomplete.receive',
+            p_classroom_id: classroomId,
+            p_class_session_id: sessionId,
+            p_effective_date: occ?.occurrence_date
+          })
+          if (resolveError) throw resolveError
+          decision = (Array.isArray(resolved) ? resolved[0] : resolved) || {
+            is_allowed: false,
+            is_denied: false,
+            policy_configured: false
+          }
+          permissionCache.set(policyKey, decision)
+        }
+
+        if (decision.policy_configured) {
+          if (!decision.is_allowed || decision.is_denied) continue
+        } else if (!isTeacherPresentForScope(
+          teacherId,
+          teacherUserId,
+          occ?.teacher_ids || [],
+          occ?.teacher_attendance || {}
+        )) {
+          // Backward compatibility until an administrator configures a policy for this hierarchy.
+          continue
         }
       }
       const student = Array.isArray(report.enrollments?.students) ? report.enrollments.students[0] : report.enrollments?.students

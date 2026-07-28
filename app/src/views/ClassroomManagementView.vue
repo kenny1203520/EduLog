@@ -8,7 +8,8 @@ import { SessionService } from '@/services/session/SessionService'
 import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
-import { TeacherRoleService, type TeacherRoleTypeDTO } from '@/services/teacher/TeacherRoleService'
+import { RoleService } from '@/services/rbac/RoleService'
+import type { RoleDTO } from '@/models/Rbac'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import {
     ClassSessionFactory,
@@ -93,11 +94,11 @@ const allClassrooms = ref<Classroom[]>([]) // For Dropdown
 const hiddenClassroomIds = ref<Set<string>>(new Set())
 const hiddenSessionIds = ref<Set<string>>(new Set())
 const teachersList = ref<any[]>([])
-const teacherRoleTypes = ref<TeacherRoleTypeDTO[]>([])
+const roles = ref<RoleDTO[]>([])
 
 interface SessionTeacherConfig {
     teacher_id: string
-    role_type_id: string
+    role_id: string
     effective_from: string
     effective_to?: string | null
 }
@@ -168,7 +169,7 @@ async function loadData() {
             loadSessions(),
             loadAllRooms(),
             loadTeachers(),
-            TeacherRoleService.getRoleTypes().then(data => { teacherRoleTypes.value = data }),
+            RoleService.getRoles().then(data => { roles.value = data }),
             CourseCatalogService.getCourses().then(res => { courses.value = res.data })
         ])
     } catch (e) {
@@ -366,7 +367,7 @@ const teacherOptions = computed(() => teachersList.value.map(t => ({
     value: t.id
 })))
 
-const teacherRoleOptions = computed(() => teacherRoleTypes.value.map(role => ({
+const roleOptions = computed(() => roles.value.map(role => ({
     label: role.name,
     value: role.id
 })))
@@ -531,7 +532,7 @@ async function openEditSession(session: ClassSessionDTO) {
         const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
         selectedTeacherConfigs.value = assignedTeachers.map(t => ({
             teacher_id: t.id!,
-            role_type_id: t.role_type_id,
+            role_id: t.role_id,
             effective_from: t.effective_from,
             effective_to: t.effective_to
         }))
@@ -625,7 +626,7 @@ function toggleCourseSelection(courseId: string) {
 function addTeacherAssignment() {
     selectedTeacherConfigs.value.push({
         teacher_id: '',
-        role_type_id: teacherRoleTypes.value.find(role => role.code === 'teacher')?.id || teacherRoleTypes.value[0]?.id || '',
+        role_id: roles.value.find(role => role.code === 'teacher')?.id || roles.value[0]?.id || '',
         effective_from: newSession.value.start_date || DateUtils.todayString(newSession.value.time_zone || preferences.timeZone),
         effective_to: null
     })
@@ -1284,7 +1285,7 @@ function clearTeacherSelection() {
                                     <div class="flex-1">
                                         <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
                                             {{ $t('classroom.teacher_role') }}</label>
-                                        <SearchableSelect v-model="config.role_type_id" :options="teacherRoleOptions"
+                                        <SearchableSelect v-model="config.role_id" :options="roleOptions"
                                             :placeholder="$t('classroom.teacher_role_placeholder')" />
                                     </div>
                                     <button @click="removeTeacherAssignment(index)"

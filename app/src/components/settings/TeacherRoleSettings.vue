@@ -2,18 +2,19 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import { TeacherRoleService, type TeacherRoleTypeDTO } from '@/services/teacher/TeacherRoleService'
+import { RoleService } from '@/services/rbac/RoleService'
+import type { RoleDTO } from '@/models/Rbac'
 
 const { t } = useI18n()
 const toast = useToast()
-const roles = ref<TeacherRoleTypeDTO[]>([])
+const roles = ref<RoleDTO[]>([])
 const newRoleName = ref('')
 const loading = ref(false)
 
 async function loadRoles() {
     loading.value = true
     try {
-        roles.value = await TeacherRoleService.getRoleTypes()
+        roles.value = await RoleService.getRoles()
     } catch (error: any) {
         toast.error(error.message)
     } finally {
@@ -24,7 +25,7 @@ async function loadRoles() {
 async function addRole() {
     if (!newRoleName.value.trim()) return
     try {
-        await TeacherRoleService.createRoleType(newRoleName.value)
+        await RoleService.createRole(newRoleName.value)
         newRoleName.value = ''
         await loadRoles()
         toast.success(t('settings.teacher_roles.saved'))
@@ -33,10 +34,10 @@ async function addRole() {
     }
 }
 
-async function removeRole(role: TeacherRoleTypeDTO) {
+async function removeRole(role: RoleDTO) {
     if (role.is_system) return
     try {
-        await TeacherRoleService.deleteRoleType(role.id)
+        await RoleService.deleteRole(role.id)
         await loadRoles()
         toast.success(t('settings.teacher_roles.deleted'))
     } catch (error: any) {

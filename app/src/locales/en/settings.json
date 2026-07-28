@@ -30,7 +30,15 @@
         "global": "Global default",
         "classroom": "Specific classroom",
         "class_session": "Specific class",
-        "inheritance_hint": "Class settings override classroom settings, and classroom settings override the global default. Selecting no roles removes this override.",
-        "saved": "Notification recipients saved"
+        "inheritance_hint": "Each role uses the most specific class, classroom, then system policy. A deny on any assigned role takes priority.",
+        "saved": "Notification recipients saved",
+        "system": "System-wide",
+        "allow": "Notify",
+        "deny": "Do not notify",
+        "inherit": "Inherit",
+        "effective": "Effective result",
+        "inherited": "Inherited result",
+        "no_policy": "No configured policy",
+        "legacy_fallback": "Legacy attendance fallback"
     }
 }

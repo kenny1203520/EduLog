@@ -30,7 +30,15 @@
         "global": "全域預設",
         "classroom": "指定教室",
         "class_session": "指定班級",
-        "inheritance_hint": "班級設定優先於教室，教室優先於全域；未勾選職務會移除此層設定並沿用上層。",
-        "saved": "通知對象已儲存"
+        "inheritance_hint": "每個職務依班級、教室、全系統順序採用最具體政策；同一使用者有多個職務時，不通知優先。",
+        "saved": "通知對象已儲存",
+        "system": "全系統",
+        "allow": "通知",
+        "deny": "不通知",
+        "inherit": "沿用",
+        "effective": "目前有效結果",
+        "inherited": "上層繼承結果",
+        "no_policy": "尚無政策",
+        "legacy_fallback": "沿用當日出席教師"
     }
 }

@@ -21,8 +21,8 @@ export interface TeacherDTO {
 export interface SessionTeacherAssignmentDTO extends TeacherDTO {
     effective_from: string
     effective_to: string | null
-    role_type_id: string
-    role_type?: { id: string; name: string; code?: string | null } | null
+    role_id: string
+    role?: { id: string; name: string; code?: string | null } | null
 }
 
 export interface TeacherCredentialDTO {
@@ -243,8 +243,8 @@ export class TeacherService {
                 teacher_id,
                 effective_from,
                 effective_to,
-                role_type_id,
-                teacher_role_types (id, name, code),
+                role_id,
+                roles (id, name, code),
                 teachers (
                     id,
                     user_id,
@@ -284,8 +284,8 @@ export class TeacherService {
                     ...(row.teachers as TeacherDTO),
                     effective_from: row.effective_from,
                     effective_to: row.effective_to,
-                    role_type_id: row.role_type_id,
-                    role_type: row.teacher_role_types || null
+                    role_id: row.role_id,
+                    role: row.roles || null
                 })
             }
         })
@@ -295,7 +295,7 @@ export class TeacherService {
 
     static async replaceTeachersForSession(
         sessionId: string,
-        teachers: { teacher_id: string, role_type_id: string, effective_from: string, effective_to?: string | null }[]
+        teachers: { teacher_id: string, role_id: string, effective_from: string, effective_to?: string | null }[]
     ): Promise<void> {
         await this.clearSessionTeachers(sessionId)
 
@@ -306,14 +306,14 @@ export class TeacherService {
 
     static async assignTeachersToSession(
         sessionId: string,
-        teachers: { teacher_id: string, role_type_id: string, effective_from: string, effective_to?: string | null }[]
+        teachers: { teacher_id: string, role_id: string, effective_from: string, effective_to?: string | null }[]
     ): Promise<void> {
         if (teachers.length === 0) return
 
         const records = teachers.map(t => ({
             class_session_id: sessionId,
             teacher_id: t.teacher_id,
-            role_type_id: t.role_type_id,
+            role_id: t.role_id,
             effective_from: t.effective_from,
             effective_to: t.effective_to || null
         }))
