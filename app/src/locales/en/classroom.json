@@ -262,5 +262,7 @@
     "student_search": "Search students",
     "student_search_placeholder": "Search by student name",
     "student_filter_all": "All attendance statuses",
-    "student_filter_count": "Showing {count}"
+    "student_filter_count": "Showing {count}",
+    "no_matching_students": "No students match the current filters",
+    "clear_student_filters": "Clear filters"
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { SessionService } from '@/services/session/SessionService'
@@ -11,6 +11,7 @@ import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportS
 import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
 import { HolidayService } from '@/services/holiday/HolidayService'
 import type { Enrollment } from '@/models/Enrollment'
+import { countRosterAttendance, getRosterEnrollments } from '@/models/RosterFilter'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
@@ -734,33 +735,29 @@ function toggleCalendarPanel() {
     isCalendarExpanded.value = !isCalendarExpanded.value
 }
 
-// Filtered Enrollments: Only show active students if they have a report
-const visibleEnrollments = computed(() => {
-    return enrollments.value.filter(e => {
-        // Must have a valid report in the map to be visible
-        // (Null means checked but no report exists)
-        const report = reportMap.value.get(e.id!)
-        if (!report) return false
-        const query = studentSearchQuery.value.trim().toLocaleLowerCase()
-        if (query && !e.studentName?.toLocaleLowerCase().includes(query)) return false
-        const status = report.attendanceStatus || 'pending'
-        return studentAttendanceFilter.value === 'all' || status === studentAttendanceFilter.value
-    })
+// Keep complete roster metrics separate from the workflow filter.
+const rosterLists = computed(() => getRosterEnrollments(
+    enrollments.value,
+    reportMap.value,
+    studentSearchQuery.value,
+    studentAttendanceFilter.value
+))
+const allRosterEnrollments = computed(() => rosterLists.value.all)
+const filteredEnrollments = computed(() => rosterLists.value.filtered)
+
+const hasActiveStudentFilters = computed(() => Boolean(studentSearchQuery.value.trim()) || studentAttendanceFilter.value !== 'all')
+
+function clearStudentFilters() {
+    studentSearchQuery.value = ''
+    studentAttendanceFilter.value = 'all'
+}
+
+watch(filteredEnrollments, filtered => {
+    const filteredIds = new Set(filtered.map(enrollment => enrollment.id!))
+    selectedEnrollmentIds.value = new Set([...selectedEnrollmentIds.value].filter(id => filteredIds.has(id)))
 })
 
-const attendanceCounts = computed(() => {
-    return visibleEnrollments.value.reduce((counts, enrollment) => {
-        const status = reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending'
-        if (status === 'present') {
-            counts.present += 1
-        } else if (status === 'absent') {
-            counts.absent += 1
-        } else {
-            counts.pending += 1
-        }
-        return counts
-    }, { present: 0, pending: 0, absent: 0 })
-})
+const attendanceCounts = computed(() => countRosterAttendance(allRosterEnrollments.value, reportMap.value))
 
 async function loadData() {
     try {
@@ -915,10 +912,10 @@ function toggleEnrollmentSelection(enrId: string) {
 }
 
 function toggleSelectAll() {
-    if (selectedEnrollmentIds.value.size === visibleEnrollments.value.length) {
+    if (selectedEnrollmentIds.value.size === filteredEnrollments.value.length) {
         selectedEnrollmentIds.value.clear()
     } else {
-        selectedEnrollmentIds.value = new Set(visibleEnrollments.value.map(e => e.id!))
+        selectedEnrollmentIds.value = new Set(filteredEnrollments.value.map(e => e.id!))
     }
 }
 
@@ -985,7 +982,7 @@ function getAttendancePreviewNames(): Record<'present_list' | 'absent_list' | 'p
         pending_list: [] as string[]
     }
 
-    visibleEnrollments.value.forEach(enrollment => {
+    allRosterEnrollments.value.forEach(enrollment => {
         const report = reportMap.value.get(enrollment.id!)
         const status = report?.attendanceStatus || 'pending'
         const name = enrollment.studentName || ''
@@ -1223,7 +1220,7 @@ function copyAttendanceInfo() {
 
     // Helper to format list
     const formatList = (status: 'present' | 'absent' | 'pending') => {
-        const list = visibleEnrollments.value
+        const list = allRosterEnrollments.value
             .filter(e => {
                 const report = reportMap.value.get(e.id!)
                 const s = report?.attendanceStatus || 'pending' // Default to pending if missing
@@ -1931,6 +1928,26 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </div>
                     </div>
 
+                    <div class="flex flex-col gap-3 rounded-[2rem] border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
+                        <label class="relative min-w-0 flex-1">
+                            <span class="sr-only">{{ $t('classroom.student_search') }}</span>
+                            <svg class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
+                            </svg>
+                            <input v-model="studentSearchQuery" type="search" :placeholder="$t('classroom.student_search_placeholder')"
+                                class="w-full rounded-2xl border border-gray-100 bg-gray-50 py-3 pl-12 pr-10 font-bold text-gray-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10">
+                            <button v-if="studentSearchQuery" type="button" @click="studentSearchQuery = ''"
+                                class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" :aria-label="$t('common.clear')">×</button>
+                        </label>
+                        <select v-model="studentAttendanceFilter" class="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 font-black text-gray-700 outline-none focus:border-emerald-500">
+                            <option value="all">{{ $t('classroom.student_filter_all') }}</option>
+                            <option value="present">{{ $t('attendance.present') }}</option>
+                            <option value="absent">{{ $t('attendance.absent') }}</option>
+                            <option value="pending">{{ $t('attendance.pending') }}</option>
+                        </select>
+                        <span class="shrink-0 px-2 text-center text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.student_filter_count', { count: filteredEnrollments.length }) }}</span>
+                    </div>
+
                     <!-- Quick Attendance Block (Refined & Collapsible) -->
                     <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden"
                         v-if="todayOccurrence">
@@ -2044,22 +2061,30 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 <div class="flex items-center justify-between">
                                     <button @click="toggleSelectAll"
                                         class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all active:scale-95"
-                                        :class="selectedEnrollmentIds.size === visibleEnrollments.length && visibleEnrollments.length > 0
+                                        :class="selectedEnrollmentIds.size === filteredEnrollments.length && filteredEnrollments.length > 0
                                             ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-200'
                                             : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'">
-                                        {{ selectedEnrollmentIds.size === visibleEnrollments.length &&
-                                            visibleEnrollments.length > 0 ? $t('common.deselect_all') :
+                                        {{ selectedEnrollmentIds.size === filteredEnrollments.length &&
+                                            filteredEnrollments.length > 0 ? $t('common.deselect_all') :
                                             $t('common.select_all')
                                         }}
                                     </button>
                                     <span class="text-[10px] font-black text-gray-300 uppercase tracking-widest">{{
-                                        visibleEnrollments.length }} {{ $t('common.total') }}</span>
+                                        filteredEnrollments.length }} {{ $t('common.total') }}</span>
+                                </div>
+
+                                <div v-if="filteredEnrollments.length === 0" class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
+                                    <p class="font-black text-gray-500">{{ allRosterEnrollments.length === 0 ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students') }}</p>
+                                    <button v-if="allRosterEnrollments.length > 0 && hasActiveStudentFilters" type="button" @click="clearStudentFilters"
+                                        class="mt-3 rounded-xl bg-white px-4 py-2 text-xs font-black text-emerald-700 shadow-sm hover:bg-emerald-50">
+                                        {{ $t('classroom.clear_student_filters') }}
+                                    </button>
                                 </div>
 
                                 <!-- Student Grid (Optimized for Visibility) -->
                                 <div
                                     class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
-                                    <button v-for="e in visibleEnrollments" :key="e.id"
+                                    <button v-for="e in filteredEnrollments" :key="e.id"
                                         @click="toggleEnrollmentSelection(e.id!)"
                                         class="px-5 py-4 rounded-2xl border transition-all active:scale-95 flex items-center justify-between gap-3 group ring-offset-2 relative overflow-hidden"
                                         :class="[
@@ -2112,7 +2137,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             <div>
                                 <h4 class="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 mb-2">{{
                                     $t('classroom.total_students') }}</h4>
-                                <p class="text-5xl font-black tracking-tighter">{{ visibleEnrollments.length }}</p>
+                                <p class="text-5xl font-black tracking-tighter">{{ allRosterEnrollments.length }}</p>
                             </div>
                             <div class="bg-white/20 p-4 rounded-3xl">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none"
@@ -2129,42 +2154,22 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     $t('classroom.capacity_utilization') }}</h4>
                                 <div class="flex items-end gap-3">
                                     <p class="text-4xl font-black text-gray-900 tracking-tighter">{{
-                                        Math.round((visibleEnrollments.length / (session?.capacity || 1)) * 100) }}%</p>
+                                        Math.round((allRosterEnrollments.length / (session?.capacity || 1)) * 100) }}%</p>
                                     <p class="text-xs font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
                                         $t('classroom.capacity') }}</p>
                                 </div>
                             </div>
                             <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                 <div class="h-full bg-emerald-500 rounded-full transition-all duration-1000"
-                                    :style="{ width: `${(visibleEnrollments.length / (session?.capacity || 1)) * 100}%` }">
+                                    :style="{ width: `${(allRosterEnrollments.length / (session?.capacity || 1)) * 100}%` }">
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="flex flex-col gap-3 rounded-[2rem] border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center">
-                        <label class="relative min-w-0 flex-1">
-                            <span class="sr-only">{{ $t('classroom.student_search') }}</span>
-                            <svg class="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" />
-                            </svg>
-                            <input v-model="studentSearchQuery" type="search" :placeholder="$t('classroom.student_search_placeholder')"
-                                class="w-full rounded-2xl border border-gray-100 bg-gray-50 py-3 pl-12 pr-10 font-bold text-gray-800 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10">
-                            <button v-if="studentSearchQuery" type="button" @click="studentSearchQuery = ''"
-                                class="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" :aria-label="$t('common.clear')">×</button>
-                        </label>
-                        <select v-model="studentAttendanceFilter" class="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3 font-black text-gray-700 outline-none focus:border-emerald-500">
-                            <option value="all">{{ $t('classroom.student_filter_all') }}</option>
-                            <option value="present">{{ $t('attendance.present') }}</option>
-                            <option value="absent">{{ $t('attendance.absent') }}</option>
-                            <option value="pending">{{ $t('attendance.pending') }}</option>
-                        </select>
-                        <span class="shrink-0 px-2 text-center text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.student_filter_count', { count: visibleEnrollments.length }) }}</span>
-                    </div>
-
                     <!-- Responsive Card List -->
                     <div class="grid grid-cols-1 gap-4" :class="showSplitView ? '2xl:hidden' : 'xl:hidden'">
-                        <div v-for="e in visibleEnrollments" :key="e.id" :data-enrollment-id="e.id"
+                        <div v-for="e in filteredEnrollments" :key="e.id" :data-enrollment-id="e.id"
                             class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
                             <div class="space-y-3">
                                 <!-- A. Header -->
@@ -2358,10 +2363,14 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </div>
 
                         <!-- Empty State Mobile -->
-                        <div v-if="visibleEnrollments.length === 0"
-                            class="flex flex-col items-center justify-center py-12 text-gray-300">
-                            <span class="font-black italic tracking-widest">{{ $t('classroom.no_students_enrolled')
-                            }}</span>
+                        <div v-if="filteredEnrollments.length === 0"
+                            class="flex flex-col items-center justify-center gap-3 py-12 text-gray-300">
+                            <span class="font-black italic tracking-widest">{{ allRosterEnrollments.length === 0
+                                ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students') }}</span>
+                            <button v-if="allRosterEnrollments.length > 0 && hasActiveStudentFilters" type="button" @click="clearStudentFilters"
+                                class="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700">
+                                {{ $t('classroom.clear_student_filters') }}
+                            </button>
                         </div>
                     </div>
 
@@ -2391,7 +2400,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-50">
-                                <tr v-for="e in visibleEnrollments" :key="e.id" :data-enrollment-id="e.id"
+                                <tr v-for="e in filteredEnrollments" :key="e.id" :data-enrollment-id="e.id"
                                     class="hover:bg-emerald-50/20 transition-colors group">
                                     <!-- Attendance Column -->
                                     <td class="px-3 lg:px-4 py-4 lg:py-6 text-center" v-if="todayOccurrence">
@@ -2583,10 +2592,14 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                         </div>
                                     </td>
                                 </tr>
-                                <tr v-if="visibleEnrollments.length === 0">
+                                <tr v-if="filteredEnrollments.length === 0">
                                     <td :colspan="todayOccurrence ? 5 : 4"
                                         class="px-4 lg:px-8 py-12 lg:py-20 text-center font-black italic text-gray-300 tracking-widest text-xs lg:text-base">
-                                        {{ $t('classroom.no_students_enrolled') }}
+                                        <span>{{ allRosterEnrollments.length === 0 ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students') }}</span>
+                                        <button v-if="allRosterEnrollments.length > 0 && hasActiveStudentFilters" type="button" @click="clearStudentFilters"
+                                            class="ml-3 rounded-xl bg-emerald-50 px-4 py-2 text-xs font-black not-italic text-emerald-700">
+                                            {{ $t('classroom.clear_student_filters') }}
+                                        </button>
                                     </td>
                                 </tr>
                             </tbody>
@@ -2606,12 +2619,12 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 <!-- Avatar and Name -->
                                 <div
                                     class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl shrink-0 shadow-lg shadow-emerald-100">
-                                    {{visibleEnrollments.find(e => e.id ===
+                                    {{allRosterEnrollments.find(e => e.id ===
                                         selectedEnrollmentId)?.studentName?.charAt(0)}}
                                 </div>
                                 <div class="min-w-0">
                                     <div class="font-black text-gray-900 text-xl leading-tight truncate">
-                                        {{visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName}}
+                                        {{allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName}}
                                     </div>
                                     <div class="flex items-center gap-1.5 mt-1">
                                         <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -2644,12 +2657,12 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :initial-version="reportMap.get(selectedEnrollmentId)?.version"
                                 :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
                                 :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
-                                :course-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
-                                :course-display-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
+                                :course-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
+                                :course-display-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
                                 :initial-classroom-name="session?.classroom_name" :initial-session-name="session?.name"
                                 :initial-session-time="session ? `${session.start_time?.slice(0, 5) || ''}-${session.end_time?.slice(0, 5) || ''}` : ''"
-                                :initial-student-name="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName"
-                                :initial-student-id="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
+                                :initial-student-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName"
+                                :initial-student-id="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
                                 :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
                                 :available-lessons="courseLessons"
                                 :initial-report-external-link="reportMap.get(selectedEnrollmentId)?.externalLink"
@@ -2666,7 +2679,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :initial-class-notes-document="reportMap.get(selectedEnrollmentId)?.classNotesDocument"
                                 :initial-content="reportMap.get(selectedEnrollmentId)?.content"
                                 :initial-content-document="reportMap.get(selectedEnrollmentId)?.contentDocument"
-                                :initial-enrollment-external-link="visibleEnrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
+                                :initial-enrollment-external-link="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
                                 @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                                 @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
                                 @save-success="handleSaveSuccess($event, selectedEnrollmentId!)"
@@ -2908,7 +2921,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </div>
                                     <div>
                                         <div class="text-sm font-black text-gray-900">{{ st.name }}</div>
-                                        <div v-if="st.role_type?.name" class="mt-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-600">{{ st.role_type.name }}</div>
+                                        <div v-if="st.role?.name" class="mt-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-600">{{ st.role.name }}</div>
                                         <div class="text-[10px] font-bold text-gray-400">
                                             {{ st.effective_to ? `${st.effective_from} ~ ${st.effective_to}` :
                                                 `${st.effective_from} ~ ${$t('classroom.default_teacher')}` }}

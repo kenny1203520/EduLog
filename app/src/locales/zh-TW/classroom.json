@@ -262,5 +262,7 @@
     "student_search": "搜尋學生",
     "student_search_placeholder": "搜尋學生姓名",
     "student_filter_all": "全部出席狀態",
-    "student_filter_count": "顯示 {count} 位"
+    "student_filter_count": "顯示 {count} 位",
+    "no_matching_students": "沒有符合條件的學生",
+    "clear_student_filters": "清除篩選"
 }
