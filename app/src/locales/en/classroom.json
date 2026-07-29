@@ -264,5 +264,12 @@
     "student_filter_all": "All attendance statuses",
     "student_filter_count": "Showing {count}",
     "no_matching_students": "No students match the current filters",
-    "clear_student_filters": "Clear filters"
+    "clear_student_filters": "Clear filters",
+    "previous_occurrence": "Previous",
+    "next_occurrence": "Next",
+    "occurrence_load_error": "Unable to load the class occurrence. Please try again.",
+    "retry_occurrence_load": "Reload",
+    "attendance_saved": "Saved",
+    "attendance_action_disabled": "Attendance cannot be changed right now",
+    "attendance_select_student": "Select student"
 }

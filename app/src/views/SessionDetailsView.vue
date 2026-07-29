@@ -28,6 +28,7 @@ import { copyRichTextToClipboard } from '@/utils/clipboard'
 
 import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
+import QuickAttendancePanel, { type QuickAttendanceStatus } from '@/components/classroom/QuickAttendancePanel.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
@@ -64,7 +65,13 @@ const isOccurrenceInHoliday = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
-const isQuickAttendanceExpanded = ref(false)
+const isQuickAttendanceExpanded = ref(true)
+const isOccurrenceLoading = ref(false)
+const occurrenceLoadError = ref<string | null>(null)
+const previousOccurrence = ref<ClassOccurrence | null>(null)
+const nextOccurrence = ref<ClassOccurrence | null>(null)
+let occurrenceLoadToken = 0
+let classViewScrollY = 0
 const showAttendanceTemplateModal = ref(false)
 const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
 const attendanceTemplateDocument = ref<RichTextDocumentV1>(
@@ -443,14 +450,12 @@ const displayedOccurrenceDate = computed(() => {
     return DateUtils.displayDate(todayOccurrence.value.occurrenceDate, preferences.locale, preferences.timeZone)
 })
 
-const weekRangeLabel = computed(() => {
-    const start = new Date(weekAnchorDate.value)
-    start.setDate(start.getDate() - 3)
-
-    const end = new Date(weekAnchorDate.value)
-    end.setDate(end.getDate() + 3)
-
-    return `${DateUtils.displayDate(start, preferences.locale, preferences.timeZone)} - ${DateUtils.displayDate(end, preferences.locale, preferences.timeZone)}`
+const occurrenceNavigationLabel = computed(() => {
+    if (!todayOccurrence.value?.occurrenceDate) return ''
+    const start = todayOccurrence.value.effectiveStartTime?.slice(0, 5)
+    const end = todayOccurrence.value.effectiveEndTime?.slice(0, 5)
+    const time = start && end ? ` · ${start}–${end}` : ''
+    return `${displayedOccurrenceDate.value}${time}`
 })
 
 function normalizeDateInput(value: string | Date | undefined): string {
@@ -548,89 +553,49 @@ function handleMakeupStudentChange() {
     selectedMakeupEnrollmentId.value = null
 }
 
-function formatDateOnly(date: Date): string {
-    return DateUtils.formatLocalDate(date)
-}
-
 function findOccurrenceByDate(date: Date): ClassOccurrence | undefined {
-    const target = formatDateOnly(date)
-    return sessionOccurrences.value.find(occ => formatDateOnly(occ.occurrenceDate) === target)
-}
-
-function findClosestOccurrence(targetDate: Date): ClassOccurrence | null {
-    if (sessionOccurrences.value.length === 0) {
-        return null
-    }
-
-    return [...sessionOccurrences.value].sort((a, b) => {
-        const diffA = Math.abs(new Date(a.occurrenceDate).getTime() - targetDate.getTime())
-        const diffB = Math.abs(new Date(b.occurrenceDate).getTime() - targetDate.getTime())
-        return diffA - diffB
-    })[0]
-}
-
-function findLatestOccurrenceBeforeOrOn(date: Date): ClassOccurrence | null {
-    const target = date.getTime()
-    const candidates = sessionOccurrences.value
-        .filter(occ => new Date(occ.occurrenceDate).getTime() <= target)
-        .sort((a, b) => new Date(b.occurrenceDate).getTime() - new Date(a.occurrenceDate).getTime())
-
-    return candidates[0] || null
+    const target = DateUtils.formatLocalDate(date)
+    return sessionOccurrences.value.find(occ => DateUtils.formatLocalDate(occ.occurrenceDate) === target)
 }
 
 async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
     const rangeStart = new Date(anchorDate)
     rangeStart.setFullYear(rangeStart.getFullYear() - 1)
-
     const rangeEnd = new Date(anchorDate)
     rangeEnd.setFullYear(rangeEnd.getFullYear() + 1)
-
     sessionOccurrences.value = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
 }
 
 async function loadReportsForCurrentOccurrence() {
     reportMap.value = new Map()
+    if (!todayOccurrence.value?.id) return
 
-    if (!todayOccurrence.value) {
-        return
-    }
-
-    const occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(todayOccurrence.value.id)
+    const occurrenceReports = await OccurrenceReportService.createReportsForOccurrence(todayOccurrence.value.id)
     const reportEnrollmentIds = new Set(occurrenceReports.map(r => r.enrollmentId))
-
     occurrenceReports.forEach(r => {
-        if (r.enrollmentId) {
-            reportMap.value.set(r.enrollmentId, r)
-        }
+        if (r.enrollmentId) reportMap.value.set(r.enrollmentId, r)
     })
 
     const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
     const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
-
     if (guestEnrollmentIds.length > 0) {
-        const guestPromises = guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!))
-        const guests = await Promise.all(guestPromises)
+        const guests = await Promise.all(guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!)))
         const addedGuests: Enrollment[] = []
-
         guests.forEach(guest => {
-            if (guest) {
-                ; (guest as any).isGuest = true
-                if (!enrollments.value.find(e => e.id === guest.id)) {
-                    enrollments.value.push(guest)
-                    addedGuests.push(guest)
-                }
+            if (!guest) return
+            ;(guest as any).isGuest = true
+            if (!enrollments.value.find(e => e.id === guest.id)) {
+                enrollments.value.push(guest)
+                addedGuests.push(guest)
             }
         })
-
         if (addedGuests.length > 0) {
             await loadStudentProgressSummaries(addedGuests, 'merge', todayOccurrence.value.occurrenceDate)
         }
     }
 
-    for (const enr of enrollments.value) {
-        if (enr.id && !reportMap.value.has(enr.id)) {
-            reportMap.value.set(enr.id, null)
-        }
+    for (const enrollment of enrollments.value) {
+        if (enrollment.id && !reportMap.value.has(enrollment.id)) reportMap.value.set(enrollment.id, null)
     }
 }
 
@@ -641,94 +606,102 @@ async function loadOccurrenceTeachers() {
         return
     }
 
-    // Refresh session teachers to get latest intervals
     sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
-
     const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
-
-    // Find teachers active on this date from the plan
-    const activeAssignments = sessionTeachers.value.filter(st => {
-        if (dateStr < st.effective_from) return false
-        if (st.effective_to && dateStr > st.effective_to) return false
-        return true
-    })
-
-    const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(id => !!id))] as string[]
-
-    // Current "Reality" is still teacherIds in the occurrence, 
-    // but we should probably sync if they differ and it's a fresh view
+    const activeAssignments = sessionTeachers.value.filter(st => dateStr >= st.effective_from && (!st.effective_to || dateStr <= st.effective_to))
+    const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(Boolean))] as string[]
     const currentTeacherIds = todayOccurrence.value.teacherIds || []
-
-    // If the occurrence has no teachers yet (freshly generated), or if we want to sync
-    // For now, let's trust the Plan for displaying assignments in the editor, 
-    // but keep occurrenceTeachers based on the Reality for attendance.
-
     selectedTeacherIds.value = new Set(currentTeacherIds)
 
     if (currentTeacherIds.length === 0 && planTeacherIds.length > 0) {
-        // Auto-sync if reality is empty but plan has teachers
         selectedTeacherIds.value = new Set(planTeacherIds)
-        await saveOccurrenceTeachers(false) // silent sync
+        await saveOccurrenceTeachers(false)
     }
-
     if (allTeachersList.value.length === 0) {
         const { data } = await TeacherService.getTeachers(1, 1000)
         allTeachersList.value = data
     }
-
     occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
 }
 
 async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
+    const loadToken = ++occurrenceLoadToken
+    isOccurrenceLoading.value = true
+    occurrenceLoadError.value = null
     todayOccurrence.value = occurrence
 
-    if (occurrence?.occurrenceDate) {
-        weekAnchorDate.value = new Date(occurrence.occurrenceDate)
-
-        // Check if occurrence is within a holiday period
-        try {
-            const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
-                ? DateUtils.formatLocalDate(occurrence.occurrenceDate)
-                : occurrence.occurrenceDate
-            isOccurrenceInHoliday.value = await HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId)
-        } catch (e) {
-            console.error('Failed to check holiday status:', e)
-            isOccurrenceInHoliday.value = false
+    try {
+        if (!occurrence?.occurrenceDate) {
+            reportMap.value = new Map()
+            previousOccurrence.value = null
+            nextOccurrence.value = null
+            return
         }
-    }
 
-    await Promise.all([
-        loadReportsForCurrentOccurrence(),
-        loadOccurrenceTeachers(),
-        loadStudentProgressSummaries(enrollments.value)
-    ])
+        weekAnchorDate.value = new Date(occurrence.occurrenceDate)
+        const occurrenceDateStr = DateUtils.formatLocalDate(occurrence.occurrenceDate)
+        const [holiday, navigation] = await Promise.all([
+            HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId).catch(error => {
+                console.error('Failed to check holiday status:', error)
+                return false
+            }),
+            OccurrenceService.getOccurrenceNavigationState(sessionId, occurrence.occurrenceDate)
+        ])
+        if (loadToken !== occurrenceLoadToken) return
+        isOccurrenceInHoliday.value = holiday
+        previousOccurrence.value = navigation.previous
+        nextOccurrence.value = navigation.next
+
+        await Promise.all([
+            loadReportsForCurrentOccurrence(),
+            loadOccurrenceTeachers(),
+            loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate)
+        ])
+    } catch (error) {
+        if (loadToken === occurrenceLoadToken) {
+            console.error('Failed to initialize occurrence:', error)
+            occurrenceLoadError.value = t('classroom.occurrence_load_error')
+        }
+        throw error
+    } finally {
+        if (loadToken === occurrenceLoadToken) isOccurrenceLoading.value = false
+    }
 }
 
 async function handleCalendarOccurrenceSelect(occurrence: ClassOccurrence) {
+    if (isOccurrenceLoading.value) return
     await setCurrentOccurrence(occurrence)
 }
 
-async function moveWeek(offset: number) {
-    const nextAnchor = new Date(weekAnchorDate.value)
-    nextAnchor.setDate(nextAnchor.getDate() + offset * 7)
-    weekAnchorDate.value = nextAnchor
+async function moveOccurrence(direction: 'previous' | 'next') {
+    if (isOccurrenceLoading.value || !todayOccurrence.value) return
+    const adjacent = direction === 'previous' ? previousOccurrence.value : nextOccurrence.value
+    if (!adjacent) return
+    await setCurrentOccurrence(adjacent)
+    await loadSessionOccurrences(adjacent.occurrenceDate)
+}
 
-    await loadSessionOccurrences(nextAnchor)
-
-    const sameDayOccurrence = findOccurrenceByDate(nextAnchor)
-    const fallbackOccurrence = findClosestOccurrence(nextAnchor)
-    await setCurrentOccurrence(sameDayOccurrence || fallbackOccurrence)
+async function ensureTodayOccurrence(today: Date): Promise<void> {
+    await loadSessionOccurrences(today)
+    if (findOccurrenceByDate(today)) return
+    if (session.value && await SessionService.isScheduledOn(sessionId, DateUtils.formatLocalDate(today))) {
+        await OccurrenceService.generateOccurrences(sessionId, today, today)
+        await loadSessionOccurrences(today)
+    }
 }
 
 async function goToToday() {
+    if (isOccurrenceLoading.value) return
     const today = DateUtils.todayDate(sessionTimeZone.value)
-    weekAnchorDate.value = today
-
-    await loadSessionOccurrences(today)
-
-    const todayOccurrenceFromList = findOccurrenceByDate(today)
-    const fallbackOccurrence = findClosestOccurrence(today)
-    await setCurrentOccurrence(todayOccurrenceFromList || fallbackOccurrence)
+    try {
+        await ensureTodayOccurrence(today)
+        const preferred = await OccurrenceService.getPreferredOccurrence(sessionId, today)
+        await setCurrentOccurrence(preferred)
+        if (preferred) await loadSessionOccurrences(preferred.occurrenceDate)
+    } catch (error) {
+        console.error(error)
+        occurrenceLoadError.value = t('classroom.occurrence_load_error')
+    }
 }
 
 function toggleCalendarPanel() {
@@ -762,56 +735,32 @@ const attendanceCounts = computed(() => countRosterAttendance(allRosterEnrollmen
 async function loadData() {
     try {
         loading.value = true
-        // Reset maps to avoid stale or merged data
+        occurrenceLoadError.value = null
         reportMap.value = new Map()
         studentProgressSummaries.value = {}
 
-        // 1. Get session details
         session.value = await SessionService.getSessionDetails(sessionId)
-
-        // 2. Get all students enrolled in this session
-        const { data: allEnrollments } = await CourseService.getEnrollmentsBySession(sessionId)
+        const [{ data: allEnrollments }, teachers, allTeachers] = await Promise.all([
+            CourseService.getEnrollmentsBySession(sessionId),
+            TeacherService.getSessionTeachers(sessionId),
+            TeacherService.getTeachers(1, 1000)
+        ])
         enrollments.value = allEnrollments
+        sessionTeachers.value = teachers
+        allTeachersList.value = allTeachers.data
 
-        // 2.1 Load session teachers
-        sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        if (allEnrollments[0]?.courseId) courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
 
-        // Load all teachers once for the picker
-        const { data: allTeachers } = await TeacherService.getTeachers(1, 1000)
-        allTeachersList.value = allTeachers
-
-        // 2.5 Summaries will be loaded in setCurrentOccurrence
-
-        if (allEnrollments.length > 0 && allEnrollments[0]?.courseId) {
-            courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
-        }
-
-        // 3. Find or Create Today's Occurrence
         const today = DateUtils.todayDate(sessionTimeZone.value)
         todayOccurrence.value = null
         weekAnchorDate.value = today
-
-        await loadSessionOccurrences(today)
-
-        const todayOccurrenceFromList = findOccurrenceByDate(today)
-
-        // Check if session runs today and generate missing teaching day occurrence
-        if (
-            session.value
-            && await SessionService.isScheduledOn(sessionId, DateUtils.formatLocalDate(today))
-            && !todayOccurrenceFromList
-        ) {
-            await OccurrenceService.generateOccurrences(sessionId, today, today)
-            await loadSessionOccurrences(today)
-        }
-
-        const preferredOccurrence = findOccurrenceByDate(today)
-            || findLatestOccurrenceBeforeOrOn(today)
-            || findClosestOccurrence(today)
-
+        await ensureTodayOccurrence(today)
+        const preferredOccurrence = await OccurrenceService.getPreferredOccurrence(sessionId, today)
+        if (preferredOccurrence) await loadSessionOccurrences(preferredOccurrence.occurrenceDate)
         await setCurrentOccurrence(preferredOccurrence)
-    } catch (e) {
-        console.error(e)
+    } catch (error) {
+        console.error(error)
+        occurrenceLoadError.value = t('classroom.occurrence_load_error')
     } finally {
         loading.value = false
     }
@@ -822,102 +771,66 @@ onMounted(() => {
 })
 
 // Attendance & Rating Handlers
-async function toggleAttendance(enrId: string) {
+async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
         toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
         return
     }
-
     const report = reportMap.value.get(enrId)
-    if (!report) return
-
-    // Cycle: Pending -> Present -> Absent -> Pending
-    const currentStatus = report.attendanceStatus || 'pending'
-    let newStatus: 'present' | 'absent' | 'pending' = 'pending'
-
-    if (currentStatus === 'pending') {
-        newStatus = 'present'
-    } else if (currentStatus === 'present') {
-        newStatus = 'absent'
-    } else {
-        newStatus = 'pending'
-    }
+    if (!report || savingMap.value.get(enrId) || (report.attendanceStatus || 'pending') === status) return
 
     savingMap.value.set(enrId, true)
     try {
-        await OccurrenceReportService.saveAttendanceOnly(
-            report.id,
-            report.version,
-            undefined,
-            {
-                attendanceStatus: newStatus,
-                absenceReason: newStatus === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null,
-            }
-        )
-        // Refresh local report state
-        const updated = await OccurrenceReportService.getReportById(report.id)
-        reportMap.value.set(enrId, updated)
-    } catch (e) {
-        console.error('Failed to toggle attendance:', e)
+        await OccurrenceReportService.saveAttendanceOnly(report.id, report.version, undefined, {
+            attendanceStatus: status,
+            absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null
+        })
+        reportMap.value.set(enrId, await OccurrenceReportService.getReportById(report.id))
+    } catch (error) {
+        console.error('Failed to set attendance:', error)
         toast.error(t('common.save_error'))
     } finally {
         savingMap.value.delete(enrId)
     }
 }
 
-async function batchSetAttendance(status: 'present' | 'absent') {
+async function toggleAttendance(enrId: string) {
+    const current = reportMap.value.get(enrId)?.attendanceStatus || 'pending'
+    const next: QuickAttendanceStatus = current === 'pending' ? 'present' : current === 'present' ? 'absent' : 'pending'
+    await setAttendance(enrId, next)
+}
+
+async function batchSetAttendance(status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
         toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
         return
     }
-
-    const ids = Array.from(selectedEnrollmentIds.value)
+    const visibleIds = new Set(filteredEnrollments.value.map(enrollment => enrollment.id))
+    const ids = [...selectedEnrollmentIds.value].filter(id => visibleIds.has(id))
     if (ids.length === 0) return
-
-    const promises = ids.map(async (enrId) => {
-        const report = reportMap.value.get(enrId)
-        if (!report) return
-
-        savingMap.value.set(enrId, true)
-        try {
-            await OccurrenceReportService.saveAttendanceOnly(
-                report.id,
-                report.version,
-                undefined,
-                {
-                    attendanceStatus: status,
-                    absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null,
-                }
-            )
-            const updated = await OccurrenceReportService.getReportById(report.id)
-            reportMap.value.set(enrId, updated)
-        } catch (e) {
-            console.error(`Failed to set attendance for ${enrId}:`, e)
-        } finally {
-            savingMap.value.delete(enrId)
-        }
-    })
-
-    await Promise.all(promises)
-    selectedEnrollmentIds.value.clear()
+    await Promise.all(ids.map(id => setAttendance(id, status)))
+    selectedEnrollmentIds.value = new Set()
     toast.success(t('common.save_success'))
 }
 
 function toggleEnrollmentSelection(enrId: string) {
-    if (selectedEnrollmentIds.value.has(enrId)) {
-        selectedEnrollmentIds.value.delete(enrId)
-    } else {
-        selectedEnrollmentIds.value.add(enrId)
-    }
+    const next = new Set(selectedEnrollmentIds.value)
+    next.has(enrId) ? next.delete(enrId) : next.add(enrId)
+    selectedEnrollmentIds.value = next
 }
 
 function toggleSelectAll() {
-    if (selectedEnrollmentIds.value.size === filteredEnrollments.value.length) {
-        selectedEnrollmentIds.value.clear()
-    } else {
-        selectedEnrollmentIds.value = new Set(filteredEnrollments.value.map(e => e.id!))
-    }
+    const visibleIds = filteredEnrollments.value.map(enrollment => enrollment.id!).filter(Boolean)
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedEnrollmentIds.value.has(id))
+    selectedEnrollmentIds.value = allSelected ? new Set() : new Set(visibleIds)
 }
+
+const quickAttendanceStudents = computed(() => filteredEnrollments.value.map(enrollment => ({
+    id: enrollment.id!,
+    name: enrollment.studentName || t('common.unnamed'),
+    status: (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus,
+    isSaving: savingMap.value.get(enrollment.id!) === true
+})))
 
 const attendanceTemplateVariables = computed(() => {
     const previewNames = getAttendancePreviewNames()
@@ -1385,6 +1298,7 @@ async function toggleSplitView(enrollmentId: string) {
             courseLessons.value = await getLessonsForCourse(enrollment.courseId)
         }
 
+        classViewScrollY = window.scrollY
         selectedEnrollmentId.value = enrollmentId
         showSplitView.value = true
 
@@ -1412,8 +1326,10 @@ async function closeSplitView() {
     showSplitView.value = false
     selectedEnrollmentId.value = null
 
-    if (enrollmentIdToRestore) {
-        await nextTick()
+    await nextTick()
+    if (window.matchMedia('(max-width: 1279px)').matches) {
+        window.scrollTo({ top: classViewScrollY, behavior: 'auto' })
+    } else if (enrollmentIdToRestore) {
         scrollToEnrollment(enrollmentIdToRestore)
     }
 }
@@ -1774,11 +1690,17 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
         </div>
 
         <div v-else class="w-full">
-            <div class="grid gap-6 transition-all duration-500 ease-in-out min-w-0"
-                :class="showSplitView ? 'grid-cols-1 lg:grid-cols-[minmax(0,1fr)_450px] xl:grid-cols-[minmax(0,1fr)_560px]' : 'grid-cols-1'">
+            <div v-if="occurrenceLoadError" class="flex flex-col items-center justify-center rounded-3xl border border-red-100 bg-white px-6 py-20 text-center shadow-sm">
+                <p class="font-black text-red-700">{{ occurrenceLoadError }}</p>
+                <button type="button" class="mt-5 rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white hover:bg-red-700" @click="loadData">
+                    {{ $t('classroom.retry_occurrence_load') }}
+                </button>
+            </div>
+            <div v-else class="grid gap-6 transition-all duration-500 ease-in-out min-w-0"
+                :class="showSplitView ? 'grid-cols-1 xl:grid-cols-[minmax(560px,1fr)_minmax(420px,560px)]' : 'grid-cols-1'">
 
                 <!-- LEFT COLUMN: Student List & Stats -->
-                <div class="space-y-6 min-w-0" :class="{ 'hidden lg:block': showSplitView }">
+                <div class="space-y-6 min-w-0" :class="{ 'hidden xl:block': showSplitView }">
                     <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
                         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                             <div>
@@ -1787,17 +1709,20 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             </div>
 
                             <div class="flex items-center gap-2 flex-wrap md:justify-end">
-                                <button @click="moveWeek(-1)"
-                                    class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
-                                    {{ $t('classroom.previous_week') }}
+                                <button @click="moveOccurrence('previous')"
+                                    :disabled="!previousOccurrence || isOccurrenceLoading"
+                                    class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-40">
+                                    {{ $t('classroom.previous_occurrence') }}
                                 </button>
                                 <button @click="goToToday"
-                                    class="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 hover:bg-emerald-100 transition-all text-xs font-black uppercase tracking-widest">
+                                    :disabled="isOccurrenceLoading"
+                                    class="px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 hover:bg-emerald-100 transition-all text-xs font-black uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-40">
                                     {{ $t('classroom.back_to_today') }}
                                 </button>
-                                <button @click="moveWeek(1)"
-                                    class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest">
-                                    {{ $t('classroom.next_week') }}
+                                <button @click="moveOccurrence('next')"
+                                    :disabled="!nextOccurrence || isOccurrenceLoading"
+                                    class="px-4 py-2 rounded-xl bg-gray-50 border border-gray-100 text-gray-500 hover:bg-gray-100 transition-all text-xs font-black uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-40">
+                                    {{ $t('classroom.next_occurrence') }}
                                 </button>
 
                                 <button @click="toggleCalendarPanel"
@@ -1814,12 +1739,13 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             </div>
                         </div>
 
-                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">{{ weekRangeLabel }}
+                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">{{ occurrenceNavigationLabel }}
                         </p>
 
                         <Transition name="fade-slide">
                             <div v-show="isCalendarExpanded" class="max-w-4xl mx-auto w-full">
                                 <OccurrenceCalendar :occurrences="sessionOccurrences" :compact="true"
+                                    :model-value="todayOccurrence?.occurrenceDate || null"
                                     @select-occurrence="handleCalendarOccurrenceSelect" />
                             </div>
                         </Transition>
@@ -1948,190 +1874,23 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <span class="shrink-0 px-2 text-center text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.student_filter_count', { count: filteredEnrollments.length }) }}</span>
                     </div>
 
-                    <!-- Quick Attendance Block (Refined & Collapsible) -->
-                    <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden"
-                        v-if="todayOccurrence">
-                        <!-- Header (Always Visible) -->
-                        <div class="p-6 md:p-8 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 transition-colors"
-                            @click="isQuickAttendanceExpanded = !isQuickAttendanceExpanded">
-                            <div class="flex items-center gap-4">
-                                <div class="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                                <div>
-                                    <h3 class="font-black text-xl text-gray-900">{{
-                                        $t('classroom.quick_attendance_title')
-                                    }}</h3>
-                                    <p class="text-xs font-bold text-gray-400">
-                                        {{ $t('classroom.quick_attendance_subtitle') }}
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="hidden md:flex items-center gap-2">
-                                <div
-                                    class="rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-2 min-w-[72px]">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700">
-                                        {{ $t('classroom.attendance_present_count') }}
-                                    </p>
-                                    <p class="text-xl font-black text-emerald-700 leading-none mt-1">
-                                        {{ attendanceCounts.present }}
-                                    </p>
-                                </div>
-                                <div class="rounded-xl border border-gray-100 bg-gray-50 px-3 py-2 min-w-[72px]">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                                        {{ $t('classroom.attendance_pending_count') }}
-                                    </p>
-                                    <p class="text-xl font-black text-gray-700 leading-none mt-1">
-                                        {{ attendanceCounts.pending }}
-                                    </p>
-                                </div>
-                                <div class="rounded-xl border border-red-100 bg-red-50 px-3 py-2 min-w-[72px]">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-red-700">
-                                        {{ $t('classroom.attendance_absent_count') }}
-                                    </p>
-                                    <p class="text-xl font-black text-red-700 leading-none mt-1">
-                                        {{ attendanceCounts.absent }}
-                                    </p>
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-4">
-                                <button @click.stop="openAddStudentModal"
-                                    class="px-4 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 hover:bg-emerald-50 transition-all text-xs font-black uppercase tracking-widest">
-                                    {{ $t('classroom.add_student_to_class') }}
-                                </button>
-                                <span v-if="selectedEnrollmentIds.size > 0"
-                                    class="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-wider">
-                                    {{ selectedEnrollmentIds.size }} {{ $t('common.selected') }}
-                                </span>
-                                <div class="p-2 rounded-xl bg-gray-50 text-gray-400 transition-transform duration-300"
-                                    :class="{ 'rotate-180': isQuickAttendanceExpanded }">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                            d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Expandable Content -->
-                        <div v-show="isQuickAttendanceExpanded"
-                            class="px-6 md:px-8 pb-8 pt-2 space-y-8 border-t border-gray-50">
-                            <div class="grid grid-cols-3 gap-3 md:hidden">
-                                <div class="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-emerald-700">
-                                        {{ $t('classroom.attendance_present_count') }}
-                                    </p>
-                                    <p class="mt-1 text-3xl font-black text-emerald-700">{{ attendanceCounts.present }}</p>
-                                </div>
-                                <div class="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-gray-500">
-                                        {{ $t('classroom.attendance_pending_count') }}
-                                    </p>
-                                    <p class="mt-1 text-3xl font-black text-gray-700">{{ attendanceCounts.pending }}</p>
-                                </div>
-                                <div class="rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
-                                    <p class="text-[10px] font-black uppercase tracking-widest text-red-700">
-                                        {{ $t('classroom.attendance_absent_count') }}
-                                    </p>
-                                    <p class="mt-1 text-3xl font-black text-red-700">{{ attendanceCounts.absent }}</p>
-                                </div>
-                            </div>
-
-                            <!-- Batch Action Buttons -->
-                            <div class="flex items-center gap-3">
-                                <button @click="batchSetAttendance('present')"
-                                    :disabled="selectedEnrollmentIds.size === 0 || isOccurrenceInHoliday"
-                                    class="flex-1 px-6 py-4 bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-700 transition-all active:scale-95 shadow-lg shadow-emerald-100/50">
-                                    {{ $t('attendance.present') }}
-                                </button>
-                                <button @click="batchSetAttendance('absent')"
-                                    :disabled="selectedEnrollmentIds.size === 0 || isOccurrenceInHoliday"
-                                    class="flex-1 px-6 py-4 bg-red-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed hover:bg-red-700 transition-all active:scale-95 shadow-lg shadow-red-100/50">
-                                    {{ $t('attendance.absent') }}
-                                </button>
-                            </div>
-
-                            <div class="space-y-4">
-                                <!-- Select All Toggle -->
-                                <div class="flex items-center justify-between">
-                                    <button @click="toggleSelectAll"
-                                        class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border transition-all active:scale-95"
-                                        :class="selectedEnrollmentIds.size === filteredEnrollments.length && filteredEnrollments.length > 0
-                                            ? 'bg-gray-900 text-white border-gray-900 shadow-lg shadow-gray-200'
-                                            : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'">
-                                        {{ selectedEnrollmentIds.size === filteredEnrollments.length &&
-                                            filteredEnrollments.length > 0 ? $t('common.deselect_all') :
-                                            $t('common.select_all')
-                                        }}
-                                    </button>
-                                    <span class="text-[10px] font-black text-gray-300 uppercase tracking-widest">{{
-                                        filteredEnrollments.length }} {{ $t('common.total') }}</span>
-                                </div>
-
-                                <div v-if="filteredEnrollments.length === 0" class="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
-                                    <p class="font-black text-gray-500">{{ allRosterEnrollments.length === 0 ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students') }}</p>
-                                    <button v-if="allRosterEnrollments.length > 0 && hasActiveStudentFilters" type="button" @click="clearStudentFilters"
-                                        class="mt-3 rounded-xl bg-white px-4 py-2 text-xs font-black text-emerald-700 shadow-sm hover:bg-emerald-50">
-                                        {{ $t('classroom.clear_student_filters') }}
-                                    </button>
-                                </div>
-
-                                <!-- Student Grid (Optimized for Visibility) -->
-                                <div
-                                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3">
-                                    <button v-for="e in filteredEnrollments" :key="e.id"
-                                        @click="toggleEnrollmentSelection(e.id!)"
-                                        class="px-5 py-4 rounded-2xl border transition-all active:scale-95 flex items-center justify-between gap-3 group ring-offset-2 relative overflow-hidden"
-                                        :class="[
-                                            selectedEnrollmentIds.has(e.id!)
-                                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-xl shadow-emerald-100 ring-2 ring-emerald-500'
-                                                : 'bg-white text-gray-700 border-gray-100 hover:border-emerald-200 hover:bg-emerald-50/20'
-                                        ]">
-                                        <div class="flex items-center gap-3 min-w-0 z-10">
-                                            <!-- Status Indicator Dot -->
-                                            <div class="w-3 h-3 rounded-full shrink-0 shadow-sm border-2 border-white"
-                                                :class="{
-                                                    'bg-emerald-400': reportMap.get(e.id!)?.attendanceStatus === 'present',
-                                                    'bg-red-400': reportMap.get(e.id!)?.attendanceStatus === 'absent',
-                                                    'bg-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
-                                                }"></div>
-
-                                            <span class="font-black text-base truncate">{{ e.studentName }}</span>
-                                        </div>
-
-                                        <!-- Checkmark for selection -->
-                                        <div class="shrink-0 z-10 transition-all duration-300 transform"
-                                            :class="selectedEnrollmentIds.has(e.id!) ? 'scale-100 opacity-100' : 'scale-50 opacity-0'">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-emerald-100"
-                                                viewBox="0 0 20 20" fill="currentColor">
-                                                <path fill-rule="evenodd"
-                                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                    clip-rule="evenodd" />
-                                            </svg>
-                                        </div>
-
-                                        <!-- Subtle Background Pattern for Selected -->
-                                        <div v-if="selectedEnrollmentIds.has(e.id!)"
-                                            class="absolute -right-4 -bottom-4 text-white/5 transform rotate-12">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-20 w-20"
-                                                fill="currentColor" viewBox="0 0 24 24">
-                                                <path
-                                                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
-                                            </svg>
-                                        </div>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <QuickAttendancePanel v-if="todayOccurrence"
+                        v-model:expanded="isQuickAttendanceExpanded"
+                        :students="quickAttendanceStudents"
+                        :selected-ids="[...selectedEnrollmentIds]"
+                        :counts="attendanceCounts"
+                        :disabled="isOccurrenceInHoliday || isOccurrenceLoading"
+                        :empty-message="allRosterEnrollments.length === 0 ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students')"
+                        :show-clear-filters="allRosterEnrollments.length > 0 && hasActiveStudentFilters"
+                        @set-attendance="setAttendance"
+                        @batch-set-attendance="batchSetAttendance"
+                        @toggle-selection="toggleEnrollmentSelection"
+                        @toggle-select-all="toggleSelectAll"
+                        @add-student="openAddStudentModal"
+                        @clear-filters="clearStudentFilters" />
 
                     <!-- Stats Bar (Conditional or Compact in Split View?) -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6" v-if="!showSplitView">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6" v-if="!showSplitView && todayOccurrence">
                         <div
                             class="bg-emerald-600 p-8 rounded-[2.5rem] text-white shadow-xl shadow-emerald-100 flex items-center justify-between">
                             <div>

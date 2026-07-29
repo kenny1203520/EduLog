@@ -264,5 +264,12 @@
     "student_filter_all": "全部出席狀態",
     "student_filter_count": "顯示 {count} 位",
     "no_matching_students": "沒有符合條件的學生",
-    "clear_student_filters": "清除篩選"
+    "clear_student_filters": "清除篩選",
+    "previous_occurrence": "上一次",
+    "next_occurrence": "下一次",
+    "occurrence_load_error": "課次資料載入失敗，請重新載入。",
+    "retry_occurrence_load": "重新載入",
+    "attendance_saved": "已儲存",
+    "attendance_action_disabled": "目前無法修改點名狀態",
+    "attendance_select_student": "選取學生"
 }
