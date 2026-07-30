@@ -6,78 +6,77 @@ function source(path: string): string {
     return readFileSync(resolve(process.cwd(), path), 'utf8')
 }
 
-function openingTags(code: string, element: 'router-link' | 'a' | 'button'): string[] {
+function openingTags(code: string, element: 'router-link' | 'a'): string[] {
     return [...code.matchAll(new RegExp(`<${element}\\b[\\s\\S]*?>`, 'gi'))].map(match => match[0])
 }
 
-function tagsContaining(code: string, element: 'router-link' | 'a' | 'button', marker: string): string[] {
+function tagsContaining(code: string, element: 'router-link' | 'a', marker: string): string[] {
     return openingTags(code, element).filter(tag => tag.includes(marker))
 }
 
-function expectSecureNewTab(tags: string[]): void {
+function expectNativeInternalLinks(tags: string[]): void {
     expect(tags.length).toBeGreaterThan(0)
     for (const tag of tags) {
-        expect(tag).toContain('target="_blank"')
-        expect(tag).toContain('rel="noopener noreferrer"')
+        expect(tag).not.toContain('target="_blank"')
+        expect(tag).not.toContain('rel="noopener noreferrer"')
     }
 }
 
-describe('contextual new-tab navigation contract', () => {
-    it('opens student profile and report details from list and report workspaces', () => {
+describe('native internal navigation contract', () => {
+    it('keeps student and report details as real same-tab links', () => {
         const studentManagement = source('src/views/StudentManagementView.vue')
-        expectSecureNewTab(tagsContaining(studentManagement, 'router-link', "name: 'student-profile'"))
-        expectSecureNewTab(tagsContaining(studentManagement, 'router-link', "name: 'student-all-reports'"))
+        expectNativeInternalLinks(tagsContaining(studentManagement, 'router-link', "name: 'student-profile'"))
+        expectNativeInternalLinks(tagsContaining(studentManagement, 'router-link', "name: 'student-all-reports'"))
 
         const roster = source('src/components/classroom/StudentRosterPanel.vue')
         expect(tagsContaining(roster, 'a', 'item.profileHref')).toHaveLength(2)
         expect(tagsContaining(roster, 'a', 'item.reportHref')).toHaveLength(2)
-        expectSecureNewTab(tagsContaining(roster, 'a', 'item.profileHref'))
-        expectSecureNewTab(tagsContaining(roster, 'a', 'item.reportHref'))
+        expectNativeInternalLinks(tagsContaining(roster, 'a', 'item.profileHref'))
+        expectNativeInternalLinks(tagsContaining(roster, 'a', 'item.reportHref'))
 
         const incompleteReports = source('src/views/GlobalIncompleteReportsView.vue')
-        expectSecureNewTab(tagsContaining(incompleteReports, 'router-link', 'selectedReport.fullStudent.id'))
+        expectNativeInternalLinks(tagsContaining(incompleteReports, 'router-link', 'selectedReport.fullStudent.id'))
 
         const enrollments = source('src/components/StudentEnrollments.vue')
-        expectSecureNewTab(tagsContaining(enrollments, 'router-link', "name: 'lesson-reports'"))
+        expectNativeInternalLinks(tagsContaining(enrollments, 'router-link', "name: 'lesson-reports'"))
 
         const allReports = source('src/views/StudentAllReportsView.vue')
-        expectSecureNewTab(tagsContaining(allReports, 'router-link', "name: 'lesson-reports'"))
+        expectNativeInternalLinks(tagsContaining(allReports, 'router-link', "name: 'lesson-reports'"))
     })
 
-    it('opens dashboard and classroom workspace details without replacing the current context', () => {
+    it('keeps dashboard and classroom workspaces as native internal links', () => {
         const home = source('src/views/HomeView.vue')
-        const homeSessions = tagsContaining(home, 'router-link', "name: 'session-details'")
-        expect(homeSessions).toHaveLength(2)
-        expectSecureNewTab(homeSessions)
-        expectSecureNewTab(tagsContaining(home, 'router-link', "name: 'lesson-reports'"))
-        expect(home).not.toContain('function navigateToSession')
-        expect(home).not.toContain('function openReport')
+        expect(tagsContaining(home, 'router-link', "name: 'session-details'")).toHaveLength(2)
+        expectNativeInternalLinks(tagsContaining(home, 'router-link', "name: 'session-details'"))
+        expectNativeInternalLinks(tagsContaining(home, 'router-link', "name: 'lesson-reports'"))
+        expectNativeInternalLinks(tagsContaining(home, 'router-link', "name: 'students'"))
+        expectNativeInternalLinks(tagsContaining(home, 'router-link', "name: 'courses'"))
+        expectNativeInternalLinks(tagsContaining(home, 'router-link', "name: 'classrooms'"))
+        expectNativeInternalLinks(tagsContaining(home, 'router-link', "name: 'incomplete-reports'"))
 
         const classrooms = source('src/views/ClassroomManagementView.vue')
-        expectSecureNewTab(tagsContaining(classrooms, 'router-link', "name: 'session-details'"))
-        expect(classrooms).not.toContain('function navigateToSession')
+        expectNativeInternalLinks(tagsContaining(classrooms, 'router-link', "name: 'session-details'"))
 
         const session = source('src/views/SessionDetailsView.vue')
-        expectSecureNewTab(tagsContaining(session, 'router-link', "name: 'classrooms'"))
-        expectSecureNewTab(tagsContaining(session, 'router-link', '/dashboard/teachers'))
+        expectNativeInternalLinks(tagsContaining(session, 'router-link', "name: 'classrooms'"))
+        expectNativeInternalLinks(tagsContaining(session, 'router-link', '/dashboard/teachers'))
     })
 
-    it('keeps primary navigation and state-changing controls in the current tab', () => {
-        const home = source('src/views/HomeView.vue')
-        const studentManagementButton = tagsContaining(home, 'button', "name: 'students'")
-        const courseManagementButton = tagsContaining(home, 'button', "name: 'courses'")
-        const allIncompleteButton = tagsContaining(home, 'button', 'navigateToGlobalIncomplete')
-        expect(studentManagementButton).toHaveLength(1)
-        expect(courseManagementButton).toHaveLength(1)
-        expect(allIncompleteButton).toHaveLength(1)
-        expect([...studentManagementButton, ...courseManagementButton, ...allIncompleteButton].every(tag => !tag.includes('target='))).toBe(true)
+    it('uses links for page navigation while preserving stateful redirects', () => {
+        const landing = source('src/views/LandingView.vue')
+        expectNativeInternalLinks(tagsContaining(landing, 'router-link', 'to="/"'))
+        expectNativeInternalLinks(tagsContaining(landing, 'router-link', 'to="/login"'))
+        expectNativeInternalLinks(tagsContaining(landing, 'router-link', ':to="getStartedRoute"'))
 
-        const about = source('src/views/AboutView.vue')
-        const changelog = tagsContaining(about, 'router-link', '/dashboard/about/changelog')
-        expect(changelog).toHaveLength(1)
-        expect(changelog[0]).not.toContain('target=')
+        const login = source('src/views/LoginView.vue')
+        expectNativeInternalLinks(tagsContaining(login, 'router-link', 'to="/"'))
+        expect(login).toContain("router.push('/dashboard')")
 
-        const mainLayout = source('src/layouts/MainLayout.vue')
-        expect(openingTags(mainLayout, 'router-link').every(tag => !tag.includes('target='))).toBe(true)
+        const profile = source('src/views/StudentProfileView.vue')
+        expect(tagsContaining(profile, 'router-link', 'to="/dashboard"')).toHaveLength(2)
+        expectNativeInternalLinks(tagsContaining(profile, 'router-link', 'to="/dashboard"'))
+
+        expect(source('src/layouts/MainLayout.vue')).toContain("router.push('/login')")
+        expect(source('src/components/StudentMainDetails.vue')).toContain("router.push('/dashboard')")
     })
 })

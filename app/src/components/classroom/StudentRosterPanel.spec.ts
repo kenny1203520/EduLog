@@ -76,18 +76,18 @@ describe('StudentRosterPanel', () => {
         expect(protectedOccurrence.find('[data-enrollment-id="enrollment-1"] button[aria-label]').attributes('disabled')).toBeDefined()
     })
 
-    it('uses secure semantic links for reports and profiles while actions keep emitting identifiers', async () => {
+    it('uses native same-tab links for reports and profiles while actions keep emitting identifiers', async () => {
         const wrapper = mountPanel()
         const card = wrapper.find('.roster-cards [data-enrollment-id="enrollment-1"]')
         const buttons = card.findAll('button')
         const [reportLink, profileLink] = card.findAll('a')
 
         expect(reportLink?.attributes('href')).toBe('/dashboard/students/enrollment-1/reports')
-        expect(reportLink?.attributes('target')).toBe('_blank')
-        expect(reportLink?.attributes('rel')).toBe('noopener noreferrer')
+        expect(reportLink?.attributes('target')).toBeUndefined()
+        expect(reportLink?.attributes('rel')).toBeUndefined()
         expect(profileLink?.attributes('href')).toBe('/dashboard/student/student-1')
-        expect(profileLink?.attributes('target')).toBe('_blank')
-        expect(profileLink?.attributes('rel')).toBe('noopener noreferrer')
+        expect(profileLink?.attributes('target')).toBeUndefined()
+        expect(profileLink?.attributes('rel')).toBeUndefined()
 
         await buttons.find(button => button.text() === 'classroom.quick_edit')!.trigger('click')
         await buttons.find(button => button.text() === 'classroom.koding_check')!.trigger('click')

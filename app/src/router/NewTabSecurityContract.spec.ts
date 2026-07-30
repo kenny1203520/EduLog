@@ -10,8 +10,8 @@ function vueFiles(directory: string): string[] {
     })
 }
 
-describe('new-tab link security contract', () => {
-    it('protects every target blank anchor and router link from opener access', () => {
+describe('external new-tab and internal navigation security contract', () => {
+    it('protects every external target blank link from opener access', () => {
         const root = resolve(process.cwd(), 'src')
         const unsafe: string[] = []
         let newTabLinkCount = 0
@@ -27,7 +27,22 @@ describe('new-tab link security contract', () => {
             }
         }
 
-        expect(newTabLinkCount).toBeGreaterThan(10)
+        expect(newTabLinkCount).toBeGreaterThan(5)
         expect(unsafe).toEqual([])
+    })
+
+    it('never forces an internal RouterLink into a new tab', () => {
+        const root = resolve(process.cwd(), 'src')
+        const forcedInternalLinks: string[] = []
+
+        for (const file of vueFiles(root)) {
+            const code = readFileSync(file, 'utf8')
+            const tags = [...code.matchAll(/<router-link\b[\s\S]*?>/gi)].map(match => match[0])
+            for (const tag of tags.filter(candidate => candidate.includes('target="_blank"'))) {
+                forcedInternalLinks.push(`${relative(root, file)}: ${tag.replace(/\s+/g, ' ')}`)
+            }
+        }
+
+        expect(forcedInternalLinks).toEqual([])
     })
 })
