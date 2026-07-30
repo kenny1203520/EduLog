@@ -82,6 +82,12 @@
     "show_less": "Show Less",
     "system_managed": "System Managed",
     "language": "Language",
+    "choose_language": "Choose your language",
+    "choose_language_hint": "Select the language used throughout EduLog.",
+    "language_descriptions": {
+        "zh-TW": "Traditional Chinese",
+        "en": "English"
+    },
     "time_zone": "Time Zone",
     "display_time_zone": "Display Time Zone",
     "languages": {

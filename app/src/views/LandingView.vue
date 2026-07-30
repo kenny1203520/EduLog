@@ -12,18 +12,18 @@ const getStartedRoute = computed(() => auth.isAuthenticated ? '/dashboard' : '/l
     <div class="min-h-screen bg-white flex flex-col selection:bg-emerald-100 selection:text-emerald-900">
         <!-- Header -->
         <header
-            class="container mx-auto px-6 py-8 flex justify-between items-center bg-white/70 backdrop-blur-2xl sticky top-0 z-50 border-b border-emerald-50/50">
-            <router-link to="/" class="flex items-center gap-4 group">
+            class="container mx-auto sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-emerald-50/50 bg-white/70 px-4 py-4 backdrop-blur-2xl sm:px-6 sm:py-6">
+            <router-link to="/" class="group flex min-w-0 items-center gap-2 sm:gap-4">
                 <div
-                    class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-emerald-200 group-hover:rotate-12 transition-transform overflow-hidden">
+                    class="h-10 w-10 shrink-0 bg-white sm:h-12 sm:w-12 rounded-2xl flex items-center justify-center shadow-2xl shadow-emerald-200 group-hover:rotate-12 transition-transform overflow-hidden">
                     <img src="/pwa-192x192.png" alt="EduLog Logo" class="w-full h-full object-cover" />
                 </div>
-                <span class="text-3xl font-black text-gray-900 tracking-tighter">EduLog</span>
+                <span class="truncate text-xl font-black tracking-tighter text-gray-900 sm:text-3xl">EduLog</span>
             </router-link>
-            <div class="flex items-center gap-4">
+            <div class="flex shrink-0 items-center gap-2 sm:gap-3">
                 <LanguageSwitcher align="right" />
                 <router-link to="/login"
-                    class="px-8 py-3 bg-gray-900 text-white rounded-2xl font-black hover:bg-emerald-600 transition-all shadow-xl hover:shadow-emerald-200 active:scale-95">
+                    class="flex min-h-11 items-center justify-center rounded-xl bg-gray-900 px-4 py-2.5 font-black text-white shadow-lg transition-all hover:bg-emerald-600 hover:shadow-emerald-200 active:scale-95 sm:rounded-2xl sm:px-7">
                     {{ $t('auth.submit') }}
                 </router-link>
             </div>

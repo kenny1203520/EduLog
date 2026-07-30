@@ -82,6 +82,12 @@
     "show_less": "減少顯示",
     "system_managed": "系統管理",
     "language": "語言",
+    "choose_language": "選擇語言",
+    "choose_language_hint": "選擇 EduLog 介面所使用的語言。",
+    "language_descriptions": {
+        "zh-TW": "繁體中文",
+        "en": "英文"
+    },
     "time_zone": "時區",
     "display_time_zone": "顯示時區",
     "languages": {
