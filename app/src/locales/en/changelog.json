@@ -1,6 +1,36 @@
 {
     "entries": [
         {
+            "version": "1.7.0",
+            "date": "2026-07-30",
+            "changes": {
+                "added": [
+                    "Added extensible roles and system, classroom, and class notification policies with inherit, notify, and do-not-notify states.",
+                    "Added responsive room management with child-class search, inline notification settings, and reuse of the full class editor.",
+                    "Added responsive quick attendance, roster filtering, student workflow improvements, and a shared accessible globe language menu."
+                ],
+                "changed": [
+                    "Incomplete report pages and dashboard tasks now only show students from classes where the current assigned teacher was explicitly marked present.",
+                    "Class occurrence loading now initializes immediately and navigates actual previous and next occurrences.",
+                    "Internal links use native same-tab navigation while external links retain safe new-tab behavior.",
+                    "Improved responsive class headers, room cards, student rosters, report split views, and management panels."
+                ],
+                "fixed": [
+                    "Separated notification eligibility from report visibility so policies never expose another teacher’s reports.",
+                    "Made room and class retries reuse entities created before a dependent policy, teacher, or occurrence write failed.",
+                    "Removed unreadable narrow quick-attendance columns and metadata overflow."
+                ],
+                "tests": [
+                    "Added coverage for attended-teacher visibility, scoped policy inheritance and deny precedence, room/class policy workflows, retry safety, language accessibility, responsive layouts, and navigation contracts."
+                ],
+                "deployment": [
+                    "Apply 1000026_teacher_roles_and_incomplete_report_notifications.sql.",
+                    "Apply 1000027_rbac_foundation_and_scoped_permissions.sql after 1000026.",
+                    "Deploy the updated aggregate-incomplete-reports Edge Function."
+                ]
+            }
+        },
+        {
             "version": "1.6.0",
             "date": "2026-07-21",
             "changes": {
