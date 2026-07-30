@@ -10,6 +10,7 @@ const item: StudentRosterItem = {
     id: 'enrollment-1',
     studentId: 'student-1',
     reportHref: '/dashboard/students/enrollment-1/reports',
+    profileHref: '/dashboard/student/student-1',
     name: '王小明',
     initials: '王',
     currentCourse: 'HTML5 網頁程式開發班',
@@ -75,22 +76,32 @@ describe('StudentRosterPanel', () => {
         expect(protectedOccurrence.find('[data-enrollment-id="enrollment-1"] button[aria-label]').attributes('disabled')).toBeDefined()
     })
 
-    it('emits all named student actions with stable identifiers', async () => {
+    it('uses secure semantic links for reports and profiles while actions keep emitting identifiers', async () => {
         const wrapper = mountPanel()
         const card = wrapper.find('.roster-cards [data-enrollment-id="enrollment-1"]')
         const buttons = card.findAll('button')
+        const [reportLink, profileLink] = card.findAll('a')
 
-        const reportLink = card.get('a')
-        expect(reportLink.attributes('href')).toBe('/dashboard/students/enrollment-1/reports')
-        expect(reportLink.attributes('target')).toBe('_blank')
-        expect(reportLink.attributes('rel')).toBe('noopener noreferrer')
+        expect(reportLink?.attributes('href')).toBe('/dashboard/students/enrollment-1/reports')
+        expect(reportLink?.attributes('target')).toBe('_blank')
+        expect(reportLink?.attributes('rel')).toBe('noopener noreferrer')
+        expect(profileLink?.attributes('href')).toBe('/dashboard/student/student-1')
+        expect(profileLink?.attributes('target')).toBe('_blank')
+        expect(profileLink?.attributes('rel')).toBe('noopener noreferrer')
+
         await buttons.find(button => button.text() === 'classroom.quick_edit')!.trigger('click')
         await buttons.find(button => button.text() === 'classroom.koding_check')!.trigger('click')
-        await buttons.find(button => button.text() === 'common.profile')!.trigger('click')
 
         expect(wrapper.emitted('quick-edit')).toEqual([['enrollment-1']])
         expect(wrapper.emitted('koding-check')).toEqual([['enrollment-1']])
-        expect(wrapper.emitted('view-profile')).toEqual([['student-1']])
+    })
+
+    it('does not create an empty profile link when no student account is available', () => {
+        const wrapper = mountPanel({ items: [{ ...item, studentId: '', profileHref: null }] })
+        const card = wrapper.find('.roster-cards [data-enrollment-id="enrollment-1"]')
+
+        expect(card.findAll('a')).toHaveLength(1)
+        expect(card.find('[aria-disabled="true"]').exists()).toBe(true)
     })
 
     it('distinguishes an empty filter result and exposes filter reset', async () => {
