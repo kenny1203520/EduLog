@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/AggregateService'
@@ -32,7 +31,6 @@ import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t } = useI18n()
 const toast = useToast()
-const router = useRouter()
 const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 type DisplayMode = 'visible' | 'all' | 'hidden'
@@ -589,9 +587,6 @@ function closeSessionModal() {
     }
 }
 
-function navigateToSession(id: string) {
-    router.push({ name: 'session-details', params: { id } })
-}
 
 async function deleteSession(id: string) {
     openConfirm(t('classroom.confirm_delete_session'), async () => {
@@ -859,7 +854,7 @@ function clearTeacherSelection() {
                                         d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
                             </div>
-                            <a :href="room.external_link" target="_blank"
+                            <a :href="room.external_link" target="_blank" rel="noopener noreferrer"
                                 class="text-sm font-medium pt-0.5 text-emerald-600 hover:underline break-all">{{
                                     room.external_link }}</a>
                         </div>
@@ -1000,7 +995,7 @@ function clearTeacherSelection() {
                                         d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
                             </div>
-                            <a :href="session.external_link" target="_blank"
+                            <a :href="session.external_link" target="_blank" rel="noopener noreferrer"
                                 class="text-xs font-black pt-0.5 text-emerald-600 hover:underline break-all uppercase tracking-tight">{{
                                     session.external_link }}</a>
                         </div>
@@ -1016,7 +1011,8 @@ function clearTeacherSelection() {
 
                     <!-- Card Actions -->
                     <div class="px-5 py-4 flex gap-2">
-                        <button @click="navigateToSession(session.id!)"
+                        <router-link :to="{ name: 'session-details', params: { id: session.id! } }" target="_blank" rel="noopener noreferrer"
+                            :title="$t('classroom.view_students') + ' · ' + $t('common.opens_new_tab')"
                             class="flex-1 py-2.5 rounded-xl text-sm font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-white"
                             :style="{ backgroundColor: getDayColor(primaryScheduleDay(session)) }">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
@@ -1025,7 +1021,8 @@ function clearTeacherSelection() {
                                     d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                             </svg>
                             {{ $t('classroom.view_students', 'Students') }}
-                        </button>
+                            <svg class="h-3.5 w-3.5 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" /></svg>
+                        </router-link>
                     </div>
 
                     <!-- Card Footer -->

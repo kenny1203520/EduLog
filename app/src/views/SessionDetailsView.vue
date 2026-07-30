@@ -824,6 +824,9 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         id: enrollment.id!,
         studentId: enrollment.studentId || '',
         reportHref: router.resolve({ name: 'lesson-reports', params: { enrollmentId: enrollment.id } }).href,
+        profileHref: enrollment.studentId
+            ? router.resolve({ name: 'student-profile', params: { id: enrollment.studentId } }).href
+            : null,
         name: enrollment.studentName || t('classroom.koding_unnamed_account'),
         initials: enrollment.studentName?.trim().charAt(0) || '?',
         currentCourse: progress.currentCourse,
@@ -848,9 +851,6 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
 }))
 
 
-function openStudentProfile(studentId: string) {
-    if (studentId) router.push({ name: 'student-profile', params: { id: studentId } })
-}
 
 function openStudentKodingCheck(enrollmentId: string) {
     const enrollment = enrollments.value.find(item => item.id === enrollmentId)
@@ -1658,7 +1658,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     <span class="w-1 h-1 bg-gray-300 rounded-full"></span>
                     <span>{{ session.time_zone || 'Asia/Taipei' }}</span>
                     <span v-if="session.external_link" class="w-1 h-1 bg-gray-300 rounded-full"></span>
-                    <a v-if="session.external_link" :href="session.external_link" target="_blank"
+                    <a v-if="session.external_link" :href="session.external_link" target="_blank" rel="noopener noreferrer"
                         class="flex items-center gap-1.5 text-emerald-600 hover:underline">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -1668,7 +1668,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         {{ $t('classroom.external_link') }}
                     </a>
                     <span v-if="session.classroom?.external_link" class="w-1 h-1 bg-gray-300 rounded-full"></span>
-                    <a v-if="session.classroom?.external_link" :href="session.classroom?.external_link" target="_blank"
+                    <a v-if="session.classroom?.external_link" :href="session.classroom?.external_link" target="_blank" rel="noopener noreferrer"
                         class="flex items-center gap-1.5 text-blue-600 hover:underline">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -1962,7 +1962,6 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         @set-attendance="setAttendance"
                         @quick-edit="toggleSplitView"
                         @koding-check="openStudentKodingCheck"
-                        @view-profile="openStudentProfile"
                         @clear-filters="clearStudentFilters" />
                 </div>
 
@@ -2261,9 +2260,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <h4
                             class="text-xs font-black text-emerald-800 uppercase tracking-widest mb-3 flex items-center justify-between">
                             {{ $t('classroom.teaching_schedule') }}
-                            <router-link :to="{ name: 'classrooms', query: { edit: sessionId } }"
+                            <router-link :to="{ name: 'classrooms', query: { edit: sessionId } }" target="_blank" rel="noopener noreferrer"
+                                :title="$t('classroom.master_schedule_link') + ' · ' + $t('common.opens_new_tab')"
                                 class="text-[10px] font-bold text-emerald-600 hover:underline">
                                 {{ $t('classroom.master_schedule_link') }}
+                                <svg class="ml-1 inline h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" /></svg>
                             </router-link>
                         </h4>
                         <div class="space-y-2">
@@ -2288,14 +2289,16 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </div>
                                 </div>
                                 <div class="flex items-center gap-1">
-                                    <router-link to="/dashboard/teachers"
-                                        class="p-2 text-gray-300 hover:text-emerald-500 transition-colors"
-                                        :title="$t('common.profile')">
+                                    <router-link to="/dashboard/teachers" target="_blank" rel="noopener noreferrer"
+                                        :title="$t('classroom.manage_teachers') + ' · ' + $t('common.opens_new_tab')"
+                                        :aria-label="$t('classroom.manage_teachers') + ' · ' + $t('common.opens_new_tab')"
+                                        class="relative p-2 text-gray-300 hover:text-emerald-500 transition-colors">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
                                         </svg>
+                                        <svg class="absolute right-0 top-0 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" /></svg>
                                     </router-link>
                                     <button @click="st.id && removeAssignment(st.id, st.effective_from)"
                                         class="p-2 text-gray-300 hover:text-rose-500 transition-colors">

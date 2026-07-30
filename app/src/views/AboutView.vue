@@ -44,7 +44,7 @@ const version = __APP_VERSION__
                     </div>
                     <div>
                         <h3 class="text-sm font-medium text-gray-500">{{ $t('about.developer') }}</h3>
-                        <a href="https://github.com/kenny1203520" target="_blank" class="text-xl font-bold text-gray-900">Kenny</a>
+                        <a href="https://github.com/kenny1203520" target="_blank" rel="noopener noreferrer" class="text-xl font-bold text-gray-900">Kenny</a>
                     </div>
                 </div>
             </div>
@@ -69,7 +69,7 @@ const version = __APP_VERSION__
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                     </svg>
                 </router-link>
-                <a href="https://github.com/kenny1203520/EduLog" target="_blank" class="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
+                <a href="https://github.com/kenny1203520/EduLog" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
                     <div class="flex items-center gap-3">
                         <div class="p-2 bg-gray-50 text-gray-700 rounded-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -82,7 +82,7 @@ const version = __APP_VERSION__
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                     </svg>
                 </a>
-                <a href="https://hub.docker.com/r/kenny1203520/edulog" target="_blank" class="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
+                <a href="https://hub.docker.com/r/kenny1203520/edulog" target="_blank" rel="noopener noreferrer" class="flex items-center justify-between p-4 hover:bg-gray-50 transition-colors group">
                     <div class="flex items-center gap-3">
                         <div class="p-2 bg-blue-50 text-blue-600 rounded-lg">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

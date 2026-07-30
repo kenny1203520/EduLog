@@ -120,13 +120,7 @@ function normalizePendingReport(report: any) {
     }
 }
 
-function navigateToSession(id: string) {
-    router.push({ name: 'session-details', params: { id } })
-}
 
-function openReport(enrollmentId: string) {
-    router.push({ name: 'lesson-reports', params: { enrollmentId } })
-}
 
 function navigateToGlobalIncomplete() {
     router.push({ name: 'incomplete-reports' })
@@ -221,15 +215,16 @@ function formatReportDate(date: string | Date | undefined): string {
                                 </div>
                             </div>
                         </div>
-                        <button @click="navigateToSession(nextClass.classSessionId)"
+                        <router-link :to="{ name: 'session-details', params: { id: nextClass.classSessionId } }" target="_blank" rel="noopener noreferrer"
+                            :title="$t('dashboard.schedule.open_session') + ' · ' + $t('common.opens_new_tab')"
                             class="bg-gray-900 text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 hover:bg-gray-800 transition-all active:scale-95 shrink-0 shadow-lg">
                             {{ $t('dashboard.schedule.open_session') }}
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
                                 stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                    d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    d="M14 3h7m0 0v7m0-7L10 14M5 5h5M5 5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5" />
                             </svg>
-                        </button>
+                        </router-link>
                     </div>
                 </div>
 
@@ -275,8 +270,12 @@ function formatReportDate(date: string | Date | undefined): string {
 
                     <div v-else class="space-y-3">
                         <div v-for="occ in todayOccurrences" :key="occ.id"
-                            @click="navigateToSession(occ.classSessionId)"
-                            class="flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all cursor-pointer group bg-white">
+                            class="relative flex items-center justify-between p-4 rounded-2xl border border-gray-100 hover:border-emerald-200 hover:shadow-md transition-all cursor-pointer group bg-white">
+                            <router-link :to="{ name: 'session-details', params: { id: occ.classSessionId } }" target="_blank" rel="noopener noreferrer"
+                                class="absolute inset-0 z-10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2"
+                                :aria-label="(occ.sessionName || $t('dashboard.schedule.untitled_class')) + ' · ' + $t('common.opens_new_tab')">
+                                <span class="sr-only">{{ $t('common.opens_new_tab') }}</span>
+                            </router-link>
                             <div class="flex items-center gap-4">
                                 <div class="w-1.5 h-12 rounded-full"
                                     :style="{ backgroundColor: occ.classroomColor || '#10b981' }"></div>
@@ -305,7 +304,7 @@ function formatReportDate(date: string | Date | undefined): string {
                                     class="h-5 w-5 text-gray-300 group-hover:text-emerald-500 transition-colors"
                                     fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 5l7 7-7 7" />
+                                        d="M14 3h7m0 0v7m0-7L10 14M5 5h5M5 5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5" />
                                 </svg>
                             </div>
                         </div>
@@ -391,8 +390,14 @@ function formatReportDate(date: string | Date | undefined): string {
 
                     <div class="space-y-3 mb-6">
                         <div v-for="report in pendingReports.slice(0, 3)" :key="report.id"
-                            @click="openReport(report.enrollmentId)"
-                            class="bg-gray-50/50 p-4 rounded-2xl border border-gray-100 hover:bg-white hover:shadow-md hover:border-amber-200 transition-all cursor-pointer group">
+                            class="relative bg-gray-50/50 p-4 rounded-2xl border border-gray-100 hover:bg-white hover:shadow-md hover:border-amber-200 transition-all cursor-pointer group">
+                            <router-link v-if="report.enrollmentId" :to="{ name: 'lesson-reports', params: { enrollmentId: report.enrollmentId } }" target="_blank" rel="noopener noreferrer"
+                                class="absolute inset-0 z-10 rounded-2xl focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
+                                :aria-label="report.studentName + ' · ' + $t('common.opens_new_tab')">
+                                <span class="absolute right-3 top-3 rounded-lg bg-white/90 p-1 text-amber-600 shadow-sm" aria-hidden="true">
+                                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14M5 5h5M5 5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5" /></svg>
+                                </span>
+                            </router-link>
                             <div class="flex items-start justify-between">
                                 <div class="flex items-center gap-3">
                                     <div

@@ -277,15 +277,17 @@
                                         {{ selectedReport.studentName }}
                                     </h3>
                                     <router-link v-if="selectedReport.fullStudent?.id"
-                                        :to="`/dashboard/student/${selectedReport.fullStudent.id}`"
-                                        class="w-10 h-10 flex items-center justify-center text-emerald-600 bg-emerald-50 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shrink-0 shadow-sm border border-emerald-100/50 group/link"
-                                        :title="t('report.view_student_profile')">
+                                        :to="`/dashboard/student/${selectedReport.fullStudent.id}`" target="_blank" rel="noopener noreferrer"
+                                        class="relative w-10 h-10 flex items-center justify-center text-emerald-600 bg-emerald-50 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shrink-0 shadow-sm border border-emerald-100/50 group/link"
+                                        :title="t('report.view_student_profile') + ' · ' + t('common.opens_new_tab')"
+                                        :aria-label="t('report.view_student_profile') + ' · ' + t('common.opens_new_tab')">
                                         <svg xmlns="http://www.w3.org/2000/svg"
                                             class="h-4 w-4 group-hover/link:scale-110 transition-transform" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
                                         </svg>
+                                        <svg class="absolute right-0.5 top-0.5 h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" /></svg>
                                     </router-link>
                                 </div>
                                 <div class="flex items-center gap-3 flex-wrap">
