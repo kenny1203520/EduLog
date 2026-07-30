@@ -96,7 +96,7 @@ async function applyDashboardPendingReports(_agg: any) {
 
 async function loadMyPresentPendingReports() {
     try {
-        const myReports = await OccurrenceReportService.getGlobalIncompleteReports('my_notifications')
+        const myReports = await OccurrenceReportService.getGlobalIncompleteReports('my_present')
         pendingReports.value = (myReports || []).map(normalizePendingReport)
         pendingReportsCount.value = pendingReports.value.length
     } catch (fallbackError) {
