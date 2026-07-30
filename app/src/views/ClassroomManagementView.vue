@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { AggregateService } from '@/services/AggregateService'
@@ -8,9 +7,14 @@ import { SessionService } from '@/services/session/SessionService'
 import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
+import { RoleService } from '@/services/rbac/RoleService'
+import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
+import type { PermissionDTO, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
+import type { RolePolicySelections } from '@/components/settings/ScopedRolePolicyEditor.vue'
+import ScopedRolePolicyEditor from '@/components/settings/ScopedRolePolicyEditor.vue'
+import ClassroomManagementPanel from '@/components/classroom/ClassroomManagementPanel.vue'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import {
-    ClassSessionFactory,
     type ClassSessionScheduleRuleDTO,
     type ScheduleMode,
     type SessionType
@@ -22,6 +26,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
+import { buildSessionScheduleDisplayItems } from '@/utils/sessionScheduleDisplay'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 
@@ -30,7 +35,6 @@ import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t } = useI18n()
 const toast = useToast()
-const router = useRouter()
 const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 type DisplayMode = 'visible' | 'all' | 'hidden'
@@ -92,9 +96,18 @@ const allClassrooms = ref<Classroom[]>([]) // For Dropdown
 const hiddenClassroomIds = ref<Set<string>>(new Set())
 const hiddenSessionIds = ref<Set<string>>(new Set())
 const teachersList = ref<any[]>([])
+const roles = ref<RoleDTO[]>([])
+const notificationPermission = ref<PermissionDTO | null>(null)
+const notificationPolicies = ref<RolePermissionPolicyDTO[]>([])
+const roomPolicySelections = ref<RolePolicySelections>({})
+const sessionPolicySelections = ref<RolePolicySelections>({})
+const roomSessions = ref<ClassSessionDTO[]>([])
+const returnToRoomAfterSession = ref(false)
+const roomPanelInitialTab = ref<'details' | 'notifications' | 'sessions'>('details')
 
 interface SessionTeacherConfig {
     teacher_id: string
+    role_id: string
     effective_from: string
     effective_to?: string | null
 }
@@ -129,6 +142,48 @@ const newSession = ref<Partial<ClassSessionDTO>>({
     schedule_rules: [{ schedule_kind: 'weekly', day_of_week: 1, start_time: '10:00', end_time: '12:00' }]
 })
 const editingSession = ref<ClassSessionDTO | null>(null)
+
+async function loadNotificationPolicies() {
+    const permission = await PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION)
+    notificationPermission.value = permission
+    notificationPolicies.value = await PermissionPolicyService.getPolicies(permission.id)
+}
+
+function policySelectionsFor(scopeType: 'classroom' | 'class_session', scopeId?: string | null): RolePolicySelections {
+    return Object.fromEntries(roles.value.map(role => {
+        const policy = notificationPolicies.value.find(item => item.role_id === role.id
+            && item.scope_type === scopeType && item.scope_id === scopeId)
+        return [role.id, policy?.effect || 'inherit']
+    })) as RolePolicySelections
+}
+
+function policyOverrides(selections: RolePolicySelections) {
+    return roles.value.flatMap(role => {
+        const effect = selections[role.id]
+        return effect === 'allow' || effect === 'deny' ? [{ role_id: role.id, effect }] : []
+    })
+}
+
+async function refreshNotificationPolicies() {
+    if (!notificationPermission.value) return loadNotificationPolicies()
+    notificationPolicies.value = await PermissionPolicyService.getPolicies(notificationPermission.value.id)
+}
+
+async function loadRoomSessions(roomId?: string | null) {
+    if (!roomId) {
+        roomSessions.value = []
+        return
+    }
+    const result = await SessionService.getClassSessions(1, 500, '', roomId, 'all')
+    roomSessions.value = [...result.data].sort((a, b) => {
+        const firstA = a.schedule_rules?.[0]
+        const firstB = b.schedule_rules?.[0]
+        const dayA = firstA?.day_of_week ?? a.day_of_week ?? 7
+        const dayB = firstB?.day_of_week ?? b.day_of_week ?? 7
+        if (dayA !== dayB) return dayA - dayB
+        return (firstA?.start_time || a.start_time || '').localeCompare(firstB?.start_time || b.start_time || '')
+    })
+}
 
 async function loadTeachers() {
     try {
@@ -165,6 +220,8 @@ async function loadData() {
             loadSessions(),
             loadAllRooms(),
             loadTeachers(),
+            RoleService.getRoles().then(data => { roles.value = data }),
+            loadNotificationPolicies(),
             CourseCatalogService.getCourses().then(res => { courses.value = res.data })
         ])
     } catch (e) {
@@ -344,15 +401,12 @@ function primaryScheduleDay(session: ClassSessionDTO): number {
         ?? 1
 }
 
-function formatScheduleSummary(session: ClassSessionDTO): string {
-    const model = ClassSessionFactory.create(session)
-    if (model.isDraft) return t('classroom.schedule_draft')
-    return model.scheduleRules.map(rule => {
-        const time = `${rule.start_time.slice(0, 5)}-${rule.end_time.slice(0, 5)}`
-        if (rule.schedule_kind === 'weekly') return `${getDayLabel(rule.day_of_week ?? 0)} ${time}`
-        if (rule.schedule_kind === 'monthly') return t('classroom.monthly_day_summary', { day: rule.day_of_month, time })
-        return `${rule.occurrence_date} ${time}`
-    }).join('、')
+function scheduleDisplayItems(session: ClassSessionDTO) {
+    return buildSessionScheduleDisplayItems(
+        session,
+        (key, named) => named ? t(key, named) : t(key),
+        day => String(getDayLabel(day))
+    )
 }
 
 
@@ -360,6 +414,11 @@ function formatScheduleSummary(session: ClassSessionDTO): string {
 const teacherOptions = computed(() => teachersList.value.map(t => ({
     label: t.name + (t.email ? ` (${t.email})` : ''),
     value: t.id
+})))
+
+const roleOptions = computed(() => roles.value.map(role => ({
+    label: role.name,
+    value: role.id
 })))
 
 const roomOptions = computed(() => allClassrooms.value.map(c => ({
@@ -372,22 +431,29 @@ async function saveClassroom() {
     if (!newClassroom.value.name) return
     try {
         isSavingRoom.value = true
-        if (editingClassroom.value?.id) {
-            await ClassroomService.updateClassroom(editingClassroom.value.id, newClassroom.value)
-        } else {
-            await ClassroomService.createClassroom(newClassroom.value)
-        }
-        await Promise.all([loadRooms(), loadAllRooms()])
+        const saved = editingClassroom.value?.id
+            ? await ClassroomService.updateClassroom(editingClassroom.value.id, newClassroom.value)
+            : await ClassroomService.createClassroom(newClassroom.value)
+
+        // Switch to edit mode immediately so a policy failure cannot create a duplicate room on retry.
+        editingClassroom.value = saved
+        await PermissionPolicyService.replacePolicies(
+            INCOMPLETE_REPORT_PERMISSION,
+            { type: 'classroom', id: saved.id },
+            policyOverrides(roomPolicySelections.value)
+        )
+        await Promise.all([loadRooms(), loadAllRooms(), refreshNotificationPolicies()])
         closeRoomModal()
         toast.success(t('classroom.room_save_success') || 'Room saved successfully')
-    } catch (e) {
-        toast.error(e as string)
+    } catch (e: any) {
+        toast.error(e.message || String(e))
     } finally {
         isSavingRoom.value = false
     }
 }
 
-function openEditRoom(room: Classroom) {
+async function openEditRoom(room: Classroom) {
+    roomPanelInitialTab.value = 'details'
     editingClassroom.value = room
     newClassroom.value = {
         name: room.name,
@@ -396,6 +462,17 @@ function openEditRoom(room: Classroom) {
         color: room.color || '#10b981',
         external_link: room.external_link || ''
     }
+    roomPolicySelections.value = policySelectionsFor('classroom', room.id)
+    await loadRoomSessions(room.id)
+    isCreateRoomModalOpen.value = true
+}
+
+function openCreateRoomModal() {
+    roomPanelInitialTab.value = 'details'
+    editingClassroom.value = null
+    newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
+    roomPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
+    roomSessions.value = []
     isCreateRoomModalOpen.value = true
 }
 
@@ -403,6 +480,15 @@ function closeRoomModal() {
     isCreateRoomModalOpen.value = false
     editingClassroom.value = null
     newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
+    roomPolicySelections.value = {}
+    roomSessions.value = []
+}
+
+async function editSessionFromRoomPanel(session: ClassSessionDTO) {
+    roomPanelInitialTab.value = 'sessions'
+    returnToRoomAfterSession.value = true
+    isCreateRoomModalOpen.value = false
+    await openEditSession(session)
 }
 
 async function deleteClassroom(id: string) {
@@ -471,37 +557,36 @@ async function saveSession() {
             schedule_kind: newSession.value.schedule_mode || 'weekly'
         }))
     }
-    if (!DateUtils.isValidTimeZone(payload.time_zone)) {
-        payload.time_zone = preferences.timeZone
-    }
-    if (!payload.classroom_id) {
-        payload.classroom_id = null
-    }
-    if (!payload.end_date) {
-        payload.end_date = null
-    }
+    if (!DateUtils.isValidTimeZone(payload.time_zone)) payload.time_zone = preferences.timeZone
+    if (!payload.classroom_id) payload.classroom_id = null
+    if (!payload.end_date) payload.end_date = null
 
     try {
         isSavingSession.value = true
-        let sessionId: string
+        let saved: ClassSessionDTO
         if (editingSession.value?.id) {
-            await SessionService.updateClassSession(editingSession.value.id, payload)
-            sessionId = editingSession.value.id
+            saved = await SessionService.updateClassSession(editingSession.value.id, payload)
         } else {
-            const session = await SessionService.createClassSession(payload)
-            sessionId = session.id!
+            saved = await SessionService.createClassSession(payload)
         }
 
+        // Keep the created id before follow-up writes so retry updates instead of inserting again.
+        editingSession.value = saved
+        newSession.value = { ...newSession.value, id: saved.id }
+        const sessionId = saved.id!
         await TeacherService.replaceTeachersForSession(sessionId, selectedTeacherConfigs.value.filter(c => c.teacher_id))
-
+        await PermissionPolicyService.replacePolicies(
+            INCOMPLETE_REPORT_PERMISSION,
+            { type: 'class_session', id: sessionId },
+            policyOverrides(sessionPolicySelections.value)
+        )
         const reconciliation = await OccurrenceService.syncSessionOccurrences(sessionId)
 
-        await loadSessions()
+        await Promise.all([loadSessions(), refreshNotificationPolicies()])
+        if (returnToRoomAfterSession.value && saved.classroom_id) await loadRoomSessions(saved.classroom_id)
         closeSessionModal()
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
-        if (reconciliation.preserved > 0) {
-            toast.info(t('classroom.schedule_preserved_notice', { count: reconciliation.preserved }))
-        }
+        if (reconciliation.preserved > 0) toast.info(t('classroom.schedule_preserved_notice', { count: reconciliation.preserved }))
     } catch (e: any) {
         toast.error(e.message || String(e))
     } finally {
@@ -511,6 +596,7 @@ async function saveSession() {
 
 async function openEditSession(session: ClassSessionDTO) {
     editingSession.value = session
+    sessionPolicySelections.value = policySelectionsFor('class_session', session.id)
     newSession.value = {
         ...session,
         time_zone: session.time_zone || preferences.timeZone,
@@ -522,6 +608,7 @@ async function openEditSession(session: ClassSessionDTO) {
         const assignedTeachers = await TeacherService.getSessionTeachers(session.id!)
         selectedTeacherConfigs.value = assignedTeachers.map(t => ({
             teacher_id: t.id!,
+            role_id: t.role_id,
             effective_from: t.effective_from,
             effective_to: t.effective_to
         }))
@@ -533,8 +620,10 @@ async function openEditSession(session: ClassSessionDTO) {
 }
 
 function openCreateSessionModal() {
+    returnToRoomAfterSession.value = false
     clearTeacherSelection()
     editingSession.value = null
+    sessionPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
     newSession.value = {
         name: '',
         classroom_id: '',
@@ -557,8 +646,10 @@ function openCreateSessionModal() {
 }
 
 function closeSessionModal() {
+    const restoreRoom = returnToRoomAfterSession.value
     isCreateSessionModalOpen.value = false
     editingSession.value = null
+    sessionPolicySelections.value = {}
     clearTeacherSelection()
     newSession.value = {
         name: '',
@@ -576,11 +667,10 @@ function closeSessionModal() {
         schedule_mode: 'weekly',
         schedule_rules: [{ schedule_kind: 'weekly', day_of_week: 1, start_time: '10:00', end_time: '12:00' }]
     }
+    returnToRoomAfterSession.value = false
+    if (restoreRoom && editingClassroom.value) isCreateRoomModalOpen.value = true
 }
 
-function navigateToSession(id: string) {
-    router.push({ name: 'session-details', params: { id } })
-}
 
 async function deleteSession(id: string) {
     openConfirm(t('classroom.confirm_delete_session'), async () => {
@@ -615,6 +705,7 @@ function toggleCourseSelection(courseId: string) {
 function addTeacherAssignment() {
     selectedTeacherConfigs.value.push({
         teacher_id: '',
+        role_id: roles.value.find(role => role.code === 'teacher')?.id || roles.value[0]?.id || '',
         effective_from: newSession.value.start_date || DateUtils.todayString(newSession.value.time_zone || preferences.timeZone),
         effective_to: null
     })
@@ -643,6 +734,7 @@ function clearTeacherSelection() {
                     </svg>
                 </div>
             </template>
+
             <template #actions>
                 <div class="flex flex-col sm:flex-row flex-1 items-center gap-4 w-full max-w-2xl">
                     <!-- Search Bar -->
@@ -684,7 +776,7 @@ function clearTeacherSelection() {
                 </div>
 
                 <!-- Primary Action Button -->
-                <button v-if="activeTab === 'rooms'" @click="isCreateRoomModalOpen = true"
+                <button v-if="activeTab === 'rooms'" @click="openCreateRoomModal"
                     class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span> {{ t('classroom.add_room') }}
                 </button>
@@ -847,7 +939,7 @@ function clearTeacherSelection() {
                                         d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                 </svg>
                             </div>
-                            <a :href="room.external_link" target="_blank"
+                            <a :href="room.external_link" target="_blank" rel="noopener noreferrer"
                                 class="text-sm font-medium pt-0.5 text-emerald-600 hover:underline break-all">{{
                                     room.external_link }}</a>
                         </div>
@@ -877,148 +969,110 @@ function clearTeacherSelection() {
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div v-for="session in sortedSessions" :key="session.id"
-                    class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full">
+                    class="session-card group min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg">
 
-                    <!-- Card Header -->
-                    <div class="p-5 pb-3 flex items-start justify-between">
-                        <div class="flex items-center gap-4">
-                            <!-- Session Indicator Icon -->
-                            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform shadow-inner"
+                    <div class="p-5 pb-4">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-xl font-black uppercase shadow-inner transition-transform group-hover:scale-110"
                                 :style="{ backgroundColor: `${getDayColor(primaryScheduleDay(session))}15`, color: getDayColor(primaryScheduleDay(session)) }">
                                 {{ session.name.charAt(0) }}
                             </div>
-                            <!-- Session Name & Info -->
                             <div class="min-w-0 flex-1">
-                                <h3
-                                    class="font-black text-xl text-gray-900 break-words group-hover:text-emerald-700 transition leading-tight">
+                                <h3 class="break-words text-xl font-black leading-tight text-gray-900 transition group-hover:text-emerald-700">
                                     {{ session.name }}
                                 </h3>
-                                <div class="flex items-center gap-2 mt-0.5">
-                                    <span
-                                        class="text-[12px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-widest"
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <span class="rounded-lg border px-2 py-1 text-[11px] font-black"
                                         :style="{ backgroundColor: `${getDayColor(primaryScheduleDay(session))}10`, color: getDayColor(primaryScheduleDay(session)), borderColor: `${getDayColor(primaryScheduleDay(session))}30` }">
                                         {{ session.session_type === 'camp' ? $t('classroom.camp') : $t('classroom.regular_session') }}
                                     </span>
-                                    <span class="text-[11px] font-bold text-gray-400">
-                                        {{ formatScheduleSummary(session) }}
-                                    </span>
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                        {{ session.time_zone || 'Asia/Taipei' }}
-                                    </span>
                                     <span v-if="isSessionHidden(session.id)"
-                                        class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">
+                                        class="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-600">
                                         {{ $t('classroom.hidden') }}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Quick Actions (Mobile Always Visible, Desktop Hover) -->
-                        <div
-                            class="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                        <div class="mt-4 flex items-center justify-end gap-1 border-t border-gray-100 pt-3">
                             <button @click="openEditSession(session)"
-                                class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                                :title="$t('common.edit')">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
-                                    fill="currentColor">
-                                    <path
-                                        d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600"
+                                :title="$t('common.edit')" :aria-label="$t('common.edit')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                             </button>
                             <button @click="deleteSession(session.id!)"
-                                class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                                :title="$t('common.delete')">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
-                                    fill="currentColor">
-                                    <path fill-rule="evenodd"
-                                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                                        clip-rule="evenodd" />
+                                class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                :title="$t('common.delete')" :aria-label="$t('common.delete')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
                                 </svg>
                             </button>
                             <button @click="toggleSessionVisibility(session.id)"
-                                class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
-                                :title="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')">
-                                <svg v-if="isSessionHidden(session.id)" xmlns="http://www.w3.org/2000/svg"
-                                    class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path
-                                        d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z" />
-                                </svg>
-                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
-                                    fill="currentColor">
-                                    <path fill-rule="evenodd"
-                                        d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z"
-                                        clip-rule="evenodd" />
-                                </svg>
+                                class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-amber-50 hover:text-amber-600"
+                                :title="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')"
+                                :aria-label="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')">
+                                <svg v-if="isSessionHidden(session.id)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z" /></svg>
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z" clip-rule="evenodd" /></svg>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Card Body -->
-                    <div class="px-5 py-2 flex-1 space-y-3">
-                        <!-- Room Info -->
-                        <div class="flex items-center gap-2.5 text-gray-500">
-                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                </svg>
+                    <div class="space-y-4 px-5 pb-2">
+                        <section class="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3">
+                            <h4 class="flex items-center gap-2 text-[11px] font-black text-emerald-800">
+                                <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                {{ $t('classroom.schedule') }}
+                            </h4>
+                            <div class="mt-2 flex flex-col gap-1.5">
+                                <span v-for="item in scheduleDisplayItems(session)" :key="item.key"
+                                    class="break-words rounded-xl bg-white px-3 py-2 text-xs font-bold leading-5 text-gray-700 ring-1 ring-emerald-100">
+                                    {{ item.text }}
+                                </span>
                             </div>
-                            <span class="text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!)
-                                }}</span>
+                        </section>
+
+                        <div class="session-card__metadata gap-3">
+                            <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
+                                <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('student.internal_courses.classroom') }}</p><p class="break-words text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!) }}</p></div>
+                            </div>
+                            <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
+                                <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 0c2.5 2.7 3.8 6 3.8 10S14.5 19.3 12 22M2 12h20M12 2c-2.5 2.7-3.8 6-3.8 10s1.3 7.3 3.8 10" /></svg>
+                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('classroom.session_time_zone') }}</p><p class="break-words text-sm font-bold text-gray-700">{{ session.time_zone || 'Asia/Taipei' }}</p></div>
+                            </div>
+                            <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
+                                <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2c0-1.18.68-2.2 1.67-2.69M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('classroom.capacity_short') }}</p><p class="text-sm font-bold text-gray-700">{{ session.capacity }}</p></div>
+                            </div>
                         </div>
 
-                        <!-- Capacity Info -->
-                        <div class="flex items-center gap-2.5 text-gray-500">
-                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
-                            </div>
-                            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
-                                $t('classroom.capacity_short') }}: {{ session.capacity }}</span>
-                        </div>
-                        <div v-if="session.external_link" class="flex items-center gap-2.5 text-gray-500">
-                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                </svg>
-                            </div>
-                            <a :href="session.external_link" target="_blank"
-                                class="text-xs font-black pt-0.5 text-emerald-600 hover:underline break-all uppercase tracking-tight">{{
-                                    session.external_link }}</a>
-                        </div>
-
-                        <!-- Courses Tags -->
-                        <div v-if="session.course_ids?.length" class="flex flex-wrap gap-1.5 pt-1">
+                        <div v-if="session.course_ids?.length" class="flex flex-wrap gap-1.5">
                             <span v-for="cid in session.course_ids" :key="cid"
-                                class="px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-lg text-[10px] font-black text-gray-400 uppercase tracking-tight truncate max-w-[120px]">
-                                {{courses.find(c => c.id === cid)?.subject}}
+                                class="max-w-full truncate rounded-lg border border-gray-100 bg-gray-50 px-2 py-1 text-[10px] font-black text-gray-500">
+                                {{ courses.find(c => c.id === cid)?.subject }}
                             </span>
                         </div>
+
+                        <a v-if="session.external_link" :href="session.external_link" target="_blank"
+                            rel="noopener noreferrer" :title="session.external_link"
+                            class="inline-flex max-w-full items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100">
+                            <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                            <span class="truncate">{{ $t('classroom.external_link') }}</span>
+                        </a>
                     </div>
 
-                    <!-- Card Actions -->
-                    <div class="px-5 py-4 flex gap-2">
-                        <button @click="navigateToSession(session.id!)"
-                            class="flex-1 py-2.5 rounded-xl text-sm font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-white"
+                    <div class="px-5 py-4">
+                        <router-link :to="{ name: 'session-details', params: { id: session.id! } }"
+                            class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-black text-white shadow-md transition-all active:scale-95"
                             :style="{ backgroundColor: getDayColor(primaryScheduleDay(session)) }">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                             {{ $t('classroom.view_students', 'Students') }}
-                        </button>
+                        </router-link>
                     </div>
 
-                    <!-- Card Footer -->
-                    <div
-                        class="px-5 py-3 bg-gray-50/50 border-t border-gray-50 flex items-center justify-between text-[10px] font-black text-gray-300 tracking-widest uppercase">
+                    <div class="flex items-center justify-between border-t border-gray-50 bg-gray-50/50 px-5 py-3 text-[10px] font-black tracking-widest text-gray-300">
                         <span>#{{ session.id?.slice(0, 8) }}</span>
                         <span>{{ session.lesson_number }} Lessons</span>
                     </div>
@@ -1035,69 +1089,19 @@ function clearTeacherSelection() {
                     :totalItems="sessionsPagination.total" />
             </div>
         </div>
-
-        <!-- Create Room Modal -->
-        <div v-if="isCreateRoomModalOpen"
-            class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in fade-in zoom-in duration-200">
-                <h3 class="text-xl font-bold mb-6 text-gray-800">{{ $t('classroom.add_room') }}</h3>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                            }}</label>
-                        <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                            }}</label>
-                        <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                            }}</label>
-                        <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
-                            }}</label>
-                        <input v-model="newClassroom.external_link"
-                            :placeholder="$t('classroom.external_link_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                            }}</label>
-                        <input type="color" v-model="newClassroom.color"
-                            class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
-                    </div>
-                </div>
-                <div class="flex justify-end gap-3 mt-8">
-                    <button @click="closeRoomModal" :disabled="isSavingRoom"
-                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{
-                            $t('common.cancel', 'Cancel') }}</button>
-                    <button @click="saveClassroom" :disabled="isSavingRoom"
-                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all flex items-center gap-2">
-                        <svg v-if="isSavingRoom" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                            </circle>
-                            <path class="opacity-75" fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                            </path>
-                        </svg>
-                        {{ editingClassroom ? $t('common.save', 'Save') : $t('common.add', 'Add') }}
-                    </button>
-                </div>
-            </div>
-        </div>
+        <!-- Responsive Room Management Panel -->
+        <ClassroomManagementPanel v-if="isCreateRoomModalOpen" v-model:room="newClassroom"
+            v-model:room-selections="roomPolicySelections" :room-id="editingClassroom?.id"
+            :sessions="roomSessions" :roles="roles" :policies="notificationPolicies" :saving="isSavingRoom"
+            :initial-tab="roomPanelInitialTab"
+            @close="closeRoomModal" @save="saveClassroom" @edit-session="editSessionFromRoomPanel"
+            @policies-changed="refreshNotificationPolicies" />
 
         <!-- Create Session Modal -->
         <div v-if="isCreateSessionModalOpen"
             class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div
-                class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl m-4 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
+                class="bg-white rounded-2xl p-6 w-full max-w-4xl shadow-2xl m-4 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
                 <h3 class="text-xl font-bold mb-6 text-gray-800">{{ editingSession ? $t('classroom.edit_session') : $t('classroom.add_session') }}</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
@@ -1270,6 +1274,12 @@ function clearTeacherSelection() {
                                         <SearchableSelect v-model="config.teacher_id" :options="teacherOptions"
                                             :placeholder="$t('classroom.teacher_search_placeholder')" />
                                     </div>
+                                    <div class="flex-1">
+                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                                            {{ $t('classroom.teacher_role') }}</label>
+                                        <SearchableSelect v-model="config.role_id" :options="roleOptions"
+                                            :placeholder="$t('classroom.teacher_role_placeholder')" />
+                                    </div>
                                     <button @click="removeTeacherAssignment(index)"
                                         class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1317,6 +1327,17 @@ function clearTeacherSelection() {
                     </div>
                 </div>
 
+                <section class="mt-6 space-y-4 rounded-2xl border border-gray-100 bg-gray-50 p-4 sm:p-5">
+                    <div>
+                        <h4 class="font-black text-gray-900">{{ $t('settings.incomplete_notifications.title') }}</h4>
+                        <p class="mt-1 text-xs font-bold text-gray-400">{{ $t('classroom.session_notification_hint') }}</p>
+                    </div>
+                    <ScopedRolePolicyEditor v-model="sessionPolicySelections" :roles="roles" :policies="notificationPolicies"
+                        scope-type="class_session" :scope-id="editingSession?.id"
+                        :classroom-id="newSession.classroom_id || null" :class-session-id="editingSession?.id"
+                        compact :disabled="isSavingSession" />
+                </section>
+
                 <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">
                     <button @click="closeSessionModal" :disabled="isSavingSession"
                         class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{
@@ -1341,3 +1362,20 @@ function clearTeacherSelection() {
             @close="genericConfirm.isOpen = false" />
     </div>
 </template>
+
+<style scoped>
+.session-card {
+    container-type: inline-size;
+}
+
+.session-card__metadata {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 26rem) {
+    .session-card__metadata {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+</style>

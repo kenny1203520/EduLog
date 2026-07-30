@@ -175,7 +175,7 @@ export class AggregateService {
     })
   }
 
-  static async getIncompleteReportsAggregate(daysBack: number = 90, scope: 'all' | 'my_present' = 'all') {
+  static async getIncompleteReportsAggregate(daysBack: number = 90, scope: 'all' | 'my_present' | 'my_notifications' = 'all') {
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 

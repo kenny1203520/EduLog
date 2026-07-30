@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-30
+
+### Added
+- Added extensible system roles and scoped RBAC policy foundations for system, classroom, and class-session assignments.
+- Added three-level incomplete-report notification policies with inherit, allow, deny, effective-source display, and deny precedence across multiple roles.
+- Added responsive room management with room details, notification policies, searchable child classes, inline class policy editing, and safe return to the full class editor.
+- Added direct three-state quick attendance, visible-result batch operations, responsive student roster cards, and class-wide roster filtering.
+- Added an accessible globe language menu shared by the landing, login, application sidebar, and settings pages.
+
+### Changed
+- Restricted user-facing incomplete reports and dashboard tasks to students from class occurrences where the current assigned teacher was explicitly marked present.
+- Separated notification eligibility from report visibility; notification aggregation continues to use scoped role policies without granting access to other teachers' reports.
+- Made class occurrence initialization select and navigate actual adjacent occurrences, ensure eligible reports idempotently, and distinguish load failures from genuinely empty schedules.
+- Reworked class headers, room cards, student rosters, quick attendance, split views, and management panels for 375px through desktop layouts.
+- Restored native same-tab behavior for internal links while preserving middle-click, modified-click, keyboard, and context-menu navigation; external sites remain safely opened in new tabs.
+- Made room and class creation retries update already-created entities when a dependent teacher, policy, or occurrence synchronization step fails.
+
+### Fixed
+- Removed the incomplete-report scope checkbox and misleading access to all teachers' reports.
+- Fixed initial class entry requiring manual previous/next navigation before occurrence and roster data appeared.
+- Fixed quick-attendance content collapsing into unreadable columns at narrow widths.
+- Fixed class title, room, schedule, time-zone, display-time-zone, and external-link wrapping and overflow.
+- Fixed room card information hierarchy for class type, schedule rules, classroom, time zone, capacity, courses, and external links.
+
+### Tests
+- Added coverage for strict teacher-attendance report visibility, scoped policy inheritance and deny precedence, room/class policy workflows, safe partial-failure retries, language menu accessibility, responsive metadata, and native navigation contracts.
+
+### Deployment Notes
+- Apply `1000026_teacher_roles_and_incomplete_report_notifications.sql`.
+- Apply `1000027_rbac_foundation_and_scoped_permissions.sql` after `1000026`.
+- Deploy the updated `aggregate-incomplete-reports` Edge Function after the migrations.
+- No additional v1.7.0 database migration is required.
+
 ## [1.6.0] - 2026-07-21
 
 ### Fixed

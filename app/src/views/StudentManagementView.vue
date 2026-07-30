@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useStudentStore } from '@/stores/useStudentStore'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
@@ -11,7 +10,6 @@ import BasePageHeader from '@/components/common/BasePageHeader.vue'
 const { t } = useI18n()
 const toast = useToast()
 const studentStore = useStudentStore()
-const router = useRouter()
 
 const showCreateModal = ref(false)
 const newStudentName = ref('')
@@ -188,7 +186,7 @@ async function copyToClipboard(text: string) {
                             </span>
                         </router-link>
                         <router-link :to="{ name: 'student-all-reports', params: { id: student.id } }"
-                            class="w-full min-w-0 flex items-center justify-center bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-md shadow-emerald-100 active:scale-95">
+                            class="w-full min-w-0 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-md shadow-emerald-100 active:scale-95">
                             <span class="text-xs font-black tracking-wide">
                                 {{ $t('report.list_title') }}
                             </span>

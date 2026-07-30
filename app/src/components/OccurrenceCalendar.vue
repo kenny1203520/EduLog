@@ -1,6 +1,6 @@
 <template>
     <div class="occurrence-calendar">
-        <BaseCalendar :compact="props.compact" @select-date="handleSelectDate">
+        <BaseCalendar :compact="props.compact" :model-value="props.modelValue" @select-date="handleSelectDate">
             <template #day="{ day }">
                 <!-- Occurrence Indicators -->
                 <div v-if="getOccurrencesForDate(day.date).length > 0"
@@ -67,13 +67,15 @@ interface Props {
     existingReportIds?: Set<string>
     occurrenceStatuses?: Record<string, string>
     compact?: boolean
+    modelValue?: string | Date | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
     occurrences: () => [],
     existingReportIds: () => new Set(),
     occurrenceStatuses: () => ({}),
-    compact: false
+    compact: false,
+    modelValue: null
 })
 
 const emit = defineEmits<{

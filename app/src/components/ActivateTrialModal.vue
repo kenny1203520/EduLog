@@ -44,14 +44,13 @@ const eligibleSessions = computed(() => {
     if (!currentEnrollment.value?.courseId) return []
     return SessionEligibilityPolicy.filter(sessions.value, {
         courseId: currentEnrollment.value.courseId,
-        classroomId: selectedClassroomId.value || null,
-        excludeSessionId: currentEnrollment.value.classSessionId || null
+        classroomId: selectedClassroomId.value || null
     })
 })
 
 const classroomOptions = computed(() => {
     const eligibleIds = SessionEligibilityPolicy.classroomIds(
-        sessions.value.filter(session => session.id !== currentEnrollment.value?.classSessionId),
+        sessions.value,
         currentEnrollment.value?.courseId || ''
     )
     return [
@@ -108,17 +107,21 @@ async function fetchSessions() {
     }
 }
 
-watch(() => props.isOpen, (val) => {
+watch(() => props.isOpen, async (val) => {
     if (val) {
         selectedClassroomId.value = ''
-        fetchClassrooms()
-        fetchSessions()
         activateTrialForm.value = {
             class_session_id: '',
             effective_date: DateUtils.todayString(preferences.timeZone),
             target_total_reports: 1
         }
-        fetchCurrentEnrollment()
+        await Promise.all([fetchClassrooms(), fetchSessions(), fetchCurrentEnrollment()])
+        const originalClassroomId = currentEnrollment.value?.classroomId || ''
+        const originalSessionId = currentEnrollment.value?.classSessionId || ''
+        selectedClassroomId.value = originalClassroomId
+        if (originalSessionId && eligibleSessions.value.some(session => session.id === originalSessionId)) {
+            activateTrialForm.value.class_session_id = originalSessionId
+        }
     }
 })
 

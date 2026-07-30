@@ -18,6 +18,13 @@ export interface TeacherDTO {
     updated_at?: string
 }
 
+export interface SessionTeacherAssignmentDTO extends TeacherDTO {
+    effective_from: string
+    effective_to: string | null
+    role_id: string
+    role?: { id: string; name: string; code?: string | null } | null
+}
+
 export interface TeacherCredentialDTO {
     id?: string
     teacher_id?: string
@@ -229,13 +236,15 @@ export class TeacherService {
     }
 
     // Session-teacher relationships
-    static async getSessionTeachers(sessionId: string, onDate?: string): Promise<(TeacherDTO & { effective_from: string, effective_to: string | null })[]> {
+    static async getSessionTeachers(sessionId: string, onDate?: string): Promise<SessionTeacherAssignmentDTO[]> {
         let query = supabase
             .from('class_session_teachers')
             .select(`
                 teacher_id,
                 effective_from,
                 effective_to,
+                role_id,
+                roles (id, name, code),
                 teachers (
                     id,
                     user_id,
@@ -262,7 +271,7 @@ export class TeacherService {
         if (error) throw new Error(error.message)
 
         // Map and optionally filter by effective_to
-        const results: (TeacherDTO & { effective_from: string, effective_to: string | null })[] = []
+        const results: SessionTeacherAssignmentDTO[] = []
 
         ;(data as any[] || []).forEach(row => {
             if (row.teachers) {
@@ -274,7 +283,9 @@ export class TeacherService {
                 results.push({
                     ...(row.teachers as TeacherDTO),
                     effective_from: row.effective_from,
-                    effective_to: row.effective_to
+                    effective_to: row.effective_to,
+                    role_id: row.role_id,
+                    role: row.roles || null
                 })
             }
         })
@@ -284,7 +295,7 @@ export class TeacherService {
 
     static async replaceTeachersForSession(
         sessionId: string,
-        teachers: { teacher_id: string, effective_from: string, effective_to?: string | null }[]
+        teachers: { teacher_id: string, role_id: string, effective_from: string, effective_to?: string | null }[]
     ): Promise<void> {
         await this.clearSessionTeachers(sessionId)
 
@@ -295,13 +306,14 @@ export class TeacherService {
 
     static async assignTeachersToSession(
         sessionId: string,
-        teachers: { teacher_id: string, effective_from: string, effective_to?: string | null }[]
+        teachers: { teacher_id: string, role_id: string, effective_from: string, effective_to?: string | null }[]
     ): Promise<void> {
         if (teachers.length === 0) return
 
         const records = teachers.map(t => ({
             class_session_id: sessionId,
             teacher_id: t.teacher_id,
+            role_id: t.role_id,
             effective_from: t.effective_from,
             effective_to: t.effective_to || null
         }))

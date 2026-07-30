@@ -166,7 +166,7 @@ export class OccurrenceReportService {
         return ReportQueryService.getReportsByStudent(studentId, params)
     }
 
-    static async getGlobalIncompleteReports(scope: 'all' | 'my_present' = 'all'): Promise<any[]> {
+    static async getGlobalIncompleteReports(scope: 'all' | 'my_present' | 'my_notifications' = 'all'): Promise<any[]> {
         return ReportQueryService.getGlobalIncompleteReports(scope)
     }
 }

@@ -76,6 +76,67 @@ export class OccurrenceQueryService {
         })
     }
 
+    static async getPreferredOccurrence(
+        sessionId: string,
+        referenceDate: Date
+    ): Promise<ClassOccurrence | null> {
+        const reference = this.formatDate(referenceDate)
+        const { data: previous, error: previousError } = await supabase
+            .from('class_occurrences')
+            .select('*')
+            .eq('class_session_id', sessionId)
+            .lte('occurrence_date', reference)
+            .order('occurrence_date', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (previousError) throw new Error(previousError.message)
+        if (previous) return new ClassOccurrence(previous as any)
+
+        const { data: next, error: nextError } = await supabase
+            .from('class_occurrences')
+            .select('*')
+            .eq('class_session_id', sessionId)
+            .gt('occurrence_date', reference)
+            .order('occurrence_date', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+
+        if (nextError) throw new Error(nextError.message)
+        return next ? new ClassOccurrence(next as any) : null
+    }
+
+    static async getAdjacentOccurrence(
+        sessionId: string,
+        occurrenceDate: Date,
+        direction: 'previous' | 'next'
+    ): Promise<ClassOccurrence | null> {
+        const date = this.formatDate(occurrenceDate)
+        let query = supabase
+            .from('class_occurrences')
+            .select('*')
+            .eq('class_session_id', sessionId)
+
+        query = direction === 'previous'
+            ? query.lt('occurrence_date', date).order('occurrence_date', { ascending: false })
+            : query.gt('occurrence_date', date).order('occurrence_date', { ascending: true })
+
+        const { data, error } = await query.limit(1).maybeSingle()
+        if (error) throw new Error(error.message)
+        return data ? new ClassOccurrence(data as any) : null
+    }
+
+    static async getOccurrenceNavigationState(
+        sessionId: string,
+        occurrenceDate: Date
+    ): Promise<{ previous: ClassOccurrence | null; next: ClassOccurrence | null }> {
+        const [previous, next] = await Promise.all([
+            this.getAdjacentOccurrence(sessionId, occurrenceDate, 'previous'),
+            this.getAdjacentOccurrence(sessionId, occurrenceDate, 'next')
+        ])
+        return { previous, next }
+    }
+
     static async getOccurrenceById(occurrenceId: string): Promise<ClassOccurrence> {
         const { data, error } = await supabase
             .from('class_occurrences')

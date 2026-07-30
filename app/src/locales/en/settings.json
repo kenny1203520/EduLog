@@ -13,5 +13,32 @@
         "font_scale": "Global Font Size",
         "font_scale_hint": "Changes will be applied immediately to all pages.",
         "language": "Interface Language"
+    },
+    "teacher_roles": {
+        "title": "Teacher Role Types",
+        "description": "Manage roles available for class assignments. Built-in roles cannot be removed.",
+        "placeholder": "New custom role name",
+        "system": "System role",
+        "custom": "Custom role",
+        "saved": "Role added",
+        "deleted": "Role deleted"
+    },
+    "incomplete_notifications": {
+        "title": "Incomplete Report Notifications",
+        "description": "Choose which assigned roles receive incomplete-report reminders on the dashboard.",
+        "scope": "Configuration scope",
+        "global": "Global default",
+        "classroom": "Specific classroom",
+        "class_session": "Specific class",
+        "inheritance_hint": "Each role uses the most specific class, classroom, then system policy. A deny on any assigned role takes priority.",
+        "saved": "Notification recipients saved",
+        "system": "System-wide",
+        "allow": "Notify",
+        "deny": "Do not notify",
+        "inherit": "Inherit",
+        "effective": "Effective result",
+        "inherited": "Inherited result",
+        "no_policy": "No configured policy",
+        "legacy_fallback": "Legacy attendance fallback"
     }
 }

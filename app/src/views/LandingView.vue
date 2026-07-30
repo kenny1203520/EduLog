@@ -1,50 +1,31 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
-import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { computed } from 'vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 
-const router = useRouter()
 const auth = useAuthStore()
-const preferences = usePreferencesStore()
 
-function handleGetStarted() {
-    if (auth.isAuthenticated) {
-        router.push('/dashboard')
-    } else {
-        router.push('/login')
-    }
-}
+const getStartedRoute = computed(() => auth.isAuthenticated ? '/dashboard' : '/login')
 </script>
 
 <template>
     <div class="min-h-screen bg-white flex flex-col selection:bg-emerald-100 selection:text-emerald-900">
         <!-- Header -->
         <header
-            class="container mx-auto px-6 py-8 flex justify-between items-center bg-white/70 backdrop-blur-2xl sticky top-0 z-50 border-b border-emerald-50/50">
-            <div class="flex items-center gap-4 group cursor-pointer" @click="router.push('/')">
+            class="container mx-auto sticky top-0 z-50 flex items-center justify-between gap-3 border-b border-emerald-50/50 bg-white/70 px-4 py-4 backdrop-blur-2xl sm:px-6 sm:py-6">
+            <router-link to="/" class="group flex min-w-0 items-center gap-2 sm:gap-4">
                 <div
-                    class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-emerald-200 group-hover:rotate-12 transition-transform overflow-hidden">
+                    class="h-10 w-10 shrink-0 bg-white sm:h-12 sm:w-12 rounded-2xl flex items-center justify-center shadow-2xl shadow-emerald-200 group-hover:rotate-12 transition-transform overflow-hidden">
                     <img src="/pwa-192x192.png" alt="EduLog Logo" class="w-full h-full object-cover" />
                 </div>
-                <span class="text-3xl font-black text-gray-900 tracking-tighter">EduLog</span>
-            </div>
-            <div class="flex items-center gap-4">
-                <div class="hidden md:flex gap-1 text-xs font-bold bg-gray-100 rounded-xl p-1">
-                    <button @click="preferences.locale = 'zh-TW'"
-                        :class="{ 'bg-white shadow-sm text-emerald-600': preferences.locale === 'zh-TW', 'text-gray-400 hover:text-gray-600': preferences.locale !== 'zh-TW' }"
-                        class="px-3 py-1.5 rounded-lg transition-all active:scale-95">
-                        中文
-                    </button>
-                    <button @click="preferences.locale = 'en'"
-                        :class="{ 'bg-white shadow-sm text-emerald-600': preferences.locale === 'en', 'text-gray-400 hover:text-gray-600': preferences.locale !== 'en' }"
-                        class="px-3 py-1.5 rounded-lg transition-all active:scale-95">
-                        English
-                    </button>
-                </div>
-                <button @click="router.push('/login')"
-                    class="px-8 py-3 bg-gray-900 text-white rounded-2xl font-black hover:bg-emerald-600 transition-all shadow-xl hover:shadow-emerald-200 active:scale-95">
+                <span class="truncate text-xl font-black tracking-tighter text-gray-900 sm:text-3xl">EduLog</span>
+            </router-link>
+            <div class="flex shrink-0 items-center gap-2 sm:gap-3">
+                <LanguageSwitcher align="right" />
+                <router-link to="/login"
+                    class="flex min-h-11 items-center justify-center rounded-xl bg-gray-900 px-4 py-2.5 font-black text-white shadow-lg transition-all hover:bg-emerald-600 hover:shadow-emerald-200 active:scale-95 sm:rounded-2xl sm:px-7">
                     {{ $t('auth.submit') }}
-                </button>
+                </router-link>
             </div>
         </header>
 
@@ -66,7 +47,7 @@ function handleGetStarted() {
                     class="text-xl md:text-3xl text-gray-500 mb-16 max-w-3xl mx-auto leading-relaxed font-semibold italic">
                     {{ $t('landing.subtitle') }}
                 </p>
-                <button @click="handleGetStarted"
+                <router-link :to="getStartedRoute"
                     class="px-12 py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-2xl hover:bg-emerald-700 transition-all shadow-2xl shadow-emerald-200 hover:-translate-y-2 active:translate-y-0 flex items-center gap-4 mx-auto group">
                     {{ $t('landing.get_started') }}
                     <svg xmlns="http://www.w3.org/2000/svg"
@@ -75,7 +56,7 @@ function handleGetStarted() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
                             d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
-                </button>
+                </router-link>
             </div>
         </main>
 
@@ -136,10 +117,10 @@ function handleGetStarted() {
                 <div class="relative z-10">
                     <h2 class="text-5xl md:text-7xl font-black text-white mb-12 tracking-tighter">{{
                         $t('landing.cta_title') }}</h2>
-                    <button @click="handleGetStarted"
+                    <router-link :to="getStartedRoute"
                         class="px-16 py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-3xl hover:bg-emerald-50 hover:text-emerald-900 transition-all shadow-2xl hover:-translate-y-2 active:translate-y-0">
                         {{ $t('landing.get_started') }}
-                    </button>
+                    </router-link>
                 </div>
             </div>
         </section>

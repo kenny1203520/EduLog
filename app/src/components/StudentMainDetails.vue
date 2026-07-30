@@ -221,7 +221,7 @@ watch(isEditingMainDetails, (val) => {
                     class="w-full border-gray-200 rounded-lg px-4 py-3 text-base font-bold focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all outline-none bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400">
                 <div v-else
                     class="text-gray-800 px-4 py-3 text-base font-bold bg-gray-50/50 rounded-lg border border-transparent min-h-[46px] overflow-hidden text-ellipsis whitespace-nowrap">
-                    <a v-if="form.external_link" :href="form.external_link" target="_blank"
+                    <a v-if="form.external_link" :href="form.external_link" target="_blank" rel="noopener noreferrer"
                         class="text-emerald-600 hover:text-emerald-700 underline flex items-center gap-1">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                             stroke="currentColor" class="w-4 h-4">

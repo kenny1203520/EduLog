@@ -9,6 +9,8 @@
     "cancel": "取消",
     "confirm": "確認",
     "close": "關閉",
+    "reset": "還原",
+    "discard": "捨棄",
     "delete": "刪除",
     "deleted": "已刪除",
     "edit": "編輯",
@@ -80,7 +82,14 @@
     "show_less": "減少顯示",
     "system_managed": "系統管理",
     "language": "語言",
+    "choose_language": "選擇語言",
+    "choose_language_hint": "選擇 EduLog 介面所使用的語言。",
+    "language_descriptions": {
+        "zh-TW": "繁體中文",
+        "en": "英文"
+    },
     "time_zone": "時區",
+    "display_time_zone": "顯示時區",
     "languages": {
         "zh-TW": "繁體中文",
         "en": "English"
@@ -93,5 +102,6 @@
         "thu": "星期四",
         "fri": "星期五",
         "sat": "星期六"
-    }
+    },
+    "opens_new_tab": "在新分頁開啟"
 }

@@ -482,7 +482,7 @@ export class ReportCommandService {
     ): Promise<OccurrenceReport[]> {
         const { data: occurrence, error: occError } = await supabase
             .from('class_occurrences')
-            .select('class_session_id')
+            .select('class_session_id, occurrence_date')
             .eq('id', occurrenceId)
             .single()
 
@@ -492,17 +492,36 @@ export class ReportCommandService {
             .from('enrollments')
             .select('id')
             .eq('class_session_id', occurrence.class_session_id)
-            .eq('status', 'regular')
+            .in('status', ['regular', 'trial'])
+            .lte('start_date', occurrence.occurrence_date)
 
         if (enrollError) throw new Error(`Failed to fetch enrollments: ${enrollError.message}`)
+        if (!enrollments?.length) return ReportQueryService.getReportsByOccurrence(occurrenceId)
 
-        const reports: OccurrenceReport[] = []
+        const enrollmentIds = enrollments.map(enrollment => enrollment.id)
+        const { data: existing, error: existingError } = await supabase
+            .from('occurrence_reports')
+            .select('enrollment_id')
+            .eq('class_occurrence_id', occurrenceId)
+            .in('enrollment_id', enrollmentIds)
 
-        for (const enrollment of enrollments) {
-            const report = await this.getOrCreateReport(enrollment.id, occurrenceId)
-            reports.push(report)
+        if (existingError) throw new Error(existingError.message)
+        const existingIds = new Set((existing || []).map(report => report.enrollment_id))
+        const missingIds = enrollmentIds.filter(id => !existingIds.has(id))
+
+        if (missingIds.length > 0) {
+            const payloads = await Promise.all(missingIds.map(enrollmentId =>
+                ReportLifecyclePolicy.buildInitialReportPayload(enrollmentId, occurrenceId)
+            ))
+            const { error: insertError } = await supabase
+                .from('occurrence_reports')
+                .upsert(payloads, {
+                    onConflict: 'enrollment_id,class_occurrence_id',
+                    ignoreDuplicates: true
+                })
+            if (insertError) throw new Error(`Failed to ensure occurrence reports: ${insertError.message}`)
         }
 
-        return reports
+        return ReportQueryService.getReportsByOccurrence(occurrenceId)
     }
 }

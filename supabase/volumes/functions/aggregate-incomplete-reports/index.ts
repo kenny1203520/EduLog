@@ -29,7 +29,8 @@ serve(async (req: Request) => {
 
   const url = new URL(req.url)
   const daysBack = Number(url.searchParams.get('daysBack') || '90')
-  const scope = url.searchParams.get('scope') === 'my_present' ? 'my_present' : 'all'
+  const requestedScope = url.searchParams.get('scope')
+  const scope = requestedScope === 'my_present' || requestedScope === 'my_notifications' ? requestedScope : 'all'
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
 
@@ -54,7 +55,7 @@ serve(async (req: Request) => {
     const userId = userRes.data.user.id
     let teacherId = ''
     let teacherUserId = ''
-    if (scope === 'my_present') {
+    if (scope === 'my_present' || scope === 'my_notifications') {
       const { data: teacher, error: teacherError } = await client
         .from('teachers')
         .select('id, user_id')
@@ -64,7 +65,7 @@ serve(async (req: Request) => {
       if (teacherError) throw teacherError
       teacherId = teacher?.id || ''
       teacherUserId = teacher?.user_id || userId
-      if (!teacherId) {
+      if (scope === 'my_present' && !teacherId) {
         return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
     }
@@ -91,6 +92,8 @@ serve(async (req: Request) => {
     if (error) throw error
     if (!data) return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
+    const permissionCache = new Map<string, { is_allowed: boolean; is_denied: boolean; policy_configured: boolean }>()
+
     const results: any[] = []
     for (const report of data) {
       const hasContent = !!(report.content && report.content.trim().length > 0)
@@ -103,17 +106,45 @@ serve(async (req: Request) => {
       if (!isIncomplete) continue
 
       const occ = report.class_occurrences
+      const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
+      const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
       if (scope === 'my_present') {
-        if (!isTeacherPresentForScope(
+        if (!isTeacherPresentForScope(teacherId, teacherUserId, occ?.teacher_ids || [], occ?.teacher_attendance || {})) continue
+      }
+      if (scope === 'my_notifications') {
+        const classroomId = classroom?.id || session?.classroom_id || null
+        const sessionId = session?.id || null
+        const policyKey = [classroomId, sessionId, occ?.occurrence_date].join(':')
+        let decision = permissionCache.get(policyKey)
+        if (!decision) {
+          const { data: resolved, error: resolveError } = await client.rpc('resolve_user_permission', {
+            p_user_id: userId,
+            p_permission_key: 'reports.incomplete.receive',
+            p_classroom_id: classroomId,
+            p_class_session_id: sessionId,
+            p_effective_date: occ?.occurrence_date
+          })
+          if (resolveError) throw resolveError
+          decision = (Array.isArray(resolved) ? resolved[0] : resolved) || {
+            is_allowed: false,
+            is_denied: false,
+            policy_configured: false
+          }
+          permissionCache.set(policyKey, decision)
+        }
+
+        if (decision.policy_configured) {
+          if (!decision.is_allowed || decision.is_denied) continue
+        } else if (!isTeacherPresentForScope(
           teacherId,
           teacherUserId,
           occ?.teacher_ids || [],
-          occ?.teacher_attendance || {},
-        )) continue
+          occ?.teacher_attendance || {}
+        )) {
+          // Backward compatibility until an administrator configures a policy for this hierarchy.
+          continue
+        }
       }
-
-      const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
-      const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
       const student = Array.isArray(report.enrollments?.students) ? report.enrollments.students[0] : report.enrollments?.students
 
       results.push({

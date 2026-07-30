@@ -117,7 +117,7 @@
                         </button>
                     </div>
                     <!-- Enrollment External Link Button -->
-                    <a v-if="initialEnrollmentExternalLink" :href="initialEnrollmentExternalLink" target="_blank"
+                    <a v-if="initialEnrollmentExternalLink" :href="initialEnrollmentExternalLink" target="_blank" rel="noopener noreferrer"
                         class="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -139,7 +139,7 @@
                 <div class="flex gap-2">
                     <input type="url" v-model="reportExternalLink" placeholder="https://..."
                         class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
-                    <a v-if="reportExternalLink" :href="reportExternalLink" target="_blank"
+                    <a v-if="reportExternalLink" :href="reportExternalLink" target="_blank" rel="noopener noreferrer"
                         class="flex items-center justify-center w-10 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-600">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
