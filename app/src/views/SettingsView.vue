@@ -5,6 +5,7 @@ import { DateUtils } from '@/utils/DateUtils'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
 import TeacherRoleSettings from '@/components/settings/TeacherRoleSettings.vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 
 const preferences = usePreferencesStore()
@@ -236,20 +237,7 @@ onMounted(() => {
                         <div class="space-y-4 pt-4 border-t border-gray-50">
                             <label class="text-sm font-black text-gray-900 uppercase tracking-widest block">{{
                                 $t('settings.appearance.language') }}</label>
-                            <div class="grid grid-cols-2 gap-4">
-                                <button @click="preferences.locale = 'zh-TW'" :class="[
-                                    'py-4 rounded-2xl font-black transition-all border-2',
-                                    preferences.locale === 'zh-TW' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'
-                                ]">
-                                    繁體中文
-                                </button>
-                                <button @click="preferences.locale = 'en'" :class="[
-                                    'py-4 rounded-2xl font-black transition-all border-2',
-                                    preferences.locale === 'en' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'
-                                ]">
-                                    English
-                                </button>
-                            </div>
+                            <LanguageSwitcher full-width label-on-mobile align="left" />
                         </div>
                     </div>
                 </section>

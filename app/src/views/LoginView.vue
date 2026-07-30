@@ -3,10 +3,9 @@ import { ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 
 const { t } = useI18n()
-const preferences = usePreferencesStore()
 
 const email = ref('')
 const password = ref('')
@@ -55,19 +54,9 @@ async function handleLogin() {
                 class="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-emerald-200 transform hover:rotate-12 transition-transform cursor-pointer overflow-hidden border-4 border-white">
                 <img src="/pwa-192x192.png" alt="EduLog Logo" class="w-full h-full object-cover" />
             </router-link>
-
             <!-- Language Switcher -->
-            <div class="flex gap-1 text-[10px] font-black bg-gray-100/50 backdrop-blur-md rounded-xl p-1 mb-6 uppercase tracking-wider">
-                <button @click="preferences.locale = 'zh-TW'" type="button"
-                    :class="{ 'bg-white shadow-sm text-emerald-600': preferences.locale === 'zh-TW', 'text-gray-400 hover:text-gray-600': preferences.locale !== 'zh-TW' }"
-                    class="px-3 py-1 rounded-lg transition-all active:scale-95">
-                    中文
-                </button>
-                <button @click="preferences.locale = 'en'" type="button"
-                    :class="{ 'bg-white shadow-sm text-emerald-600': preferences.locale === 'en', 'text-gray-400 hover:text-gray-600': preferences.locale !== 'en' }"
-                    class="px-3 py-1 rounded-lg transition-all active:scale-95">
-                    English
-                </button>
+            <div class="mb-6">
+                <LanguageSwitcher align="left" />
             </div>
 
             <h1 class="text-4xl font-black text-gray-900 mb-2 tracking-tight text-center">{{ $t('auth.login_title') }}

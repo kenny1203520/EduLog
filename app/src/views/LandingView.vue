@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/useAuthStore'
-import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { computed } from 'vue'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 
 const auth = useAuthStore()
-const preferences = usePreferencesStore()
 
 const getStartedRoute = computed(() => auth.isAuthenticated ? '/dashboard' : '/login')
 </script>
@@ -22,18 +21,7 @@ const getStartedRoute = computed(() => auth.isAuthenticated ? '/dashboard' : '/l
                 <span class="text-3xl font-black text-gray-900 tracking-tighter">EduLog</span>
             </router-link>
             <div class="flex items-center gap-4">
-                <div class="hidden md:flex gap-1 text-xs font-bold bg-gray-100 rounded-xl p-1">
-                    <button @click="preferences.locale = 'zh-TW'"
-                        :class="{ 'bg-white shadow-sm text-emerald-600': preferences.locale === 'zh-TW', 'text-gray-400 hover:text-gray-600': preferences.locale !== 'zh-TW' }"
-                        class="px-3 py-1.5 rounded-lg transition-all active:scale-95">
-                        中文
-                    </button>
-                    <button @click="preferences.locale = 'en'"
-                        :class="{ 'bg-white shadow-sm text-emerald-600': preferences.locale === 'en', 'text-gray-400 hover:text-gray-600': preferences.locale !== 'en' }"
-                        class="px-3 py-1.5 rounded-lg transition-all active:scale-95">
-                        English
-                    </button>
-                </div>
+                <LanguageSwitcher align="right" />
                 <router-link to="/login"
                     class="px-8 py-3 bg-gray-900 text-white rounded-2xl font-black hover:bg-emerald-600 transition-all shadow-xl hover:shadow-emerald-200 active:scale-95">
                     {{ $t('auth.submit') }}
