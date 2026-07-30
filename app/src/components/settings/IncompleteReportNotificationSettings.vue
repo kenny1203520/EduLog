@@ -9,16 +9,8 @@ import {
     INCOMPLETE_REPORT_PERMISSION,
     PermissionPolicyService
 } from '@/services/rbac/PermissionPolicyService'
-import {
-    PermissionPolicyEvaluator,
-    type PermissionDTO,
-    type PolicyEffect,
-    type PolicyScope,
-    type RoleDTO,
-    type RolePermissionPolicyDTO
-} from '@/models/Rbac'
-
-type PolicySelection = PolicyEffect | 'inherit'
+import type { PermissionDTO, PolicyScope, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
+import ScopedRolePolicyEditor, { type PolicySelection } from '@/components/settings/ScopedRolePolicyEditor.vue'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -33,7 +25,6 @@ const policies = ref<RolePermissionPolicyDTO[]>([])
 const selections = ref<Record<string, PolicySelection>>({})
 const loading = ref(false)
 const saving = ref(false)
-const policySelections: PolicySelection[] = ['inherit', 'allow', 'deny']
 
 const filteredSessions = computed(() => !classroomId.value
     ? sessions.value
@@ -55,37 +46,6 @@ function syncSelections() {
     }))
 }
 
-function inheritedFor(roleId: string) {
-    const inheritedPolicies = policies.value.filter(policy => !(policy.role_id === roleId && isCurrentScope(policy)))
-    return PermissionPolicyEvaluator.resolveRole(inheritedPolicies, roleId, {
-        classroomId: classroomId.value || null,
-        classSessionId: sessionId.value || null
-    })
-}
-
-function effectiveFor(roleId: string) {
-    const local = selections.value[roleId] || 'inherit'
-    if (local !== 'inherit') return { effect: local, source: scopeType.value }
-    return inheritedFor(roleId)
-}
-
-function sourceLabel(source: PolicyScope | null) {
-    return source ? t('settings.incomplete_notifications.' + source) : t('settings.incomplete_notifications.no_policy')
-}
-
-function hierarchyHasPolicy() {
-    return policies.value.some(policy => policy.scope_type === 'system'
-        || (policy.scope_type === 'classroom' && policy.scope_id === classroomId.value)
-        || (policy.scope_type === 'class_session' && policy.scope_id === sessionId.value))
-}
-
-function effectiveLabel(roleId: string) {
-    const effect = effectiveFor(roleId).effect
-    if (effect) return t('settings.incomplete_notifications.' + effect)
-    return hierarchyHasPolicy()
-        ? t('settings.incomplete_notifications.no_policy')
-        : t('settings.incomplete_notifications.legacy_fallback')
-}
 
 async function load() {
     loading.value = true
@@ -178,36 +138,10 @@ onMounted(load)
                     </select>
                 </label>
             </div>
-
             <div v-if="loading" class="py-8 text-center font-bold text-gray-400">{{ $t('common.loading') }}</div>
-            <div v-else class="space-y-3">
-                <article v-for="role in roles" :key="role.id" class="grid gap-3 rounded-2xl border border-gray-100 bg-gray-50 p-4 lg:grid-cols-[minmax(10rem,1fr)_auto_minmax(12rem,1fr)] lg:items-center">
-                    <div class="min-w-0">
-                        <p class="truncate font-black text-gray-800">{{ role.name }}</p>
-                        <p class="text-xs font-bold text-gray-400">
-                            {{ $t('settings.incomplete_notifications.effective') }}:
-                            <span :class="effectiveFor(role.id).effect === 'deny' ? 'text-red-600' : effectiveFor(role.id).effect === 'allow' ? 'text-emerald-600' : 'text-gray-500'">
-                                {{ effectiveLabel(role.id) }}
-                            </span>
-                            · {{ sourceLabel(effectiveFor(role.id).source) }}
-                        </p>
-                    </div>
-                    <div class="inline-flex rounded-xl bg-white p-1 shadow-sm" role="group">
-                        <button v-for="effect in policySelections" :key="effect" type="button"
-                            @click="selections[role.id] = effect" :disabled="!canSave"
-                            :class="['rounded-lg px-3 py-2 text-xs font-black transition disabled:opacity-40', selections[role.id] === effect
-                                ? effect === 'allow' ? 'bg-emerald-600 text-white' : effect === 'deny' ? 'bg-red-600 text-white' : 'bg-gray-700 text-white'
-                                : 'text-gray-500 hover:bg-gray-100']">
-                            {{ $t('settings.incomplete_notifications.' + effect) }}
-                        </button>
-                    </div>
-                    <p class="text-xs font-bold text-gray-400">
-                        {{ $t('settings.incomplete_notifications.inherited') }}:
-                        {{ inheritedFor(role.id).effect ? $t('settings.incomplete_notifications.' + inheritedFor(role.id).effect) : $t('settings.incomplete_notifications.no_policy') }}
-                        · {{ sourceLabel(inheritedFor(role.id).source) }}
-                    </p>
-                </article>
-            </div>
+            <ScopedRolePolicyEditor v-else v-model="selections" :roles="roles" :policies="policies"
+                :scope-type="scopeType" :scope-id="scopeId" :classroom-id="classroomId || null"
+                :class-session-id="sessionId || null" :disabled="!canSave || saving" />
 
             <div class="flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <p class="text-xs font-bold leading-5 text-amber-800">{{ $t('settings.incomplete_notifications.inheritance_hint') }}</p>
