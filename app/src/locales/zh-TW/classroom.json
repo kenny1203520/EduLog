@@ -271,5 +271,8 @@
     "retry_occurrence_load": "重新載入",
     "attendance_saved": "已儲存",
     "attendance_action_disabled": "目前無法修改點名狀態",
-    "attendance_select_student": "選取學生"
+    "attendance_select_student": "選取學生",
+    "student_roster_title": "學生列表",
+    "student_roster_subtitle": "快速掌握出席、今日課程與學習進度",
+    "student_filter_result": "顯示學生"
 }

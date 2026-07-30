@@ -29,6 +29,7 @@ import { copyRichTextToClipboard } from '@/utils/clipboard'
 import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import QuickAttendancePanel, { type QuickAttendanceStatus } from '@/components/classroom/QuickAttendancePanel.vue'
+import StudentRosterPanel, { type StudentRosterItem } from '@/components/classroom/StudentRosterPanel.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
@@ -358,17 +359,6 @@ function buildStudentProgressSummary(enrollment: Enrollment, reports: Occurrence
             : t('classroom.progress_no_record'),
         latestProgressStatus: formatProgressRange(latestAttendedReport),
         latestProgressTone: getProgressTone(latestAttendedReport)
-    }
-}
-
-function getProgressToneClasses(tone: ProgressTone): string {
-    switch (tone) {
-        case 'completed':
-            return 'bg-emerald-50 text-emerald-700 border-emerald-200'
-        case 'incomplete':
-            return 'bg-rose-50 text-rose-700 border-rose-200 ring-1 ring-rose-100'
-        default:
-            return 'bg-slate-50 text-slate-500 border-slate-200'
     }
 }
 
@@ -794,12 +784,6 @@ async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
     }
 }
 
-async function toggleAttendance(enrId: string) {
-    const current = reportMap.value.get(enrId)?.attendanceStatus || 'pending'
-    const next: QuickAttendanceStatus = current === 'pending' ? 'present' : current === 'present' ? 'absent' : 'pending'
-    await setAttendance(enrId, next)
-}
-
 async function batchSetAttendance(status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
         toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
@@ -831,6 +815,49 @@ const quickAttendanceStudents = computed(() => filteredEnrollments.value.map(enr
     status: (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus,
     isSaving: savingMap.value.get(enrollment.id!) === true
 })))
+
+const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollments.value.map(enrollment => {
+    const progress = getStudentProgressSummary(enrollment.id)
+    const today = getTodayCourseSummary(enrollment)
+    const attendanceStatus = (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus
+    return {
+        id: enrollment.id!,
+        studentId: enrollment.studentId || '',
+        name: enrollment.studentName || t('classroom.koding_unnamed_account'),
+        initials: enrollment.studentName?.trim().charAt(0) || '?',
+        currentCourse: progress.currentCourse,
+        enrollmentStatus: t('student.internal_courses.status_' + enrollment.status),
+        enrollmentTone: enrollment.status === 'regular' ? 'regular' : enrollment.status === 'trial' ? 'trial' : 'inactive',
+        isGuest: Boolean((enrollment as any).isGuest),
+        attendanceStatus,
+        attendanceLabel: t('attendance.' + attendanceStatus),
+        isSavingAttendance: savingMap.value.get(enrollment.id!) === true,
+        todayTitle: today.title,
+        todayProgress: today.chapterProgress,
+        todayCompletion: today.completionStatus,
+        todayTone: today.tone,
+        highestTitle: progress.highestProgressTitle,
+        highestStatus: progress.highestProgressStatus,
+        highestTone: progress.highestProgressTone,
+        latestTitle: progress.latestProgressTitle,
+        latestStatus: progress.latestProgressStatus,
+        latestTone: progress.latestProgressTone,
+        isEditing: selectedEnrollmentId.value === enrollment.id && showSplitView.value
+    }
+}))
+
+function openStudentReports(enrollmentId: string) {
+    router.push({ name: 'lesson-reports', params: { enrollmentId } })
+}
+
+function openStudentProfile(studentId: string) {
+    if (studentId) router.push({ name: 'student-profile', params: { id: studentId } })
+}
+
+function openStudentKodingCheck(enrollmentId: string) {
+    const enrollment = enrollments.value.find(item => item.id === enrollmentId)
+    if (enrollment) openKodingCheck(enrollment)
+}
 
 const attendanceTemplateVariables = computed(() => {
     const previewNames = getAttendancePreviewNames()
@@ -1927,443 +1954,19 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     </div>
 
                     <!-- Responsive Card List -->
-                    <div class="grid grid-cols-1 gap-4" :class="showSplitView ? '2xl:hidden' : 'xl:hidden'">
-                        <div v-for="e in filteredEnrollments" :key="e.id" :data-enrollment-id="e.id"
-                            class="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-                            <div class="space-y-3">
-                                <!-- A. Header -->
-                                <div class="flex items-start justify-between gap-3">
-                                    <div class="flex items-center gap-3 min-w-0">
-                                        <div
-                                            class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-xl shrink-0">
-                                            {{ e.studentName?.charAt(0) }}
-                                        </div>
-                                        <div class="min-w-0">
-                                            <div class="font-black text-gray-900 text-lg leading-tight truncate">{{
-                                                e.studentName }}</div>
-                                        </div>
-                                    </div>
-
-                                    <div class="flex flex-col items-end gap-2 shrink-0">
-                                        <span v-if="(e as any).isGuest"
-                                            class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border bg-purple-50 text-purple-700 border-purple-100">
-                                            {{ $t('common.rescheduled') }}
-                                        </span>
-                                        <span
-                                            class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border"
-                                            :class="e.status === 'regular'
-                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                                : (e.status === 'trial'
-                                                    ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                                    : 'bg-gray-50 text-gray-400 border-gray-200')">
-                                            {{ $t('student.internal_courses.status_' + e.status) }}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <!-- B. Current Course -->
-                                <div class="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-                                    <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
-                                        {{ $t('classroom.current_course') }}</div>
-                                    <div class="mt-1 text-sm font-bold text-slate-900 leading-snug break-words">
-                                        {{ getStudentProgressSummary(e.id).currentCourse }}</div>
-                                </div>
-
-                                <!-- C. Today Course Summary -->
-                                <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
-                                    <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
-                                        {{ $t('classroom.today_course_summary') }}</div>
-                                    <div class="text-[15px] font-black text-slate-900 break-words">
-                                        {{ getTodayCourseSummary(e).title }}</div>
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="text-[11px] font-bold text-slate-500">{{
-                                            $t('classroom.chapter_progress') }}</span>
-                                        <span class="text-xs font-black text-slate-800">{{
-                                            getTodayCourseSummary(e).chapterProgress }}</span>
-                                    </div>
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="text-[11px] font-bold text-slate-500">{{
-                                            $t('classroom.completion_status') }}</span>
-                                        <span
-                                            class="inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-black tracking-wide"
-                                            :class="getProgressToneClasses(getTodayCourseSummary(e).tone)">
-                                            {{ getTodayCourseSummary(e).completionStatus }}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <!-- D. Learning Snapshot -->
-                                <div class="rounded-2xl border border-slate-200 bg-white p-3 space-y-2">
-                                    <div class="text-[12px] font-black uppercase tracking-[0.22em] text-slate-400">
-                                        {{ $t('classroom.learning_snapshot') }}</div>
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="min-w-0">
-                                            <div class="text-[11px] font-bold text-slate-500">{{
-                                                $t('classroom.highest_progress') }}</div>
-                                            <div class="text-xs font-black text-slate-900 break-words">{{
-                                                getStudentProgressSummary(e.id).highestProgressTitle }}</div>
-                                        </div>
-                                        <span
-                                            class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wide"
-                                            :class="getProgressToneClasses(getStudentProgressSummary(e.id).highestProgressTone)">
-                                            {{ getStudentProgressSummary(e.id).highestProgressStatus }}
-                                        </span>
-                                    </div>
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="min-w-0">
-                                            <div class="text-[11px] font-bold text-slate-500">{{
-                                                $t('classroom.latest_progress') }}</div>
-                                            <div class="text-xs font-black text-slate-900 break-words">{{
-                                                getStudentProgressSummary(e.id).latestProgressTitle }}</div>
-                                        </div>
-                                        <span
-                                            class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black tracking-wide"
-                                            :class="getProgressToneClasses(getStudentProgressSummary(e.id).latestProgressTone)">
-                                            {{ getStudentProgressSummary(e.id).latestProgressStatus }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <hr class="border-gray-50">
-
-                            <!-- Attendance Row -->
-                            <div class="flex items-center justify-between" v-if="todayOccurrence">
-                                <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
-                                    $t('attendance.status') }}</span>
-                                <div class="flex items-center gap-3">
-                                    <span class="text-sm font-bold transition-colors"
-                                        :class="reportMap.get(e.id!)?.attendanceStatus === 'present' ? 'text-emerald-600' : 'text-gray-400'">
-                                        {{ reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' +
-                                            reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending') }}
-                                    </span>
-                                    <button type="button" @click="toggleAttendance(e.id!)"
-                                        class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center"
-                                        :class="{
-                                            'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
-                                            'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
-                                            'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
-                                        }" :title="$t('attendance.status')" :disabled="savingMap.has(e.id!) || isOccurrenceInHoliday">
-                                        <!-- Present Icon (Check) -->
-                                        <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
-                                            xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
-                                            fill="currentColor">
-                                            <path fill-rule="evenodd"
-                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                clip-rule="evenodd" />
-                                        </svg>
-
-                                        <!-- Absent Icon (X) -->
-                                        <svg v-else-if="reportMap.get(e.id!)?.attendanceStatus === 'absent'"
-                                            xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
-                                            fill="currentColor">
-                                            <path fill-rule="evenodd"
-                                                d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                                clip-rule="evenodd" />
-                                        </svg>
-
-                                        <!-- Pending Icon (Circle/Question) -->
-                                        <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Actions Grid -->
-                            <div class="space-y-2 pt-2">
-                                <div class="grid grid-cols-2 gap-3">
-                                    <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: e.id! } }"
-                                        class="inline-flex items-center justify-center gap-2 p-3 rounded-2xl bg-emerald-600 text-white border border-emerald-700 no-underline active:scale-95 transition-all shadow-lg shadow-emerald-100">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                        </svg>
-                                        <span class="text-xs font-black tracking-wide">{{ $t('common.reports') }}</span>
-                                    </router-link>
-
-                                    <button @click.stop="toggleSplitView(e.id!)"
-                                        class="flex items-center justify-center gap-2 p-3 rounded-2xl border active:scale-95 transition-all"
-                                        :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white border-blue-700 shadow-blue-200 shadow-lg' : 'bg-blue-50 text-blue-700 border-blue-100'">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                        </svg>
-                                        <span class="text-xs font-black tracking-wide">{{ $t('common.edit') }}</span>
-                                    </button>
-                                </div>
-
-                                <button @click="openKodingCheck(e)"
-                                    class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-amber-50 text-amber-700 border border-amber-100 active:scale-95 transition-all"
-                                    :title="$t('classroom.koding_check')">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
-                                    </svg>
-                                    <span class="text-xs font-black tracking-wide">{{ $t('classroom.koding_check') }}</span>
-                                </button>
-
-                                <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
-                                    class="inline-flex w-full items-center justify-center gap-2 p-3 rounded-2xl bg-gray-50 text-gray-500 border border-gray-100 no-underline active:scale-95 transition-all"
-                                    :title="$t('classroom.view_profile')">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                                    </svg>
-                                    <span class="text-xs font-bold">{{ $t('common.profile') }}</span>
-                                </router-link>
-                            </div>
-                        </div>
-
-                        <!-- Empty State Mobile -->
-                        <div v-if="filteredEnrollments.length === 0"
-                            class="flex flex-col items-center justify-center gap-3 py-12 text-gray-300">
-                            <span class="font-black italic tracking-widest">{{ allRosterEnrollments.length === 0
-                                ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students') }}</span>
-                            <button v-if="allRosterEnrollments.length > 0 && hasActiveStudentFilters" type="button" @click="clearStudentFilters"
-                                class="rounded-xl bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-700">
-                                {{ $t('classroom.clear_student_filters') }}
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Desktop Table List -->
-                    <div class="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-x-auto"
-                        :class="showSplitView ? 'hidden 2xl:block' : 'hidden xl:block'">
-                        <table class="w-full min-w-[1020px] text-left border-collapse">
-                            <thead>
-                                <tr class="bg-gray-50/50">
-                                    <th class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest text-center"
-                                        v-if="todayOccurrence">{{ $t('attendance.status') }}</th>
-                                    <th
-                                        class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">
-                                        {{
-                                            $t('classroom.student_name') }}</th>
-                                    <th
-                                        class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">
-                                        {{
-                                            $t('classroom.enrollment_status') }}</th>
-                                    <th
-                                        class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest">
-                                        {{
-                                            $t('classroom.today_course_summary') }}</th>
-                                    <th
-                                        class="px-3 lg:px-4 py-4 lg:py-6 text-[12px] font-black text-gray-400 uppercase tracking-widest text-right w-[96px] xl:w-[176px]">
-                                        {{ $t('classroom.actions') }}</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-50">
-                                <tr v-for="e in filteredEnrollments" :key="e.id" :data-enrollment-id="e.id"
-                                    class="hover:bg-emerald-50/20 transition-colors group">
-                                    <!-- Attendance Column -->
-                                    <td class="px-3 lg:px-4 py-4 lg:py-6 text-center" v-if="todayOccurrence">
-                                        <button type="button" @click="toggleAttendance(e.id!)"
-                                            class="p-2 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center mx-auto"
-                                            :class="{
-                                                'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 focus:ring-emerald-500': reportMap.get(e.id!)?.attendanceStatus === 'present',
-                                                'bg-red-100 text-red-800 hover:bg-red-200 focus:ring-red-500': reportMap.get(e.id!)?.attendanceStatus === 'absent',
-                                                'bg-gray-100 text-gray-400 hover:bg-gray-200 focus:ring-gray-300': !reportMap.get(e.id!)?.attendanceStatus || reportMap.get(e.id!)?.attendanceStatus === 'pending'
-                                            }"
-                                            :title="$t('attendance.status') + ': ' + (reportMap.get(e.id!)?.attendanceStatus ? $t('attendance.' + reportMap.get(e.id!)?.attendanceStatus) : $t('attendance.pending'))"
-                                            :disabled="savingMap.has(e.id!) || isOccurrenceInHoliday">
-                                            <!-- Present Icon (Check) -->
-                                            <svg v-if="reportMap.get(e.id!)?.attendanceStatus === 'present'"
-                                                xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
-                                                fill="currentColor">
-                                                <path fill-rule="evenodd"
-                                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                                    clip-rule="evenodd" />
-                                            </svg>
-
-                                            <!-- Absent Icon (X) -->
-                                            <svg v-else-if="reportMap.get(e.id!)?.attendanceStatus === 'absent'"
-                                                xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20"
-                                                fill="currentColor">
-                                                <path fill-rule="evenodd"
-                                                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                                                    clip-rule="evenodd" />
-                                            </svg>
-
-                                            <!-- Pending Icon (Circle/Question) -->
-                                            <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                            </svg>
-                                        </button>
-                                    </td>
-
-                                    <td class="px-3 lg:px-4 py-4 lg:py-6">
-                                        <div class="flex items-center gap-3 lg:gap-4">
-                                            <div
-                                                class="w-10 lg:w-12 h-10 lg:h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-lg lg:text-xl shrink-0">
-                                                {{ e.studentName?.charAt(0) }}
-                                            </div>
-                                            <div class="min-w-0">
-                                                <div class="font-black text-gray-900 text-base lg:text-lg">{{
-                                                    e.studentName }}</div>
-                                                <div
-                                                    class="mt-0.5 lg:mt-1 text-[9px] lg:text-[10px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-gray-400 whitespace-nowrap">
-                                                    {{ $t('classroom.current_course') }}</div>
-                                                <div
-                                                    class="mt-0.5 lg:mt-1 text-xs lg:text-sm font-bold text-gray-700 leading-snug break-words">
-                                                    {{ getStudentProgressSummary(e.id).currentCourse }}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-3 lg:px-4 py-4 lg:py-6">
-                                        <div class="flex flex-col lg:flex-row gap-2 lg:gap-1">
-                                            <span v-if="(e as any).isGuest"
-                                                class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border bg-purple-50 text-purple-700 border-purple-100 whitespace-nowrap inline-block lg:inline">
-                                                {{ $t('common.rescheduled') }}
-                                            </span>
-                                            <span
-                                                class="px-2 lg:px-3 py-1 rounded-xl text-[9px] lg:text-[10px] font-black uppercase tracking-wider lg:tracking-widest border whitespace-nowrap inline-block lg:inline"
-                                                :class="e.status === 'regular'
-                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                                                    : (e.status === 'trial'
-                                                        ? 'bg-amber-50 text-amber-700 border-amber-100'
-                                                        : 'bg-gray-50 text-gray-400 border-gray-200')">
-                                                {{ $t('student.internal_courses.status_' + e.status) }}
-                                            </span>
-                                        </div>
-                                    </td>
-
-                                    <td class="px-3 lg:px-4 py-4 lg:py-6">
-                                        <div
-                                            class="rounded-2xl border border-slate-200 bg-white p-2 lg:p-3 space-y-2 lg:space-y-3 min-w-[220px] lg:min-w-[200px]">
-                                            <div
-                                                class="text-[9px] lg:text-[11px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
-                                                {{ $t('classroom.today_course_summary') }}</div>
-                                            <div class="text-xs lg:text-sm font-black text-slate-900 break-words">
-                                                {{ getTodayCourseSummary(e).title }}</div>
-                                            <div class="flex items-center justify-between gap-1.5 lg:gap-2">
-                                                <span class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{
-                                                    $t('classroom.chapter_progress') }}</span>
-                                                <span
-                                                    class="text-[10px] lg:text-xs font-black text-slate-800 shrink-0">{{
-                                                        getTodayCourseSummary(e).chapterProgress }}</span>
-                                            </div>
-                                            <div class="flex items-center justify-between gap-1.5 lg:gap-2">
-                                                <span class="text-[10px] lg:text-[11px] font-bold text-slate-500">{{
-                                                    $t('classroom.completion_status') }}</span>
-                                                <span
-                                                    class="inline-flex items-center rounded-full border px-2 lg:px-2.5 py-0.5 lg:py-1 text-[10px] lg:text-[11px] font-black tracking-wide shrink-0"
-                                                    :class="getProgressToneClasses(getTodayCourseSummary(e).tone)">
-                                                    {{ getTodayCourseSummary(e).completionStatus }}
-                                                </span>
-                                            </div>
-
-                                            <div class="border-t border-slate-100 pt-2 lg:pt-3 space-y-2">
-                                                <div
-                                                    class="text-[9px] lg:text-[11px] font-black uppercase tracking-[0.18em] lg:tracking-[0.22em] text-slate-400">
-                                                    {{ $t('classroom.learning_snapshot') }}</div>
-
-                                                <div class="flex items-start justify-between gap-1.5 lg:gap-2">
-                                                    <div class="min-w-0">
-                                                        <div
-                                                            class="text-[10px] lg:text-[11px] font-bold text-slate-500">
-                                                            {{ $t('classroom.highest_progress') }}</div>
-                                                        <div
-                                                            class="text-[11px] lg:text-xs font-black text-slate-900 break-words">
-                                                            {{ getStudentProgressSummary(e.id).highestProgressTitle }}
-                                                        </div>
-                                                    </div>
-                                                    <span
-                                                        class="shrink-0 inline-flex items-center rounded-full border px-1.5 lg:px-2 py-0.5 text-[9px] lg:text-[10px] font-black tracking-wider lg:tracking-wide"
-                                                        :class="getProgressToneClasses(getStudentProgressSummary(e.id).highestProgressTone)">
-                                                        {{ getStudentProgressSummary(e.id).highestProgressStatus }}
-                                                    </span>
-                                                </div>
-
-                                                <div class="flex items-start justify-between gap-1.5 lg:gap-2">
-                                                    <div class="min-w-0">
-                                                        <div
-                                                            class="text-[10px] lg:text-[11px] font-bold text-slate-500">
-                                                            {{ $t('classroom.latest_progress') }}</div>
-                                                        <div
-                                                            class="text-[11px] lg:text-xs font-black text-slate-900 break-words">
-                                                            {{ getStudentProgressSummary(e.id).latestProgressTitle }}
-                                                        </div>
-                                                    </div>
-                                                    <span
-                                                        class="shrink-0 inline-flex items-center rounded-full border px-1.5 lg:px-2 py-0.5 text-[9px] lg:text-[10px] font-black tracking-wider lg:tracking-wide"
-                                                        :class="getProgressToneClasses(getStudentProgressSummary(e.id).latestProgressTone)">
-                                                        {{ getStudentProgressSummary(e.id).latestProgressStatus }}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td>
-
-                                    <td class="px-3 lg:px-4 py-4 lg:py-6 text-right align-top">
-                                        <div
-                                            class="flex flex-col xl:flex-row justify-end items-end xl:items-center gap-1.5 lg:gap-2">
-                                            <router-link
-                                                :to="{ name: 'lesson-reports', params: { enrollmentId: e.id! } }"
-                                                class="p-2.5 xl:p-3 rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all active:scale-90"
-                                                :title="$t('classroom.view_reports')">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                                    viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                                </svg>
-                                            </router-link>
-                                            <button @click="toggleSplitView(e.id!)"
-                                                class="p-2.5 xl:p-3 rounded-2xl border border-gray-100 shadow-sm transition-all active:scale-90"
-                                                :class="selectedEnrollmentId === e.id && showSplitView ? 'bg-blue-600 text-white shadow-blue-200' : 'bg-white text-gray-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-100'"
-                                                :title="$t('classroom.quick_edit')">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                                    viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                </svg>
-                                            </button>
-                                            <button @click="openKodingCheck(e)"
-                                                class="p-2.5 xl:p-3 rounded-2xl bg-amber-50 text-amber-600 hover:text-amber-700 hover:bg-amber-100 border border-amber-100 transition-all active:scale-90"
-                                                :title="$t('classroom.koding_check')">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                                    viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M9.75 17L8.25 12l1.5-5M14.25 7l1.5 5-1.5 5M4.5 12h15" />
-                                                </svg>
-                                            </button>
-                                            <router-link :to="{ name: 'student-profile', params: { id: e.studentId } }"
-                                                class="p-2.5 xl:p-3 rounded-2xl bg-gray-50 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 border border-gray-100 hover:border-emerald-100 transition-all active:scale-90"
-                                                :title="$t('classroom.view_profile')">
-                                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                                    viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2"
-                                                        d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                                                </svg>
-                                            </router-link>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr v-if="filteredEnrollments.length === 0">
-                                    <td :colspan="todayOccurrence ? 5 : 4"
-                                        class="px-4 lg:px-8 py-12 lg:py-20 text-center font-black italic text-gray-300 tracking-widest text-xs lg:text-base">
-                                        <span>{{ allRosterEnrollments.length === 0 ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students') }}</span>
-                                        <button v-if="allRosterEnrollments.length > 0 && hasActiveStudentFilters" type="button" @click="clearStudentFilters"
-                                            class="ml-3 rounded-xl bg-emerald-50 px-4 py-2 text-xs font-black not-italic text-emerald-700">
-                                            {{ $t('classroom.clear_student_filters') }}
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                    <StudentRosterPanel
+                        :items="studentRosterItems"
+                        :result-count="filteredEnrollments.length"
+                        :has-occurrence="Boolean(todayOccurrence)"
+                        :attendance-disabled="isOccurrenceInHoliday || isOccurrenceLoading"
+                        :empty-message="allRosterEnrollments.length === 0 ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students')"
+                        :show-clear-filters="allRosterEnrollments.length > 0 && hasActiveStudentFilters"
+                        @set-attendance="setAttendance"
+                        @view-reports="openStudentReports"
+                        @quick-edit="toggleSplitView"
+                        @koding-check="openStudentKodingCheck"
+                        @view-profile="openStudentProfile"
+                        @clear-filters="clearStudentFilters" />
                 </div>
 
                 <!-- RIGHT COLUMN: Report Editor -->

@@ -271,5 +271,8 @@
     "retry_occurrence_load": "Reload",
     "attendance_saved": "Saved",
     "attendance_action_disabled": "Attendance cannot be changed right now",
-    "attendance_select_student": "Select student"
+    "attendance_select_student": "Select student",
+    "student_roster_title": "Student Roster",
+    "student_roster_subtitle": "Review attendance, today’s course, and learning progress",
+    "student_filter_result": "Students shown"
 }
