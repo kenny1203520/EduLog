@@ -40,6 +40,28 @@ export class OccurrenceService {
         return OccurrenceQueryService.getOccurrencesByDateRange(startDate, endDate, sessionIds)
     }
 
+    static async getPreferredOccurrence(
+        sessionId: string,
+        referenceDate: Date
+    ): Promise<ClassOccurrence | null> {
+        return OccurrenceQueryService.getPreferredOccurrence(sessionId, referenceDate)
+    }
+
+    static async getAdjacentOccurrence(
+        sessionId: string,
+        occurrenceDate: Date,
+        direction: 'previous' | 'next'
+    ): Promise<ClassOccurrence | null> {
+        return OccurrenceQueryService.getAdjacentOccurrence(sessionId, occurrenceDate, direction)
+    }
+
+    static async getOccurrenceNavigationState(
+        sessionId: string,
+        occurrenceDate: Date
+    ): Promise<{ previous: ClassOccurrence | null; next: ClassOccurrence | null }> {
+        return OccurrenceQueryService.getOccurrenceNavigationState(sessionId, occurrenceDate)
+    }
+
     static async getOccurrenceById(occurrenceId: string): Promise<ClassOccurrence> {
         return OccurrenceQueryService.getOccurrenceById(occurrenceId)
     }

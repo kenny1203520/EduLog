@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
 import { useStudentStore } from '@/stores/useStudentStore'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
@@ -11,11 +10,9 @@ import BasePageHeader from '@/components/common/BasePageHeader.vue'
 const { t } = useI18n()
 const toast = useToast()
 const studentStore = useStudentStore()
-const router = useRouter()
 
 const showCreateModal = ref(false)
 const newStudentName = ref('')
-const newStudentGrade = ref('')
 
 onMounted(() => {
     studentStore.fetchAll(studentStore.pagination.page, studentStore.pagination.perPage)
@@ -43,15 +40,6 @@ async function handleCreateStudent() {
     await studentStore.addStudent(newStudentName.value)
     showCreateModal.value = false
     newStudentName.value = ''
-    newStudentGrade.value = ''
-}
-
-function navigateToProfile(id: string) {
-    router.push({ name: 'student-profile', params: { id } })
-}
-
-function navigateToReports(id: string) {
-    router.push({ name: 'student-all-reports', params: { id } })
 }
 
 async function copyToClipboard(text: string) {
@@ -184,20 +172,26 @@ async function copyToClipboard(text: string) {
                 </div>
 
                 <!-- Card Actions -->
-                <div class="px-5 py-4 flex gap-2">
-                    <button @click="navigateToProfile(student.id)"
-                        class="flex-1 bg-gray-50 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 py-2.5 rounded-xl text-sm font-bold transition-all border border-gray-100 hover:border-emerald-200 flex items-center justify-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                            viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                        </svg>
-                        {{ $t('common.edit') }}
-                    </button>
-                    <button @click="navigateToReports(student.id)"
-                        class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-md shadow-emerald-100 active:scale-95">
-                        {{ $t('report.list_title') }}
-                    </button>
+                <div class="space-y-2 pt-2 px-5 pb-4">
+                    <div class="grid grid-cols-2 gap-3">
+                        <router-link :to="{ name: 'student-profile', params: { id: student.id } }"
+                            class="w-full min-w-0 flex items-center justify-center gap-2 bg-gray-50 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 py-2.5 rounded-xl text-sm font-bold transition-all border border-gray-100 hover:border-emerald-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                            </svg>
+                            <span class="text-xs font-black tracking-wide">
+                                {{ $t('common.view') }}
+                            </span>
+                        </router-link>
+                        <router-link :to="{ name: 'student-all-reports', params: { id: student.id } }"
+                            class="w-full min-w-0 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-md shadow-emerald-100 active:scale-95">
+                            <span class="text-xs font-black tracking-wide">
+                                {{ $t('report.list_title') }}
+                            </span>
+                        </router-link>
+                    </div>
                 </div>
 
                 <!-- Card Footer -->
@@ -262,14 +256,6 @@ async function copyToClipboard(text: string) {
                         <input v-model="newStudentName" type="text"
                             class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold placeholder-gray-300"
                             required :placeholder="$t('student.name')" />
-                    </div>
-
-                    <div class="space-y-2">
-                        <label class="block text-[10px] font-black text-emerald-600 uppercase tracking-widest ml-1">{{
-                            $t('student.grade') }}</label>
-                        <input v-model="newStudentGrade" type="text"
-                            class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-4 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all font-bold placeholder-gray-300"
-                            :placeholder="$t('student.grade')" />
                     </div>
 
                     <div class="flex gap-4 pt-4">

@@ -13,5 +13,32 @@
         "font_scale": "全域字體大小",
         "font_scale_hint": "調整後會立即套用到所有頁面。",
         "language": "介面語言"
+    },
+    "teacher_roles": {
+        "title": "教師職務種類",
+        "description": "管理班級教師可使用的職務；系統預設職務不可刪除。",
+        "placeholder": "新增自訂職務名稱",
+        "system": "系統職務",
+        "custom": "自訂職務",
+        "saved": "職務已新增",
+        "deleted": "職務已刪除"
+    },
+    "incomplete_notifications": {
+        "title": "未完成報告通知",
+        "description": "設定哪些班級職務會在首頁收到未完成報告提醒。",
+        "scope": "設定範圍",
+        "global": "全域預設",
+        "classroom": "指定教室",
+        "class_session": "指定班級",
+        "inheritance_hint": "每個職務依班級、教室、全系統順序採用最具體政策；同一使用者有多個職務時，不通知優先。",
+        "saved": "通知對象已儲存",
+        "system": "全系統",
+        "allow": "通知",
+        "deny": "不通知",
+        "inherit": "沿用",
+        "effective": "目前有效結果",
+        "inherited": "上層繼承結果",
+        "no_policy": "尚無政策",
+        "legacy_fallback": "沿用當日出席教師"
     }
 }

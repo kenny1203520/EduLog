@@ -198,7 +198,7 @@ export class ReportQueryService {
         }))
     }
 
-    static async getGlobalIncompleteReports(scope: 'all' | 'my_present' = 'all'): Promise<any[]> {
+    static async getGlobalIncompleteReports(scope: 'all' | 'my_present' | 'my_notifications' = 'all'): Promise<any[]> {
         // Try aggregate endpoint first
         try {
             const agg = await AggregateService.getIncompleteReportsAggregate(90, scope)
@@ -207,7 +207,8 @@ export class ReportQueryService {
             // ignore and fallback
         }
 
-        return this.fetchIncompleteReportsInternal(90, scope)
+        // Older deployments may not know the notification scope yet. Preserve the previous behavior.
+        return this.fetchIncompleteReportsInternal(90, scope === 'my_notifications' ? 'my_present' : scope)
     }
 
     private static async getCurrentTeacherIdentity(): Promise<{ id: string, userId: string | null } | null> {

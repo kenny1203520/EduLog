@@ -43,8 +43,9 @@
             </div>
 
             <!-- Enrollment Cards -->
-            <div v-for="enrollment in enrollments" :key="enrollment.id" @click="navigateToReports(enrollment.id!)"
-                class="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-xl hover:border-emerald-300 transition-all cursor-pointer group">
+            <router-link v-for="enrollment in enrollments" :key="enrollment.id"
+                :to="{ name: 'lesson-reports', params: { enrollmentId: enrollment.id! } }"
+                class="block bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-xl hover:border-emerald-300 transition-all cursor-pointer group">
                 <div class="flex items-start justify-between">
                     <div class="flex-1">
                         <h3 class="text-xl font-bold text-gray-900 group-hover:text-emerald-700 transition mb-2">
@@ -75,11 +76,11 @@
                         <span class="text-sm font-bold">{{ $t('common.view') }}</span>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M9 5l7 7-7 7" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                         </svg>
                     </div>
                 </div>
-            </div>
+            </router-link>
         </div>
     </div>
 </template>
@@ -121,7 +122,4 @@ async function loadData() {
     }
 }
 
-function navigateToReports(enrollmentId: string) {
-    router.push({ name: 'lesson-reports', params: { enrollmentId } })
-}
 </script>

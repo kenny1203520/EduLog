@@ -116,7 +116,7 @@
         </div>
         <div class="flex justify-between items-end mb-4">
             <!-- Sort Control (List View Only) -->
-            <div v-if="viewMode === 'list'" class="mb-1">
+            <div v-if="viewMode === 'list'" class="mb-1 flex flex-wrap items-center gap-2">
                 <button @click="toggleSort"
                     class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition shadow-sm">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-500" fill="none"
@@ -126,6 +126,20 @@
                     </svg>
                     <span>{{ sortOrder === 'asc' ? $t('common.sort_asc') || 'Oldest First' : $t('common.sort_desc') ||
                         'Newest First' }}</span>
+                </button>
+                <button @click="hideScheduledReports = !hideScheduledReports"
+                    type="button"
+                    :aria-pressed="hideScheduledReports"
+                    class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium border rounded-lg transition shadow-sm"
+                    :class="hideScheduledReports
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 4a1 1 0 011-1h16a1 1 0 01.8 1.6L15 12.333V19a1 1 0 01-.553.894l-4 2A1 1 0 019 21v-8.667L3.2 4.6A1 1 0 013 4z" />
+                    </svg>
+                    <span>{{ $t('report.hide_scheduled_reports') }}</span>
                 </button>
             </div>
             <div v-else></div>
@@ -178,8 +192,10 @@
                         d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
             </div>
-            <div v-else-if="allReports.length === 0" class="p-12 text-center text-gray-500">
-                No reports found.
+            <div v-else-if="allReportDisplay.length === 0" class="p-12 text-center text-gray-500">
+                {{ hideScheduledReports
+                    ? $t('report.no_reports_match_filter')
+                    : $t('report.no_reports_available') }}
             </div>
             <div v-else class="divide-y divide-gray-100">
                 <div v-for="displayReport in allReportDisplay" :key="displayReport.id"
@@ -505,6 +521,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
 import { DateUtils } from '@/utils/DateUtils'
+import { isAttendanceReportStatus } from '@/utils/reportListFilter'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
 type ReportEditorExpose = {
@@ -643,6 +660,7 @@ const listLoading = ref(false)
 const allReports = ref<any[]>([])
 const suspensions = ref<Suspension[]>([])
 const sortOrder = ref<'asc' | 'desc'>('asc')
+const hideScheduledReports = ref(true)
 const showIncompleteModule = ref(false)
 
 const incompleteReports = computed(() => {
@@ -754,6 +772,7 @@ const allReportDisplay = computed(() => {
     // Sort based on sortOrder
     return mergedList
         .filter(r => r.status !== 'rescheduled' && r.absenceReason !== 'rescheduled') // Shield against rescheduled stubs
+        .filter(r => !hideScheduledReports.value || isAttendanceReportStatus(r.status))
         .sort((a, b) => {
             const timeA = new Date(a.date).getTime()
             const timeB = new Date(b.date).getTime()

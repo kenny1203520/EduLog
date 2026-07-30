@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -77,17 +78,9 @@ async function handleLogout() {
 
             <!-- Subtle Divider -->
             <div class="mx-6 h-px bg-gray-100/60"></div>
-
             <!-- Language Switcher in Sidebar -->
             <div class="px-6 py-2">
-                <div class="flex gap-2 text-xs font-medium bg-gray-100 rounded p-1 w-full justify-center">
-                    <button @click="preferences.locale = 'zh-TW'"
-                        :class="{ 'bg-white shadow text-emerald-600': preferences.locale === 'zh-TW', 'text-gray-500 hover:text-gray-700': preferences.locale !== 'zh-TW' }"
-                        class="px-3 py-1.5 rounded transition flex-1">中文</button>
-                    <button @click="preferences.locale = 'en'"
-                        :class="{ 'bg-white shadow text-emerald-600': preferences.locale === 'en', 'text-gray-500 hover:text-gray-700': preferences.locale !== 'en' }"
-                        class="px-3 py-1.5 rounded transition flex-1">English</button>
-                </div>
+                <LanguageSwitcher full-width label-on-mobile align="left" />
             </div>
 
             <!-- Font Size Switcher in Sidebar -->
