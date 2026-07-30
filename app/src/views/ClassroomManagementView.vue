@@ -8,7 +8,11 @@ import { VisibilityPreferenceService } from '@/services/VisibilityPreferenceServ
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { TeacherService } from '@/services/teacher/TeacherService'
 import { RoleService } from '@/services/rbac/RoleService'
-import type { RoleDTO } from '@/models/Rbac'
+import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
+import type { PermissionDTO, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
+import type { RolePolicySelections } from '@/components/settings/ScopedRolePolicyEditor.vue'
+import ScopedRolePolicyEditor from '@/components/settings/ScopedRolePolicyEditor.vue'
+import ClassroomManagementPanel from '@/components/classroom/ClassroomManagementPanel.vue'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import {
     type ClassSessionScheduleRuleDTO,
@@ -93,6 +97,13 @@ const hiddenClassroomIds = ref<Set<string>>(new Set())
 const hiddenSessionIds = ref<Set<string>>(new Set())
 const teachersList = ref<any[]>([])
 const roles = ref<RoleDTO[]>([])
+const notificationPermission = ref<PermissionDTO | null>(null)
+const notificationPolicies = ref<RolePermissionPolicyDTO[]>([])
+const roomPolicySelections = ref<RolePolicySelections>({})
+const sessionPolicySelections = ref<RolePolicySelections>({})
+const roomSessions = ref<ClassSessionDTO[]>([])
+const returnToRoomAfterSession = ref(false)
+const roomPanelInitialTab = ref<'details' | 'notifications' | 'sessions'>('details')
 
 interface SessionTeacherConfig {
     teacher_id: string
@@ -132,6 +143,48 @@ const newSession = ref<Partial<ClassSessionDTO>>({
 })
 const editingSession = ref<ClassSessionDTO | null>(null)
 
+async function loadNotificationPolicies() {
+    const permission = await PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION)
+    notificationPermission.value = permission
+    notificationPolicies.value = await PermissionPolicyService.getPolicies(permission.id)
+}
+
+function policySelectionsFor(scopeType: 'classroom' | 'class_session', scopeId?: string | null): RolePolicySelections {
+    return Object.fromEntries(roles.value.map(role => {
+        const policy = notificationPolicies.value.find(item => item.role_id === role.id
+            && item.scope_type === scopeType && item.scope_id === scopeId)
+        return [role.id, policy?.effect || 'inherit']
+    })) as RolePolicySelections
+}
+
+function policyOverrides(selections: RolePolicySelections) {
+    return roles.value.flatMap(role => {
+        const effect = selections[role.id]
+        return effect === 'allow' || effect === 'deny' ? [{ role_id: role.id, effect }] : []
+    })
+}
+
+async function refreshNotificationPolicies() {
+    if (!notificationPermission.value) return loadNotificationPolicies()
+    notificationPolicies.value = await PermissionPolicyService.getPolicies(notificationPermission.value.id)
+}
+
+async function loadRoomSessions(roomId?: string | null) {
+    if (!roomId) {
+        roomSessions.value = []
+        return
+    }
+    const result = await SessionService.getClassSessions(1, 500, '', roomId, 'all')
+    roomSessions.value = [...result.data].sort((a, b) => {
+        const firstA = a.schedule_rules?.[0]
+        const firstB = b.schedule_rules?.[0]
+        const dayA = firstA?.day_of_week ?? a.day_of_week ?? 7
+        const dayB = firstB?.day_of_week ?? b.day_of_week ?? 7
+        if (dayA !== dayB) return dayA - dayB
+        return (firstA?.start_time || a.start_time || '').localeCompare(firstB?.start_time || b.start_time || '')
+    })
+}
+
 async function loadTeachers() {
     try {
         teachersList.value = await TeacherService.getAllTeachers()
@@ -168,6 +221,7 @@ async function loadData() {
             loadAllRooms(),
             loadTeachers(),
             RoleService.getRoles().then(data => { roles.value = data }),
+            loadNotificationPolicies(),
             CourseCatalogService.getCourses().then(res => { courses.value = res.data })
         ])
     } catch (e) {
@@ -377,22 +431,29 @@ async function saveClassroom() {
     if (!newClassroom.value.name) return
     try {
         isSavingRoom.value = true
-        if (editingClassroom.value?.id) {
-            await ClassroomService.updateClassroom(editingClassroom.value.id, newClassroom.value)
-        } else {
-            await ClassroomService.createClassroom(newClassroom.value)
-        }
-        await Promise.all([loadRooms(), loadAllRooms()])
+        const saved = editingClassroom.value?.id
+            ? await ClassroomService.updateClassroom(editingClassroom.value.id, newClassroom.value)
+            : await ClassroomService.createClassroom(newClassroom.value)
+
+        // Switch to edit mode immediately so a policy failure cannot create a duplicate room on retry.
+        editingClassroom.value = saved
+        await PermissionPolicyService.replacePolicies(
+            INCOMPLETE_REPORT_PERMISSION,
+            { type: 'classroom', id: saved.id },
+            policyOverrides(roomPolicySelections.value)
+        )
+        await Promise.all([loadRooms(), loadAllRooms(), refreshNotificationPolicies()])
         closeRoomModal()
         toast.success(t('classroom.room_save_success') || 'Room saved successfully')
-    } catch (e) {
-        toast.error(e as string)
+    } catch (e: any) {
+        toast.error(e.message || String(e))
     } finally {
         isSavingRoom.value = false
     }
 }
 
-function openEditRoom(room: Classroom) {
+async function openEditRoom(room: Classroom) {
+    roomPanelInitialTab.value = 'details'
     editingClassroom.value = room
     newClassroom.value = {
         name: room.name,
@@ -401,6 +462,17 @@ function openEditRoom(room: Classroom) {
         color: room.color || '#10b981',
         external_link: room.external_link || ''
     }
+    roomPolicySelections.value = policySelectionsFor('classroom', room.id)
+    await loadRoomSessions(room.id)
+    isCreateRoomModalOpen.value = true
+}
+
+function openCreateRoomModal() {
+    roomPanelInitialTab.value = 'details'
+    editingClassroom.value = null
+    newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
+    roomPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
+    roomSessions.value = []
     isCreateRoomModalOpen.value = true
 }
 
@@ -408,6 +480,15 @@ function closeRoomModal() {
     isCreateRoomModalOpen.value = false
     editingClassroom.value = null
     newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
+    roomPolicySelections.value = {}
+    roomSessions.value = []
+}
+
+async function editSessionFromRoomPanel(session: ClassSessionDTO) {
+    roomPanelInitialTab.value = 'sessions'
+    returnToRoomAfterSession.value = true
+    isCreateRoomModalOpen.value = false
+    await openEditSession(session)
 }
 
 async function deleteClassroom(id: string) {
@@ -476,37 +557,36 @@ async function saveSession() {
             schedule_kind: newSession.value.schedule_mode || 'weekly'
         }))
     }
-    if (!DateUtils.isValidTimeZone(payload.time_zone)) {
-        payload.time_zone = preferences.timeZone
-    }
-    if (!payload.classroom_id) {
-        payload.classroom_id = null
-    }
-    if (!payload.end_date) {
-        payload.end_date = null
-    }
+    if (!DateUtils.isValidTimeZone(payload.time_zone)) payload.time_zone = preferences.timeZone
+    if (!payload.classroom_id) payload.classroom_id = null
+    if (!payload.end_date) payload.end_date = null
 
     try {
         isSavingSession.value = true
-        let sessionId: string
+        let saved: ClassSessionDTO
         if (editingSession.value?.id) {
-            await SessionService.updateClassSession(editingSession.value.id, payload)
-            sessionId = editingSession.value.id
+            saved = await SessionService.updateClassSession(editingSession.value.id, payload)
         } else {
-            const session = await SessionService.createClassSession(payload)
-            sessionId = session.id!
+            saved = await SessionService.createClassSession(payload)
         }
 
+        // Keep the created id before follow-up writes so retry updates instead of inserting again.
+        editingSession.value = saved
+        newSession.value = { ...newSession.value, id: saved.id }
+        const sessionId = saved.id!
         await TeacherService.replaceTeachersForSession(sessionId, selectedTeacherConfigs.value.filter(c => c.teacher_id))
-
+        await PermissionPolicyService.replacePolicies(
+            INCOMPLETE_REPORT_PERMISSION,
+            { type: 'class_session', id: sessionId },
+            policyOverrides(sessionPolicySelections.value)
+        )
         const reconciliation = await OccurrenceService.syncSessionOccurrences(sessionId)
 
-        await loadSessions()
+        await Promise.all([loadSessions(), refreshNotificationPolicies()])
+        if (returnToRoomAfterSession.value && saved.classroom_id) await loadRoomSessions(saved.classroom_id)
         closeSessionModal()
         toast.success(t('classroom.session_save_success') || 'Session saved successfully')
-        if (reconciliation.preserved > 0) {
-            toast.info(t('classroom.schedule_preserved_notice', { count: reconciliation.preserved }))
-        }
+        if (reconciliation.preserved > 0) toast.info(t('classroom.schedule_preserved_notice', { count: reconciliation.preserved }))
     } catch (e: any) {
         toast.error(e.message || String(e))
     } finally {
@@ -516,6 +596,7 @@ async function saveSession() {
 
 async function openEditSession(session: ClassSessionDTO) {
     editingSession.value = session
+    sessionPolicySelections.value = policySelectionsFor('class_session', session.id)
     newSession.value = {
         ...session,
         time_zone: session.time_zone || preferences.timeZone,
@@ -539,8 +620,10 @@ async function openEditSession(session: ClassSessionDTO) {
 }
 
 function openCreateSessionModal() {
+    returnToRoomAfterSession.value = false
     clearTeacherSelection()
     editingSession.value = null
+    sessionPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
     newSession.value = {
         name: '',
         classroom_id: '',
@@ -563,8 +646,10 @@ function openCreateSessionModal() {
 }
 
 function closeSessionModal() {
+    const restoreRoom = returnToRoomAfterSession.value
     isCreateSessionModalOpen.value = false
     editingSession.value = null
+    sessionPolicySelections.value = {}
     clearTeacherSelection()
     newSession.value = {
         name: '',
@@ -582,6 +667,8 @@ function closeSessionModal() {
         schedule_mode: 'weekly',
         schedule_rules: [{ schedule_kind: 'weekly', day_of_week: 1, start_time: '10:00', end_time: '12:00' }]
     }
+    returnToRoomAfterSession.value = false
+    if (restoreRoom && editingClassroom.value) isCreateRoomModalOpen.value = true
 }
 
 
@@ -689,7 +776,7 @@ function clearTeacherSelection() {
                 </div>
 
                 <!-- Primary Action Button -->
-                <button v-if="activeTab === 'rooms'" @click="isCreateRoomModalOpen = true"
+                <button v-if="activeTab === 'rooms'" @click="openCreateRoomModal"
                     class="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-3 rounded-2xl transition-all shadow-lg shadow-emerald-200 font-black flex items-center justify-center gap-2 active:scale-95 text-sm uppercase tracking-widest w-full md:w-auto shrink-0">
                     <span class="text-xl leading-none">+</span> {{ t('classroom.add_room') }}
                 </button>
@@ -1002,69 +1089,19 @@ function clearTeacherSelection() {
                     :totalItems="sessionsPagination.total" />
             </div>
         </div>
-
-        <!-- Create Room Modal -->
-        <div v-if="isCreateRoomModalOpen"
-            class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in fade-in zoom-in duration-200">
-                <h3 class="text-xl font-bold mb-6 text-gray-800">{{ $t('classroom.add_room') }}</h3>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.room_name')
-                            }}</label>
-                        <input v-model="newClassroom.name" :placeholder="$t('classroom.room_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.address')
-                            }}</label>
-                        <input v-model="newClassroom.address" :placeholder="$t('classroom.address')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.phone')
-                            }}</label>
-                        <input v-model="newClassroom.phone" :placeholder="$t('classroom.phone')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.external_link')
-                            }}</label>
-                        <input v-model="newClassroom.external_link"
-                            :placeholder="$t('classroom.external_link_placeholder')"
-                            class="w-full border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $t('classroom.color_label')
-                            }}</label>
-                        <input type="color" v-model="newClassroom.color"
-                            class="w-full h-10 border-gray-300 rounded-lg cursor-pointer bg-white p-1">
-                    </div>
-                </div>
-                <div class="flex justify-end gap-3 mt-8">
-                    <button @click="closeRoomModal" :disabled="isSavingRoom"
-                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors">{{
-                            $t('common.cancel', 'Cancel') }}</button>
-                    <button @click="saveClassroom" :disabled="isSavingRoom"
-                        class="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 shadow-sm font-bold transition-all flex items-center gap-2">
-                        <svg v-if="isSavingRoom" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                            </circle>
-                            <path class="opacity-75" fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                            </path>
-                        </svg>
-                        {{ editingClassroom ? $t('common.save', 'Save') : $t('common.add', 'Add') }}
-                    </button>
-                </div>
-            </div>
-        </div>
+        <!-- Responsive Room Management Panel -->
+        <ClassroomManagementPanel v-if="isCreateRoomModalOpen" v-model:room="newClassroom"
+            v-model:room-selections="roomPolicySelections" :room-id="editingClassroom?.id"
+            :sessions="roomSessions" :roles="roles" :policies="notificationPolicies" :saving="isSavingRoom"
+            :initial-tab="roomPanelInitialTab"
+            @close="closeRoomModal" @save="saveClassroom" @edit-session="editSessionFromRoomPanel"
+            @policies-changed="refreshNotificationPolicies" />
 
         <!-- Create Session Modal -->
         <div v-if="isCreateSessionModalOpen"
             class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div
-                class="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl m-4 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
+                class="bg-white rounded-2xl p-6 w-full max-w-4xl shadow-2xl m-4 animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
                 <h3 class="text-xl font-bold mb-6 text-gray-800">{{ editingSession ? $t('classroom.edit_session') : $t('classroom.add_session') }}</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="md:col-span-2">
@@ -1289,6 +1326,17 @@ function clearTeacherSelection() {
                         </div>
                     </div>
                 </div>
+
+                <section class="mt-6 space-y-4 rounded-2xl border border-gray-100 bg-gray-50 p-4 sm:p-5">
+                    <div>
+                        <h4 class="font-black text-gray-900">{{ $t('settings.incomplete_notifications.title') }}</h4>
+                        <p class="mt-1 text-xs font-bold text-gray-400">{{ $t('classroom.session_notification_hint') }}</p>
+                    </div>
+                    <ScopedRolePolicyEditor v-model="sessionPolicySelections" :roles="roles" :policies="notificationPolicies"
+                        scope-type="class_session" :scope-id="editingSession?.id"
+                        :classroom-id="newSession.classroom_id || null" :class-session-id="editingSession?.id"
+                        compact :disabled="isSavingSession" />
+                </section>
 
                 <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-50">
                     <button @click="closeSessionModal" :disabled="isSavingSession"
