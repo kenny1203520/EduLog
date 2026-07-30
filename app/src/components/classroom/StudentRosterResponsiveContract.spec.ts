@@ -22,6 +22,8 @@ describe('student roster responsive contract', () => {
     it('retains scroll targeting and visible named actions in both layouts', () => {
         expect(component).toContain(':data-enrollment-id="item.id"')
         expect(component).toContain("t('classroom.view_reports')")
+        expect(component).toContain('target="_blank"')
+        expect(component).toContain('rel="noopener noreferrer"')
         expect(component).toContain("t('classroom.quick_edit')")
         expect(component).toContain("t('classroom.koding_check')")
         expect(component).toContain("t('common.profile')")

@@ -823,6 +823,7 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
     return {
         id: enrollment.id!,
         studentId: enrollment.studentId || '',
+        reportHref: router.resolve({ name: 'lesson-reports', params: { enrollmentId: enrollment.id } }).href,
         name: enrollment.studentName || t('classroom.koding_unnamed_account'),
         initials: enrollment.studentName?.trim().charAt(0) || '?',
         currentCourse: progress.currentCourse,
@@ -846,9 +847,6 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
     }
 }))
 
-function openStudentReports(enrollmentId: string) {
-    router.push({ name: 'lesson-reports', params: { enrollmentId } })
-}
 
 function openStudentProfile(studentId: string) {
     if (studentId) router.push({ name: 'student-profile', params: { id: studentId } })
@@ -1962,7 +1960,6 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         :empty-message="allRosterEnrollments.length === 0 ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students')"
                         :show-clear-filters="allRosterEnrollments.length > 0 && hasActiveStudentFilters"
                         @set-attendance="setAttendance"
-                        @view-reports="openStudentReports"
                         @quick-edit="toggleSplitView"
                         @koding-check="openStudentKodingCheck"
                         @view-profile="openStudentProfile"
