@@ -11,7 +11,6 @@ import { RoleService } from '@/services/rbac/RoleService'
 import type { RoleDTO } from '@/models/Rbac'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
 import {
-    ClassSessionFactory,
     type ClassSessionScheduleRuleDTO,
     type ScheduleMode,
     type SessionType
@@ -23,6 +22,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
+import { buildSessionScheduleDisplayItems } from '@/utils/sessionScheduleDisplay'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 
@@ -347,15 +347,12 @@ function primaryScheduleDay(session: ClassSessionDTO): number {
         ?? 1
 }
 
-function formatScheduleSummary(session: ClassSessionDTO): string {
-    const model = ClassSessionFactory.create(session)
-    if (model.isDraft) return t('classroom.schedule_draft')
-    return model.scheduleRules.map(rule => {
-        const time = `${rule.start_time.slice(0, 5)}-${rule.end_time.slice(0, 5)}`
-        if (rule.schedule_kind === 'weekly') return `${getDayLabel(rule.day_of_week ?? 0)} ${time}`
-        if (rule.schedule_kind === 'monthly') return t('classroom.monthly_day_summary', { day: rule.day_of_month, time })
-        return `${rule.occurrence_date} ${time}`
-    }).join('、')
+function scheduleDisplayItems(session: ClassSessionDTO) {
+    return buildSessionScheduleDisplayItems(
+        session,
+        (key, named) => named ? t(key, named) : t(key),
+        day => String(getDayLabel(day))
+    )
 }
 
 
@@ -650,6 +647,7 @@ function clearTeacherSelection() {
                     </svg>
                 </div>
             </template>
+
             <template #actions>
                 <div class="flex flex-col sm:flex-row flex-1 items-center gap-4 w-full max-w-2xl">
                     <!-- Search Bar -->
@@ -884,150 +882,110 @@ function clearTeacherSelection() {
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <div v-for="session in sortedSessions" :key="session.id"
-                    class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full">
+                    class="session-card group min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg">
 
-                    <!-- Card Header -->
-                    <div class="p-5 pb-3 flex items-start justify-between">
-                        <div class="flex items-center gap-4">
-                            <!-- Session Indicator Icon -->
-                            <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform shadow-inner"
+                    <div class="p-5 pb-4">
+                        <div class="flex min-w-0 items-start gap-3">
+                            <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-xl font-black uppercase shadow-inner transition-transform group-hover:scale-110"
                                 :style="{ backgroundColor: `${getDayColor(primaryScheduleDay(session))}15`, color: getDayColor(primaryScheduleDay(session)) }">
                                 {{ session.name.charAt(0) }}
                             </div>
-                            <!-- Session Name & Info -->
                             <div class="min-w-0 flex-1">
-                                <h3
-                                    class="font-black text-xl text-gray-900 break-words group-hover:text-emerald-700 transition leading-tight">
+                                <h3 class="break-words text-xl font-black leading-tight text-gray-900 transition group-hover:text-emerald-700">
                                     {{ session.name }}
                                 </h3>
-                                <div class="flex items-center gap-2 mt-0.5">
-                                    <span
-                                        class="text-[12px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-widest"
+                                <div class="mt-2 flex flex-wrap gap-2">
+                                    <span class="rounded-lg border px-2 py-1 text-[11px] font-black"
                                         :style="{ backgroundColor: `${getDayColor(primaryScheduleDay(session))}10`, color: getDayColor(primaryScheduleDay(session)), borderColor: `${getDayColor(primaryScheduleDay(session))}30` }">
                                         {{ session.session_type === 'camp' ? $t('classroom.camp') : $t('classroom.regular_session') }}
                                     </span>
-                                    <span class="text-[11px] font-bold text-gray-400">
-                                        {{ formatScheduleSummary(session) }}
-                                    </span>
-                                    <span class="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                        {{ session.time_zone || 'Asia/Taipei' }}
-                                    </span>
                                     <span v-if="isSessionHidden(session.id)"
-                                        class="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-600 border border-amber-100 text-[10px]">
+                                        class="rounded-lg border border-amber-100 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-600">
                                         {{ $t('classroom.hidden') }}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Quick Actions (Mobile Always Visible, Desktop Hover) -->
-                        <div
-                            class="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                        <div class="mt-4 flex items-center justify-end gap-1 border-t border-gray-100 pt-3">
                             <button @click="openEditSession(session)"
-                                class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                                :title="$t('common.edit')">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
-                                    fill="currentColor">
-                                    <path
-                                        d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600"
+                                :title="$t('common.edit')" :aria-label="$t('common.edit')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
                                 </svg>
                             </button>
                             <button @click="deleteSession(session.id!)"
-                                class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                                :title="$t('common.delete')">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
-                                    fill="currentColor">
-                                    <path fill-rule="evenodd"
-                                        d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
-                                        clip-rule="evenodd" />
+                                class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-red-50 hover:text-red-600"
+                                :title="$t('common.delete')" :aria-label="$t('common.delete')">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
                                 </svg>
                             </button>
                             <button @click="toggleSessionVisibility(session.id)"
-                                class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
-                                :title="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')">
-                                <svg v-if="isSessionHidden(session.id)" xmlns="http://www.w3.org/2000/svg"
-                                    class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path
-                                        d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z" />
-                                </svg>
-                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
-                                    fill="currentColor">
-                                    <path fill-rule="evenodd"
-                                        d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z"
-                                        clip-rule="evenodd" />
-                                </svg>
+                                class="rounded-xl p-2.5 text-gray-400 transition-all hover:bg-amber-50 hover:text-amber-600"
+                                :title="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')"
+                                :aria-label="isSessionHidden(session.id) ? $t('classroom.show') : $t('classroom.hide')">
+                                <svg v-if="isSessionHidden(session.id)" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3C5 3 1.73 7.11.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c5 0 8.27-4.11 9.54-6.04a1.75 1.75 0 000-1.92C18.27 7.11 15 3 10 3zm0 11a4 4 0 110-8 4 4 0 010 8z" /></svg>
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3.28 2.22a.75.75 0 00-1.06 1.06l1.468 1.468C2.22 5.99 1.15 7.58.46 9.04a1.75 1.75 0 000 1.92C1.73 12.89 5 17 10 17c2.1 0 3.88-.72 5.34-1.73l1.38 1.38a.75.75 0 001.06-1.06l-14.5-14.5zM6.86 7.92A3 3 0 0010 13a2.99 2.99 0 002.08-.86L6.86 7.92zm6.36 1.06A3 3 0 0111.78 12l2.77 2.77c1.67-1.26 2.95-3.01 3.98-4.53a.25.25 0 000-.28c-1.27-1.87-4.17-5.43-8.53-5.43-.95 0-1.82.17-2.61.45l2.43 2.43A2.99 2.99 0 0113.22 8.98z" clip-rule="evenodd" /></svg>
                             </button>
                         </div>
                     </div>
 
-                    <!-- Card Body -->
-                    <div class="px-5 py-2 flex-1 space-y-3">
-                        <!-- Room Info -->
-                        <div class="flex items-center gap-2.5 text-gray-500">
-                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                </svg>
+                    <div class="space-y-4 px-5 pb-2">
+                        <section class="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3">
+                            <h4 class="flex items-center gap-2 text-[11px] font-black text-emerald-800">
+                                <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                {{ $t('classroom.schedule') }}
+                            </h4>
+                            <div class="mt-2 flex flex-col gap-1.5">
+                                <span v-for="item in scheduleDisplayItems(session)" :key="item.key"
+                                    class="break-words rounded-xl bg-white px-3 py-2 text-xs font-bold leading-5 text-gray-700 ring-1 ring-emerald-100">
+                                    {{ item.text }}
+                                </span>
                             </div>
-                            <span class="text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!)
-                                }}</span>
+                        </section>
+
+                        <div class="session-card__metadata gap-3">
+                            <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
+                                <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('student.internal_courses.classroom') }}</p><p class="break-words text-sm font-bold text-gray-700">{{ getRoomName(session.classroom_id!) }}</p></div>
+                            </div>
+                            <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
+                                <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 0c2.5 2.7 3.8 6 3.8 10S14.5 19.3 12 22M2 12h20M12 2c-2.5 2.7-3.8 6-3.8 10s1.3 7.3 3.8 10" /></svg>
+                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('classroom.session_time_zone') }}</p><p class="break-words text-sm font-bold text-gray-700">{{ session.time_zone || 'Asia/Taipei' }}</p></div>
+                            </div>
+                            <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
+                                <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2c0-1.18.68-2.2 1.67-2.69M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('classroom.capacity_short') }}</p><p class="text-sm font-bold text-gray-700">{{ session.capacity }}</p></div>
+                            </div>
                         </div>
 
-                        <!-- Capacity Info -->
-                        <div class="flex items-center gap-2.5 text-gray-500">
-                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                                </svg>
-                            </div>
-                            <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">{{
-                                $t('classroom.capacity_short') }}: {{ session.capacity }}</span>
-                        </div>
-                        <div v-if="session.external_link" class="flex items-center gap-2.5 text-gray-500">
-                            <div class="p-1.5 bg-gray-50 rounded-lg text-gray-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"
-                                        d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                </svg>
-                            </div>
-                            <a :href="session.external_link" target="_blank" rel="noopener noreferrer"
-                                class="text-xs font-black pt-0.5 text-emerald-600 hover:underline break-all uppercase tracking-tight">{{
-                                    session.external_link }}</a>
-                        </div>
-
-                        <!-- Courses Tags -->
-                        <div v-if="session.course_ids?.length" class="flex flex-wrap gap-1.5 pt-1">
+                        <div v-if="session.course_ids?.length" class="flex flex-wrap gap-1.5">
                             <span v-for="cid in session.course_ids" :key="cid"
-                                class="px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-lg text-[10px] font-black text-gray-400 uppercase tracking-tight truncate max-w-[120px]">
-                                {{courses.find(c => c.id === cid)?.subject}}
+                                class="max-w-full truncate rounded-lg border border-gray-100 bg-gray-50 px-2 py-1 text-[10px] font-black text-gray-500">
+                                {{ courses.find(c => c.id === cid)?.subject }}
                             </span>
                         </div>
+
+                        <a v-if="session.external_link" :href="session.external_link" target="_blank"
+                            rel="noopener noreferrer" :title="session.external_link"
+                            class="inline-flex max-w-full items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100">
+                            <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                            <span class="truncate">{{ $t('classroom.external_link') }}</span>
+                        </a>
                     </div>
 
-                    <!-- Card Actions -->
-                    <div class="px-5 py-4 flex gap-2">
-                        <router-link :to="{ name: 'session-details', params: { id: session.id! } }" target="_blank" rel="noopener noreferrer"
-                            :title="$t('classroom.view_students') + ' · ' + $t('common.opens_new_tab')"
-                            class="flex-1 py-2.5 rounded-xl text-sm font-black transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-white"
+                    <div class="px-5 py-4">
+                        <router-link :to="{ name: 'session-details', params: { id: session.id! } }"
+                            class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-black text-white shadow-md transition-all active:scale-95"
                             :style="{ backgroundColor: getDayColor(primaryScheduleDay(session)) }">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
-                                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                            </svg>
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                             {{ $t('classroom.view_students', 'Students') }}
-                            <svg class="h-3.5 w-3.5 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" /></svg>
                         </router-link>
                     </div>
 
-                    <!-- Card Footer -->
-                    <div
-                        class="px-5 py-3 bg-gray-50/50 border-t border-gray-50 flex items-center justify-between text-[10px] font-black text-gray-300 tracking-widest uppercase">
+                    <div class="flex items-center justify-between border-t border-gray-50 bg-gray-50/50 px-5 py-3 text-[10px] font-black tracking-widest text-gray-300">
                         <span>#{{ session.id?.slice(0, 8) }}</span>
                         <span>{{ session.lesson_number }} Lessons</span>
                     </div>
@@ -1356,3 +1314,20 @@ function clearTeacherSelection() {
             @close="genericConfirm.isOpen = false" />
     </div>
 </template>
+
+<style scoped>
+.session-card {
+    container-type: inline-size;
+}
+
+.session-card__metadata {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@container (min-width: 26rem) {
+    .session-card__metadata {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+</style>

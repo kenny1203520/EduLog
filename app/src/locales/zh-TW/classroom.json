@@ -17,6 +17,7 @@
     "capacity": "容納人數",
     "schedule": "上課時間",
     "session_type": "班級類型",
+    "session_time_zone": "班級時區",
     "regular_session": "一般班級",
     "camp": "營隊",
     "weekly": "每週",

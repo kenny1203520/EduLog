@@ -17,6 +17,7 @@
     "capacity": "Capacity",
     "schedule": "Schedule",
     "session_type": "Session Type",
+    "session_time_zone": "Class Time Zone",
     "regular_session": "Regular Session",
     "camp": "Camp",
     "weekly": "Weekly",

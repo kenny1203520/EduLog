@@ -81,6 +81,7 @@
     "system_managed": "System Managed",
     "language": "Language",
     "time_zone": "Time Zone",
+    "display_time_zone": "Display Time Zone",
     "languages": {
         "zh-TW": "繁體中文",
         "en": "English"
