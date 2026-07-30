@@ -51,10 +51,10 @@ async function handleLogin() {
 
         <div
             class="bg-white/80 backdrop-blur-xl p-8 md:p-12 rounded-[2.5rem] shadow-2xl w-full max-w-md border border-white ring-1 ring-emerald-100 flex flex-col items-center relative z-10 animate-in fade-in zoom-in duration-500">
-            <div @click="router.push('/')"
+            <router-link to="/"
                 class="w-20 h-20 bg-white rounded-[2rem] flex items-center justify-center mb-6 shadow-xl shadow-emerald-200 transform hover:rotate-12 transition-transform cursor-pointer overflow-hidden border-4 border-white">
                 <img src="/pwa-192x192.png" alt="EduLog Logo" class="w-full h-full object-cover" />
-            </div>
+            </router-link>
 
             <!-- Language Switcher -->
             <div class="flex gap-1 text-[10px] font-black bg-gray-100/50 backdrop-blur-md rounded-xl p-1 mb-6 uppercase tracking-wider">

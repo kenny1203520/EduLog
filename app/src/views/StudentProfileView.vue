@@ -30,7 +30,7 @@ async function refreshData() {
     <div class="min-h-screen bg-white">
         <!-- Minimal Navigation Bar -->
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between border-b border-gray-50">
-            <button @click="$router.push('/dashboard')"
+            <router-link to="/dashboard"
                 class="inline-flex items-center gap-2 text-gray-500 hover:text-gray-900 font-bold transition-colors cursor-pointer group">
                 <div class="p-1.5 bg-gray-50 rounded-lg group-hover:bg-gray-100 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5"
@@ -39,7 +39,7 @@ async function refreshData() {
                     </svg>
                 </div>
                 <span class="text-sm tracking-tight uppercase">{{ $t('common.back_to_dashboard') }}</span>
-            </button>
+            </router-link>
 
             <button @click="refreshData" :disabled="studentStore.loading"
                 class="p-2 text-gray-400 hover:text-emerald-600 rounded-lg hover:bg-emerald-50 transition-all cursor-pointer">
@@ -110,10 +110,10 @@ async function refreshData() {
                     </div>
                     <h3 class="text-xl font-bold text-gray-900 mb-2">{{ $t('student.not_found') }}</h3>
                     <p class="text-gray-500 mb-8">{{ $t('student.not_found_subtitle') }}</p>
-                    <button @click="$router.push('/dashboard')"
+                    <router-link to="/dashboard"
                         class="px-8 py-3 bg-gray-900 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-gray-800 transition-all active:scale-95 shadow-xl shadow-gray-200">
                         {{ $t('common.back_to_dashboard') }}
-                    </button>
+                    </router-link>
                 </div>
             </Transition>
         </main>

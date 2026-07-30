@@ -1,19 +1,12 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { computed } from 'vue'
 
-const router = useRouter()
 const auth = useAuthStore()
 const preferences = usePreferencesStore()
 
-function handleGetStarted() {
-    if (auth.isAuthenticated) {
-        router.push('/dashboard')
-    } else {
-        router.push('/login')
-    }
-}
+const getStartedRoute = computed(() => auth.isAuthenticated ? '/dashboard' : '/login')
 </script>
 
 <template>
@@ -21,13 +14,13 @@ function handleGetStarted() {
         <!-- Header -->
         <header
             class="container mx-auto px-6 py-8 flex justify-between items-center bg-white/70 backdrop-blur-2xl sticky top-0 z-50 border-b border-emerald-50/50">
-            <div class="flex items-center gap-4 group cursor-pointer" @click="router.push('/')">
+            <router-link to="/" class="flex items-center gap-4 group">
                 <div
                     class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-2xl shadow-emerald-200 group-hover:rotate-12 transition-transform overflow-hidden">
                     <img src="/pwa-192x192.png" alt="EduLog Logo" class="w-full h-full object-cover" />
                 </div>
                 <span class="text-3xl font-black text-gray-900 tracking-tighter">EduLog</span>
-            </div>
+            </router-link>
             <div class="flex items-center gap-4">
                 <div class="hidden md:flex gap-1 text-xs font-bold bg-gray-100 rounded-xl p-1">
                     <button @click="preferences.locale = 'zh-TW'"
@@ -41,10 +34,10 @@ function handleGetStarted() {
                         English
                     </button>
                 </div>
-                <button @click="router.push('/login')"
+                <router-link to="/login"
                     class="px-8 py-3 bg-gray-900 text-white rounded-2xl font-black hover:bg-emerald-600 transition-all shadow-xl hover:shadow-emerald-200 active:scale-95">
                     {{ $t('auth.submit') }}
-                </button>
+                </router-link>
             </div>
         </header>
 
@@ -66,7 +59,7 @@ function handleGetStarted() {
                     class="text-xl md:text-3xl text-gray-500 mb-16 max-w-3xl mx-auto leading-relaxed font-semibold italic">
                     {{ $t('landing.subtitle') }}
                 </p>
-                <button @click="handleGetStarted"
+                <router-link :to="getStartedRoute"
                     class="px-12 py-6 bg-emerald-600 text-white rounded-[2rem] font-black text-2xl hover:bg-emerald-700 transition-all shadow-2xl shadow-emerald-200 hover:-translate-y-2 active:translate-y-0 flex items-center gap-4 mx-auto group">
                     {{ $t('landing.get_started') }}
                     <svg xmlns="http://www.w3.org/2000/svg"
@@ -75,7 +68,7 @@ function handleGetStarted() {
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3"
                             d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
-                </button>
+                </router-link>
             </div>
         </main>
 
@@ -136,10 +129,10 @@ function handleGetStarted() {
                 <div class="relative z-10">
                     <h2 class="text-5xl md:text-7xl font-black text-white mb-12 tracking-tighter">{{
                         $t('landing.cta_title') }}</h2>
-                    <button @click="handleGetStarted"
+                    <router-link :to="getStartedRoute"
                         class="px-16 py-7 bg-emerald-600 text-white rounded-[2.5rem] font-black text-3xl hover:bg-emerald-50 hover:text-emerald-900 transition-all shadow-2xl hover:-translate-y-2 active:translate-y-0">
                         {{ $t('landing.get_started') }}
-                    </button>
+                    </router-link>
                 </div>
             </div>
         </section>

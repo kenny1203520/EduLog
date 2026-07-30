@@ -174,8 +174,7 @@ async function copyToClipboard(text: string) {
                 <!-- Card Actions -->
                 <div class="space-y-2 pt-2 px-5 pb-4">
                     <div class="grid grid-cols-2 gap-3">
-                        <router-link :to="{ name: 'student-profile', params: { id: student.id } }" target="_blank" rel="noopener noreferrer"
-                            :title="$t('common.view') + ' · ' + $t('common.opens_new_tab')"
+                        <router-link :to="{ name: 'student-profile', params: { id: student.id } }"
                             class="w-full min-w-0 flex items-center justify-center gap-2 bg-gray-50 hover:bg-emerald-50 text-gray-600 hover:text-emerald-700 py-2.5 rounded-xl text-sm font-bold transition-all border border-gray-100 hover:border-emerald-200">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
                                 viewBox="0 0 24 24" stroke="currentColor">
@@ -185,15 +184,12 @@ async function copyToClipboard(text: string) {
                             <span class="text-xs font-black tracking-wide">
                                 {{ $t('common.view') }}
                             </span>
-                            <svg class="h-3.5 w-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" /></svg>
                         </router-link>
-                        <router-link :to="{ name: 'student-all-reports', params: { id: student.id } }" target="_blank" rel="noopener noreferrer"
-                            :title="$t('report.list_title') + ' · ' + $t('common.opens_new_tab')"
+                        <router-link :to="{ name: 'student-all-reports', params: { id: student.id } }"
                             class="w-full min-w-0 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-xl text-sm font-bold transition-all shadow-md shadow-emerald-100 active:scale-95">
                             <span class="text-xs font-black tracking-wide">
                                 {{ $t('report.list_title') }}
                             </span>
-                            <svg class="h-3.5 w-3.5 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" /></svg>
                         </router-link>
                     </div>
                 </div>

@@ -180,10 +180,10 @@ function requestAttendance(item: StudentRosterItem) {
                 </div>
 
                 <div class="mt-auto grid grid-cols-2 gap-2 pt-4 sm:grid-cols-4">
-                    <a :href="item.reportHref" target="_blank" rel="noopener noreferrer"
+                    <a :href="item.reportHref"
                         class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"
-                        :aria-label="`${t('classroom.view_reports')}: ${item.name} · ${t('common.opens_new_tab')}`">
-                        <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14M5 5h5M5 5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5" /></svg>
+                        :aria-label="`${t('classroom.view_reports')}: ${item.name}`">
+                        <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                         <span>{{ t('classroom.view_reports') }}</span>
                     </a>
                     <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-black transition"
@@ -197,12 +197,11 @@ function requestAttendance(item: StudentRosterItem) {
                         <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l-3 3 3 3m8-6l3 3-3 3m-3.5-9L11.5 18" /></svg>
                         <span>{{ t('classroom.koding_check') }}</span>
                     </button>
-                    <a v-if="item.profileHref" :href="item.profileHref" target="_blank" rel="noopener noreferrer"
-                        class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-black text-slate-600 transition hover:bg-slate-50"
-                        :title="t('common.profile') + ' · ' + t('common.opens_new_tab')">
+                    <a v-if="item.profileHref" :href="item.profileHref"
+                        class="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-black text-slate-600 transition hover:bg-slate-50">
                         <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0" /></svg>
                         <span>{{ t('common.profile') }}</span>
-                        <svg class="h-3.5 w-3.5 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14M5 5h5M5 5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5" /></svg>
+                        <svg class="h-3.5 w-3.5 shrink-0 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                     </a>
                     <span v-else class="inline-flex cursor-not-allowed items-center justify-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 text-xs font-black text-slate-300" aria-disabled="true">
                         <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0" /></svg>
@@ -265,13 +264,13 @@ function requestAttendance(item: StudentRosterItem) {
                         </td>
                         <td class="px-6 py-5">
                             <div class="grid grid-cols-2 gap-2">
-                                <a :href="item.reportHref" target="_blank" rel="noopener noreferrer" :title="t('classroom.view_reports') + ' · ' + t('common.opens_new_tab')" class="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2 py-2 text-[10px] font-black text-white hover:bg-emerald-700">
-                                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14M5 5h5M5 5a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5" /></svg>
+                                <a :href="item.reportHref" class="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2 py-2 text-[10px] font-black text-white hover:bg-emerald-700">
+                                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                     <span>{{ t('classroom.view_reports') }}</span>
                                 </a>
                                 <button type="button" class="inline-flex items-center justify-center gap-1 rounded-xl border border-blue-100 bg-blue-50 px-2 py-2 text-[10px] font-black text-blue-700 hover:bg-blue-100" @click="emit('quick-edit', item.id)"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M4 20h3.5L19.268 8.232a2.5 2.5 0 10-3.536-3.536L4 16.428V20z" /></svg><span>{{ t('classroom.quick_edit') }}</span></button>
                                 <button type="button" class="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-100 bg-amber-50 px-2 py-2 text-[10px] font-black text-amber-700 hover:bg-amber-100" @click="emit('koding-check', item.id)"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l-3 3 3 3m8-6l3 3-3 3m-3.5-9L11.5 18" /></svg><span>{{ t('classroom.koding_check') }}</span></button>
-                                <a v-if="item.profileHref" :href="item.profileHref" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-2 text-[10px] font-black text-slate-600 hover:bg-slate-50" :title="t('common.profile') + ' · ' + t('common.opens_new_tab')"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0" /></svg><span>{{ t('common.profile') }}</span><svg class="h-3 w-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14" /></svg></a><span v-else class="inline-flex cursor-not-allowed items-center justify-center gap-1 rounded-xl border border-slate-100 bg-slate-50 px-2 py-2 text-[10px] font-black text-slate-300" aria-disabled="true">{{ t('common.profile') }}</span>
+                                <a v-if="item.profileHref" :href="item.profileHref" class="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-2 text-[10px] font-black text-slate-600 hover:bg-slate-50"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0" /></svg><span>{{ t('common.profile') }}</span><svg class="h-3 w-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></a><span v-else class="inline-flex cursor-not-allowed items-center justify-center gap-1 rounded-xl border border-slate-100 bg-slate-50 px-2 py-2 text-[10px] font-black text-slate-300" aria-disabled="true">{{ t('common.profile') }}</span>
                             </div>
                         </td>
                     </tr>
