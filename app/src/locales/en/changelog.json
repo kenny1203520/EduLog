@@ -2,7 +2,7 @@
     "entries": [
         {
             "version": "1.7.1",
-            "date": "2026-07-31",
+            "date": "2026-08-01",
             "changes": {
                 "fixed": [
                     "Dashboard and incomplete-report tasks now require assignment, explicit teacher attendance, and an effective class-role notification policy; absence and deny decisions take precedence.",
