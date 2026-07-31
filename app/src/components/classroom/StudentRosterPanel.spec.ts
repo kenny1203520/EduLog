@@ -96,6 +96,18 @@ describe('StudentRosterPanel', () => {
         expect(wrapper.emitted('koding-check')).toEqual([['enrollment-1']])
     })
 
+    it('keeps trial enrollments visible while disabling unavailable report actions', async () => {
+        const wrapper = mountPanel({ items: [{ ...item, enrollmentTone: 'trial', reportAvailable: false }] })
+        const card = wrapper.get('.roster-cards [data-enrollment-id="enrollment-1"]')
+        expect(card.text()).toContain(item.name)
+        expect(card.find('a[href="/dashboard/students/enrollment-1/reports"]').exists()).toBe(false)
+        expect(card.find('button[aria-label]').attributes('disabled')).toBeDefined()
+        const editButton = card.findAll('button').find(button => button.text() === 'classroom.quick_edit')!
+        expect(editButton.attributes('disabled')).toBeDefined()
+        await editButton.trigger('click')
+        expect(wrapper.emitted('quick-edit')).toBeUndefined()
+    })
+
     it('does not create an empty profile link when no student account is available', () => {
         const wrapper = mountPanel({ items: [{ ...item, studentId: '', profileHref: null }] })
         const card = wrapper.find('.roster-cards [data-enrollment-id="enrollment-1"]')

@@ -213,6 +213,7 @@
     "back_to_this_week": "回到本週",
     "back_to_today": "回到本日",
     "no_students_enrolled": "目前沒有學生資料",
+    "trial_report_unavailable": "轉為正式學員後才能建立報告及點名",
     "add_student_to_class": "新增補課學生",
     "add_student_modal_title": "補課 / 調課添增學生",
     "add_student_modal_hint": "先搜尋學生，再選擇該學生的進行中課程。系統只會建立該日期當次報告，不會更動原班級歸屬。",

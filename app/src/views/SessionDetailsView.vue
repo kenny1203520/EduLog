@@ -798,13 +798,14 @@ async function batchSetAttendance(status: QuickAttendanceStatus) {
 }
 
 function toggleEnrollmentSelection(enrId: string) {
+    if (!reportMap.value.has(enrId)) return
     const next = new Set(selectedEnrollmentIds.value)
     next.has(enrId) ? next.delete(enrId) : next.add(enrId)
     selectedEnrollmentIds.value = next
 }
 
 function toggleSelectAll() {
-    const visibleIds = filteredEnrollments.value.map(enrollment => enrollment.id!).filter(Boolean)
+    const visibleIds = filteredEnrollments.value.map(enrollment => enrollment.id!).filter(id => Boolean(id) && reportMap.value.has(id))
     const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedEnrollmentIds.value.has(id))
     selectedEnrollmentIds.value = allSelected ? new Set() : new Set(visibleIds)
 }
@@ -813,7 +814,9 @@ const quickAttendanceStudents = computed(() => filteredEnrollments.value.map(enr
     id: enrollment.id!,
     name: enrollment.studentName || t('common.unnamed'),
     status: (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus,
-    isSaving: savingMap.value.get(enrollment.id!) === true
+    isSaving: savingMap.value.get(enrollment.id!) === true,
+    disabled: !reportMap.value.has(enrollment.id!),
+    disabledReason: !reportMap.value.has(enrollment.id!) ? t('classroom.trial_report_unavailable') : undefined
 })))
 
 const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollments.value.map(enrollment => {
@@ -846,7 +849,8 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         latestTitle: progress.latestProgressTitle,
         latestStatus: progress.latestProgressStatus,
         latestTone: progress.latestProgressTone,
-        isEditing: selectedEnrollmentId.value === enrollment.id && showSplitView.value
+        isEditing: selectedEnrollmentId.value === enrollment.id && showSplitView.value,
+        reportAvailable: reportMap.value.has(enrollment.id!)
     }
 }))
 

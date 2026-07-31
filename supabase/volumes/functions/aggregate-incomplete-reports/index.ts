@@ -1,27 +1,14 @@
 import { serve } from 'https://deno.land/std@0.177.1/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1'
+import {
+  canReceiveIncompleteReportNotification,
+  isTeacherPresentForScope,
+  type PermissionDecision,
+} from './policy.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
-
-function isTeacherPresentForScope(
-  teacherId: string,
-  teacherUserId: string | null | undefined,
-  occurrenceTeacherIds: string[] = [],
-  teacherAttendance: Record<string, boolean> = {},
-): boolean {
-  const teacherKeys = [teacherId, teacherUserId].filter(Boolean) as string[]
-  const isAssigned = teacherKeys.some((key) => occurrenceTeacherIds.includes(key))
-  if (!isAssigned) return false
-
-  const attendanceValues = teacherKeys
-    .filter((key) => Object.prototype.hasOwnProperty.call(teacherAttendance, key))
-    .map((key) => teacherAttendance[key])
-
-  if (attendanceValues.some((value) => value === false)) return false
-  return attendanceValues.some((value) => value === true)
 }
 
 serve(async (req: Request) => {
@@ -92,7 +79,7 @@ serve(async (req: Request) => {
     if (error) throw error
     if (!data) return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 
-    const permissionCache = new Map<string, { is_allowed: boolean; is_denied: boolean; policy_configured: boolean }>()
+    const permissionCache = new Map<string, PermissionDecision>()
 
     const results: any[] = []
     for (const report of data) {
@@ -108,9 +95,13 @@ serve(async (req: Request) => {
       const occ = report.class_occurrences
       const session = Array.isArray(occ?.class_sessions) ? occ.class_sessions[0] : occ?.class_sessions
       const classroom = Array.isArray(session?.classrooms) ? session.classrooms[0] : session?.classrooms
-      if (scope === 'my_present') {
-        if (!isTeacherPresentForScope(teacherId, teacherUserId, occ?.teacher_ids || [], occ?.teacher_attendance || {})) continue
-      }
+      const isTeacherPresent = isTeacherPresentForScope(
+        teacherId,
+        teacherUserId,
+        occ?.teacher_ids || [],
+        occ?.teacher_attendance || {},
+      )
+      if ((scope === 'my_present' || scope === 'my_notifications') && !isTeacherPresent) continue
       if (scope === 'my_notifications') {
         const classroomId = classroom?.id || session?.classroom_id || null
         const sessionId = session?.id || null
@@ -133,17 +124,7 @@ serve(async (req: Request) => {
           permissionCache.set(policyKey, decision)
         }
 
-        if (decision.policy_configured) {
-          if (!decision.is_allowed || decision.is_denied) continue
-        } else if (!isTeacherPresentForScope(
-          teacherId,
-          teacherUserId,
-          occ?.teacher_ids || [],
-          occ?.teacher_attendance || {}
-        )) {
-          // Backward compatibility until an administrator configures a policy for this hierarchy.
-          continue
-        }
+        if (!canReceiveIncompleteReportNotification(isTeacherPresent, decision)) continue
       }
       const student = Array.isArray(report.enrollments?.students) ? report.enrollments.students[0] : report.enrollments?.students
 

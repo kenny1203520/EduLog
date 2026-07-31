@@ -34,7 +34,7 @@ describe('ReportCommandService.createReportsForOccurrence', () => {
         }) as any)
     })
 
-    it('ensures only eligible regular and trial enrollment reports in one idempotent upsert', async () => {
+    it('ensures only eligible regular enrollment reports in one idempotent upsert', async () => {
         const occurrence = terminalQuery({ data: { class_session_id: 'session-1', occurrence_date: '2026-07-29' }, error: null }, 'single')
         const enrollments = terminalQuery({ data: [{ id: 'enrollment-1' }, { id: 'enrollment-2' }], error: null })
         const existing = terminalQuery({ data: [{ enrollment_id: 'enrollment-1' }], error: null })
@@ -47,7 +47,7 @@ describe('ReportCommandService.createReportsForOccurrence', () => {
 
         await ReportCommandService.createReportsForOccurrence('occurrence-1')
 
-        expect(enrollments.in).toHaveBeenCalledWith('status', ['regular', 'trial'])
+        expect(enrollments.eq).toHaveBeenCalledWith('status', 'regular')
         expect(enrollments.lte).toHaveBeenCalledWith('start_date', '2026-07-29')
         expect(ReportLifecyclePolicy.buildInitialReportPayload).toHaveBeenCalledTimes(1)
         expect(ReportLifecyclePolicy.buildInitialReportPayload).toHaveBeenCalledWith('enrollment-2', 'occurrence-1')

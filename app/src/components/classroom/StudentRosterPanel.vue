@@ -30,6 +30,7 @@ export interface StudentRosterItem {
     latestStatus: string
     latestTone: RosterProgressTone
     isEditing: boolean
+    reportAvailable?: boolean
 }
 
 const props = withDefaults(defineProps<{
@@ -80,7 +81,7 @@ function nextAttendance(status: QuickAttendanceStatus): QuickAttendanceStatus {
 }
 
 function requestAttendance(item: StudentRosterItem) {
-    if (props.attendanceDisabled || item.isSavingAttendance) return
+    if (props.attendanceDisabled || item.isSavingAttendance || item.reportAvailable === false) return
     emit('set-attendance', item.id, nextAttendance(item.attendanceStatus))
 }
 </script>
@@ -141,7 +142,8 @@ function requestAttendance(item: StudentRosterItem) {
                     </div>
                     <button v-if="hasOccurrence" type="button"
                         class="shrink-0 rounded-xl border px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50"
-                        :class="attendanceToneClasses(item.attendanceStatus)" :disabled="attendanceDisabled || item.isSavingAttendance"
+                        :class="attendanceToneClasses(item.attendanceStatus)" :disabled="attendanceDisabled || item.isSavingAttendance || item.reportAvailable === false"
+                        :title="item.reportAvailable === false ? t('classroom.trial_report_unavailable') : undefined"
                         :aria-label="`${item.name}: ${item.attendanceLabel}`" @click="requestAttendance(item)">
                         <span class="inline-flex items-center gap-1.5">
                             <span class="h-2 w-2 rounded-full" :class="item.attendanceStatus === 'present' ? 'bg-emerald-500' : item.attendanceStatus === 'absent' ? 'bg-red-500' : 'bg-slate-400'"></span>
@@ -180,14 +182,16 @@ function requestAttendance(item: StudentRosterItem) {
                 </div>
 
                 <div class="mt-auto grid grid-cols-2 gap-2 pt-4 sm:grid-cols-4">
-                    <a :href="item.reportHref"
+                    <a v-if="item.reportAvailable !== false" :href="item.reportHref"
                         class="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"
                         :aria-label="`${t('classroom.view_reports')}: ${item.name}`">
                         <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                         <span>{{ t('classroom.view_reports') }}</span>
                     </a>
-                    <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-black transition"
+                    <span v-else class="inline-flex cursor-not-allowed items-center justify-center rounded-xl bg-slate-100 px-3 py-2.5 text-xs font-black text-slate-400" :title="t('classroom.trial_report_unavailable')" aria-disabled="true">{{ t('classroom.view_reports') }}</span>
+                    <button type="button" class="inline-flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50"
                         :class="item.isEditing ? 'border-blue-600 bg-blue-600 text-white' : 'border-blue-100 bg-blue-50 text-blue-700 hover:bg-blue-100'"
+                        :disabled="item.reportAvailable === false" :title="item.reportAvailable === false ? t('classroom.trial_report_unavailable') : undefined"
                         @click="emit('quick-edit', item.id)">
                         <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M4 20h3.5L19.268 8.232a2.5 2.5 0 10-3.536-3.536L4 16.428V20z" /></svg>
                         <span>{{ t('classroom.quick_edit') }}</span>
@@ -264,11 +268,12 @@ function requestAttendance(item: StudentRosterItem) {
                         </td>
                         <td class="px-6 py-5">
                             <div class="grid grid-cols-2 gap-2">
-                                <a :href="item.reportHref" class="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2 py-2 text-[10px] font-black text-white hover:bg-emerald-700">
+                                <a v-if="item.reportAvailable !== false" :href="item.reportHref" class="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2 py-2 text-[10px] font-black text-white hover:bg-emerald-700">
                                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
                                     <span>{{ t('classroom.view_reports') }}</span>
                                 </a>
-                                <button type="button" class="inline-flex items-center justify-center gap-1 rounded-xl border border-blue-100 bg-blue-50 px-2 py-2 text-[10px] font-black text-blue-700 hover:bg-blue-100" @click="emit('quick-edit', item.id)"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M4 20h3.5L19.268 8.232a2.5 2.5 0 10-3.536-3.536L4 16.428V20z" /></svg><span>{{ t('classroom.quick_edit') }}</span></button>
+                                <span v-else class="inline-flex cursor-not-allowed items-center justify-center rounded-xl bg-slate-100 px-2 py-2 text-[10px] font-black text-slate-400" :title="t('classroom.trial_report_unavailable')" aria-disabled="true">{{ t('classroom.view_reports') }}</span>
+                                <button type="button" class="inline-flex items-center justify-center gap-1 rounded-xl border border-blue-100 disabled:cursor-not-allowed disabled:opacity-50 bg-blue-50 px-2 py-2 text-[10px] font-black text-blue-700 hover:bg-blue-100" :disabled="item.reportAvailable === false" :title="item.reportAvailable === false ? t('classroom.trial_report_unavailable') : undefined" @click="emit('quick-edit', item.id)"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M4 20h3.5L19.268 8.232a2.5 2.5 0 10-3.536-3.536L4 16.428V20z" /></svg><span>{{ t('classroom.quick_edit') }}</span></button>
                                 <button type="button" class="inline-flex items-center justify-center gap-1 rounded-xl border border-amber-100 bg-amber-50 px-2 py-2 text-[10px] font-black text-amber-700 hover:bg-amber-100" @click="emit('koding-check', item.id)"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l-3 3 3 3m8-6l3 3-3 3m-3.5-9L11.5 18" /></svg><span>{{ t('classroom.koding_check') }}</span></button>
                                 <a v-if="item.profileHref" :href="item.profileHref" class="inline-flex items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-2 text-[10px] font-black text-slate-600 hover:bg-slate-50"><svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM4 21a8 8 0 0116 0" /></svg><span>{{ t('common.profile') }}</span><svg class="h-3 w-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></a><span v-else class="inline-flex cursor-not-allowed items-center justify-center gap-1 rounded-xl border border-slate-100 bg-slate-50 px-2 py-2 text-[10px] font-black text-slate-300" aria-disabled="true">{{ t('common.profile') }}</span>
                             </div>

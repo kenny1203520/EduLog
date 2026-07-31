@@ -210,16 +210,14 @@ export class ReportCommandService {
             }
         }
 
-        if (detailedData?.lessonId && detailedData?.isCompleted !== undefined) {
+        if (updated.lesson_id && (detailedData?.lessonId !== undefined || detailedData?.isCompleted !== undefined)) {
             try {
                 await ReportLifecyclePolicy.updateEnrollmentProgressAfterReport(
                     serverReport.enrollment_id,
-                    reportId,
-                    detailedData.lessonId,
-                    detailedData.isCompleted
+                    reportId
                 )
             } catch (progressError: any) {
-                console.error('Failed to update progress:', progressError)
+                console.error('Failed to reconcile enrollment lifecycle:', progressError)
             }
         }
 
@@ -394,6 +392,17 @@ export class ReportCommandService {
 
         if (updateError) throw new Error(`Failed to restore version: ${updateError.message}`)
 
+        if (updated.lesson_id) {
+            try {
+                await ReportLifecyclePolicy.updateEnrollmentProgressAfterReport(
+                    updated.enrollment_id,
+                    reportId
+                )
+            } catch (progressError: any) {
+                console.error('Failed to reconcile enrollment lifecycle after restore:', progressError)
+            }
+        }
+
         return new OccurrenceReport(updated)
     }
 
@@ -446,6 +455,17 @@ export class ReportCommandService {
 
         if (updateError) throw new Error(`Failed to resolve conflict: ${updateError.message}`)
 
+        if (updated.lesson_id) {
+            try {
+                await ReportLifecyclePolicy.updateEnrollmentProgressAfterReport(
+                    updated.enrollment_id,
+                    reportId
+                )
+            } catch (progressError: any) {
+                console.error('Failed to reconcile enrollment lifecycle after conflict resolution:', progressError)
+            }
+        }
+
         return new OccurrenceReport(updated)
     }
 
@@ -492,7 +512,7 @@ export class ReportCommandService {
             .from('enrollments')
             .select('id')
             .eq('class_session_id', occurrence.class_session_id)
-            .in('status', ['regular', 'trial'])
+            .eq('status', 'regular')
             .lte('start_date', occurrence.occurrence_date)
 
         if (enrollError) throw new Error(`Failed to fetch enrollments: ${enrollError.message}`)
