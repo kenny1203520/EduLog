@@ -7,6 +7,8 @@
                 "fixed": [
                     "Dashboard and incomplete-report tasks now require assignment, explicit teacher attendance, and an effective class-role notification policy; absence and deny decisions take precedence.",
                     "Policy-aware incomplete-report queries now fail closed instead of exposing the broader attended-teacher scope.",
+                    "Notification eligibility now requires an effective class teacher assignment on the occurrence date; generic RBAC assignments cannot replace a class role, and classes with no eligible role or policy notify nobody.",
+                    "Policy-aware notification responses now bypass client caches, use private no-store response headers, and clear stale incomplete-report data when the endpoint fails.",
                     "Automatic class report creation now includes regular enrollments only.",
                     "A persisted present and fully completed report on the highest-sequence lesson now completes a regular enrollment without chapter or progress-letter checks.",
                     "Classroom actions remain visible on touch devices; student profiles, report calendars, and wrapped class schedules now stay within narrow layouts.",
@@ -14,11 +16,12 @@
                     "The container release workflow now runs tests, production type-checking, and the application build before publishing."
                 ],
                 "tests": [
-                    "Added regression coverage for effective-date notification policy denies, regular-only report creation, final-lesson completion, responsive layouts, calendar synchronization, and database lint fixes."
+                    "Added regression coverage for yuan's 2026-07-25 assistant deny, effective-date notification eligibility, no-policy fail-closed behavior, no-store responses, regular-only report creation, final-lesson completion, responsive layouts, calendar synchronization, and database lint fixes."
                 ],
                 "deployment": [
                     "Apply 1000028_rbac_security_performance_and_enrollment_completion.sql after 1000027.",
-                    "Deploy the updated aggregate-incomplete-reports Edge Function."
+                    "Apply 1000029_strict_incomplete_report_notification_eligibility.sql after 1000028.",
+                    "Deploy the updated aggregate-incomplete-reports Edge Function after 1000029, then deploy the frontend."
                 ]
             }
         },
