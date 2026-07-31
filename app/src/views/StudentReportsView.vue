@@ -307,7 +307,8 @@
             <!-- Calendar Section -->
             <div class="lg:col-span-1">
                 <OccurrenceCalendar :occurrences="occurrences" :existing-report-ids="existingReportIds"
-                    :occurrence-statuses="occurrenceStatuses" @select-occurrence="selectOccurrence" />
+                    :occurrence-statuses="occurrenceStatuses"
+                    :model-value="selectedOccurrence?.occurrenceDate || null" @select-occurrence="selectOccurrence" />
 
                 <!-- Class Context Info (Bottom Left) -->
                 <div v-if="enrollmentInfo" class="mt-6 p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
@@ -338,7 +339,7 @@
                             </div>
                             <div>
                                 <p class="text-xs text-gray-500">{{ $t('classroom.session') }}</p>
-                                <p class="text-sm font-bold text-gray-800">{{ enrollmentInfo.sessionName || '-' }}</p>
+                                <p class="break-words text-sm font-bold text-gray-800">{{ enrollmentInfo.sessionName || '-' }}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-3">
@@ -389,7 +390,7 @@
                                 {{ $t('classroom.koding_check') }}
                             </button>
                         </div>
-                        <div class="text-sm text-gray-600 grid grid-cols-2 gap-4">
+                        <div class="grid min-w-0 grid-cols-1 gap-4 text-sm text-gray-600 sm:grid-cols-2">
                             <div v-if="selectedOccurrence.classroomName" class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
                                     $t('classroom.title') }}</span>
@@ -398,7 +399,7 @@
                             <div v-if="selectedOccurrence.sessionName" class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
                                     $t('classroom.session') }}</span>
-                                <span class="text-gray-800 font-medium truncate"
+                                <span class="break-words whitespace-normal font-medium text-gray-800"
                                     :title="selectedOccurrence.sessionName">{{
                                         selectedOccurrence.sessionName }}</span>
                             </div>
@@ -411,7 +412,7 @@
                             <div v-if="selectedOccurrence.effectiveStartTime" class="bg-white/50 p-2 rounded-lg">
                                 <span class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
                                     $t('report.time') }}</span>
-                                <span class="text-gray-800 font-medium">{{ selectedOccurrence.effectiveStartTime }} - {{
+                                <span class="break-words whitespace-normal font-medium text-gray-800">{{ selectedOccurrence.effectiveStartTime }} - {{
                                     selectedOccurrence.effectiveEndTime }}</span>
                             </div>
                             <div v-if="selectedReport.updatedAt || selectedReport.lastEditedAt"

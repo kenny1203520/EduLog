@@ -159,7 +159,7 @@ async function copyToClipboard(text: string) {
 </script>
 
 <template>
-    <section class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-fit transition-all hover:shadow-md">
+    <section class="h-fit min-w-0 overflow-hidden rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md sm:p-6">
         <h2 class="text-xl font-bold mb-6 flex items-center gap-2 text-gray-800">
             <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -212,7 +212,7 @@ async function copyToClipboard(text: string) {
                                 <span class="text-sm font-mono text-gray-700 break-all">{{ c.username }}</span>
                             </div>
                             <button @click="copyToClipboard(c.username)"
-                                class="p-1 text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                                class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
                                 title="Copy Username">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
@@ -249,7 +249,7 @@ async function copyToClipboard(text: string) {
                                     </svg>
                                 </button>
                                 <button @click="copyToClipboard(c.password)"
-                                    class="p-1 text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                                    class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
                                     title="Copy Password">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                         stroke-width="1.5" stroke="currentColor" class="w-4 h-4">

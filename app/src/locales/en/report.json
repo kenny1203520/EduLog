@@ -37,7 +37,7 @@
     "incomplete_reports": "Incomplete Reports",
     "select_to_complete": "Select to complete",
     "incomplete_reports_title": "Incomplete Reports",
-    "incomplete_reports_subtitle": "Only reports for students from classes where you were marked present are shown.",
+    "incomplete_reports_subtitle": "Only reports from classes where you were marked present and your effective class role is eligible for notifications are shown.",
     "only_my_present_students": "My students only (teacher present)",
     "incomplete_reports_desc": "You have {count} report(s) needing attention",
     "all_caught_up": "All caught up!",

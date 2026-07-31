@@ -58,24 +58,24 @@ const globalOptions = {
     }
 }
 
-describe('GlobalIncompleteReportsView attended-teacher scope', () => {
+describe('GlobalIncompleteReportsView notification scope', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         vi.mocked(OccurrenceReportService.getGlobalIncompleteReports).mockResolvedValue([])
     })
-    it('always loads the current teacher present scope and renders no scope checkbox', async () => {
+    it('always loads the policy-aware notification scope and renders no scope checkbox', async () => {
         const wrapper = mount(GlobalIncompleteReportsView, { global: globalOptions })
         await flushPromises()
 
-        expect(OccurrenceReportService.getGlobalIncompleteReports).toHaveBeenCalledWith('my_present')
+        expect(OccurrenceReportService.getGlobalIncompleteReports).toHaveBeenCalledWith('my_notifications')
         expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
         expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('all')
-        expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('my_notifications')
+        expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('my_present')
     })
 
-    it('keeps every view load path fixed to my_present', () => {
+    it('keeps every view load path fixed to my_notifications', () => {
         const source = readFileSync(resolve(process.cwd(), 'src/views/GlobalIncompleteReportsView.vue'), 'utf8')
-        expect(source).toContain("getGlobalIncompleteReports('my_present')")
+        expect(source).toContain("getGlobalIncompleteReports('my_notifications')")
         expect(source).not.toContain('onlyMyPresentStudents')
         expect(source).not.toContain("getGlobalIncompleteReports('all')")
     })

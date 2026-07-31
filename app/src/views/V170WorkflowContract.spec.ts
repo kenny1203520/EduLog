@@ -5,10 +5,13 @@ import { describe, expect, it } from 'vitest'
 const read = (file: string) => readFileSync(resolve(process.cwd(), file), 'utf8')
 
 describe('v1.7 report visibility and hierarchical policy workflow', () => {
-    it('uses my_present for user-facing report lists while preserving notification aggregation', () => {
-        expect(read('src/views/HomeView.vue')).toContain("getGlobalIncompleteReports('my_present')")
-        expect(read('src/services/report/ReportQueryService.ts')).toContain("scope === 'my_notifications'")
+    it('uses notification eligibility for every user-facing incomplete-report surface', () => {
+        expect(read('src/views/HomeView.vue')).toContain("getGlobalIncompleteReports('my_notifications')")
+        expect(read('src/views/GlobalIncompleteReportsView.vue')).toContain("getGlobalIncompleteReports('my_notifications')")
+        expect(read('src/services/report/ReportQueryService.ts')).toContain("if (scope === 'my_notifications') throw error")
         expect(read('src/services/AggregateService.ts')).toContain("'my_notifications'")
+        expect(read('../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'))
+            .toContain("(scope === 'my_present' || scope === 'my_notifications') && !teacherId")
     })
 
     it('keeps created entities in edit mode before dependent policy writes', () => {

@@ -10,15 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.7.1] - 2026-07-31
 
 ### Fixed
-- Required incomplete-report notification recipients to be assigned to the occurrence, explicitly marked present that day, and allowed by their effective class role notification policy; any explicit absence or deny policy takes precedence.
-- Limited automatic occurrence-report creation to regular enrollments while keeping trial students visible with unavailable report-backed actions clearly disabled.
-- Completed an enrollment when any fully completed report references the course's highest-sequence lesson, removing the previous chapter and progress-letter dependency.
+- Enforced the scoped role policy for incomplete reports on both the dashboard and incomplete-report workspace: recipients must be linked to a teacher, assigned and explicitly present for the occurrence, and allowed by their effective class role; any explicit absence or deny takes precedence.
+- Made the policy-aware report query fail closed instead of silently falling back to the broader attended-teacher scope.
+- Limited automatic occurrence-report creation to enrollments whose current status is `regular`.
+- Added a database trigger that completes a regular enrollment only when a persisted report is present, fully completed, and references the course's highest-sequence lesson; chapter and progress-letter checks are no longer used.
+- Kept enrollment completion as a one-way transition and prevented completed enrollments from producing a next-lesson report.
+- Made classroom edit, visibility, and delete controls permanently visible and touch friendly.
+- Fixed student profile breakpoints and overflow, historical-report calendar month synchronization, and class schedule wrapping at narrow widths.
+- Changed the RBAC compatibility views to security-invoker mode, fixed the role trigger function search path, and removed duplicate legacy indexes.
+- Added a release quality gate so tests, production type-checking, and the application build must pass before the container image can be published.
 
 ### Tests
-- Added regression coverage for attendance plus role-policy notification eligibility, deny precedence, regular-only report creation, trial-student UI safeguards, and final-lesson completion.
+- Added regression coverage for attendance plus effective-date role-policy eligibility (including the 2026-06-13 assistant deny case), deny precedence, regular-only report creation, final-lesson completion, responsive controls, calendar synchronization, and database linter remediations.
 
 ### Deployment Notes
-- No database migration is required for v1.7.1.
+- Apply `1000028_rbac_security_performance_and_enrollment_completion.sql` after `1000027`.
 - Deploy the updated `aggregate-incomplete-reports` Edge Function.
 
 

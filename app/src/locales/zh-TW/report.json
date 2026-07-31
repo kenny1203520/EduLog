@@ -37,7 +37,7 @@
     "incomplete_reports": "未完成報告",
     "select_to_complete": "請選擇以補完",
     "incomplete_reports_title": "未完成報告列表",
-    "incomplete_reports_subtitle": "僅顯示您當天有出席授課之學生的未完成報告。",
+    "incomplete_reports_subtitle": "僅顯示您當天明確出席，且班級職務符合通知政策之學生的未完成報告。",
     "only_my_present_students": "僅自己的學生（當天老師出席）",
     "incomplete_reports_desc": "您有 {count} 份報告需要處理",
     "all_caught_up": "全部補完了！",
