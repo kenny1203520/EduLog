@@ -54,18 +54,18 @@ async function refreshData() {
         <!-- Centered Profile Hero Section -->
         <div v-if="studentStore.currentStudent && !studentStore.loading"
             class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-12 text-center animate-in fade-in slide-in-from-top-4 duration-1000">
-            <h1 class="text-5xl font-black text-gray-900 tracking-tight mb-4">
+            <h1 class="break-words text-3xl font-black tracking-tight text-gray-900 sm:text-5xl mb-4">
                 {{ studentStore.currentStudent.name }}
             </h1>
-            <div class="flex items-center justify-center gap-3 text-gray-500 font-bold uppercase tracking-widest text-sm">
+            <div class="flex min-w-0 flex-wrap items-center justify-center gap-3 text-sm font-bold uppercase tracking-widest text-gray-500">
                 <span>{{ studentStore.currentStudent.displayGrade || $t('student.management.no_grade') }}</span>
                 <span class="text-gray-300">•</span>
-                <span class="font-mono text-gray-400 tracking-tight">{{ studentStore.currentStudent.id }}</span>
+                <span class="min-w-0 break-all font-mono tracking-tight text-gray-400">{{ studentStore.currentStudent.id }}</span>
             </div>
             <hr class="mt-12 border-gray-900 border-[0.5px]">
         </div>
 
-        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <main class="mx-auto min-w-0 max-w-7xl overflow-x-clip px-4 py-10 sm:px-6 lg:px-8">
             <Transition name="fade" mode="out-in">
                 <div v-if="studentStore.loading" class="flex flex-col items-center justify-center py-32 space-y-4">
                     <div class="relative w-16 h-16">
@@ -80,16 +80,16 @@ async function refreshData() {
 
                 <div v-else-if="studentStore.currentStudent"
                     class="animate-in fade-in slide-in-from-bottom-4 duration-700">
-                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div class="grid min-w-0 grid-cols-1 gap-8 xl:grid-cols-12">
                         <!-- Left Column: Main Details & Enrollments -->
-                        <div class="lg:col-span-8 space-y-8">
+                        <div class="min-w-0 space-y-8 xl:col-span-8">
                             <StudentMainDetails :student-id="studentId" />
                             <StudentEnrollments :student-id="studentId"
                                 :enrollments="studentStore.currentStudent.enrollments || []" />
                         </div>
 
                         <!-- Right Column: Contacts, Schools, Credentials -->
-                        <div class="lg:col-span-4 space-y-8">
+                        <div class="min-w-0 space-y-8 xl:col-span-4">
                             <StudentContacts :student-id="studentId"
                                 :contacts="studentStore.currentStudent.contacts || []" />
                             <StudentSchools :student-id="studentId"
