@@ -13,8 +13,8 @@ describe('v1.7.1 release metadata', () => {
         expect(pkg.version).toBe('1.7.1')
         expect(lock.version).toBe(pkg.version)
         expect(lock.packages[''].version).toBe(pkg.version)
-        expect(en.entries[0]).toMatchObject({ version: pkg.version, date: '2026-07-31' })
-        expect(zh.entries[0]).toMatchObject({ version: pkg.version, date: '2026-07-31' })
+        expect(en.entries[0]).toMatchObject({ version: pkg.version, date: '2026-08-01' })
+        expect(zh.entries[0]).toMatchObject({ version: pkg.version, date: '2026-08-01' })
     })
 
     it('documents the aggregate function deployment and v1.7.1 migration', () => {
