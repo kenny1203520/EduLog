@@ -27,6 +27,6 @@ export function canReceiveIncompleteReportNotification(
   decision: PermissionDecision,
 ): boolean {
   if (!isPresent) return false
-  if (!decision.policy_configured) return true
+  if (!decision.policy_configured) return false
   return decision.is_allowed && !decision.is_denied
 }

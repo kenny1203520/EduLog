@@ -23,12 +23,15 @@ describe('incomplete report notification eligibility', () => {
         )).toBe(false)
     })
 
-    it('keeps the attended-teacher fallback only when no policy is configured', () => {
+    it('fails closed when no notification policy is configured', () => {
         expect(canReceiveIncompleteReportNotification(true, {
             is_allowed: false,
             is_denied: false,
             policy_configured: false
-        })).toBe(true)
+        })).toBe(false)
+    })
+
+    it('requires an explicit allow and keeps deny precedence', () => {
         expect(canReceiveIncompleteReportNotification(true, {
             is_allowed: true,
             is_denied: true,
@@ -41,7 +44,7 @@ describe('incomplete report notification eligibility', () => {
         })).toBe(false)
     })
 
-    it('excludes yuan when the effective 2026-06-13 assistant policy denies notifications', () => {
+    it('excludes yuan on 2026-07-25 when the effective assistant policy denies notifications', () => {
         const yuanWasAssignedAndPresent = isTeacherPresentForScope(
             'yuan-teacher',
             'yuan-user',

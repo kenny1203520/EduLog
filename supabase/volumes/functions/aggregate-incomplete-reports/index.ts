@@ -11,6 +11,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const jsonHeaders = {
+  ...corsHeaders,
+  'Content-Type': 'application/json',
+  'Cache-Control': 'private, no-store',
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -22,13 +28,13 @@ serve(async (req: Request) => {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY') ?? ''
 
   if (!supabaseUrl || !serviceRoleKey) {
-    return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: 'Missing Supabase configuration' }), { status: 500, headers: jsonHeaders })
   }
 
   const authHeader = req.headers.get('authorization') || ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
   if (!token) {
-    return new Response(JSON.stringify({ error: 'Missing Authorization token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: 'Missing Authorization token' }), { status: 401, headers: jsonHeaders })
   }
 
   const client = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } })
@@ -36,7 +42,7 @@ serve(async (req: Request) => {
   try {
     const userRes = await client.auth.getUser(token)
     if (userRes.error || !userRes.data?.user) {
-      return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: jsonHeaders })
     }
 
     const userId = userRes.data.user.id
@@ -53,7 +59,7 @@ serve(async (req: Request) => {
       teacherId = teacher?.id || ''
       teacherUserId = teacher?.user_id || userId
       if ((scope === 'my_present' || scope === 'my_notifications') && !teacherId) {
-        return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        return new Response(JSON.stringify([]), { status: 200, headers: jsonHeaders })
       }
     }
 
@@ -77,7 +83,7 @@ serve(async (req: Request) => {
       .lte('class_occurrences.occurrence_date', todayStr)
 
     if (error) throw error
-    if (!data) return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    if (!data) return new Response(JSON.stringify([]), { status: 200, headers: jsonHeaders })
 
     const permissionCache = new Map<string, PermissionDecision>()
 
@@ -108,9 +114,8 @@ serve(async (req: Request) => {
         const policyKey = [classroomId, sessionId, occ?.occurrence_date].join(':')
         let decision = permissionCache.get(policyKey)
         if (!decision) {
-          const { data: resolved, error: resolveError } = await client.rpc('resolve_user_permission', {
+          const { data: resolved, error: resolveError } = await client.rpc('resolve_incomplete_report_notification_permission', {
             p_user_id: userId,
-            p_permission_key: 'reports.incomplete.receive',
             p_classroom_id: classroomId,
             p_class_session_id: sessionId,
             p_effective_date: occ?.occurrence_date
@@ -169,8 +174,8 @@ serve(async (req: Request) => {
 
     results.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
-    return new Response(JSON.stringify(results), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=30, s-maxage=30, stale-while-revalidate=60' } })
+    return new Response(JSON.stringify(results), { status: 200, headers: jsonHeaders })
   } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || String(e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: e?.message || String(e) }), { status: 500, headers: jsonHeaders })
   }
 })

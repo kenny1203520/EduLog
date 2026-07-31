@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000027_rbac_foundation_and_scoped_permissions.sql'), 'utf8')
 const correction = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000028_rbac_security_performance_and_enrollment_completion.sql'), 'utf8')
+const strictNotificationEligibility = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000029_strict_incomplete_report_notification_eligibility.sql'), 'utf8')
 const edgeFunction = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'), 'utf8')
 const notificationPolicy = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/policy.ts'), 'utf8')
 
@@ -30,14 +31,26 @@ describe('RBAC migration contract', () => {
         expect(migration).toContain("COALESCE(bool_or(effect = 'deny'), false)")
     })
 
-    it('routes notification aggregation through the evaluator with legacy fallback', () => {
-        expect(edgeFunction).toContain("client.rpc('resolve_user_permission'")
+    it('routes notification aggregation through the strict class-role evaluator', () => {
+        expect(edgeFunction).toContain("client.rpc('resolve_incomplete_report_notification_permission'")
         expect(edgeFunction).toContain('canReceiveIncompleteReportNotification')
         expect(edgeFunction).toContain('isTeacherPresentForScope')
         expect(notificationPolicy).toContain('if (!isPresent) return false')
-        expect(notificationPolicy).toContain('if (!decision.policy_configured) return true')
+        expect(notificationPolicy).toContain('if (!decision.policy_configured) return false')
         expect(notificationPolicy).toContain('return decision.is_allowed && !decision.is_denied')
-        expect(edgeFunction).not.toContain('resolveNotificationRoleIds')
+        expect(edgeFunction).toContain("'Cache-Control': 'private, no-store'")
+        expect(edgeFunction).not.toContain("'Cache-Control': 'public")
+    })
+
+    it('requires an effective class assignment and explicit three-level policy', () => {
+        expect(strictNotificationEligibility).toContain('resolve_incomplete_report_notification_permission')
+        expect(strictNotificationEligibility).toContain('FROM public.class_session_teachers AS class_teacher')
+        expect(strictNotificationEligibility).toContain('class_teacher.effective_from <= p_effective_date')
+        expect(strictNotificationEligibility).toContain('class_teacher.effective_to >= p_effective_date')
+        expect(strictNotificationEligibility).toContain("WHEN 'class_session' THEN 3")
+        expect(strictNotificationEligibility).toContain("WHEN 'classroom' THEN 2")
+        expect(strictNotificationEligibility).toContain("COALESCE(bool_or(effect = 'deny'), false)")
+        expect(strictNotificationEligibility).not.toContain('user_role_assignments')
     })
 
     it('hardens compatibility views, trigger search paths and duplicate indexes', () => {

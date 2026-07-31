@@ -6,10 +6,20 @@ const read = (file: string) => readFileSync(resolve(process.cwd(), file), 'utf8'
 
 describe('v1.7 report visibility and hierarchical policy workflow', () => {
     it('uses notification eligibility for every user-facing incomplete-report surface', () => {
-        expect(read('src/views/HomeView.vue')).toContain("getGlobalIncompleteReports('my_notifications')")
-        expect(read('src/views/GlobalIncompleteReportsView.vue')).toContain("getGlobalIncompleteReports('my_notifications')")
+        const home = read('src/views/HomeView.vue')
+        const globalIncompleteReports = read('src/views/GlobalIncompleteReportsView.vue')
+
+        expect(home).toContain("getGlobalIncompleteReports('my_notifications')")
+        expect(home).not.toContain("getGlobalIncompleteReports('my_present')")
+        expect(home).not.toContain("getGlobalIncompleteReports('all')")
+        expect(globalIncompleteReports).toContain("getGlobalIncompleteReports('my_notifications')")
+        expect(globalIncompleteReports).not.toContain("getGlobalIncompleteReports('my_present')")
+        expect(globalIncompleteReports).not.toContain("getGlobalIncompleteReports('all')")
+        expect(globalIncompleteReports).toContain('incompleteReports.value = []')
+        expect(globalIncompleteReports).toContain('selectedReport.value = null')
         expect(read('src/services/report/ReportQueryService.ts')).toContain("if (scope === 'my_notifications') throw error")
-        expect(read('src/services/AggregateService.ts')).toContain("'my_notifications'")
+        expect(read('src/services/AggregateService.ts')).toContain("if (scope === 'my_notifications') return fetchReports()")
+        expect(read('src/services/AggregateService.ts')).toContain("request.cache = 'no-store'")
         expect(read('../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'))
             .toContain("(scope === 'my_present' || scope === 'my_notifications') && !teacherId")
     })
