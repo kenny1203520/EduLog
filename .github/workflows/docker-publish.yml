@@ -20,6 +20,10 @@ env:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      VITE_SUPABASE_URL: https://supabase.invalid
+      VITE_SUPABASE_ANON_KEY: ci-anon-key
+      VITE_SUPABASE_FUNCTIONS_BASE_URL: https://functions.invalid
     defaults:
       run:
         working-directory: ./app
