@@ -7,6 +7,9 @@ const cardStart = source.indexOf('<div v-for="session in sortedSessions"')
 const cardEnd = source.indexOf('<div v-if="sortedSessions.length === 0"', cardStart)
 const card = source.slice(cardStart, cardEnd)
 
+const roomCardStart = source.indexOf('<div v-for="room in classrooms"')
+const roomCardEnd = source.indexOf('<!-- Card Body -->', roomCardStart)
+const roomCard = source.slice(roomCardStart, roomCardEnd)
 describe('ClassroomManagement session card responsive contract', () => {
     it('uses card width to switch metadata columns without crushing mobile content', () => {
         expect(card).toContain('class="session-card group min-w-0')
@@ -42,5 +45,13 @@ describe('ClassroomManagement session card responsive contract', () => {
         expect(source).toContain('const roomCompare = roomA.localeCompare(roomB)')
         expect(source).toContain('if (dayA !== dayB) return dayA - dayB')
         expect(source).toContain("firstA?.start_time || a.start_time || ''")
+    })
+
+    it('keeps room edit, delete and visibility controls visible and touch sized', () => {
+        expect(roomCard).toContain('always visible for mouse, keyboard, and touch')
+        expect(roomCard).toContain('min-h-11 min-w-11')
+        expect(roomCard).toContain(':aria-label="$t(\'common.edit\')"')
+        expect(roomCard).toContain("$t('classroom.hide')")
+        expect(roomCard).not.toContain('lg:opacity-0')
     })
 })

@@ -25,8 +25,8 @@
                     <div class="space-y-3">
                         <div v-for="occurrence in getOccurrencesForDate(selectedDate)" :key="occurrence.id"
                             @click="$emit('select-occurrence', occurrence)"
-                            class="p-4 bg-white border border-gray-100 rounded-2xl hover:shadow-md hover:border-emerald-100 cursor-pointer transition-all flex items-center justify-between group active:scale-[0.98]">
-                            <div class="flex items-center gap-3">
+                            class="group flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-4 transition-all hover:border-emerald-100 hover:shadow-md active:scale-[0.98] cursor-pointer">
+                            <div class="flex min-w-0 items-center gap-3">
                                 <div
                                     class="w-10 h-10 rounded-xl bg-gray-50 text-gray-400 flex items-center justify-center shrink-0 group-hover:bg-emerald-50 group-hover:text-emerald-500 transition-colors">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
@@ -35,17 +35,17 @@
                                             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                     </svg>
                                 </div>
-                                <div>
+                                <div class="min-w-0">
                                     <div
-                                        class="font-black text-gray-900 leading-tight group-hover:text-emerald-700 transition-colors">
+                                        class="break-words font-black leading-tight text-gray-900 transition-colors group-hover:text-emerald-700">
                                         {{ occurrence.sessionName }}</div>
-                                    <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mt-0.5">
+                                    <div class="mt-0.5 break-words text-[10px] font-bold uppercase tracking-wider text-gray-400">
                                         {{ occurrence.effectiveStartTime }} - {{ occurrence.effectiveEndTime }}
                                     </div>
                                 </div>
                             </div>
                             <span :class="getOccurrenceStatusBadgeClass(occurrence.status)"
-                                class="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border">
+                                class="shrink-0 rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest">
                                 {{ $t(`attendance.${props.occurrenceStatuses[occurrence.id!] || occurrence.status}`) }}
                             </span>
                         </div>

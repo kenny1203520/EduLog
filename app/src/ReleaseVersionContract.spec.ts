@@ -17,10 +17,10 @@ describe('v1.7.1 release metadata', () => {
         expect(zh.entries[0]).toMatchObject({ version: pkg.version, date: '2026-07-31' })
     })
 
-    it('documents the aggregate function deployment and no new migration', () => {
+    it('documents the aggregate function deployment and v1.7.1 migration', () => {
         const root = readFileSync(resolve(process.cwd(), '../CHANGELOG.md'), 'utf8')
         const release = root.slice(root.indexOf('## [1.7.1]'), root.indexOf('## [1.7.0]'))
-        expect(release).toContain('No database migration is required for v1.7.1')
+        expect(release).toContain('1000028_rbac_security_performance_and_enrollment_completion.sql')
         expect(release).toContain('aggregate-incomplete-reports')
     })
 })

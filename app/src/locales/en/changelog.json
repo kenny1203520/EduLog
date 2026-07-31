@@ -5,15 +5,19 @@
             "date": "2026-07-31",
             "changes": {
                 "fixed": [
-                    "Incomplete-report notifications now require explicit teacher attendance and an effective class-role notification policy; absence and deny decisions take precedence.",
-                    "Automatic class report creation now includes regular enrollments only, while trial students remain visible with unavailable report actions disabled.",
-                    "A fully completed report on the highest-sequence lesson now completes the enrollment without chapter or progress-letter checks."
+                    "Dashboard and incomplete-report tasks now require assignment, explicit teacher attendance, and an effective class-role notification policy; absence and deny decisions take precedence.",
+                    "Policy-aware incomplete-report queries now fail closed instead of exposing the broader attended-teacher scope.",
+                    "Automatic class report creation now includes regular enrollments only.",
+                    "A persisted present and fully completed report on the highest-sequence lesson now completes a regular enrollment without chapter or progress-letter checks.",
+                    "Classroom actions remain visible on touch devices; student profiles, report calendars, and wrapped class schedules now stay within narrow layouts.",
+                    "RBAC compatibility views now use invoker security, the role trigger has a fixed search path, and duplicate legacy indexes were removed.",
+                    "The container release workflow now runs tests, production type-checking, and the application build before publishing."
                 ],
                 "tests": [
-                    "Added regression coverage for notification eligibility, regular-only report creation, trial-student safeguards, and final-lesson completion."
+                    "Added regression coverage for effective-date notification policy denies, regular-only report creation, final-lesson completion, responsive layouts, calendar synchronization, and database lint fixes."
                 ],
                 "deployment": [
-                    "No database migration is required for v1.7.1.",
+                    "Apply 1000028_rbac_security_performance_and_enrollment_completion.sql after 1000027.",
                     "Deploy the updated aggregate-incomplete-reports Edge Function."
                 ]
             }

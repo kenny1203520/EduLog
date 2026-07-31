@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000027_rbac_foundation_and_scoped_permissions.sql'), 'utf8')
+const correction = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000028_rbac_security_performance_and_enrollment_completion.sql'), 'utf8')
 const edgeFunction = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'), 'utf8')
 const notificationPolicy = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/policy.ts'), 'utf8')
 
@@ -21,6 +22,14 @@ describe('RBAC migration contract', () => {
         expect(migration).toContain("WHEN 'class_session' THEN 3 WHEN 'classroom' THEN 2 ELSE 1")
     })
 
+    it('resolves only roles effective on the occurrence date with deny precedence', () => {
+        expect(migration).toContain('class_teacher.effective_from <= p_effective_date')
+        expect(migration).toContain('class_teacher.effective_to >= p_effective_date')
+        expect(migration).toContain('assignment.effective_from <= p_effective_date')
+        expect(migration).toContain('assignment.effective_to >= p_effective_date')
+        expect(migration).toContain("COALESCE(bool_or(effect = 'deny'), false)")
+    })
+
     it('routes notification aggregation through the evaluator with legacy fallback', () => {
         expect(edgeFunction).toContain("client.rpc('resolve_user_permission'")
         expect(edgeFunction).toContain('canReceiveIncompleteReportNotification')
@@ -29,5 +38,14 @@ describe('RBAC migration contract', () => {
         expect(notificationPolicy).toContain('if (!decision.policy_configured) return true')
         expect(notificationPolicy).toContain('return decision.is_allowed && !decision.is_denied')
         expect(edgeFunction).not.toContain('resolveNotificationRoleIds')
+    })
+
+    it('hardens compatibility views, trigger search paths and duplicate indexes', () => {
+        expect(correction.match(/security_invoker = true/g)).toHaveLength(2)
+        expect(correction).toContain('SET search_path = \'\'')
+        expect(correction).toContain('DROP INDEX IF EXISTS public.idx_class_session_teachers_role_type_id')
+        expect(correction).toContain('DROP INDEX IF EXISTS public.teacher_role_types_code_unique')
+        expect(correction).toContain('DROP INDEX IF EXISTS public.teacher_role_types_name_unique')
+        expect(correction).toContain('SECURITY INVOKER')
     })
 })

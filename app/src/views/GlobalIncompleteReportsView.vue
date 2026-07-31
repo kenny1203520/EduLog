@@ -420,7 +420,7 @@ async function loadReports(refreshEditor = true) {
     }
 
     try {
-        const raw = await OccurrenceReportService.getGlobalIncompleteReports('my_present')
+        const raw = await OccurrenceReportService.getGlobalIncompleteReports('my_notifications')
         const normalized = (raw || []).map((r: any) => {
             const progress = r.progressLetter || r.progress_letter || ''
             let start = ''
