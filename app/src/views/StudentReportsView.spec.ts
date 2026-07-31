@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import StudentReportsView from './StudentReportsView.vue'
+
+const source = readFileSync(resolve(process.cwd(), 'src/views/StudentReportsView.vue'), 'utf8')
 
 vi.mock('vue-router', () => ({
     useRoute: () => ({ params: {} }),
@@ -76,5 +80,12 @@ describe('StudentReportsView scheduled report filter', () => {
 
         await filterButton.trigger('click')
         expect(filterButton.attributes('aria-pressed')).toBe('true')
+    })
+
+    it('keeps the calendar on the selected report month and wraps class metadata', () => {
+        expect(source).toContain(':model-value="selectedOccurrence?.occurrenceDate || null"')
+        expect(source).toContain('grid-cols-1 gap-4 text-sm text-gray-600 sm:grid-cols-2')
+        expect(source).toContain('break-words whitespace-normal font-medium text-gray-800')
+        expect(source).not.toContain('font-medium truncate')
     })
 })

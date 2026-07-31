@@ -212,7 +212,7 @@ export class ReportCommandService {
 
         if (updated.lesson_id && (detailedData?.lessonId !== undefined || detailedData?.isCompleted !== undefined)) {
             try {
-                await ReportLifecyclePolicy.updateEnrollmentProgressAfterReport(
+                await ReportLifecyclePolicy.ensureNextOccurrenceReportAfterSave(
                     serverReport.enrollment_id,
                     reportId
                 )
@@ -394,7 +394,7 @@ export class ReportCommandService {
 
         if (updated.lesson_id) {
             try {
-                await ReportLifecyclePolicy.updateEnrollmentProgressAfterReport(
+                await ReportLifecyclePolicy.ensureNextOccurrenceReportAfterSave(
                     updated.enrollment_id,
                     reportId
                 )
@@ -457,7 +457,7 @@ export class ReportCommandService {
 
         if (updated.lesson_id) {
             try {
-                await ReportLifecyclePolicy.updateEnrollmentProgressAfterReport(
+                await ReportLifecyclePolicy.ensureNextOccurrenceReportAfterSave(
                     updated.enrollment_id,
                     reportId
                 )

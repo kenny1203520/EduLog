@@ -844,8 +844,8 @@ function clearTeacherSelection() {
                     class="bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group overflow-hidden flex flex-col h-full">
 
                     <!-- Card Header -->
-                    <div class="p-5 pb-3 flex items-start justify-between">
-                        <div class="flex items-center gap-4">
+                    <div class="flex flex-col gap-4 p-5 pb-3">
+                        <div class="flex min-w-0 items-center gap-4">
                             <!-- Room Indicator Icon -->
                             <div class="w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black uppercase shrink-0 group-hover:scale-110 transition-transform shadow-inner"
                                 :style="{ backgroundColor: `${room.color}15`, color: room.color }">
@@ -867,12 +867,13 @@ function clearTeacherSelection() {
                             </div>
                         </div>
 
-                        <!-- Quick Actions (Mobile Always Visible, Desktop Hover) -->
+                        <!-- Quick Actions (always visible for mouse, keyboard, and touch) -->
                         <div
-                            class="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                            class="flex w-full items-center justify-end gap-2 border-t border-gray-100 pt-3">
                             <button @click="openEditRoom(room)"
-                                class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
-                                :title="$t('common.edit')">
+                                class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-50"
+                                :title="$t('common.edit')"
+                                :aria-label="$t('common.edit')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
                                     fill="currentColor">
                                     <path
@@ -880,8 +881,9 @@ function clearTeacherSelection() {
                                 </svg>
                             </button>
                             <button @click="deleteClassroom(room.id!)"
-                                class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                                :title="$t('common.delete')">
+                                class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-red-500 transition-all hover:bg-red-50"
+                                :title="$t('common.delete')"
+                                :aria-label="$t('common.delete')">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20"
                                     fill="currentColor">
                                     <path fill-rule="evenodd"
@@ -890,8 +892,9 @@ function clearTeacherSelection() {
                                 </svg>
                             </button>
                             <button @click="toggleClassroomVisibility(room.id)"
-                                class="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
-                                :title="isClassroomHidden(room.id) ? $t('classroom.show') : $t('classroom.hide')">
+                                class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-amber-600 transition-all hover:bg-amber-50"
+                                :title="isClassroomHidden(room.id) ? $t('classroom.show') : $t('classroom.hide')"
+                                :aria-label="isClassroomHidden(room.id) ? $t('classroom.show') : $t('classroom.hide')">
                                 <svg v-if="isClassroomHidden(room.id)" xmlns="http://www.w3.org/2000/svg"
                                     class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                     <path

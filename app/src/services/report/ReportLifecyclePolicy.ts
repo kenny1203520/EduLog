@@ -6,13 +6,6 @@ import { SuspensionService } from '../suspension/SuspensionService'
 import { DateUtils } from '@/utils/DateUtils'
 import { SessionService } from '../session/SessionService'
 
-export function isFinalCompletedLesson(
-    isCompleted: boolean,
-    lessonId: string | null | undefined,
-    finalLessonId: string | null | undefined
-): boolean {
-    return isCompleted && Boolean(lessonId) && lessonId === finalLessonId
-}
 
 export class ReportLifecyclePolicy {
     static async buildInitialReportPayload(enrollmentId: string, occurrenceId: string): Promise<Partial<OccurrenceReportDTO>> {
@@ -52,47 +45,18 @@ export class ReportLifecyclePolicy {
         return payload
     }
 
-    static async updateEnrollmentProgressAfterReport(
+    static async ensureNextOccurrenceReportAfterSave(
         enrollmentId: string,
         reportId: string
     ): Promise<void> {
         const { data: enrollment, error: enrollmentError } = await supabase
             .from('enrollments')
-            .select('course_id, status')
+            .select('status')
             .eq('id', enrollmentId)
             .single()
 
         if (enrollmentError || !enrollment) return
 
-        const { data: finalLesson } = await supabase
-            .from('lessons')
-            .select('id')
-            .eq('course_id', enrollment.course_id)
-            .order('sequence', { ascending: false })
-            .limit(1)
-            .maybeSingle()
-
-        if (finalLesson?.id) {
-            const { data: completedReports, error: completionError } = await supabase
-                .from('occurrence_reports')
-                .select('lesson_id, is_completed')
-                .eq('enrollment_id', enrollmentId)
-                .eq('is_completed', true)
-
-            const hasCompletedFinalLesson = completedReports?.some(report =>
-                isFinalCompletedLesson(report.is_completed, report.lesson_id, finalLesson.id)
-            )
-            if (!completionError && hasCompletedFinalLesson) {
-                if (enrollment.status !== 'completed') {
-                    const { error: statusError } = await supabase
-                        .from('enrollments')
-                        .update({ status: 'completed' })
-                        .eq('id', enrollmentId)
-                    if (statusError) throw new Error('Failed to complete enrollment: ' + statusError.message)
-                }
-                return
-            }
-        }
 
         if (enrollment.status !== 'regular') return
 
