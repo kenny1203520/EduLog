@@ -70,6 +70,19 @@ describe('QuickAttendancePanel', () => {
         expect(wrapper.text()).toContain('common.saving')
     })
 
+    it('keeps a trial enrollment visible while disabling report-backed attendance actions', async () => {
+        const wrapper = mountPanel({
+            students: [{ id: 'trial-1', name: 'Trial Student', status: 'pending', isSaving: false, disabled: true, disabledReason: 'Regular enrollment required' }]
+        })
+        const student = wrapper.get('[data-student-id="trial-1"]')
+        expect(student.text()).toContain('Trial Student')
+        expect(student.text()).toContain('Regular enrollment required')
+        expect(student.get('input[type="checkbox"]').attributes('disabled')).toBeDefined()
+        expect(student.findAll('[data-attendance-status]').every(button => button.attributes('disabled') !== undefined)).toBe(true)
+        await student.get('[data-attendance-status="present"]').trigger('click')
+        expect(wrapper.emitted('set-attendance')).toBeUndefined()
+    })
+
     it('distinguishes filtered empty results and exposes clearing filters', async () => {
         const wrapper = mountPanel({ students: [], showClearFilters: true, emptyMessage: 'No matches' })
         expect(wrapper.text()).toContain('No matches')

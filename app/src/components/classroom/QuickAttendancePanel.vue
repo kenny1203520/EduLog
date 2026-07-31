@@ -9,6 +9,8 @@ export interface QuickAttendanceStudent {
     name: string
     status: QuickAttendanceStatus
     isSaving: boolean
+    disabled?: boolean
+    disabledReason?: string
 }
 
 const props = withDefaults(defineProps<{
@@ -37,12 +39,13 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const selectedSet = computed(() => new Set(props.selectedIds))
-const allVisibleSelected = computed(() => props.students.length > 0 && props.students.every(student => selectedSet.value.has(student.id)))
+const selectableStudents = computed(() => props.students.filter(student => !student.disabled))
+const allVisibleSelected = computed(() => selectableStudents.value.length > 0 && selectableStudents.value.every(student => selectedSet.value.has(student.id)))
 
 const statuses: QuickAttendanceStatus[] = ['pending', 'present', 'absent']
 
 function requestAttendance(student: QuickAttendanceStudent, status: QuickAttendanceStatus) {
-    if (student.status === status || student.isSaving || props.disabled) return
+    if (student.status === status || student.isSaving || student.disabled || props.disabled) return
     emit('set-attendance', student.id, status)
 }
 
@@ -105,7 +108,7 @@ function statusClass(status: QuickAttendanceStatus, active: boolean): string {
                 <div class="flex flex-wrap items-center gap-2">
                     <button type="button" class="rounded-xl border px-4 py-2 text-xs font-black transition"
                         :class="allVisibleSelected ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-100 bg-white text-gray-500 hover:bg-gray-50'"
-                        :disabled="students.length === 0" @click="emit('toggle-select-all')">
+                        :disabled="selectableStudents.length === 0" @click="emit('toggle-select-all')">
                         {{ allVisibleSelected ? t('common.deselect_all') : t('common.select_all') }}
                     </button>
                     <span class="text-xs font-black text-gray-400">{{ selectedIds.length }} {{ t('common.selected') }}</span>
@@ -134,11 +137,12 @@ function statusClass(status: QuickAttendanceStatus, active: boolean): string {
                     <div class="flex min-w-0 items-start gap-3">
                         <input type="checkbox" class="mt-1 h-5 w-5 shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                             :checked="selectedSet.has(student.id)" :aria-label="`${t('classroom.attendance_select_student')} ${student.name}`"
+                            :disabled="student.disabled" :title="student.disabledReason"
                             @change="emit('toggle-selection', student.id)">
                         <div class="min-w-0 flex-1">
                             <p class="break-words text-base font-black text-gray-900">{{ student.name }}</p>
                             <p class="mt-1 text-xs font-bold" :class="student.status === 'present' ? 'text-emerald-600' : student.status === 'absent' ? 'text-red-600' : 'text-gray-400'">
-                                {{ t(`attendance.${student.status}`) }} · {{ student.isSaving ? t('common.saving') : t('classroom.attendance_saved') }}
+                                {{ student.disabled ? student.disabledReason : t(`attendance.${student.status}`) + ' · ' + (student.isSaving ? t('common.saving') : t('classroom.attendance_saved')) }}
                             </p>
                         </div>
                     </div>
@@ -147,7 +151,7 @@ function statusClass(status: QuickAttendanceStatus, active: boolean): string {
                             class="min-w-0 rounded-xl border px-2 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50"
                             :data-attendance-status="status" :class="statusClass(status, student.status === status)" :aria-pressed="student.status === status"
                             :aria-label="`${student.name}: ${t(`attendance.${status}`)}`"
-                            :disabled="disabled || student.isSaving" :title="student.isSaving ? t('common.saving') : disabled ? t('classroom.attendance_action_disabled') : undefined"
+                            :disabled="disabled || student.isSaving || student.disabled" :title="student.disabledReason || (student.isSaving ? t('common.saving') : disabled ? t('classroom.attendance_action_disabled') : undefined)"
                             @click="requestAttendance(student, status)">
                             {{ t(`attendance.${status}`) }}
                         </button>
