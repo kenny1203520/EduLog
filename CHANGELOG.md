@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-08-01
+
+### Fixed
+- Made the DHI Nginx runtime execute EduLog's bootstrap script explicitly, generate the active Nginx configuration, and listen on the Docker-exposed HTTP and HTTPS ports instead of retaining the base image's port 8080 configuration.
+- Assigned built frontend files to the non-root Nginx user so startup can safely regenerate runtime-config.js without elevating container privileges.
+
+### Tests
+- Added a Docker runtime contract covering the explicit entrypoint, non-root file ownership, active Nginx configuration generation, command handoff, exposed ports, and LF-only Alpine shell script.
+- Verified the production image with live container requests: /healthz, /, /runtime-config.js, and the generated JavaScript asset all return HTTP 200, with runtime configuration marked no-store.
+
+### Deployment Notes
+- No database migration or Edge Function deployment is required for v1.7.2.
+- Rebuild and redeploy the application Docker image so the corrected entrypoint and file ownership are included.
+
 ## [1.7.1] - 2026-08-01
 
 ### Fixed

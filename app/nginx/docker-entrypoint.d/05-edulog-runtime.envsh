@@ -208,3 +208,14 @@ fi
 
 export EDULOG_NGINX_HTTP_SERVER_BLOCK
 export EDULOG_NGINX_HTTPS_SERVER_BLOCK
+
+{
+  printf '%s\n' "$EDULOG_NGINX_HTTP_SERVER_BLOCK"
+  printf '%s\n' "$EDULOG_NGINX_HTTPS_SERVER_BLOCK"
+} > /etc/nginx/conf.d/default.conf
+
+if [ "$#" -eq 0 ]; then
+  set -- nginx -g 'daemon off;'
+fi
+
+exec "$@"
