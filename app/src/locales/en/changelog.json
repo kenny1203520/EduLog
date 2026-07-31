@@ -1,6 +1,23 @@
 {
     "entries": [
         {
+            "version": "1.7.2",
+            "date": "2026-08-01",
+            "changes": {
+                "fixed": [
+                    "The DHI Nginx image now explicitly runs the EduLog bootstrap, writes the active Nginx configuration, and listens on the exposed application ports.",
+                    "Built frontend files now belong to the non-root Nginx user so runtime-config.js can be regenerated without elevated container privileges."
+                ],
+                "tests": [
+                    "Added Docker startup contract coverage and verified health, homepage, runtime configuration, and generated JavaScript assets return HTTP 200 from a live container."
+                ],
+                "deployment": [
+                    "No database migration or Edge Function deployment is required.",
+                    "Rebuild and redeploy the application Docker image."
+                ]
+            }
+        },
+        {
             "version": "1.7.1",
             "date": "2026-08-01",
             "changes": {
