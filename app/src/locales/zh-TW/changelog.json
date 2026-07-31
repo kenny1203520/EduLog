@@ -1,6 +1,23 @@
 {
     "entries": [
         {
+            "version": "1.7.2",
+            "date": "2026-08-01",
+            "changes": {
+                "fixed": [
+                    "DHI Nginx image 現在會明確執行 EduLog 啟動腳本、產生實際使用的 Nginx 設定，並監聽對外公開的應用程式連接埠。",
+                    "建置後的前端檔案改由非 root 的 Nginx 使用者擁有，使 runtime-config.js 可在不提高容器權限的情況下安全重新產生。"
+                ],
+                "tests": [
+                    "新增 Docker 啟動合約測試，並以實際容器確認健康檢查、首頁、執行期設定與產生的 JavaScript 資源皆回傳 HTTP 200。"
+                ],
+                "deployment": [
+                    "不需要新增資料庫 migration 或部署 Edge Function。",
+                    "請重新建置並部署應用程式 Docker image。"
+                ]
+            }
+        },
+        {
             "version": "1.7.1",
             "date": "2026-08-01",
             "changes": {
