@@ -1,18 +1,36 @@
-import { describe, expect, it, vi } from 'vitest'
-vi.mock('@/lib/supabase', () => ({ supabase: {} }))
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { describe, expect, it } from 'vitest'
 
-import { isFinalCompletedLesson } from './ReportLifecyclePolicy'
+const migration = readFileSync(
+    resolve(process.cwd(), '../supabase/migrations/1000028_rbac_security_performance_and_enrollment_completion.sql'),
+    'utf8'
+)
+const lifecycle = readFileSync(resolve(process.cwd(), 'src/services/report/ReportLifecyclePolicy.ts'), 'utf8')
 
-describe('ReportLifecyclePolicy final lesson completion', () => {
-    it('completes only when a fully completed report references the highest-sequence lesson', () => {
-        expect(isFinalCompletedLesson(true, 'lesson-final', 'lesson-final')).toBe(true)
-        expect(isFinalCompletedLesson(false, 'lesson-final', 'lesson-final')).toBe(false)
-        expect(isFinalCompletedLesson(true, 'lesson-before-final', 'lesson-final')).toBe(false)
-        expect(isFinalCompletedLesson(true, null, 'lesson-final')).toBe(false)
+describe('final attended lesson enrollment completion', () => {
+    it('uses one database trigger for every persisted report mutation path', () => {
+        expect(migration).toContain('AFTER INSERT OR UPDATE OF attendance_status, is_completed, lesson_id')
+        expect(migration).toContain("NEW.attendance_status = 'present'")
+        expect(migration).toContain('NEW.is_completed IS TRUE')
+        expect(migration).toContain('NEW.lesson_id IS NOT NULL')
+        expect(migration).toContain("enrollment.status = 'regular'")
     })
 
-    it('does not depend on a chapter or progress-letter value', () => {
-        const report = { is_completed: true, lesson_id: 'lesson-final', progress_letter: null, chapter: null }
-        expect(isFinalCompletedLesson(report.is_completed, report.lesson_id, 'lesson-final')).toBe(true)
+    it('recognizes the final lesson by course sequence without chapter checks', () => {
+        expect(migration).toContain('later_lesson.sequence > current_lesson.sequence')
+        expect(migration).not.toMatch(/chapter/i)
+    })
+
+    it('backfills existing eligible reports and never downgrades completed enrollments', () => {
+        expect(migration).toContain('Reconcile records saved before this trigger existed')
+        expect(migration).toContain("WHERE enrollment.status = 'regular'")
+        expect(migration).not.toContain("SET status = 'regular'")
+    })
+
+    it('keeps the client lifecycle focused on idempotent next-report creation', () => {
+        expect(lifecycle).toContain('ensureNextOccurrenceReportAfterSave')
+        expect(lifecycle).not.toContain('isFinalCompletedLesson')
+        expect(lifecycle).not.toContain(".update({ status: 'completed' })")
     })
 })

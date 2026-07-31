@@ -52,7 +52,7 @@ serve(async (req: Request) => {
       if (teacherError) throw teacherError
       teacherId = teacher?.id || ''
       teacherUserId = teacher?.user_id || userId
-      if (scope === 'my_present' && !teacherId) {
+      if ((scope === 'my_present' || scope === 'my_notifications') && !teacherId) {
         return new Response(JSON.stringify([]), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
     }

@@ -168,7 +168,7 @@
 
                             <!-- Actions (Only in View Mode) -->
                             <div v-if="editingId !== suspension.id"
-                                class="flex items-center gap-1 ml-4 opacity-0 group-hover:opacity-100 transition-all">
+                                class="ml-4 flex flex-wrap items-center gap-1">
                                 <!-- End Indefinite Button (Quick Action) -->
                                 <button v-if="suspension.isIndefinite && suspension.isActive"
                                     @click="endSuspensionNow(suspension)" :disabled="isEndingNowId === suspension.id"

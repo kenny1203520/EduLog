@@ -203,12 +203,17 @@ export class ReportQueryService {
         try {
             const agg = await AggregateService.getIncompleteReportsAggregate(90, scope)
             if (Array.isArray(agg)) return agg
-        } catch (e) {
-            // ignore and fallback
+        } catch (error) {
+            // Notification eligibility is authoritative. Never fall back to the broader
+            // attended-teacher scope when the policy-aware endpoint is unavailable.
+            if (scope === 'my_notifications') throw error
+        }
+        if (scope === 'my_notifications') {
+            throw new Error('Policy-aware incomplete report query returned an invalid response')
         }
 
-        // Older deployments may not know the notification scope yet. Preserve the previous behavior.
-        return this.fetchIncompleteReportsInternal(90, scope === 'my_notifications' ? 'my_present' : scope)
+
+        return this.fetchIncompleteReportsInternal(90, scope)
     }
 
     private static async getCurrentTeacherIdentity(): Promise<{ id: string, userId: string | null } | null> {

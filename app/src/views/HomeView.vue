@@ -83,7 +83,7 @@ onMounted(async () => {
         }
     } catch (e) {
         console.error('Failed to load dashboard data:', e)
-        await loadMyPresentPendingReports()
+        await loadMyNotificationPendingReports()
     } finally {
         loading.value = false
     }
@@ -91,16 +91,16 @@ onMounted(async () => {
 
 async function applyDashboardPendingReports(_agg: any) {
     // Role-aware recipient rules are resolved by the dedicated incomplete-report endpoint.
-    await loadMyPresentPendingReports()
+    await loadMyNotificationPendingReports()
 }
 
-async function loadMyPresentPendingReports() {
+async function loadMyNotificationPendingReports() {
     try {
-        const myReports = await OccurrenceReportService.getGlobalIncompleteReports('my_present')
+        const myReports = await OccurrenceReportService.getGlobalIncompleteReports('my_notifications')
         pendingReports.value = (myReports || []).map(normalizePendingReport)
         pendingReportsCount.value = pendingReports.value.length
     } catch (fallbackError) {
-        console.error('Failed to load my present pending reports:', fallbackError)
+        console.error('Failed to load notification-eligible pending reports:', fallbackError)
         pendingReports.value = []
         pendingReportsCount.value = 0
     }

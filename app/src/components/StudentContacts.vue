@@ -155,7 +155,7 @@ async function copyToClipboard(text: string) {
                             </svg>
                             {{ c.phone }}
                             <button v-if="c.phone" @click="copyToClipboard(c.phone)"
-                                class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-1 cursor-pointer"
+                                class="ml-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
                                 title="Copy">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
@@ -172,7 +172,7 @@ async function copyToClipboard(text: string) {
                             </svg>
                             {{ c.email }}
                             <button v-if="c.email" @click="copyToClipboard(c.email)"
-                                class="text-gray-300 hover:text-emerald-600 opacity-0 group-hover:opacity-100 transition-all ml-1 cursor-pointer"
+                                class="ml-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
                                 title="Copy">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">

@@ -153,7 +153,7 @@ async function refreshData() {
 </script>
 
 <template>
-    <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 transition-all hover:shadow-md">
+    <section class="min-w-0 overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition-all hover:shadow-md sm:p-6">
         <div class="flex justify-between items-center mb-8">
             <h2 class="text-2xl font-bold flex items-center gap-3 text-gray-800">
                 <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
@@ -174,10 +174,10 @@ async function refreshData() {
 
         <div v-else class="grid grid-cols-1 gap-4 mb-6">
             <div v-for="e in enrollments" :key="e.id"
-                class="bg-gray-50 p-4 sm:p-6 rounded-2xl border border-transparent hover:border-emerald-100 transition-all group hover:shadow-lg hover:shadow-emerald-50/50">
+                class="group min-w-0 rounded-2xl border border-transparent bg-gray-50 p-4 transition-all hover:border-emerald-100 hover:shadow-lg hover:shadow-emerald-50/50 sm:p-6">
                 <div v-if="editingEnrollmentId !== e.id">
                     <div class="space-y-4">
-                        <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div class="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                         <div class="min-w-0 flex-1 space-y-3">
                             <div>
                                 <div class="min-w-0 break-words font-black text-gray-900 text-xl sm:text-2xl tracking-tight leading-tight">
@@ -224,9 +224,9 @@ async function refreshData() {
                             </div>
                         </div>
 
-                        <div class="flex shrink-0 items-center justify-end gap-1 lg:pt-1">
+                        <div class="flex shrink-0 flex-wrap items-center justify-end gap-1 xl:pt-1">
                                 <button @click="openSuspensions(e.id)"
-                                    class="p-2 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all cursor-pointer"
+                                    class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-400 transition-all hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
                                     title="Suspensions">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                         stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -235,7 +235,7 @@ async function refreshData() {
                                     </svg>
                                 </button>
                                 <button @click="startEditEnrollment(e)"
-                                    class="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all cursor-pointer"
+                                    class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
                                     title="Edit">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                         stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -244,7 +244,7 @@ async function refreshData() {
                                     </svg>
                                 </button>
                                 <button @click="confirmRemoveEnrollment(e.id)"
-                                    class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all cursor-pointer"
+                                    class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-400 transition-all hover:bg-red-50 hover:text-red-600 cursor-pointer"
                                     title="Delete">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                         stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -256,7 +256,8 @@ async function refreshData() {
                         </div>
 
                         <div
-                            class="grid w-full min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+                            class="grid w-full min-w-0 gap-2"
+                            style="grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));">
                                 <router-link :to="{ name: 'lesson-reports', params: { enrollmentId: e.id } }"
                                     class="inline-flex min-h-11 w-full justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-emerald-600 border border-emerald-600 text-white text-sm font-black rounded-xl hover:bg-emerald-700 transition-all shadow-sm cursor-pointer active:scale-95 items-center gap-1.5">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
