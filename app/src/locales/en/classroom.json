@@ -213,6 +213,7 @@
     "back_to_this_week": "Back To This Week",
     "back_to_today": "Back To Today",
     "no_students_enrolled": "No students enrolled",
+    "trial_report_unavailable": "Reports and attendance are available after the enrollment becomes regular",
     "add_student_to_class": "Add Make-up Student",
     "add_student_modal_title": "Add Student for Make-up Class",
     "add_student_modal_hint": "Search and select a student first, then choose one of that student's active courses. This only creates a report for the selected date and does not change the original enrollment session.",
