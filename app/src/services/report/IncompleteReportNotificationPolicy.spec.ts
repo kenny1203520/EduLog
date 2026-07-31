@@ -40,4 +40,20 @@ describe('incomplete report notification eligibility', () => {
             policy_configured: true
         })).toBe(false)
     })
+
+    it('excludes yuan when the effective 2026-06-13 assistant policy denies notifications', () => {
+        const yuanWasAssignedAndPresent = isTeacherPresentForScope(
+            'yuan-teacher',
+            'yuan-user',
+            ['yuan-teacher'],
+            { 'yuan-teacher': true }
+        )
+
+        expect(yuanWasAssignedAndPresent).toBe(true)
+        expect(canReceiveIncompleteReportNotification(yuanWasAssignedAndPresent, {
+            is_allowed: false,
+            is_denied: true,
+            policy_configured: true
+        })).toBe(false)
+    })
 })
