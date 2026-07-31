@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Enforced the scoped role policy for incomplete reports on both the dashboard and incomplete-report workspace: recipients must be linked to a teacher, assigned and explicitly present for the occurrence, and allowed by their effective class role; any explicit absence or deny takes precedence.
 - Made the policy-aware report query fail closed instead of silently falling back to the broader attended-teacher scope.
+- Required an effective `class_session_teachers` assignment on the occurrence date before applying the system, classroom, and class-session notification hierarchy; generic RBAC assignments no longer substitute for a class role, and classes with no eligible role or policy notify nobody.
+- Prevented stale or shared authorization results by disabling client caching for `my_notifications`, returning personalized aggregate responses with `private, no-store`, and clearing incomplete-report views when the policy endpoint fails.
 - Limited automatic occurrence-report creation to enrollments whose current status is `regular`.
 - Added a database trigger that completes a regular enrollment only when a persisted report is present, fully completed, and references the course's highest-sequence lesson; chapter and progress-letter checks are no longer used.
 - Kept enrollment completion as a one-way transition and prevented completed enrollments from producing a next-lesson report.
@@ -21,11 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a release quality gate so tests, production type-checking, and the application build must pass before the container image can be published.
 
 ### Tests
-- Added regression coverage for attendance plus effective-date role-policy eligibility (including the 2026-06-13 assistant deny case), deny precedence, regular-only report creation, final-lesson completion, responsive controls, calendar synchronization, and database linter remediations.
+- Added regression coverage for attendance plus effective-date role-policy eligibility (including yuan's 2026-07-25 assistant deny case), deny precedence, no-policy fail-closed behavior, authorization-sensitive no-store responses, regular-only report creation, final-lesson completion, responsive controls, calendar synchronization, and database linter remediations.
 
 ### Deployment Notes
 - Apply `1000028_rbac_security_performance_and_enrollment_completion.sql` after `1000027`.
-- Deploy the updated `aggregate-incomplete-reports` Edge Function.
+- Apply `1000029_strict_incomplete_report_notification_eligibility.sql` after `1000028`.
+- Deploy the updated `aggregate-incomplete-reports` Edge Function after `1000029`, then deploy the frontend so `my_notifications` bypasses client caching.
 
 
 ## [1.7.0] - 2026-07-30

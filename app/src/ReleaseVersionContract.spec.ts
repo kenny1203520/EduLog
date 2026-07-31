@@ -21,6 +21,8 @@ describe('v1.7.1 release metadata', () => {
         const root = readFileSync(resolve(process.cwd(), '../CHANGELOG.md'), 'utf8')
         const release = root.slice(root.indexOf('## [1.7.1]'), root.indexOf('## [1.7.0]'))
         expect(release).toContain('1000028_rbac_security_performance_and_enrollment_completion.sql')
+        expect(release).toContain('1000029_strict_incomplete_report_notification_eligibility.sql')
         expect(release).toContain('aggregate-incomplete-reports')
+        expect(release).toContain('private, no-store')
     })
 })
