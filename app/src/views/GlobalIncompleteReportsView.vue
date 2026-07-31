@@ -488,6 +488,8 @@ async function loadReports(refreshEditor = true) {
         }
     } catch (err) {
         console.error(err)
+        incompleteReports.value = []
+        selectedReport.value = null
         toast.error(t('report.load_error'))
     } finally {
         loading.value = false

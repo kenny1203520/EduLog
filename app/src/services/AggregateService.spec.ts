@@ -98,4 +98,23 @@ describe('AggregateService', () => {
     expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toContain('scope=my_present')
     expect(vi.mocked(globalThis.fetch).mock.calls[1][0]).toContain('scope=all')
   })
+
+  it('never caches policy-aware notification results', async () => {
+    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: { session: { access_token: 'yuan-token' } }
+    } as any)
+
+    vi.mocked(globalThis.fetch).mockResolvedValue({
+      ok: true,
+      json: async () => [],
+      text: async () => ''
+    } as any)
+
+    await AggregateService.getIncompleteReportsAggregate(90, 'my_notifications')
+    await AggregateService.getIncompleteReportsAggregate(90, 'my_notifications')
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(globalThis.fetch).mock.calls[0][1]).toEqual(expect.objectContaining({ cache: 'no-store' }))
+    expect(vi.mocked(globalThis.fetch).mock.calls[1][1]).toEqual(expect.objectContaining({ cache: 'no-store' }))
+  })
 })

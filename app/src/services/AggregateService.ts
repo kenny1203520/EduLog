@@ -188,15 +188,24 @@ export class AggregateService {
     const qs = `daysBack=${daysBack}&scope=${encodeURIComponent(scope)}`
     const url = base ? `${base}/aggregate-incomplete-reports?${qs}` : `/aggregate-incomplete-reports?${qs}`
 
-    const cacheKey = `incomplete_reports:back${daysBack}:scope${scope}:t${token || 'anon'}`
-    return this.withCache(cacheKey, this.DEFAULT_TTL_MS, async () => {
-      const resp = await fetch(url, { method: 'GET', headers })
+    const fetchReports = async () => {
+      const request: RequestInit = { method: 'GET', headers }
+      if (scope === 'my_notifications') request.cache = 'no-store'
+
+      const resp = await fetch(url, request)
       if (!resp.ok) {
         const txt = await resp.text()
         throw new Error(`AggregateService error: ${resp.status} ${txt}`)
       }
       return resp.json()
-    })
+    }
+
+    // Notification visibility is authorization-sensitive and can change immediately
+    // when a class role or policy is edited. Never reuse a previous decision.
+    if (scope === 'my_notifications') return fetchReports()
+
+    const cacheKey = `incomplete_reports:back${daysBack}:scope${scope}:t${token || 'anon'}`
+    return this.withCache(cacheKey, this.DEFAULT_TTL_MS, fetchReports)
   }
 
   static async getHolidaysAggregate(expandNames: boolean = true) {

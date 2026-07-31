@@ -79,4 +79,21 @@ describe('GlobalIncompleteReportsView notification scope', () => {
         expect(source).not.toContain('onlyMyPresentStudents')
         expect(source).not.toContain("getGlobalIncompleteReports('all')")
     })
+
+    it('clears notification data when the policy-aware endpoint fails', async () => {
+        vi.mocked(OccurrenceReportService.getGlobalIncompleteReports)
+            .mockResolvedValueOnce([{ id: 'report-1', studentName: 'Student', className: 'Class' }])
+            .mockRejectedValueOnce(new Error('policy endpoint unavailable'))
+
+        const wrapper = mount(GlobalIncompleteReportsView, { global: globalOptions })
+        await flushPromises()
+        expect(wrapper.text()).toContain('Student')
+
+        await (wrapper.vm as any).loadReports(false)
+        await flushPromises()
+
+        expect(wrapper.text()).not.toContain('Student')
+        expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('my_present')
+        expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('all')
+    })
 })
