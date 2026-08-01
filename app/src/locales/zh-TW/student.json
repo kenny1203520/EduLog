@@ -226,7 +226,22 @@
         "cancel_transfer": "取消本次調課",
         "confirm": "套用所選欄位並調課",
         "stale": "其中一份報告已被更新，請重新開啟衝突管理並確認最新內容。",
-        "failed": "處理報告衝突失敗。"
+        "failed": "處理報告衝突失敗。",
+        "unknown_session": "未知班級",
+        "unknown_classroom": "未知教室",
+        "unknown_lesson": "未知課次",
+        "attendance_pending": "尚未確認",
+        "not_filled": "未填寫",
+        "no_source_report": "原課堂尚無報告，本次調課將保留目標報告。",
+        "technical_details": "技術資訊",
+        "copy_id": "複製",
+        "copied": "已複製",
+        "report_id": "報告 ID",
+        "occurrence_id": "課堂紀錄 ID",
+        "session_id": "班級 ID",
+        "classroom_id": "教室 ID",
+        "lesson_id": "課次 ID",
+        "enrollment_id": "報名 ID"
     },
     "activate_trial_modal": {
         "title": "轉為正式學員",

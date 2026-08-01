@@ -1,7 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
-import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
+import { EnrollmentTransferQueryService, type TransferConflictDisplayContext } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 
 export interface SingleLessonTransferConflict {
@@ -12,6 +12,8 @@ export interface SingleLessonTransferConflict {
     targetSessionId: string
     sourceReport: OccurrenceReportDTO | null
     targetReport: OccurrenceReportDTO
+    sourceContext: TransferConflictDisplayContext
+    targetContext: TransferConflictDisplayContext
 }
 
 export type SingleLessonTransferResult =
@@ -33,6 +35,13 @@ export class SingleLessonTransferConflictService {
         ])
 
         if (!targetReport) throw new Error('TRANSFER_CONFLICT_STALE')
+        const [sourceContext, targetContext] = await Promise.all([
+            EnrollmentTransferQueryService.getTransferConflictDisplayContext(
+                sourceOccurrenceId,
+                sourceReport?.lesson_id
+            ),
+            EnrollmentTransferQueryService.getTransferConflictDisplayContext(targetOccurrenceId, targetReport.lesson_id)
+        ])
 
         return {
             status: 'conflict',
@@ -43,7 +52,9 @@ export class SingleLessonTransferConflictService {
                 sourceSessionId,
                 targetSessionId,
                 sourceReport,
-                targetReport
+                targetReport,
+                sourceContext,
+                targetContext
             }
         }
     }

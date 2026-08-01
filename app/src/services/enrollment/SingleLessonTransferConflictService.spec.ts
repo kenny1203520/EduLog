@@ -7,7 +7,10 @@ import { createDefaultTransferFieldSelections } from '@/services/report/ReportFi
 const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
 vi.mock('@/lib/supabase', () => ({ supabase: { rpc: rpcMock } }))
 vi.mock('./EnrollmentTransferQueryService', () => ({
-    EnrollmentTransferQueryService: { getReportForOccurrence: vi.fn() }
+    EnrollmentTransferQueryService: {
+        getReportForOccurrence: vi.fn(),
+        getTransferConflictDisplayContext: vi.fn()
+    }
 }))
 vi.mock('./EnrollmentTransferToolService', () => ({
     EnrollmentTransferToolService: { syncSessionPair: vi.fn() }
@@ -15,11 +18,19 @@ vi.mock('./EnrollmentTransferToolService', () => ({
 
 const sourceReport = {
     id: 'source-report', enrollment_id: 'enrollment-1', class_occurrence_id: 'source-occurrence',
-    content: 'source', version: 3
+    content: 'source', lesson_id: 'source-lesson', version: 3
 }
 const targetReport = {
     id: 'target-report', enrollment_id: 'enrollment-1', class_occurrence_id: 'target-occurrence',
     content: 'target', version: 5
+}
+const sourceContext = {
+    occurrenceId: 'source-occurrence', occurrenceDate: '2026-08-03', sessionId: 'source-session',
+    sessionName: 'Source class', lessonId: 'source-lesson', lessonSequence: 1, lessonTitle: 'Source lesson'
+}
+const targetContext = {
+    occurrenceId: 'target-occurrence', occurrenceDate: '2026-08-05', sessionId: 'target-session',
+    sessionName: 'Target class'
 }
 
 const conflict: SingleLessonTransferConflict = {
@@ -29,7 +40,9 @@ const conflict: SingleLessonTransferConflict = {
     sourceSessionId: 'source-session',
     targetSessionId: 'target-session',
     sourceReport,
-    targetReport
+    targetReport,
+    sourceContext,
+    targetContext
 }
 
 describe('SingleLessonTransferConflictService', () => {
@@ -43,6 +56,9 @@ describe('SingleLessonTransferConflictService', () => {
         vi.mocked(EnrollmentTransferQueryService.getReportForOccurrence)
             .mockResolvedValueOnce(sourceReport)
             .mockResolvedValueOnce(targetReport)
+        vi.mocked(EnrollmentTransferQueryService.getTransferConflictDisplayContext)
+            .mockResolvedValueOnce(sourceContext)
+            .mockResolvedValueOnce(targetContext)
 
         const result = await SingleLessonTransferConflictService.createConflict(
             'enrollment-1', 'source-occurrence', 'target-occurrence', 'source-session', 'target-session'

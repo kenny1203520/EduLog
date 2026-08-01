@@ -226,7 +226,22 @@
         "cancel_transfer": "Cancel this transfer",
         "confirm": "Apply selected fields and transfer",
         "stale": "One of the reports changed. Reopen the conflict manager and review the latest values.",
-        "failed": "Failed to resolve the report conflict."
+        "failed": "Failed to resolve the report conflict.",
+        "unknown_session": "Unknown class",
+        "unknown_classroom": "Unknown classroom",
+        "unknown_lesson": "Unknown lesson",
+        "attendance_pending": "Pending",
+        "not_filled": "Not filled",
+        "no_source_report": "There is no report in the original lesson. This transfer will preserve the target report.",
+        "technical_details": "Technical details",
+        "copy_id": "Copy",
+        "copied": "Copied",
+        "report_id": "Report ID",
+        "occurrence_id": "Occurrence ID",
+        "session_id": "Class ID",
+        "classroom_id": "Classroom ID",
+        "lesson_id": "Lesson ID",
+        "enrollment_id": "Enrollment ID"
     },
     "activate_trial_modal": {
         "title": "Convert to Regular",

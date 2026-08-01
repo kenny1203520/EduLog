@@ -15,6 +15,7 @@ vi.mock('./EnrollmentTransferQueryService', () => ({
         getTargetOccurrenceId: vi.fn(),
         getExistingReportForOccurrence: vi.fn(),
         getReportForOccurrence: vi.fn(),
+        getTransferConflictDisplayContext: vi.fn(),
         getReportTransferInfo: vi.fn()
     }
 }))
@@ -95,6 +96,14 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
                 class_occurrence_id: 'target-occurrence',
                 content: 'existing target',
                 version: 2
+            })
+
+        vi.mocked(EnrollmentTransferQueryService.getTransferConflictDisplayContext)
+            .mockResolvedValueOnce({
+                occurrenceId: 'source-occurrence', occurrenceDate: '2026-08-03', sessionId: 'source-session'
+            })
+            .mockResolvedValueOnce({
+                occurrenceId: 'target-occurrence', occurrenceDate: '2026-08-05', sessionId: 'target-session'
             })
 
         const result = await EnrollmentTransferService.transferSingleLessonFromDate(

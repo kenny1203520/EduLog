@@ -2,6 +2,21 @@ import { supabase } from '@/lib/supabase'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
+export interface TransferConflictDisplayContext {
+    occurrenceId: string
+    occurrenceDate: string
+    startTime?: string | null
+    endTime?: string | null
+    sessionId: string
+    sessionName?: string | null
+    sessionTimeZone?: string | null
+    classroomId?: string | null
+    classroomName?: string | null
+    lessonId?: string | null
+    lessonSequence?: number | null
+    lessonTitle?: string | null
+}
+
 export type TransferMigrationRow = {
     id: string
     enrollment_id: string
@@ -207,6 +222,69 @@ export class EnrollmentTransferQueryService {
         }
 
         return (data as OccurrenceReportDTO | null) || null
+    }
+
+    /** Loads readable occurrence, session, classroom, and lesson metadata for conflict UI. */
+    static async getTransferConflictDisplayContext(
+        occurrenceId: string,
+        lessonId?: string | null
+    ): Promise<TransferConflictDisplayContext> {
+        const occurrenceQuery = supabase
+            .from('class_occurrences')
+            .select(`
+                id,
+                occurrence_date,
+                class_session_id,
+                original_start_time,
+                original_end_time,
+                actual_start_time,
+                actual_end_time,
+                class_session:class_sessions!class_session_id(
+                    id,
+                    name,
+                    start_time,
+                    end_time,
+                    time_zone,
+                    classroom_id,
+                    classroom:classrooms!classroom_id(id, name)
+                )
+            `)
+            .eq('id', occurrenceId)
+            .single()
+        const lessonQuery = lessonId
+            ? supabase.from('lessons').select('id, title, sequence').eq('id', lessonId).maybeSingle()
+            : Promise.resolve({ data: null, error: null })
+        const [{ data: occurrence, error: occurrenceError }, { data: lesson, error: lessonError }] =
+            await Promise.all([occurrenceQuery, lessonQuery])
+
+        if (occurrenceError || !occurrence) {
+            throw new Error(`Failed to fetch occurrence conflict context: ${occurrenceError?.message || 'not found'}`)
+        }
+        if (lessonError) {
+            throw new Error(`Failed to fetch lesson conflict context: ${lessonError.message}`)
+        }
+
+        const session = Array.isArray((occurrence as any).class_session)
+            ? (occurrence as any).class_session[0]
+            : (occurrence as any).class_session
+        const classroom = Array.isArray(session?.classroom)
+            ? session.classroom[0]
+            : session?.classroom
+
+        return {
+            occurrenceId: occurrence.id,
+            occurrenceDate: occurrence.occurrence_date,
+            startTime: occurrence.actual_start_time || occurrence.original_start_time || session?.start_time || null,
+            endTime: occurrence.actual_end_time || occurrence.original_end_time || session?.end_time || null,
+            sessionId: occurrence.class_session_id,
+            sessionName: session?.name || null,
+            sessionTimeZone: session?.time_zone || null,
+            classroomId: session?.classroom_id || null,
+            classroomName: classroom?.name || null,
+            lessonId: lesson?.id || lessonId || null,
+            lessonSequence: lesson?.sequence ?? null,
+            lessonTitle: lesson?.title || null
+        }
     }
 
     static async getTargetOccurrenceId(sessionId: string, targetDate: string): Promise<string> {
