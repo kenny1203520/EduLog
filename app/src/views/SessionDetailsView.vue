@@ -72,7 +72,6 @@ const occurrenceLoadError = ref<string | null>(null)
 const previousOccurrence = ref<ClassOccurrence | null>(null)
 const nextOccurrence = ref<ClassOccurrence | null>(null)
 let occurrenceLoadToken = 0
-let classViewScrollY = 0
 const showAttendanceTemplateModal = ref(false)
 const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
 const attendanceTemplateDocument = ref<RichTextDocumentV1>(
@@ -1314,37 +1313,36 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
 }
 
 async function toggleSplitView(enrollmentId: string) {
+    if (selectedEnrollmentId.value === enrollmentId && showSplitView.value) {
+        await closeSplitView()
+        return
+    }
+
     const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
     if (saveSucceeded === false) return
 
-    if (selectedEnrollmentId.value === enrollmentId && showSplitView.value) {
-        showSplitView.value = false
-        selectedEnrollmentId.value = null
-    } else {
-        // finding the enrollment to get the courseId
-        const enrollment = enrollments.value.find(e => e.id === enrollmentId)
-        if (enrollment?.courseId) {
-            courseLessons.value = await getLessonsForCourse(enrollment.courseId)
-        }
+    // finding the enrollment to get the courseId
+    const enrollment = enrollments.value.find(e => e.id === enrollmentId)
+    if (enrollment?.courseId) {
+        courseLessons.value = await getLessonsForCourse(enrollment.courseId)
+    }
 
-        classViewScrollY = window.scrollY
-        selectedEnrollmentId.value = enrollmentId
-        showSplitView.value = true
+    selectedEnrollmentId.value = enrollmentId
+    showSplitView.value = true
 
-        // Fetch latest report content to ensure sync with server (fixes stale data issues)
-        if (todayOccurrence.value?.id) {
-            savingMap.value.set(enrollmentId, true)
-            OccurrenceReportService.getReport(enrollmentId, todayOccurrence.value.id)
-                .then(report => {
-                    reportMap.value.set(enrollmentId, report)
-                })
-                .catch(e => {
-                    console.error('Failed to sync report on quick edit open', e)
-                })
-                .finally(() => {
-                    savingMap.value.delete(enrollmentId)
-                })
-        }
+    // Fetch latest report content to ensure sync with server (fixes stale data issues)
+    if (todayOccurrence.value?.id) {
+        savingMap.value.set(enrollmentId, true)
+        OccurrenceReportService.getReport(enrollmentId, todayOccurrence.value.id)
+            .then(report => {
+                reportMap.value.set(enrollmentId, report)
+            })
+            .catch(e => {
+                console.error('Failed to sync report on quick edit open', e)
+            })
+            .finally(() => {
+                savingMap.value.delete(enrollmentId)
+            })
     }
 }
 
@@ -1356,11 +1354,7 @@ async function closeSplitView() {
     selectedEnrollmentId.value = null
 
     await nextTick()
-    if (window.matchMedia('(max-width: 1279px)').matches) {
-        window.scrollTo({ top: classViewScrollY, behavior: 'auto' })
-    } else if (enrollmentIdToRestore) {
-        scrollToEnrollment(enrollmentIdToRestore)
-    }
+    if (enrollmentIdToRestore) scrollToEnrollment(enrollmentIdToRestore)
 }
 
 function scrollToEnrollment(enrollmentId: string) {
@@ -1726,18 +1720,19 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
             <span class="text-gray-500 font-black italic tracking-widest">{{ $t('student.loading') }}</span>
         </div>
 
-        <div v-else class="w-full">
+        <div v-else class="session-workspace w-full">
             <div v-if="occurrenceLoadError" class="flex flex-col items-center justify-center rounded-3xl border border-red-100 bg-white px-6 py-20 text-center shadow-sm">
                 <p class="font-black text-red-700">{{ occurrenceLoadError }}</p>
                 <button type="button" class="mt-5 rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white hover:bg-red-700" @click="loadData">
                     {{ $t('classroom.retry_occurrence_load') }}
                 </button>
             </div>
-            <div v-else class="grid gap-6 transition-all duration-500 ease-in-out min-w-0"
-                :class="showSplitView ? 'grid-cols-1 xl:grid-cols-[minmax(560px,1fr)_minmax(420px,560px)]' : 'grid-cols-1'">
+            <div v-else class="session-workspace__grid grid min-w-0 grid-cols-1 gap-6 transition-all duration-500 ease-in-out"
+                :class="{ 'session-workspace__grid--editing': showSplitView }">
 
                 <!-- LEFT COLUMN: Student List & Stats -->
-                <div class="space-y-6 min-w-0" :class="{ 'hidden xl:block': showSplitView }">
+                <div class="session-workspace__class-column min-w-0 space-y-6"
+                    :class="{ 'session-workspace__class-column--editing': showSplitView }">
                     <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
                         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                             <div>
@@ -2395,6 +2390,25 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 </template>
 
 <style scoped>
+.session-workspace {
+    container-name: session-workspace;
+    container-type: inline-size;
+}
+
+.session-workspace__class-column--editing {
+    display: none;
+}
+
+@container session-workspace (min-width: 960px) {
+    .session-workspace__grid--editing {
+        grid-template-columns: minmax(520px, 1fr) minmax(392px, 560px);
+    }
+
+    .session-workspace__class-column--editing {
+        display: block;
+    }
+}
+
 .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
 }
