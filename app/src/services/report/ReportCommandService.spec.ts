@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReportCommandService } from './ReportCommandService'
 import { ReportLifecyclePolicy } from './ReportLifecyclePolicy'
 import { ReportQueryService } from './ReportQueryService'
+import { OccurrenceRosterService } from '../occurrence/OccurrenceRosterService'
 
 const { fromMock } = vi.hoisted(() => ({ fromMock: vi.fn() }))
 
@@ -11,6 +12,9 @@ vi.mock('./ReportLifecyclePolicy', () => ({
 }))
 vi.mock('./ReportQueryService', () => ({
     ReportQueryService: { getReportsByOccurrence: vi.fn() }
+}))
+vi.mock('../occurrence/OccurrenceRosterService', () => ({
+    OccurrenceRosterService: { getEffectiveEnrollmentIds: vi.fn() }
 }))
 
 function terminalQuery(result: { data?: any; error?: any }, terminal: 'single' | 'then' = 'then') {
@@ -26,6 +30,7 @@ describe('ReportCommandService.createReportsForOccurrence', () => {
     beforeEach(() => {
         vi.clearAllMocks()
         vi.mocked(ReportQueryService.getReportsByOccurrence).mockResolvedValue([])
+        vi.mocked(OccurrenceRosterService.getEffectiveEnrollmentIds).mockResolvedValue(['enrollment-1', 'enrollment-2'])
         vi.mocked(ReportLifecyclePolicy.buildInitialReportPayload).mockImplementation(async enrollmentId => ({
             enrollment_id: enrollmentId,
             class_occurrence_id: 'occurrence-1',
@@ -34,21 +39,15 @@ describe('ReportCommandService.createReportsForOccurrence', () => {
         }) as any)
     })
 
-    it('ensures only eligible regular enrollment reports in one idempotent upsert', async () => {
-        const occurrence = terminalQuery({ data: { class_session_id: 'session-1', occurrence_date: '2026-07-29' }, error: null }, 'single')
-        const enrollments = terminalQuery({ data: [{ id: 'enrollment-1' }, { id: 'enrollment-2' }], error: null })
+    it('ensures only effective-roster reports in one idempotent upsert', async () => {
         const existing = terminalQuery({ data: [{ enrollment_id: 'enrollment-1' }], error: null })
         const upsert = vi.fn().mockResolvedValue({ error: null })
         fromMock
-            .mockReturnValueOnce(occurrence)
-            .mockReturnValueOnce(enrollments)
             .mockReturnValueOnce(existing)
             .mockReturnValueOnce({ upsert })
 
         await ReportCommandService.createReportsForOccurrence('occurrence-1')
 
-        expect(enrollments.eq).toHaveBeenCalledWith('status', 'regular')
-        expect(enrollments.lte).toHaveBeenCalledWith('start_date', '2026-07-29')
         expect(ReportLifecyclePolicy.buildInitialReportPayload).toHaveBeenCalledTimes(1)
         expect(ReportLifecyclePolicy.buildInitialReportPayload).toHaveBeenCalledWith('enrollment-2', 'occurrence-1')
         expect(upsert).toHaveBeenCalledWith(expect.arrayContaining([
@@ -61,14 +60,12 @@ describe('ReportCommandService.createReportsForOccurrence', () => {
     })
 
     it('does not write when every eligible enrollment already has a report', async () => {
-        fromMock
-            .mockReturnValueOnce(terminalQuery({ data: { class_session_id: 'session-1', occurrence_date: '2026-07-29' }, error: null }, 'single'))
-            .mockReturnValueOnce(terminalQuery({ data: [{ id: 'enrollment-1' }], error: null }))
-            .mockReturnValueOnce(terminalQuery({ data: [{ enrollment_id: 'enrollment-1' }], error: null }))
+        vi.mocked(OccurrenceRosterService.getEffectiveEnrollmentIds).mockResolvedValue(['enrollment-1'])
+        fromMock.mockReturnValueOnce(terminalQuery({ data: [{ enrollment_id: 'enrollment-1' }], error: null }))
 
         await ReportCommandService.createReportsForOccurrence('occurrence-1')
 
         expect(ReportLifecyclePolicy.buildInitialReportPayload).not.toHaveBeenCalled()
-        expect(fromMock).toHaveBeenCalledTimes(3)
+        expect(fromMock).toHaveBeenCalledTimes(1)
     })
 })

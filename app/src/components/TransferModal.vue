@@ -15,6 +15,9 @@ import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { formatClassSessionOption } from '@/utils/sessionSchedule'
 import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
+import TransferReportConflictModal from '@/components/TransferReportConflictModal.vue'
+import type { SingleLessonTransferConflict, SingleLessonTransferResult } from '@/services/enrollment/SingleLessonTransferConflictService'
+import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 
 const props = defineProps<{
     isOpen: boolean
@@ -29,6 +32,8 @@ const toast = useToast()
 const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
+const isResolvingConflict = ref(false)
+const transferConflict = ref<SingleLessonTransferConflict | null>(null)
 const isLoadingReports = ref(false)
 const isLoadingClassrooms = ref(false)
 const isLoadingEnrollment = ref(false)
@@ -239,6 +244,7 @@ async function fetchReports() {
 watch(() => props.isOpen, (val) => {
     if (val) {
         selectedClassroomId.value = ''
+        transferConflict.value = null
         fetchClassrooms()
         fetchSessions()
         fetchReports()
@@ -313,9 +319,10 @@ async function submitTransfer() {
     try {
         isSubmitting.value = true
 
+        let singleResult: SingleLessonTransferResult | null = null
         if (transferForm.value.mode === 'single') {
             if (transferForm.value.single_source_mode === 'date') {
-                await EnrollmentService.transferSingleLessonFromDate(
+                singleResult = await EnrollmentService.transferSingleLessonFromDate(
                     props.fromEnrollmentId,
                     transferForm.value.original_date,
                     transferForm.value.to_session_id,
@@ -323,7 +330,7 @@ async function submitTransfer() {
                     { createIfMissing: true }
                 )
             } else {
-                await EnrollmentService.transferSingleLessonReport(
+                singleResult = await EnrollmentService.transferSingleLessonReport(
                     transferForm.value.selected_report_id,
                     transferForm.value.to_session_id,
                     transferForm.value.target_date
@@ -339,6 +346,11 @@ async function submitTransfer() {
                 originalLastDate,
                 transferForm.value.effective_date
             )
+        }
+
+        if (singleResult?.status === 'conflict') {
+            transferConflict.value = singleResult.conflict
+            return
         }
 
         toast.success(t('common.success'))
@@ -367,6 +379,35 @@ async function submitTransfer() {
         }
     } finally {
         isSubmitting.value = false
+    }
+}
+
+async function resolveTransferConflict(selections: TransferReportFieldSelections) {
+    const conflict = transferConflict.value
+    if (!conflict) return
+
+    try {
+        isResolvingConflict.value = true
+        const result = await EnrollmentService.resolveSingleLessonTransferConflict(
+            conflict,
+            selections
+        )
+        if (result.status === 'completed') {
+            transferConflict.value = null
+            toast.success(t('common.success'))
+            emit('success')
+            emit('close')
+        }
+    } catch (e: any) {
+        console.error(e)
+        const message = e?.message || ''
+        if (message.includes('TRANSFER_CONFLICT_STALE')) {
+            toast.error(t('student.transfer_conflict.stale'))
+        } else {
+            toast.error(message || t('student.transfer_conflict.failed'))
+        }
+    } finally {
+        isResolvingConflict.value = false
     }
 }
 
@@ -579,6 +620,11 @@ async function submitTransfer() {
                 </button>
             </div>
         </div>
+
+        <TransferReportConflictModal v-if="transferConflict" :conflict="transferConflict"
+            :is-resolving="isResolvingConflict"
+            @cancel="transferConflict = null"
+            @resolve="resolveTransferConflict" />
 
     </div>
 </template>

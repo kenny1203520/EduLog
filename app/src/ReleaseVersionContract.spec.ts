@@ -4,13 +4,13 @@ import { describe, expect, it } from 'vitest'
 
 const readJson = (path: string) => JSON.parse(readFileSync(resolve(process.cwd(), path), 'utf8'))
 
-describe('v1.7.2 release metadata', () => {
+describe('v1.7.3 release metadata', () => {
     it('keeps package, lockfile and both in-app changelogs aligned', () => {
         const pkg = readJson('package.json')
         const lock = readJson('package-lock.json')
         const en = readJson('src/locales/en/changelog.json')
         const zh = readJson('src/locales/zh-TW/changelog.json')
-        expect(pkg.version).toBe('1.7.2')
+        expect(pkg.version).toBe('1.7.3')
         expect(lock.version).toBe(pkg.version)
         expect(lock.packages[''].version).toBe(pkg.version)
         expect(en.entries[0]).toMatchObject({ version: pkg.version, date: '2026-08-01' })
@@ -19,11 +19,9 @@ describe('v1.7.2 release metadata', () => {
 
     it('documents the Docker runtime hotfix and deployment', () => {
         const root = readFileSync(resolve(process.cwd(), '../CHANGELOG.md'), 'utf8')
-        const release = root.slice(root.indexOf('## [1.7.2]'), root.indexOf('## [1.7.1]'))
-        expect(release).toContain('DHI Nginx')
-        expect(release).toContain('non-root Nginx user')
-        expect(release).toContain('runtime-config.js')
-        expect(release).toContain('No database migration or Edge Function deployment')
-        expect(release).toContain('Rebuild and redeploy')
+        const release = root.slice(root.indexOf('## [1.7.3]'), root.indexOf('## [1.7.2]'))
+        expect(release).toContain('single-lesson transfer')
+        expect(release).toContain('human-readable')
+        expect(release).toContain('1000031_single_lesson_transfer_conflict_resolution.sql')
     })
 })
