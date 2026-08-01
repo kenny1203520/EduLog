@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-08-01
+
+### Added
+- Added single-lesson transfer report conflict management with per-field source/target selection, non-empty content priority, and safe cancellation when a conflict cannot be resolved.
+- Added human-readable transfer conflict details for lesson, class, classroom, date, attendance, ratings, progress, rich text, and external links, with collapsible technical IDs for support diagnostics.
+
+### Changed
+- Reports now follow the effective students for each lesson occurrence, so students transferred out of a class no longer receive a report recreated in the source lesson.
+- Existing reports move with a single-lesson transfer and retain their content; missing source reports are created only when entering the target lesson.
+
+### Tests
+- Added regression coverage for effective lesson rosters, report migration and rollback, idempotency, conflict resolution, readable formatting, and release metadata.
+
+### Deployment Notes
+- Apply `1000030_single_lesson_transfers.sql` and `1000031_single_lesson_transfer_conflict_resolution.sql` in order before deploying the frontend.
+- No existing reports are automatically cleaned up by this release.
 ## [1.7.2] - 2026-08-01
 
 ### Fixed
