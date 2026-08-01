@@ -312,4 +312,9 @@ export class EnrollmentCommandService {
         )
     }
 
+    static async cancelSingleLessonTransfer(transferId: string): Promise<void> {
+        return EnrollmentTransferService.cancelSingleLessonTransfer(transferId)
+    }
+
+
 }

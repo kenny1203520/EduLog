@@ -7,6 +7,7 @@ import {
 import { EnrollmentProgressService } from '../enrollment/EnrollmentProgressService'
 import { ReportLifecyclePolicy } from './ReportLifecyclePolicy'
 import { ReportQueryService } from './ReportQueryService'
+import { OccurrenceRosterService } from '../occurrence/OccurrenceRosterService'
 import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
 
@@ -500,25 +501,9 @@ export class ReportCommandService {
     static async createReportsForOccurrence(
         occurrenceId: string
     ): Promise<OccurrenceReport[]> {
-        const { data: occurrence, error: occError } = await supabase
-            .from('class_occurrences')
-            .select('class_session_id, occurrence_date')
-            .eq('id', occurrenceId)
-            .single()
+        const enrollmentIds = await OccurrenceRosterService.getEffectiveEnrollmentIds(occurrenceId)
+        if (enrollmentIds.length === 0) return ReportQueryService.getReportsByOccurrence(occurrenceId)
 
-        if (occError) throw new Error(`Failed to fetch occurrence: ${occError.message}`)
-
-        const { data: enrollments, error: enrollError } = await supabase
-            .from('enrollments')
-            .select('id')
-            .eq('class_session_id', occurrence.class_session_id)
-            .eq('status', 'regular')
-            .lte('start_date', occurrence.occurrence_date)
-
-        if (enrollError) throw new Error(`Failed to fetch enrollments: ${enrollError.message}`)
-        if (!enrollments?.length) return ReportQueryService.getReportsByOccurrence(occurrenceId)
-
-        const enrollmentIds = enrollments.map(enrollment => enrollment.id)
         const { data: existing, error: existingError } = await supabase
             .from('occurrence_reports')
             .select('enrollment_id')
