@@ -14,6 +14,7 @@ vi.mock('./EnrollmentTransferQueryService', () => ({
         isSessionScheduledOn: vi.fn(),
         getTargetOccurrenceId: vi.fn(),
         getExistingReportForOccurrence: vi.fn(),
+        getReportForOccurrence: vi.fn(),
         getReportTransferInfo: vi.fn()
     }
 }))
@@ -84,15 +85,26 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
         }))
     })
 
-    it('does not synchronize occurrences when the atomic transfer fails', async () => {
+    it('converts a concurrent target-report insert into a manageable conflict', async () => {
         rpcMock.mockResolvedValue({ data: null, error: { message: 'TARGET_REPORT_ALREADY_EXISTS' } })
+        vi.mocked(EnrollmentTransferQueryService.getReportForOccurrence)
+            .mockResolvedValueOnce(null)
+            .mockResolvedValueOnce({
+                id: 'target-report',
+                enrollment_id: 'enrollment-1',
+                class_occurrence_id: 'target-occurrence',
+                content: 'existing target',
+                version: 2
+            })
 
-        await expect(EnrollmentTransferService.transferSingleLessonFromDate(
+        const result = await EnrollmentTransferService.transferSingleLessonFromDate(
             'enrollment-1',
             '2026-08-03',
             'target-session',
             '2026-08-05'
-        )).rejects.toThrow('TARGET_REPORT_ALREADY_EXISTS')
+        )
+
+        expect(result.status).toBe('conflict')
         expect(EnrollmentTransferToolService.syncSessionPair).not.toHaveBeenCalled()
     })
 

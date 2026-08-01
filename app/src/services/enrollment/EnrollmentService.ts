@@ -1,6 +1,8 @@
 import { type EnrollmentDTO, Enrollment } from '@/models/Enrollment'
 import { EnrollmentCommandService } from './EnrollmentCommandService'
 import { EnrollmentQueryService } from './EnrollmentQueryService'
+import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
+import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -73,7 +75,7 @@ export class EnrollmentService {
         originalDate: string,
         targetSessionId: string,
         targetDate: string
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         return EnrollmentCommandService.transferSingleLesson(
             enrollmentId,
             originalDate,
@@ -86,7 +88,7 @@ export class EnrollmentService {
         reportId: string,
         targetSessionId: string,
         targetDate: string
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         return EnrollmentCommandService.transferSingleLessonReport(
             reportId,
             targetSessionId,
@@ -100,7 +102,7 @@ export class EnrollmentService {
         targetSessionId: string,
         targetDate: string,
         options: { createIfMissing?: boolean } = {}
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         return EnrollmentCommandService.transferSingleLessonFromDate(
             enrollmentId,
             originalDate,
@@ -108,6 +110,13 @@ export class EnrollmentService {
             targetDate,
             options
         )
+    }
+
+    static async resolveSingleLessonTransferConflict(
+        conflict: SingleLessonTransferConflict,
+        fieldSources: TransferReportFieldSelections
+    ): Promise<SingleLessonTransferResult> {
+        return EnrollmentCommandService.resolveSingleLessonTransferConflict(conflict, fieldSources)
     }
 
     static async cancelSingleLessonTransfer(transferId: string): Promise<void> {

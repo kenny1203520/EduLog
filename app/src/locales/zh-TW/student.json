@@ -216,6 +216,18 @@
         "original_report_ambiguous": "同一天有多筆報告，請改用報告選單指定單一報告。",
         "original_date_not_class_day": "原定日期不是目前班級的授課日，請改選原班級上課日。"
     },
+    "transfer_conflict": {
+        "title": "報告衝突管理",
+        "description": "目標課堂已有報告，請逐欄選擇要保留原課堂或目標課堂的內容，再完成調課。",
+        "use_all_source": "全部使用原課堂覆蓋",
+        "keep_all_target": "全部保留目標課堂",
+        "source_report": "原課堂報告",
+        "target_report": "目標課堂報告",
+        "cancel_transfer": "取消本次調課",
+        "confirm": "套用所選欄位並調課",
+        "stale": "其中一份報告已被更新，請重新開啟衝突管理並確認最新內容。",
+        "failed": "處理報告衝突失敗。"
+    },
     "activate_trial_modal": {
         "title": "轉為正式學員",
         "subtitle": "將試聽狀態轉換為正式報名",

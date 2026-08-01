@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import { ClassSessionFactory } from '@/models/ClassSession'
+import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 
 export type TransferMigrationRow = {
     id: string
@@ -187,6 +188,25 @@ export class EnrollmentTransferQueryService {
         }
 
         return data || null
+    }
+
+    /** Loads the complete report state required by field-level transfer conflict management. */
+    static async getReportForOccurrence(
+        enrollmentId: string,
+        occurrenceId: string
+    ): Promise<OccurrenceReportDTO | null> {
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select('*')
+            .eq('enrollment_id', enrollmentId)
+            .eq('class_occurrence_id', occurrenceId)
+            .maybeSingle()
+
+        if (error) {
+            throw new Error(`Failed to fetch report conflict data: ${error.message}`)
+        }
+
+        return (data as OccurrenceReportDTO | null) || null
     }
 
     static async getTargetOccurrenceId(sessionId: string, targetDate: string): Promise<string> {

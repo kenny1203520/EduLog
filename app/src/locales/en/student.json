@@ -216,6 +216,18 @@
         "original_report_ambiguous": "Multiple reports were found on that date. Select a specific report instead.",
         "original_date_not_class_day": "The original date is not a teaching day for the current session."
     },
+    "transfer_conflict": {
+        "title": "Report conflict",
+        "description": "A report already exists in the target lesson. Choose which value to keep for each changed field before transferring.",
+        "use_all_source": "Overwrite all with source",
+        "keep_all_target": "Keep all target values",
+        "source_report": "Original lesson report",
+        "target_report": "Target lesson report",
+        "cancel_transfer": "Cancel this transfer",
+        "confirm": "Apply selected fields and transfer",
+        "stale": "One of the reports changed. Reopen the conflict manager and review the latest values.",
+        "failed": "Failed to resolve the report conflict."
+    },
     "activate_trial_modal": {
         "title": "Convert to Regular",
         "subtitle": "Convert trial enrollment to regular status",

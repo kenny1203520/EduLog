@@ -5,6 +5,12 @@ import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { EnrollmentTransferQueryService, type TransferMigrationRow } from './EnrollmentTransferQueryService'
 import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { SessionService } from '../session/SessionService'
+import {
+    SingleLessonTransferConflictService,
+    type SingleLessonTransferConflict,
+    type SingleLessonTransferResult
+} from './SingleLessonTransferConflictService'
+import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 
 export class EnrollmentTransferService {
     private static getOccurrenceInfo<T extends { class_occurrence: any }>(row: T): any {
@@ -176,7 +182,7 @@ export class EnrollmentTransferService {
         originalDate: string,
         targetSessionId: string,
         targetDate: string
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         return this.transferSingleLessonFromDate(
             enrollmentId,
             originalDate,
@@ -191,7 +197,7 @@ export class EnrollmentTransferService {
         targetSessionId: string,
         targetDate: string,
         options: { createIfMissing?: boolean } = {}
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         void options
         const enrollment = await EnrollmentTransferQueryService.getEnrollmentSessionInfo(enrollmentId)
         const originalSessionId = enrollment.class_session_id
@@ -222,10 +228,6 @@ export class EnrollmentTransferService {
             targetOccId
         )
 
-        if (existingTargetReport) {
-            throw new Error('TARGET_REPORT_ALREADY_EXISTS')
-        }
-
         const original = DateUtils.parseLocalDate(originalDate) || new Date(originalDate)
         await OccurrenceService.generateOccurrences(originalSessionId, original, original).catch(() => {})
 
@@ -238,20 +240,45 @@ export class EnrollmentTransferService {
             originalOccId
         )
 
-        await this.commitSingleLessonTransfer(
-            enrollmentId,
-            originalOccId,
-            targetOccId,
-            existingOriginalReport?.id || null
-        )
+        if (existingTargetReport) {
+            return SingleLessonTransferConflictService.createConflict(
+                enrollmentId,
+                originalOccId,
+                targetOccId,
+                originalSessionId,
+                targetSessionId
+            )
+        }
+
+        let transferId: string
+        try {
+            transferId = await this.commitSingleLessonTransfer(
+                enrollmentId,
+                originalOccId,
+                targetOccId,
+                existingOriginalReport?.id || null
+            )
+        } catch (error: any) {
+            if (error?.message?.includes('TARGET_REPORT_ALREADY_EXISTS')) {
+                return SingleLessonTransferConflictService.createConflict(
+                    enrollmentId,
+                    originalOccId,
+                    targetOccId,
+                    originalSessionId,
+                    targetSessionId
+                )
+            }
+            throw error
+        }
         await EnrollmentTransferToolService.syncSessionPair(originalSessionId, targetSessionId)
+        return { status: 'completed', transferId }
     }
 
     static async transferSingleLessonReport(
         reportId: string,
         targetSessionId: string,
         targetDate: string
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         await this.assertTargetDateMatchesSession(targetSessionId, targetDate)
 
         const report = await EnrollmentTransferQueryService.getReportTransferInfo(reportId)
@@ -269,7 +296,7 @@ export class EnrollmentTransferService {
         )
 
         if (targetOccId === report.class_occurrence_id) {
-            return
+            return { status: 'completed' }
         }
 
         const existingTargetReport = await EnrollmentTransferQueryService.getExistingReportForOccurrence(
@@ -278,17 +305,48 @@ export class EnrollmentTransferService {
         )
 
         if (existingTargetReport) {
-            throw new Error('TARGET_REPORT_ALREADY_EXISTS')
+            if (!originalSessionId) throw new Error('ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION')
+            return SingleLessonTransferConflictService.createConflict(
+                report.enrollment_id,
+                report.class_occurrence_id,
+                targetOccId,
+                originalSessionId,
+                targetSessionId
+            )
         }
 
-        await this.commitSingleLessonTransfer(
-            report.enrollment_id,
-            report.class_occurrence_id,
-            targetOccId,
-            report.id
-        )
+        let transferId: string
+        try {
+            transferId = await this.commitSingleLessonTransfer(
+                report.enrollment_id,
+                report.class_occurrence_id,
+                targetOccId,
+                report.id
+            )
+        } catch (error: any) {
+            if (error?.message?.includes('TARGET_REPORT_ALREADY_EXISTS')) {
+                if (!originalSessionId) throw new Error('ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION')
+                return SingleLessonTransferConflictService.createConflict(
+                    report.enrollment_id,
+                    report.class_occurrence_id,
+                    targetOccId,
+                    originalSessionId,
+                    targetSessionId
+                )
+            }
+            throw error
+        }
 
         await EnrollmentTransferToolService.syncSessionPair(originalSessionId, targetSessionId)
+        return { status: 'completed', transferId }
+    }
+
+    /** Resolves a target-report conflict using the user's per-field choices. */
+    static async resolveSingleLessonTransferConflict(
+        conflict: SingleLessonTransferConflict,
+        fieldSources: TransferReportFieldSelections
+    ): Promise<SingleLessonTransferResult> {
+        return SingleLessonTransferConflictService.resolve(conflict, fieldSources)
     }
 
     /** Cancels one active single-lesson transfer and moves its report back atomically. */

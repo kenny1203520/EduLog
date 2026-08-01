@@ -7,6 +7,8 @@ import { EnrollmentTransferService } from './EnrollmentTransferService'
 import { EnrollmentSupportService } from './EnrollmentSupportService'
 import { DateUtils } from '@/utils/DateUtils'
 import { SessionService } from '../session/SessionService'
+import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
+import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -275,7 +277,7 @@ export class EnrollmentCommandService {
         originalDate: string,
         targetSessionId: string,
         targetDate: string
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         return EnrollmentTransferService.transferSingleLesson(
             enrollmentId,
             originalDate,
@@ -288,7 +290,7 @@ export class EnrollmentCommandService {
         reportId: string,
         targetSessionId: string,
         targetDate: string
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         return EnrollmentTransferService.transferSingleLessonReport(
             reportId,
             targetSessionId,
@@ -302,7 +304,7 @@ export class EnrollmentCommandService {
         targetSessionId: string,
         targetDate: string,
         options: { createIfMissing?: boolean } = {}
-    ): Promise<void> {
+    ): Promise<SingleLessonTransferResult> {
         return EnrollmentTransferService.transferSingleLessonFromDate(
             enrollmentId,
             originalDate,
@@ -310,6 +312,13 @@ export class EnrollmentCommandService {
             targetDate,
             options
         )
+    }
+
+    static async resolveSingleLessonTransferConflict(
+        conflict: SingleLessonTransferConflict,
+        fieldSources: TransferReportFieldSelections
+    ): Promise<SingleLessonTransferResult> {
+        return EnrollmentTransferService.resolveSingleLessonTransferConflict(conflict, fieldSources)
     }
 
     static async cancelSingleLessonTransfer(transferId: string): Promise<void> {

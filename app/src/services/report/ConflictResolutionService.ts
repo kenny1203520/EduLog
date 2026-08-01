@@ -1,4 +1,5 @@
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { findReportConflictingFields } from './ReportFieldConflictService'
 
 export interface ConflictInfo {
     hasConflict: boolean
@@ -41,34 +42,7 @@ export class ConflictResolutionService {
         server: OccurrenceReportDTO,
         client: OccurrenceReportDTO
     ): string[] {
-        const fieldsThatMatter = [
-            'content',
-            'content_document',
-            'attendance_status',
-            'is_completed',
-            'progress_letter',
-            'class_participation',
-            'classroom_behavior',
-            'contact_notes',
-            'contact_notes_document',
-            'class_notes',
-            'class_notes_document',
-            'lesson_id',
-            'external_link'
-        ]
-
-        const conflicts: string[] = []
-
-        fieldsThatMatter.forEach((field) => {
-            const serverValue = (server as Record<string, any>)[field]
-            const clientValue = (client as Record<string, any>)[field]
-
-            if (JSON.stringify(serverValue ?? null) !== JSON.stringify(clientValue ?? null)) {
-                conflicts.push(field)
-            }
-        })
-
-        return conflicts
+        return findReportConflictingFields(server, client) as string[]
     }
 
     /**
