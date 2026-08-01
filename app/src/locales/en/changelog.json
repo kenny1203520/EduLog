@@ -1,6 +1,26 @@
 {
     "entries": [
-        {
+    {
+            "version": "1.7.3",
+            "date": "2026-08-01",
+            "changes": {
+                "added": [
+                    "Added single-lesson transfer report conflict management with per-field source/target selection and safe cancellation.",
+                    "Added human-readable transfer conflict details with collapsible technical IDs."
+                ],
+                "changed": [
+                    "Effective lesson rosters now prevent report recreation in the source lesson after a transfer.",
+                    "Existing reports move with a transfer and retain their content."
+                ],
+                "tests": [
+                    "Added coverage for transfer rosters, report migration, idempotency, conflict resolution, readable formatting, and release metadata."
+                ],
+                "deployment": [
+                    "Apply migrations 1000030 and 1000031 in order before deploying the frontend.",
+                    "Existing reports are not automatically cleaned up."
+                ]
+            }
+        },        {
             "version": "1.7.2",
             "date": "2026-08-01",
             "changes": {
