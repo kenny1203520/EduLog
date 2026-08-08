@@ -305,7 +305,8 @@
         "delete_student_failed": "Failed to delete student",
         "update_enrollment_failed": "Failed to update enrollment",
         "delete_enrollment_failed": "Failed to delete enrollment",
-        "platform_required": "Platform and username are required; password is also required for non-Koding School (Orange Apple) accounts",
+        "platform_required": "Platform is required",
+        "credential_value_required": "Enter at least one of username, password, or link",
         "session_full": "Selected session is full in the chosen period",
         "session_course_mismatch": "The selected class session cannot teach this course"
     }

@@ -305,7 +305,8 @@
         "delete_student_failed": "刪除學生失敗",
         "update_enrollment_failed": "更新報名記錄失敗",
         "delete_enrollment_failed": "刪除報名記錄失敗",
-        "platform_required": "平台與使用者名稱為必填；非橘蘋學習平台帳號也需填寫密碼",
+        "platform_required": "平台為必填",
+        "credential_value_required": "帳號、密碼或連結至少需填寫一項",
         "session_full": "所選時段在該區間已滿額",
         "session_course_mismatch": "所選班級無法教授這門課程"
     }

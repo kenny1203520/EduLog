@@ -269,14 +269,14 @@ function formatSchoolDate(date: string | undefined, timeZone?: string) {
 
                 <!-- Edit Mode -->
                 <div v-else class="space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="space-y-1">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="min-w-0 space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.schools.name') }}</label>
                             <input v-model="editSchoolForm.name"
-                                class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
+                                class="w-full px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
                         </div>
-                        <div class="space-y-1">
+                        <div class="min-w-0 space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.schools.status') }}</label>
                             <BaseDropdown v-model="editSchoolForm.status" :options="schoolStatusOptions"
@@ -284,15 +284,15 @@ function formatSchoolDate(date: string | undefined, timeZone?: string) {
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="space-y-1">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div class="min-w-0 space-y-1">
                             <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                 $t('student.schools.school_student_id') }}</label>
                             <input v-model="editSchoolForm.school_student_id"
-                                class="px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
+                                class="w-full px-4 py-3 text-base font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm rounded-xl border border-gray-200">
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid min-w-0 grid-cols-2 gap-4">
                             <div class="space-y-1">
                                 <label class="text-sm font-black text-gray-400 uppercase tracking-widest ml-1 mb-1 block">{{
                                     $t('student.schools.grade') }}</label>
