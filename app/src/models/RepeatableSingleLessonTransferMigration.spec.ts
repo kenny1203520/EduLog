@@ -16,6 +16,7 @@ describe('repeatable single lesson transfer migration contract', () => {
         expect(migration).toContain('SET cancelled_at = now()')
         expect(migration).toContain('Intermediate chain nodes are targets historically')
         expect(migration).toContain('manually recreated source report is authoritative')
+        expect(migration).toContain('SELECT incoming.enrollment_id FROM transferred_in AS incoming')
     })
 
     it('uses the same repeatable chain logic for normal and conflict transfers', () => {

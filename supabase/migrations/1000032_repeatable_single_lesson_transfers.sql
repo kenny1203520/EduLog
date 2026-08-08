@@ -43,7 +43,7 @@ BEGIN
     SELECT eligible.id FROM eligible_enrollments AS eligible
     WHERE NOT EXISTS (SELECT 1 FROM transferred_out AS outgoing WHERE outgoing.enrollment_id = eligible.id)
     UNION
-    SELECT incoming.id FROM transferred_in AS incoming;
+    SELECT incoming.enrollment_id FROM transferred_in AS incoming;
 END;
 $$;
 
