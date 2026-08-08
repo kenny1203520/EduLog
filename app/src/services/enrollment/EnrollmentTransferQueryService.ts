@@ -51,7 +51,57 @@ export type SingleLessonTransferReportRow = {
     }>
 }
 
+export interface SingleLessonTransferHistoryItem {
+    id: string
+    created_at: string
+    cancelled_at: string | null
+    course_display_name: string | null
+    source_occurrence_date: string
+    source_start_time: string | null
+    source_end_time: string | null
+    source_session_name: string | null
+    source_classroom_name: string | null
+    target_occurrence_date: string
+    target_start_time: string | null
+    target_end_time: string | null
+    target_session_name: string | null
+    target_classroom_name: string | null
+}
+
+export interface EffectiveSingleLessonTransferTarget {
+    transfer_id: string
+    source_occurrence_id: string
+    target_occurrence_id: string
+    is_effective_target: boolean
+    target_report_id: string | null
+}
+
 export class EnrollmentTransferQueryService {
+    static async getSingleLessonTransferHistory(enrollmentId: string): Promise<SingleLessonTransferHistoryItem[]> {
+        const { data, error } = await supabase.rpc('get_single_lesson_transfer_history', {
+            p_enrollment_id: enrollmentId
+        })
+        if (error) throw new Error(error.message)
+        return (data || []) as SingleLessonTransferHistoryItem[]
+    }
+
+    static async getEffectiveSingleLessonTransferTargets(enrollmentId: string): Promise<EffectiveSingleLessonTransferTarget[]> {
+        const { data, error } = await supabase.rpc('get_effective_single_lesson_transfer_targets', {
+            p_enrollment_id: enrollmentId
+        })
+        if (error) throw new Error(error.message)
+        return (data || []) as EffectiveSingleLessonTransferTarget[]
+    }
+
+    static async repairSingleLessonTransferReport(enrollmentId: string, targetOccurrenceId: string): Promise<string> {
+        const { data, error } = await supabase.rpc('repair_single_lesson_transfer_report', {
+            p_enrollment_id: enrollmentId,
+            p_target_occurrence_id: targetOccurrenceId
+        })
+        if (error) throw new Error(error.message)
+        return data as string
+    }
+
     static async getEnrollmentSessionInfo(enrollmentId: string): Promise<{ class_session_id: string | null; course_id: string }> {
         const { data, error } = await supabase
             .from('enrollments')

@@ -105,25 +105,21 @@ function getOccurrenceIndicatorClass(occurrence: ClassOccurrence) {
     const status = props.occurrenceStatuses[occurrence.id!] || occurrence.status
     switch (status) {
         case 'present':
-        case 'completed':
+        case 'late':
             return 'bg-emerald-500'
         case 'absent':
-            return 'bg-rose-500'
-        case 'late':
-            return 'bg-amber-500'
         case 'excused':
-            return 'bg-blue-500'
+            return 'bg-red-500'
         case 'cancelled':
         case 'rescheduled':
-            return 'bg-gray-300'
         case 'scheduled':
-            return 'bg-emerald-400 opacity-50'
         case 'bookable':
-            return 'bg-gray-200'
         case 'holiday':
-            return 'bg-pink-400'
+        case 'completed':
         default:
             return 'bg-gray-400'
+        case 'pending':
+            return 'bg-amber-500'
     }
 }
 
@@ -131,25 +127,21 @@ function getOccurrenceStatusBadgeClass(status: string) {
     const currentStatus = props.occurrenceStatuses[status] || status
     switch (currentStatus) {
         case 'present':
-        case 'completed':
+        case 'late':
             return 'bg-emerald-50 text-emerald-600 border-emerald-100'
         case 'absent':
-            return 'bg-rose-50 text-rose-600 border-rose-100'
-        case 'late':
-            return 'bg-amber-50 text-amber-600 border-amber-100'
         case 'excused':
-            return 'bg-blue-50 text-blue-600 border-blue-100'
+            return 'bg-red-50 text-red-600 border-red-100'
         case 'cancelled':
         case 'rescheduled':
-            return 'bg-gray-50 text-gray-400 border-gray-100'
         case 'scheduled':
-            return 'bg-emerald-50/50 text-emerald-400 border-emerald-100/50 ring-1 ring-emerald-50'
         case 'bookable':
-            return 'bg-slate-50 text-slate-400 border-slate-100'
         case 'holiday':
-            return 'bg-pink-50 text-pink-600 border-pink-100'
+        case 'completed':
         default:
-            return 'bg-gray-50 text-gray-700 border-gray-100'
+            return 'bg-gray-50 text-gray-500 border-gray-100'
+        case 'pending':
+            return 'bg-amber-50 text-amber-700 border-amber-100'
     }
 }
 

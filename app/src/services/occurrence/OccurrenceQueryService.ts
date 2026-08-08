@@ -106,6 +106,38 @@ export class OccurrenceQueryService {
         return next ? new ClassOccurrence(next as any) : null
     }
 
+    static async getOccurrencesByIds(occurrenceIds: string[]): Promise<ClassOccurrence[]> {
+        if (occurrenceIds.length === 0) return []
+        const { data, error } = await supabase
+            .from('class_occurrences')
+            .select(`
+                *,
+                class_sessions (
+                    name,
+                    time_zone,
+                    classrooms (name, color)
+                )
+            `)
+            .in('id', occurrenceIds)
+
+        if (error) throw new Error(error.message)
+
+        return (data as any[]).map((dto: any) => {
+            const occurrence = new ClassOccurrence(dto)
+            if (dto.class_sessions) {
+                occurrence.sessionName = dto.class_sessions.name
+                if (!dto.time_zone && DateUtils.isValidTimeZone(dto.class_sessions.time_zone)) {
+                    occurrence.timeZone = dto.class_sessions.time_zone
+                }
+            }
+            if (dto.class_sessions?.classrooms) {
+                occurrence.classroomName = dto.class_sessions.classrooms.name
+                occurrence.classroomColor = dto.class_sessions.classrooms.color
+            }
+            return occurrence
+        })
+    }
+
     static async getAdjacentOccurrence(
         sessionId: string,
         occurrenceDate: Date,

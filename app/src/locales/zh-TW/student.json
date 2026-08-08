@@ -131,6 +131,7 @@
         "none_option": "-- 無 --",
         "lesson_label": "開始課次",
         "transfer_btn": "調課",
+        "transfer_history_btn": "調課歷程",
         "transfer_title": "調課",
         "transfer_from": "原時段",
         "transfer_target": "新時段",
@@ -243,6 +244,24 @@
         "lesson_id": "課次 ID",
         "enrollment_id": "報名 ID"
     },
+    "transfer_history": {
+        "title": "調課歷程",
+        "subtitle": "此課程的單堂調課稽核紀錄",
+        "loading": "正在載入調課歷程…",
+        "load_error": "無法載入調課歷程，請稍後再試。",
+        "retry": "重新載入",
+        "empty": "目前沒有單堂調課紀錄。",
+        "active": "目前有效",
+        "closed": "已關閉",
+        "source": "來源堂次",
+        "target": "目標堂次",
+        "created_at": "調課時間：{date}",
+        "closed_at": "關閉時間：{date}",
+        "report_exists": "報告已建立",
+        "report_missing": "報告缺失",
+        "repair_report": "重新產生報告",
+        "repairing": "正在產生…"
+    },
     "activate_trial_modal": {
         "title": "轉為正式學員",
         "subtitle": "將試聽狀態轉換為正式報名",
@@ -305,7 +324,8 @@
         "delete_student_failed": "刪除學生失敗",
         "update_enrollment_failed": "更新報名記錄失敗",
         "delete_enrollment_failed": "刪除報名記錄失敗",
-        "platform_required": "平台與使用者名稱為必填；非橘蘋學習平台帳號也需填寫密碼",
+        "platform_required": "平台為必填",
+        "credential_value_required": "帳號、密碼或連結至少需填寫一項",
         "session_full": "所選時段在該區間已滿額",
         "session_course_mismatch": "所選班級無法教授這門課程"
     }

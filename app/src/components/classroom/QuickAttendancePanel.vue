@@ -7,6 +7,7 @@ export type QuickAttendanceStatus = 'pending' | 'present' | 'absent'
 export interface QuickAttendanceStudent {
     id: string
     name: string
+    currentCourse: string
     status: QuickAttendanceStatus
     isSaving: boolean
     disabled?: boolean
@@ -35,6 +36,7 @@ const emit = defineEmits<{
     'update:expanded': [expanded: boolean]
     'add-student': []
     'clear-filters': []
+    'focus-student': [studentId: string]
 }>()
 
 const { t } = useI18n()
@@ -140,7 +142,11 @@ function statusClass(status: QuickAttendanceStatus, active: boolean): string {
                             :disabled="student.disabled" :title="student.disabledReason"
                             @change="emit('toggle-selection', student.id)">
                         <div class="min-w-0 flex-1">
-                            <p class="break-words text-base font-black text-gray-900">{{ student.name }}</p>
+                            <button type="button" class="max-w-full break-words text-left text-base font-black text-gray-900 underline-offset-4 transition hover:text-emerald-700 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                :aria-label="`${t('classroom.student_name')}: ${student.name}`" @click="emit('focus-student', student.id)">
+                                {{ student.name }}
+                            </button>
+                            <p class="mt-1 break-words text-xs font-bold text-slate-500">{{ student.currentCourse }}</p>
                             <p class="mt-1 text-xs font-bold" :class="student.status === 'present' ? 'text-emerald-600' : student.status === 'absent' ? 'text-red-600' : 'text-gray-400'">
                                 {{ student.disabled ? student.disabledReason : t(`attendance.${student.status}`) + ' · ' + (student.isSaving ? t('common.saving') : t('classroom.attendance_saved')) }}
                             </p>

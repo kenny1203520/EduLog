@@ -1,4 +1,9 @@
 {
+    "transferred_report_missing": "This transferred lesson is missing its report",
+    "transferred_report_missing_hint": "The lesson is currently transferred here, but its report no longer exists. Regenerating creates a new blank report and never overwrites existing data.",
+    "repair_transferred_report": "Regenerate report",
+    "repair_success": "Report regenerated",
+    "repair_error": "Unable to regenerate report",
     "title": "Write Report",
     "list_title": "Class Reports",
     "history": "History",

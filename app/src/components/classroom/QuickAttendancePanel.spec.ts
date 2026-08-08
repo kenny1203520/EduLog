@@ -7,8 +7,8 @@ vi.mock('vue-i18n', () => ({
 }))
 
 const students = [
-    { id: 'student-1', name: '王小明', status: 'pending' as const, isSaving: false },
-    { id: 'student-2', name: '陳小華', status: 'present' as const, isSaving: false }
+    { id: 'student-1', name: '王小明', currentCourse: 'Python 基礎課程', status: 'pending' as const, isSaving: false },
+    { id: 'student-2', name: '陳小華', currentCourse: 'Scratch 課程', status: 'present' as const, isSaving: false }
 ]
 
 function mountPanel(overrides: Record<string, unknown> = {}) {
@@ -32,6 +32,14 @@ describe('QuickAttendancePanel', () => {
         expect(wrapper.find('.attendance-grid').exists()).toBe(true)
         expect(wrapper.findAll('[data-student-id]')).toHaveLength(2)
         expect(wrapper.findAll('[data-attendance-status]')).toHaveLength(6)
+        expect(wrapper.text()).toContain('Python 基礎課程')
+    })
+
+    it('emits focus-student only when the student name is clicked', async () => {
+        const wrapper = mountPanel()
+        await wrapper.get('[data-student-id="student-1"] button[aria-label="classroom.student_name: 王小明"]').trigger('click')
+        expect(wrapper.emitted('focus-student')).toEqual([['student-1']])
+        expect(wrapper.emitted('set-attendance')).toBeUndefined()
     })
 
     it('emits direct attendance changes and treats the current state as a no-op', async () => {
@@ -62,7 +70,7 @@ describe('QuickAttendancePanel', () => {
 
     it('disables a saving student without hiding their status', () => {
         const wrapper = mountPanel({
-            students: [{ id: 'student-1', name: '王小明', status: 'absent', isSaving: true }]
+            students: [{ id: 'student-1', name: '王小明', currentCourse: 'Python 基礎課程', status: 'absent', isSaving: true }]
         })
         const buttons = wrapper.findAll('[data-student-id="student-1"] [data-attendance-status]')
         expect(buttons).toHaveLength(3)
@@ -72,7 +80,7 @@ describe('QuickAttendancePanel', () => {
 
     it('keeps a trial enrollment visible while disabling report-backed attendance actions', async () => {
         const wrapper = mountPanel({
-            students: [{ id: 'trial-1', name: 'Trial Student', status: 'pending', isSaving: false, disabled: true, disabledReason: 'Regular enrollment required' }]
+            students: [{ id: 'trial-1', name: 'Trial Student', currentCourse: 'Trial 課程', status: 'pending', isSaving: false, disabled: true, disabledReason: 'Regular enrollment required' }]
         })
         const student = wrapper.get('[data-student-id="trial-1"]')
         expect(student.text()).toContain('Trial Student')

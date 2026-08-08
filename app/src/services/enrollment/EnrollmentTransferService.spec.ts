@@ -14,6 +14,7 @@ vi.mock('./EnrollmentTransferQueryService', () => ({
         isSessionScheduledOn: vi.fn(),
         getTargetOccurrenceId: vi.fn(),
         getExistingReportForOccurrence: vi.fn(),
+        getSingleLessonReportCandidates: vi.fn(),
         getReportForOccurrence: vi.fn(),
         getTransferConflictDisplayContext: vi.fn(),
         getReportTransferInfo: vi.fn()
@@ -38,11 +39,14 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
         })
         vi.mocked(EnrollmentTransferQueryService.isSessionScheduledOn).mockResolvedValue(true)
         vi.mocked(EnrollmentTransferQueryService.getTargetOccurrenceId)
+            .mockReset()
             .mockResolvedValueOnce('target-occurrence')
             .mockResolvedValueOnce('source-occurrence')
         vi.mocked(EnrollmentTransferQueryService.getExistingReportForOccurrence)
+            .mockReset()
             .mockResolvedValueOnce(null)
             .mockResolvedValueOnce(null)
+        vi.mocked(EnrollmentTransferQueryService.getSingleLessonReportCandidates).mockResolvedValue([])
         vi.mocked(SessionService.getCompatibleClassSession).mockResolvedValue({} as any)
         vi.mocked(OccurrenceService.generateOccurrences).mockResolvedValue([])
         vi.mocked(EnrollmentTransferToolService.syncSessionPair).mockResolvedValue()
@@ -84,6 +88,49 @@ describe('EnrollmentTransferService single-lesson transfers', () => {
         expect(rpcMock).toHaveBeenCalledWith('transfer_single_lesson', expect.objectContaining({
             p_report_id: 'report-1'
         }))
+    })
+
+    it('uses the unique report on a custom source date even after it was previously moved', async () => {
+        vi.mocked(EnrollmentTransferQueryService.getSingleLessonReportCandidates).mockResolvedValue([{
+            id: 'moved-report', enrollment_id: 'enrollment-1', class_occurrence_id: 'makeup-occurrence',
+            class_occurrence: [{ occurrence_date: '2026-08-03', class_session_id: 'makeup-session' }]
+        }])
+        vi.mocked(EnrollmentTransferQueryService.getReportTransferInfo).mockResolvedValue({
+            id: 'moved-report', enrollment_id: 'enrollment-1', class_occurrence_id: 'makeup-occurrence',
+            class_occurrence: [{ occurrence_date: '2026-08-03', class_session_id: 'makeup-session' }]
+        })
+
+        await EnrollmentTransferService.transferSingleLessonFromDate(
+            'enrollment-1', '2026-08-03', 'target-session', '2026-08-05'
+        )
+
+        expect(rpcMock).toHaveBeenCalledWith('transfer_single_lesson', expect.objectContaining({
+            p_source_occurrence_id: 'makeup-occurrence', p_report_id: 'moved-report'
+        }))
+    })
+
+    it('uses a previously transferred report occurrence as the next transfer source', async () => {
+        vi.mocked(EnrollmentTransferQueryService.getReportTransferInfo).mockResolvedValue({
+            id: 'report-2',
+            enrollment_id: 'enrollment-1',
+            class_occurrence_id: 'makeup-occurrence',
+            class_occurrence: [{ occurrence_date: '2026-08-05', class_session_id: 'makeup-session' }]
+        })
+
+        await EnrollmentTransferService.transferSingleLessonReport(
+            'report-2',
+            'next-session',
+            '2026-08-12'
+        )
+
+        expect(rpcMock).toHaveBeenCalledWith('transfer_single_lesson', {
+            p_enrollment_id: 'enrollment-1',
+            p_source_occurrence_id: 'makeup-occurrence',
+            p_target_occurrence_id: 'target-occurrence',
+            p_report_id: 'report-2'
+        })
+        expect(EnrollmentTransferToolService.syncSessionPair)
+            .toHaveBeenCalledWith('makeup-session', 'next-session')
     })
 
     it('converts a concurrent target-report insert into a manageable conflict', async () => {

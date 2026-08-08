@@ -62,14 +62,13 @@ const eligibleSessions = computed(() => {
     if (!currentEnrollment.value?.courseId) return []
     return SessionEligibilityPolicy.filter(sessions.value, {
         courseId: currentEnrollment.value.courseId,
-        classroomId: selectedClassroomId.value || null,
-        excludeSessionId: currentEnrollment.value.classSessionId || null
+        classroomId: selectedClassroomId.value || null
     })
 })
 
 const classroomOptions = computed(() => {
     const eligibleIds = SessionEligibilityPolicy.classroomIds(
-        sessions.value.filter(session => session.id !== currentEnrollment.value?.classSessionId),
+        sessions.value,
         currentEnrollment.value?.courseId || ''
     )
     return [

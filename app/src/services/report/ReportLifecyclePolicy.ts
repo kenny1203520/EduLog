@@ -51,14 +51,14 @@ export class ReportLifecyclePolicy {
     ): Promise<void> {
         const { data: enrollment, error: enrollmentError } = await supabase
             .from('enrollments')
-            .select('status')
+            .select('status, class_session_id')
             .eq('id', enrollmentId)
             .single()
 
         if (enrollmentError || !enrollment) return
 
 
-        if (enrollment.status !== 'regular') return
+        if (enrollment.status !== 'regular' || !enrollment.class_session_id) return
 
         const { data: currentReport } = await supabase
             .from('occurrence_reports')
@@ -78,19 +78,22 @@ export class ReportLifecyclePolicy {
 
         if (count && count > 0) return
 
+        // A single-lesson transfer only changes the current occurrence.  The
+        // next prebuilt report must continue on the enrollment's normal class,
+        // not on the one-off make-up class that hosted this report.
         const nextDateString = await SessionService.getNextScheduledDate(
-            currentOcc.class_session_id,
+            enrollment.class_session_id,
             occurrenceDate
         )
         if (!nextDateString) return
 
         const nextDate = DateUtils.parseLocalDate(nextDateString) || new Date(nextDateString)
-        await OccurrenceService.generateOccurrences(currentOcc.class_session_id, nextDate, nextDate)
+        await OccurrenceService.generateOccurrences(enrollment.class_session_id, nextDate, nextDate)
 
         const { data: nextOcc } = await supabase
             .from('class_occurrences')
             .select('id')
-            .eq('class_session_id', currentOcc.class_session_id)
+            .eq('class_session_id', enrollment.class_session_id)
             .eq('occurrence_date', nextDateString)
             .maybeSingle()
 

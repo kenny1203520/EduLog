@@ -460,6 +460,20 @@
                         @restored="handleReportRestored" @deleted="handleDeleted" />
                 </div>
 
+                <div v-else-if="selectedOccurrence && isMissingTransferredOccurrence(selectedOccurrence.id)"
+                    class="flex min-h-[400px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-amber-200 bg-amber-50 p-8 text-center">
+                    <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-white text-amber-500 shadow-sm">
+                        <svg class="h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M7.5 3h9l3 3v15H4.5V6l3-3Z" /></svg>
+                    </div>
+                    <h3 class="text-xl font-black text-amber-900">{{ $t('report.transferred_report_missing') }}</h3>
+                    <p class="mt-2 max-w-md text-sm leading-relaxed text-amber-700">{{ $t('report.transferred_report_missing_hint') }}</p>
+                    <button type="button" :disabled="isCreatingReport" @click="repairMissingTransferredReport"
+                        class="mt-6 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-white shadow-sm transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60">
+                        <svg v-if="isCreatingReport" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                        {{ $t('report.repair_transferred_report') }}
+                    </button>
+                </div>
+
                 <!-- Empty State -->
                 <div v-else
                     class="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 p-12 text-center h-full flex flex-col items-center justify-center min-h-[400px]">
@@ -514,6 +528,7 @@ import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { CourseService } from '@/services/course/CourseService'
+import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { SuspensionService } from '@/services/suspension/SuspensionService'
@@ -564,6 +579,13 @@ const enrollmentInfo = ref<{
     kodingAdmissionId?: string
 } | null>(null)
 const isEnrollmentActive = ref(false)
+const effectiveTransferTargets = ref<Array<{
+    transfer_id: string
+    source_occurrence_id: string
+    target_occurrence_id: string
+    is_effective_target: boolean
+    target_report_id: string | null
+}>>([])
 const courseLessons = ref<any[]>([])
 let reportSubscription: RealtimeChannel | null = null
 
@@ -577,6 +599,16 @@ const pendingSelectionState = ref<{
     report: OccurrenceReport | null
     scrollY: number
 } | null>(null)
+
+const missingTransferredOccurrenceIds = computed(() => new Set(
+    effectiveTransferTargets.value
+        .filter(target => target.is_effective_target && !target.target_report_id)
+        .map(target => target.target_occurrence_id)
+))
+
+function isMissingTransferredOccurrence(occurrenceId: string | undefined): boolean {
+    return !!occurrenceId && missingTransferredOccurrenceIds.value.has(occurrenceId)
+}
 
 function clearReportSubscription() {
     if (reportSubscription) {
@@ -650,6 +682,35 @@ async function handleConfirmCreate() {
     } catch (e) {
         console.error('Failed to create report', e)
         toast.error(t('report.create_error') || 'Failed to create report')
+    } finally {
+        isCreatingReport.value = false
+    }
+}
+
+async function repairMissingTransferredReport() {
+    const enrollmentId = route.params.enrollmentId as string
+    const occurrenceId = selectedOccurrence.value?.id
+    if (!enrollmentId || !occurrenceId || !isMissingTransferredOccurrence(occurrenceId)) return
+
+    try {
+        isCreatingReport.value = true
+        await EnrollmentService.repairSingleLessonTransferReport(enrollmentId, occurrenceId)
+        await loadOccurrences()
+        const repairedOccurrence = occurrences.value.find(occurrence => occurrence.id === occurrenceId)
+        if (repairedOccurrence) {
+            await selectOccurrence(repairedOccurrence, { allowCreatePrompt: false })
+        }
+        toast.success(t('report.repair_success') || 'Report regenerated')
+    } catch (error) {
+        const message = error instanceof Error ? error.message : ''
+        if (message.includes('REPORT_ALREADY_EXISTS')) {
+            await loadOccurrences()
+            const existingOccurrence = occurrences.value.find(occurrence => occurrence.id === occurrenceId)
+            if (existingOccurrence) await selectOccurrence(existingOccurrence, { allowCreatePrompt: false })
+            return
+        }
+        console.error('Failed to repair transferred report:', error)
+        toast.error(t('report.repair_error') || 'Failed to regenerate report')
     } finally {
         isCreatingReport.value = false
     }
@@ -905,12 +966,13 @@ function formatOccurrenceDateTime(occ: ClassOccurrence) {
 
 function getStatusColor(status: string) {
     switch (status) {
-        case 'present': return 'bg-emerald-100 text-emerald-700'
-        case 'absent': return 'bg-rose-100 text-rose-700'
-        case 'late': return 'bg-amber-100 text-amber-700'
-        case 'excused': return 'bg-blue-100 text-blue-700'
+        case 'present':
+        case 'late': return 'bg-emerald-100 text-emerald-700'
+        case 'absent':
+        case 'excused': return 'bg-red-100 text-red-700'
         case 'cancelled': return 'bg-gray-100 text-gray-500 line-through'
-        case 'scheduled': return 'bg-blue-50 text-blue-600'
+        case 'pending': return 'bg-amber-100 text-amber-700'
+        case 'scheduled': return 'bg-gray-100 text-gray-600'
         case 'bookable': return 'bg-gray-50 text-gray-400 border border-gray-100'
         default: return 'bg-gray-100 text-gray-700'
     }
@@ -1004,6 +1066,15 @@ async function loadOccurrences() {
         // This ensures we see past classes even if the student transferred sessions
         const reportsWithDetails = await OccurrenceReportService.getReportsWithDetails(enrollmentId)
         allReports.value = reportsWithDetails
+
+        // Active transfer targets must be visible even before they have a report.
+        // Their source occurrences are removed later so a one-off move never appears twice.
+        effectiveTransferTargets.value = await EnrollmentService.getEffectiveSingleLessonTransferTargets(enrollmentId)
+        const transferredTargetOccurrences = await OccurrenceService.getOccurrencesByIds(
+            effectiveTransferTargets.value
+                .filter(target => target.is_effective_target)
+                .map(target => target.target_occurrence_id)
+        )
 
         // Map reports to ClassOccurrence objects
         const historicalOccurrences: ClassOccurrence[] = reportsWithDetails.map((r: any) => {
@@ -1145,6 +1216,10 @@ async function loadOccurrences() {
             if (o.id) occurrenceMap.set(o.id, o)
         })
 
+        transferredTargetOccurrences.forEach(o => {
+            if (o.id) occurrenceMap.set(o.id, o)
+        })
+
         // 5a. Filter out "Rescheduled" stubs
         // We look at allReports (the source data for reportsWithDetails)
         // 5a. Filter out "Rescheduled" stubs
@@ -1159,6 +1234,7 @@ async function loadOccurrences() {
         const merged = Array.from(occurrenceMap.values()).filter(occ => {
             // Filter by ID
             if (rescheduledOccIds.has(occ.id)) return false
+            if (effectiveTransferTargets.value.some(target => target.source_occurrence_id === occ.id)) return false
             // Check if occ itself has a rescheduled status (though usually it's in the report)
             if (occ.status === 'rescheduled') return false
             return true
@@ -1243,6 +1319,12 @@ async function selectOccurrence(
         const hasExistingReport = allReports.value.some(r => r.class_occurrence_id === occurrence.id)
 
         // Create explicit Create method for manual creation
+        if (!hasExistingReport && allowCreatePrompt && isMissingTransferredOccurrence(occurrence.id)) {
+            selectedReport.value = null
+            pendingSelectionState.value = null
+            return
+        }
+
         if (!hasExistingReport && allowCreatePrompt) {
             // Store pending occurrence and show modal
             pendingOccurrence.value = occurrence

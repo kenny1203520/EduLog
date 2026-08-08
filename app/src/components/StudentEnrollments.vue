@@ -7,6 +7,7 @@ import { useStudentStore } from "@/stores/useStudentStore";
 import { usePreferencesStore } from "@/stores/usePreferencesStore";
 import EnrollStudentModal from "@/components/EnrollStudentModal.vue";
 import TransferModal from "@/components/TransferModal.vue";
+import SingleLessonTransferHistoryModal from "@/components/SingleLessonTransferHistoryModal.vue";
 import ActivateTrialModal from "@/components/ActivateTrialModal.vue";
 import StudentSuspensions from "@/components/StudentSuspensions.vue";
 import ConfirmModal from "@/components/common/ConfirmModal.vue";
@@ -36,10 +37,12 @@ const editEnrollmentForm = ref({
 // Modal States
 const showEnrollModal = ref(false);
 const showTransferModal = ref(false);
+const showTransferHistoryModal = ref(false);
 const showActivateTrialModal = ref(false);
 const showSuspensionsModal = ref(false);
 const showKodingCheckModal = ref(false);
 const selectedEnrollmentId = ref<string | null>(null);
+const selectedTransferHistoryEnrollmentId = ref<string | null>(null);
 const selectedKodingEnrollment = ref<any | null>(null);
 
 // Deletion
@@ -121,6 +124,11 @@ async function handleRemoveEnrollment() {
 function openTransfer(id: string) {
     selectedEnrollmentId.value = id;
     showTransferModal.value = true;
+}
+
+function openTransferHistory(id: string) {
+    selectedTransferHistoryEnrollmentId.value = id;
+    showTransferHistoryModal.value = true;
 }
 
 function openActivateTrial(id: string) {
@@ -279,6 +287,13 @@ async function refreshData() {
                                     class="inline-flex min-h-11 w-full items-center justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-white border border-amber-100 text-amber-600 text-sm font-black rounded-xl hover:bg-amber-50 hover:border-amber-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("student.internal_courses.transfer_btn") }}
                                 </button>
+                                <button @click="openTransferHistory(e.id)"
+                                    class="inline-flex min-h-11 w-full items-center justify-center gap-1.5 whitespace-normal text-center leading-tight px-3 py-2 bg-white border border-sky-100 text-sky-600 text-sm font-black rounded-xl hover:bg-sky-50 hover:border-sky-200 transition-all shadow-sm cursor-pointer active:scale-95">
+                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {{ $t("student.internal_courses.transfer_history_btn") }}
+                                </button>
                                 <button @click="openKodingCheck(e)"
                                     class="inline-flex min-h-11 w-full items-center justify-center whitespace-normal text-center leading-tight px-3 py-2 bg-white border border-orange-100 text-orange-600 text-sm font-black rounded-xl hover:bg-orange-50 hover:border-orange-200 transition-all shadow-sm cursor-pointer active:scale-95">
                                     {{ $t("classroom.koding_check") }}
@@ -395,6 +410,10 @@ async function refreshData() {
 
         <TransferModal :is-open="showTransferModal" :student-id="studentId" :from-enrollment-id="selectedEnrollmentId"
             @close="showTransferModal = false" @success="refreshData" />
+
+        <SingleLessonTransferHistoryModal :is-open="showTransferHistoryModal"
+            :enrollment-id="selectedTransferHistoryEnrollmentId"
+            @update:is-open="showTransferHistoryModal = $event" />
 
         <ActivateTrialModal :is-open="showActivateTrialModal" :student-id="studentId"
             :from-enrollment-id="selectedEnrollmentId" @close="showActivateTrialModal = false" @success="refreshData" />

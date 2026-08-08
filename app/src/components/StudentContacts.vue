@@ -138,22 +138,22 @@ async function copyToClipboard(text: string) {
 
         <ul class="space-y-4 mb-8">
             <li v-for="c in contacts" :key="c.id"
-                class="bg-gray-50 p-4 rounded-xl border border-transparent hover:border-gray-200 transition-colors">
+                class="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm transition hover:border-emerald-200 hover:shadow-md">
                 <div v-if="editingContactId !== c.id" class="flex justify-between items-start">
-                    <div>
-                        <div class="font-bold text-gray-800 text-xl flex items-center gap-3">
+                    <div class="min-w-0 flex-1">
+                        <div class="font-bold text-gray-800 text-xl flex flex-wrap items-center gap-3">
                             {{ c.name }}
-                            <span
+                            <span v-if="c.relation"
                                 class="text-sm text-gray-500 font-medium bg-white px-3 py-1 rounded-full border border-gray-100">{{
                                     c.relation }}</span>
                         </div>
-                        <div class="text-base text-gray-600 mt-2 flex items-center gap-2 group">
+                        <div v-if="c.phone" class="mt-4 flex items-center gap-2 rounded-xl border border-slate-100 bg-white px-3 py-2 text-base text-slate-700">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                 stroke="currentColor" class="w-3.5 h-3.5">
                                 <path stroke-linecap="round" stroke-linejoin="round"
                                     d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
                             </svg>
-                            {{ c.phone }}
+                            <a :href="`tel:${c.phone}`" class="min-w-0 flex-1 truncate font-bold text-emerald-700 hover:underline">{{ c.phone }}</a>
                             <button v-if="c.phone" @click="copyToClipboard(c.phone)"
                                 class="ml-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
                                 title="Copy">
@@ -164,13 +164,13 @@ async function copyToClipboard(text: string) {
                                 </svg>
                             </button>
                         </div>
-                        <div class="text-base text-gray-600 flex items-center gap-2 group">
+                        <div v-if="c.email" class="mt-2 flex items-center gap-2 rounded-xl border border-slate-100 bg-white px-3 py-2 text-base text-slate-700">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                 stroke="currentColor" class="w-3.5 h-3.5">
                                 <path stroke-linecap="round" stroke-linejoin="round"
                                     d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
                             </svg>
-                            {{ c.email }}
+                            <a :href="`mailto:${c.email}`" class="min-w-0 flex-1 truncate font-bold text-emerald-700 hover:underline">{{ c.email }}</a>
                             <button v-if="c.email" @click="copyToClipboard(c.email)"
                                 class="ml-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
                                 title="Copy">

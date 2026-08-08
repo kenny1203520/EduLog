@@ -33,4 +33,10 @@ describe('final attended lesson enrollment completion', () => {
         expect(lifecycle).not.toContain('isFinalCompletedLesson')
         expect(lifecycle).not.toContain(".update({ status: 'completed' })")
     })
+
+    it('returns to the enrollment normal session after a one-off transferred lesson', () => {
+        expect(lifecycle).toContain(".select('status, class_session_id')")
+        expect(lifecycle).toContain('SessionService.getNextScheduledDate(\n            enrollment.class_session_id')
+        expect(lifecycle).toContain('OccurrenceService.generateOccurrences(enrollment.class_session_id')
+    })
 })

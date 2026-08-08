@@ -57,10 +57,13 @@ function closeAddCredentialForm() {
 
 async function addCredential() {
     const platformValue = newCredential.value.platform === 'Other' ? otherPlatformAdd.value.trim() : newCredential.value.platform
-    const requiresPassword = !isKodingPlatform(platformValue)
 
-    if (!platformValue || !newCredential.value.username || (requiresPassword && !newCredential.value.password)) {
+    if (!platformValue) {
         toast.error(t('student.errors.platform_required'))
+        return
+    }
+    if (![newCredential.value.username, newCredential.value.password, newCredential.value.url].some(value => value.trim())) {
+        toast.error(t('student.errors.credential_value_required'))
         return
     }
 
@@ -102,9 +105,17 @@ function cancelEditCredential() {
 
 async function saveCredential() {
     if (!editingCredentialId.value) return
+    const platformValue = editCredentialForm.value.platform === 'Other' ? otherPlatformEdit.value.trim() : editCredentialForm.value.platform
+    if (!platformValue) {
+        toast.error(t('student.errors.platform_required'))
+        return
+    }
+    if (![editCredentialForm.value.username, editCredentialForm.value.password, editCredentialForm.value.url].some(value => value.trim())) {
+        toast.error(t('student.errors.credential_value_required'))
+        return
+    }
     try {
         isModifying.value = true
-        const platformValue = editCredentialForm.value.platform === 'Other' ? otherPlatformEdit.value : editCredentialForm.value.platform
         await StudentService.updateCredential(editingCredentialId.value, { ...editCredentialForm.value, platform: platformValue })
         cancelEditCredential()
         await studentStore.loadStudent(props.studentId)
@@ -156,6 +167,11 @@ async function copyToClipboard(text: string) {
         toast.error(t('common.copy_error', 'Failed to copy to clipboard'))
     }
 }
+
+function credentialUrl(url: string): string {
+    const value = url.trim()
+    return /^https?:\/\//i.test(value) ? value : `https://${value}`
+}
 </script>
 
 <template>
@@ -204,7 +220,7 @@ async function copyToClipboard(text: string) {
                     </div>
 
                     <div class="space-y-2">
-                        <div
+                        <div v-if="c.username"
                             class="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-100 group">
                             <div class="flex flex-col">
                                 <span class="text-[12px] text-gray-400 uppercase font-bold tracking-wider">{{
@@ -221,7 +237,7 @@ async function copyToClipboard(text: string) {
                                 </svg>
                             </button>
                         </div>
-                        <div
+                        <div v-if="c.password"
                             class="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-gray-100 group">
                             <div class="flex flex-col">
                                 <span class="text-[12px] text-gray-400 uppercase font-bold tracking-wider">{{
@@ -259,6 +275,11 @@ async function copyToClipboard(text: string) {
                                 </button>
                             </div>
                         </div>
+                        <a v-if="c.url" :href="credentialUrl(c.url)" target="_blank" rel="noopener noreferrer"
+                            class="flex items-center justify-between gap-3 rounded-lg border border-sky-100 bg-sky-50 px-3 py-2 text-sm font-bold text-sky-700 transition hover:bg-sky-100">
+                            <span class="min-w-0 truncate">{{ c.url }}</span>
+                            <svg class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H19.5m0 0v6m0-6L10 15.5M6 10.5v7.25A2.25 2.25 0 0 0 8.25 20h7.25A2.25 2.25 0 0 0 17.75 17.75V15" /></svg>
+                        </a>
                     </div>
                 </div>
 

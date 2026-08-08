@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EnrollmentTransferQueryService } from './EnrollmentTransferQueryService'
 
-const { fromMock, occurrenceChain, lessonChain } = vi.hoisted(() => {
+const { fromMock, rpcMock, occurrenceChain, lessonChain } = vi.hoisted(() => {
     const occurrenceChain: any = {
         select: vi.fn(),
         eq: vi.fn(),
@@ -21,11 +21,12 @@ const { fromMock, occurrenceChain, lessonChain } = vi.hoisted(() => {
     return {
         occurrenceChain,
         lessonChain,
-        fromMock: vi.fn((table: string) => table === 'class_occurrences' ? occurrenceChain : lessonChain)
+        fromMock: vi.fn((table: string) => table === 'class_occurrences' ? occurrenceChain : lessonChain),
+        rpcMock: vi.fn()
     }
 })
 
-vi.mock('@/lib/supabase', () => ({ supabase: { from: fromMock } }))
+vi.mock('@/lib/supabase', () => ({ supabase: { from: fromMock, rpc: rpcMock } }))
 
 describe('EnrollmentTransferQueryService conflict display context', () => {
     beforeEach(() => {
@@ -99,5 +100,63 @@ describe('EnrollmentTransferQueryService conflict display context', () => {
             lessonTitle: null
         })
         expect(lessonChain.maybeSingle).not.toHaveBeenCalled()
+    })
+})
+
+describe('EnrollmentTransferQueryService single lesson transfer history', () => {
+    it('queries the protected RPC and maps its DTO unchanged', async () => {
+        const row = {
+            id: 'transfer-1',
+            created_at: '2026-08-08T05:30:00Z',
+            cancelled_at: null,
+            course_display_name: 'Scratch Advanced',
+            source_occurrence_date: '2026-08-08',
+            source_start_time: '10:00:00',
+            source_end_time: '12:00:00',
+            source_session_name: 'Original class',
+            source_classroom_name: 'Room 201',
+            target_occurrence_date: '2026-08-09',
+            target_start_time: '13:00:00',
+            target_end_time: '15:00:00',
+            target_session_name: 'Make-up class',
+            target_classroom_name: 'Room 202'
+        }
+        rpcMock.mockResolvedValue({ data: [row], error: null })
+
+        await expect(EnrollmentTransferQueryService.getSingleLessonTransferHistory('enrollment-1'))
+            .resolves.toEqual([row])
+        expect(rpcMock).toHaveBeenCalledWith('get_single_lesson_transfer_history', {
+            p_enrollment_id: 'enrollment-1'
+        })
+    })
+})
+
+describe('EnrollmentTransferQueryService effective single lesson targets', () => {
+    it('uses the protected effective-target RPC and preserves report state', async () => {
+        const row = {
+            transfer_id: 'transfer-1',
+            source_occurrence_id: 'occurrence-a',
+            target_occurrence_id: 'occurrence-b',
+            is_effective_target: true,
+            target_report_id: null
+        }
+        rpcMock.mockResolvedValue({ data: [row], error: null })
+
+        await expect(EnrollmentTransferQueryService.getEffectiveSingleLessonTransferTargets('enrollment-1'))
+            .resolves.toEqual([row])
+        expect(rpcMock).toHaveBeenCalledWith('get_effective_single_lesson_transfer_targets', {
+            p_enrollment_id: 'enrollment-1'
+        })
+    })
+
+    it('repairs only through the guarded RPC', async () => {
+        rpcMock.mockResolvedValue({ data: 'report-1', error: null })
+
+        await expect(EnrollmentTransferQueryService.repairSingleLessonTransferReport('enrollment-1', 'occurrence-b'))
+            .resolves.toBe('report-1')
+        expect(rpcMock).toHaveBeenCalledWith('repair_single_lesson_transfer_report', {
+            p_enrollment_id: 'enrollment-1',
+            p_target_occurrence_id: 'occurrence-b'
+        })
     })
 })

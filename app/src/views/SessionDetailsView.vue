@@ -706,12 +706,30 @@ const rosterLists = computed(() => getRosterEnrollments(
 ))
 const allRosterEnrollments = computed(() => rosterLists.value.all)
 const filteredEnrollments = computed(() => rosterLists.value.filtered)
+const highlightedEnrollmentId = ref<string | null>(null)
+let rosterHighlightTimer: ReturnType<typeof setTimeout> | null = null
 
 const hasActiveStudentFilters = computed(() => Boolean(studentSearchQuery.value.trim()) || studentAttendanceFilter.value !== 'all')
 
 function clearStudentFilters() {
     studentSearchQuery.value = ''
     studentAttendanceFilter.value = 'all'
+}
+
+async function focusRosterStudent(enrollmentId: string) {
+    if (!filteredEnrollments.value.some(enrollment => enrollment.id === enrollmentId)) return
+
+    highlightedEnrollmentId.value = enrollmentId
+    if (rosterHighlightTimer) clearTimeout(rosterHighlightTimer)
+    await nextTick()
+    const visibleRosterItem = [...document.querySelectorAll<HTMLElement>(`[data-enrollment-id="${enrollmentId}"]`)]
+        .find(element => element.offsetParent !== null)
+    visibleRosterItem?.scrollIntoView({
+        behavior: 'smooth', block: 'center'
+    })
+    rosterHighlightTimer = setTimeout(() => {
+        if (highlightedEnrollmentId.value === enrollmentId) highlightedEnrollmentId.value = null
+    }, 2000)
 }
 
 watch(filteredEnrollments, filtered => {
@@ -812,6 +830,7 @@ function toggleSelectAll() {
 const quickAttendanceStudents = computed(() => filteredEnrollments.value.map(enrollment => ({
     id: enrollment.id!,
     name: enrollment.studentName || t('common.unnamed'),
+    currentCourse: enrollment.courseDisplayName || [enrollment.courseSubject, enrollment.courseStage].filter(Boolean).join(' ') || t('classroom.progress_no_record'),
     status: (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus,
     isSaving: savingMap.value.get(enrollment.id!) === true,
     disabled: !reportMap.value.has(enrollment.id!),
@@ -1919,6 +1938,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         @toggle-selection="toggleEnrollmentSelection"
                         @toggle-select-all="toggleSelectAll"
                         @add-student="openAddStudentModal"
+                        @focus-student="focusRosterStudent"
                         @clear-filters="clearStudentFilters" />
 
                     <!-- Stats Bar (Conditional or Compact in Split View?) -->
@@ -1964,6 +1984,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         :result-count="filteredEnrollments.length"
                         :has-occurrence="Boolean(todayOccurrence)"
                         :attendance-disabled="isOccurrenceInHoliday || isOccurrenceLoading"
+                        :highlighted-enrollment-id="highlightedEnrollmentId"
                         :empty-message="allRosterEnrollments.length === 0 ? $t('classroom.no_students_enrolled') : $t('classroom.no_matching_students')"
                         :show-clear-filters="allRosterEnrollments.length > 0 && hasActiveStudentFilters"
                         @set-attendance="setAttendance"

@@ -38,11 +38,13 @@ const props = withDefaults(defineProps<{
     resultCount: number
     hasOccurrence?: boolean
     attendanceDisabled?: boolean
+    highlightedEnrollmentId?: string | null
     emptyMessage: string
     showClearFilters?: boolean
 }>(), {
     hasOccurrence: false,
     attendanceDisabled: false,
+    highlightedEnrollmentId: null,
     showClearFilters: false
 })
 
@@ -123,7 +125,8 @@ function requestAttendance(item: StudentRosterItem) {
 
         <div v-else class="roster-cards p-4 sm:p-5">
             <article v-for="item in items" :key="item.id" :data-enrollment-id="item.id"
-                class="group flex min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-100/40 sm:p-5">
+                class="group flex min-w-0 flex-col rounded-3xl border border-slate-200 bg-white p-4 transition hover:border-emerald-200 hover:shadow-lg hover:shadow-emerald-100/40 sm:p-5"
+                :class="item.id === highlightedEnrollmentId ? 'ring-4 ring-emerald-300 ring-offset-2' : ''">
                 <div class="flex min-w-0 items-start gap-3">
                     <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-lg font-black text-emerald-700">
                         {{ item.initials }}
@@ -227,7 +230,8 @@ function requestAttendance(item: StudentRosterItem) {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <tr v-for="item in items" :key="item.id" :data-enrollment-id="item.id" class="align-top transition hover:bg-emerald-50/20">
+                    <tr v-for="item in items" :key="item.id" :data-enrollment-id="item.id" class="align-top transition hover:bg-emerald-50/20"
+                        :class="item.id === highlightedEnrollmentId ? 'bg-emerald-50 ring-2 ring-inset ring-emerald-300' : ''">
                         <td class="px-6 py-5">
                             <div class="flex min-w-0 gap-3">
                                 <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 font-black text-emerald-700">{{ item.initials }}</div>
