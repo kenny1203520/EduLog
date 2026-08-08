@@ -6,6 +6,10 @@ const migration = readFileSync(
     resolve(process.cwd(), '../supabase/migrations/1000033_single_lesson_transfer_history.sql'),
     'utf8'
 )
+const remediationMigration = readFileSync(
+    resolve(process.cwd(), '../supabase/migrations/1000034_fix_single_lesson_transfer_history_rpc_ambiguity.sql'),
+    'utf8'
+)
 
 describe('single lesson transfer history migration contract', () => {
     it('exposes a protected, audit-focused history RPC', () => {
@@ -26,5 +30,10 @@ describe('single lesson transfer history migration contract', () => {
         expect(migration).toContain('source_session.name')
         expect(migration).toContain('target_session.name')
         expect(migration).toContain('ORDER BY transfer.created_at DESC')
+    })
+
+    it('qualifies the enrollment identifier in the deployed-RPC remediation', () => {
+        expect(remediationMigration).toContain('WHERE enrollment_owner.id = p_enrollment_id')
+        expect(remediationMigration).not.toContain('WHERE id = p_enrollment_id')
     })
 })

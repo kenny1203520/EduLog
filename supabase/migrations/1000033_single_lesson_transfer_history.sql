@@ -31,8 +31,8 @@ BEGIN
     END IF;
 
     SELECT user_id INTO v_enrollment_owner
-    FROM public.enrollments
-    WHERE id = p_enrollment_id;
+    FROM public.enrollments AS enrollment_owner
+    WHERE enrollment_owner.id = p_enrollment_id;
     IF NOT FOUND THEN RAISE EXCEPTION 'ENROLLMENT_NOT_FOUND'; END IF;
 
     IF COALESCE(auth.role(), '') <> 'service_role'
