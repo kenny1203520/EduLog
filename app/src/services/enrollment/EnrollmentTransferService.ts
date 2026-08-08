@@ -206,6 +206,24 @@ export class EnrollmentTransferService {
             throw new Error('Enrollment has no current session to transfer from')
         }
 
+        // A report may now live in a make-up session after a previous transfer.
+        // Date mode should still find and move that report rather than assuming
+        // the enrollment's normal class is the current source.
+        const matchingReports = await EnrollmentTransferQueryService.getSingleLessonReportCandidates(
+            enrollmentId,
+            originalDate
+        )
+        if (matchingReports.length > 1) {
+            throw new Error('ORIGINAL_REPORT_AMBIGUOUS')
+        }
+        if (matchingReports.length === 1) {
+            return this.transferSingleLessonReport(
+                matchingReports[0].id,
+                targetSessionId,
+                targetDate
+            )
+        }
+
 
         await SessionService.getCompatibleClassSession(targetSessionId, enrollment.course_id)
 
