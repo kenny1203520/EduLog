@@ -40,6 +40,10 @@ export class OccurrenceService {
         return OccurrenceQueryService.getOccurrencesByDateRange(startDate, endDate, sessionIds)
     }
 
+    static async getOccurrencesByIds(occurrenceIds: string[]): Promise<ClassOccurrence[]> {
+        return OccurrenceQueryService.getOccurrencesByIds(occurrenceIds)
+    }
+
     static async getPreferredOccurrence(
         sessionId: string,
         referenceDate: Date

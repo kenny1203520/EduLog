@@ -256,7 +256,11 @@
         "source": "來源堂次",
         "target": "目標堂次",
         "created_at": "調課時間：{date}",
-        "closed_at": "關閉時間：{date}"
+        "closed_at": "關閉時間：{date}",
+        "report_exists": "報告已建立",
+        "report_missing": "報告缺失",
+        "repair_report": "重新產生報告",
+        "repairing": "正在產生…"
     },
     "activate_trial_modal": {
         "title": "轉為正式學員",

@@ -15,6 +15,8 @@ const preferences = usePreferencesStore()
 const history = ref<SingleLessonTransferHistoryItem[]>([])
 const isLoading = ref(false)
 const error = ref<string | null>(null)
+const effectiveTargets = ref<Array<{ transfer_id: string; target_occurrence_id: string; is_effective_target: boolean; target_report_id: string | null }>>([])
+const repairingTransferId = ref<string | null>(null)
 
 const activeHistory = computed(() => history.value.filter(item => !item.cancelled_at))
 const closedHistory = computed(() => history.value.filter(item => item.cancelled_at))
@@ -56,12 +58,39 @@ function occurrenceTime(item: SingleLessonTransferHistoryItem, side: 'source' | 
     )
 }
 
+function effectiveTargetFor(item: SingleLessonTransferHistoryItem) {
+    return effectiveTargets.value.find(target => target.transfer_id === item.id && target.is_effective_target)
+}
+
+function isMissingTargetReport(item: SingleLessonTransferHistoryItem) {
+    return effectiveTargetFor(item)?.target_report_id === null
+}
+
+async function repairTargetReport(item: SingleLessonTransferHistoryItem) {
+    const target = effectiveTargetFor(item)
+    if (!props.enrollmentId || !target || target.target_report_id || repairingTransferId.value) return
+    repairingTransferId.value = item.id
+    try {
+        await EnrollmentService.repairSingleLessonTransferReport(props.enrollmentId, target.target_occurrence_id)
+        await loadHistory()
+    } catch (cause) {
+        error.value = cause instanceof Error ? cause.message : 'Unable to repair the transferred report.'
+    } finally {
+        repairingTransferId.value = null
+    }
+}
+
 async function loadHistory() {
     if (!props.enrollmentId) return
     isLoading.value = true
     error.value = null
     try {
-        history.value = await EnrollmentService.getSingleLessonTransferHistory(props.enrollmentId)
+        const [historyItems, targets] = await Promise.all([
+            EnrollmentService.getSingleLessonTransferHistory(props.enrollmentId),
+            EnrollmentService.getEffectiveSingleLessonTransferTargets(props.enrollmentId)
+        ])
+        history.value = historyItems
+        effectiveTargets.value = targets
     } catch (cause) {
         error.value = cause instanceof Error ? cause.message : 'Unable to load transfer history.'
     } finally {
@@ -126,6 +155,16 @@ watch(() => [props.isOpen, props.enrollmentId], ([isOpen]) => {
                                             <div class="rounded-xl bg-gray-50 p-3"><p class="text-[11px] font-black uppercase tracking-wider text-gray-400">{{ $t('student.transfer_history.source') }}</p><p class="mt-1 font-bold text-gray-900">{{ occurrenceTitle(item, 'source') }}</p><p class="mt-1 text-sm text-gray-500">{{ formatDate(occurrenceDate(item, 'source')) }} · {{ occurrenceTime(item, 'source') }}</p></div>
                                             <div class="flex items-center justify-center text-amber-500"><svg class="h-6 w-6 rotate-90 sm:rotate-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12h14m-5-5 5 5-5 5" /></svg></div>
                                             <div class="rounded-xl bg-emerald-50/70 p-3"><p class="text-[11px] font-black uppercase tracking-wider text-emerald-600">{{ $t('student.transfer_history.target') }}</p><p class="mt-1 font-bold text-gray-900">{{ occurrenceTitle(item, 'target') }}</p><p class="mt-1 text-sm text-gray-500">{{ formatDate(occurrenceDate(item, 'target')) }} · {{ occurrenceTime(item, 'target') }}</p></div>
+                                        </div>
+                                        <div v-if="effectiveTargetFor(item)" class="mt-4 flex flex-wrap items-center justify-end gap-3">
+                                            <span v-if="!isMissingTargetReport(item)" class="text-xs font-bold text-emerald-700">{{ $t('student.transfer_history.report_exists') }}</span>
+                                            <template v-else>
+                                                <span class="text-xs font-bold text-amber-700">{{ $t('student.transfer_history.report_missing') }}</span>
+                                                <button type="button" :disabled="repairingTransferId === item.id" @click="repairTargetReport(item)"
+                                                    class="rounded-xl bg-amber-500 px-3 py-2 text-xs font-black text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60">
+                                                    {{ repairingTransferId === item.id ? $t('student.transfer_history.repairing') : $t('student.transfer_history.repair_report') }}
+                                                </button>
+                                            </template>
                                         </div>
                                     </div>
                                 </article>

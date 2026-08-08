@@ -3,7 +3,7 @@ import { EnrollmentCommandService } from './EnrollmentCommandService'
 import { EnrollmentQueryService } from './EnrollmentQueryService'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
-import { EnrollmentTransferQueryService, type SingleLessonTransferHistoryItem } from './EnrollmentTransferQueryService'
+import { EnrollmentTransferQueryService, type EffectiveSingleLessonTransferTarget, type SingleLessonTransferHistoryItem } from './EnrollmentTransferQueryService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -20,6 +20,14 @@ type EnrollmentUpdateOptions = {
 export class EnrollmentService {
     static async getSingleLessonTransferHistory(enrollmentId: string): Promise<SingleLessonTransferHistoryItem[]> {
         return EnrollmentTransferQueryService.getSingleLessonTransferHistory(enrollmentId)
+    }
+
+    static async getEffectiveSingleLessonTransferTargets(enrollmentId: string): Promise<EffectiveSingleLessonTransferTarget[]> {
+        return EnrollmentTransferQueryService.getEffectiveSingleLessonTransferTargets(enrollmentId)
+    }
+
+    static async repairSingleLessonTransferReport(enrollmentId: string, targetOccurrenceId: string): Promise<string> {
+        return EnrollmentTransferQueryService.repairSingleLessonTransferReport(enrollmentId, targetOccurrenceId)
     }
 
     static async getByStudentId(studentId: string): Promise<Enrollment[]> {

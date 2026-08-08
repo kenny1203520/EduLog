@@ -256,7 +256,11 @@
         "source": "Source session",
         "target": "Target session",
         "created_at": "Transferred: {date}",
-        "closed_at": "Closed: {date}"
+        "closed_at": "Closed: {date}",
+        "report_exists": "Report exists",
+        "report_missing": "Report missing",
+        "repair_report": "Regenerate report",
+        "repairing": "Regenerating…"
     },
     "activate_trial_modal": {
         "title": "Convert to Regular",

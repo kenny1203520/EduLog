@@ -88,4 +88,12 @@ describe('StudentReportsView scheduled report filter', () => {
         expect(source).toContain('break-words whitespace-normal font-medium text-gray-800')
         expect(source).not.toContain('font-medium truncate')
     })
+
+    it('adds effective transfer targets without reports and excludes every active source', () => {
+        expect(source).toContain('getEffectiveSingleLessonTransferTargets(enrollmentId)')
+        expect(source).toContain('.filter(target => target.is_effective_target)')
+        expect(source).toContain('target.source_occurrence_id === occ.id')
+        expect(source).toContain('isMissingTransferredOccurrence(occurrence.id)')
+        expect(source).toContain('repairSingleLessonTransferReport')
+    })
 })

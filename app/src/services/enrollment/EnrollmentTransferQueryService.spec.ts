@@ -130,3 +130,33 @@ describe('EnrollmentTransferQueryService single lesson transfer history', () => 
         })
     })
 })
+
+describe('EnrollmentTransferQueryService effective single lesson targets', () => {
+    it('uses the protected effective-target RPC and preserves report state', async () => {
+        const row = {
+            transfer_id: 'transfer-1',
+            source_occurrence_id: 'occurrence-a',
+            target_occurrence_id: 'occurrence-b',
+            is_effective_target: true,
+            target_report_id: null
+        }
+        rpcMock.mockResolvedValue({ data: [row], error: null })
+
+        await expect(EnrollmentTransferQueryService.getEffectiveSingleLessonTransferTargets('enrollment-1'))
+            .resolves.toEqual([row])
+        expect(rpcMock).toHaveBeenCalledWith('get_effective_single_lesson_transfer_targets', {
+            p_enrollment_id: 'enrollment-1'
+        })
+    })
+
+    it('repairs only through the guarded RPC', async () => {
+        rpcMock.mockResolvedValue({ data: 'report-1', error: null })
+
+        await expect(EnrollmentTransferQueryService.repairSingleLessonTransferReport('enrollment-1', 'occurrence-b'))
+            .resolves.toBe('report-1')
+        expect(rpcMock).toHaveBeenCalledWith('repair_single_lesson_transfer_report', {
+            p_enrollment_id: 'enrollment-1',
+            p_target_occurrence_id: 'occurrence-b'
+        })
+    })
+})
