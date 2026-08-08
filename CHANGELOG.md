@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.4] - 2026-08-08
+
+### Added
+- Added a complete single-lesson transfer history interface on student enrollment cards, including active and closed audit records.
+- Added recovery for missing reports on currently effective transferred lesson occurrences, with a guarded “regenerate report” action.
+- Added repeatable transfer support so reports can move through chained lesson changes and return to a previous class without losing content or audit history.
+
+### Changed
+- Quick attendance now shows each student’s current course and smoothly scrolls to and highlights the matching roster card on desktop and mobile.
+- Clarified attendance colors across calendars and report lists: green for present, red for absent, amber for pending attendance, and gray for scheduled or neutral states.
+- Improved single-lesson transfer source selection, custom-date handling, conflict merging, and report scheduling so later lessons return to the enrollment’s normal class.
+
+### Fixed
+- Fixed transfer history and effective-target RPCs that could fail with ambiguous or missing column references.
+- Fixed missing transferred reports being omitted from the student report page after a report was deleted or never created.
+- Added credential validation for entries containing any one of username, password, or link, plus contact-card copy, email, and phone actions.
+
+### Tests
+- Added regression coverage for transfer chains, report recovery and idempotency, transfer history display, attendance status colors, roster scrolling, and release metadata.
+
+### Deployment Notes
+- Apply `1000034_repair_effective_single_lesson_transfer_reports.sql` after the existing transfer migrations before deploying the frontend.
+- Rebuild and redeploy the frontend with package version `1.7.4`.
+
 ## [1.7.3] - 2026-08-01
 
 ### Added

@@ -1,6 +1,31 @@
 {
     "entries": [
     {
+            "version": "1.7.4",
+            "date": "2026-08-08",
+            "changes": {
+                "added": [
+                    "Added single-lesson transfer history on student enrollment cards.",
+                    "Added guarded report regeneration for missing effective transferred lessons."
+                ],
+                "changed": [
+                    "Quick attendance now shows the current course and scrolls to the matching roster card.",
+                    "Attendance colors now clearly distinguish present, absent, pending, and neutral states.",
+                    "Single-lesson transfers can be chained or returned to a previous lesson while preserving report history."
+                ],
+                "fixed": [
+                    "Fixed missing transferred reports being omitted after deletion or incomplete creation.",
+                    "Fixed transfer history and effective-target RPC column ambiguity errors."
+                ],
+                "tests": [
+                    "Added regression coverage for transfer chains, report recovery, transfer history, attendance colors, roster scrolling, and release metadata."
+                ],
+                "deployment": [
+                    "Apply 1000034_repair_effective_single_lesson_transfer_reports.sql after the existing transfer migrations.",
+                    "Rebuild and redeploy the frontend with version 1.7.4."
+                ]
+            }
+        },        {
             "version": "1.7.3",
             "date": "2026-08-01",
             "changes": {
