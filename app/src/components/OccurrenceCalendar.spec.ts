@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const source = readFileSync(resolve(process.cwd(), 'src/components/OccurrenceCalendar.vue'), 'utf8')
+const source = readFileSync(resolve(process.cwd(), 'src/components/OccurrenceCalendar.vue'), 'utf8').replace(/\r\n/g, '\n')
 
 describe('OccurrenceCalendar attendance indicator colors', () => {
-    it('uses green for attending, red for absent, and gray for pending states', () => {
+    it('uses green for attending, red for absent, amber for pending, and gray for neutral states', () => {
         expect(source).toContain("case 'late':\n            return 'bg-emerald-500'")
         expect(source).toContain("case 'excused':\n            return 'bg-red-500'")
         expect(source).toContain("case 'pending':\n            return 'bg-amber-500'")

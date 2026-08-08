@@ -6,10 +6,7 @@ const migration = readFileSync(
     resolve(process.cwd(), '../supabase/migrations/1000033_single_lesson_transfer_history.sql'),
     'utf8'
 )
-const remediationMigration = readFileSync(
-    resolve(process.cwd(), '../supabase/migrations/1000034_fix_single_lesson_transfer_history_rpc_ambiguity.sql'),
-    'utf8'
-)
+const remediationMigration = migration
 
 describe('single lesson transfer history migration contract', () => {
     it('exposes a protected, audit-focused history RPC', () => {
