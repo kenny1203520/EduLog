@@ -131,6 +131,7 @@
         "none_option": "-- 無 --",
         "lesson_label": "開始課次",
         "transfer_btn": "調課",
+        "transfer_history_btn": "調課歷程",
         "transfer_title": "調課",
         "transfer_from": "原時段",
         "transfer_target": "新時段",
@@ -242,6 +243,20 @@
         "classroom_id": "教室 ID",
         "lesson_id": "課次 ID",
         "enrollment_id": "報名 ID"
+    },
+    "transfer_history": {
+        "title": "調課歷程",
+        "subtitle": "此課程的單堂調課稽核紀錄",
+        "loading": "正在載入調課歷程…",
+        "load_error": "無法載入調課歷程，請稍後再試。",
+        "retry": "重新載入",
+        "empty": "目前沒有單堂調課紀錄。",
+        "active": "目前有效",
+        "closed": "已關閉",
+        "source": "來源堂次",
+        "target": "目標堂次",
+        "created_at": "調課時間：{date}",
+        "closed_at": "關閉時間：{date}"
     },
     "activate_trial_modal": {
         "title": "轉為正式學員",

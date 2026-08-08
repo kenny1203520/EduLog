@@ -3,6 +3,7 @@ import { EnrollmentCommandService } from './EnrollmentCommandService'
 import { EnrollmentQueryService } from './EnrollmentQueryService'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
+import { EnrollmentTransferQueryService, type SingleLessonTransferHistoryItem } from './EnrollmentTransferQueryService'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -17,6 +18,10 @@ type EnrollmentUpdateOptions = {
  * Internal responsibilities are split into command/query/status-policy services.
  */
 export class EnrollmentService {
+    static async getSingleLessonTransferHistory(enrollmentId: string): Promise<SingleLessonTransferHistoryItem[]> {
+        return EnrollmentTransferQueryService.getSingleLessonTransferHistory(enrollmentId)
+    }
+
     static async getByStudentId(studentId: string): Promise<Enrollment[]> {
         return EnrollmentQueryService.getByStudentId(studentId)
     }

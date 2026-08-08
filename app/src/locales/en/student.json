@@ -143,6 +143,7 @@
         "external_link": "External Report Overview URL",
         "koding_admission_id": "Koding admission ID",
         "transfer_btn": "Transfer",
+        "transfer_history_btn": "Transfer History",
         "transfer_title": "Transfer Class",
         "transfer_from": "From Session",
         "transfer_target": "To Session",
@@ -242,6 +243,20 @@
         "classroom_id": "Classroom ID",
         "lesson_id": "Lesson ID",
         "enrollment_id": "Enrollment ID"
+    },
+    "transfer_history": {
+        "title": "Transfer History",
+        "subtitle": "Single-lesson transfer audit history for this enrollment",
+        "loading": "Loading transfer history…",
+        "load_error": "Unable to load transfer history. Please try again.",
+        "retry": "Retry",
+        "empty": "There is no single-lesson transfer history yet.",
+        "active": "Active",
+        "closed": "Closed",
+        "source": "Source session",
+        "target": "Target session",
+        "created_at": "Transferred: {date}",
+        "closed_at": "Closed: {date}"
     },
     "activate_trial_modal": {
         "title": "Convert to Regular",
