@@ -966,12 +966,13 @@ function formatOccurrenceDateTime(occ: ClassOccurrence) {
 
 function getStatusColor(status: string) {
     switch (status) {
-        case 'present': return 'bg-emerald-100 text-emerald-700'
-        case 'absent': return 'bg-rose-100 text-rose-700'
-        case 'late': return 'bg-amber-100 text-amber-700'
-        case 'excused': return 'bg-blue-100 text-blue-700'
+        case 'present':
+        case 'late': return 'bg-emerald-100 text-emerald-700'
+        case 'absent':
+        case 'excused': return 'bg-red-100 text-red-700'
         case 'cancelled': return 'bg-gray-100 text-gray-500 line-through'
-        case 'scheduled': return 'bg-blue-50 text-blue-600'
+        case 'pending': return 'bg-amber-100 text-amber-700'
+        case 'scheduled': return 'bg-gray-100 text-gray-600'
         case 'bookable': return 'bg-gray-50 text-gray-400 border border-gray-100'
         default: return 'bg-gray-100 text-gray-700'
     }
