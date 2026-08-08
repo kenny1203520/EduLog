@@ -722,7 +722,9 @@ async function focusRosterStudent(enrollmentId: string) {
     highlightedEnrollmentId.value = enrollmentId
     if (rosterHighlightTimer) clearTimeout(rosterHighlightTimer)
     await nextTick()
-    document.querySelector<HTMLElement>(`[data-enrollment-id="${enrollmentId}"]`)?.scrollIntoView({
+    const visibleRosterItem = [...document.querySelectorAll<HTMLElement>(`[data-enrollment-id="${enrollmentId}"]`)]
+        .find(element => element.offsetParent !== null)
+    visibleRosterItem?.scrollIntoView({
         behavior: 'smooth', block: 'center'
     })
     rosterHighlightTimer = setTimeout(() => {
