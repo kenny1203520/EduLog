@@ -978,7 +978,7 @@ function getAttendanceVariablePreview(variable: string, names: Record<'present_l
             return session.value?.name || t('classroom.session')
         case 'occurrence_date':
             return todayOccurrence.value?.occurrenceDate
-                ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+                ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale)
                 : t('classroom.no_teaching_day_selected')
         case 'start_time':
             return todayOccurrence.value?.originalStartTime?.substring(0, 5) || '10:00'
@@ -1013,7 +1013,7 @@ function buildAttendanceTemplateContext() {
         values: {
             class_info_title: t('classroom.class_info_title'),
             session_name: session.value?.name || '',
-            occurrence_date: todayOccurrence.value?.occurrenceDate ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString() : '',
+            occurrence_date: todayOccurrence.value?.occurrenceDate ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale) : '',
             start_time: todayOccurrence.value?.originalStartTime?.substring(0, 5) || '',
             end_time: todayOccurrence.value?.originalEndTime?.substring(0, 5) || '',
             time_range: `${todayOccurrence.value?.originalStartTime?.substring(0, 5) || ''}-${todayOccurrence.value?.originalEndTime?.substring(0, 5) || ''}`,
@@ -1175,7 +1175,7 @@ async function saveAttendanceTemplate() {
 function copyAttendanceInfo() {
     if (!todayOccurrence.value || !session.value) return
 
-    const date = new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+    const date = new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale)
     const startTime = todayOccurrence.value.originalStartTime?.substring(0, 5) || ''
     const endTime = todayOccurrence.value.originalEndTime?.substring(0, 5) || ''
     const time = `${startTime}-${endTime}`
@@ -2044,7 +2044,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :key="selectedEnrollmentId" :report-id="reportMap.get(selectedEnrollmentId)?.id"
                                 :initial-version="reportMap.get(selectedEnrollmentId)?.version"
                                 :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
-                                :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
+                                :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString(preferences.locale)} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
                                 :course-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
                                 :course-display-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
                                 :initial-classroom-name="session?.classroom_name" :initial-session-name="session?.name"

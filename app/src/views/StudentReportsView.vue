@@ -259,7 +259,7 @@
                                     {{ displayReport.progressDisplay }}
                                 </span>
                             </div>
-                            <div class="text-xs text-gray-400 font-mono">Ver: {{ displayReport.version }}</div>
+                            <div class="text-xs text-gray-400 font-mono">{{ $t('common.version') }}: {{ displayReport.version }}</div>
                         </div>
 
                         <!-- Main Content Summary -->
@@ -431,7 +431,7 @@
                                         class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
                                             $t('report.last_updated') }}</span>
                                     <span class="text-gray-800 font-medium">{{ (selectedReport.updatedAt ||
-                                        selectedReport.lastEditedAt)?.toLocaleString() }}</span>
+                                        selectedReport.lastEditedAt)?.toLocaleString(preferences.locale) }}</span>
                                 </div>
                                 <span v-if="selectedReport.lastEditedBy"
                                     class="text-[10px] text-gray-400 font-bold italic">{{ $t('common.edited_by') }}: {{

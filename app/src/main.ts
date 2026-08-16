@@ -11,12 +11,18 @@ import { setupDocumentHead } from './utils/documentHead'
 import { mapDomainError } from './services/errors/mapDomainError'
 import { mapSupabaseError } from './services/errors/mapSupabaseError'
 import { AppError } from './services/errors/AppError'
+import { usePreferencesStore } from './stores/usePreferencesStore'
 
 const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
 app.use(i18n)
+// Instantiating the store here (rather than leaving it to whichever
+// component happens to use it first, e.g. LanguageSwitcher) makes the
+// locale/i18n sync in usePreferencesStore's immediate watcher run
+// deterministically at startup instead of incidentally on first render.
+usePreferencesStore()
 setupDocumentHead(router)
 app.use(Toast, {
     position: 'top-right',

@@ -14,6 +14,7 @@
     "delete": "Delete",
     "deleted": "Deleted",
     "edit": "Edit",
+    "copy": "Copy",
     "view": "View",
     "view_link": "View Link",
     "show": "Show",
@@ -104,6 +105,10 @@
         "sat": "Sat"
     },
     "opens_new_tab": "Opens in a new tab",
+    "autosave": {
+        "never": "Never",
+        "just_now": "Just now"
+    },
     "update_available_title": "Update Available",
     "update_available_message": "A new version of EduLog is ready. Reload now to get the latest features and fixes.",
     "reload": "Reload",

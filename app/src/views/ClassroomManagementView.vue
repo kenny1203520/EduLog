@@ -1083,7 +1083,7 @@ function clearTeacherSelection() {
 
                     <div class="flex items-center justify-between border-t border-gray-50 bg-gray-50/50 px-5 py-3 text-[10px] font-black tracking-widest text-gray-300">
                         <span>#{{ session.id?.slice(0, 8) }}</span>
-                        <span>{{ session.lesson_number }} Lessons</span>
+                        <span>{{ $t('classroom.lesson_count', session.lesson_number || 0, { named: { count: session.lesson_number || 0 } }) }}</span>
                     </div>
                 </div>
 

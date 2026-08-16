@@ -260,7 +260,8 @@
         "report_exists": "報告已建立",
         "report_missing": "報告缺失",
         "repair_report": "重新產生報告",
-        "repairing": "正在產生…"
+        "repairing": "正在產生…",
+        "repair_error": "無法重新產生已調課的報告，請再試一次。"
     },
     "activate_trial_modal": {
         "title": "轉為正式學員",
@@ -269,7 +270,7 @@
         "to_classroom": "目標班級時段",
         "effective_date": "生效日期",
         "target_total_reports": "預計啟用課堂數",
-        "target_total_reports_hint": "預設為課程長度：{count} 堂。系統僅會補足缺少的報告。",
+        "target_total_reports_hint": "預設為課程長度：{count} 堂。系統僅會補足缺少的報告。| 預設為課程長度：{count} 堂。系統僅會補足缺少的報告。",
         "note": "報名狀態將更新為「正式」，並可分配到新的班級時段。"
     },
     "credentials": {
@@ -282,6 +283,8 @@
         "add_title": "新增帳號",
         "add_btn": "新增帳號",
         "delete": "刪除帳號密碼",
+        "copy_username": "複製使用者名稱",
+        "copy_password": "複製密碼",
         "confirm_delete": "確定要刪除此帳號嗎？",
         "platforms": {
             "koding_school_orange_apple": "橘蘋學習平台",

@@ -30,7 +30,10 @@ export function createEditorNotifier(
         notify(notification) {
             onNotification?.(notification)
             if (!this.enabled || notification.toast === false || !toast) return
-            toast[notification.level](notification.message)
+            // Error toasts must not auto-dismiss -- a failure the user didn't
+            // get to read before the default 3s timeout is not feedback.
+            const options = notification.level === 'error' ? { timeout: false as const } : undefined
+            toast[notification.level](notification.message, options)
         },
         setEnabled(value) { this.enabled = value }
     }

@@ -7,7 +7,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const studentStore = useStudentStore()
 
@@ -217,7 +217,7 @@ async function copyToClipboard(text: string) {
                         </div>
                     </div>
 
-                    <span>{{ new Date(student.created_at).toLocaleDateString() }}</span>
+                    <span>{{ new Date(student.created_at).toLocaleDateString(locale) }}</span>
                 </div>
             </div>
         </div>

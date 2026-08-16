@@ -1,16 +1,22 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
-import i18n from '@/i18n'
+import i18n, { type SupportedLocale } from '@/i18n'
 import { DateUtils } from '@/utils/DateUtils'
 import { UserPreferenceService } from '@/services/UserPreferenceService'
 import { AggregateService } from '@/services/AggregateService'
 import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings } from '@/components/common/text-editor/settings'
 
+function readStoredLocale(): SupportedLocale {
+    // Guards against a stale/corrupted localStorage value (e.g. from an older
+    // build) silently becoming an invalid i18n.global.locale assignment.
+    return localStorage.getItem('locale') === 'en' ? 'en' : 'zh-TW'
+}
+
 export const usePreferencesStore = defineStore('preferences', () => {
     const globalFontScale = ref(Number(localStorage.getItem('globalFontScale')) || 100)
     const editorFontScale = ref(Number(localStorage.getItem('editorFontScale')) || 100)
     const editorSettings = ref(normalizeEditorUserSettings(parseStoredEditorSettings()))
-    const locale = ref(localStorage.getItem('locale') || 'zh-TW')
+    const locale = ref<SupportedLocale>(readStoredLocale())
     const timeZone = ref(DateUtils.getDefaultTimeZone())
     const isLoadingRemotePreferences = ref(false)
     let isApplyingRemotePreferences = false
@@ -71,7 +77,6 @@ export const usePreferencesStore = defineStore('preferences', () => {
     
     watch(locale, (val) => {
         localStorage.setItem('locale', val)
-        // @ts-ignore
         i18n.global.locale.value = val
     }, { immediate: true })
 
