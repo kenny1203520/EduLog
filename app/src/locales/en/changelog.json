@@ -1,6 +1,33 @@
 {
     "entries": [
     {
+            "version": "1.8.0",
+            "date": "2026-08-16",
+            "changes": {
+                "added": [
+                    "Added a central error-feedback layer that translates any error into a clear, persistent notification instead of raw text or a blank failure.",
+                    "Added locale-aware date, time, and number formatting, and proper plural forms for count-based messages.",
+                    "Added a batched roster progress-summary query for faster session loading."
+                ],
+                "changed": [
+                    "Dates and relative times now follow the app's selected language instead of the browser's.",
+                    "Translated the remaining hardcoded English text across the report editor, save pipeline, and student detail views.",
+                    "Reduced the data transferred by list and save-preview queries, and batched several per-item request loops into single queries."
+                ],
+                "fixed": [
+                    "Fixed several silent failures (schedule sync, a confirm dialog, dashboard loading, split-pane search) to show an explanatory message instead of nothing or a misleading empty state.",
+                    "Fixed a missing English translation for the dashboard time zone label.",
+                    "Replaced the native browser update prompt with the app's own confirmation dialog."
+                ],
+                "tests": [
+                    "Added regression coverage for error mapping, autosave retry, persistent error toasts, locale key parity, and the batched progress-summary query."
+                ],
+                "deployment": [
+                    "No database migration required.",
+                    "Rebuild and redeploy the frontend with version 1.8.0."
+                ]
+            }
+        },        {
             "version": "1.7.5",
             "date": "2026-08-16",
             "changes": {

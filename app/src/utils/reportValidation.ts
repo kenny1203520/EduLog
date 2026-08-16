@@ -1,7 +1,8 @@
 // OccurrenceReport validation utilities
 export interface ReportValidationError {
     field: string
-    message: string
+    /** An i18n key (not a rendered message) -- callers must translate it before display. */
+    messageKey: string
 }
 
 /**
@@ -22,7 +23,7 @@ export function validateReportData(data: {
         if (!data.absenceReason || data.absenceReason.trim() === '') {
             errors.push({
                 field: 'absence_reason',
-                message: '請假原因為必填'
+                messageKey: 'report.validation.absence_reason_required'
             })
         }
     }

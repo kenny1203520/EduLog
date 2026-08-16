@@ -38,6 +38,7 @@ import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import KodingCodeCheckModal from '@/components/KodingCodeCheckModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -51,6 +52,7 @@ type ReportEditorExpose = {
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey } = useFeedback()
 const preferences = usePreferencesStore()
 
 const route = useRoute()
@@ -400,13 +402,18 @@ async function loadStudentProgressSummaries(
     const uniqueCourseIds = [...new Set(enrollmentList.map(enrollment => enrollment.courseId).filter(Boolean))]
     await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
 
+    const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
+    // One request for the whole roster instead of one paginated, full-row
+    // request per student -- see getProgressSummaryReportsByEnrollments.
+    const reportsByEnrollment = await OccurrenceReportService.getProgressSummaryReportsByEnrollments(enrollmentIds)
+
     const summaryEntries = await Promise.all(enrollmentList.map(async enrollment => {
         if (!enrollment.id) {
             return [enrollment.id, getDefaultProgressSummary()] as const
         }
 
         const lessons = await getLessonsForCourse(enrollment.courseId)
-        const reports = await OccurrenceReportService.getAllReportsByEnrollment(enrollment.id)
+        const reports = reportsByEnrollment.get(enrollment.id) || []
         return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons, referenceDate)] as const
     }))
 
@@ -568,7 +575,7 @@ async function loadReportsForCurrentOccurrence() {
     const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
     const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
     if (guestEnrollmentIds.length > 0) {
-        const guests = await Promise.all(guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!)))
+        const guests = await CourseService.getEnrollmentsByIds(guestEnrollmentIds as string[])
         const addedGuests: Enrollment[] = []
         guests.forEach(guest => {
             if (!guest) return
@@ -595,7 +602,12 @@ async function loadOccurrenceTeachers() {
         return
     }
 
-    sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+    // sessionTeachers is session-level (not occurrence-specific) data: loadData()
+    // fetches it once for the session, and the assignment-mutation flows
+    // (addTeacherForToday, removeAssignment) explicitly re-fetch it themselves
+    // right before calling this function again. Re-fetching it here too made
+    // every single date navigation re-request the same session's assignment
+    // plan for no reason -- see setCurrentOccurrence's call to this function.
     const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
     const activeAssignments = sessionTeachers.value.filter(st => dateStr >= st.effective_from && (!st.effective_to || dateStr <= st.effective_to))
     const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(Boolean))] as string[]
@@ -976,7 +988,7 @@ function getAttendanceVariablePreview(variable: string, names: Record<'present_l
             return session.value?.name || t('classroom.session')
         case 'occurrence_date':
             return todayOccurrence.value?.occurrenceDate
-                ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+                ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale)
                 : t('classroom.no_teaching_day_selected')
         case 'start_time':
             return todayOccurrence.value?.originalStartTime?.substring(0, 5) || '10:00'
@@ -1011,7 +1023,7 @@ function buildAttendanceTemplateContext() {
         values: {
             class_info_title: t('classroom.class_info_title'),
             session_name: session.value?.name || '',
-            occurrence_date: todayOccurrence.value?.occurrenceDate ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString() : '',
+            occurrence_date: todayOccurrence.value?.occurrenceDate ? new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale) : '',
             start_time: todayOccurrence.value?.originalStartTime?.substring(0, 5) || '',
             end_time: todayOccurrence.value?.originalEndTime?.substring(0, 5) || '',
             time_range: `${todayOccurrence.value?.originalStartTime?.substring(0, 5) || ''}-${todayOccurrence.value?.originalEndTime?.substring(0, 5) || ''}`,
@@ -1173,7 +1185,7 @@ async function saveAttendanceTemplate() {
 function copyAttendanceInfo() {
     if (!todayOccurrence.value || !session.value) return
 
-    const date = new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString()
+    const date = new Date(todayOccurrence.value.occurrenceDate).toLocaleDateString(preferences.locale)
     const startTime = todayOccurrence.value.originalStartTime?.substring(0, 5) || ''
     const endTime = todayOccurrence.value.originalEndTime?.substring(0, 5) || ''
     const time = `${startTime}-${endTime}`
@@ -1226,11 +1238,11 @@ function copyAttendanceInfo() {
         if (success) {
             toast.success(t('classroom.copy_success'))
         } else {
-            toast.error('Failed to copy to clipboard')
+            errorKey('classroom.copy_error')
         }
     }).catch(err => {
         console.error('Failed to copy: ', err)
-        toast.error('Failed to copy to clipboard')
+        errorKey('classroom.copy_error')
     })
 }
 
@@ -2042,7 +2054,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :key="selectedEnrollmentId" :report-id="reportMap.get(selectedEnrollmentId)?.id"
                                 :initial-version="reportMap.get(selectedEnrollmentId)?.version"
                                 :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
-                                :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString()} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
+                                :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString(preferences.locale)} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
                                 :course-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
                                 :course-display-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
                                 :initial-classroom-name="session?.classroom_name" :initial-session-name="session?.name"

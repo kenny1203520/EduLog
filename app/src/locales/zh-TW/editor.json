@@ -12,5 +12,5 @@
     "minimum_height": "最小高度", "monospace": "等寬字型", "resizable": "可調整高度", "reset": "重設",
     "presets": { "form": "表單", "notes": "筆記", "report": "報告", "template": "範本", "merge": "合併" }
   },
-  "template": { "editor": "編輯器", "preview": "預覽", "variable_count": "{count} 個變數" }
+  "template": { "editor": "編輯器", "preview": "預覽", "variable_count": "{count} 個變數 | {count} 個變數" }
 }

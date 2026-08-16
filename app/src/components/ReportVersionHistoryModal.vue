@@ -84,7 +84,7 @@
                                         </div>
                                         <div class="flex flex-col">
                                             <span class="text-sm font-bold text-gray-900">{{ version.createdAt ?
-                                                version.createdAt.toLocaleString() : '-' }}</span>
+                                                version.createdAt.toLocaleString(locale) : '-' }}</span>
                                             <span class="text-[10px] text-gray-500 font-medium flex items-center gap-1">
                                                 <svg class="w-3 h-3" fill="none" stroke="currentColor"
                                                     viewBox="0 0 24 24">
@@ -343,7 +343,7 @@ const emit = defineEmits<{
     (e: 'restored', report: OccurrenceReportDTO): void
 }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 const authStore = useAuthStore()
 

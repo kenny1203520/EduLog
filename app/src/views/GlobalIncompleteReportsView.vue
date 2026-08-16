@@ -195,13 +195,13 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleDateString(undefined, {
+                                {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleDateString(preferences.locale, {
                                     month:
                                         'short', day: 'numeric'
                                 }) }}
                             </div>
                             <div class="text-[11px] font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-md">
-                                {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleTimeString([], {
+                                {{ new Date(report.updatedAt || report.lastEditedAt).toLocaleTimeString(preferences.locale, {
                                     hour:
                                         '2-digit',
                                     minute: '2-digit'

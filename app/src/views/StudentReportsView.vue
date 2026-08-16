@@ -259,7 +259,7 @@
                                     {{ displayReport.progressDisplay }}
                                 </span>
                             </div>
-                            <div class="text-xs text-gray-400 font-mono">Ver: {{ displayReport.version }}</div>
+                            <div class="text-xs text-gray-400 font-mono">{{ $t('common.version') }}: {{ displayReport.version }}</div>
                         </div>
 
                         <!-- Main Content Summary -->
@@ -431,7 +431,7 @@
                                         class="font-semibold block text-gray-400 text-[10px] uppercase tracking-wider">{{
                                             $t('report.last_updated') }}</span>
                                     <span class="text-gray-800 font-medium">{{ (selectedReport.updatedAt ||
-                                        selectedReport.lastEditedAt)?.toLocaleString() }}</span>
+                                        selectedReport.lastEditedAt)?.toLocaleString(preferences.locale) }}</span>
                                 </div>
                                 <span v-if="selectedReport.lastEditedBy"
                                     class="text-[10px] text-gray-400 font-bold italic">{{ $t('common.edited_by') }}: {{
@@ -545,6 +545,7 @@ import { Suspension } from '@/models/Suspension'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { DateUtils } from '@/utils/DateUtils'
 import { isAttendanceReportStatus } from '@/utils/reportListFilter'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -559,6 +560,7 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const toast = useToast()
+const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 
 const loading = ref(true)
@@ -1446,7 +1448,8 @@ function handleReportRestored(restoredReport: OccurrenceReportDTO) {
 }
 
 function handleSaveError(error: string) {
-    toast.error(`Failed to save report: ${error}`)
+    console.error('Failed to save report:', error)
+    reportError(error)
 }
 
 function handleDeleted() {

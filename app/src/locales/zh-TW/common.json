@@ -14,6 +14,7 @@
     "delete": "刪除",
     "deleted": "已刪除",
     "edit": "編輯",
+    "copy": "複製",
     "view": "查看",
     "view_link": "查看連結",
     "show": "顯示",
@@ -103,5 +104,13 @@
         "fri": "星期五",
         "sat": "星期六"
     },
-    "opens_new_tab": "在新分頁開啟"
+    "opens_new_tab": "在新分頁開啟",
+    "autosave": {
+        "never": "從未儲存",
+        "just_now": "剛剛"
+    },
+    "update_available_title": "有可用的更新",
+    "update_available_message": "EduLog 已有新版本，重新載入即可取得最新功能與修正。",
+    "reload": "重新載入",
+    "later": "稍後再說"
 }

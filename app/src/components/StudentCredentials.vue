@@ -201,7 +201,7 @@ function credentialUrl(url: string): string {
                         <div class="flex space-x-1">
                             <button @click="startEditCredential(c)"
                                 class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                                title="Edit">
+                                :title="$t('common.edit')">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -210,7 +210,7 @@ function credentialUrl(url: string): string {
                             </button>
                             <button @click="confirmDeleteCredential(c.id!)"
                                 class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                title="Delete">
+                                :title="$t('common.delete')">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -229,7 +229,7 @@ function credentialUrl(url: string): string {
                             </div>
                             <button @click="copyToClipboard(c.username)"
                                 class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
-                                title="Copy Username">
+                                :title="$t('student.credentials.copy_username')">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -266,7 +266,7 @@ function credentialUrl(url: string): string {
                                 </button>
                                 <button @click="copyToClipboard(c.password)"
                                     class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
-                                    title="Copy Password">
+                                    :title="$t('student.credentials.copy_password')">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                         stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                         <path stroke-linecap="round" stroke-linejoin="round"

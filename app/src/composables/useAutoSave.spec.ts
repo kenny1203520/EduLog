@@ -112,7 +112,9 @@ describe('useAutoSave', () => {
 
         expect(autoSave.hasUnsavedChanges.value).toBe(true)
         expect(autoSave.saveError.value).toBe('offline')
-        expect(onError).toHaveBeenCalledWith('offline')
+        // onError also receives the failed TResult (e.g. for a messageKey the
+        // UI can translate) alongside the plain message string.
+        expect(onError).toHaveBeenCalledWith('offline', { success: false, message: 'offline' })
         await expect(autoSave.saveNow()).resolves.toBe(true)
         expect(onSave).toHaveBeenCalledTimes(2)
         expect(autoSave.hasUnsavedChanges.value).toBe(false)

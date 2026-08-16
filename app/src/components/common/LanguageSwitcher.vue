@@ -2,8 +2,8 @@
 import { computed, nextTick, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import type { SupportedLocale } from '@/i18n'
 
-type SupportedLocale = 'zh-TW' | 'en'
 const props = withDefaults(defineProps<{ fullWidth?: boolean; labelOnMobile?: boolean; align?: 'left' | 'right' }>(), {
     fullWidth: false, labelOnMobile: false, align: 'left'
 })

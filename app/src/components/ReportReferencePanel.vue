@@ -123,6 +123,15 @@
                                 $t('common.loading') }}</span>
                     </div>
 
+                    <div v-else-if="loadError"
+                        class="flex flex-col items-center justify-center py-20 sm:py-32 gap-4 text-center bg-red-50/60 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-dashed border-red-200">
+                        <p class="text-xs sm:text-sm font-bold text-red-700">{{ loadError }}</p>
+                        <button type="button" @click="refreshData"
+                            class="px-4 py-2 rounded-md bg-indigo-600 text-white text-xs sm:text-sm font-medium hover:bg-indigo-700 transition-colors">
+                            {{ $t('common.refresh') }}
+                        </button>
+                    </div>
+
                     <div v-else-if="reports.length === 0"
                         class="flex flex-col items-center justify-center py-20 sm:py-32 text-gray-400 bg-white/40 rounded-[2rem] sm:rounded-[2.5rem] border-2 border-dashed border-gray-200/60 shadow-inner">
                         <svg class="w-12 h-12 sm:w-16 sm:h-16 mb-4 sm:mb-6 opacity-20" fill="none" stroke="currentColor"
@@ -368,8 +377,10 @@ import { SessionService } from '@/services/session/SessionService'
 import { useI18n } from 'vue-i18n'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
+import { useFeedback } from '@/composables/useFeedback'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
+const { reportError } = useFeedback()
 
 // Computed Options for BaseDropdown
 const classroomOptions = computed(() => [
@@ -410,6 +421,7 @@ const emit = defineEmits(['close', 'copy'])
 const activeTab = ref<'peer' | 'history'>('peer')
 const searchQuery = ref('')
 const loading = ref(false)
+const loadError = ref<string | null>(null)
 
 // Data State
 const reports = ref<any[]>([])
@@ -508,6 +520,7 @@ async function loadFilterOptions() {
         }
     } catch (e) {
         console.error('Failed to load filters:', e)
+        reportError(e)
     }
 }
 
@@ -520,6 +533,7 @@ async function refreshData() {
     }
 
     loading.value = true
+    loadError.value = null
     try {
         const commonParams = {
             excludeReportId: props.currentReportId,
@@ -558,6 +572,10 @@ async function refreshData() {
         totalCount.value = res.count
     } catch (e) {
         console.error('Failed to load reports:', e)
+        reports.value = []
+        totalCount.value = 0
+        loadError.value = t('report.reference_panel.load_error')
+        reportError(e)
     } finally {
         loading.value = false
     }
@@ -590,7 +608,7 @@ function nextPage() {
 function formatDate(report: any) {
     const d = report.class_occurrences?.occurrence_date || report.updated_at
     if (!d) return '-'
-    return new Date(d).toLocaleDateString()
+    return new Date(d).toLocaleDateString(locale.value)
 }
 
 function getReportProgress(report: any) {

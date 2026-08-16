@@ -235,7 +235,7 @@ async function refreshData() {
                         <div class="flex shrink-0 flex-wrap items-center justify-end gap-1 xl:pt-1">
                                 <button @click="openSuspensions(e.id)"
                                     class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-400 transition-all hover:bg-rose-50 hover:text-rose-600 cursor-pointer"
-                                    title="Suspensions">
+                                    :title="$t('student.suspension.title')">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                         stroke-width="2" stroke="currentColor" class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round"
@@ -244,7 +244,7 @@ async function refreshData() {
                                 </button>
                                 <button @click="startEditEnrollment(e)"
                                     class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
-                                    title="Edit">
+                                    :title="$t('common.edit')">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                         stroke-width="2" stroke="currentColor" class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round"
@@ -253,7 +253,7 @@ async function refreshData() {
                                 </button>
                                 <button @click="confirmRemoveEnrollment(e.id)"
                                     class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl text-gray-400 transition-all hover:bg-red-50 hover:text-red-600 cursor-pointer"
-                                    title="Delete">
+                                    :title="$t('common.delete')">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                         stroke-width="2" stroke="currentColor" class="w-5 h-5">
                                         <path stroke-linecap="round" stroke-linejoin="round"

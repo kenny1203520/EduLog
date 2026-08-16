@@ -12,5 +12,5 @@
     "minimum_height": "Minimum height", "monospace": "Monospace", "resizable": "Resizable", "reset": "Reset",
     "presets": { "form": "Form", "notes": "Notes", "report": "Report", "template": "Template", "merge": "Merge" }
   },
-  "template": { "editor": "Editor", "preview": "Preview", "variable_count": "{count} variables" }
+  "template": { "editor": "Editor", "preview": "Preview", "variable_count": "{count} variable | {count} variables" }
 }

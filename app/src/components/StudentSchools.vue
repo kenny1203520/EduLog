@@ -198,7 +198,7 @@ function formatSchoolDate(date: string | undefined, timeZone?: string) {
                                     }}</span>
                                     <button @click="copyToClipboard(s.school_student_id)"
                                         class="ml-0.5 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
-                                        title="Copy">
+                                        :title="$t('common.copy')">
                                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                             stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
                                             <path stroke-linecap="round" stroke-linejoin="round"
@@ -249,7 +249,7 @@ function formatSchoolDate(date: string | undefined, timeZone?: string) {
                     <div class="flex space-x-1">
                         <button @click="startEditSchool(s)"
                             class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit">
+                            :title="$t('common.edit')">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                 stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -258,7 +258,7 @@ function formatSchoolDate(date: string | undefined, timeZone?: string) {
                         </button>
                         <button @click="confirmDeleteSchool(s.id!)"
                             class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                            title="Delete">
+                            :title="$t('common.delete')">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                 stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />

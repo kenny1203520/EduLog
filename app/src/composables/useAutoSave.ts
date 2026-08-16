@@ -1,5 +1,7 @@
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { computed, isRef, reactive, ref, watch, type Ref } from 'vue'
+import i18n from '@/i18n'
+import { DateUtils } from '@/utils/DateUtils'
 
 export interface AutoSaveResult {
     success: boolean
@@ -7,7 +9,10 @@ export interface AutoSaveResult {
     newVersion?: number
     serverVersion?: number
     serverReport?: OccurrenceReportDTO | null
+    /** Developer-facing (English) detail for logs -- never render directly to the user. */
     message?: string
+    /** i18n key the UI should translate and show instead of `message`. */
+    messageKey?: string
 }
 
 export type AutoSaveStatus = 'idle' | 'scheduled' | 'dirty' | 'saving' | 'saved' | 'error' | 'conflict' | 'disabled'
@@ -37,7 +42,8 @@ export interface AutoSaveOptions<TSnapshot, TResult extends AutoSaveResult = Aut
     onSave: (snapshot: TSnapshot) => Promise<TResult>
     onConflict?: (serverReport: OccurrenceReportDTO | null, snapshot: TSnapshot) => void
     onSuccess?: (saved: AutoSaveSuccess<TSnapshot, TResult>) => void | Promise<void>
-    onError?: (message: string) => void
+    /** `result` is the failed TResult when available (absent for a thrown exception). */
+    onError?: (message: string, result?: TResult) => void
 }
 
 interface PendingSave<TSnapshot> {
@@ -156,7 +162,7 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
                 saveError.value = message
                 restoreFailedJob(job)
                 queueBlocked = true
-                options.onError?.(message)
+                options.onError?.(message, result)
                 return
             }
 
@@ -257,15 +263,17 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
     }
 
     function getLastSavedString(): string {
-        if (!lastSaved.value) return 'Never'
+        if (!lastSaved.value) return i18n.global.t('common.autosave.never')
         const seconds = Math.floor((Date.now() - lastSaved.value.getTime()) / 1000)
+        if (seconds < 10) return i18n.global.t('common.autosave.just_now')
+
+        const rtf = new Intl.RelativeTimeFormat(i18n.global.locale.value, { numeric: 'always' })
+        if (seconds < 60) return rtf.format(-seconds, 'second')
         const minutes = Math.floor(seconds / 60)
+        if (minutes < 60) return rtf.format(-minutes, 'minute')
         const hours = Math.floor(minutes / 60)
-        if (seconds < 10) return 'Just now'
-        if (seconds < 60) return `${seconds}s ago`
-        if (minutes < 60) return `${minutes}m ago`
-        if (hours < 24) return `${hours}h ago`
-        return lastSaved.value.toLocaleString()
+        if (hours < 24) return rtf.format(-hours, 'hour')
+        return DateUtils.displayDateTime(lastSaved.value)
     }
 
     ;(['enabled', 'debounceMs', 'saveOnBlur', 'saveOnSwitch', 'saveOnUnmount'] as const).forEach(key => {

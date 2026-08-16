@@ -1,0 +1,26 @@
+{
+    "network": "Network error. Check your connection and try again.",
+    "unknown": "Something went wrong. Please try again.",
+    "unexpected": "An unexpected error occurred. If this keeps happening, please contact support.",
+    "conflict": "This was changed by someone else. Please reload before continuing.",
+    "unique_violation": "That value is already in use.",
+    "foreign_key_violation": "This can't be completed because related data still references it.",
+    "permission_denied": "You don't have permission to do that.",
+    "session_expired": "Your session has expired. Please sign in again.",
+    "validation_failed": "Please check the highlighted fields and try again.",
+    "domain": {
+        "TARGET_DATE_NOT_CLASS_DAY": "The selected date isn't a scheduled class day for that session.",
+        "TARGET_SESSION_SAME_AS_CURRENT": "That is already the student's current class.",
+        "TARGET_SESSION_COURSE_MISMATCH": "The target class belongs to a different course.",
+        "TARGET_REPORT_ALREADY_EXISTS": "A report already exists for the target lesson.",
+        "ORIGINAL_REPORT_AMBIGUOUS": "Multiple reports match the original lesson; unable to determine which to move.",
+        "ORIGINAL_DATE_NOT_CLASS_DAY": "The original date isn't a scheduled class day for that session.",
+        "ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION": "The original lesson doesn't belong to this enrollment's class.",
+        "DUPLICATE_OCCURRENCE_REPORT": "A report already exists for this student on that date.",
+        "MAKEUP_DATE_NOT_CLASS_DAY": "The make-up date isn't a scheduled class day.",
+        "COURSE_REQUIRED_FOR_SESSION": "Select a course before choosing a class.",
+        "ROLE_NAME_REQUIRED": "Enter a role name.",
+        "TRANSFER_CONFLICT_STALE": "This transfer conflict was already resolved elsewhere. Please refresh.",
+        "REPORT_ALREADY_EXISTS": "A report already exists for this lesson."
+    }
+}

@@ -103,6 +103,10 @@ export class OccurrenceReportService {
         return ReportQueryService.getAllReportsByEnrollment(enrollmentId)
     }
 
+    static async getProgressSummaryReportsByEnrollments(enrollmentIds: string[]): Promise<Map<string, OccurrenceReport[]>> {
+        return ReportQueryService.getProgressSummaryReportsByEnrollments(enrollmentIds)
+    }
+
     static async getReportsByOccurrence(
         occurrenceId: string
     ): Promise<OccurrenceReport[]> {

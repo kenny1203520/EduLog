@@ -275,7 +275,7 @@ export class ReportVersion {
      * Get display string for version
      */
     get displayString(): string {
-        const timeStr = this.createdAt?.toLocaleString() || 'Unknown time'
+        const timeStr = this.createdAt ? DateUtils.displayDateTime(this.createdAt) : 'Unknown time'
         return `Version ${this.version} - ${timeStr}`
     }
 }
@@ -285,7 +285,10 @@ export class ReportVersion {
  */
 export interface SaveReportResult {
     success: boolean
+    /** Developer-facing (English) detail for logs -- never render directly to the user. */
     message?: string
+    /** i18n key the UI should translate and show instead of `message`. */
+    messageKey?: string
     newVersion?: number
     conflict?: boolean
     serverContent?: string

@@ -2,6 +2,7 @@
     "title": "My Students",
     "add_student": "Add Student",
     "loading": "Loading students...",
+    "load_error": "Unable to load your dashboard. Please try again.",
     "empty": "No students found.",
     "empty_sub": "Add your first student to get started!",
     "added": "Added: {date}",
@@ -13,6 +14,7 @@
     "schedule": {
         "title": "Today's Schedule",
         "subtitle": "Classes happening right now and later today.",
+        "time_zone": "Time zone: {zone}",
         "view_classrooms": "View Classrooms",
         "loading": "LOADING SCHEDULE...",
         "no_classes": "No classes scheduled today.",

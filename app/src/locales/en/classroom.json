@@ -1,5 +1,6 @@
 {
     "title": "Classroom & Session Management",
+    "lesson_count": "{count} Lesson | {count} Lessons",
     "rooms_tab": "Rooms",
     "sessions_tab": "Sessions",
     "add_room": "Add Room",
@@ -162,6 +163,7 @@
         "pending_list": "List of pending student names with selectable separators."
     },
     "copy_success": "Attendance info copied to clipboard",
+    "copy_error": "Failed to copy to clipboard",
     "present_list": "Present Students",
     "absent_list": "Absent Students",
     "pending_list": "Pending Students",

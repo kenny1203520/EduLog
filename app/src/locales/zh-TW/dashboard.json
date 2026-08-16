@@ -2,6 +2,7 @@
     "title": "我的學生",
     "add_student": "新增學生",
     "loading": "載入學生中...",
+    "load_error": "無法載入儀表板，請再試一次。",
     "empty": "尚未建立學生資料",
     "empty_sub": "新增一位學生以開始使用！",
     "added": "建立日期: {date}",

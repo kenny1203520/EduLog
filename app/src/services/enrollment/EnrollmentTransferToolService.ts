@@ -10,9 +10,13 @@ export class EnrollmentTransferToolService {
 
     static async syncSessionPair(oldSessionId: string | null, newSessionId: string): Promise<void> {
         if (oldSessionId) {
-            await OccurrenceService.syncSessionOccurrences(oldSessionId).catch(() => {})
+            await OccurrenceService.syncSessionOccurrences(oldSessionId).catch((err: any) => {
+                console.error('Failed to sync the old session\'s occurrences after transfer:', err)
+            })
         }
 
-        await OccurrenceService.syncSessionOccurrences(newSessionId).catch(() => {})
+        await OccurrenceService.syncSessionOccurrences(newSessionId).catch((err: any) => {
+            console.error('Failed to sync the new session\'s occurrences after transfer:', err)
+        })
     }
 }

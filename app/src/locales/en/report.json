@@ -1,4 +1,10 @@
 {
+    "validation": {
+        "absence_reason_required": "An absence reason is required"
+    },
+    "no_report_selected": "No report is selected to save",
+    "collaboration_connection_failed": "Collaborative editing connection failed",
+    "collaboration_init_failed": "Failed to initialize collaborative editing",
     "transferred_report_missing": "This transferred lesson is missing its report",
     "transferred_report_missing_hint": "The lesson is currently transferred here, but its report no longer exists. Regenerating creates a new blank report and never overwrites existing data.",
     "repair_transferred_report": "Regenerate report",
@@ -65,6 +71,7 @@
         "student_history": "Student History",
         "search_placeholder": "Search content...",
         "no_results": "No relevant reports found.",
+        "load_error": "Unable to load reference reports. Please try again.",
         "copy_content": "Copy Content",
         "copy_success": "Copied to editor",
         "items_per_page": "per page",
