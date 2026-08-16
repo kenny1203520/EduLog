@@ -1,5 +1,6 @@
 {
     "title": "教室與時段管理",
+    "lesson_count": "{count} 堂課 | {count} 堂課",
     "rooms_tab": "教室管理",
     "sessions_tab": "班級時段",
     "add_room": "新增教室",

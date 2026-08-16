@@ -239,7 +239,7 @@ async function submitActivateTrial() {
                             :disabled="isLoadingEnrollment"
                             class="w-full bg-gray-50 border-gray-100 rounded-2xl px-5 py-3 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all font-bold text-gray-700 shadow-sm disabled:opacity-60">
                         <p class="text-xs font-bold text-gray-400 ml-1">
-                            {{ $t('student.activate_trial_modal.target_total_reports_hint', { count: defaultReportCount }) }}
+                            {{ $t('student.activate_trial_modal.target_total_reports_hint', defaultReportCount, { named: { count: defaultReportCount } }) }}
                         </p>
                     </div>
                 </div>

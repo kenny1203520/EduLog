@@ -26,7 +26,7 @@
                         <div class="space-y-3">
                             <div class="flex items-center justify-between gap-3">
                                 <p class="text-sm font-bold text-gray-700">{{ variableTitle }}</p>
-                                <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{{ t('editor.template.variable_count', { count: variableCount }) }}</span>
+                                <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">{{ t('editor.template.variable_count', variableCount, { named: { count: variableCount } }) }}</span>
                             </div>
                             <slot name="variables" />
                         </div>

@@ -2085,9 +2085,9 @@ const {
     saveOnSwitch: computed(() => preferences.editorSettings.autoSave.saveOnSwitch),
     saveOnUnmount: computed(() => preferences.editorSettings.autoSave.saveOnUnmount),
     onSave: async (snapshot) => {
-        editorNotifier.notify({ code: 'save-started', level: 'info', message: 'Saving report', toast: false })
+        editorNotifier.notify({ code: 'save-started', level: 'info', message: t('report.saving'), toast: false })
         if (!props.reportId) {
-            return { success: false, message: 'No report ID provided' }
+            return { success: false, message: 'No report ID provided', messageKey: 'report.no_report_selected' }
         }
 
         if (!canSave.value) {
@@ -2122,11 +2122,11 @@ const {
         } catch (error: any) {
             const message = error.message || 'Failed to save report'
             emit('save-error', message)
-            return { success: false, message }
+            return { success: false, message, messageKey: 'errors.unknown' }
         }
     },
     onConflict: (serverReport, snapshot) => {
-        editorNotifier.notify({ code: 'save-conflict', level: 'warning', message: 'Report save conflict', toast: true })
+        editorNotifier.notify({ code: 'save-conflict', level: 'warning', message: t('report.conflict.description'), toast: true })
         if (serverReport) {
             emit('conflict', serverReport, snapshotToLocalReport(snapshot))
         }
@@ -2151,11 +2151,12 @@ const {
         if (updatedReport) {
             emit('save-success', updatedReport)
         }
-        editorNotifier.notify({ code: 'save-succeeded', level: 'success', message: 'Report saved', toast: false })
+        editorNotifier.notify({ code: 'save-succeeded', level: 'success', message: t('report.save_success'), toast: false })
     },
-    onError: (message) => {
+    onError: (message, result) => {
         emit('save-error', message)
-        editorNotifier.notify({ code: 'save-failed', level: 'error', message, toast: true })
+        const translated = result?.messageKey ? t(result.messageKey) : t('report.save_error')
+        editorNotifier.notify({ code: 'save-failed', level: 'error', message: translated, toast: true })
     }
 })
 

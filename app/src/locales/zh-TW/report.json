@@ -1,4 +1,10 @@
 {
+    "validation": {
+        "absence_reason_required": "請假原因為必填"
+    },
+    "no_report_selected": "尚未選擇要儲存的報告",
+    "collaboration_connection_failed": "協作編輯連線失敗",
+    "collaboration_init_failed": "協作編輯初始化失敗",
     "transferred_report_missing": "此補課堂次缺少報告",
     "transferred_report_missing_hint": "此堂課已調至目前班次，但原報告已不存在。重新產生會建立一份新的空白報告，不會覆寫既有資料。",
     "repair_transferred_report": "重新產生報告",

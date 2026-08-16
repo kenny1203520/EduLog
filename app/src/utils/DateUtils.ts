@@ -226,7 +226,12 @@ export class DateUtils {
         return `${y}-${m}-${d}`
     }
 
-    static displayDate(date: Date | string | undefined, locale?: string, timeZone: string = this.getDefaultTimeZone()): string {
+    /**
+     * Locale defaults to the current app language (not the browser's) so a
+     * caller that forgets to pass one explicitly still respects the user's
+     * language preference instead of silently falling back to OS locale.
+     */
+    static displayDate(date: Date | string | undefined, locale: string = i18n.global.locale.value, timeZone: string = this.getDefaultTimeZone()): string {
         if (!date) return '-'
         if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
             return this.parseLocalDate(date)?.toLocaleDateString(locale) || '-'
@@ -236,7 +241,7 @@ export class DateUtils {
         return d.toLocaleDateString(locale, { timeZone })
     }
 
-    static displayDateTime(date: Date | string | undefined, locale?: string, timeZone: string = this.getDefaultTimeZone()): string {
+    static displayDateTime(date: Date | string | undefined, locale: string = i18n.global.locale.value, timeZone: string = this.getDefaultTimeZone()): string {
         if (!date) return '-'
         const d = typeof date === 'string' ? new Date(date) : date
         if (Number.isNaN(d.getTime())) return '-'

@@ -1,4 +1,5 @@
 import { computed, isRef, onBeforeUnmount, reactive, ref, shallowRef, watch, type Ref } from 'vue'
+import i18n from '@/i18n'
 import {
     SupabaseProvider,
     type ReportCollabConnectionStatus,
@@ -92,7 +93,7 @@ export function useReportCollab(
 
     function handleStatus(next: ReportCollabConnectionStatus): void {
         status.value = next
-        if (next === 'error') error.value = 'Collaboration connection failed'
+        if (next === 'error') error.value = i18n.global.t('report.collaboration_connection_failed')
     }
 
     const connect = async () => {
@@ -126,7 +127,7 @@ export function useReportCollab(
             await nextProvider.ready
         } catch (reason: any) {
             if (token === generation) {
-                error.value = reason?.message || 'Collaboration initialization failed'
+                error.value = reason?.message || i18n.global.t('report.collaboration_init_failed')
                 status.value = 'error'
             }
             return false

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import type { SingleLessonTransferHistoryItem } from '@/services/enrollment/EnrollmentTransferQueryService'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
+import { mapDomainError } from '@/services/errors/mapDomainError'
+import { mapSupabaseError } from '@/services/errors/mapSupabaseError'
 
 const props = defineProps<{
     isOpen: boolean
@@ -11,6 +14,19 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ 'update:isOpen': [value: boolean] }>()
+const { t } = useI18n()
+
+// Never show a raw thrown message: a recognized domain sentinel code gets its
+// specific translation, anything else falls back to the call site's generic,
+// translated description.
+function describeError(cause: unknown, fallbackKey: string): string {
+    const message = cause instanceof Error ? cause.message : undefined
+    const domain = mapDomainError(message)
+    if (domain) return t(domain.i18nKey)
+    if (message) return t(fallbackKey)
+    return t(mapSupabaseError(cause).i18nKey)
+}
+
 const preferences = usePreferencesStore()
 const history = ref<SingleLessonTransferHistoryItem[]>([])
 const isLoading = ref(false)
@@ -74,7 +90,7 @@ async function repairTargetReport(item: SingleLessonTransferHistoryItem) {
         await EnrollmentService.repairSingleLessonTransferReport(props.enrollmentId, target.target_occurrence_id)
         await loadHistory()
     } catch (cause) {
-        error.value = cause instanceof Error ? cause.message : 'Unable to repair the transferred report.'
+        error.value = describeError(cause, 'student.transfer_history.repair_error')
     } finally {
         repairingTransferId.value = null
     }
@@ -92,7 +108,7 @@ async function loadHistory() {
         history.value = historyItems
         effectiveTargets.value = targets
     } catch (cause) {
-        error.value = cause instanceof Error ? cause.message : 'Unable to load transfer history.'
+        error.value = describeError(cause, 'student.transfer_history.load_error')
     } finally {
         isLoading.value = false
     }

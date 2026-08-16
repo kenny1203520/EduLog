@@ -109,7 +109,8 @@ export class ReportCommandService {
             return {
                 success: false,
                 conflict: false,
-                message: `Failed to fetch report: ${fetchError.message}`
+                message: `Failed to fetch report: ${fetchError.message}`,
+                messageKey: 'errors.unknown'
             }
         }
 
@@ -119,7 +120,8 @@ export class ReportCommandService {
                 conflict: true,
                 serverContent: serverReport.content,
                 serverReport: serverReport,
-                message: 'Conflict detected: Report was modified by another user'
+                message: 'Conflict detected: Report was modified by another user',
+                messageKey: 'errors.conflict'
             }
         }
 
@@ -131,14 +133,16 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: false,
-                    message: `Cannot modify attendance status: This report is managed by the system (${serverReport.absence_reason}).`
+                    message: `Cannot modify attendance status: This report is managed by the system (${serverReport.absence_reason}).`,
+                    messageKey: 'report.editor.system_managed_absence_notice'
                 }
             }
             if (detailedData.absenceReason !== undefined && detailedData.absenceReason !== serverReport.absence_reason) {
                 return {
                     success: false,
                     conflict: false,
-                    message: `Cannot modify absence reason: This report is managed by the system (${serverReport.absence_reason}).`
+                    message: `Cannot modify absence reason: This report is managed by the system (${serverReport.absence_reason}).`,
+                    messageKey: 'report.editor.system_managed_absence_notice'
                 }
             }
         }
@@ -200,14 +204,16 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: true,
-                    message: 'Conflict detected: Concurrent modification'
+                    message: 'Conflict detected: Concurrent modification',
+                    messageKey: 'errors.conflict'
                 }
             }
 
             return {
                 success: false,
                 conflict: false,
-                message: `Failed to save report: ${updateError.message}`
+                message: `Failed to save report: ${updateError.message}`,
+                messageKey: 'errors.unknown'
             }
         }
 
@@ -246,7 +252,8 @@ export class ReportCommandService {
             return {
                 success: false,
                 conflict: false,
-                message: `Failed to fetch report: ${fetchError.message}`
+                message: `Failed to fetch report: ${fetchError.message}`,
+                messageKey: 'errors.unknown'
             }
         }
 
@@ -256,7 +263,8 @@ export class ReportCommandService {
                 conflict: true,
                 serverContent: serverReport.content,
                 serverReport: serverReport,
-                message: 'Conflict detected: Report was modified by another user'
+                message: 'Conflict detected: Report was modified by another user',
+                messageKey: 'errors.conflict'
             }
         }
 
@@ -266,7 +274,8 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: false,
-                    message: `Cannot modify attendance status: This report is managed by the system (${serverReport.absence_reason}).`
+                    message: `Cannot modify attendance status: This report is managed by the system (${serverReport.absence_reason}).`,
+                    messageKey: 'report.editor.system_managed_absence_notice'
                 }
             }
 
@@ -274,7 +283,8 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: false,
-                    message: `Cannot modify absence reason: This report is managed by the system (${serverReport.absence_reason}).`
+                    message: `Cannot modify absence reason: This report is managed by the system (${serverReport.absence_reason}).`,
+                    messageKey: 'report.editor.system_managed_absence_notice'
                 }
             }
         }
@@ -304,14 +314,16 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: true,
-                    message: 'Conflict detected: Concurrent modification'
+                    message: 'Conflict detected: Concurrent modification',
+                    messageKey: 'errors.conflict'
                 }
             }
 
             return {
                 success: false,
                 conflict: false,
-                message: `Failed to save attendance: ${updateError.message}`
+                message: `Failed to save attendance: ${updateError.message}`,
+                messageKey: 'errors.unknown'
             }
         }
 

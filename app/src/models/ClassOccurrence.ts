@@ -179,7 +179,11 @@ export class ClassOccurrence {
      * Get display string for occurrence
      */
     get displayString(): string {
-        const dateStr = this.occurrenceDate.toLocaleDateString()
+        // Pass the formatted YYYY-MM-DD string, not the Date carrier itself --
+        // occurrenceDate is local midnight for a calendar day, and DateUtils.
+        // displayDate would reinterpret a raw Date through getDefaultTimeZone(),
+        // which can shift the shown day when that differs from the browser's zone.
+        const dateStr = DateUtils.displayDate(this.formatDate(this.occurrenceDate))
         const timeStr = this.effectiveStartTime ? ` ${this.effectiveStartTime.slice(0, 5)}` : ''
         return `${dateStr}${timeStr}`
     }

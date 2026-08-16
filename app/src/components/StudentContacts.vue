@@ -156,7 +156,7 @@ async function copyToClipboard(text: string) {
                             <a :href="`tel:${c.phone}`" class="min-w-0 flex-1 truncate font-bold text-emerald-700 hover:underline">{{ c.phone }}</a>
                             <button v-if="c.phone" @click="copyToClipboard(c.phone)"
                                 class="ml-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
-                                title="Copy">
+                                :title="$t('common.copy')">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
                                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -173,7 +173,7 @@ async function copyToClipboard(text: string) {
                             <a :href="`mailto:${c.email}`" class="min-w-0 flex-1 truncate font-bold text-emerald-700 hover:underline">{{ c.email }}</a>
                             <button v-if="c.email" @click="copyToClipboard(c.email)"
                                 class="ml-1 inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-gray-400 transition-all hover:bg-emerald-50 hover:text-emerald-600 cursor-pointer"
-                                title="Copy">
+                                :title="$t('common.copy')">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
                                     stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
                                     <path stroke-linecap="round" stroke-linejoin="round"
@@ -185,7 +185,7 @@ async function copyToClipboard(text: string) {
                     <div class="flex space-x-1">
                         <button @click="startEditContact(c)"
                             class="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit">
+                            :title="$t('common.edit')">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                 stroke="currentColor" class="w-4 h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -194,7 +194,7 @@ async function copyToClipboard(text: string) {
                         </button>
                         <button @click="confirmDeleteContact(c.id!)"
                             class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                            title="Delete">
+                            :title="$t('common.delete')">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                 stroke="currentColor" class="w-4 h-4">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />

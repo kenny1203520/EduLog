@@ -379,7 +379,7 @@ import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import RichTextViewer from '@/components/common/text-editor/RichTextViewer.vue'
 import { useFeedback } from '@/composables/useFeedback'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { reportError } = useFeedback()
 
 // Computed Options for BaseDropdown
@@ -608,7 +608,7 @@ function nextPage() {
 function formatDate(report: any) {
     const d = report.class_occurrences?.occurrence_date || report.updated_at
     if (!d) return '-'
-    return new Date(d).toLocaleDateString()
+    return new Date(d).toLocaleDateString(locale.value)
 }
 
 function getReportProgress(report: any) {

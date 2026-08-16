@@ -1,5 +1,6 @@
 {
     "title": "Classroom & Session Management",
+    "lesson_count": "{count} Lesson | {count} Lessons",
     "rooms_tab": "Rooms",
     "sessions_tab": "Sessions",
     "add_room": "Add Room",

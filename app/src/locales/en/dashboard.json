@@ -14,6 +14,7 @@
     "schedule": {
         "title": "Today's Schedule",
         "subtitle": "Classes happening right now and later today.",
+        "time_zone": "Time zone: {zone}",
         "view_classrooms": "View Classrooms",
         "loading": "LOADING SCHEDULE...",
         "no_classes": "No classes scheduled today.",
