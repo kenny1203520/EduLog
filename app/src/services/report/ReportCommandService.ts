@@ -46,6 +46,20 @@ type AttendanceOnlyData = {
 }
 
 export class ReportCommandService {
+    /** Full row fetch used only once a version conflict is confirmed, to populate the conflict-resolution UI. */
+    private static async fetchFullReportForConflict(reportId: string): Promise<OccurrenceReportDTO | undefined> {
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select('*')
+            .eq('id', reportId)
+            .maybeSingle()
+        if (error) {
+            console.error('Failed to fetch full report for conflict resolution:', error)
+            return undefined
+        }
+        return (data as OccurrenceReportDTO) || undefined
+    }
+
     static async createReport(
         enrollmentId: string,
         occurrenceId: string
@@ -99,9 +113,14 @@ export class ReportCommandService {
         userId?: string,
         detailedData?: ReportSaveData
     ): Promise<SaveReportResult> {
+        // Narrow pre-fetch: the CAS check and the system-managed guard below
+        // only ever read these three columns. The three rich-text jsonb
+        // columns are only needed to populate the conflict-resolution UI,
+        // which is the rare path -- fetched separately, only when a conflict
+        // is actually detected, instead of on every single autosave.
         const { data: serverReport, error: fetchError } = await supabase
             .from('occurrence_reports')
-            .select('*')
+            .select('version, absence_reason, attendance_status, enrollment_id')
             .eq('id', reportId)
             .single()
 
@@ -115,11 +134,12 @@ export class ReportCommandService {
         }
 
         if (serverReport.version !== currentVersion) {
+            const fullServerReport = await this.fetchFullReportForConflict(reportId)
             return {
                 success: false,
                 conflict: true,
-                serverContent: serverReport.content,
-                serverReport: serverReport,
+                serverContent: fullServerReport?.content,
+                serverReport: fullServerReport,
                 message: 'Conflict detected: Report was modified by another user',
                 messageKey: 'errors.conflict'
             }
@@ -244,7 +264,7 @@ export class ReportCommandService {
     ): Promise<SaveReportResult> {
         const { data: serverReport, error: fetchError } = await supabase
             .from('occurrence_reports')
-            .select('*')
+            .select('version, absence_reason, attendance_status')
             .eq('id', reportId)
             .single()
 
@@ -258,11 +278,12 @@ export class ReportCommandService {
         }
 
         if (serverReport.version !== currentVersion) {
+            const fullServerReport = await this.fetchFullReportForConflict(reportId)
             return {
                 success: false,
                 conflict: true,
-                serverContent: serverReport.content,
-                serverReport: serverReport,
+                serverContent: fullServerReport?.content,
+                serverReport: fullServerReport,
                 message: 'Conflict detected: Report was modified by another user',
                 messageKey: 'errors.conflict'
             }

@@ -48,11 +48,18 @@ export class ReportQueryService {
     }
 
     static async getReportVersions(reportId: string): Promise<ReportVersion[]> {
+        // Each row's snapshot is a full to_jsonb(OLD.*) copy of the report at
+        // that point, so this has no natural per-row size cap the way a plain
+        // list query does. A heavily-edited report could in principle
+        // accumulate an unbounded number of versions; cap at the most recent
+        // 200 as a safety ceiling rather than leaving the query fully open --
+        // real usage is nowhere near this, so it isn't a visible behavior change.
         const { data, error } = await supabase
             .from('report_versions')
             .select('*')
             .eq('occurrence_report_id', reportId)
             .order('version', { ascending: false })
+            .limit(200)
 
         if (error) throw new Error(`Failed to fetch versions: ${error.message}`)
 
@@ -130,6 +137,54 @@ export class ReportQueryService {
         return allReports
     }
 
+    /**
+     * Batched, narrow-column report fetch for progress-summary computation
+     * (roster views showing "highest lesson reached" / "latest attended
+     * lesson" per student). Replaces what used to be one paginated,
+     * full-row `getAllReportsByEnrollment` call per enrollment -- for a
+     * 15-student roster that was 15+ requests each carrying the report's
+     * three rich-text jsonb columns, none of which progress-summary logic
+     * reads. One request, six narrow columns, grouped by enrollment here so
+     * callers don't need to know the query shape.
+     */
+    static async getProgressSummaryReportsByEnrollments(
+        enrollmentIds: string[]
+    ): Promise<Map<string, OccurrenceReport[]>> {
+        const byEnrollment = new Map<string, OccurrenceReport[]>()
+        if (enrollmentIds.length === 0) return byEnrollment
+
+        const { data, error } = await supabase
+            .from('occurrence_reports')
+            .select(`
+                id,
+                enrollment_id,
+                lesson_id,
+                is_completed,
+                progress_letter,
+                attendance_status,
+                created_at,
+                updated_at,
+                class_occurrence:class_occurrences!class_occurrence_id(occurrence_date)
+            `)
+            .in('enrollment_id', enrollmentIds)
+
+        if (error) throw new Error(`Failed to fetch progress summary reports: ${error.message}`)
+
+        for (const row of data || []) {
+            const occ = Array.isArray((row as any).class_occurrence) ? (row as any).class_occurrence[0] : (row as any).class_occurrence
+            const report = new OccurrenceReport({
+                ...(row as any),
+                content: '',
+                occurrence_date: occ?.occurrence_date
+            })
+            const list = byEnrollment.get(report.enrollmentId)
+            if (list) list.push(report)
+            else byEnrollment.set(report.enrollmentId, [report])
+        }
+
+        return byEnrollment
+    }
+
     static async getReportsByOccurrence(
         occurrenceId: string
     ): Promise<OccurrenceReport[]> {
@@ -159,10 +214,34 @@ export class ReportQueryService {
     static async getReportsWithDetails(
         enrollmentId: string
     ): Promise<any[]> {
+        // List/preview consumers (StudentReportsView, TransferModal) only ever
+        // read the plain-text content/notes fields, never the *_document rich
+        // text jsonb columns -- those are only needed once a single report is
+        // opened for editing (a separate getReport()/getReportById() call).
+        // Omitting them here is the difference between fetching plain strings
+        // and fetching a whole rich-text document per field, per row.
         const { data, error } = await supabase
             .from('occurrence_reports')
             .select(`
-                *,
+                id,
+                enrollment_id,
+                class_occurrence_id,
+                lesson_id,
+                is_completed,
+                progress_letter,
+                attendance_status,
+                absence_reason,
+                class_participation,
+                classroom_behavior,
+                contact_notes,
+                class_notes,
+                content,
+                external_link,
+                version,
+                last_edited_by,
+                last_edited_at,
+                created_at,
+                updated_at,
                 class_occurrence:class_occurrences!class_occurrence_id(
                     *,
                     class_session:class_sessions!class_session_id(
@@ -237,11 +316,29 @@ export class ReportQueryService {
         if (scope === 'my_present' && !teacherIdentity) return []
 
         // Fetch reports with attendance_status = 'present'
-        // Join with everything needed to determine incompleteness and show details
+        // Join with everything needed to determine incompleteness and show details.
+        // Incompleteness is decided client-side below from plain scalar fields --
+        // the three rich-text jsonb columns are never read for that, so they're
+        // left out here (they can add up over a 90-day, all-present-reports scan).
         const { data, error } = await supabase
             .from('occurrence_reports')
             .select(`
-                *,
+                id,
+                enrollment_id,
+                class_occurrence_id,
+                lesson_id,
+                is_completed,
+                progress_letter,
+                attendance_status,
+                absence_reason,
+                class_participation,
+                classroom_behavior,
+                contact_notes,
+                class_notes,
+                content,
+                external_link,
+                version,
+                updated_at,
                 enrollments!inner (
                     id, student_id, course_id, status,
                     students (id, name)
@@ -262,7 +359,7 @@ export class ReportQueryService {
         if (!data) return []
 
         const results: any[] = []
-        for (const report of data) {
+        for (const report of data as any[]) {
             // Check incompleteness based on user's rules:
             // 課堂秩序、課程參與、課次、進度紀錄(如果完整完成則可以省略)、學習報告 以上任一位完成則為缺失
             const hasContent = !!(report.content && report.content.trim().length > 0)

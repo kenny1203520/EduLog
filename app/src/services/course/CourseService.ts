@@ -40,6 +40,24 @@ export class CourseService {
         return new Enrollment(data)
     }
 
+    /** Batched form of getEnrollmentById -- one request instead of one per id. */
+    static async getEnrollmentsByIds(ids: string[]): Promise<Enrollment[]> {
+        if (ids.length === 0) return []
+        const { data, error } = await supabase
+            .from('enrollments')
+            .select(`
+            *,
+            courses (subject, stage, display_name),
+            classrooms (name),
+            class_sessions (name),
+            students (name, email)
+        `)
+            .in('id', ids)
+
+        if (error) throw new Error(error.message)
+        return (data || []).map(dto => new Enrollment(dto))
+    }
+
     static async enrollStudent(enrollment: Partial<EnrollmentDTO>): Promise<Enrollment> {
         const { data, error } = await supabase.from('enrollments').insert(enrollment).select().single()
         if (error) throw new Error(error.message)
