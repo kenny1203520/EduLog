@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-16
+
+### Added
+- Added a central error-feedback layer (`useFeedback`, a typed `AppError` hierarchy, and Supabase/domain error mappers) that resolves any thrown or returned error to a translated, persistent toast instead of raw English text, an untranslated domain code, or `[object Object]`.
+- Added `datetimeFormats`/`numberFormats` to the i18n configuration and CLDR plural forms for count-based messages.
+- Added a batched, narrow-column progress-summary query for session rosters, replacing one paginated full-row request per student with a single request for the whole roster.
+
+### Changed
+- Routed date/time display through the app's selected language instead of the browser's for the 13 places that previously formatted dates with no explicit locale, and rewrote autosave's relative-time labels with `Intl.RelativeTimeFormat`.
+- Translated the remaining hardcoded strings across the report editor, save pipeline, and student detail views: icon-button tooltips, save-result and collaboration messages, and version/loading labels.
+- Trimmed rich-text jsonb columns out of list-only report queries and the report save pre-fetch; the save pre-fetch now only pulls the full row when a conflict is actually detected.
+- Batched several per-item request loops (teacher bulk delete, guest-enrollment lookups) into single queries, and removed a redundant session-teachers re-fetch that ran on every occurrence date navigation.
+
+### Fixed
+- Fixed several previously silent failures (transfer/enrollment schedule regeneration, a confirm-modal action, dashboard load, split-pane report search) to show an explanatory, actionable message instead of nothing or a misleading "no results" state.
+- Fixed the `dashboard.schedule.time_zone` translation key being present in zh-TW but missing from en.
+- Replaced the native `confirm()` prompt for PWA updates with the app's own confirmation dialog.
+
+### Tests
+- Added regression coverage for the error mapping utilities, autosave retry behavior, the notifier's persistent-error-toast timeout, locale key parity between en and zh-TW, and the batched progress-summary query.
+
+### Deployment Notes
+- No database migration is required for v1.8.0.
+- Rebuild and redeploy the frontend with package version `1.8.0`.
+
 ## [1.7.5] - 2026-08-16
 
 ### Fixed
