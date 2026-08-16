@@ -402,13 +402,18 @@ async function loadStudentProgressSummaries(
     const uniqueCourseIds = [...new Set(enrollmentList.map(enrollment => enrollment.courseId).filter(Boolean))]
     await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
 
+    const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
+    // One request for the whole roster instead of one paginated, full-row
+    // request per student -- see getProgressSummaryReportsByEnrollments.
+    const reportsByEnrollment = await OccurrenceReportService.getProgressSummaryReportsByEnrollments(enrollmentIds)
+
     const summaryEntries = await Promise.all(enrollmentList.map(async enrollment => {
         if (!enrollment.id) {
             return [enrollment.id, getDefaultProgressSummary()] as const
         }
 
         const lessons = await getLessonsForCourse(enrollment.courseId)
-        const reports = await OccurrenceReportService.getAllReportsByEnrollment(enrollment.id)
+        const reports = reportsByEnrollment.get(enrollment.id) || []
         return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons, referenceDate)] as const
     }))
 
@@ -570,7 +575,7 @@ async function loadReportsForCurrentOccurrence() {
     const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
     const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
     if (guestEnrollmentIds.length > 0) {
-        const guests = await Promise.all(guestEnrollmentIds.map(id => CourseService.getEnrollmentById(id!)))
+        const guests = await CourseService.getEnrollmentsByIds(guestEnrollmentIds as string[])
         const addedGuests: Enrollment[] = []
         guests.forEach(guest => {
             if (!guest) return
@@ -597,7 +602,12 @@ async function loadOccurrenceTeachers() {
         return
     }
 
-    sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+    // sessionTeachers is session-level (not occurrence-specific) data: loadData()
+    // fetches it once for the session, and the assignment-mutation flows
+    // (addTeacherForToday, removeAssignment) explicitly re-fetch it themselves
+    // right before calling this function again. Re-fetching it here too made
+    // every single date navigation re-request the same session's assignment
+    // plan for no reason -- see setCurrentOccurrence's call to this function.
     const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
     const activeAssignments = sessionTeachers.value.filter(st => dateStr >= st.effective_from && (!st.effective_to || dateStr <= st.effective_to))
     const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(Boolean))] as string[]
