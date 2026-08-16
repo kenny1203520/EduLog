@@ -92,8 +92,55 @@ describe('StudentReportsView scheduled report filter', () => {
     it('adds effective transfer targets without reports and excludes every active source', () => {
         expect(source).toContain('getEffectiveSingleLessonTransferTargets(enrollmentId)')
         expect(source).toContain('.filter(target => target.is_effective_target)')
-        expect(source).toContain('target.source_occurrence_id === occ.id')
+        expect(source).toContain('target.is_effective_target && target.source_occurrence_id === occ.id')
         expect(source).toContain('isMissingTransferredOccurrence(occurrence.id)')
         expect(source).toContain('repairSingleLessonTransferReport')
+    })
+
+    it('never lets a failed or forbidden transfer-target lookup blank out the report list', () => {
+        // getEffectiveSingleLessonTransferTargets is enrichment only (it overlays
+        // active single-lesson transfers on the schedule); a RPC failure --
+        // notably SINGLE_LESSON_TRANSFER_FORBIDDEN on an enrollment with no
+        // transfer rows -- must never abort the whole occurrence load, since that
+        // used to leave occurrences.value permanently empty while the incomplete-
+        // reports banner (which reads allReports directly) still showed entries.
+        const loadOccurrencesBody = source.slice(
+            source.indexOf('async function loadOccurrences()'),
+            source.indexOf('async function selectOccurrence(')
+        )
+        expect(loadOccurrencesBody).toContain('effectiveTransferTargets.value = await EnrollmentService.getEffectiveSingleLessonTransferTargets(enrollmentId)')
+        expect(loadOccurrencesBody).toContain('effectiveTransferTargets.value = []')
+        expect(loadOccurrencesBody).toContain("loadError.value = t('report.list_load_error')")
+        // The transfer-targets call must be wrapped in its own try/catch, isolated
+        // from the outer function-level catch that used to blank the whole list.
+        const transferTargetsCallIndex = loadOccurrencesBody.indexOf(
+            'effectiveTransferTargets.value = await EnrollmentService.getEffectiveSingleLessonTransferTargets(enrollmentId)'
+        )
+        const innerTryIndex = loadOccurrencesBody.lastIndexOf('try {', transferTargetsCallIndex)
+        const innerCatchIndex = loadOccurrencesBody.indexOf('} catch (transferTargetsError) {', transferTargetsCallIndex)
+        expect(innerTryIndex).toBeGreaterThanOrEqual(0)
+        expect(innerCatchIndex).toBeGreaterThan(transferTargetsCallIndex)
+    })
+
+    it('shows every fetched report even when its occurrence is missing from the merged schedule', () => {
+        // allReportDisplay used to be built by mapping occurrences.value only, so
+        // any report whose class_occurrence_id had no matching entry there (e.g.
+        // because occurrences.value was incomplete) was silently dropped even
+        // though it existed in allReports.value.
+        const allReportDisplayBody = source.slice(
+            source.indexOf('const allReportDisplay = computed(() => {'),
+            source.indexOf('const existingReportIds = computed(() => {')
+        )
+        expect(allReportDisplayBody).toContain('mergedOccurrenceIds.has(r.class_occurrence_id)')
+        expect(allReportDisplayBody).toContain('const orphanReports = allReports.value')
+        expect(allReportDisplayBody).toContain('[...mergedList, ...orphanReports]')
+    })
+
+    it('guards the historical class_session lookup against a missing joined session', () => {
+        // ReportQueryService.getReportsWithDetails did not select class_session.id,
+        // so occData.class_session.id was always undefined, and would throw a
+        // TypeError (into the same swallow-all catch) if class_session were ever
+        // null for a historical occurrence.
+        expect(source).toContain('class_session_id: occData.class_session?.id')
     })
 })

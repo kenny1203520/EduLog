@@ -166,6 +166,7 @@ export class ReportQueryService {
                 class_occurrence:class_occurrences!class_occurrence_id(
                     *,
                     class_session:class_sessions!class_session_id(
+                        id,
                         name,
                         day_of_week,
                         start_time,

@@ -1,9 +1,11 @@
-export type AttendanceReportStatus = 'present' | 'absent' | 'pending'
+export type AttendanceReportStatus = 'present' | 'absent' | 'pending' | 'late' | 'excused'
 
 const ATTENDANCE_REPORT_STATUSES: ReadonlySet<string> = new Set([
     'present',
     'absent',
-    'pending'
+    'pending',
+    'late',
+    'excused'
 ])
 
 /** Returns whether a list item represents a report with an attendance status. */

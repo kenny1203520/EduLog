@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.5] - 2026-08-16
+
+### Fixed
+- Fixed the class report list rendering empty for enrollments with no single-lesson transfer history, even though the incomplete-reports banner correctly showed pending entries; `get_effective_single_lesson_transfer_targets` and `get_single_lesson_transfer_history` no longer require a transfer record to authorize an assigned teacher's read.
+- Fixed assigned teachers being unable to view a student's historical reports on enrollments they did not personally create.
+- Fixed the report list dropping reports whose class occurrence was missing from the merged schedule instead of showing them.
+- Fixed autosave permanently stalling after a single failed save; new edits now correctly re-arm the retry queue.
+- Fixed a Yjs collaboration broadcast being able to bypass optimistic-concurrency checks and silently overwrite another editor's saved content.
+- Fixed every connected peer re-saving a remote collaborator's edit, multiplying writes and version conflicts for a single change.
+- Fixed unsaved report content and collaborative snapshots being discarded on tab close, refresh, and report/occurrence switching.
+- Fixed a stale collaborative snapshot being silently overwritten with older canonical content instead of being preserved for review.
+- Fixed holiday closure/release syncing bumping report versions on reports already in the target state, needlessly invalidating open editors.
+
+### Tests
+- Added regression coverage for the report list surviving a forbidden transfer-target lookup, autosave retry after a failed save, and the relaxed read-authorization migration contract.
+
+### Deployment Notes
+- Apply `1000035_relax_transfer_read_authorization.sql` after the existing transfer migrations before deploying the frontend.
+- Rebuild and redeploy the frontend with package version `1.7.5`.
+
 ## [1.7.4] - 2026-08-08
 
 ### Added

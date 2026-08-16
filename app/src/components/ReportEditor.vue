@@ -1673,10 +1673,28 @@ watch(ready, (isReady) => {
                     if (key === 'selectedLessonId' && (newVal || '') !== selectedLessonId.value) selectedLessonId.value = newVal as any || ''
                     if (key === 'reportExternalLink' && (newVal || '') !== reportExternalLink.value) reportExternalLink.value = newVal as any || ''
                     if (key === 'version') {
+                        // A peer's save advanced the report's DB version. Their
+                        // content is CRDT-merged into our editor already, but
+                        // `version` is also the optimistic-concurrency token this
+                        // editor sends with ITS OWN next save (see onSave below) --
+                        // trusting a broadcast for that would let a save through
+                        // whose local snapshot was never confirmed to genuinely be
+                        // that version's full state (e.g. after a dropped realtime
+                        // message). So only the snapshot guard is updated here;
+                        // `version` itself only advances once our own save
+                        // succeeds, and until then the server's real CAS check
+                        // will correctly surface a conflict instead of a silent
+                        // overwrite.
                         const remoteVersion = Number(newVal || 0)
                         if (remoteVersion > version.value) {
-                            version.value = remoteVersion
+                            remoteVersionDrift.value = true
                             setBaseReportVersion(remoteVersion)
+                            editorNotifier.notify({
+                                code: 'remote-change',
+                                level: 'info',
+                                message: t('report.editor.remote_update_notice'),
+                                toast: true
+                            })
                         }
                     }
                 })
@@ -1727,7 +1745,23 @@ watch(ready, (isReady) => {
 
                 syncTextRefsFromEditors()
 
-                if (seeded || collabInitialState.value !== 'loaded') {
+                if (collabInitialState.value === 'stale') {
+                    // The persisted collab snapshot was based on an older report
+                    // version than the one we just loaded -- something else (a
+                    // peer's save, an attendance-only update, a holiday version
+                    // bump, ...) advanced the version since it was written. We
+                    // have no way to know whether that snapshot held edits that
+                    // were never otherwise persisted, so it must not be silently
+                    // overwritten with a doc reseeded from the canonical row.
+                    // Leave report_collab_docs untouched; it will be properly
+                    // superseded once the user's own edits trigger a real save.
+                    editorNotifier.notify({
+                        code: 'remote-change',
+                        level: 'warning',
+                        message: t('report.editor.stale_collab_snapshot_notice'),
+                        toast: true
+                    })
+                } else if (seeded || collabInitialState.value !== 'loaded') {
                     void saveSnapshot()
                 }
             })
@@ -1752,7 +1786,20 @@ const initialContactContent = createTextEditorContent(props.initialContactNotesD
 const initialClassContent = createTextEditorContent(props.initialClassNotesDocument || props.initialClassNotes)
 const localContent = ref(initialMainContent.plainText)
 const contentDocument = ref(initialMainContent.richText)
+// The version our local snapshot is actually based on. This is the optimistic-
+// concurrency token sent with every save, so it must only ever advance when our
+// local content genuinely catches up with that version: on our own successful
+// save, when the parent hands us a freshly-reloaded report, or on an explicit
+// canonical reload. A peer's collab broadcast alone must never bump it -- see
+// remoteVersionDrift below.
 const version = ref(props.initialVersion)
+// True once a Yjs broadcast has reported a report version newer than the one
+// our local snapshot is based on. We deliberately do NOT fast-forward `version`
+// to match: doing so used to let a stale local buffer pass the save's
+// optimistic-concurrency check and silently overwrite the peer's saved content.
+// Leaving `version` at its true baseline means the next save's CAS check
+// (ReportCommandService.saveReport) correctly reports a conflict instead.
+const remoteVersionDrift = ref(false)
 
 
 
@@ -2088,6 +2135,7 @@ const {
         const updatedReport = result.updatedReport
         const newVersion = updatedReport?.version ?? result.newVersion ?? version.value
         version.value = newVersion
+        remoteVersionDrift.value = false
         savedReportSnapshot.value = updatedReport ? buildSnapshotFromDto(updatedReport) : snapshot
         setBaseReportVersion(newVersion)
 
@@ -2136,6 +2184,7 @@ watch(() => props.initialContent, (newContent) => {
 
 watch(() => props.initialVersion, (newVersion) => {
     version.value = newVersion
+    remoteVersionDrift.value = false
     setBaseReportVersion(newVersion)
 })
 
@@ -2285,6 +2334,22 @@ function handleTextEditorChange(
         classNotes.value = change.content.plainText
         classNotesDocument.value = change.content.richText
     }
+
+    if (change.source === 'remote') {
+        // The shared Y.Doc already merged this edit for us -- it did not
+        // originate from this editor instance. Mirror it into local state and
+        // upward via the content emits so any display that reads them stays
+        // current, but do NOT enqueue an autosave: every connected peer's
+        // editor observes the same fragment change, so letting each of them
+        // independently re-save the merge would multiply writes for one edit
+        // and race every peer's optimistic-concurrency check against the
+        // others for no reason -- only the peer who actually typed it should
+        // persist it.
+        emit('update:content', localContent.value)
+        emit('update:report-external-link', reportExternalLink.value)
+        return
+    }
+
     handleInput()
 }
 
@@ -2319,6 +2384,7 @@ function saveNow(_options?: { reason?: 'manual' | 'switch' }): Promise<boolean> 
 
 function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = false) {
     version.value = report.version
+    remoteVersionDrift.value = false
     const main = createTextEditorContent(report.content_document || report.content || '')
     const contact = createTextEditorContent(report.contact_notes_document || report.contact_notes || '')
     const classNotesContent = createTextEditorContent(report.class_notes_document || report.class_notes || '')
@@ -2393,6 +2459,7 @@ defineExpose({
     autoSaveStatus,
     collaborationStatus,
     activePeers,
+    remoteVersionDrift,
     setAutoSaveEnabled,
     configureAutoSave,
     setCollaborationEnabled,
@@ -2402,10 +2469,31 @@ defineExpose({
     resetEditorSettings
 })
 
+// Best-effort flush when the tab is closed, refreshed, or backgrounded. Vue's
+// onBeforeUnmount never fires for these (the page can be torn down mid-async-
+// work, or not unmount the component at all if it's merely backgrounded), so
+// up to a full debounce interval of typing -- and any pending Yjs snapshot --
+// would otherwise be silently lost. visibilitychange also covers mobile
+// Safari, which does not reliably fire pagehide/beforeunload.
+function flushOnPageHide() {
+    if (hasUnsavedChanges.value) void saveNow()
+    void saveSnapshot()
+}
+function handleVisibilityChange() {
+    if (document.visibilityState === 'hidden') flushOnPageHide()
+}
+
+onMounted(() => {
+    window.addEventListener('pagehide', flushOnPageHide)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
 // Warn before leaving with unsaved changes
-onBeforeUnmount(() => {
+onBeforeUnmount(async () => {
+    window.removeEventListener('pagehide', flushOnPageHide)
+    document.removeEventListener('visibilitychange', handleVisibilityChange)
     cleanupReportCollabBindings()
-    if (preferences.editorSettings.autoSave.saveOnUnmount) void saveNow()
+    if (preferences.editorSettings.autoSave.saveOnUnmount) await saveNow()
 })
 </script>
 

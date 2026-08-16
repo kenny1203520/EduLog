@@ -28,6 +28,7 @@
     "select_course_to_view": "Select a course to view its learning reports",
     "report_for_date": "Report for {date}",
     "load_error": "Failed to load incomplete reports",
+    "list_load_error": "Unable to load the report list. Please try again.",
     "lesson_label": "Lesson",
     "learning_content": "Learning Content",
     "participation": "Participation",
@@ -249,7 +250,9 @@
         "confirm_restore": "Confirm Restore",
         "restore_success": "Restored successfully",
         "restore_conflict_error": "Restore failed: Another user has modified this report. Please refresh first.",
-        "restore_failed": "Restore failed, please try again."
+        "restore_failed": "Restore failed, please try again.",
+        "remote_update_notice": "Another user just saved changes to this report. Your next save will be checked for conflicts.",
+        "stale_collab_snapshot_notice": "This report changed elsewhere since your last collaborative session. Showing the latest saved content; please review it before continuing."
     },
     "conflict": {
         "title": "Conflict Detected",
