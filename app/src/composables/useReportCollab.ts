@@ -66,7 +66,14 @@ export function useReportCollab(
         activePeers.value = provider.value?.getActivePeers() || []
     }
 
-    async function destroyCurrent(flush = false) {
+    // Defaults to flushing the pending Yjs snapshot before tearing the provider
+    // down. This runs both when switching to a different report (connect(), via
+    // its internal teardown of the previous session) and on unmount (destroy()):
+    // collaborative content that only exists in the Y.Doc and never made it into
+    // occurrence_reports would otherwise be silently discarded whenever either
+    // happens, which is exactly the "switched pages" / "closed the tab mid-edit"
+    // data-loss path this guards against.
+    async function destroyCurrent(flush = true) {
         ready.value = false
         initialState.value = 'none'
         activePeers.value = []
@@ -144,7 +151,7 @@ export function useReportCollab(
     }
 
     const reconnect = async () => {
-        await disconnect({ flush: false })
+        await disconnect({ flush: true })
         return connect()
     }
 
@@ -185,7 +192,7 @@ export function useReportCollab(
         () => getReportId(),
         () => {
             if (configuration.enabled && configuration.connectOnMount) void connect()
-            else void disconnect({ flush: false })
+            else void disconnect({ flush: true })
         },
         { immediate: true }
     )

@@ -105,6 +105,10 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
         hasUnsavedChanges.value = true
         saveError.value = null
         hasConflict.value = false
+        // A previous failure must not permanently stall autosave: new input means
+        // a fresh attempt is warranted, so the queue is unblocked here rather than
+        // only via an explicit saveNow()/retry() call.
+        queueBlocked = false
         return job
     }
 

@@ -236,7 +236,7 @@ export class HolidayCommandService {
 
         let query = supabase
             .from('occurrence_reports')
-            .select('id, version')
+            .select('id, version, attendance_status, absence_reason')
             .in('class_occurrence_id', occurrenceIds)
 
         if (attendanceStatus === 'pending') {
@@ -249,6 +249,12 @@ export class HolidayCommandService {
         }
 
         for (const report of reports || []) {
+            // A report already in the target holiday state must not be re-written:
+            // bumping `version` with no actual content change would needlessly
+            // conflict every open editor for this report and mark its
+            // collaborative snapshot stale, even though nothing changed.
+            if (report.attendance_status === attendanceStatus && report.absence_reason === absenceReason) continue
+
             const { error: updateError } = await supabase
                 .from('occurrence_reports')
                 .update({

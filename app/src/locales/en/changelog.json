@@ -1,6 +1,27 @@
 {
     "entries": [
     {
+            "version": "1.7.5",
+            "date": "2026-08-16",
+            "changes": {
+                "fixed": [
+                    "Fixed the class report list rendering empty for enrollments with no transfer history, even though the incomplete-reports banner showed pending entries.",
+                    "Fixed assigned teachers being unable to view a student's historical reports on enrollments they did not personally create.",
+                    "Fixed the report list dropping reports whose class occurrence was missing from the merged schedule.",
+                    "Fixed autosave permanently stalling after a single failed save.",
+                    "Fixed a collaboration broadcast bypassing optimistic-concurrency checks and silently overwriting another editor's saved content.",
+                    "Fixed unsaved report content and collaborative snapshots being discarded on tab close, refresh, and report switching.",
+                    "Fixed holiday syncing needlessly bumping report versions on reports already in the target state."
+                ],
+                "tests": [
+                    "Added regression coverage for the report list surviving a forbidden transfer-target lookup, autosave retry after failure, and the relaxed read-authorization migration contract."
+                ],
+                "deployment": [
+                    "Apply 1000035_relax_transfer_read_authorization.sql after the existing transfer migrations.",
+                    "Rebuild and redeploy the frontend with version 1.7.5."
+                ]
+            }
+        },        {
             "version": "1.7.4",
             "date": "2026-08-08",
             "changes": {

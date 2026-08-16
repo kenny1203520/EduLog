@@ -28,6 +28,7 @@
     "select_course_to_view": "選擇一個課程以檢視其學習報告",
     "report_for_date": "課程報告: {date}",
     "load_error": "無法載入未完成報告列表",
+    "list_load_error": "報告列表載入失敗，請重新載入。",
     "lesson_label": "課次",
     "learning_content": "學習內容",
     "participation": "課堂參與",
@@ -249,7 +250,9 @@
         "confirm_restore": "確認回檔",
         "restore_success": "回檔成功",
         "restore_conflict_error": "回檔失敗：已有其他使用者修改了此報告。請先重新載入取得最新版本。",
-        "restore_failed": "回檔失敗，請稍後再試。"
+        "restore_failed": "回檔失敗，請稍後再試。",
+        "remote_update_notice": "其他使用者剛剛儲存了這份報告的變更，下次存檔時會進行衝突檢查。",
+        "stale_collab_snapshot_notice": "此報告在您上次協作編輯後已被其他地方變更，目前顯示的是最新已儲存的內容，請確認後再繼續編輯。"
     },
     "conflict": {
         "title": "偵測到版本衝突",
