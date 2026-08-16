@@ -179,4 +179,52 @@ describe('useAutoSave', () => {
         expect(saved).toEqual(['new report'])
         expect(autoSave.hasUnsavedChanges.value).toBe(false)
     })
+
+    it('re-arms the debounced queue on new input after a failed save instead of stalling forever', async () => {
+        // Regression: enqueue() used to clear saveError/hasConflict but leave
+        // queueBlocked set after a failure, so schedule() kept early-returning on
+        // every subsequent edit and status silently read back as 'dirty' -- the
+        // user would keep typing into a queue that would never debounce-save
+        // again without an explicit saveNow()/retry() call. This covers the
+        // automatic-debounce path; the sibling test above already covers the
+        // manual-drain retry path.
+        vi.useFakeTimers()
+        let callCount = 0
+        const onSave = vi.fn(async (): Promise<AutoSaveResult> => {
+            callCount += 1
+            if (callCount === 1) return { success: false, message: 'network error' }
+            return { success: true, newVersion: callCount }
+        })
+        const autoSave = useAutoSave<Snapshot>({ debounceMs: 2000, onSave })
+
+        autoSave.triggerAutoSave({ content: 'first' })
+        await vi.advanceTimersByTimeAsync(2000)
+        expect(onSave).toHaveBeenCalledTimes(1)
+        expect(autoSave.saveError.value).toBe('network error')
+        expect(autoSave.status.value).toBe('error')
+
+        // New input after the failure must clear the block and reschedule --
+        // without any explicit retry()/saveNow() call from the caller.
+        autoSave.triggerAutoSave({ content: 'second' })
+        expect(autoSave.status.value).not.toBe('error')
+
+        await vi.advanceTimersByTimeAsync(2000)
+        expect(onSave).toHaveBeenCalledTimes(2)
+        expect(autoSave.saveError.value).toBeNull()
+        expect(autoSave.status.value).toBe('saved')
+    })
+
+    it('does not spin retrying on its own while blocked and no new input arrives', async () => {
+        vi.useFakeTimers()
+        const onSave = vi.fn().mockResolvedValue({ success: false, message: 'boom' })
+        const autoSave = useAutoSave<Snapshot>({ debounceMs: 2000, onSave })
+
+        autoSave.triggerAutoSave({ content: 'a' })
+        await vi.advanceTimersByTimeAsync(2000)
+        expect(onSave).toHaveBeenCalledTimes(1)
+
+        // No new input: advancing time must not trigger further saves on its own.
+        await vi.advanceTimersByTimeAsync(60000)
+        expect(onSave).toHaveBeenCalledTimes(1)
+    })
 })

@@ -182,6 +182,15 @@
             <p class="font-medium">{{ $t('report.loading_full') }}</p>
         </div>
 
+        <div v-else-if="loadError"
+            class="flex flex-col items-center justify-center py-20 text-center bg-white rounded-2xl shadow-sm border border-red-100">
+            <p class="font-black text-red-700 mb-4">{{ loadError }}</p>
+            <button type="button" @click="loadOccurrences"
+                class="px-4 py-2 rounded-md bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors">
+                {{ $t('common.refresh') }}
+            </button>
+        </div>
+
         <!-- LIST VIEW -->
         <div v-else-if="viewMode === 'list'"
             class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -553,6 +562,7 @@ const toast = useToast()
 const preferences = usePreferencesStore()
 
 const loading = ref(true)
+const loadError = ref<string | null>(null)
 const occurrences = ref<ClassOccurrence[]>([])
 const selectedOccurrence = ref<ClassOccurrence | null>(null)
 const selectedReport = ref<OccurrenceReport | null>(null)
@@ -831,8 +841,40 @@ const allReportDisplay = computed(() => {
         }
     })
 
+    // Defensive union: occurrences.value can be legitimately incomplete (a single
+    // failed enrichment call, a schedule gap that hasn't been backfilled yet, ...).
+    // Any report that already exists in allReports.value must still be shown even
+    // when its occurrence didn't make it into the merged schedule above, so the
+    // list can never render empty while reports actually exist.
+    const mergedOccurrenceIds = new Set(occurrences.value.map(occ => occ.id))
+    const orphanReports = allReports.value
+        .filter(r => r.class_occurrence_id && !mergedOccurrenceIds.has(r.class_occurrence_id))
+        .map(r => {
+            const occData = r.class_occurrence
+            const lesson = r.lesson
+            return {
+                id: r.id,
+                occurrenceId: r.class_occurrence_id,
+                date: occData?.occurrence_date,
+                startTime: occData?.actual_start_time || occData?.original_start_time || '',
+                status: r.attendance_status || 'present',
+                content: r.content,
+                classNotes: r.class_notes,
+                version: r.version,
+                lessonTitle: lesson ? `${lesson.sequence ? `Lesson ${lesson.sequence}` : ''} ${lesson.title || ''}` : '',
+                classParticipation: r.class_participation,
+                classroomBehavior: r.classroom_behavior,
+                isCompleted: r.is_completed,
+                contactNotes: r.contact_notes,
+                progressDisplay: r.progress_letter
+                    ? `Progress: ${r.progress_letter}`
+                    : (r.progress_start ? `Progress: ${r.progress_start}${r.progress_end ? `-${r.progress_end}` : ''}` : ''),
+                absenceReason: r.absence_reason
+            }
+        })
+
     // Sort based on sortOrder
-    return mergedList
+    return [...mergedList, ...orphanReports]
         .filter(r => r.status !== 'rescheduled' && r.absenceReason !== 'rescheduled') // Shield against rescheduled stubs
         .filter(r => !hideScheduledReports.value || isAttendanceReportStatus(r.status))
         .sort((a, b) => {
@@ -1028,6 +1070,7 @@ onBeforeUnmount(() => {
 async function loadOccurrences() {
     try {
         loading.value = true
+        loadError.value = null
         const enrollmentId = route.params.enrollmentId as string
         if (!enrollmentId) return
 
@@ -1069,7 +1112,14 @@ async function loadOccurrences() {
 
         // Active transfer targets must be visible even before they have a report.
         // Their source occurrences are removed later so a one-off move never appears twice.
-        effectiveTransferTargets.value = await EnrollmentService.getEffectiveSingleLessonTransferTargets(enrollmentId)
+        // This is enrichment, not required data: a failure here must never blank out
+        // the report list, so it is isolated from the main load.
+        try {
+            effectiveTransferTargets.value = await EnrollmentService.getEffectiveSingleLessonTransferTargets(enrollmentId)
+        } catch (transferTargetsError) {
+            console.error('Failed to load effective transfer targets:', transferTargetsError)
+            effectiveTransferTargets.value = []
+        }
         const transferredTargetOccurrences = await OccurrenceService.getOccurrencesByIds(
             effectiveTransferTargets.value
                 .filter(target => target.is_effective_target)
@@ -1081,7 +1131,7 @@ async function loadOccurrences() {
             const occData = r.class_occurrence
             const occ = new ClassOccurrence({
                 id: r.class_occurrence_id,
-                class_session_id: occData.class_session.id,
+                class_session_id: occData.class_session?.id,
                 occurrence_date: occData.occurrence_date,
                 status: occData.status,
                 original_start_time: occData.original_start_time,
@@ -1234,7 +1284,7 @@ async function loadOccurrences() {
         const merged = Array.from(occurrenceMap.values()).filter(occ => {
             // Filter by ID
             if (rescheduledOccIds.has(occ.id)) return false
-            if (effectiveTransferTargets.value.some(target => target.source_occurrence_id === occ.id)) return false
+            if (effectiveTransferTargets.value.some(target => target.is_effective_target && target.source_occurrence_id === occ.id)) return false
             // Check if occ itself has a rescheduled status (though usually it's in the report)
             if (occ.status === 'rescheduled') return false
             return true
@@ -1287,6 +1337,7 @@ async function loadOccurrences() {
 
     } catch (error) {
         console.error('Failed to load occurrences:', error)
+        loadError.value = t('report.list_load_error')
     } finally {
         loading.value = false
     }
