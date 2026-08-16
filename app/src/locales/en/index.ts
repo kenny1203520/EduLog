@@ -15,6 +15,7 @@ import changelog from './changelog.json'
 import timezones from './timezones.json'
 import settings from './settings.json'
 import editor from './editor.json'
+import errors from './errors.json'
 
 export default {
   nav,
@@ -33,5 +34,6 @@ export default {
   changelog,
   timezones,
   settings,
-  editor
+  editor,
+  errors
 }

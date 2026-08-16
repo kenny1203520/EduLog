@@ -165,7 +165,9 @@ export class EnrollmentCommandService {
         if (previousStatus !== 'dropped' && nextStatus === 'dropped' && updated.id) {
             await EnrollmentStatusPolicyService.deleteDroppedPendingEmptyReports(updated.id)
             if (updated.class_session_id) {
-                await OccurrenceService.syncSessionOccurrences(updated.class_session_id, 'all').catch(() => {})
+                await OccurrenceService.syncSessionOccurrences(updated.class_session_id, 'all').catch((err: any) => {
+                    console.error('Failed to sync occurrences after enrollment status change:', err)
+                })
             }
         }
 
@@ -225,7 +227,9 @@ export class EnrollmentCommandService {
         }
 
         const target = new Date(normalizedTargetDate)
-        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch(() => {})
+        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
+            console.error('Failed to generate occurrence for makeup enrollment:', err)
+        })
 
         let { data: targetOccurrences, error: targetOccurrenceError } = await supabase
             .from('class_occurrences')

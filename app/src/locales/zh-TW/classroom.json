@@ -162,6 +162,7 @@
         "pending_list": "待點名學生姓名清單，可切換不同分隔方式。"
     },
     "copy_success": "已複製點名資訊",
+    "copy_error": "複製到剪貼簿失敗",
     "present_list": "出席名單",
     "absent_list": "缺席名單",
     "pending_list": "待點名名單",

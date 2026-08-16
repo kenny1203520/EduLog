@@ -65,6 +65,7 @@
         "student_history": "學生歷史紀錄",
         "search_placeholder": "搜尋內容...",
         "no_results": "找不到相關報告。",
+        "load_error": "無法載入參考報告，請再試一次。",
         "copy_content": "複製內容",
         "copy_success": "已複製到編輯區",
         "items_per_page": "每頁顯示",

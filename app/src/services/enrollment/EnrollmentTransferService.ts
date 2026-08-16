@@ -98,7 +98,9 @@ export class EnrollmentTransferService {
         const start = DateUtils.parseLocalDate(transferDate) || new Date(transferDate)
         const endDate = await SessionService.getGenerationEndDate(newSessionId, transferDate, occurrenceCount)
 
-        await OccurrenceService.generateOccurrences(newSessionId, start, endDate).catch(() => {})
+        await OccurrenceService.generateOccurrences(newSessionId, start, endDate).catch((err: any) => {
+            console.error('Failed to generate occurrences for the new session during class transfer:', err)
+        })
 
         const newOccurrences = await EnrollmentTransferQueryService.getTargetOccurrences(newSessionId, transferDate)
 
@@ -235,7 +237,9 @@ export class EnrollmentTransferService {
         await this.assertTargetDateMatchesSession(targetSessionId, targetDate)
 
         const target = DateUtils.parseLocalDate(targetDate) || new Date(targetDate)
-        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch(() => {})
+        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
+            console.error('Failed to generate the target occurrence for single-lesson transfer:', err)
+        })
 
         const targetOccId = await EnrollmentTransferQueryService.getTargetOccurrenceId(
             targetSessionId,
@@ -247,7 +251,9 @@ export class EnrollmentTransferService {
         )
 
         const original = DateUtils.parseLocalDate(originalDate) || new Date(originalDate)
-        await OccurrenceService.generateOccurrences(originalSessionId, original, original).catch(() => {})
+        await OccurrenceService.generateOccurrences(originalSessionId, original, original).catch((err: any) => {
+            console.error('Failed to generate the original occurrence for single-lesson transfer:', err)
+        })
 
         const originalOccId = await EnrollmentTransferQueryService.getTargetOccurrenceId(
             originalSessionId,
@@ -306,7 +312,9 @@ export class EnrollmentTransferService {
         const originalSessionId = originalOccurrence?.class_session_id || null
 
         const target = DateUtils.parseLocalDate(targetDate) || new Date(targetDate)
-        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch(() => {})
+        await OccurrenceService.generateOccurrences(targetSessionId, target, target).catch((err: any) => {
+            console.error('Failed to generate the target occurrence for single-lesson report transfer:', err)
+        })
 
         const targetOccId = await EnrollmentTransferQueryService.getTargetOccurrenceId(
             targetSessionId,

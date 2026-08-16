@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { SessionService } from '@/services/session/SessionService'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
@@ -29,6 +30,7 @@ const emit = defineEmits(['close', 'success'])
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey, reportError } = useFeedback()
 const preferences = usePreferencesStore()
 
 const isSubmitting = ref(false)
@@ -359,22 +361,25 @@ async function submitTransfer() {
         console.error(e)
         const message = e.message || ''
 
+        // Codes with friendlier, context-specific wording than the generic
+        // errors.domain.* mapper keep it; everything else -- including codes
+        // that used to fall through to a raw/English message -- now routes
+        // through reportError so nothing untranslated reaches the user.
+        // (ORIGINAL_REPORT_NOT_FOUND was a dead branch: nothing ever threw it.)
         if (message.includes('TARGET_DATE_NOT_CLASS_DAY')) {
-            toast.error(t('student.transfer_modal.target_date_not_class_day'))
+            errorKey('student.transfer_modal.target_date_not_class_day')
         } else if (message.includes('TARGET_REPORT_ALREADY_EXISTS')) {
-            toast.error(t('student.transfer_modal.target_report_exists'))
+            errorKey('student.transfer_modal.target_report_exists')
         } else if (message.includes('TARGET_SESSION_SAME_AS_CURRENT')) {
-            toast.error(t('student.transfer_modal.same_session_error'))
+            errorKey('student.transfer_modal.same_session_error')
         } else if (message.includes('TARGET_SESSION_COURSE_MISMATCH')) {
-            toast.error(t('student.errors.session_course_mismatch'))
-        } else if (message.includes('ORIGINAL_REPORT_NOT_FOUND')) {
-            toast.error(t('student.transfer_modal.original_report_not_found'))
+            errorKey('student.errors.session_course_mismatch')
         } else if (message.includes('ORIGINAL_REPORT_AMBIGUOUS')) {
-            toast.error(t('student.transfer_modal.original_report_ambiguous'))
+            errorKey('student.transfer_modal.original_report_ambiguous')
         } else if (message.includes('ORIGINAL_DATE_NOT_CLASS_DAY')) {
-            toast.error(t('student.transfer_modal.original_date_not_class_day'))
+            errorKey('student.transfer_modal.original_date_not_class_day')
         } else {
-            toast.error(message || 'Failed to transfer student')
+            reportError(e)
         }
     } finally {
         isSubmitting.value = false
@@ -401,9 +406,9 @@ async function resolveTransferConflict(selections: TransferReportFieldSelections
         console.error(e)
         const message = e?.message || ''
         if (message.includes('TRANSFER_CONFLICT_STALE')) {
-            toast.error(t('student.transfer_conflict.stale'))
+            errorKey('student.transfer_conflict.stale')
         } else {
-            toast.error(message || t('student.transfer_conflict.failed'))
+            reportError(e)
         }
     } finally {
         isResolvingConflict.value = false

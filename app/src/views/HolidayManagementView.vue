@@ -8,6 +8,7 @@ import { TeacherService, type TeacherDTO } from '@/services/teacher/TeacherServi
 import { Holiday, type HolidayDTO } from '@/models/Holiday'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
@@ -30,6 +31,7 @@ interface TeacherLeaveGroup {
 
 const { t } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 const holidays = ref<Holiday[]>([])
 const classrooms = ref<ClassroomDTO[]>([])
@@ -390,7 +392,8 @@ async function handleSaveHoliday() {
         closeModal()
         toast.success(t('holiday.save_success') || 'Holiday saved successfully')
     } catch (e: any) {
-        toast.error(e.message || 'Failed to save holiday')
+        console.error(e)
+        reportError(e)
     } finally {
         isSaving.value = false
     }
@@ -409,7 +412,8 @@ async function confirmDelete() {
         await loadHolidays()
         toast.success(t('holiday.delete_success') || 'Holiday deleted successfully')
     } catch (e: any) {
-        toast.error(e.message || 'Failed to delete holiday')
+        console.error(e)
+        reportError(e)
     } finally {
         isDeleting.value = false
         showDeleteConfirm.value = false

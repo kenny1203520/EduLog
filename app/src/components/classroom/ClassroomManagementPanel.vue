@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import type { ClassroomDTO, ClassSessionDTO } from '@/models/Classroom'
 import type { RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
 import ScopedRolePolicyEditor, {
@@ -36,6 +37,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const activeTab = ref<PanelTab>(props.initialTab || 'details')
 const search = ref('')
 const expandedSessionId = ref<string | null>(null)
@@ -131,7 +133,7 @@ async function saveSessionPolicy(continuePending = false) {
         showUnsavedDialog.value = false
         pendingAction.value = null
     } catch (error: any) {
-        toast.error(error.message || String(error))
+        reportError(error)
     } finally {
         savingSessionPolicy.value = false
     }

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { SessionService } from '@/services/session/SessionService'
 import { RoleService } from '@/services/rbac/RoleService'
@@ -14,6 +15,7 @@ import ScopedRolePolicyEditor, { type PolicySelection } from '@/components/setti
 
 const { t } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const scopeType = ref<PolicyScope>('system')
 const classroomId = ref('')
 const sessionId = ref('')
@@ -63,7 +65,7 @@ async function load() {
         sessions.value = sessionResult.data
         syncSelections()
     } catch (error: any) {
-        toast.error(error.message)
+        reportError(error)
     } finally {
         loading.value = false
     }
@@ -86,7 +88,7 @@ async function save() {
         syncSelections()
         toast.success(t('settings.incomplete_notifications.saved'))
     } catch (error: any) {
-        toast.error(error.message)
+        reportError(error)
     } finally {
         saving.value = false
     }
