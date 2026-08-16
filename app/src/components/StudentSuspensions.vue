@@ -220,6 +220,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { SuspensionService } from '@/services/suspension/SuspensionService'
 import type { Suspension } from '@/models/Suspension'
 import { DateUtils } from '@/utils/DateUtils'
@@ -233,6 +234,7 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 const emit = defineEmits(['close'])
 
@@ -336,7 +338,7 @@ async function addSuspension() {
         toast.success(t('common.success') || 'Suspension added successfully')
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || 'Failed to create suspension')
+        reportError(e)
     } finally {
         isAdding.value = false
     }
@@ -350,7 +352,7 @@ async function deleteSuspension(id: string) {
             toast.success(t('common.deleted') || 'Suspension deleted successfully')
         } catch (e: any) {
             console.error(e)
-            toast.error(e.message || 'Failed to delete suspension')
+            reportError(e)
         }
     }, t('common.delete'), true)
 }
@@ -383,7 +385,7 @@ async function saveEdit(id: string) {
         toast.success(t('common.success') || 'Suspension updated successfully')
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || 'Failed to update suspension')
+        reportError(e)
     } finally {
         isSaving.value = false
     }
@@ -407,7 +409,7 @@ async function endSuspensionNow(suspension: Suspension) {
         toast.success(t('common.success') || 'Suspension ended successfully')
     } catch (e: any) {
         console.error(e)
-        toast.error(e.message || 'Failed to update suspension')
+        reportError(e)
     } finally {
         isEndingNowId.value = null
     }

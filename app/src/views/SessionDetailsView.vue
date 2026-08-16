@@ -38,6 +38,7 @@ import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import KodingCodeCheckModal from '@/components/KodingCodeCheckModal.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -51,6 +52,7 @@ type ReportEditorExpose = {
 
 const { t } = useI18n()
 const toast = useToast()
+const { errorKey } = useFeedback()
 const preferences = usePreferencesStore()
 
 const route = useRoute()
@@ -1226,11 +1228,11 @@ function copyAttendanceInfo() {
         if (success) {
             toast.success(t('classroom.copy_success'))
         } else {
-            toast.error('Failed to copy to clipboard')
+            errorKey('classroom.copy_error')
         }
     }).catch(err => {
         console.error('Failed to copy: ', err)
-        toast.error('Failed to copy to clipboard')
+        errorKey('classroom.copy_error')
     })
 }
 

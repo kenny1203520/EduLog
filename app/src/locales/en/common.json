@@ -103,5 +103,9 @@
         "fri": "Fri",
         "sat": "Sat"
     },
-    "opens_new_tab": "Opens in a new tab"
+    "opens_new_tab": "Opens in a new tab",
+    "update_available_title": "Update Available",
+    "update_available_message": "A new version of EduLog is ready. Reload now to get the latest features and fixes.",
+    "reload": "Reload",
+    "later": "Later"
 }

@@ -4,6 +4,7 @@ import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { Course, Lesson, type CourseDTO } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
@@ -14,6 +15,7 @@ import type { TextEditorContent } from '@/components/common/text-editor/types'
 
 const { t } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const courses = ref<Course[]>([])
 const loading = ref(true)
 const iscreateModalOpen = ref(false)
@@ -163,7 +165,8 @@ async function saveCourse() {
         iscreateModalOpen.value = false
         toast.success(t('course.save_success') || 'Course saved successfully')
     } catch (e) {
-        toast.error('Error saving course: ' + e)
+        console.error(e)
+        reportError(e)
     } finally {
         isSaving.value = false
     }
@@ -219,7 +222,7 @@ async function saveLesson(courseId: string) {
         toast.success(t('course.lesson_save_success') || 'Lesson saved successfully')
     } catch (e) {
         console.error(e)
-        toast.error('Error saving lesson: ' + e)
+        reportError(e)
     } finally {
         isSaving.value = false
     }
@@ -237,7 +240,7 @@ async function deleteCourse(id: string) {
             await fetchCourses()
             toast.success(t('course.delete_success') || 'Course deleted successfully')
         } catch (e) {
-            toast.error(e as string)
+            reportError(e)
         }
     }, t('common.delete'), true)
 }
@@ -249,7 +252,7 @@ async function deleteLesson(id: string) {
             await fetchCourses()
             toast.success(t('course.lesson_delete_success') || 'Lesson deleted successfully')
         } catch (e) {
-            toast.error(e as string)
+            reportError(e)
         }
     }, t('common.delete'), true)
 }

@@ -162,6 +162,7 @@
         "pending_list": "List of pending student names with selectable separators."
     },
     "copy_success": "Attendance info copied to clipboard",
+    "copy_error": "Failed to copy to clipboard",
     "present_list": "Present Students",
     "absent_list": "Absent Students",
     "pending_list": "Pending Students",

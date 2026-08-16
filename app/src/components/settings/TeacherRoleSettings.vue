@@ -2,11 +2,13 @@
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import { RoleService } from '@/services/rbac/RoleService'
 import type { RoleDTO } from '@/models/Rbac'
 
 const { t } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const roles = ref<RoleDTO[]>([])
 const newRoleName = ref('')
 const loading = ref(false)
@@ -16,7 +18,7 @@ async function loadRoles() {
     try {
         roles.value = await RoleService.getRoles()
     } catch (error: any) {
-        toast.error(error.message)
+        reportError(error)
     } finally {
         loading.value = false
     }
@@ -30,7 +32,7 @@ async function addRole() {
         await loadRoles()
         toast.success(t('settings.teacher_roles.saved'))
     } catch (error: any) {
-        toast.error(error.message)
+        reportError(error)
     }
 }
 
@@ -41,7 +43,7 @@ async function removeRole(role: RoleDTO) {
         await loadRoles()
         toast.success(t('settings.teacher_roles.deleted'))
     } catch (error: any) {
-        toast.error(error.message)
+        reportError(error)
     }
 }
 

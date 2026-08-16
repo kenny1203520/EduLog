@@ -65,6 +65,7 @@
         "student_history": "Student History",
         "search_placeholder": "Search content...",
         "no_results": "No relevant reports found.",
+        "load_error": "Unable to load reference reports. Please try again.",
         "copy_content": "Copy Content",
         "copy_success": "Copied to editor",
         "items_per_page": "per page",

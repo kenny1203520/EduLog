@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { AggregateService } from '@/services/AggregateService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
+import { useFeedback } from '@/composables/useFeedback'
 
+const { t } = useI18n()
+const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 const stats = ref({
     totalStudents: 0,
@@ -16,6 +20,7 @@ const todayOccurrences = ref<ClassOccurrence[]>([])
 const pendingReports = ref<any[]>([])
 const pendingReportsCount = ref(0)
 const loading = ref(true)
+const loadError = ref<string | null>(null)
 
 const nextClass = computed(() => {
     if (!todayOccurrences.value.length) return null
@@ -41,9 +46,10 @@ const nextClass = computed(() => {
     }) || null
 })
 
-onMounted(async () => {
+async function loadDashboard() {
     try {
         loading.value = true
+        loadError.value = null
 
         const todayStr = DateUtils.todayString(preferences.timeZone)
         const agg = await AggregateService.getDashboardHome(todayStr, todayStr, true)
@@ -83,11 +89,15 @@ onMounted(async () => {
         }
     } catch (e) {
         console.error('Failed to load dashboard data:', e)
+        loadError.value = t('dashboard.load_error')
+        reportError(e)
         await loadMyNotificationPendingReports()
     } finally {
         loading.value = false
     }
-})
+}
+
+onMounted(loadDashboard)
 
 async function applyDashboardPendingReports(_agg: any) {
     // Role-aware recipient rules are resolved by the dedicated incomplete-report endpoint.
@@ -157,6 +167,16 @@ function formatReportDate(date: string | Date | undefined): string {
                     </router-link>
                 </div>
             </div>
+        </div>
+
+        <!-- Dashboard load error -->
+        <div v-if="loadError"
+            class="flex flex-col sm:flex-row items-center justify-between gap-4 rounded-2xl border border-red-100 bg-red-50 px-6 py-4 text-center sm:text-left">
+            <p class="font-bold text-red-700">{{ loadError }}</p>
+            <button type="button" @click="loadDashboard"
+                class="shrink-0 px-4 py-2 rounded-md bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors">
+                {{ $t('common.refresh') }}
+            </button>
         </div>
 
         <!-- Main Dashboard Grid -->

@@ -97,7 +97,9 @@ export class EnrollmentStatusPolicyService {
         const start = new Date(startDate)
         const endDate = await SessionService.getGenerationEndDate(sessionId, startDate, lessonCount)
 
-        await OccurrenceService.generateOccurrences(sessionId, start, endDate).catch(() => {})
+        await OccurrenceService.generateOccurrences(sessionId, start, endDate).catch((err: any) => {
+            console.error('Failed to generate occurrences while ensuring enrollment report target:', err)
+        })
 
         const fetchLimit = options.skipExisting ? lessonCount * 4 : lessonCount
         const { data: occurrences } = await supabase

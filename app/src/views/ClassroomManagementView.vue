@@ -22,6 +22,7 @@ import {
 import { Course } from '@/models/Course'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
+import { useFeedback } from '@/composables/useFeedback'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -35,6 +36,7 @@ import BasePageHeader from '@/components/common/BasePageHeader.vue'
 
 const { t } = useI18n()
 const toast = useToast()
+const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 type DisplayMode = 'visible' | 'all' | 'hidden'
@@ -77,7 +79,11 @@ async function handleGenericConfirm() {
             await genericConfirm.value.action()
             genericConfirm.value.isOpen = false
         } catch (e) {
+            // The modal used to just stop loading here with no other signal --
+            // the user was left staring at an unchanged dialog with no idea
+            // whether it was safe to retry.
             console.error(e)
+            reportError(e)
         } finally {
             genericConfirm.value.isLoading = false
         }
@@ -498,7 +504,7 @@ async function deleteClassroom(id: string) {
             await Promise.all([loadRooms(), loadAllRooms()])
             toast.success(t('classroom.room_delete_success') || 'Room deleted successfully')
         } catch (e) {
-            toast.error(e as string)
+            reportError(e)
         }
     }, t('common.delete'), true)
 }
@@ -530,7 +536,7 @@ async function toggleClassroomVisibility(id?: string) {
         await refreshActiveList()
         toast.success(willHide ? t('classroom.room_hidden') : t('classroom.room_shown'))
     } catch (e) {
-        toast.error(e as string)
+        reportError(e)
     }
 }
 
@@ -544,7 +550,7 @@ async function toggleSessionVisibility(id?: string) {
         await refreshActiveList()
         toast.success(willHide ? t('classroom.session_hidden') : t('classroom.session_shown'))
     } catch (e) {
-        toast.error(e as string)
+        reportError(e)
     }
 }
 
@@ -679,7 +685,7 @@ async function deleteSession(id: string) {
             await loadSessions()
             toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
         } catch (e) {
-            toast.error(e as string)
+            reportError(e)
         }
     }, t('common.delete'), true)
 }

@@ -1,0 +1,26 @@
+{
+    "network": "網路連線發生問題，請檢查連線後再試一次。",
+    "unknown": "發生錯誤，請再試一次。",
+    "unexpected": "發生未預期的錯誤。如果持續發生，請聯絡支援人員。",
+    "conflict": "此資料已被其他人變更，請重新載入後再繼續。",
+    "unique_violation": "該值已被使用。",
+    "foreign_key_violation": "因為仍有相關資料參照此項目，無法完成此操作。",
+    "permission_denied": "您沒有執行此操作的權限。",
+    "session_expired": "登入已逾期，請重新登入。",
+    "validation_failed": "請檢查標示的欄位後再試一次。",
+    "domain": {
+        "TARGET_DATE_NOT_CLASS_DAY": "所選日期不是該班次的排課日。",
+        "TARGET_SESSION_SAME_AS_CURRENT": "該班次已是學生目前所在的班次。",
+        "TARGET_SESSION_COURSE_MISMATCH": "目標班次屬於不同的課程。",
+        "TARGET_REPORT_ALREADY_EXISTS": "目標課次已存在報告。",
+        "ORIGINAL_REPORT_AMBIGUOUS": "符合原始課次的報告不只一筆，無法判斷要移動哪一筆。",
+        "ORIGINAL_DATE_NOT_CLASS_DAY": "原始日期不是該班次的排課日。",
+        "ORIGINAL_OCCURRENCE_NOT_IN_ENROLLMENT_SESSION": "原始課次不屬於此學生的班次。",
+        "DUPLICATE_OCCURRENCE_REPORT": "此學生在該日期已有報告。",
+        "MAKEUP_DATE_NOT_CLASS_DAY": "補課日期不是排課日。",
+        "COURSE_REQUIRED_FOR_SESSION": "請先選擇課程再選擇班次。",
+        "ROLE_NAME_REQUIRED": "請輸入角色名稱。",
+        "TRANSFER_CONFLICT_STALE": "此調課衝突已在其他地方被處理，請重新整理。",
+        "REPORT_ALREADY_EXISTS": "此課次已存在報告。"
+    }
+}
