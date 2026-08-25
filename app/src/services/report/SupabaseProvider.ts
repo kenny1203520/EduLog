@@ -40,6 +40,21 @@ interface ReportPresencePayload {
 
 export type ReportCollabInitialState = 'none' | 'loaded' | 'legacy' | 'stale' | 'error'
 export type ReportCollabConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+export interface ReportCollabActivity {
+    field?: string
+    focused?: boolean
+    caret?: number
+    selectionEnd?: number
+}
+export interface ReportCollabPeer {
+    clientId: number
+    user?: { name: string; color: string }
+    activity?: ReportCollabActivity
+}
+
+const REALTIME_READY_TIMEOUT_MS = 10000
+const SNAPSHOT_REQUEST_TIMEOUT_MS = 10000
+const SNAPSHOT_MAX_ATTEMPTS = 2
 
 export interface SupabaseProviderOptions {
     snapshotDebounceMs?: number
@@ -55,6 +70,14 @@ export class SupabaseProvider {
     private isSubscribed = false
     private snapshotTimer: ReturnType<typeof setTimeout> | null = null
     private resolveReady!: () => void
+    private rejectReady!: (reason?: unknown) => void
+    private readyTimer: ReturnType<typeof setTimeout> | null = null
+    private awarenessTimer: ReturnType<typeof setTimeout> | null = null
+    private awarenessRequest: Promise<void> | null = null
+    private awarenessPending = false
+    private snapshotPromise: Promise<boolean> | null = null
+    private pendingSnapshot: { key: string; state: string; version: number } | null = null
+    private lastSnapshotKey: string | null = null
     private readonly remoteClientIds = new Set<number>()
     private readonly docUpdateHandler = (update: Uint8Array, origin: any) => {
         if (origin === this || this.isDestroyed) return
@@ -74,7 +97,7 @@ export class SupabaseProvider {
 
         const changedLocalState = [...change.added, ...change.updated, ...change.removed].includes(this.awareness.clientID)
         if (changedLocalState) {
-            void this.trackLocalAwareness()
+            this.queueTrackLocalAwareness()
         }
     }
 
@@ -105,9 +128,13 @@ export class SupabaseProvider {
         this.presenceEnabled = options.presenceEnabled ?? true
         this.onStatus = options.onStatus
         this.awareness = new Awareness(this.doc)
-        this.ready = new Promise((resolve) => {
+        this.ready = new Promise((resolve, reject) => {
             this.resolveReady = resolve
+            this.rejectReady = reject
         })
+        this.readyTimer = setTimeout(() => {
+            this.failReady(new Error('Realtime collaboration subscription timed out'))
+        }, REALTIME_READY_TIMEOUT_MS)
 
         this.channel = this.supabase.channel(`room:${this.roomId}`, {
             config: {
@@ -128,10 +155,14 @@ export class SupabaseProvider {
                 await this.loadInitialState()
                 if (this.presenceEnabled) await this.trackLocalAwareness()
                 this.onStatus?.('connected')
+                if (this.readyTimer) clearTimeout(this.readyTimer)
+                this.readyTimer = null
                 this.resolveReady()
             } else {
                 this.isSubscribed = false
-                this.onStatus?.(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' ? 'error' : 'disconnected')
+                const failed = status === 'CHANNEL_ERROR' || status === 'TIMED_OUT'
+                this.onStatus?.(failed ? 'error' : 'disconnected')
+                if (failed) this.failReady(new Error('Realtime collaboration channel ' + status.toLowerCase()))
             }
         })
     }
@@ -186,7 +217,7 @@ export class SupabaseProvider {
 
         this.channel.on('presence', { event: 'join' }, () => {
             if (!this.isDestroyed) {
-                void this.trackLocalAwareness()
+                this.queueTrackLocalAwareness()
             }
         })
 
@@ -251,6 +282,13 @@ export class SupabaseProvider {
         }
     }
 
+    private failReady(reason: Error): void {
+        if (this.isDestroyed) return
+        if (this.readyTimer) clearTimeout(this.readyTimer)
+        this.readyTimer = null
+        this.rejectReady(reason)
+    }
+
     private scheduleSnapshotSave() {
         if (this.snapshotTimer) clearTimeout(this.snapshotTimer)
         this.snapshotTimer = setTimeout(() => {
@@ -260,25 +298,64 @@ export class SupabaseProvider {
     }
 
     public async saveSnapshot(): Promise<boolean> {
+        if (this.isDestroyed) return false
+        const state = uint8ArrayToBase64(Y.encodeStateAsUpdate(this.doc))
+        const payload = { key: this.baseReportVersion + ':' + state, state, version: this.baseReportVersion }
+        if (payload.key === this.lastSnapshotKey) return true
+        this.pendingSnapshot = payload
+        if (!this.snapshotPromise) this.snapshotPromise = this.flushSnapshots()
+        return this.snapshotPromise
+    }
+
+    private async flushSnapshots(): Promise<boolean> {
+        let result = true
         try {
-            const stateUpdate = Y.encodeStateAsUpdate(this.doc)
-            const base64State = uint8ArrayToBase64(stateUpdate)
-            
-            const { data, error } = await this.supabase.rpc('save_report_collab_snapshot', {
-                p_occurrence_report_id: this.roomId,
-                p_snapshot_base64: base64State,
-                p_base_report_version: this.baseReportVersion
-            })
-            
-            if (error) {
-                console.error('Failed to save snapshot:', error)
-                return false
+            while (this.pendingSnapshot && !this.isDestroyed) {
+                const payload = this.pendingSnapshot
+                this.pendingSnapshot = null
+                if (payload.key === this.lastSnapshotKey) continue
+                result = await this.persistSnapshot(payload)
+                if (result) this.lastSnapshotKey = payload.key
             }
-            return data === true
-        } catch (err) {
-            console.error('saveSnapshot exception:', err)
-            return false
+            return result
+        } finally {
+            this.snapshotPromise = null
+            if (this.pendingSnapshot && !this.isDestroyed) {
+                this.snapshotPromise = this.flushSnapshots()
+            }
         }
+    }
+
+    private async persistSnapshot(payload: { key: string; state: string; version: number }): Promise<boolean> {
+        for (let attempt = 0; attempt < SNAPSHOT_MAX_ATTEMPTS; attempt += 1) {
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(), SNAPSHOT_REQUEST_TIMEOUT_MS)
+            try {
+                const request: any = this.supabase.rpc('save_report_collab_snapshot', {
+                    p_occurrence_report_id: this.roomId,
+                    p_snapshot_base64: payload.state,
+                    p_base_report_version: payload.version
+                })
+                const query = typeof request?.abortSignal === 'function' ? request.abortSignal(controller.signal) : request
+                const result: any = await Promise.race([
+                    query,
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('snapshot request timeout')), SNAPSHOT_REQUEST_TIMEOUT_MS))
+                ])
+                clearTimeout(timeout)
+                if (result?.error) {
+                    console.error('Failed to save snapshot:', result.error)
+                    return false
+                }
+                return result?.data === true
+            } catch (err) {
+                clearTimeout(timeout)
+                if (attempt + 1 >= SNAPSHOT_MAX_ATTEMPTS) {
+                    console.error('saveSnapshot exception:', err)
+                    return false
+                }
+            }
+        }
+        return false
     }
 
     /** Advances the canonical version used to guard future snapshot writes. */
@@ -290,10 +367,34 @@ export class SupabaseProvider {
         return this.isSubscribed
     }
 
-    public getActivePeers(): Array<Record<string, any>> {
+    public getActivePeers(): ReportCollabPeer[] {
         return [...this.awareness.getStates().entries()]
             .filter(([clientId]) => clientId !== this.awareness.clientID)
-            .map(([, state]) => state.user || state)
+            .map(([clientId, state]) => ({
+                clientId,
+                user: state.user,
+                activity: state.activity
+            }))
+    }
+
+    private queueTrackLocalAwareness(): void {
+        if (this.isDestroyed) return
+        this.awarenessPending = true
+        if (this.awarenessTimer || this.awarenessRequest) return
+        this.awarenessTimer = setTimeout(() => {
+            this.awarenessTimer = null
+            void this.flushAwareness()
+        }, 60)
+    }
+
+    private async flushAwareness(): Promise<void> {
+        if (this.awarenessRequest) return
+        this.awarenessPending = false
+        this.awarenessRequest = this.trackLocalAwareness().finally(() => {
+            this.awarenessRequest = null
+            if (this.awarenessPending && !this.isDestroyed) this.queueTrackLocalAwareness()
+        })
+        await this.awarenessRequest
     }
 
     private async trackLocalAwareness() {
@@ -318,7 +419,12 @@ export class SupabaseProvider {
 
         this.isDestroyed = true
         if (this.snapshotTimer) clearTimeout(this.snapshotTimer)
+        if (this.awarenessTimer) clearTimeout(this.awarenessTimer)
         this.snapshotTimer = null
+        this.awarenessTimer = null
+        this.awarenessPending = false
+        if (this.readyTimer) clearTimeout(this.readyTimer)
+        this.readyTimer = null
         this.resolveReady()
         this.doc.off('update', this.docUpdateHandler)
         if (this.presenceEnabled) this.awareness.off('update', this.awarenessUpdateHandler)

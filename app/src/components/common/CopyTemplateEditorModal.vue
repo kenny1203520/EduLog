@@ -44,7 +44,7 @@
                                     </div>
                                     <TextEditor
                                         :ref="(el) => setEditorRef(field.id, el)"
-                                        :model-value="createTextEditorContent(field.document || field.content, { templateVariables: true })"
+                                        :model-value="field.document || field.content"
                                         preset="template"
                                         template-variables
                                         :min-height="144"
@@ -76,7 +76,7 @@
                                 </div>
                                 <TextEditor
                                     :ref="(el) => setEditorRef('template', el)"
-                                    :model-value="createTextEditorContent(templateDocument || templateText || '', { templateVariables: true })"
+                                    :model-value="templateDocument || templateText || ''"
                                     preset="template"
                                     template-variables
                                     :min-height="288"

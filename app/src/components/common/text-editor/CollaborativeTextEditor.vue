@@ -11,12 +11,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, toRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue'
 import { Editor, EditorContent } from '@tiptap/vue-3'
-import Collaboration from '@tiptap/extension-collaboration'
+import Collaboration, { isChangeOrigin } from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import type * as Y from 'yjs'
-import { observeXmlFragmentDeep } from '@/utils/yjsDeepObserver'
 import { createTextEditorExtensions, isAllowedEditorUrl } from './extensions'
 import { calculateTextEditorMetrics, contentEquals, createTextEditorContent, richTextToHTML } from './content'
 import { useTextEditorAppearance } from './useTextEditorAppearance'
@@ -108,12 +107,13 @@ const editor = new Editor({
         }
     },
     onFocus: () => { focused.value = true; emitActivity() },
-    onBlur: () => { focused.value = false },
+    onBlur: () => { focused.value = false; emitActivity() },
+    onUpdate: ({ transaction }) => publishContent(isChangeOrigin(transaction) ? 'remote' : 'local'),
     onSelectionUpdate: () => { contentRevision.value++; emitActivity() }
 })
 
 let lastContent = getContent()
-function getSelection(): TextEditorActivity { return { caret: editor.state.selection.from, selectionEnd: editor.state.selection.to } }
+function getSelection(): TextEditorActivity { return { caret: editor.state.selection.from, selectionEnd: editor.state.selection.to, focused: focused.value } }
 function emitActivity(): void { emit('activity', getSelection()) }
 function getContent(): TextEditorContent {
     return createTextEditorContent({
@@ -135,11 +135,6 @@ function publishContent(source: TextEditorChangeSource, emitChange = true): void
     emit('metrics-change', calculateTextEditorMetrics(content))
     emitActivity()
 }
-
-const fragment = props.ydoc.getXmlFragment(props.fieldName)
-const stopObserving = observeXmlFragmentDeep(fragment, (_events, transaction) => {
-    void nextTick(() => publishContent(transaction.local ? 'local' : 'remote'))
-})
 
 function focus(): void { editor.commands.focus() }
 function blur(): void { editor.commands.blur() }
@@ -233,13 +228,10 @@ const showPlaceholder = computed(() => { void contentRevision.value; return !foc
 
 watch(() => props.disabled, disabled => setMode(disabled ? 'disabled' : props.mode))
 watch(() => props.mode, mode => setMode(props.disabled ? 'disabled' : mode))
-watch(() => props.user, user => { if (props.provider) editor.commands.updateUser(user) }, { deep: true })
-watch(() => props.modelValue, value => {
-    const resolved = createTextEditorContent(value, { templateVariables: props.templateVariables })
-    if (!contentEquals(resolved, getContent())) replaceContent(resolved)
-}, { deep: true })
+watch(() => [props.user.name, props.user.color] as const, () => { if (props.provider) editor.commands.updateUser({ ...props.user }) })
 
-onBeforeUnmount(() => { stopObserving(); editor.destroy() })
+
+onBeforeUnmount(() => editor.destroy())
 
 defineExpose({ editor, focus, blur, getContent, getText, getJSON, getHTML, insertText, insertContent,
     replaceText, replaceContent, getSelection, getMetrics, getStyle, setStyle, resetStyle,

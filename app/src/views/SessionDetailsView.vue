@@ -75,6 +75,7 @@ const previousOccurrence = ref<ClassOccurrence | null>(null)
 const nextOccurrence = ref<ClassOccurrence | null>(null)
 let occurrenceLoadToken = 0
 const showAttendanceTemplateModal = ref(false)
+let attendanceTemplateRequestGeneration = 0
 const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
 const attendanceTemplateDocument = ref<RichTextDocumentV1>(
     createTextEditorContent(SYSTEM_ATTENDANCE_TEMPLATE, { templateVariables: true }).richText
@@ -1079,6 +1080,7 @@ function loadSelectedAttendanceTemplate() {
 }
 
 async function openAttendanceTemplateModal() {
+    const requestGeneration = ++attendanceTemplateRequestGeneration
     showAttendanceTemplateModal.value = true
     attendanceTemplateScope.value = 'class_session'
     attendanceTemplateText.value = SYSTEM_ATTENDANCE_TEMPLATE
@@ -1094,11 +1096,11 @@ async function openAttendanceTemplateModal() {
 
     try {
         isLoadingAttendanceTemplate.value = true
-        const [classTemplate, userTemplate, loadOptions] = await Promise.all([
-            CopyTemplateService.getAttendanceTemplateByScope('class_session', sessionId),
-            CopyTemplateService.getAttendanceTemplateByScope('user_default'),
-            CopyTemplateService.getTemplateLoadOptions('attendance_copy', sessionId)
-        ])
+        const bundle = await CopyTemplateService.getEditorBundle('attendance_copy', sessionId)
+        if (requestGeneration !== attendanceTemplateRequestGeneration || !showAttendanceTemplateModal.value) return
+        const loadOptions = bundle.options
+        const classTemplate = bundle.current?.scopeType === 'class_session' ? bundle.current.templateText : null
+        const userTemplate = bundle.current?.scopeType === 'user_default' ? bundle.current.templateText : null
 
         attendanceTemplateLoadOptions.value = loadOptions.map(item => {
             let label = item.label
@@ -1152,9 +1154,11 @@ async function openAttendanceTemplateModal() {
         console.error('Failed to load attendance copy template', error)
         toast.error(t('classroom.copy_template_load_failed'))
     } finally {
-        isLoadingAttendanceTemplate.value = false
+        if (requestGeneration === attendanceTemplateRequestGeneration) isLoadingAttendanceTemplate.value = false
     }
 }
+
+watch(showAttendanceTemplateModal, value => { if (!value) attendanceTemplateRequestGeneration++ })
 
 async function saveAttendanceTemplate() {
     const content = createTextEditorContent(attendanceTemplateDocument.value, { templateVariables: true })

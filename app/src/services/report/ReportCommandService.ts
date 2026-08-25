@@ -6,7 +6,7 @@ import {
 } from '@/models/OccurrenceReport'
 import { EnrollmentProgressService } from '../enrollment/EnrollmentProgressService'
 import { ReportLifecyclePolicy } from './ReportLifecyclePolicy'
-import { ReportQueryService } from './ReportQueryService'
+import { ReportQueryService, REPORT_EDITOR_COLUMNS } from './ReportQueryService'
 import { OccurrenceRosterService } from '../occurrence/OccurrenceRosterService'
 import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
@@ -45,12 +45,102 @@ type AttendanceOnlyData = {
     absenceReason?: string | null
 }
 
+const REPORT_REQUEST_TIMEOUT_MS = 15000
+
+class ReportRequestTimeoutError extends Error {
+    constructor() {
+        super('Report request timed out')
+        this.name = 'ReportRequestTimeoutError'
+    }
+}
+
+async function runReportRequest<T>(requestFactory: () => any): Promise<T> {
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | null = null
+    try {
+        const request = requestFactory()
+        const abortable = typeof request?.abortSignal === 'function'
+            ? request.abortSignal(controller.signal)
+            : request
+        return await Promise.race([
+            abortable as Promise<T>,
+            new Promise<T>((_, reject) => {
+                timer = setTimeout(() => {
+                    controller.abort()
+                    reject(new ReportRequestTimeoutError())
+                }, REPORT_REQUEST_TIMEOUT_MS)
+            })
+        ])
+    } catch (error: any) {
+        if (error instanceof ReportRequestTimeoutError || controller.signal.aborted || error?.name === 'AbortError') {
+            throw new ReportRequestTimeoutError()
+        }
+        throw error
+    } finally {
+        if (timer) clearTimeout(timer)
+    }
+}
+
+function timeoutResult(message = 'Report save request timed out'): SaveReportResult {
+    return { success: false, conflict: false, errorCode: 'request_timeout', message, messageKey: 'errors.request_timeout' }
+}
+
+function unknownOutcomeResult(): SaveReportResult {
+    return { success: false, conflict: false, errorCode: 'save_outcome_unknown', message: 'The report save outcome could not be confirmed', messageKey: 'errors.save_outcome_unknown' }
+}
+
+async function loadCanonicalReport(reportId: string): Promise<{ data: OccurrenceReportDTO | null, error: any }> {
+    return runReportRequest(() => supabase
+        .from('occurrence_reports')
+        .select(REPORT_EDITOR_COLUMNS)
+        .eq('id', reportId)
+        .single())
+}
+
+async function loadConflictResult(reportId: string, message: string): Promise<SaveReportResult> {
+    try {
+        const { data: serverReport, error } = await loadCanonicalReport(reportId)
+        if (error || !serverReport) return unknownOutcomeResult()
+        return { success: false, conflict: true, serverContent: serverReport.content, serverReport, message, messageKey: 'errors.conflict' }
+    } catch {
+        return unknownOutcomeResult()
+    }
+}
+
+function valuesMatch(actual: unknown, expected: unknown): boolean {
+    if (actual == null && expected == null) return true
+    if (typeof actual === 'object' || typeof expected === 'object') return JSON.stringify(actual) === JSON.stringify(expected)
+    return actual === expected
+}
+
+function reportMatchesUpdate(report: OccurrenceReportDTO, updateData: Record<string, unknown>): boolean {
+    return Object.entries(updateData).every(([key, expected]) => key === 'last_edited_at' || expected === undefined || valuesMatch((report as unknown as Record<string, unknown>)[key], expected))
+}
+
+async function reconcileTimedOutSave(reportId: string, currentVersion: number, expectedVersion: number, updateData: Record<string, unknown>): Promise<SaveReportResult> {
+    try {
+        const response = await loadCanonicalReport(reportId)
+        if (response.error || !response.data) return unknownOutcomeResult()
+        const canonical = response.data
+        if (canonical.version === currentVersion) return timeoutResult()
+        if (canonical.version === expectedVersion && reportMatchesUpdate(canonical, updateData)) {
+            return { success: true, conflict: false, newVersion: canonical.version, updatedReport: canonical }
+        }
+        if (canonical.version > currentVersion) {
+            return { success: false, conflict: true, serverContent: canonical.content, serverReport: canonical, message: 'Conflict detected after a timed out save request', messageKey: 'errors.conflict' }
+        }
+        return unknownOutcomeResult()
+    } catch {
+        return unknownOutcomeResult()
+    }
+}
+
 export class ReportCommandService {
     /** Full row fetch used only once a version conflict is confirmed, to populate the conflict-resolution UI. */
     private static async fetchFullReportForConflict(reportId: string): Promise<OccurrenceReportDTO | undefined> {
         const { data, error } = await supabase
             .from('occurrence_reports')
-            .select('*')
+            .select(REPORT_EDITOR_COLUMNS)
             .eq('id', reportId)
             .maybeSingle()
         if (error) {
@@ -69,7 +159,7 @@ export class ReportCommandService {
         let { data: created, error: createError } = await supabase
             .from('occurrence_reports')
             .insert(newReport)
-            .select()
+            .select(REPORT_EDITOR_COLUMNS)
             .single()
 
         if (createError?.message?.includes('occurrence_reports_attendance_status_check')) {
@@ -85,7 +175,7 @@ export class ReportCommandService {
             const retryResult = await supabase
                 .from('occurrence_reports')
                 .insert(retryPayload)
-                .select()
+                .select(REPORT_EDITOR_COLUMNS)
                 .single()
 
             created = retryResult.data
@@ -94,7 +184,7 @@ export class ReportCommandService {
 
         if (createError) throw new Error(`Failed to create report: ${createError.message}`)
 
-        return new OccurrenceReport(created)
+        return new OccurrenceReport(created!)
     }
 
     static async getOrCreateReport(
@@ -118,19 +208,21 @@ export class ReportCommandService {
         // columns are only needed to populate the conflict-resolution UI,
         // which is the rare path -- fetched separately, only when a conflict
         // is actually detected, instead of on every single autosave.
-        const { data: serverReport, error: fetchError } = await supabase
-            .from('occurrence_reports')
-            .select('version, absence_reason, attendance_status, enrollment_id')
-            .eq('id', reportId)
-            .single()
-
-        if (fetchError) {
-            return {
-                success: false,
-                conflict: false,
-                message: `Failed to fetch report: ${fetchError.message}`,
-                messageKey: 'errors.unknown'
-            }
+        let preflight: any
+        try {
+            preflight = await runReportRequest(() => supabase
+                .from('occurrence_reports')
+                .select('version, absence_reason, attendance_status, enrollment_id')
+                .eq('id', reportId)
+                .single())
+        } catch (error: any) {
+            return error instanceof ReportRequestTimeoutError
+                ? timeoutResult('Report preflight request timed out')
+                : { success: false, conflict: false, message: 'Failed to fetch report: ' + (error?.message || 'Unknown error'), messageKey: 'errors.unknown' }
+        }
+        const { data: serverReport, error: fetchError } = preflight
+        if (fetchError || !serverReport) {
+            return { success: false, conflict: false, message: 'Failed to fetch report: ' + (fetchError?.message || 'Report not found'), messageKey: 'errors.unknown' }
         }
 
         if (serverReport.version !== currentVersion) {
@@ -211,30 +303,23 @@ export class ReportCommandService {
             }
         }
 
-        const { data: updated, error: updateError } = await supabase
-            .from('occurrence_reports')
-            .update(updateData)
-            .eq('id', reportId)
-            .eq('version', currentVersion)
-            .select()
-            .single()
-
-        if (updateError) {
-            if (updateError.code === 'PGRST116') {
-                return {
-                    success: false,
-                    conflict: true,
-                    message: 'Conflict detected: Concurrent modification',
-                    messageKey: 'errors.conflict'
-                }
-            }
-
-            return {
-                success: false,
-                conflict: false,
-                message: `Failed to save report: ${updateError.message}`,
-                messageKey: 'errors.unknown'
-            }
+        let updateResponse: any
+        try {
+            updateResponse = await runReportRequest(() => supabase
+                .from('occurrence_reports')
+                .update(updateData)
+                .eq('id', reportId)
+                .eq('version', currentVersion)
+                .select(REPORT_EDITOR_COLUMNS)
+                .single())
+        } catch (error: any) {
+            if (error instanceof ReportRequestTimeoutError) return reconcileTimedOutSave(reportId, currentVersion, newVersion, updateData)
+            return { success: false, conflict: false, message: 'Failed to save report: ' + (error?.message || 'Unknown error'), messageKey: 'errors.unknown' }
+        }
+        const { data: updated, error: updateError } = updateResponse
+        if (updateError || !updated) {
+            if (updateError?.code === 'PGRST116') return loadConflictResult(reportId, 'Conflict detected: Concurrent modification')
+            return { success: false, conflict: false, message: 'Failed to save report: ' + (updateError?.message || 'No report was updated'), messageKey: 'errors.unknown' }
         }
 
         if (updated.lesson_id && (detailedData?.lessonId !== undefined || detailedData?.isCompleted !== undefined)) {
@@ -262,19 +347,21 @@ export class ReportCommandService {
         userId: string | undefined,
         attendanceData: AttendanceOnlyData
     ): Promise<SaveReportResult> {
-        const { data: serverReport, error: fetchError } = await supabase
-            .from('occurrence_reports')
-            .select('version, absence_reason, attendance_status')
-            .eq('id', reportId)
-            .single()
-
-        if (fetchError) {
-            return {
-                success: false,
-                conflict: false,
-                message: `Failed to fetch report: ${fetchError.message}`,
-                messageKey: 'errors.unknown'
-            }
+        let preflight: any
+        try {
+            preflight = await runReportRequest(() => supabase
+                .from('occurrence_reports')
+                .select('version, absence_reason, attendance_status')
+                .eq('id', reportId)
+                .single())
+        } catch (error: any) {
+            return error instanceof ReportRequestTimeoutError
+                ? timeoutResult('Report preflight request timed out')
+                : { success: false, conflict: false, message: 'Failed to fetch report: ' + (error?.message || 'Unknown error'), messageKey: 'errors.unknown' }
+        }
+        const { data: serverReport, error: fetchError } = preflight
+        if (fetchError || !serverReport) {
+            return { success: false, conflict: false, message: 'Failed to fetch report: ' + (fetchError?.message || 'Report not found'), messageKey: 'errors.unknown' }
         }
 
         if (serverReport.version !== currentVersion) {
@@ -322,30 +409,23 @@ export class ReportCommandService {
             updateData.absence_reason = attendanceData.absenceReason
         }
 
-        const { data: updated, error: updateError } = await supabase
-            .from('occurrence_reports')
-            .update(updateData)
-            .eq('id', reportId)
-            .eq('version', currentVersion)
-            .select()
-            .single()
-
-        if (updateError) {
-            if (updateError.code === 'PGRST116') {
-                return {
-                    success: false,
-                    conflict: true,
-                    message: 'Conflict detected: Concurrent modification',
-                    messageKey: 'errors.conflict'
-                }
-            }
-
-            return {
-                success: false,
-                conflict: false,
-                message: `Failed to save attendance: ${updateError.message}`,
-                messageKey: 'errors.unknown'
-            }
+        let updateResponse: any
+        try {
+            updateResponse = await runReportRequest(() => supabase
+                .from('occurrence_reports')
+                .update(updateData)
+                .eq('id', reportId)
+                .eq('version', currentVersion)
+                .select(REPORT_EDITOR_COLUMNS)
+                .single())
+        } catch (error: any) {
+            if (error instanceof ReportRequestTimeoutError) return reconcileTimedOutSave(reportId, currentVersion, newVersion, updateData)
+            return { success: false, conflict: false, message: 'Failed to save attendance: ' + (error?.message || 'Unknown error'), messageKey: 'errors.unknown' }
+        }
+        const { data: updated, error: updateError } = updateResponse
+        if (updateError || !updated) {
+            if (updateError?.code === 'PGRST116') return loadConflictResult(reportId, 'Conflict detected: Concurrent modification')
+            return { success: false, conflict: false, message: 'Failed to save attendance: ' + (updateError?.message || 'No report was updated'), messageKey: 'errors.unknown' }
         }
 
         return {
@@ -421,7 +501,7 @@ export class ReportCommandService {
             .from('occurrence_reports')
             .update(updatePayload)
             .eq('id', reportId)
-            .select()
+            .select(REPORT_EDITOR_COLUMNS)
             .single()
 
         if (updateError) throw new Error(`Failed to restore version: ${updateError.message}`)
@@ -484,7 +564,7 @@ export class ReportCommandService {
             .from('occurrence_reports')
             .update(updatePayload)
             .eq('id', reportId)
-            .select()
+            .select(REPORT_EDITOR_COLUMNS)
             .single()
 
         if (updateError) throw new Error(`Failed to resolve conflict: ${updateError.message}`)

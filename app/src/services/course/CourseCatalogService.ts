@@ -68,7 +68,7 @@ export class CourseCatalogService {
     static async getLessonsByCourse(courseId: string): Promise<Lesson[]> {
         const { data, error } = await supabase
             .from('lessons')
-            .select('*')
+            .select('id, course_id, title, sequence')
             .eq('course_id', courseId)
             .order('sequence', { ascending: true })
 

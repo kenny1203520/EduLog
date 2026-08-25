@@ -1,5 +1,5 @@
 <template>
-    <div class="report-editor bg-white rounded-lg shadow-sm p-4 sm:p-6 relative min-h-[400px]">
+    <div class="report-editor bg-white rounded-lg shadow-sm p-4 sm:p-6 relative min-h-[400px]" @focusin="handleEditorFieldFocus" @focusout="handleEditorFieldBlur">
         <!-- Loading Overlay -->
         <div v-if="props.loading"
             class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/60 backdrop-blur-[2px] rounded-lg transition-all duration-300">
@@ -12,9 +12,19 @@
         </div>
 
         <!-- Header -->
-        <h3 class="text-lg font-semibold text-gray-800">
-            {{ props.title || $t('report.editor.title') }}
-        </h3>
+        <div class="flex items-center justify-between gap-3">
+            <h3 class="text-lg font-semibold text-gray-800">
+                {{ props.title || $t('report.editor.title') }}
+            </h3>
+            <div v-if="activePeers.length" class="flex items-center gap-1 text-xs text-slate-500" aria-live="polite">
+                <span class="font-semibold text-emerald-700">{{ activePeers.length }} online</span>
+                <span v-for="peer in activePeers.slice(0, 3)" :key="peer.clientId"
+                    class="rounded-full px-2 py-0.5 font-medium"
+                    :style="{ color: peer.user?.color, backgroundColor: (peer.user?.color || '#94a3b8') + '20' }">
+                    {{ peer.user?.name || 'Collaborator' }}<span v-if="peer.activity?.field"> - {{ peer.activity.field }}</span>
+                </span>
+            </div>
+        </div>
 
         <div class="flex items-center gap-4">
             <!-- Reference Panel Toggle -->
@@ -127,7 +137,7 @@
                         {{ $t('report.editor.view_external_report') || $t('report.editor.course_folder') }}
                     </a>
                 </div>
-                <BaseDropdown v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
+                <BaseDropdown data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
                     theme="emerald" />
             </div>
 
@@ -137,7 +147,7 @@
                     {{ $t('report.editor.report_link_label') }}
                 </label>
                 <div class="flex gap-2">
-                    <input type="url" v-model="reportExternalLink" placeholder="https://..."
+                    <input data-collab-field="external_link" type="url" v-model="reportExternalLink" placeholder="https://..."
                         class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
                     <a v-if="reportExternalLink" :href="reportExternalLink" target="_blank" rel="noopener noreferrer"
                         class="flex items-center justify-center w-10 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-600">
@@ -161,7 +171,7 @@
                 {{ $t('report.editor.attendance_title') }}
             </h4>
 
-            <div class="flex items-center gap-4 mb-3">
+            <div data-collab-field="attendance" class="flex items-center gap-4 mb-3">
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="pending" v-model="attendanceStatus"
                         class="w-4 h-4 text-gray-400 border-gray-300 focus:ring-gray-400" />
@@ -219,7 +229,7 @@
 
             <div class="mb-4">
                 <label class="flex items-center gap-2 cursor-pointer w-fit">
-                    <input type="checkbox" v-model="isCompleted"
+                    <input data-collab-field="completion" type="checkbox" v-model="isCompleted"
                         class="w-5 h-5 text-amber-600 border-gray-300 rounded focus:ring-amber-500" />
                     <span class="text-sm font-medium text-gray-700">{{ $t('report.editor.lesson_completed') }}</span>
                 </label>
@@ -231,7 +241,7 @@
                     <label class="block text-xs font-medium text-gray-600 mb-1">
                         {{ $t('report.editor.progress_start_label') }}
                     </label>
-                    <BaseDropdown v-model="progressStart" :options="progressOptions" theme="amber" />
+                    <BaseDropdown data-collab-field="progress" v-model="progressStart" :options="progressOptions" theme="amber" />
                 </div>
 
                 <!-- End Progress -->
@@ -239,7 +249,7 @@
                     <label class="block text-xs font-medium text-gray-600 mb-1">
                         {{ $t('report.editor.progress_end_label') }}
                     </label>
-                    <BaseDropdown v-model="progressEnd" :options="progressOptions" theme="amber" />
+                    <BaseDropdown data-collab-field="progress" v-model="progressEnd" :options="progressOptions" theme="amber" />
                 </div>
             </div>
 
@@ -264,7 +274,7 @@
                     {{ $t('report.editor.class_participation_label') }}
                 </label>
                 <div class="flex items-center gap-2">
-                    <RatingInput v-model="classParticipation" :show-value="true" />
+                    <RatingInput data-collab-field="class_participation" v-model="classParticipation" :show-value="true" />
                 </div>
             </div>
             <div class="flex-1 min-w-[165px]">
@@ -272,7 +282,7 @@
                     {{ $t('report.editor.classroom_behavior_label') }}
                 </label>
                 <div class="flex items-center gap-2">
-                    <RatingInput v-model="classroomBehavior" :show-value="true" />
+                    <RatingInput data-collab-field="classroom_behavior" v-model="classroomBehavior" :show-value="true" />
                 </div>
             </div>
         </div>
@@ -317,9 +327,10 @@
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
                 :min-height="120"
-                :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#60A5FA' }"
+                :user="collaborationUser""
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
-                @change="handleTextEditorChange('contactNotes', $event)" />
+                @change="handleTextEditorChange('contactNotes', $event)"
+                @activity="handleCollaborationActivity('contactNotes', $event)" />
             <!-- Fallback standard editor if ydoc not ready -->
             <TextEditor v-else v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
@@ -355,9 +366,10 @@
                 :font-scale="preferences.editorFontScale"
                 :min-height="140"
                 mono
-                :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#A78BFA' }"
+                :user="collaborationUser""
                 :placeholder="$t('report.editor.class_notes_placeholder')"
-                @change="handleTextEditorChange('classNotes', $event)" />
+                @change="handleTextEditorChange('classNotes', $event)"
+                @activity="handleCollaborationActivity('classNotes', $event)" />
             <TextEditor v-else v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
                 :toolbar-visible="preferences.editorSettings.toolbarVisible"
@@ -399,9 +411,10 @@
                 :font-scale="preferences.editorFontScale"
                 :min-height="300"
                 mono
-                :user="{ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#34D399' }"
+                :user="collaborationUser""
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
-                @change="handleTextEditorChange('content', $event)" />
+                @change="handleTextEditorChange('content', $event)"
+                @activity="handleCollaborationActivity('content', $event)" />
             <TextEditor v-else v-model="contentEditorValue" preset="report"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
@@ -764,6 +777,7 @@ const justCopiedCourse = ref(false)
 const isSavingTemplate = ref(false)
 const isLoadingTemplateManager = ref(false)
 const showCourseCopyTemplateModal = ref(false)
+let courseTemplateRequestGeneration = 0
 const courseCopyTemplateText = ref(SYSTEM_COURSE_TEMPLATE)
 const courseCopyTemplateDocument = ref(createTextEditorContent(SYSTEM_COURSE_TEMPLATE, { templateVariables: true }).richText)
 const isLoadingCourseCopyTemplate = ref(false)
@@ -774,6 +788,7 @@ const selectedCourseTemplateModes = ref<Record<string, string>>({
 const courseTemplateLoadOptions = ref<Array<CopyTemplateLoadOption & { displayLabel: string }>>([])
 const selectedCourseTemplateLoadKey = ref('')
 const showReportTemplateManagerModal = ref(false)
+let reportTemplateRequestGeneration = 0
 const reportTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
 const courseTemplateModal = ref<InstanceType<typeof CopyTemplateEditorModal> | null>(null)
 const selectedTemplateId = ref('')
@@ -1256,6 +1271,7 @@ function insertCourseTemplateVariable(variable: string) {
 }
 
 async function openCourseCopyTemplateModal() {
+    const requestGeneration = ++courseTemplateRequestGeneration
     showCourseCopyTemplateModal.value = true
     courseCopyTemplateText.value = SYSTEM_COURSE_TEMPLATE
     courseCopyTemplateDocument.value = createTextEditorContent(SYSTEM_COURSE_TEMPLATE, { templateVariables: true }).richText
@@ -1265,10 +1281,10 @@ async function openCourseCopyTemplateModal() {
 
     try {
         isLoadingCourseCopyTemplate.value = true
-        const [template, options] = await Promise.all([
-            CopyTemplateService.getCourseUserDefaultTemplate(),
-            CopyTemplateService.getTemplateLoadOptions('course_copy')
-        ])
+        const bundle = await CopyTemplateService.getEditorBundle('course_copy')
+        if (requestGeneration !== courseTemplateRequestGeneration || !showCourseCopyTemplateModal.value) return
+        const options = bundle.options
+        const template = bundle.current?.templateText || null
         courseTemplateLoadOptions.value = options.map(item => ({
             ...item,
             displayLabel: item.label === 'system_default'
@@ -1285,9 +1301,11 @@ async function openCourseCopyTemplateModal() {
         console.error('Failed to load course copy template', error)
         toast.error(t('report.editor.copy_course_template_load_failed'))
     } finally {
-        isLoadingCourseCopyTemplate.value = false
+        if (requestGeneration === courseTemplateRequestGeneration) isLoadingCourseCopyTemplate.value = false
     }
 }
+
+watch(showCourseCopyTemplateModal, value => { if (!value) courseTemplateRequestGeneration++ })
 
 function loadSelectedCourseTemplate() {
     const option = courseTemplateLoadOptions.value.find(item => item.key === selectedCourseTemplateLoadKey.value)
@@ -1404,10 +1422,12 @@ function handleTemplateSelectionChange() {
 }
 
 async function openReportTemplateManagerModal() {
+    const requestGeneration = ++reportTemplateRequestGeneration
     showReportTemplateManagerModal.value = true
     try {
         isLoadingTemplateManager.value = true
         await loadTemplates()
+        if (requestGeneration !== reportTemplateRequestGeneration || !showReportTemplateManagerModal.value) return
         if (savedTemplates.value.length > 0) {
             selectedTemplateId.value = savedTemplates.value[0].id
             syncTemplateDraftFromSelection()
@@ -1529,6 +1549,8 @@ onMounted(() => {
 })
 
 // Collab logic
+const collaborationUser = computed(() => ({ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#60A5FA' }))
+
 const reportIdRef = computed(() => props.reportId || '')
 const initialReportVersionRef = computed(() => props.initialVersion)
 const {
@@ -1552,6 +1574,28 @@ const contactNotesEditorRef = ref<TextEditorHandle | null>(null)
 const classNotesEditorRef = ref<TextEditorHandle | null>(null)
 const contentEditorRef = ref<TextEditorHandle | null>(null)
 const collabWatchStops: WatchStopHandle[] = []
+
+function handleEditorFieldFocus(event: FocusEvent) {
+    const element = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('[data-collab-field]') : null
+    const field = element?.dataset.collabField
+    const awareness = awarenessProvider.value?.awareness
+    if (field && awareness) awareness.setLocalStateField('activity', { field, focused: true })
+}
+
+function handleEditorFieldBlur(event: FocusEvent) {
+    const element = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('[data-collab-field]') : null
+    const field = element?.dataset.collabField
+    const awareness = awarenessProvider.value?.awareness
+    if (field && awareness && (!event.relatedTarget || !(event.relatedTarget instanceof Node) || !element?.contains(event.relatedTarget))) {
+        awareness.setLocalStateField('activity', { field, focused: false })
+    }
+}
+
+function handleCollaborationActivity(field: string, activity: { caret: number; selectionEnd: number; focused?: boolean }) {
+    const awareness = awarenessProvider.value?.awareness
+    if (!awareness) return
+    awareness.setLocalStateField('activity', { field, ...activity })
+}
 let collabMetaMap: any = null
 let collabMetaObserver: ((event: any) => void) | null = null
 let isApplyingRemoteCollab = false
@@ -2145,7 +2189,7 @@ const {
             if (newVersion > currentMetaVer) {
                 metaMap.set('version', newVersion)
             }
-            await saveSnapshot()
+            void saveSnapshot().catch((error) => console.warn('Collaboration snapshot deferred after canonical save', error))
         }
 
         if (updatedReport) {

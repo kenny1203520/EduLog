@@ -5,6 +5,8 @@ import { createTextEditorContent } from '@/components/common/text-editor/content
 /**
  * ReportTemplateService handles database operations for report templates.
  */
+const REPORT_TEMPLATE_EDITOR_COLUMNS = 'id, name, content, contact_notes, class_notes, content_document, contact_notes_document, class_notes_document, instructor_id, created_at, updated_at'
+
 export class ReportTemplateService {
     /**
      * Gets all templates for a specific instructor
@@ -12,7 +14,7 @@ export class ReportTemplateService {
     static async getTemplates(instructorId: string): Promise<ReportTemplate[]> {
         const { data, error } = await supabase
             .from('report_templates')
-            .select('*')
+            .select(REPORT_TEMPLATE_EDITOR_COLUMNS)
             .eq('instructor_id', instructorId)
             .order('name', { ascending: true })
 
@@ -40,7 +42,7 @@ export class ReportTemplateService {
         const { data, error } = await supabase
             .from('report_templates')
             .upsert(payload)
-            .select()
+            .select(REPORT_TEMPLATE_EDITOR_COLUMNS)
             .single()
 
         if (error) throw new Error(`Failed to save template: ${error.message}`)

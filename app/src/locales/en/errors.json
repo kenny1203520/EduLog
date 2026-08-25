@@ -1,6 +1,8 @@
 {
     "network": "Network error. Check your connection and try again.",
     "unknown": "Something went wrong. Please try again.",
+    "request_timeout": "The save request timed out. Your changes are still pending; please retry.",
+    "save_outcome_unknown": "The save result could not be confirmed. Your changes are still pending; please retry.",
     "unexpected": "An unexpected error occurred. If this keeps happening, please contact support.",
     "conflict": "This was changed by someone else. Please reload before continuing.",
     "unique_violation": "That value is already in use.",

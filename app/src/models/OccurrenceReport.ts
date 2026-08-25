@@ -294,4 +294,5 @@ export interface SaveReportResult {
     serverContent?: string
     serverReport?: OccurrenceReportDTO // Full server report for deep comparison
     updatedReport?: OccurrenceReportDTO // Authoritative row returned after a successful save
+    errorCode?: 'request_timeout' | 'save_outcome_unknown'
 }

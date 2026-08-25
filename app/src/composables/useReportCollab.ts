@@ -4,6 +4,7 @@ import {
     SupabaseProvider,
     type ReportCollabConnectionStatus,
     type ReportCollabInitialState,
+    type ReportCollabPeer,
     type SupabaseProviderOptions
 } from '@/services/report/SupabaseProvider'
 import { supabase } from '@/lib/supabase'
@@ -55,7 +56,7 @@ export function useReportCollab(
     const status = ref<ReportCollaborationStatus>(configuration.enabled ? 'disconnected' : 'disabled')
     const error = ref<string | null>(null)
     const initialState = ref<ReportCollabInitialState>('none')
-    const activePeers = ref<Array<Record<string, any>>>([])
+    const activePeers = ref<ReportCollabPeer[]>([])
     const lastSyncedAt = ref<Date | null>(null)
     let generation = 0
     let awarenessHandler: (() => void) | null = null
@@ -102,7 +103,8 @@ export function useReportCollab(
             return false
         }
         const token = ++generation
-        await destroyCurrent()
+        await destroyCurrent(false)
+        if (token !== generation) return false
         const reportIdValue = getReportId()
         if (!reportIdValue) {
             status.value = 'disconnected'
@@ -129,6 +131,10 @@ export function useReportCollab(
             if (token === generation) {
                 error.value = reason?.message || i18n.global.t('report.collaboration_init_failed')
                 status.value = 'error'
+                await destroyCurrent(false)
+            } else {
+                await nextProvider.destroy()
+                doc.destroy()
             }
             return false
         }

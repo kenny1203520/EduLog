@@ -25,6 +25,11 @@ export interface EffectiveTemplateResult {
     source: CopyTemplateSource
 }
 
+export interface CopyTemplateEditorBundle {
+    options: CopyTemplateLoadOption[]
+    current?: CopyTemplateLoadOption
+}
+
 export interface CopyTemplateLoadOption {
     key: string
     templateType: 'attendance_copy' | 'course_copy'
@@ -59,6 +64,13 @@ export class CopyTemplateService {
 
     static async getEffectiveCourseTemplate(): Promise<EffectiveTemplateResult> {
         return CopyTemplateQueryService.getEffectiveCourseTemplate()
+    }
+
+    static async getEditorBundle(
+        templateType: 'attendance_copy' | 'course_copy',
+        currentClassSessionId?: string
+    ): Promise<CopyTemplateEditorBundle> {
+        return CopyTemplateQueryService.getEditorBundle(templateType, currentClassSessionId)
     }
 
     static async getTemplateLoadOptions(
