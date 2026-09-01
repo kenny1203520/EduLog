@@ -1533,7 +1533,9 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
     try {
         const report = await OccurrenceReportService.resolveConflict(
             conflictReportId.value,
-            resolvedReport
+            resolvedReport,
+            auth.user?.id,
+            conflictServerVersion.value
         )
 
         // Update local state

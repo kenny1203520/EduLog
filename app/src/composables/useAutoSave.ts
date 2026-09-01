@@ -13,7 +13,8 @@ export interface AutoSaveResult {
     message?: string
     /** i18n key the UI should translate and show instead of `message`. */
     messageKey?: string
-    errorCode?: 'request_timeout' | 'save_outcome_unknown'
+    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error'
+    conflictFields?: string[]
 }
 
 export type AutoSaveStatus = 'idle' | 'scheduled' | 'dirty' | 'saving' | 'saved' | 'error' | 'conflict' | 'disabled'

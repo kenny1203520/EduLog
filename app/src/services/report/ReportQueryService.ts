@@ -58,7 +58,7 @@ export class ReportQueryService {
         // real usage is nowhere near this, so it isn't a visible behavior change.
         const { data, error } = await supabase
             .from('report_versions')
-            .select('*')
+            .select('id, occurrence_report_id, version, content, edited_by, snapshot, created_at')
             .eq('occurrence_report_id', reportId)
             .order('version', { ascending: false })
             .limit(200)

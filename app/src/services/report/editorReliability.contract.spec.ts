@@ -26,6 +26,13 @@ describe('editor reliability contracts', () => {
         expect(referencePanel).toContain('SessionService.getClassSessionOptions')
     })
 
+    it('counts the local session plus remote peers only when collaboration is ready', () => {
+        const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        expect(collab).toContain('onlineParticipantCount')
+        expect(collab).toContain('activePeers.value.length + 1')
+        expect(editor).toContain('{{ onlineParticipantCount }} online')
+    })
     it('keeps the editor visible when collaboration is unavailable', () => {
         const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
         expect(editor).not.toContain(':user="collaborationUser""')

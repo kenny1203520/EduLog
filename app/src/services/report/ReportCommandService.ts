@@ -10,6 +10,7 @@ import { ReportQueryService, REPORT_EDITOR_COLUMNS } from './ReportQueryService'
 import { OccurrenceRosterService } from '../occurrence/OccurrenceRosterService'
 import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { safeExternalHref } from '@/utils/safeExternalHref'
 
 function assignRichTextPair(
     target: Record<string, unknown>,
@@ -46,6 +47,11 @@ type AttendanceOnlyData = {
 }
 
 const REPORT_REQUEST_TIMEOUT_MS = 15000
+async function authenticatedUserId(): Promise<string | null> {
+    const { data } = await supabase.auth.getUser()
+    return data.user?.id || null
+}
+
 
 class ReportRequestTimeoutError extends Error {
     constructor() {
@@ -88,7 +94,17 @@ function timeoutResult(message = 'Report save request timed out'): SaveReportRes
 function unknownOutcomeResult(): SaveReportResult {
     return { success: false, conflict: false, errorCode: 'save_outcome_unknown', message: 'The report save outcome could not be confirmed', messageKey: 'errors.save_outcome_unknown' }
 }
-
+function classifiedSaveError(error: any, fallback: string): SaveReportResult {
+    const code = error?.code
+    const status = error?.status || error?.statusCode
+    if (code === '42501' || status === 401 || status === 403) {
+        return { success: false, conflict: false, errorCode: 'permission_denied', message: fallback, messageKey: 'errors.permission_denied' }
+    }
+    if (code === '23514' || code === '22001' || code === '22P02') {
+        return { success: false, conflict: false, errorCode: 'validation_error', message: fallback, messageKey: 'errors.validation_failed' }
+    }
+    return { success: false, conflict: false, message: fallback, messageKey: 'errors.unknown' }
+}
 async function loadCanonicalReport(reportId: string): Promise<{ data: OccurrenceReportDTO | null, error: any }> {
     return runReportRequest(() => supabase
         .from('occurrence_reports')
@@ -101,7 +117,7 @@ async function loadConflictResult(reportId: string, message: string): Promise<Sa
     try {
         const { data: serverReport, error } = await loadCanonicalReport(reportId)
         if (error || !serverReport) return unknownOutcomeResult()
-        return { success: false, conflict: true, serverContent: serverReport.content, serverReport, message, messageKey: 'errors.conflict' }
+        return { success: false, conflict: true, errorCode: 'conflict', serverVersion: serverReport.version, serverContent: serverReport.content, serverReport, message, messageKey: 'errors.conflict' }
     } catch {
         return unknownOutcomeResult()
     }
@@ -127,7 +143,7 @@ async function reconcileTimedOutSave(reportId: string, currentVersion: number, e
             return { success: true, conflict: false, newVersion: canonical.version, updatedReport: canonical }
         }
         if (canonical.version > currentVersion) {
-            return { success: false, conflict: true, serverContent: canonical.content, serverReport: canonical, message: 'Conflict detected after a timed out save request', messageKey: 'errors.conflict' }
+            return { success: false, conflict: true, errorCode: 'conflict', serverVersion: canonical.version, serverContent: canonical.content, serverReport: canonical, message: 'Conflict detected after a timed out save request', messageKey: 'errors.conflict' }
         }
         return unknownOutcomeResult()
     } catch {
@@ -200,7 +216,7 @@ export class ReportCommandService {
     static async saveReport(
         reportId: string,
         currentVersion: number,
-        userId?: string,
+        _userId?: string,
         detailedData?: ReportSaveData
     ): Promise<SaveReportResult> {
         // Narrow pre-fetch: the CAS check and the system-managed guard below
@@ -230,6 +246,8 @@ export class ReportCommandService {
             return {
                 success: false,
                 conflict: true,
+                errorCode: 'conflict',
+                serverVersion: fullServerReport?.version,
                 serverContent: fullServerReport?.content,
                 serverReport: fullServerReport,
                 message: 'Conflict detected: Report was modified by another user',
@@ -263,7 +281,7 @@ export class ReportCommandService {
 
         const updateData: any = {
             version: newVersion,
-            last_edited_by: userId,
+            last_edited_by: await authenticatedUserId(),
             last_edited_at: new Date().toISOString()
         }
 
@@ -272,7 +290,10 @@ export class ReportCommandService {
                 updateData.lesson_id = detailedData.lessonId
             }
             if (detailedData.externalLink !== undefined) {
-                updateData.external_link = detailedData.externalLink
+                const rawLink = detailedData.externalLink || ''
+                const safeLink = safeExternalHref(rawLink)
+                if (rawLink.trim() && !safeLink) return { success: false, conflict: false, errorCode: 'validation_error', message: 'Invalid external link', messageKey: 'errors.validation_failed' }
+                updateData.external_link = safeLink
             }
             if (detailedData.isCompleted !== undefined) {
                 updateData.is_completed = detailedData.isCompleted
@@ -319,7 +340,7 @@ export class ReportCommandService {
         const { data: updated, error: updateError } = updateResponse
         if (updateError || !updated) {
             if (updateError?.code === 'PGRST116') return loadConflictResult(reportId, 'Conflict detected: Concurrent modification')
-            return { success: false, conflict: false, message: 'Failed to save report: ' + (updateError?.message || 'No report was updated'), messageKey: 'errors.unknown' }
+            return classifiedSaveError(updateError, 'Failed to save report')
         }
 
         if (updated.lesson_id && (detailedData?.lessonId !== undefined || detailedData?.isCompleted !== undefined)) {
@@ -344,7 +365,7 @@ export class ReportCommandService {
     static async saveAttendanceOnly(
         reportId: string,
         currentVersion: number,
-        userId: string | undefined,
+        _userId: string | undefined,
         attendanceData: AttendanceOnlyData
     ): Promise<SaveReportResult> {
         let preflight: any
@@ -369,6 +390,8 @@ export class ReportCommandService {
             return {
                 success: false,
                 conflict: true,
+                errorCode: 'conflict',
+                serverVersion: fullServerReport?.version,
                 serverContent: fullServerReport?.content,
                 serverReport: fullServerReport,
                 message: 'Conflict detected: Report was modified by another user',
@@ -401,7 +424,7 @@ export class ReportCommandService {
         const updateData: any = {
             attendance_status: attendanceData.attendanceStatus,
             version: newVersion,
-            last_edited_by: userId,
+            last_edited_by: await authenticatedUserId(),
             last_edited_at: new Date().toISOString()
         }
 
@@ -425,7 +448,7 @@ export class ReportCommandService {
         const { data: updated, error: updateError } = updateResponse
         if (updateError || !updated) {
             if (updateError?.code === 'PGRST116') return loadConflictResult(reportId, 'Conflict detected: Concurrent modification')
-            return { success: false, conflict: false, message: 'Failed to save attendance: ' + (updateError?.message || 'No report was updated'), messageKey: 'errors.unknown' }
+            return classifiedSaveError(updateError, 'Failed to save attendance')
         }
 
         return {
@@ -439,13 +462,15 @@ export class ReportCommandService {
     static async restoreReportVersion(
         reportId: string,
         versionId: string,
-        userId?: string,
+        _userId?: string,
         currentVersion?: number
     ): Promise<OccurrenceReport> {
+        if (currentVersion === undefined) throw new Error('expectedVersion is required to restore a report version')
         const { data: version, error: versionError } = await supabase
             .from('report_versions')
-            .select('*')
+            .select('id, occurrence_report_id, version, content, edited_by, snapshot, created_at')
             .eq('id', versionId)
+            .eq('occurrence_report_id', reportId)
             .single()
 
         if (versionError || !version) throw new Error(`Failed to fetch version: ${versionError?.message}`)
@@ -482,7 +507,7 @@ export class ReportCommandService {
                 absence_reason: snap.absence_reason,
                 class_participation: snap.class_participation,
                 classroom_behavior: snap.classroom_behavior,
-                external_link: snap.external_link
+                external_link: safeExternalHref(snap.external_link) || null
             }
             assignRichTextPair(updatePayload, 'contact_notes', 'contact_notes_document', snap.contact_notes, snap.contact_notes_document)
             assignRichTextPair(updatePayload, 'class_notes', 'class_notes_document', snap.class_notes, snap.class_notes_document)
@@ -494,16 +519,18 @@ export class ReportCommandService {
         const newVersion = (current?.version || 0) + 1
 
         updatePayload.version = newVersion
-        updatePayload.last_edited_by = userId
+        updatePayload.last_edited_by = await authenticatedUserId()
         updatePayload.last_edited_at = new Date().toISOString()
 
         const { data: updated, error: updateError } = await supabase
             .from('occurrence_reports')
             .update(updatePayload)
             .eq('id', reportId)
+            .eq('version', currentVersion)
             .select(REPORT_EDITOR_COLUMNS)
             .single()
 
+        if (updateError?.code === 'PGRST116') throw new Error('Conflict detected: Report was modified by another user')
         if (updateError) throw new Error(`Failed to restore version: ${updateError.message}`)
 
         if (updated.lesson_id) {
@@ -523,11 +550,13 @@ export class ReportCommandService {
     static async resolveConflict(
         reportId: string,
         resolvedReport: OccurrenceReportDTO,
-        userId?: string
+        _userId?: string,
+        expectedVersion?: number
     ): Promise<OccurrenceReport> {
+        if (expectedVersion === undefined) throw new Error('expectedVersion is required to resolve a report conflict')
         const { data: current, error: fetchError } = await supabase
             .from('occurrence_reports')
-            .select('*')
+            .select(REPORT_EDITOR_COLUMNS)
             .eq('id', reportId)
             .single()
 
@@ -551,9 +580,9 @@ export class ReportCommandService {
             absence_reason: resolvedReport.absence_reason,
             class_participation: resolvedReport.class_participation,
             classroom_behavior: resolvedReport.classroom_behavior,
-            external_link: resolvedReport.external_link,
+            external_link: safeExternalHref(resolvedReport.external_link) || null,
             version: newVersion,
-            last_edited_by: userId,
+            last_edited_by: await authenticatedUserId(),
             last_edited_at: new Date().toISOString()
         }
         assignRichTextPair(updatePayload, 'contact_notes', 'contact_notes_document', resolvedReport.contact_notes, resolvedReport.contact_notes_document)
@@ -564,9 +593,11 @@ export class ReportCommandService {
             .from('occurrence_reports')
             .update(updatePayload)
             .eq('id', reportId)
+            .eq('version', expectedVersion)
             .select(REPORT_EDITOR_COLUMNS)
             .single()
 
+        if (updateError?.code === 'PGRST116') throw new Error('Conflict detected: Report was modified by another user')
         if (updateError) throw new Error(`Failed to resolve conflict: ${updateError.message}`)
 
         if (updated.lesson_id) {

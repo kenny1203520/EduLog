@@ -55,6 +55,17 @@ export interface ReportCollabPeer {
 const REALTIME_READY_TIMEOUT_MS = 10000
 const SNAPSHOT_REQUEST_TIMEOUT_MS = 10000
 const SNAPSHOT_MAX_ATTEMPTS = 2
+const MAX_YJS_UPDATE_BYTES = 256 * 1024
+const MAX_SNAPSHOT_BYTES = 1024 * 1024
+const MAX_AWARENESS_BYTES = 32 * 1024
+function decodeBoundedBase64(value: string, maxBytes: number): Uint8Array {
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length > Math.ceil(maxBytes * 4 / 3) + 4) {
+        throw new Error('Invalid collaboration payload')
+    }
+    const decoded = base64ToUint8Array(value)
+    if (decoded.byteLength > maxBytes) throw new Error('Collaboration payload exceeds size limit')
+    return decoded
+}
 
 export interface SupabaseProviderOptions {
     snapshotDebounceMs?: number
@@ -83,6 +94,10 @@ export class SupabaseProvider {
         if (origin === this || this.isDestroyed) return
 
         if (this.isSubscribed && this.supabase.realtime.isConnected()) {
+            if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
+                this.onStatus?.('error')
+                return
+            }
             this.channel.send({
                 type: 'broadcast',
                 event: 'sync-update',
@@ -138,6 +153,7 @@ export class SupabaseProvider {
 
         this.channel = this.supabase.channel(`room:${this.roomId}`, {
             config: {
+                private: true,
                 broadcast: { ack: false },
                 presence: { key: `${this.userId || 'anonymous'}:${this.awareness.clientID}` }
             }
@@ -184,8 +200,13 @@ export class SupabaseProvider {
             const encodedUpdate = payload.payload?.update
             if (typeof encodedUpdate !== 'string') return
 
-            const update = base64ToUint8Array(encodedUpdate)
-            Y.applyUpdate(this.doc, update, this)
+            try {
+                const update = decodeBoundedBase64(encodedUpdate, MAX_YJS_UPDATE_BYTES)
+                Y.applyUpdate(this.doc, update, this)
+            } catch (error) {
+                console.warn('Rejected invalid collaboration update:', error)
+                this.onStatus?.('error')
+            }
         })
 
         if (!this.presenceEnabled) return
@@ -208,7 +229,11 @@ export class SupabaseProvider {
 
                     seenRemoteClientIds.add(payload.clientId)
                     this.remoteClientIds.add(payload.clientId)
-                    applyAwarenessUpdate(this.awareness, base64ToUint8Array(payload.awarenessUpdateBase64), this)
+                    try {
+                        applyAwarenessUpdate(this.awareness, decodeBoundedBase64(payload.awarenessUpdateBase64, MAX_AWARENESS_BYTES), this)
+                    } catch (error) {
+                        console.warn('Rejected invalid collaboration awareness:', error)
+                    }
                 })
             })
 
@@ -278,7 +303,7 @@ export class SupabaseProvider {
             }
 
             if (data.snapshot_base64) {
-                const update = base64ToUint8Array(data.snapshot_base64)
+                const update = decodeBoundedBase64(data.snapshot_base64, MAX_SNAPSHOT_BYTES)
                 Y.applyUpdate(this.doc, update, this)
                 this.initialState = 'loaded'
             }
@@ -307,6 +332,10 @@ export class SupabaseProvider {
     public async saveSnapshot(): Promise<boolean> {
         if (this.isDestroyed) return false
         const state = uint8ArrayToBase64(Y.encodeStateAsUpdate(this.doc))
+        if (state.length > Math.ceil(MAX_SNAPSHOT_BYTES * 4 / 3) + 4) {
+            this.onStatus?.('error')
+            return false
+        }
         const payload = { key: this.baseReportVersion + ':' + state, state, version: this.baseReportVersion }
         if (payload.key === this.lastSnapshotKey) return true
         this.pendingSnapshot = payload
@@ -413,10 +442,16 @@ export class SupabaseProvider {
             return
         }
 
+        const awarenessUpdate = encodeAwarenessUpdate(this.awareness, [this.awareness.clientID])
+        if (awarenessUpdate.byteLength > MAX_AWARENESS_BYTES) {
+            this.onStatus?.('error')
+            return
+        }
+
         await this.channel.track({
             clientId: this.awareness.clientID,
             user: localState.user,
-            awarenessUpdateBase64: uint8ArrayToBase64(encodeAwarenessUpdate(this.awareness, [this.awareness.clientID])),
+            awarenessUpdateBase64: uint8ArrayToBase64(awarenessUpdate),
             updatedAt: new Date().toISOString()
         } satisfies ReportPresencePayload)
     }

@@ -1477,7 +1477,8 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
         const report = await OccurrenceReportService.resolveConflict(
             selectedReport.value.id!,
             resolvedContent,
-            authStore.user?.id // Pass user ID
+            authStore.user?.id,
+            conflictServerVersion.value
         )
 
         selectedReport.value = report

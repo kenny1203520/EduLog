@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase'
 import * as Y from 'yjs'
 import { useAuthStore } from '@/stores/useAuthStore'
 
-export type ReportCollaborationStatus = 'disabled' | 'connecting' | 'connected' | 'disconnected' | 'error'
+export type ReportCollaborationStatus = 'disabled' | 'connecting' | 'ready' | 'error'
 
 export interface ReportCollaborationConfiguration {
     enabled: boolean
@@ -53,7 +53,7 @@ export function useReportCollab(
     const ydoc = shallowRef<Y.Doc | null>(null)
     const provider = shallowRef<SupabaseProvider | null>(null)
     const ready = ref(false)
-    const status = ref<ReportCollaborationStatus>(configuration.enabled ? 'disconnected' : 'disabled')
+    const status = ref<ReportCollaborationStatus>(configuration.enabled ? 'connecting' : 'disabled')
     const error = ref<string | null>(null)
     const initialState = ref<ReportCollabInitialState>('none')
     const activePeers = ref<ReportCollabPeer[]>([])
@@ -93,7 +93,7 @@ export function useReportCollab(
     }
 
     function handleStatus(next: ReportCollabConnectionStatus): void {
-        status.value = next
+        status.value = next === 'connected' ? 'ready' : next === 'disconnected' ? 'error' : next
         if (next === 'error') error.value = i18n.global.t('report.collaboration_connection_failed')
     }
 
@@ -107,7 +107,7 @@ export function useReportCollab(
         if (token !== generation) return false
         const reportIdValue = getReportId()
         if (!reportIdValue) {
-            status.value = 'disconnected'
+            status.value = 'error'
             return false
         }
 
@@ -146,7 +146,7 @@ export function useReportCollab(
         }
         initialState.value = nextProvider.initialState
         ready.value = true
-        status.value = nextProvider.connected ? 'connected' : status.value
+        status.value = nextProvider.connected ? 'ready' : status.value
         updatePeers()
         return true
     }
@@ -154,7 +154,7 @@ export function useReportCollab(
     const disconnect = async (options: { flush?: boolean } = {}) => {
         generation += 1
         await destroyCurrent(options.flush ?? true)
-        status.value = configuration.enabled ? 'disconnected' : 'disabled'
+        status.value = configuration.enabled ? 'error' : 'disabled'
     }
 
     const reconnect = async () => {
@@ -192,7 +192,7 @@ export function useReportCollab(
     const destroy = async () => {
         generation += 1
         await destroyCurrent()
-        status.value = configuration.enabled ? 'disconnected' : 'disabled'
+        status.value = configuration.enabled ? 'error' : 'disabled'
     }
 
     watch(
@@ -212,7 +212,7 @@ export function useReportCollab(
 
     return {
         configuration, ydoc, provider, ready, status, error, initialState, activePeers,
-        activePeerCount: computed(() => activePeers.value.length), lastSyncedAt,
+        activePeerCount: computed(() => activePeers.value.length), onlineParticipantCount: computed(() => ready.value && provider.value?.connected ? activePeers.value.length + 1 : 0), lastSyncedAt,
         connect, disconnect, reconnect, saveSnapshot, setBaseReportVersion, setEnabled, configure, destroy
     }
 }

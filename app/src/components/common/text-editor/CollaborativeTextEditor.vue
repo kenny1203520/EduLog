@@ -94,28 +94,39 @@ const extensions = [
     ...(props.provider ? [CollaborationCaret.configure({ provider: props.provider, user: props.user })] : [])
 ]
 
-const editor = new Editor({
+let editor = null as unknown as Editor
+let isInitializing = true
+
+const editorOptions = {
     extensions,
     editable: effectiveMode.value === 'edit',
     editorProps: {
         attributes: { class: 'text-editor-tiptap' },
-        handleKeyDown: (_, event) => {
+        handleKeyDown: (_: any, event: KeyboardEvent) => {
             if (event.key !== 'Tab') return false
             event.preventDefault()
+            if (!editor) return false
             editor.commands.insertContent('  ')
             return true
         }
     },
     onFocus: () => { focused.value = true; emitActivity() },
     onBlur: () => { focused.value = false; emitActivity() },
-    onUpdate: ({ transaction }) => publishContent(isChangeOrigin(transaction) ? 'remote' : 'local'),
+    onUpdate: ({ transaction }: { transaction: any }) => {
+        if (isInitializing || !editor) return
+        publishContent(isChangeOrigin(transaction) ? 'remote' : 'local')
+    },
     onSelectionUpdate: () => { contentRevision.value++; emitActivity() }
-})
+} as const
+
+editor = new Editor(editorOptions)
+isInitializing = false
 
 let lastContent = getContent()
-function getSelection(): TextEditorActivity { return { caret: editor.state.selection.from, selectionEnd: editor.state.selection.to, focused: focused.value } }
+function getSelection(): TextEditorActivity { if (!editor) return { caret: 0, selectionEnd: 0, focused: focused.value }; return { caret: editor.state.selection.from, selectionEnd: editor.state.selection.to, focused: focused.value } }
 function emitActivity(): void { emit('activity', getSelection()) }
 function getContent(): TextEditorContent {
+    if (isInitializing || !editor) return createTextEditorContent('')
     return createTextEditorContent({
         schemaVersion: 1,
         doc: editor.getJSON(),
@@ -142,6 +153,7 @@ function getText(): string { return getContent().plainText }
 function getJSON(): RichTextDocumentV1 { return getContent().richText }
 function getHTML(options: TextEditorHtmlOptions = {}): string { return richTextToHTML(getJSON(), options.sanitized !== false) }
 function replaceContent(value: TextEditorContentInput, options: TextEditorReplaceOptions = {}): void {
+    if (!editor) return
     const resolved = createTextEditorContent(value, { templateVariables: props.templateVariables })
     documentAppearance.value = resolved.richText.appearance
     lastContent = resolved
@@ -153,11 +165,11 @@ function replaceContent(value: TextEditorContentInput, options: TextEditorReplac
 }
 function replaceText(value: string, options?: TextEditorReplaceOptions): void { replaceContent(normalizeTextContent(value), options) }
 function insertText(value: string): void {
-    if (effectiveMode.value !== 'edit') return
+    if (effectiveMode.value !== 'edit' || !editor) return
     editor.chain().focus().insertContent(normalizeTextContent(value)).run()
 }
 function insertContent(value: TextEditorContentInput): void {
-    if (effectiveMode.value !== 'edit') return
+    if (effectiveMode.value !== 'edit' || !editor) return
     if (value && typeof value === 'object' && 'type' in value && value.type && value.type !== 'doc' && !('schemaVersion' in value) && !('richText' in value)) {
         editor.chain().focus().insertContent(value as any).run()
         return
@@ -182,11 +194,11 @@ function resetStyle(): void {
 function getMode(): TextEditorMode { return effectiveMode.value }
 function setMode(mode: TextEditorMode): void {
     effectiveMode.value = mode
-    editor.setEditable(mode === 'edit')
+    editor?.setEditable(mode === 'edit')
     emit('mode-change', mode)
 }
 function commandChain(command: TextEditorCommand, options: TextEditorCommandOptions = {}, dryRun = false): boolean {
-    if (effectiveMode.value !== 'edit') return false
+    if (effectiveMode.value !== 'edit' || !editor) return false
     const chain = dryRun ? editor.can().chain().focus() : editor.chain().focus()
     switch (command) {
         case 'bold': return chain.toggleBold().run()
@@ -224,14 +236,14 @@ function getFormattingState(): TextEditorFormattingState {
     }
 }
 const formattingState = computed(() => { void contentRevision.value; return getFormattingState() })
-const showPlaceholder = computed(() => { void contentRevision.value; return !focused.value && editor.isEmpty && Boolean(props.placeholder) })
+const showPlaceholder = computed(() => { void contentRevision.value; return !focused.value && Boolean(editor?.isEmpty) && Boolean(props.placeholder) })
 
 watch(() => props.disabled, disabled => setMode(disabled ? 'disabled' : props.mode))
 watch(() => props.mode, mode => setMode(props.disabled ? 'disabled' : mode))
-watch(() => [props.user.name, props.user.color] as const, () => { if (props.provider) editor.commands.updateUser({ ...props.user }) })
+watch(() => [props.user.name, props.user.color] as const, () => { if (props.provider) editor?.commands.updateUser({ ...props.user }) })
 
 
-onBeforeUnmount(() => editor.destroy())
+onBeforeUnmount(() => editor?.destroy())
 
 defineExpose({ editor, focus, blur, getContent, getText, getJSON, getHTML, insertText, insertContent,
     replaceText, replaceContent, getSelection, getMetrics, getStyle, setStyle, resetStyle,

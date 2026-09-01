@@ -33,8 +33,8 @@
             <h3 class="text-lg font-semibold text-gray-800">
                 {{ props.title || $t('report.editor.title') }}
             </h3>
-            <div v-if="activePeers.length" class="flex items-center gap-1 text-xs text-slate-500" aria-live="polite">
-                <span class="font-semibold text-emerald-700">{{ activePeers.length }} online</span>
+            <div v-if="onlineParticipantCount > 0" class="flex items-center gap-1 text-xs text-slate-500" aria-live="polite">
+                <span class="font-semibold text-emerald-700">{{ onlineParticipantCount }} online</span>
                 <span v-for="peer in activePeers.slice(0, 3)" :key="peer.clientId"
                     class="rounded-full px-2 py-0.5 font-medium"
                     :style="{ color: peer.user?.color, backgroundColor: (peer.user?.color || '#94a3b8') + '20' }">
@@ -144,7 +144,7 @@
                         </button>
                     </div>
                     <!-- Enrollment External Link Button -->
-                    <a v-if="initialEnrollmentExternalLink" :href="initialEnrollmentExternalLink" target="_blank" rel="noopener noreferrer"
+                    <a v-if="safeExternalHref(initialEnrollmentExternalLink)" :href="safeExternalHref(initialEnrollmentExternalLink) || undefined" target="_blank" rel="noopener noreferrer"
                         class="text-xs flex items-center gap-1 text-blue-600 hover:text-blue-800 font-bold bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 hover:border-blue-300 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -166,7 +166,7 @@
                 <div class="flex gap-2">
                     <input data-collab-field="external_link" type="url" v-model="reportExternalLink" placeholder="https://..."
                         class="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
-                    <a v-if="reportExternalLink" :href="reportExternalLink" target="_blank" rel="noopener noreferrer"
+                    <a v-if="safeExternalHref(reportExternalLink)" :href="safeExternalHref(reportExternalLink) || undefined" target="_blank" rel="noopener noreferrer"
                         class="flex items-center justify-center w-10 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 text-gray-600">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
@@ -331,6 +331,7 @@
                 {{ $t('report.editor.contact_notes_label') }}
             </label>
             <CollaborativeTextEditor
+                :key="'collab-contact-notes'"
                 ref="contactNotesEditorRef"
                 v-if="ready && ydoc"
                 v-model="contactNotesEditorValue"
@@ -349,7 +350,7 @@
                 @change="handleTextEditorChange('contactNotes', $event)"
                 @activity="handleCollaborationActivity('contactNotes', $event)" />
             <!-- Fallback standard editor if ydoc not ready -->
-            <TextEditor v-else v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
+            <TextEditor v-else :key="'plain-contact-notes'" v-model="contactNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
                 :toolbar-visible="preferences.editorSettings.toolbarVisible"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
@@ -369,6 +370,7 @@
                 <span class="text-xs text-gray-500 font-normal">{{ $t('report.editor.class_notes_subtitle') }}</span>
             </label>
             <CollaborativeTextEditor
+                :key="'collab-class-notes'"
                 ref="classNotesEditorRef"
                 v-if="ready && ydoc"
                 v-model="classNotesEditorValue"
@@ -387,7 +389,7 @@
                 :placeholder="$t('report.editor.class_notes_placeholder')"
                 @change="handleTextEditorChange('classNotes', $event)"
                 @activity="handleCollaborationActivity('classNotes', $event)" />
-            <TextEditor v-else v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
+            <TextEditor v-else :key="'plain-class-notes'" v-model="classNotesEditorValue" preset="notes" :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
                 :toolbar-visible="preferences.editorSettings.toolbarVisible"
                 :style-controls-enabled="preferences.editorSettings.styleControlsEnabled"
@@ -414,6 +416,7 @@
                 </span>
             </label>
             <CollaborativeTextEditor
+                :key="'collab-content'"
                 ref="contentEditorRef"
                 v-if="ready && ydoc"
                 v-model="contentEditorValue"
@@ -432,7 +435,7 @@
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 @change="handleTextEditorChange('content', $event)"
                 @activity="handleCollaborationActivity('content', $event)" />
-            <TextEditor v-else v-model="contentEditorValue" preset="report"
+            <TextEditor v-else :key="'plain-content'" v-model="contentEditorValue" preset="report"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 :disabled="props.disabled"
                 :formatting-enabled="preferences.editorSettings.formattingEnabled"
@@ -667,6 +670,8 @@ import {
 } from '@/utils/copyTemplate'
 import { copyRichTextToClipboard } from '@/utils/clipboard'
 import { formatNumber } from '@/utils/numberFormatting'
+import { safeExternalHref } from '@/utils/safeExternalHref'
+import { mergeReportConflict } from '@/services/report/ReportConflictMerge'
 
 import type { Lesson } from '@/models/Course'
 
@@ -869,7 +874,7 @@ const handleConfirmAction = async () => {
 
 const handleCopyContent = (text: string) => {
     if (!text) return
-    if (contentEditorRef.value) {
+    if (isTextEditorHandle(contentEditorRef.value)) {
         const current = contentEditorRef.value.getText()
         contentEditorRef.value.replaceText(current + (current ? '\n\n' : '') + text, { emitChange: true })
     } else {
@@ -1367,15 +1372,15 @@ function applyTemplate(template: Template) {
     let changed = false
 
     if (ydoc.value) {
-        if (renderedContent.plainText && contentEditorRef.value) {
+        if (renderedContent.plainText && isTextEditorHandle(contentEditorRef.value)) {
             if (contentEditorRef.value.getText()) contentEditorRef.value.insertText('\n\n')
             contentEditorRef.value.insertContent(renderedContent)
         }
-        if (renderedContactNotes.plainText && contactNotesEditorRef.value) {
+        if (renderedContactNotes.plainText && isTextEditorHandle(contactNotesEditorRef.value)) {
             if (contactNotesEditorRef.value.getText()) contactNotesEditorRef.value.insertText('\n\n')
             contactNotesEditorRef.value.insertContent(renderedContactNotes)
         }
-        if (renderedClassNotes.plainText && classNotesEditorRef.value) {
+        if (renderedClassNotes.plainText && isTextEditorHandle(classNotesEditorRef.value)) {
             if (classNotesEditorRef.value.getText()) classNotesEditorRef.value.insertText('\n\n')
             classNotesEditorRef.value.insertContent(renderedClassNotes)
         }
@@ -1580,6 +1585,7 @@ const {
     setBaseReportVersion,
     status: collaborationStatus,
     activePeers,
+    onlineParticipantCount,
     setEnabled: setCollaborationEnabled,
     configure: configureCollaboration
 } = useReportCollab(reportIdRef as any, initialReportVersionRef, computed(() => ({
@@ -1593,7 +1599,7 @@ let collaborationHadError = false
 let collaborationRecoveryTimer: ReturnType<typeof setTimeout> | null = null
 watch(collaborationStatus, nextStatus => {
     if (nextStatus === 'error') collaborationHadError = true
-    if (nextStatus === 'connected' && collaborationHadError) {
+    if (nextStatus === 'ready' && collaborationHadError) {
         collaborationHadError = false
         collaborationRecovered.value = true
         if (collaborationRecoveryTimer) clearTimeout(collaborationRecoveryTimer)
@@ -1608,6 +1614,16 @@ const contactNotesEditorRef = ref<TextEditorHandle | null>(null)
 const classNotesEditorRef = ref<TextEditorHandle | null>(null)
 const contentEditorRef = ref<TextEditorHandle | null>(null)
 const collabWatchStops: WatchStopHandle[] = []
+let collabEditorGeneration = 0
+let reportEditorUnmounted = false
+
+function isTextEditorHandle(value: unknown): value is TextEditorHandle {
+    if (!value || typeof value !== 'object') return false
+    const handle = value as Partial<TextEditorHandle>
+    return typeof handle.getText === 'function'
+        && typeof handle.getContent === 'function'
+        && typeof handle.replaceContent === 'function'
+}
 
 function handleEditorFieldFocus(event: FocusEvent) {
     const element = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('[data-collab-field]') : null
@@ -1655,17 +1671,17 @@ function withCollabGuard(fn: () => void) {
 }
 
 function syncTextRefsFromEditors() {
-    if (contentEditorRef.value) {
+    if (isTextEditorHandle(contentEditorRef.value)) {
         const content = contentEditorRef.value.getContent()
         localContent.value = content.plainText
         contentDocument.value = content.richText
     }
-    if (contactNotesEditorRef.value) {
+    if (isTextEditorHandle(contactNotesEditorRef.value)) {
         const content = contactNotesEditorRef.value.getContent()
         contactNotes.value = content.plainText
         contactNotesDocument.value = content.richText
     }
-    if (classNotesEditorRef.value) {
+    if (isTextEditorHandle(classNotesEditorRef.value)) {
         const content = classNotesEditorRef.value.getContent()
         classNotes.value = content.plainText
         classNotesDocument.value = content.richText
@@ -1673,7 +1689,7 @@ function syncTextRefsFromEditors() {
 }
 
 function setEditorContentSilently(editorRef: { value: TextEditorHandle | null }, content: TextEditorContent) {
-    editorRef.value?.replaceContent(content)
+    if (isTextEditorHandle(editorRef.value)) editorRef.value.replaceContent(content)
 }
 
 function writeReportMeta(metaMap: any) {
@@ -1690,6 +1706,7 @@ function writeReportMeta(metaMap: any) {
 }
 
 watch(ready, (isReady) => {
+    const generation = ++collabEditorGeneration
     cleanupReportCollabBindings()
 
     if (isReady && ydoc.value) {
@@ -1749,7 +1766,7 @@ watch(ready, (isReady) => {
                     if (key === 'progressStart' && (newVal || '') !== progressStart.value) progressStart.value = newVal as any || ''
                     if (key === 'progressEnd' && (newVal || '') !== progressEnd.value) progressEnd.value = newVal as any || ''
                     if (key === 'selectedLessonId' && (newVal || '') !== selectedLessonId.value) selectedLessonId.value = newVal as any || ''
-                    if (key === 'reportExternalLink' && (newVal || '') !== reportExternalLink.value) reportExternalLink.value = newVal as any || ''
+                    if (key === 'reportExternalLink' && (newVal || '') !== reportExternalLink.value) reportExternalLink.value = safeExternalHref(String(newVal || '')) || ''
                     if (key === 'version') {
                         // A peer's save advanced the report's DB version. Their
                         // content is CRDT-merged into our editor already, but
@@ -1804,19 +1821,19 @@ watch(ready, (isReady) => {
         
         // Seed XML fragments on initialization if ydoc has no content but local has content
         nextTick(() => {
-            if (!ydoc.value) return
+            if (reportEditorUnmounted || generation !== collabEditorGeneration || !ready.value || !ydoc.value) return
             withCollabGuard(() => {
                 let seeded = false
 
-                if (!contentEditorRef.value?.getText() && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
+                if (isTextEditorHandle(contentEditorRef.value) && !contentEditorRef.value.getText() && ydoc.value?.getXmlFragment('content_xml').length === 0 && localContent.value) {
                     setEditorContentSilently(contentEditorRef, contentEditorValue.value)
                     seeded = true
                 }
-                if (!contactNotesEditorRef.value?.getText() && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
+                if (isTextEditorHandle(contactNotesEditorRef.value) && !contactNotesEditorRef.value.getText() && ydoc.value?.getXmlFragment('contactNotes_xml').length === 0 && contactNotes.value) {
                     setEditorContentSilently(contactNotesEditorRef, contactNotesEditorValue.value)
                     seeded = true
                 }
-                if (!classNotesEditorRef.value?.getText() && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
+                if (isTextEditorHandle(classNotesEditorRef.value) && !classNotesEditorRef.value.getText() && ydoc.value?.getXmlFragment('classNotes_xml').length === 0 && classNotes.value) {
                     setEditorContentSilently(classNotesEditorRef, classNotesEditorValue.value)
                     seeded = true
                 }
@@ -1894,7 +1911,7 @@ const contactNotes = ref(initialContactContent.plainText)
 const contactNotesDocument = ref(initialContactContent.richText)
 const classNotes = ref(initialClassContent.plainText)
 const classNotesDocument = ref(initialClassContent.richText)
-const reportExternalLink = ref(props.initialReportExternalLink || '')
+const reportExternalLink = ref(safeExternalHref(props.initialReportExternalLink) || '')
 
 const contentEditorValue = computed<TextEditorContent>({
     get: () => ({ plainText: localContent.value, richText: contentDocument.value }),
@@ -1955,7 +1972,7 @@ function buildCurrentSnapshot(overrides: Partial<ReportDraftSnapshot> = {}): Rep
         classNotesDocument: classNotesDocument.value,
         content: localContent.value || '',
         contentDocument: contentDocument.value,
-        externalLink: reportExternalLink.value || '',
+        externalLink: safeExternalHref(reportExternalLink.value) || '',
         ...overrides
     }
 }
@@ -1983,7 +2000,7 @@ function buildSnapshotFromProps(): ReportDraftSnapshot {
         classNotesDocument: classNotesContent.richText,
         content: main.plainText,
         contentDocument: main.richText,
-        externalLink: props.initialReportExternalLink || ''
+        externalLink: safeExternalHref(props.initialReportExternalLink) || ''
     }
 }
 
@@ -2180,6 +2197,7 @@ const {
                 return { success: true, newVersion: version.value }
             }
 
+            const baseSnapshot = savedReportSnapshot.value
             const result = isAttendanceOnly
                 ? await OccurrenceReportService.saveAttendanceOnly(
                     props.reportId,
@@ -2196,6 +2214,36 @@ const {
                     authStore.user?.id,
                     payload
                 )
+
+            // A CAS conflict is expected when another teacher saves first. If
+            // only text changed, Yjs already contains the merged document; if
+            // metadata changed on both sides, return field-level conflicts.
+            if (result.conflict && result.serverReport) {
+                const merge = mergeReportConflict(
+                    baseSnapshot,
+                    snapshot,
+                    result.serverReport,
+                    collaborationStatus.value === 'ready'
+                )
+                if (merge.conflictFields.length > 0) {
+                    return { ...result, serverVersion: result.serverReport.version, conflictFields: merge.conflictFields }
+                }
+                if (merge.changed && result.serverReport.version > version.value) {
+                    const mergedResult = await OccurrenceReportService.saveReport(
+                        props.reportId,
+                        result.serverReport.version,
+                        authStore.user?.id,
+                        merge.payload as any
+                    )
+                    if (mergedResult.success) return { ...mergedResult, merged: true }
+                    return {
+                        ...mergedResult,
+                        conflict: mergedResult.conflict || false,
+                        serverVersion: mergedResult.serverReport?.version || result.serverReport.version,
+                        conflictFields: mergedResult.conflictFields || []
+                    }
+                }
+            }
             return result
         } catch (error: any) {
             const message = error.message || 'Failed to save report'
@@ -2203,7 +2251,7 @@ const {
         }
     },
     onConflict: (serverReport, snapshot) => {
-        editorNotifier.notify({ code: 'save-conflict', level: 'warning', message: t('report.conflict.description'), toast: true })
+        editorNotifier.notify({ code: 'save-conflict', level: 'warning', message: t('report.conflict.description'), dedupeKey: `${props.reportId || 'new'}:${version.value}:conflict`, toast: true })
         if (serverReport) {
             emit('conflict', serverReport, snapshotToLocalReport(snapshot))
         }
@@ -2236,7 +2284,10 @@ const {
         const messageKey = result?.messageKey
             || (errorCode === 'request_timeout' ? 'errors.request_timeout'
                 : errorCode === 'save_outcome_unknown' ? 'errors.save_outcome_unknown'
-                    : 'errors.unknown')
+                    : errorCode === 'permission_denied' ? 'errors.permission_denied'
+                        : errorCode === 'validation_error' ? 'errors.validation_failed'
+                            : errorCode === 'conflict' ? 'errors.conflict'
+                                : 'errors.unknown')
         const translated = t(messageKey)
         console.error('Report editor save failed:', {
             reportId: props.reportId,
@@ -2335,7 +2386,7 @@ watch(() => props.initialClassNotes, (newVal) => {
 })
 
 watch(() => props.initialReportExternalLink, (newVal) => {
-    if (!hasUnsavedChanges.value) reportExternalLink.value = newVal || ''
+    if (!hasUnsavedChanges.value) reportExternalLink.value = safeExternalHref(newVal) || ''
 })
 
 watch(attendanceStatus, (newStatus) => {
@@ -2500,7 +2551,7 @@ function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = 
     contactNotesDocument.value = contact.richText
     classNotes.value = classNotesContent.plainText
     classNotesDocument.value = classNotesContent.richText
-    reportExternalLink.value = report.external_link || ''
+    reportExternalLink.value = safeExternalHref(report.external_link) || ''
     savedReportSnapshot.value = buildSnapshotFromDto(report)
     setBaseReportVersion(report.version)
 
@@ -2557,6 +2608,7 @@ defineExpose({
     autoSaveStatus,
     collaborationStatus,
     activePeers,
+    onlineParticipantCount,
     remoteVersionDrift,
     setAutoSaveEnabled,
     configureAutoSave,
@@ -2588,6 +2640,8 @@ onMounted(() => {
 
 // Warn before leaving with unsaved changes
 onBeforeUnmount(async () => {
+    reportEditorUnmounted = true
+    collabEditorGeneration++
     if (collaborationRecoveryTimer) clearTimeout(collaborationRecoveryTimer)
     collaborationRecoveryTimer = null
     window.removeEventListener('pagehide', flushOnPageHide)
