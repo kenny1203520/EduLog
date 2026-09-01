@@ -13,6 +13,28 @@ describe('editor reliability contracts', () => {
         expect(migration).toContain('occurrence_reports report')
     })
 
+    it('keeps report reference options narrow', () => {
+        const courseService = readFileSync(resolve(repoRoot, 'app/src/services/course/CourseCatalogService.ts'), 'utf8')
+        const sessionService = readFileSync(resolve(repoRoot, 'app/src/services/session/SessionService.ts'), 'utf8')
+        const referencePanel = readFileSync(resolve(repoRoot, 'app/src/components/ReportReferencePanel.vue'), 'utf8')
+        expect(courseService).toMatch(/getCourseOptions[\s\S]*?select\('id, subject, stage, display_name'/)
+        expect(sessionService).toMatch(/getClassSessionOptions[\s\S]*?select\('id, name, classroom_id, course_ids'/)
+        const optionsBlock = sessionService.slice(sessionService.indexOf('getClassSessionOptions'), sessionService.indexOf('createClassSession', sessionService.indexOf('getClassSessionOptions')))
+        expect(optionsBlock).not.toContain('lessons')
+        expect(optionsBlock).not.toContain('schedule_rules')
+        expect(referencePanel).toContain('CourseCatalogService.getCourseOptions')
+        expect(referencePanel).toContain('SessionService.getClassSessionOptions')
+    })
+
+    it('keeps the editor visible when collaboration is unavailable', () => {
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        expect(editor).not.toContain(':user="collaborationUser""')
+        expect(editor).toContain('v-if="ready && ydoc"')
+        expect(editor).toContain('v-else')
+        expect(editor).toContain('dedupeKey:')
+        expect(editor).toContain('collaboration_fallback')
+    })
+
     it('does not reintroduce wildcard editor hot-path queries', () => {
         const files = [
             'app/src/services/report/ReportQueryService.ts',

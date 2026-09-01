@@ -12,6 +12,23 @@
         </div>
 
         <!-- Header -->
+        <div v-if="effectiveCollaborationEnabled && collaborationStatus === 'connecting'"
+            class="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700"
+            role="status">
+            {{ $t('report.editor.collaboration_connecting', 'Collaboration is connecting. You can continue editing.') }}
+        </div>
+        <div v-else-if="effectiveCollaborationEnabled && (collaborationStatus === 'error' || collabInitialState === 'error')"
+            class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800"
+            role="status">
+            {{ $t('report.editor.collaboration_fallback', 'Collaboration unavailable; switched to single-user editing. Saving remains available.') }}
+            <span v-if="collaborationError" class="sr-only">{{ collaborationError }}</span>
+        </div>
+        <div v-else-if="effectiveCollaborationEnabled && collaborationRecovered"
+            class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
+            role="status">
+            {{ $t('report.editor.collaboration_recovered', 'Real-time collaboration has been restored.') }}
+        </div>
+
         <div class="flex items-center justify-between gap-3">
             <h3 class="text-lg font-semibold text-gray-800">
                 {{ props.title || $t('report.editor.title') }}
@@ -327,7 +344,7 @@
                 preset="notes"
                 :font-scale="preferences.editorFontScale"
                 :min-height="120"
-                :user="collaborationUser""
+                :user="collaborationUser"
                 :placeholder="$t('report.editor.contact_notes_placeholder')"
                 @change="handleTextEditorChange('contactNotes', $event)"
                 @activity="handleCollaborationActivity('contactNotes', $event)" />
@@ -366,7 +383,7 @@
                 :font-scale="preferences.editorFontScale"
                 :min-height="140"
                 mono
-                :user="collaborationUser""
+                :user="collaborationUser"
                 :placeholder="$t('report.editor.class_notes_placeholder')"
                 @change="handleTextEditorChange('classNotes', $event)"
                 @activity="handleCollaborationActivity('classNotes', $event)" />
@@ -411,7 +428,7 @@
                 :font-scale="preferences.editorFontScale"
                 :min-height="300"
                 mono
-                :user="collaborationUser""
+                :user="collaborationUser"
                 :placeholder="props.placeholder || $t('report.editor.learning_report_placeholder')"
                 @change="handleTextEditorChange('content', $event)"
                 @activity="handleCollaborationActivity('content', $event)" />
@@ -616,7 +633,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type WatchStopHandle } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useAutoSave } from '@/composables/useAutoSave'
+import { useAutoSave, type AutoSaveErrorContext } from '@/composables/useAutoSave'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useAuthStore } from '@/stores/useAuthStore'
 import RatingInput from '@/components/common/RatingInput.vue'
@@ -1557,6 +1574,7 @@ const {
     ydoc,
     provider: awarenessProvider,
     ready,
+    error: collaborationError,
     initialState: collabInitialState,
     saveSnapshot,
     setBaseReportVersion,
@@ -1569,6 +1587,22 @@ const {
     snapshotDebounceMs: preferences.editorSettings.collaboration.snapshotDebounceMs,
     presenceEnabled: preferences.editorSettings.collaboration.presenceEnabled
 })))
+
+const collaborationRecovered = ref(false)
+let collaborationHadError = false
+let collaborationRecoveryTimer: ReturnType<typeof setTimeout> | null = null
+watch(collaborationStatus, nextStatus => {
+    if (nextStatus === 'error') collaborationHadError = true
+    if (nextStatus === 'connected' && collaborationHadError) {
+        collaborationHadError = false
+        collaborationRecovered.value = true
+        if (collaborationRecoveryTimer) clearTimeout(collaborationRecoveryTimer)
+        collaborationRecoveryTimer = setTimeout(() => {
+            collaborationRecovered.value = false
+            collaborationRecoveryTimer = null
+        }, 4000)
+    }
+})
 
 const contactNotesEditorRef = ref<TextEditorHandle | null>(null)
 const classNotesEditorRef = ref<TextEditorHandle | null>(null)
@@ -2165,7 +2199,6 @@ const {
             return result
         } catch (error: any) {
             const message = error.message || 'Failed to save report'
-            emit('save-error', message)
             return { success: false, message, messageKey: 'errors.unknown' }
         }
     },
@@ -2197,11 +2230,31 @@ const {
         }
         editorNotifier.notify({ code: 'save-succeeded', level: 'success', message: t('report.save_success'), toast: false })
     },
-    onError: (message, result) => {
+    onError: (message, result, context?: AutoSaveErrorContext) => {
         emit('save-error', message)
-        const translated = result?.messageKey ? t(result.messageKey) : t('report.save_error')
-        editorNotifier.notify({ code: 'save-failed', level: 'error', message: translated, toast: true })
+        const errorCode = result?.errorCode
+        const messageKey = result?.messageKey
+            || (errorCode === 'request_timeout' ? 'errors.request_timeout'
+                : errorCode === 'save_outcome_unknown' ? 'errors.save_outcome_unknown'
+                    : 'errors.unknown')
+        const translated = t(messageKey)
+        console.error('Report editor save failed:', {
+            reportId: props.reportId,
+            revision: context?.revision,
+            errorCode,
+            message,
+            result
+        })
+        editorNotifier.notify({
+            code: 'save-failed',
+            level: 'error',
+            message: translated,
+            dedupeKey: `${props.reportId || 'new'}:${context?.revision ?? 'unknown'}:${errorCode || messageKey}`,
+            context: { reportId: props.reportId, revision: context?.revision, errorCode: errorCode || messageKey },
+            toast: true
+        })
     }
+
 })
 
 // Computed
@@ -2535,6 +2588,8 @@ onMounted(() => {
 
 // Warn before leaving with unsaved changes
 onBeforeUnmount(async () => {
+    if (collaborationRecoveryTimer) clearTimeout(collaborationRecoveryTimer)
+    collaborationRecoveryTimer = null
     window.removeEventListener('pagehide', flushOnPageHide)
     document.removeEventListener('visibilitychange', handleVisibilityChange)
     cleanupReportCollabBindings()

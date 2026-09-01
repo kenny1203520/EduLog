@@ -582,7 +582,7 @@ function handleReportRestored() {
 }
 
 function handleSaveError(msg: string) {
-    toast.error(msg)
+    console.error('Report editor save failed:', msg)
 }
 
 function formatDate(dateVal: string | Date) {

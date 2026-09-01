@@ -40,6 +40,20 @@ export class CourseCatalogService {
         return { data: courses, count: count || 0 }
     }
 
+    static async getCourseOptions(page: number = 1, perPage: number = 1000): Promise<{ data: Array<Pick<CourseDTO, 'id' | 'subject' | 'stage' | 'display_name'>>; count: number }> {
+        const from = (page - 1) * perPage
+        const to = from + perPage - 1
+        const { data, error, count } = await supabase
+            .from('courses')
+            .select('id, subject, stage, display_name', { count: 'exact' })
+            .order('display_name', { ascending: true, nullsFirst: false })
+            .order('subject', { ascending: true })
+            .order('stage', { ascending: true })
+            .range(from, to)
+        if (error) throw new Error(error.message)
+        return { data: (data || []) as Array<Pick<CourseDTO, 'id' | 'subject' | 'stage' | 'display_name'>>, count: count || 0 }
+    }
+
     static async createCourse(course: Partial<CourseDTO>): Promise<Course> {
         const { data, error } = await supabase.from('courses').insert(this.normalizeCourse(course)).select().single()
         if (error) throw new Error(error.message)

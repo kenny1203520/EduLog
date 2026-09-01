@@ -1510,7 +1510,7 @@ function handleReportRestored(restoredReport: OccurrenceReportDTO) {
 }
 
 function handleSaveError(error: string) {
-    toast.error(`${t('report.save_error')}: ${error}`)
+    console.error('Report editor save failed:', error)
 }
 
 function handleConflict(serverReport: OccurrenceReportDTO, localReport: OccurrenceReportDTO) {

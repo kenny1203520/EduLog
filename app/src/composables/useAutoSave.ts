@@ -32,6 +32,10 @@ export interface AutoSaveSuccess<TSnapshot, TResult extends AutoSaveResult> {
     revision: number
 }
 
+export interface AutoSaveErrorContext {
+    revision: number
+}
+
 type MaybeRef<T> = T | Ref<T>
 
 export interface AutoSaveOptions<TSnapshot, TResult extends AutoSaveResult = AutoSaveResult> {
@@ -44,7 +48,7 @@ export interface AutoSaveOptions<TSnapshot, TResult extends AutoSaveResult = Aut
     onConflict?: (serverReport: OccurrenceReportDTO | null, snapshot: TSnapshot) => void
     onSuccess?: (saved: AutoSaveSuccess<TSnapshot, TResult>) => void | Promise<void>
     /** `result` is the failed TResult when available (absent for a thrown exception). */
-    onError?: (message: string, result?: TResult) => void
+    onError?: (message: string, result?: TResult, context?: AutoSaveErrorContext) => void
 }
 
 interface PendingSave<TSnapshot> {
@@ -147,7 +151,7 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
             saveError.value = message
             restoreFailedJob(job)
             queueBlocked = true
-            options.onError?.(message)
+            options.onError?.(message, undefined, { revision: job.revision })
             return
         }
 
@@ -164,7 +168,7 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
             saveError.value = message
             restoreFailedJob(job)
             queueBlocked = true
-            options.onError?.(message, result)
+            options.onError?.(message, result, { revision: job.revision })
             return
         }
 

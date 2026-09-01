@@ -152,12 +152,18 @@ export class SupabaseProvider {
 
             if (status === 'SUBSCRIBED') {
                 this.isSubscribed = true
-                await this.loadInitialState()
-                if (this.presenceEnabled) await this.trackLocalAwareness()
-                this.onStatus?.('connected')
-                if (this.readyTimer) clearTimeout(this.readyTimer)
-                this.readyTimer = null
-                this.resolveReady()
+                try {
+                    await this.loadInitialState()
+                    if (this.presenceEnabled) await this.trackLocalAwareness()
+                    this.onStatus?.('connected')
+                    if (this.readyTimer) clearTimeout(this.readyTimer)
+                    this.readyTimer = null
+                    this.resolveReady()
+                } catch (error) {
+                    this.isSubscribed = false
+                    this.onStatus?.('error')
+                    this.failReady(error instanceof Error ? error : new Error(String(error)))
+                }
             } else {
                 this.isSubscribed = false
                 const failed = status === 'CHANNEL_ERROR' || status === 'TIMED_OUT'
@@ -253,7 +259,7 @@ export class SupabaseProvider {
             if (error) {
                 console.error('loadInitialState db error:', error)
                 this.initialState = 'error'
-                return
+                throw new Error(error.message || 'Failed to load collaboration state')
             }
 
             if (!data?.snapshot_base64) {
@@ -279,6 +285,7 @@ export class SupabaseProvider {
         } catch (err) {
             console.error('Failed to load document state:', err)
             this.initialState = 'error'
+            throw err
         }
     }
 
