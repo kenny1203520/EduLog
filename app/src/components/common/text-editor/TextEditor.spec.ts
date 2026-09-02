@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import TextEditor from './TextEditor.vue'
@@ -50,6 +50,33 @@ describe('TextEditor', () => {
         await nextTick()
         expect(handle.getJSON().appearance).toMatchObject({ fontScale: 110, minHeight: 220, mono: false, resize: 'none' })
         expect(wrapper.attributes('style')).toContain('--text-editor-font-size: 110%')
+    })
+
+
+    it('does not set content or emit a model update for equivalent props', async () => {
+        const wrapper = mount(TextEditor, { props: { modelValue: createTextEditorContent('stable'), toolbarVisible: false } })
+        await nextTick()
+        const handle = wrapper.vm as unknown as TextEditorHandle & { editor: any }
+        const setContent = vi.spyOn(handle.editor.commands, 'setContent')
+        const emittedBefore = wrapper.emitted('update:modelValue')?.length || 0
+        await wrapper.setProps({ modelValue: createTextEditorContent('stable') })
+        await nextTick()
+        expect(setContent).not.toHaveBeenCalled()
+        expect(wrapper.emitted('update:modelValue')?.length || 0).toBe(emittedBefore)
+    })
+
+    it('preserves a legal selection when external content replaces the document', async () => {
+        const wrapper = mount(TextEditor, { props: { modelValue: 'short', toolbarVisible: false } })
+        await nextTick()
+        const handle = wrapper.vm as unknown as TextEditorHandle & { editor: any }
+        handle.editor.commands.setTextSelection({ from: 5, to: 5 })
+        const emittedBefore = wrapper.emitted('update:modelValue')?.length || 0
+        await wrapper.setProps({ modelValue: 'x' })
+        await nextTick()
+        const selection = handle.getSelection()
+        expect(selection.caret).toBeLessThanOrEqual(handle.editor.state.doc.content.size)
+        expect(selection.selectionEnd).toBeLessThanOrEqual(handle.editor.state.doc.content.size)
+        expect(wrapper.emitted('update:modelValue')?.length || 0).toBe(emittedBefore)
     })
 
     it('supports read and disabled modes plus placeholder state', async () => {

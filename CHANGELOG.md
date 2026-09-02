@@ -24,12 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed several previously silent failures (transfer/enrollment schedule regeneration, a confirm-modal action, dashboard load, split-pane report search) to show an explanatory, actionable message instead of nothing or a misleading "no results" state.
 - Fixed the `dashboard.schedule.time_zone` translation key being present in zh-TW but missing from en.
 - Replaced the native `confirm()` prompt for PWA updates with the app's own confirmation dialog.
+- Fixed the report editor showing an incorrect online participant count when multiple teachers shared a report.
+- Fixed collaborative editor initialization races, stale refs, and Tiptap update timing that could hide inputs or throw runtime errors.
+- Added bounded Yjs/Realtime payload validation, scoped report access, safe external links, and version-checked restore/conflict resolution.
 
 ### Tests
 - Added regression coverage for the error mapping utilities, autosave retry behavior, the notifier's persistent-error-toast timeout, locale key parity between en and zh-TW, and the batched progress-summary query.
+- Added coverage for collaboration participant counts, three-way conflict merge, private report access, bounded payloads, and safe external links.
 
 ### Deployment Notes
-- No database migration is required for v1.8.0.
+- Deploy migrations `1000037_editor_security_hardening.sql` and `1000038_editor_rbac_boundary_hardening.sql` before enabling private collaboration.
 - Rebuild and redeploy the frontend with package version `1.8.0`.
 
 ## [1.7.5] - 2026-08-16

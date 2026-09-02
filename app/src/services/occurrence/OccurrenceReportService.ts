@@ -86,9 +86,10 @@ export class OccurrenceReportService {
     static async resolveConflict(
         reportId: string,
         resolvedReport: OccurrenceReportDTO,
-        userId?: string
+        userId?: string,
+        expectedVersion?: number
     ): Promise<OccurrenceReport> {
-        return ReportCommandService.resolveConflict(reportId, resolvedReport, userId)
+        return ReportCommandService.resolveConflict(reportId, resolvedReport, userId, expectedVersion)
     }
 
     static async getReportsByEnrollment(

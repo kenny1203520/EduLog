@@ -4,8 +4,10 @@ import {
     SYSTEM_ATTENDANCE_TEMPLATE,
     SYSTEM_COURSE_TEMPLATE,
 } from '@/utils/copyTemplate'
-import type { CopyTemplateDTO, CopyTemplateScopeType, EffectiveTemplateResult, CopyTemplateLoadOption } from './CopyTemplateService'
+import type { CopyTemplateDTO, CopyTemplateScopeType, EffectiveTemplateResult, CopyTemplateLoadOption, CopyTemplateEditorBundle } from './CopyTemplateService'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+
+const COPY_TEMPLATE_COLUMNS = 'id, user_id, template_type, scope_type, scope_entity_id, template_text, template_document, created_at, updated_at'
 
 /**
  * Query service for copy templates
@@ -28,7 +30,7 @@ export class CopyTemplateQueryService {
     ): Promise<CopyTemplateDTO | null> {
         const { data, error } = await supabase
             .from('copy_templates')
-            .select('*')
+            .select(COPY_TEMPLATE_COLUMNS)
             .eq('user_id', userId)
             .eq('template_type', templateType)
             .eq('scope_type', scopeType)
@@ -74,24 +76,23 @@ export class CopyTemplateQueryService {
     }
 
     static async getEffectiveAttendanceTemplate(classSessionId: string): Promise<EffectiveTemplateResult> {
-        const classTemplate = await this.getAttendanceTemplateByScope('class_session', classSessionId)
-        if (classTemplate) {
-            const row = await this.getTemplateForScope(await this.getCurrentUserId() || '', 'attendance_copy', 'class_session', classSessionId)
-            return {
-                templateText: classTemplate,
-                templateDocument: row ? createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText : undefined,
-                source: 'class_session'
+        const userId = await this.getCurrentUserId()
+        if (userId) {
+            const classRow = await this.getTemplateForScope(userId, 'attendance_copy', 'class_session', classSessionId)
+            if (classRow?.template_text) {
+                return {
+                    templateText: classRow.template_text,
+                    templateDocument: createTextEditorContent(classRow.template_document || classRow.template_text, { templateVariables: true }).richText,
+                    source: 'class_session'
+                }
             }
-        }
-
-        const userDefault = await this.getAttendanceTemplateByScope('user_default')
-        if (userDefault) {
-            const userId = await this.getCurrentUserId()
-            const row = userId ? await this.getTemplateForScope(userId, 'attendance_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID) : null
-            return {
-                templateText: userDefault,
-                templateDocument: row ? createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText : undefined,
-                source: 'user_default'
+            const userRow = await this.getTemplateForScope(userId, 'attendance_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID)
+            if (userRow?.template_text) {
+                return {
+                    templateText: userRow.template_text,
+                    templateDocument: createTextEditorContent(userRow.template_document || userRow.template_text, { templateVariables: true }).richText,
+                    source: 'user_default'
+                }
             }
         }
 
@@ -102,14 +103,15 @@ export class CopyTemplateQueryService {
     }
 
     static async getEffectiveCourseTemplate(): Promise<EffectiveTemplateResult> {
-        const userDefault = await this.getCourseUserDefaultTemplate()
-        if (userDefault) {
-            const userId = await this.getCurrentUserId()
-            const row = userId ? await this.getTemplateForScope(userId, 'course_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID) : null
-            return {
-                templateText: userDefault,
-                templateDocument: row ? createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText : undefined,
-                source: 'user_default'
+        const userId = await this.getCurrentUserId()
+        if (userId) {
+            const row = await this.getTemplateForScope(userId, 'course_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID)
+            if (row?.template_text) {
+                return {
+                    templateText: row.template_text,
+                    templateDocument: createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText,
+                    source: 'user_default'
+                }
             }
         }
 
@@ -127,7 +129,7 @@ export class CopyTemplateQueryService {
 
         const { data, error } = await supabase
             .from('copy_templates')
-            .select('*')
+            .select(COPY_TEMPLATE_COLUMNS)
             .eq('user_id', userId)
             .eq('template_type', templateType)
             .order('updated_at', { ascending: false })
@@ -135,6 +137,18 @@ export class CopyTemplateQueryService {
         if (error) throw new Error(error.message)
 
         return (data as CopyTemplateDTO[]) || []
+    }
+
+    static async getEditorBundle(
+        templateType: 'attendance_copy' | 'course_copy',
+        currentClassSessionId?: string
+    ): Promise<CopyTemplateEditorBundle> {
+        const options = await this.getTemplateLoadOptions(templateType, currentClassSessionId)
+        const current = templateType === 'attendance_copy' && currentClassSessionId
+            ? options.find(option => option.scopeType === 'class_session' && option.scopeEntityId === currentClassSessionId)
+                || options.find(option => option.scopeType === 'user_default')
+            : options.find(option => option.scopeType === 'user_default')
+        return { options, current }
     }
 
     private static async getClassSessionNameMap(sessionIds: string[]): Promise<Record<string, string>> {

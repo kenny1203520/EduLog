@@ -7,6 +7,13 @@ import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 
 export type SessionVisibilityFilterMode = 'all' | 'visible' | 'hidden'
 
+export interface ClassSessionOption {
+    id: string
+    name: string
+    classroom_id?: string | null
+    course_ids?: string[]
+}
+
 export class SessionService {
     private static hydrateSession(data: any): ClassSessionDTO {
         return {
@@ -93,6 +100,17 @@ export class SessionService {
         }
     }
 
+    static async getClassSessionOptions(page: number = 1, perPage: number = 1000): Promise<{ data: ClassSessionOption[]; count: number }> {
+        const from = (page - 1) * perPage
+        const to = from + perPage - 1
+        const { data, error, count } = await supabase
+            .from('class_sessions')
+            .select('id, name, classroom_id, course_ids', { count: 'exact' })
+            .order('name', { ascending: true })
+            .range(from, to)
+        if (error) throw new Error(error.message)
+        return { data: (data || []) as ClassSessionOption[], count: count || 0 }
+    }
     static async createClassSession(session: Partial<ClassSessionDTO>): Promise<ClassSessionDTO> {
         return this.saveClassSession(session)
     }

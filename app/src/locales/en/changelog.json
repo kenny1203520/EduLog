@@ -17,14 +17,18 @@
                 "fixed": [
                     "Fixed several silent failures (schedule sync, a confirm dialog, dashboard loading, split-pane search) to show an explanatory message instead of nothing or a misleading empty state.",
                     "Fixed a missing English translation for the dashboard time zone label.",
-                    "Replaced the native browser update prompt with the app's own confirmation dialog."
+                    "Replaced the native browser update prompt with the app's own confirmation dialog.",
+                    "Fixed report editor collaboration participant counts, initialization races, and stale editor refs when multiple teachers share a report.",
+                    "Added scoped report RLS/private Realtime policies, bounded collaboration payloads, safe external links, and optimistic version checks for restore/conflict resolution."
                 ],
                 "tests": [
-                    "Added regression coverage for error mapping, autosave retry, persistent error toasts, locale key parity, and the batched progress-summary query."
+                    "Added regression coverage for error mapping, autosave retry, persistent error toasts, locale key parity, and the batched progress-summary query.",
+                    "Added coverage for collaboration participant counts, three-way conflict merge, private report access, bounded payloads, and safe external links."
                 ],
                 "deployment": [
-                    "No database migration required.",
-                    "Rebuild and redeploy the frontend with version 1.8.0."
+                    "Editor migrations 1000037 and 1000038 are required before enabling private collaboration.",
+                    "Rebuild and redeploy the frontend with version 1.8.0.",
+                    "Deploy migrations 1000037 and 1000038 before enabling private collaboration in production."
                 ]
             }
         },        {
@@ -205,7 +209,7 @@
                     "Expanded student enrollment class session options to show weekday and time range."
                 ],
                 "deployment": [
-                    "No database migration required."
+                    "Editor migrations 1000037 and 1000038 are required before enabling private collaboration."
                 ]
             }
         },
@@ -221,7 +225,7 @@
                     "Corrected the PWA manifest app name to display as EduLog."
                 ],
                 "deployment": [
-                    "No database migration required."
+                    "Editor migrations 1000037 and 1000038 are required before enabling private collaboration."
                 ]
             }
         },
@@ -268,7 +272,7 @@
                     "Added coverage for aggregate classroom session manager edge function behavior, holiday sync/release logic, and Vite security helpers."
                 ],
                 "deployment": [
-                    "No database migration required.",
+                    "Editor migrations 1000037 and 1000038 are required before enabling private collaboration.",
                     "To enable native EduLog HTTPS, mount certificate files into /app/ssl and set EDULOG_HTTPS_ENABLED=true."
                 ]
             }

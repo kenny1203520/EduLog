@@ -3,17 +3,17 @@
         <button v-for="item in items" :key="item.command" type="button"
             :class="{ active: item.active() }" :disabled="disabled || !item.enabled()"
             :title="item.title" :aria-label="item.title" :aria-pressed="item.active()"
-            @mousedown.prevent @click="item.run()">
+            @pointerdown.prevent @click="item.run()">
             {{ item.label }}
         </button>
         <button type="button" :disabled="disabled || !can('set-link')" :title="t('editor.toolbar.link')"
             :aria-label="t('editor.toolbar.link')" :aria-pressed="state.link"
-            :class="{ active: state.link }" @mousedown.prevent @click="setLink">
+            :class="{ active: state.link }" @pointerdown.prevent @click="setLink">
             {{ t('editor.toolbar.link') }}
         </button>
         <button type="button" :disabled="disabled || !can('unset-link')"
             :title="t('editor.toolbar.remove_link')" :aria-label="t('editor.toolbar.remove_link')"
-            @mousedown.prevent @click="run('unset-link')">
+            @pointerdown.prevent @click="run('unset-link')">
             {{ t('editor.toolbar.remove_link') }}
         </button>
     </div>

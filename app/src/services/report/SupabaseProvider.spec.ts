@@ -114,4 +114,19 @@ describe('report SupabaseProvider snapshot versioning', () => {
         }))
         await provider.destroy()
     })
+    it('rejects ready when the collaboration document cannot be loaded', async () => {
+        const { supabase, query } = createSupabaseMock()
+        query.maybeSingle.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
+        const statuses: string[] = []
+        const provider = new SupabaseProvider(supabase as any, new Y.Doc(), 'report-1', 7, 'user-1', {
+            onStatus: status => statuses.push(status)
+        })
+
+        await expect(provider.ready).rejects.toThrow('permission denied')
+        expect(provider.initialState).toBe('error')
+        expect(statuses).toContain('error')
+        await provider.destroy()
+    })
+
+
 })

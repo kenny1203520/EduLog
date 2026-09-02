@@ -503,8 +503,8 @@ function switchTab(tab: 'peer' | 'history') {
 
 async function loadFilterOptions() {
     try {
-        const crsP = CourseCatalogService.getCourses(1, 1000)
-        const sessionsP = SessionService.getClassSessions(1, 1000)
+        const crsP = CourseCatalogService.getCourseOptions(1, 1000)
+        const sessionsP = SessionService.getClassSessionOptions(1, 1000)
 
         // Try aggregate for classrooms first
         try {
