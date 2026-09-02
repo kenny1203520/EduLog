@@ -22,6 +22,7 @@ describe('v1.8.0 release metadata', () => {
         const release = root.slice(root.indexOf('## [1.8.0]'), root.indexOf('## [1.7.5]'))
         expect(release).toContain('useFeedback')
         expect(release).toContain('datetimeFormats')
-        expect(release).toContain('No database migration is required')
+        expect(release).toContain('1000037_editor_security_hardening.sql')
+        expect(release).toContain('1000038_editor_rbac_boundary_hardening.sql')
     })
 })
