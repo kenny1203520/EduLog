@@ -39,6 +39,7 @@ export interface TextEditorChange {
 export interface TextEditorActivity {
     caret: number
     selectionEnd: number
+    focused?: boolean
 }
 
 export interface TextEditorMetrics {

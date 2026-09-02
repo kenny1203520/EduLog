@@ -545,7 +545,6 @@ import { Suspension } from '@/models/Suspension'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
-import { useFeedback } from '@/composables/useFeedback'
 import { DateUtils } from '@/utils/DateUtils'
 import { isAttendanceReportStatus } from '@/utils/reportListFilter'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
@@ -560,7 +559,6 @@ const router = useRouter()
 const { t, locale } = useI18n()
 const authStore = useAuthStore()
 const toast = useToast()
-const { reportError } = useFeedback()
 const preferences = usePreferencesStore()
 
 const loading = ref(true)
@@ -1448,8 +1446,7 @@ function handleReportRestored(restoredReport: OccurrenceReportDTO) {
 }
 
 function handleSaveError(error: string) {
-    console.error('Failed to save report:', error)
-    reportError(error)
+    console.error('Report editor save failed:', error)
 }
 
 function handleDeleted() {
@@ -1480,7 +1477,8 @@ async function resolveConflict(resolvedContent: OccurrenceReportDTO) {
         const report = await OccurrenceReportService.resolveConflict(
             selectedReport.value.id!,
             resolvedContent,
-            authStore.user?.id // Pass user ID
+            authStore.user?.id,
+            conflictServerVersion.value
         )
 
         selectedReport.value = report

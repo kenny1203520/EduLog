@@ -12,6 +12,8 @@ export interface EditorNotification {
     message: string
     context?: Record<string, unknown>
     toast?: boolean
+    /** Suppress identical notifications within the dedupe window. */
+    dedupeKey?: string
 }
 
 export interface EditorNotifier {
@@ -25,11 +27,23 @@ export function createEditorNotifier(
     toast?: ToastInterface,
     enabled = true
 ): EditorNotifier {
+    const recentlyNotified = new Map<string, number>()
+    const dedupeWindowMs = 2000
+
     return {
         enabled,
         notify(notification) {
             onNotification?.(notification)
             if (!this.enabled || notification.toast === false || !toast) return
+            if (notification.dedupeKey) {
+                const now = Date.now()
+                const previous = recentlyNotified.get(notification.dedupeKey)
+                if (previous !== undefined && now - previous <dedupeWindowMs) return
+                recentlyNotified.set(notification.dedupeKey, now)
+                for (const [key, timestamp] of recentlyNotified) {
+                    if (now - timestamp >= dedupeWindowMs) recentlyNotified.delete(key)
+                }
+            }
             // Error toasts must not auto-dismiss -- a failure the user didn't
             // get to read before the default 3s timeout is not feedback.
             const options = notification.level === 'error' ? { timeout: false as const } : undefined

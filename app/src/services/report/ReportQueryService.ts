@@ -4,6 +4,8 @@ import { DateUtils } from '@/utils/DateUtils'
 import { AggregateService } from '@/services/AggregateService'
 import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
 
+export const REPORT_EDITOR_COLUMNS = 'id, enrollment_id, class_occurrence_id, lesson_id, is_completed, progress_letter, attendance_status, absence_reason, class_participation, classroom_behavior, contact_notes, contact_notes_document, class_notes, class_notes_document, content, content_document, external_link, version, last_edited_by, last_edited_at, created_at, updated_at'
+
 export class ReportQueryService {
     private static getOccurrenceSortKey(report: any): string {
         const occurrence = Array.isArray(report?.class_occurrences)
@@ -37,7 +39,7 @@ export class ReportQueryService {
     ): Promise<OccurrenceReport | null> {
         const { data: existing, error } = await supabase
             .from('occurrence_reports')
-            .select('*')
+            .select(REPORT_EDITOR_COLUMNS)
             .eq('enrollment_id', enrollmentId)
             .eq('class_occurrence_id', occurrenceId)
             .maybeSingle()
@@ -56,7 +58,7 @@ export class ReportQueryService {
         // real usage is nowhere near this, so it isn't a visible behavior change.
         const { data, error } = await supabase
             .from('report_versions')
-            .select('*')
+            .select('id, occurrence_report_id, version, content, edited_by, snapshot, created_at')
             .eq('occurrence_report_id', reportId)
             .order('version', { ascending: false })
             .limit(200)
@@ -202,7 +204,7 @@ export class ReportQueryService {
     static async getReportById(reportId: string): Promise<OccurrenceReport> {
         const { data, error } = await supabase
             .from('occurrence_reports')
-            .select('*')
+            .select(REPORT_EDITOR_COLUMNS)
             .eq('id', reportId)
             .single()
 

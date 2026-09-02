@@ -27,4 +27,20 @@ describe('editor notifier', () => {
         notifier.notify({ code: 'save-succeeded', level: 'success', message: 'Saved' })
         expect(toast.success).toHaveBeenCalledWith('Saved', undefined)
     })
+    it('dedupes the same report revision and error code but allows a new revision', () => {
+        const toast = { info: vi.fn(), success: vi.fn(), warning: vi.fn(), error: vi.fn() } as any
+        const notifier = createEditorNotifier(undefined, toast)
+        const notification = {
+            code: 'save-failed' as const,
+            level: 'error' as const,
+            message: 'offline',
+            dedupeKey: 'report-1:2:request_timeout'
+          }
+
+        notifier.notify(notification)
+        notifier.notify(notification)
+        notifier.notify({ ...notification, dedupeKey: 'report-1:3:request_timeout' })
+
+        expect(toast.error).toHaveBeenCalledTimes(2)
+    })
 })

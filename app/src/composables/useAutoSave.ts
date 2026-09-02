@@ -13,6 +13,8 @@ export interface AutoSaveResult {
     message?: string
     /** i18n key the UI should translate and show instead of `message`. */
     messageKey?: string
+    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error'
+    conflictFields?: string[]
 }
 
 export type AutoSaveStatus = 'idle' | 'scheduled' | 'dirty' | 'saving' | 'saved' | 'error' | 'conflict' | 'disabled'
@@ -31,6 +33,10 @@ export interface AutoSaveSuccess<TSnapshot, TResult extends AutoSaveResult> {
     revision: number
 }
 
+export interface AutoSaveErrorContext {
+    revision: number
+}
+
 type MaybeRef<T> = T | Ref<T>
 
 export interface AutoSaveOptions<TSnapshot, TResult extends AutoSaveResult = AutoSaveResult> {
@@ -43,7 +49,7 @@ export interface AutoSaveOptions<TSnapshot, TResult extends AutoSaveResult = Aut
     onConflict?: (serverReport: OccurrenceReportDTO | null, snapshot: TSnapshot) => void
     onSuccess?: (saved: AutoSaveSuccess<TSnapshot, TResult>) => void | Promise<void>
     /** `result` is the failed TResult when available (absent for a thrown exception). */
-    onError?: (message: string, result?: TResult) => void
+    onError?: (message: string, result?: TResult, context?: AutoSaveErrorContext) => void
 }
 
 interface PendingSave<TSnapshot> {
@@ -124,56 +130,58 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
     }
 
     async function processQueue(queueGeneration: number): Promise<void> {
-        while (
-            queueGeneration === generation &&
-            pendingSave &&
-            pendingSave.generation === queueGeneration &&
-            (configuration.enabled || drainRequested)
-        ) {
-            const job = pendingSave
-            pendingSave = null
-            isSaving.value = true
-            saveError.value = null
-            hasConflict.value = false
+        if (
+            queueGeneration !== generation ||
+            !pendingSave ||
+            pendingSave.generation !== queueGeneration ||
+            (!configuration.enabled && !drainRequested)
+        ) return
 
-            let result: TResult
-            try {
-                result = await options.onSave(job.snapshot)
-            } catch (error: any) {
-                if (queueGeneration !== generation) return
-                const message = error?.message || 'Unknown error during save'
-                saveError.value = message
-                restoreFailedJob(job)
-                queueBlocked = true
-                options.onError?.(message)
-                return
-            }
+        const job = pendingSave
+        pendingSave = null
+        isSaving.value = true
+        saveError.value = null
+        hasConflict.value = false
 
+        let result: TResult
+        try {
+            result = await options.onSave(job.snapshot)
+        } catch (error: any) {
             if (queueGeneration !== generation) return
-            if (result.conflict) {
-                restoreFailedJob(job)
-                queueBlocked = true
-                hasConflict.value = true
-                options.onConflict?.(result.serverReport || null, job.snapshot)
-                return
-            }
-            if (!result.success) {
-                const message = result.message || 'Failed to save'
-                saveError.value = message
-                restoreFailedJob(job)
-                queueBlocked = true
-                options.onError?.(message, result)
-                return
-            }
-
-            persistedRevision.value = Math.max(persistedRevision.value, job.revision)
-            lastSaved.value = new Date()
-            await options.onSuccess?.({ snapshot: job.snapshot, result, revision: job.revision })
-            const latestPending = pendingSave as PendingSave<TSnapshot> | null
-            hasUnsavedChanges.value = Boolean(
-                latestPending && latestPending.generation === generation && latestPending.revision > persistedRevision.value
-            )
+            const message = error?.message || 'Unknown error during save'
+            saveError.value = message
+            restoreFailedJob(job)
+            queueBlocked = true
+            options.onError?.(message, undefined, { revision: job.revision })
+            return
         }
+
+        if (queueGeneration !== generation) return
+        if (result.conflict) {
+            restoreFailedJob(job)
+            queueBlocked = true
+            hasConflict.value = true
+            options.onConflict?.(result.serverReport || null, job.snapshot)
+            return
+        }
+        if (!result.success) {
+            const message = result.message || 'Failed to save'
+            saveError.value = message
+            restoreFailedJob(job)
+            queueBlocked = true
+            options.onError?.(message, result, { revision: job.revision })
+            return
+        }
+
+        persistedRevision.value = Math.max(persistedRevision.value, job.revision)
+        lastSaved.value = new Date()
+        await options.onSuccess?.({ snapshot: job.snapshot, result, revision: job.revision })
+        const latestPending = pendingSave as PendingSave<TSnapshot> | null
+        hasUnsavedChanges.value = Boolean(
+            latestPending &&
+            latestPending.generation === generation &&
+            latestPending.revision > persistedRevision.value
+        )
     }
 
     function ensureProcessing(): Promise<void> {
@@ -182,7 +190,10 @@ export function useAutoSave<TSnapshot, TResult extends AutoSaveResult = AutoSave
         const queueGeneration = generation
         const currentPromise = processQueue(queueGeneration).finally(() => {
             if (processingPromise === currentPromise) processingPromise = null
-            if (queueGeneration === generation) isSaving.value = false
+            if (queueGeneration === generation) {
+                isSaving.value = false
+                if (pendingSave && configuration.enabled && !queueBlocked) schedule()
+            }
         })
         processingPromise = currentPromise
         return currentPromise

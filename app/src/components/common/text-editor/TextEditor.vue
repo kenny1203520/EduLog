@@ -79,6 +79,7 @@ const { appearance, appearanceStyle } = useTextEditorAppearance({
     lineHeight: toRef(props, 'lineHeight'), documentAppearance
 })
 const formattingRevision = ref(0)
+const focused = ref(false)
 
 const editor = new Editor({
     extensions: createTextEditorExtensions({ templateVariables: props.templateVariables }),
@@ -87,13 +88,14 @@ const editor = new Editor({
     editorProps: { attributes: { class: 'text-editor-tiptap' } },
     onUpdate: () => publishContent('local'),
     onSelectionUpdate: () => { formattingRevision.value++; emitActivity() },
-    onFocus: emitActivity
+    onFocus: () => { focused.value = true; emitActivity() },
+    onBlur: () => { focused.value = false; emitActivity() }
 })
 
 let lastContent = getContent()
 
 function getSelection(): TextEditorActivity {
-    return { caret: editor.state.selection.from, selectionEnd: editor.state.selection.to }
+    return { caret: editor.state.selection.from, selectionEnd: editor.state.selection.to, focused: focused.value }
 }
 function emitActivity(): void { emit('activity', getSelection()) }
 function getContent(): TextEditorContent {
@@ -137,6 +139,19 @@ function replaceContent(value: TextEditorContentInput, options: TextEditorReplac
 }
 function replaceText(value: string, options?: TextEditorReplaceOptions): void {
     replaceContent(normalizeTextContent(value), options)
+}
+function syncExternalContent(value: TextEditorContentInput): void {
+    const resolved = createTextEditorContent(value, { templateVariables: props.templateVariables })
+    if (contentEquals(resolved, getContent())) return
+    const selection = editor.state.selection
+    editor.commands.setContent(resolved.richText.doc, { emitUpdate: false })
+    const maxPosition = editor.state.doc.content.size
+    editor.commands.setTextSelection({ from: Math.min(selection.from, maxPosition), to: Math.min(selection.to, maxPosition) })
+    documentAppearance.value = resolved.richText.appearance
+    lastContent = resolved
+    emit('metrics-change', calculateTextEditorMetrics(resolved))
+    formattingRevision.value++
+    emitActivity()
 }
 function insertText(value: string): void {
     if (effectiveMode.value !== 'edit') return
@@ -215,10 +230,7 @@ function getFormattingState(): TextEditorFormattingState {
 const formattingState = computed(() => { void formattingRevision.value; return getFormattingState() })
 const showPlaceholder = computed(() => editor.isEmpty && Boolean(props.placeholder))
 
-watch(() => props.modelValue, value => {
-    const resolved = createTextEditorContent(value, { templateVariables: props.templateVariables })
-    if (!contentEquals(resolved, getContent())) replaceContent(resolved)
-}, { deep: true })
+watch(() => props.modelValue, value => syncExternalContent(value))
 watch(() => [props.disabled, props.mode] as const, ([disabled, mode]) => setMode(disabled ? 'disabled' : mode))
 
 onBeforeUnmount(() => editor.destroy())
