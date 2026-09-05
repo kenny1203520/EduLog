@@ -130,3 +130,5 @@ ORDER BY tablename, policyname;
 - 部署讀寫富文字文件的前端前，必須先套用 `1000023_rich_text_documents.sql`。
 - 部署週期班與營隊排程前，必須先套用 `1000024_recurring_and_camp_sessions.sql`。
 - 部署課程相容性篩選與教室同步前，必須先套用 `1000025_enrollment_classroom_consistency.sql`。
+- 部署報告編輯器的 scoped RLS 與班級頁 placeholder provisioning 修正前，必須先套用 `1000036_editor_collaboration_reliability.sql`、`1000037_editor_security_hardening.sql`、`1000038_editor_rbac_boundary_hardening.sql`，最後套用 `1000039_editor_report_insert_rls_fix.sql`。
+- `1000039_editor_report_insert_rls_fix.sql` 修正 occurrence_reports INSERT policy；請先在 staging 驗證授權教師、轉課 enrollment 與未授權使用者，再部署 production。
