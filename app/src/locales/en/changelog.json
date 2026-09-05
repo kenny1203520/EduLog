@@ -1,5 +1,23 @@
 {
     "entries": [
+        {
+            "version": "1.8.1",
+            "date": "2026-09-05",
+            "changes": {
+                "fixed": [
+                    "Fixed scoped-RLS report placeholder provisioning returning 42501 and causing class detail pages to show a course-load error.",
+                    "Added a key-based report INSERT policy validating the effective occurrence roster, assigned teacher, and single-lesson transfers.",
+                    "Kept the class workspace usable when optional placeholder provisioning is denied; existing reports remain available."
+                ],
+                "tests": [
+                    "Added regression coverage for RLS-denied placeholder upserts, non-authorization failures, and the editor INSERT policy contract."
+                ],
+                "deployment": [
+                    "Apply 1000037_editor_security_hardening.sql, 1000038_editor_rbac_boundary_hardening.sql, and 1000039_editor_report_insert_rls_fix.sql in staging, verify assigned and unassigned teacher access, then deploy to production.",
+                    "Rebuild and redeploy the frontend with version 1.8.1."
+                ]
+            }
+        },
     {
             "version": "1.8.0",
             "date": "2026-08-16",

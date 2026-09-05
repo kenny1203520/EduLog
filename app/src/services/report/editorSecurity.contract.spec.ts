@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 
 const repoRoot = resolve(process.cwd(), '..')
 const rbacBoundary = readFileSync(resolve(repoRoot, 'supabase/migrations/1000038_editor_rbac_boundary_hardening.sql'), 'utf8')
+const insertRlsFix = readFileSync(resolve(repoRoot, 'supabase/migrations/1000039_editor_report_insert_rls_fix.sql'), 'utf8')
 
 describe('editor security contracts', () => {
     it('restricts RBAC mutation and legacy admin grant to editor administrators', () => {
@@ -19,6 +20,14 @@ const migration = readFileSync(resolve(repoRoot, 'supabase/migrations/1000037_ed
         expect(migration).not.toContain('FOR UPDATE')
     })
 
+    it('uses a key-based INSERT policy for report placeholder provisioning', () => {
+        expect(insertRlsFix).toContain('can_create_occurrence_report')
+        expect(insertRlsFix).toContain('CREATE POLICY "Report editor insert is scoped"')
+        expect(insertRlsFix).toContain('WITH CHECK (')
+        expect(insertRlsFix).not.toMatch(/FOR ALL[\s\S]*WITH CHECK \(public\.can_access_occurrence_report\(id\)\)/)
+        expect(insertRlsFix).toContain('get_effective_occurrence_enrollment_ids')
+        expect(insertRlsFix).toContain('SET search_path = public')
+    })
     it('keeps collaboration channels private and payloads bounded', () => {
         const provider = readFileSync(resolve(repoRoot, 'app/src/services/report/SupabaseProvider.ts'), 'utf8')
         expect(provider).toContain('private: true')
