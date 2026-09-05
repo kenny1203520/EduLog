@@ -132,3 +132,28 @@ ORDER BY tablename, policyname;
 - 部署課程相容性篩選與教室同步前，必須先套用 `1000025_enrollment_classroom_consistency.sql`。
 - 部署報告編輯器的 scoped RLS 與班級頁 placeholder provisioning 修正前，必須先套用 `1000036_editor_collaboration_reliability.sql`、`1000037_editor_security_hardening.sql`、`1000038_editor_rbac_boundary_hardening.sql`，最後套用 `1000039_editor_report_insert_rls_fix.sql`。
 - `1000039_editor_report_insert_rls_fix.sql` 修正 occurrence_reports INSERT policy；請先在 staging 驗證授權教師、轉課 enrollment 與未授權使用者，再部署 production。
+
+## Migration chain and reconciliation
+
+The deployed history is intentionally immutable:
+
+- 1000001-1000009: core schema, academics, operations and user preferences.
+- 1000010, 1000015, 1000016: intentionally unused historical version numbers.
+- 1000011-1000024: profiles, collaboration, credentials, recurring and reporting patches.
+- 1000025-1000036: scheduling, role, collaboration and reliability patches.
+- 1000037-1000042: editor security, scoped RLS, RBAC hardening and API foundation.
+- 1000043_teaching_scope_reconciliation.sql: the canonical reconciliation entry point.
+
+Do not edit or renumber 1000001-1000042. 1000043 is idempotent and is designed to converge a clean install or a database that received only part of the historical patches. It creates the teaching/member domain, performs owner-based backfill, installs canonical permissions and replaces core authenticated-wide policies with teaching-scoped RLS. Rows whose owner cannot be inferred are assigned only to the admin quarantine teaching.
+
+### Operational procedure
+
+1. Take a database backup and run the migration in staging first.
+2. Apply the complete chain with supabase db push (or the configured deployment runner).
+3. Re-run the deployment command to verify the migration is a no-op.
+4. Verify that teachings and teaching_members exist and that classrooms, courses, and class_sessions have no NULL teaching_id.
+5. Verify policy coverage with:
+   select schemaname, tablename, policyname from pg_policies where schemaname = 'public' order by tablename, policyname;
+6. Run API/RLS integration and frontend smoke tests before merging PR #7.
+
+Rollback is restore-from-backup or a forward corrective migration. Do not delete migration history or manually undo deployed policies in production.
