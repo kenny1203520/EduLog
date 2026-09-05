@@ -53,6 +53,13 @@ type ReportEditorExpose = {
 const { t } = useI18n()
 const toast = useToast()
 const { errorKey } = useFeedback()
+
+function isReportAuthorizationError(error: any): boolean {
+    const code = error?.code
+    const status = error?.status || error?.statusCode
+    const message = typeof error?.message === 'string' ? error.message : ''
+    return code === '42501' || status === 401 || status === 403 || /row-level security|permission denied/i.test(message)
+}
 const preferences = usePreferencesStore()
 
 const route = useRoute()
@@ -655,7 +662,16 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
         nextOccurrence.value = navigation.next
 
         await Promise.all([
-            loadReportsForCurrentOccurrence(),
+            loadReportsForCurrentOccurrence().catch(error => {
+                // Placeholder report creation is best-effort. If the scoped
+                // INSERT policy is not deployed yet, keep the class workspace
+                // usable and allow existing reports to be opened.
+                if (isReportAuthorizationError(error)) {
+                    console.warn('Report data provisioning is not authorized; continuing with existing reports.')
+                    return
+                }
+                throw error
+            }),
             loadOccurrenceTeachers(),
             loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate)
         ])

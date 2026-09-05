@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [1.8.1] - 2026-09-05
+
+### Fixed
+- Fixed report placeholder provisioning failing with `42501` under scoped RLS, which previously caused class detail pages to show a course-load error.
+- Added a key-based report INSERT policy that validates the effective occurrence roster and assigned teacher, including single-lesson transfers.
+- Kept class workspace loading usable when optional placeholder provisioning is denied; existing reports remain available.
+
+### Tests
+- Added regression coverage for RLS-denied placeholder upserts, non-authorization failures, and the editor INSERT policy contract.
+
+### Deployment Notes
+- Apply `1000037_editor_security_hardening.sql`, `1000038_editor_rbac_boundary_hardening.sql`, and `1000039_editor_report_insert_rls_fix.sql` in staging, verify assigned and unassigned teacher access, then deploy to production.
+- Rebuild and redeploy the frontend with package version `1.8.1`.
 
 ## [1.8.0] - 2026-08-16
 

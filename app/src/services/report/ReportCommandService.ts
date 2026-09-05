@@ -52,6 +52,12 @@ async function authenticatedUserId(): Promise<string | null> {
     return data.user?.id || null
 }
 
+function isReportAuthorizationError(error: any): boolean {
+    const code = error?.code
+    const status = error?.status || error?.statusCode
+    return code === '42501' || status === 401 || status === 403
+}
+
 
 class ReportRequestTimeoutError extends Error {
     constructor() {
@@ -668,7 +674,19 @@ export class ReportCommandService {
                     onConflict: 'enrollment_id,class_occurrence_id',
                     ignoreDuplicates: true
                 })
-            if (insertError) throw new Error(`Failed to ensure occurrence reports: ${insertError.message}`)
+            if (insertError) {
+                // Provisioning placeholders is a convenience for the roster
+                // view. A deployment that has not yet applied the scoped
+                // INSERT policy must not make the entire class page fail;
+                // existing reports can still be displayed and edited.
+                if (isReportAuthorizationError(insertError)) {
+                    console.warn('Report placeholder provisioning was denied; continuing with existing reports.', {
+                        code: insertError.code || 'authorization_error'
+                    })
+                } else {
+                    throw new Error(`Failed to ensure occurrence reports: ${insertError.message}`)
+                }
+            }
         }
 
         return ReportQueryService.getReportsByOccurrence(occurrenceId)

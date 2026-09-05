@@ -1,5 +1,23 @@
 {
     "entries": [
+        {
+            "version": "1.8.1",
+            "date": "2026-09-05",
+            "changes": {
+                "fixed": [
+                    "修正 scoped RLS 下報告 placeholder 建立回傳 42501，導致班級詳情頁顯示課次資料載入失敗的問題。",
+                    "新增以 enrollment 與 occurrence key 驗證的報告 INSERT policy，涵蓋有效名冊、授課教師與單堂轉課。",
+                    "即使 optional placeholder 建立被拒絕，班級工作區仍可載入並顯示既有報告。"
+                ],
+                "tests": [
+                    "新增 RLS 拒絕 placeholder upsert、非權限錯誤與 editor INSERT policy contract 回歸測試。"
+                ],
+                "deployment": [
+                    "請在 staging 依序套用 1000037_editor_security_hardening.sql、1000038_editor_rbac_boundary_hardening.sql 與 1000039_editor_report_insert_rls_fix.sql，驗證授權與未授權教師後再部署 production。",
+                    "以 1.8.1 版本重新建置並部署前端。"
+                ]
+            }
+        },
     {
             "version": "1.8.0",
             "date": "2026-08-16",

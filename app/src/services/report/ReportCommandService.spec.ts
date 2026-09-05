@@ -68,4 +68,25 @@ describe('ReportCommandService.createReportsForOccurrence', () => {
         expect(ReportLifecyclePolicy.buildInitialReportPayload).not.toHaveBeenCalled()
         expect(fromMock).toHaveBeenCalledTimes(1)
     })
+
+    it('continues with existing reports when placeholder provisioning is rejected by RLS', async () => {
+        const existing = terminalQuery({ data: [{ enrollment_id: 'enrollment-1' }], error: null })
+        const upsert = vi.fn().mockResolvedValue({ error: { code: '42501', message: 'new row violates row-level security policy' } })
+        fromMock
+            .mockReturnValueOnce(existing)
+            .mockReturnValueOnce({ upsert })
+
+        await expect(ReportCommandService.createReportsForOccurrence('occurrence-1')).resolves.toEqual([])
+        expect(ReportQueryService.getReportsByOccurrence).toHaveBeenCalledWith('occurrence-1')
+    })
+
+    it('still surfaces non-authorization provisioning failures', async () => {
+        const existing = terminalQuery({ data: [{ enrollment_id: 'enrollment-1' }], error: null })
+        const upsert = vi.fn().mockResolvedValue({ error: { code: '23503', message: 'foreign key violation' } })
+        fromMock
+            .mockReturnValueOnce(existing)
+            .mockReturnValueOnce({ upsert })
+
+        await expect(ReportCommandService.createReportsForOccurrence('occurrence-1')).rejects.toThrow('Failed to ensure occurrence reports')
+    })
 })
