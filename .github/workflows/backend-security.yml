@@ -1,0 +1,39 @@
+name: backend-security
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'app/**'
+      - '.github/workflows/backend-security.yml'
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  deno:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - run: deno test --allow-read supabase/tests/migration_chain_static_test.ts
+
+  frontend-regression:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run test -- --run
+      - run: npm run build
