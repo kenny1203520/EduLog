@@ -27,6 +27,7 @@ const policies = ref<RolePermissionPolicyDTO[]>([])
 const selections = ref<Record<string, PolicySelection>>({})
 const loading = ref(false)
 const saving = ref(false)
+const canManageRbac = ref(false)
 
 const filteredSessions = computed(() => !classroomId.value
     ? sessions.value
@@ -34,7 +35,7 @@ const filteredSessions = computed(() => !classroomId.value
 const scopeId = computed(() => scopeType.value === 'system'
     ? null
     : scopeType.value === 'classroom' ? classroomId.value : sessionId.value)
-const canSave = computed(() => scopeType.value === 'system' || Boolean(scopeId.value))
+const canSave = computed(() => canManageRbac.value && (scopeType.value === 'system' || Boolean(scopeId.value)))
 
 function isCurrentScope(policy: RolePermissionPolicyDTO) {
     return policy.scope_type === scopeType.value
@@ -52,6 +53,7 @@ function syncSelections() {
 async function load() {
     loading.value = true
     try {
+        canManageRbac.value = await PermissionPolicyService.canManageRbac()
         const [roleData, permissionData, classroomResult, sessionResult] = await Promise.all([
             RoleService.getRoles(),
             PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION),
@@ -141,13 +143,18 @@ onMounted(load)
                 </label>
             </div>
             <div v-if="loading" class="py-8 text-center font-bold text-gray-400">{{ $t('common.loading') }}</div>
-            <ScopedRolePolicyEditor v-else v-model="selections" :roles="roles" :policies="policies"
-                :scope-type="scopeType" :scope-id="scopeId" :classroom-id="classroomId || null"
-                :class-session-id="sessionId || null" :disabled="!canSave || saving" />
+            <template v-else>
+                <p v-if="!canManageRbac" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                    {{ $t('errors.permission_required_for_settings') }}
+                </p>
+                <ScopedRolePolicyEditor v-model="selections" :roles="roles" :policies="policies"
+                    :scope-type="scopeType" :scope-id="scopeId" :classroom-id="classroomId || null"
+                    :class-session-id="sessionId || null" :disabled="!canSave || saving" />
+            </template>
 
             <div class="flex flex-col gap-3 rounded-2xl bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <p class="text-xs font-bold leading-5 text-amber-800">{{ $t('settings.incomplete_notifications.inheritance_hint') }}</p>
-                <button type="button" @click="save" :disabled="saving || !canSave"
+                <button v-if="canManageRbac" type="button" @click="save" :disabled="saving || !canSave"
                     class="shrink-0 rounded-xl bg-emerald-600 px-6 py-3 font-black text-white transition hover:bg-emerald-700 disabled:opacity-40">
                     {{ saving ? $t('common.loading') : $t('common.save') }}
                 </button>

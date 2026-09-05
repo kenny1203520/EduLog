@@ -691,7 +691,8 @@ async function handleConfirmCreate() {
         showCreateConfirm.value = false
     } catch (e) {
         console.error('Failed to create report', e)
-        toast.error(t('report.create_error') || 'Failed to create report')
+        const publicMessageKey = (e as any)?.i18nKey || 'report.create_error'
+        toast.error(t(publicMessageKey) || t('report.create_error') || 'Failed to create report')
     } finally {
         isCreatingReport.value = false
     }

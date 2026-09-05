@@ -11,6 +11,7 @@ import { OccurrenceRosterService } from '../occurrence/OccurrenceRosterService'
 import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
 import { safeExternalHref } from '@/utils/safeExternalHref'
+import { AuthorizationError } from '@/services/errors/AppError'
 
 function assignRichTextPair(
     target: Record<string, unknown>,
@@ -204,7 +205,16 @@ export class ReportCommandService {
             createError = retryResult.error
         }
 
-        if (createError) throw new Error(`Failed to create report: ${createError.message}`)
+        if (createError) {
+            console.error('Failed to create occurrence report:', createError)
+            if (isReportAuthorizationError(createError)) {
+                throw new AuthorizationError({
+                    message: 'Occurrence report creation was denied by the report access policy',
+                    cause: createError
+                })
+            }
+            throw new Error('Failed to create occurrence report')
+        }
 
         return new OccurrenceReport(created!)
     }

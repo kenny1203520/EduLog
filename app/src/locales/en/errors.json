@@ -8,6 +8,7 @@
     "unique_violation": "That value is already in use.",
     "foreign_key_violation": "This can't be completed because related data still references it.",
     "permission_denied": "You don't have permission to do that.",
+    "permission_required_for_settings": "Only system administrators can change notification settings.",
     "session_expired": "Your session has expired. Please sign in again.",
     "validation_failed": "Please check the highlighted fields and try again.",
     "domain": {

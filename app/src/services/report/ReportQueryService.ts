@@ -192,7 +192,7 @@ export class ReportQueryService {
     ): Promise<OccurrenceReport[]> {
         const { data, error } = await supabase
             .from('occurrence_reports')
-            .select('*')
+            .select(REPORT_EDITOR_COLUMNS)
             .eq('class_occurrence_id', occurrenceId)
             .order('created_at', { ascending: false })
 

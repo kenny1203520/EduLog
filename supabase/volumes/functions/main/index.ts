@@ -157,7 +157,19 @@ Deno.serve(async (req: Request) => {
       importMapPath,
       envVars,
     })
-    return await worker.fetch(req)
+    const workerResponse = await worker.fetch(req)
+    if (service_name === 'api-v1') return workerResponse
+
+    const legacyHeaders = new Headers(workerResponse.headers)
+    legacyHeaders.set('Deprecation', 'true')
+    legacyHeaders.set('Link', '</api/v1>; rel=""successor-version""')
+    const sunset = Deno.env.get('LEGACY_API_SUNSET')
+    if (sunset) legacyHeaders.set('Sunset', sunset)
+    return new Response(workerResponse.body, {
+      status: workerResponse.status,
+      statusText: workerResponse.statusText,
+      headers: legacyHeaders,
+    })
   } catch (e) {
     const error = { msg: e.toString() }
     return new Response(JSON.stringify(error), {
