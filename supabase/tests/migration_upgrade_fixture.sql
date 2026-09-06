@@ -23,8 +23,8 @@ INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time
   ('60000000-0000-0000-0000-0000000000ad', 'Second session same teaching', '30000000-0000-0000-0000-0000000000aa', '{}'::uuid[], '13:00', '14:00', '00000000-0000-0000-0000-0000000000aa')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.teachers(id, name, user_id) VALUES
-  ('80000000-0000-0000-0000-0000000000bb', 'Teacher B', '00000000-0000-0000-0000-0000000000bb')
+INSERT INTO public.teachers(id, name, user_id, email) VALUES
+  ('80000000-0000-0000-0000-0000000000bb', 'Teacher B', '00000000-0000-0000-0000-0000000000bb', 'teacher-b@example.test')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.class_session_teachers(class_session_id, teacher_id, role_id) VALUES
