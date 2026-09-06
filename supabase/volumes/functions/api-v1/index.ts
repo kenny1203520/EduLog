@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.177.1/http/server.ts'
 import { ApiError, audit, authenticate, beginIdempotency, completeIdempotency, corsHeaders, emitTelemetry, enforceRateLimit, handleError, parseJson, requirePermission, requestId, response, traceId } from '../_shared/api.ts'
+import { parsePagination, ValidationError, validateWritableFields } from '../_shared/validation.ts'
 
 const OPENAPI = {
   openapi: '3.0.3',
@@ -61,6 +62,39 @@ const OPENAPI = {
   },
 }
 
+const openapi = OPENAPI as any
+const commonErrors = {
+  '400': { '$ref': '#/components/responses/BadRequest' },
+  '401': { '$ref': '#/components/responses/Unauthorized' },
+  '403': { '$ref': '#/components/responses/Forbidden' },
+  '404': { '$ref': '#/components/responses/NotFound' },
+  '409': { '$ref': '#/components/responses/Conflict' },
+  '413': { '$ref': '#/components/responses/PayloadTooLarge' },
+  '422': { '$ref': '#/components/responses/ValidationError' },
+  '429': { '$ref': '#/components/responses/RateLimited' },
+  '500': { '$ref': '#/components/responses/InternalError' },
+}
+Object.assign(openapi.components.responses, {
+  BadRequest: { description: 'Malformed request', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+  NotFound: { description: 'Resource not found or not visible', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+  Conflict: { description: 'State conflict', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+  PayloadTooLarge: { description: 'Payload exceeds the configured limit', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+  InternalError: { description: 'Unexpected server error', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+})
+openapi.paths['/roles/{id}'] = { get: { responses: { '200': { description: 'Role' } } }, patch: { responses: { '200': { description: 'Updated role' } } }, delete: { responses: { '200': { description: 'Deleted role' } } } }
+for (const [path, pathItem] of Object.entries(openapi.paths) as [string, Record<string, any>][]) {
+  for (const [method, operation] of Object.entries(pathItem)) {
+    if (!['get', 'post', 'patch', 'delete'].includes(method)) continue
+    operation.responses = { ...commonErrors, ...operation.responses }
+    const pathResource = path.split('/')[1] ?? 'unknown'
+    const normalizedResource = pathResource === 'report-templates' ? 'templates' : pathResource.replaceAll('-', '_')
+    const operationAction = method === 'get' ? (path.includes('{') ? 'read' : 'list') : method
+    operation['x-permission'] = path === '/permissions' ? 'system.permissions.read' : path.startsWith('/roles') ? 'system.roles.manage' : path === '/audit-events' ? 'system.audit.list' : path.includes('/members') ? (method === 'get' ? 'teaching.members.list' : 'teaching.members.manage') : path === '/health' || path === '/me' ? undefined : 'teaching.' + normalizedResource + '.' + operationAction
+    if (method === 'get' && path !== '/health') operation.parameters = [...(operation.parameters ?? []), { '$ref': '#/components/parameters/Limit' }, { '$ref': '#/components/parameters/Offset' }, { '$ref': '#/components/parameters/Sort' }]
+    if (['post', 'patch', 'delete'].includes(method)) operation.parameters = [...(operation.parameters ?? []), { '$ref': '#/components/parameters/IdempotencyKey' }]
+  }
+}
+
 const resourceDefinitions = {
   classrooms: { table: 'classrooms', select: 'id,name,color,address,phone,external_link,teaching_id,user_id,created_at,updated_at', fields: ['name', 'color', 'address', 'phone', 'external_link', 'teaching_id'] },
   class_sessions: { table: 'class_sessions', select: 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,teaching_id,user_id,created_at,updated_at', fields: ['name', 'classroom_id', 'course_ids', 'day_of_week', 'start_time', 'end_time', 'capacity', 'lesson_number', 'external_link', 'start_date', 'end_date', 'teaching_id'] },
@@ -83,11 +117,8 @@ function resourceDefinition(resource: string) {
   return definition
 }
 
-function pickBody(body: Record<string, unknown>, fields: readonly string[]) {
-  const result: Record<string, unknown> = {}
-  for (const field of fields) if (Object.prototype.hasOwnProperty.call(body, field)) result[field] = body[field]
-  return result
-}
+function validateBody(body: Record<string, unknown>, fields: readonly string[], allowedExtra: readonly string[] = []) { try { return validateWritableFields(body, [...fields, ...allowedExtra]) } catch (error) { if (error instanceof ValidationError) throw new ApiError(422, 'VALIDATION_ERROR', error.message, error.fields); throw error } }
+function pickBody(body: Record<string, unknown>, fields: readonly string[], allowedExtra: readonly string[] = []) { validateBody(body, fields, allowedExtra); const result: Record<string, unknown> = {}; for (const field of fields) if (Object.prototype.hasOwnProperty.call(body, field)) result[field] = body[field]; return result }
 function permissionResource(resource: string) {
   if (resource === 'report_templates' || resource === 'report-templates') return 'templates'
   return resource.replaceAll('-', '_')
@@ -126,6 +157,7 @@ serve(async (req) => {
   const started = performance.now()
   let telemetryOutcome: 'success' | 'denied' | 'failure' = 'success'
   let telemetryUserId: string | undefined
+  let authenticatedContext: Awaited<ReturnType<typeof authenticate>> | undefined
   const url = new URL(req.url)
   const path = url.pathname.replace(/^\/api-v1/, '').replace(/^\/v1/, '') || '/'
   if (req.method === 'OPTIONS') return response(null, 204, id, headers)
@@ -135,6 +167,7 @@ serve(async (req) => {
     if (path === '/openapi.json' && req.method === 'GET') return response(OPENAPI, 200, id, headers)
 
     const ctx = await authenticate(req, id, trace)
+    authenticatedContext = ctx
     telemetryUserId = ctx.user.id
     const replay = await beginIdempotency(ctx, req, path)
     if (replay) return replay
@@ -142,16 +175,47 @@ serve(async (req) => {
 
     if (path === '/permissions' && req.method === 'GET') {
       await requirePermission(ctx, 'system.permissions.read')
-      const { data, error } = await ctx.db.from('permissions').select('key,name,description,domain,resource,action,conditions').order('domain').order('resource').order('action')
+      const { limit, offset } = parsePagination(url.searchParams)
+      const { data, error } = await ctx.db.from('permissions').select('key,name,description,domain,resource,action,conditions').order('domain').order('resource').order('action').range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load permissions')
-      return response({ data: data ?? [], request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset }, request_id: id }, 200, id, headers)
     }
 
     if (path === '/roles' && req.method === 'GET') {
       await requirePermission(ctx, 'system.roles.manage')
-      const { data, error } = await ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at').order('sort_order').order('name')
+      const { limit, offset } = parsePagination(url.searchParams)
+      const { data, error } = await ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at').order('sort_order').order('name').range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load roles')
-      return response({ data: data ?? [], request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset }, request_id: id }, 200, id, headers)
+    }
+
+    const roleItemMatch = path.match(/^\/roles\/([0-9a-fA-F-]{36})$/)
+    if (roleItemMatch) {
+      const roleId = roleItemMatch[1]
+      await requirePermission(ctx, 'system.roles.manage')
+      if (req.method === 'GET') {
+        const { data, error } = await ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at').eq('id', roleId).maybeSingle()
+        if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load role')
+        if (!data) throw new ApiError(404, 'ROLE_NOT_FOUND', 'Role not found')
+        return response({ data, meta: null, request_id: id }, 200, id, headers)
+      }
+      if (req.method === 'PATCH') {
+        const body = await parseJson(req)
+        validateBody(body, ['code', 'name', 'description'])
+        const payload = Object.fromEntries(Object.entries(body).map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value]))
+        const { data, error } = await ctx.db.from('roles').update(payload).eq('id', roleId).eq('is_system', false).select('id,code,name,description,is_system,sort_order,created_at,updated_at').maybeSingle()
+        if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'ROLE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Role already exists' : 'Unable to update role')
+        if (!data) throw new ApiError(404, 'ROLE_NOT_FOUND', 'Role not found or system role cannot be changed')
+        await audit(ctx, { action: 'update', domain: 'system', resource: 'roles', resourceId: roleId, outcome: 'success' })
+        return mutationResponse(ctx, req, 200, { data, meta: null, request_id: id }, id, headers)
+      }
+      if (req.method === 'DELETE') {
+        const { data, error } = await ctx.db.from('roles').delete().eq('id', roleId).eq('is_system', false).select('id').maybeSingle()
+        if (error) throw new ApiError(409, 'ROLE_IN_USE', 'Role could not be deleted')
+        if (!data) throw new ApiError(404, 'ROLE_NOT_FOUND', 'Role not found or system role cannot be deleted')
+        await audit(ctx, { action: 'delete', domain: 'system', resource: 'roles', resourceId: roleId, outcome: 'success' })
+        return mutationResponse(ctx, req, 200, { data: null, meta: null, request_id: id }, id, headers)
+      }
     }
 
     if (path === '/roles' && req.method === 'POST') {
@@ -167,10 +231,10 @@ serve(async (req) => {
 
     if (path === '/audit-events' && req.method === 'GET') {
       await requirePermission(ctx, 'system.audit.list')
-      const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 50), 1), 100)
-      const { data, error } = await ctx.db.from('audit_events').select('id,actor_user_id,action,domain,resource,resource_id,scope_id,request_id,outcome,metadata,created_at').order('created_at', { ascending: false }).limit(limit)
+      const { limit, offset } = parsePagination(url.searchParams)
+      const { data, error } = await ctx.db.from('audit_events').select('id,actor_user_id,action,domain,resource,resource_id,scope_id,request_id,outcome,metadata,created_at').order('created_at', { ascending: false }).range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load audit events')
-      return response({ data: data ?? [], request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset }, request_id: id }, 200, id, headers)
     }
 
     const teachingMembersMatch = path.match(/^\/teachings\/([0-9a-fA-F-]{36})\/members$/)
@@ -187,7 +251,7 @@ serve(async (req) => {
         const body = await parseJson(req) as Record<string, unknown>
         const userId = typeof body.user_id === 'string' ? body.user_id : ''
         if (!/^[0-9a-fA-F-]{36}$/.test(userId)) throw new ApiError(422, 'VALIDATION_ERROR', 'user_id must be a UUID', { user_id: ['invalid'] })
-        const payload = { teaching_id: teachingId, user_id: userId, ...pickBody(body, ['role_id', 'status', 'effective_from', 'effective_to']) }
+        const payload = { teaching_id: teachingId, user_id: userId, ...pickBody(body, ['role_id', 'status', 'effective_from', 'effective_to'], ['user_id']) }
         const { data, error } = await ctx.db.from('teaching_members').insert(payload).select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').single()
         if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'MEMBER_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Teaching member already exists' : 'Unable to add teaching member')
         await audit(ctx, { action: 'create', domain: 'teaching', resource: 'members', resourceId: teachingId, scopeId: teachingId, outcome: 'success' })
@@ -200,8 +264,7 @@ serve(async (req) => {
       const definition = resourceDefinition(resource)
       if (req.method === 'GET') {
         await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.list')
-        const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 50), 1), 100)
-        const offset = Math.max(Number(url.searchParams.get('offset') ?? 0), 0)
+        const { limit, offset } = parsePagination(url.searchParams)
         const sort = collectionSort(resource, url.searchParams.get('sort'))
         let query = ctx.db.from(definition.table).select(definition.select).range(offset, offset + limit - 1).order(sort.field, { ascending: sort.ascending })
         const search = url.searchParams.get('search')?.trim()
@@ -257,9 +320,21 @@ serve(async (req) => {
     }
     throw new ApiError(404, 'ROUTE_NOT_FOUND', 'Route not found')
   } catch (error) {
+    if (error instanceof ValidationError) error = new ApiError(400, 'INVALID_QUERY', error.message, error.fields)
     telemetryOutcome = error instanceof ApiError && error.status === 403 ? 'denied' : 'failure'
     if (error instanceof ApiError && error.status === 403) {
-      try { const ctx = await authenticate(req, id, trace); await audit(ctx, { action: req.method, domain: 'teaching', resource: path.split('/')[1] || 'unknown', outcome: 'denied' }) } catch { /* preserve original denial */ }
+      try {
+        const deniedContext = authenticatedContext ?? await authenticate(req, id, trace, path, started)
+        await audit(deniedContext, { action: req.method, domain: 'teaching', resource: path.split('/')[1] || 'unknown', outcome: 'denied', status: 403 })
+      } catch { /* preserve original denial */ }
+    } else if (authenticatedContext) {
+      void audit(authenticatedContext, {
+        action: req.method,
+        domain: path.startsWith('/roles') || path === '/permissions' || path === '/audit-events' ? 'system' : 'teaching',
+        resource: path.split('/')[1] || 'unknown',
+        outcome: 'failure',
+        status: error instanceof ApiError ? error.status : 500,
+      })
     }
     return handleError(error, id, trace)
   } finally {
