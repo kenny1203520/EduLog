@@ -84,3 +84,75 @@ BEGIN
   END IF;
 END;
 $$;
+
+DO $$
+DECLARE
+  function_definition text;
+  forbidden_count integer;
+  policy_count integer;
+  policy_command text;
+BEGIN
+  SELECT pg_get_functiondef(to_regprocedure('public.has_api_permission(uuid,text,uuid,uuid)'))
+  INTO function_definition;
+  IF function_definition LIKE '%SELECT false%' THEN
+    RAISE EXCEPTION 'has_api_permission compatibility shim was not replaced by 1000044';
+  END IF;
+
+  SELECT count(*) INTO forbidden_count
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename = 'occurrence_reports'
+    AND policyname IN (
+      'Report editor read is scoped',
+      'Report editor insert is scoped',
+      'Report editor update is scoped',
+      'Report editor delete is scoped',
+      'Teaching reports read',
+      'Teaching reports create',
+      'Teaching reports update',
+      'Teaching reports delete'
+    );
+  IF forbidden_count <> 0 THEN
+    RAISE EXCEPTION 'legacy occurrence report policies remain: %', forbidden_count;
+  END IF;
+
+  FOREACH policy_command IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] LOOP
+    SELECT count(*) INTO policy_count
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'occurrence_reports'
+      AND cmd = policy_command
+      AND permissive = 'PERMISSIVE'
+      AND roles @> ARRAY['authenticated'::name];
+    IF policy_count <> 1 THEN
+      RAISE EXCEPTION 'expected one authenticated permissive occurrence report % policy, found %', policy_command, policy_count;
+    END IF;
+  END LOOP;
+
+  SELECT count(*) INTO forbidden_count
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND policyname IN (
+      'Teaching owners create teachings',
+      'Teaching owners update teachings',
+      'Teaching owners delete teachings',
+      'Users read own audit events',
+      'Teaching templates read',
+      'Teaching templates create',
+      'Teaching templates update',
+      'Teaching templates delete',
+      'Teaching credentials read',
+      'Teaching credentials create',
+      'Teaching credentials update',
+      'Teaching credentials delete',
+      'Canonical teachers read',
+      'Canonical teachers create',
+      'Canonical teachers update',
+      'Canonical teachers delete'
+    )
+    AND (COALESCE(qual, '') || COALESCE(with_check, '')) !~ '\([[:space:]]*select[[:space:]]+auth\.uid\(\)[[:space:]]*\)';
+  IF forbidden_count <> 0 THEN
+    RAISE EXCEPTION 'RLS initplan rewrites are incomplete: %', forbidden_count;
+  END IF;
+END;
+$$;

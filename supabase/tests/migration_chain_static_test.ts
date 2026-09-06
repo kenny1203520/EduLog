@@ -3,6 +3,7 @@ import { assert, assertStringIncludes } from 'https://deno.land/std@0.177.1/test
 const migrationDir = new URL('../migrations/', import.meta.url)
 const reconciliation = await Deno.readTextFile(new URL('1000043_teaching_scope_reconciliation.sql', migrationDir))
 const hardening = await Deno.readTextFile(new URL('1000044_rbac_epoch_and_api_contract.sql', migrationDir))
+const compatibility = await Deno.readTextFile(new URL('1000041a_has_api_permission_compatibility.sql', migrationDir))
 
 Deno.test('reconciliation migration is present and fail-closed', () => {
   assertStringIncludes(reconciliation, 'CREATE TABLE IF NOT EXISTS public.teachings')
@@ -20,6 +21,12 @@ Deno.test('forward hardening adds epoch, cycle prevention, and action-specific R
   assertStringIncludes(hardening, 'RBAC_ROLE_INHERITANCE_CYCLE')
   assertStringIncludes(hardening, 'CREATE OR REPLACE FUNCTION public.has_api_permission')
   assertStringIncludes(hardening, 'public.resolve_user_permission(uuid,text,uuid,uuid,date)')
+  assertStringIncludes(hardening, '(select auth.uid())')
+  assertStringIncludes(hardening, 'Report editor read is scoped')
+  assertStringIncludes(hardening, 'Canonical reports read')
+  assertStringIncludes(hardening, 'Canonical reports create')
+  assertStringIncludes(hardening, 'Canonical reports update')
+  assertStringIncludes(hardening, 'Canonical reports delete')
   assertStringIncludes(hardening, 'Teaching enrollments create')
   assert(!hardening.includes('FOR ALL TO authenticated'))
 })
@@ -29,9 +36,14 @@ Deno.test('historical migration versions are preserved', async () => {
   for await (const entry of Deno.readDir(migrationDir)) {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
+  names.sort()
   for (const version of ['1000001', '1000002', '1000003', '1000041', '1000042', '1000043', '1000044']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
+  assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
+  assert(names.indexOf('1000041a_has_api_permission_compatibility.sql') < names.indexOf('1000042_api_rbac_rest_foundation.sql'))
+  assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
+  assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
   assert(!names.some((name) => name.startsWith('1000015')))
   assert(!names.some((name) => name.startsWith('1000016')))

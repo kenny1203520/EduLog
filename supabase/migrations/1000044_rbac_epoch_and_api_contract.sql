@@ -244,11 +244,16 @@ BEGIN
 END;
 $$;
 
+-- Retain the historical audit visibility rule while making auth.uid() an
+-- initplan expression rather than a per-row function call.
+DROP POLICY IF EXISTS "Users read own audit events" ON public.audit_events;
+CREATE POLICY "Users read own audit events" ON public.audit_events FOR SELECT TO authenticated
+  USING (actor_user_id = (select auth.uid()) OR public.can_manage_editor_rbac());
 -- Action-specific RLS policies replace the remaining FOR ALL variants.
 DROP POLICY IF EXISTS "Teaching owners manage teachings" ON public.teachings;
-CREATE POLICY "Teaching owners create teachings" ON public.teachings FOR INSERT TO authenticated WITH CHECK (owner_user_id = auth.uid() AND is_quarantine = false);
-CREATE POLICY "Teaching owners update teachings" ON public.teachings FOR UPDATE TO authenticated USING (owner_user_id = auth.uid()) WITH CHECK (owner_user_id = auth.uid() AND is_quarantine = false);
-CREATE POLICY "Teaching owners delete teachings" ON public.teachings FOR DELETE TO authenticated USING (owner_user_id = auth.uid());
+CREATE POLICY "Teaching owners create teachings" ON public.teachings FOR INSERT TO authenticated WITH CHECK (owner_user_id = (select auth.uid()) AND is_quarantine = false);
+CREATE POLICY "Teaching owners update teachings" ON public.teachings FOR UPDATE TO authenticated USING (owner_user_id = (select auth.uid())) WITH CHECK (owner_user_id = (select auth.uid()) AND is_quarantine = false);
+CREATE POLICY "Teaching owners delete teachings" ON public.teachings FOR DELETE TO authenticated USING (owner_user_id = (select auth.uid()));
 
 DROP POLICY IF EXISTS "Teaching managers manage membership" ON public.teaching_members;
 CREATE POLICY "Teaching managers create membership" ON public.teaching_members FOR INSERT TO authenticated WITH CHECK (public.can_teaching_action(teaching_id, 'members', 'manage'));
@@ -280,22 +285,68 @@ CREATE POLICY "Teaching occurrences update" ON public.class_occurrences FOR UPDA
 CREATE POLICY "Teaching occurrences delete" ON public.class_occurrences FOR DELETE TO authenticated USING (public.can_access_class_session(class_session_id, 'teaching.occurrences.delete'));
 
 DROP POLICY IF EXISTS "Teaching scoped reports" ON public.occurrence_reports;
-CREATE POLICY "Teaching reports read" ON public.occurrence_reports FOR SELECT TO authenticated USING (public.can_access_report(id, 'teaching.reports.read') OR public.can_access_report(id, 'teaching.reports.list'));
-CREATE POLICY "Teaching reports create" ON public.occurrence_reports FOR INSERT TO authenticated WITH CHECK (EXISTS (SELECT 1 FROM public.class_occurrences occurrence JOIN public.class_sessions session ON session.id = occurrence.class_session_id WHERE occurrence.id = occurrence_reports.class_occurrence_id AND public.can_teaching_action(session.teaching_id, 'reports', 'create')));
-CREATE POLICY "Teaching reports update" ON public.occurrence_reports FOR UPDATE TO authenticated USING (public.can_access_report(id, 'teaching.reports.update')) WITH CHECK (EXISTS (SELECT 1 FROM public.class_occurrences occurrence JOIN public.class_sessions session ON session.id = occurrence.class_session_id WHERE occurrence.id = occurrence_reports.class_occurrence_id AND public.can_teaching_action(session.teaching_id, 'reports', 'update')));
-CREATE POLICY "Teaching reports delete" ON public.occurrence_reports FOR DELETE TO authenticated USING (public.can_access_report(id, 'teaching.reports.delete'));
+DROP POLICY IF EXISTS "Report editor read is scoped" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Report editor insert is scoped" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Report editor update is scoped" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Report editor delete is scoped" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Teaching reports read" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Teaching reports create" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Teaching reports update" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Teaching reports delete" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Canonical reports read" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Canonical reports create" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Canonical reports update" ON public.occurrence_reports;
+DROP POLICY IF EXISTS "Canonical reports delete" ON public.occurrence_reports;
+
+CREATE POLICY "Canonical reports read" ON public.occurrence_reports FOR SELECT TO authenticated
+  USING (
+    public.can_access_occurrence_report(id)
+    OR public.can_access_report(id, 'teaching.reports.read')
+    OR public.can_access_report(id, 'teaching.reports.list')
+  );
+CREATE POLICY "Canonical reports create" ON public.occurrence_reports FOR INSERT TO authenticated
+  WITH CHECK (
+    public.can_create_occurrence_report(enrollment_id, class_occurrence_id)
+    OR EXISTS (
+      SELECT 1
+      FROM public.class_occurrences occurrence
+      JOIN public.class_sessions session ON session.id = occurrence.class_session_id
+      WHERE occurrence.id = occurrence_reports.class_occurrence_id
+        AND public.can_teaching_action(session.teaching_id, 'reports', 'create')
+    )
+  );
+CREATE POLICY "Canonical reports update" ON public.occurrence_reports FOR UPDATE TO authenticated
+  USING (
+    public.can_access_occurrence_report(id)
+    OR public.can_access_report(id, 'teaching.reports.update')
+  )
+  WITH CHECK (
+    public.can_access_occurrence_report(id)
+    OR EXISTS (
+      SELECT 1
+      FROM public.class_occurrences occurrence
+      JOIN public.class_sessions session ON session.id = occurrence.class_session_id
+      WHERE occurrence.id = occurrence_reports.class_occurrence_id
+        AND public.can_teaching_action(session.teaching_id, 'reports', 'update')
+    )
+  );
+CREATE POLICY "Canonical reports delete" ON public.occurrence_reports FOR DELETE TO authenticated
+  USING (
+    public.can_access_occurrence_report(id)
+    OR public.can_access_report(id, 'teaching.reports.delete')
+  );
 
 DROP POLICY IF EXISTS "Teaching scoped report templates" ON public.report_templates;
-CREATE POLICY "Teaching templates read" ON public.report_templates FOR SELECT TO authenticated USING (public.can_teaching_action(teaching_id, 'templates', 'read') OR public.can_teaching_action(teaching_id, 'templates', 'list') OR instructor_id = auth.uid());
-CREATE POLICY "Teaching templates create" ON public.report_templates FOR INSERT TO authenticated WITH CHECK (public.can_teaching_action(teaching_id, 'templates', 'create') OR instructor_id = auth.uid());
-CREATE POLICY "Teaching templates update" ON public.report_templates FOR UPDATE TO authenticated USING (public.can_teaching_action(teaching_id, 'templates', 'update') OR instructor_id = auth.uid()) WITH CHECK (public.can_teaching_action(teaching_id, 'templates', 'update') OR instructor_id = auth.uid());
-CREATE POLICY "Teaching templates delete" ON public.report_templates FOR DELETE TO authenticated USING (public.can_teaching_action(teaching_id, 'templates', 'delete') OR instructor_id = auth.uid());
+CREATE POLICY "Teaching templates read" ON public.report_templates FOR SELECT TO authenticated USING (public.can_teaching_action(teaching_id, 'templates', 'read') OR public.can_teaching_action(teaching_id, 'templates', 'list') OR instructor_id = (select auth.uid()));
+CREATE POLICY "Teaching templates create" ON public.report_templates FOR INSERT TO authenticated WITH CHECK (public.can_teaching_action(teaching_id, 'templates', 'create') OR instructor_id = (select auth.uid()));
+CREATE POLICY "Teaching templates update" ON public.report_templates FOR UPDATE TO authenticated USING (public.can_teaching_action(teaching_id, 'templates', 'update') OR instructor_id = (select auth.uid())) WITH CHECK (public.can_teaching_action(teaching_id, 'templates', 'update') OR instructor_id = (select auth.uid()));
+CREATE POLICY "Teaching templates delete" ON public.report_templates FOR DELETE TO authenticated USING (public.can_teaching_action(teaching_id, 'templates', 'delete') OR instructor_id = (select auth.uid()));
 
 DROP POLICY IF EXISTS "Teaching scoped credentials" ON public.student_credentials;
-CREATE POLICY "Teaching credentials read" ON public.student_credentials FOR SELECT TO authenticated USING (user_id = auth.uid() OR public.can_access_student(student_id, 'teaching.students.read'));
-CREATE POLICY "Teaching credentials create" ON public.student_credentials FOR INSERT TO authenticated WITH CHECK (user_id = auth.uid() OR public.can_access_student(student_id, 'teaching.students.create'));
-CREATE POLICY "Teaching credentials update" ON public.student_credentials FOR UPDATE TO authenticated USING (user_id = auth.uid() OR public.can_access_student(student_id, 'teaching.students.update')) WITH CHECK (user_id = auth.uid() OR public.can_access_student(student_id, 'teaching.students.update'));
-CREATE POLICY "Teaching credentials delete" ON public.student_credentials FOR DELETE TO authenticated USING (user_id = auth.uid() OR public.can_access_student(student_id, 'teaching.students.delete'));
+CREATE POLICY "Teaching credentials read" ON public.student_credentials FOR SELECT TO authenticated USING (user_id = (select auth.uid()) OR public.can_access_student(student_id, 'teaching.students.read'));
+CREATE POLICY "Teaching credentials create" ON public.student_credentials FOR INSERT TO authenticated WITH CHECK (user_id = (select auth.uid()) OR public.can_access_student(student_id, 'teaching.students.create'));
+CREATE POLICY "Teaching credentials update" ON public.student_credentials FOR UPDATE TO authenticated USING (user_id = (select auth.uid()) OR public.can_access_student(student_id, 'teaching.students.update')) WITH CHECK (user_id = (select auth.uid()) OR public.can_access_student(student_id, 'teaching.students.update'));
+CREATE POLICY "Teaching credentials delete" ON public.student_credentials FOR DELETE TO authenticated USING (user_id = (select auth.uid()) OR public.can_access_student(student_id, 'teaching.students.delete'));
 
 -- Canonical policy names intentionally differ from 1000043's names.  That
 -- lets an administrator replay the immutable reconciliation migration, then
@@ -333,10 +384,10 @@ CREATE POLICY "Canonical sessions delete" ON public.class_sessions FOR DELETE TO
   USING (public.can_teaching_action(teaching_id, 'class_sessions', 'delete'));
 
 CREATE POLICY "Canonical teachers read" ON public.teachers FOR SELECT TO authenticated
-  USING (user_id = auth.uid() OR EXISTS (SELECT 1 FROM public.class_session_teachers assignment JOIN public.class_sessions session ON session.id = assignment.class_session_id WHERE assignment.teacher_id = teachers.id AND public.can_access_class_session(session.id, 'teaching.teachers.read')));
+  USING (user_id = (select auth.uid()) OR EXISTS (SELECT 1 FROM public.class_session_teachers assignment JOIN public.class_sessions session ON session.id = assignment.class_session_id WHERE assignment.teacher_id = teachers.id AND public.can_access_class_session(session.id, 'teaching.teachers.read')));
 CREATE POLICY "Canonical teachers create" ON public.teachers FOR INSERT TO authenticated
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (user_id = (select auth.uid()));
 CREATE POLICY "Canonical teachers update" ON public.teachers FOR UPDATE TO authenticated
-  USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+  USING (user_id = (select auth.uid())) WITH CHECK (user_id = (select auth.uid()));
 CREATE POLICY "Canonical teachers delete" ON public.teachers FOR DELETE TO authenticated
-  USING (user_id = auth.uid());
+  USING (user_id = (select auth.uid()));
