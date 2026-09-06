@@ -239,9 +239,10 @@ WITH RECURSIVE assigned_roles AS (
       OR (policy.scope_type = 'class_session' AND policy.scope_id = p_class_session_id)
     )
 )
-SELECT COALESCE(bool_or(effect = 'allow'), false) AND NOT COALESCE(bool_or(effect = 'deny'), false),
-       COALESCE(bool_or(effect = 'deny'), false),
-       EXISTS (SELECT 1 FROM matched);
+SELECT COALESCE(bool_or(matched.effect = 'allow'), false) AND NOT COALESCE(bool_or(matched.effect = 'deny'), false),
+       COALESCE(bool_or(matched.effect = 'deny'), false),
+       EXISTS (SELECT 1 FROM matched)
+FROM matched;
 $$;
 
 CREATE OR REPLACE FUNCTION public.has_teaching_permission(p_user_id uuid, p_permission_key text, p_teaching_id uuid, p_classroom_id uuid DEFAULT NULL, p_class_session_id uuid DEFAULT NULL)
