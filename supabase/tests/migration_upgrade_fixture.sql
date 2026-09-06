@@ -19,3 +19,15 @@ INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time
   ('60000000-0000-0000-0000-0000000000ab', 'Course fallback', NULL, ARRAY['50000000-0000-0000-0000-0000000000bb']::uuid[], '10:00', '11:00', '00000000-0000-0000-0000-0000000000bb'),
   ('60000000-0000-0000-0000-0000000000ac', 'Quarantine fallback', NULL, ARRAY['70000000-0000-0000-0000-0000000000dd']::uuid[], '11:00', '12:00', '00000000-0000-0000-0000-0000000000aa')
 ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id) VALUES
+  ('60000000-0000-0000-0000-0000000000ad', 'Second session same teaching', '30000000-0000-0000-0000-0000000000aa', '{}'::uuid[], '13:00', '14:00', '00000000-0000-0000-0000-0000000000aa')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.teachers(id, name, user_id) VALUES
+  ('80000000-0000-0000-0000-0000000000bb', 'Teacher B', '00000000-0000-0000-0000-0000000000bb')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.class_session_teachers(class_session_id, teacher_id, role_id) VALUES
+  ('60000000-0000-0000-0000-0000000000aa', '80000000-0000-0000-0000-0000000000bb', (SELECT id FROM public.roles WHERE code = 'teacher')),
+  ('60000000-0000-0000-0000-0000000000ad', '80000000-0000-0000-0000-0000000000bb', (SELECT id FROM public.roles WHERE code = 'teacher'))
+ON CONFLICT DO NOTHING;

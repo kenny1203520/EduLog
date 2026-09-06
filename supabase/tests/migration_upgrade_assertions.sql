@@ -49,3 +49,19 @@ BEGIN
   END IF;
 END;
 $$;
+DO $$
+DECLARE teacher_membership_count integer;
+BEGIN
+  SELECT count(*) INTO teacher_membership_count
+  FROM public.teaching_members
+  WHERE teaching_id = (
+    SELECT teaching_id FROM public.classrooms
+    WHERE id = '30000000-0000-0000-0000-0000000000aa'
+  )
+  AND user_id = '00000000-0000-0000-0000-0000000000bb';
+
+  IF teacher_membership_count <> 1 THEN
+    RAISE EXCEPTION 'teacher membership backfill was not deduplicated: %', teacher_membership_count;
+  END IF;
+END;
+$$;

@@ -146,13 +146,32 @@ FROM public.roles owner_role
 CROSS JOIN public.permissions permission
 WHERE owner_role.code = 'teaching_owner' AND permission.domain = 'teaching'
 ON CONFLICT DO NOTHING;
+WITH teacher_memberships AS (
+  SELECT DISTINCT ON (session.teaching_id, teacher.user_id)
+    session.teaching_id,
+    teacher.user_id,
+    assignment.role_id
+  FROM public.class_session_teachers assignment
+  JOIN public.class_sessions session
+    ON session.id = assignment.class_session_id
+  JOIN public.teachers teacher
+    ON teacher.id = assignment.teacher_id
+  WHERE teacher.user_id IS NOT NULL
+    AND session.teaching_id IS NOT NULL
+  ORDER BY
+    session.teaching_id,
+    teacher.user_id,
+    (assignment.role_id IS NULL),
+    assignment.effective_from DESC,
+    assignment.created_at DESC,
+    assignment.id
+)
 INSERT INTO public.teaching_members(teaching_id, user_id, role_id)
-SELECT session.teaching_id, teacher.user_id, assignment.role_id
-FROM public.class_session_teachers assignment
-JOIN public.class_sessions session ON session.id = assignment.class_session_id
-JOIN public.teachers teacher ON teacher.id = assignment.teacher_id
-WHERE teacher.user_id IS NOT NULL AND session.teaching_id IS NOT NULL
-ON CONFLICT (teaching_id, user_id) DO UPDATE SET role_id = COALESCE(teaching_members.role_id, EXCLUDED.role_id), status = 'active';
+SELECT teaching_id, user_id, role_id
+FROM teacher_memberships
+ON CONFLICT (teaching_id, user_id) DO UPDATE
+SET role_id = COALESCE(teaching_members.role_id, EXCLUDED.role_id),
+    status = 'active';
 
 DO $$
 BEGIN
