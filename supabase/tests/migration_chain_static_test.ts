@@ -4,7 +4,7 @@ const migrationDir = new URL('../migrations/', import.meta.url)
 const reconciliation = await Deno.readTextFile(new URL('1000043_teaching_scope_reconciliation.sql', migrationDir))
 const hardening = await Deno.readTextFile(new URL('1000044_rbac_epoch_and_api_contract.sql', migrationDir))
 const compatibility = await Deno.readTextFile(new URL('1000041a_has_api_permission_compatibility.sql', migrationDir))
-const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', migrationDir))
+const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 
 Deno.test('reconciliation migration is present and fail-closed', () => {
   assertStringIncludes(reconciliation, 'CREATE TABLE IF NOT EXISTS public.teachings')
