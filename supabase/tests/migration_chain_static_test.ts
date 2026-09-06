@@ -27,6 +27,26 @@ Deno.test('forward hardening adds epoch, cycle prevention, and action-specific R
   assertStringIncludes(hardening, 'Canonical reports create')
   assertStringIncludes(hardening, 'Canonical reports update')
   assertStringIncludes(hardening, 'Canonical reports delete')
+  for (const policyName of [
+    'Teaching owners create teachings',
+    'Teaching owners update teachings',
+    'Teaching owners delete teachings',
+    'Users read own audit events',
+    'Teaching templates read',
+    'Teaching templates create',
+    'Teaching templates update',
+    'Teaching templates delete',
+    'Teaching credentials read',
+    'Teaching credentials create',
+    'Teaching credentials update',
+    'Teaching credentials delete',
+    'Canonical teachers read',
+    'Canonical teachers create',
+    'Canonical teachers update',
+    'Canonical teachers delete',
+  ]) {
+    assertStringIncludes(hardening, policyName)
+  }
   assertStringIncludes(hardening, 'Teaching enrollments create')
   assert(!hardening.includes('FOR ALL TO authenticated'))
 })

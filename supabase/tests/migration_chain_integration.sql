@@ -89,6 +89,7 @@ DO $$
 DECLARE
   function_definition text;
   forbidden_count integer;
+  missing_policy_names text;
   policy_count integer;
   policy_command text;
 BEGIN
@@ -129,7 +130,8 @@ BEGIN
     END IF;
   END LOOP;
 
-  SELECT count(*) INTO forbidden_count
+  SELECT count(*), string_agg(policyname, ', ' ORDER BY policyname)
+  INTO forbidden_count, missing_policy_names
   FROM pg_policies
   WHERE schemaname = 'public'
     AND policyname IN (
@@ -150,9 +152,9 @@ BEGIN
       'Canonical teachers update',
       'Canonical teachers delete'
     )
-    AND (COALESCE(qual, '') || COALESCE(with_check, '')) !~ '\([[:space:]]*select[[:space:]]+auth\.uid\(\)[[:space:]]*\)';
+    AND (COALESCE(qual, '') || COALESCE(with_check, '')) !~* 'SELECT[[:space:]]+auth\.uid\(\)';
   IF forbidden_count <> 0 THEN
-    RAISE EXCEPTION 'RLS initplan rewrites are incomplete: %', forbidden_count;
+    RAISE EXCEPTION 'RLS initplan rewrites are incomplete: % [%]', forbidden_count, missing_policy_names;
   END IF;
 END;
 $$;
