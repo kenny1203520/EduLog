@@ -1,159 +1,72 @@
-# EduLog Database Migration Guide
+# EduLog migration chain
 
-本資料夾包含 EduLog 專案的自定義資料庫 schema migration。  
-請依照檔名順序執行，避免外鍵或 trigger 依賴錯誤。
+This directory contains the append-only database history for EduLog. Applied migrations from `1000001` through `1000042` are historical and must not be edited. The reconciliation migrations `1000043` and `1000044` are forward fixes for teaching ownership, RLS, RBAC policy epoch, and the API contract.
 
-## Migration 執行順序
+## Ordered migrations
 
-1. `1000001_core_schema.sql`
-2. `1000002_academics.sql`
-3. `1000003_operations.sql`
-4. `1000004_enhance_report_versions.sql`
-5. `1000005_user_visibility_preferences.sql`
-6. `1000006_copy_templates.sql`
-7. `1000007_user_preferences.sql`
-8. `1000008_session_time_zones.sql`
-9. `1000009_date_record_time_zones.sql`
-10. `1000011_create_profiles_table.sql`
-11. `1000012_debug_report_access.sql`
-12. `1000013_fix_rpc_authorization.sql`
-13. `1000014_yjs_collab.sql`
-14. `1000017_cleanup_deprecated_collab.sql`
-15. `1000018_generic_yjs_documents.sql`
-16. `1000019_koding_code_check.sql`
-17. `1000020_merge_orange_apple_koding_credentials.sql`
-18. `1000021_teacher_leave_and_safe_report_versions.sql`
-19. `1000022_report_collab_snapshot_versioning.sql`
-20. `1000023_rich_text_documents.sql`
-21. `1000024_recurring_and_camp_sessions.sql`
+| Version | File | Purpose |
+| --- | --- | --- |
+| 1000001 | `1000001_core_schema.sql` | Core users, teachers, students and classrooms |
+| 1000002 | `1000002_academics.sql` | Courses, lessons and enrollments |
+| 1000003 | `1000003_operations.sql` | Sessions, occurrences and reports |
+| 1000004 | `1000004_enhance_report_versions.sql` | Report versioning |
+| 1000005 | `1000005_user_visibility_preferences.sql` | Visibility preferences |
+| 1000006 | `1000006_copy_templates.sql` | Copy templates |
+| 1000007 | `1000007_user_preferences.sql` | User preferences |
+| 1000008 | `1000008_session_time_zones.sql` | Session time zones |
+| 1000009 | `1000009_date_record_time_zones.sql` | Date record time zones |
+| — | 1000010 | Historical version intentionally unused |
+| 1000011 | `1000011_create_profiles_table.sql` | Profiles |
+| 1000012 | `1000012_debug_report_access.sql` | Report access diagnostics |
+| 1000012a | `1000012a_legacy_collaboration_rpc_compatibility.sql` | Legacy collaboration RPC compatibility |
+| 1000013 | `1000013_fix_rpc_authorization.sql` | RPC authorization |
+| 1000014 | `1000014_yjs_collab.sql` | Yjs collaboration |
+| — | 1000015 | Historical version intentionally unused |
+| — | 1000016 | Historical version intentionally unused |
+| 1000017 | `1000017_cleanup_deprecated_collab.sql` | Deprecated collaboration cleanup |
+| 1000018 | `1000018_generic_yjs_documents.sql` | Generic Yjs documents |
+| 1000019 | `1000019_koding_code_check.sql` | Koding code checks |
+| 1000020 | `1000020_merge_orange_apple_koding_credentials.sql` | Credential merge |
+| 1000021 | `1000021_teacher_leave_and_safe_report_versions.sql` | Teacher leave and safe reports |
+| 1000022 | `1000022_report_collab_snapshot_versioning.sql` | Collaboration snapshots |
+| 1000023 | `1000023_rich_text_documents.sql` | Rich text documents |
+| 1000024 | `1000024_recurring_and_camp_sessions.sql` | Recurring and camp sessions |
+| 1000025 | `1000025_enrollment_classroom_consistency.sql` | Enrollment consistency |
+| 1000026 | `1000026_teacher_roles_and_incomplete_report_notifications.sql` | Teacher roles and notifications |
+| 1000027 | `1000027_rbac_foundation_and_scoped_permissions.sql` | RBAC foundation and scoped permissions |
+| 1000028 | `1000028_rbac_security_performance_and_enrollment_completion.sql` | RBAC security and performance |
+| 1000029 | `1000029_strict_incomplete_report_notification_eligibility.sql` | Notification eligibility |
+| 1000030 | `1000030_single_lesson_transfers.sql` | Single-lesson transfers |
+| 1000031 | `1000031_single_lesson_transfer_conflict_resolution.sql` | Transfer conflict resolution |
+| 1000032 | `1000032_repeatable_single_lesson_transfers.sql` | Repeatable transfers |
+| 1000033 | `1000033_single_lesson_transfer_history.sql` | Transfer history |
+| 1000034 | `1000034_repair_effective_single_lesson_transfer_reports.sql` | Effective transfer report repair |
+| 1000035 | `1000035_relax_transfer_read_authorization.sql` | Transfer read authorization |
+| 1000036 | `1000036_editor_collaboration_reliability.sql` | Editor collaboration reliability |
+| 1000037 | `1000037_editor_security_hardening.sql` | Editor security hardening |
+| 1000038 | `1000038_editor_rbac_boundary_hardening.sql` | Editor RBAC boundaries |
+| 1000039 | `1000039_editor_report_insert_rls_fix.sql` | Report insert RLS |
+| 1000040 | `1000040_editor_report_owner_rls_fix.sql` | Report owner RLS |
+| 1000041 | `1000041_editor_rbac_rpc_guard.sql` | Editor RPC guard |
+| 1000041a | `1000041a_has_api_permission_compatibility.sql` | Pre-1000042 fail-closed API permission shim |
+| 1000042 | `1000042_api_rbac_rest_foundation.sql` | API/RBAC foundation |
+| 1000043 | `1000043_teaching_scope_reconciliation.sql` | Teaching backfill and canonical scopes |
+| 1000044 | `1000044_rbac_epoch_and_api_contract.sql` | RBAC epoch and canonical API/RLS reconciliation |
 
-## 各檔案重點
+The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. `1000041a` is an intentional compatibility migration and is ordered before `1000042`.
 
-### 1) `1000001_core_schema.sql`
+## Clean install
 
-- 建立核心 helper function（如 `update_updated_at_column`）
-- 建立學生相關核心資料表（students、contacts、schools、credentials）
-- 啟用 RLS 與對應 policy / trigger
+Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/tests/postgres_bootstrap.sql`, then run every `supabase/migrations/*.sql` file in lexical order with `ON_ERROR_STOP=1`. Finish with `supabase/tests/migration_chain_integration.sql`.
 
-### 2) `1000002_academics.sql`
+## Upgrade an existing database
 
-- 建立學術與排程相關資料表（courses、lessons、classrooms、class_sessions、holidays）
-- 啟用 RLS 與 trigger
+Back up the database first. Apply only migrations not recorded in the migration history. For a pre-reconciliation database, apply `1000043` and `1000044` after the legacy fixture/compatibility checks, then run `supabase/tests/migration_upgrade_assertions.sql`. Do not edit or squash already deployed migration files.
 
-### 3) `1000003_operations.sql`
+## Rerun and rollback
 
-- 建立營運資料表（enrollments、class_occurrences、occurrence_reports、report_versions、suspensions）
-- 建立報告版本快照 trigger
-- 啟用 RLS 與必要約束
+`1000043` and `1000044` are written to be safely rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
 
-### 4) `1000004_enhance_report_versions.sql`
+## Verification
 
-- 強化 `report_versions`，新增 `snapshot` 欄位（JSONB）
-- 更新版本快照邏輯，記錄更完整的歷史資料
-
-### 5) `1000005_user_visibility_preferences.sql`
-
-- 新增 `user_entity_visibility_preferences`
-- 支援使用者對 `classroom` / `class_session` 的隱藏偏好設定
-- 啟用 RLS 與使用者自有資料存取策略
-
-### 19) `1000022_report_collab_snapshot_versioning.sql`
-
-- 為 `report_collab_docs` 加入 canonical report 版本欄位
-- 新增原子化 `save_report_collab_snapshot` RPC，拒絕過期版本的 Yjs 快照
-- 舊有未標記版本的快照會保留，但新版前端不會直接載入
-
-### 20) `1000023_rich_text_documents.sql`
-
-- 為報告、範本、課程描述、學生備註及教師簡介加入版本化 TipTap JSONB 欄位
-- 保留既有純文字欄位作為搜尋、摘要、匯出及舊版相容的文字投影
-- 使用者編輯器預設以 `user_preferences.editor_settings` 跨裝置保存
-- 更新報告版本快照 trigger，使富文字與外觀變更可恢復
-
-### 21) `1000024_recurring_and_camp_sessions.sql`
-
-- 新增一般班級與營隊類型，以及每週、每月、指定日期排程模式
-- 建立正規化班級排程規則、單日唯一限制與舊班級週排程回填
-- 新增原子化儲存班級與排程規則的 `save_class_session_with_schedule` RPC
-- 保留原有單日排程欄位作為部署期間的相容投影
-
-### 22) `1000025_enrollment_classroom_consistency.sql`
-
-- 依班級回填既有報名資料的教室欄位
-- 驗證報名與轉班的目標班級能教授指定課程
-- 在報名換班或班級變更教室時持續同步教室欄位
-
-## 執行方式
-
-### 方法 A: Supabase Studio（建議）
-
-1. 啟動 `supabase` stack
-2. 開啟 Studio SQL Editor
-3. 依序貼上並執行上述 migration
-
-### 方法 B: PowerShell + Docker（Windows）
-
-在 `supabase/` 目錄執行：
-
-```powershell
-Get-ChildItem ./migrations/*.sql | Sort-Object Name | ForEach-Object {
-    Get-Content -Raw $_.FullName | docker exec -i supabase-db psql -U postgres -d postgres
-}
-```
-
-## 驗證
-
-### 驗證 RLS 啟用狀態
-
-```sql
-SELECT tablename, rowsecurity
-FROM pg_tables
-WHERE schemaname = 'public'
-ORDER BY tablename;
-```
-
-### 驗證 Policy
-
-```sql
-SELECT tablename, policyname, cmd
-FROM pg_policies
-WHERE schemaname = 'public'
-ORDER BY tablename, policyname;
-```
-
-## 注意事項
-
-- migration 需按順序執行，不建議跳號執行。
-- 若開發環境 schema 已偏離，建議重建資料庫後重新套用 migration。
-- 正式環境變更前請先備份資料庫。
-- 部署使用版本化報告協作快照的前端前，必須先套用 `1000022_report_collab_snapshot_versioning.sql`。
-- 部署讀寫富文字文件的前端前，必須先套用 `1000023_rich_text_documents.sql`。
-- 部署週期班與營隊排程前，必須先套用 `1000024_recurring_and_camp_sessions.sql`。
-- 部署課程相容性篩選與教室同步前，必須先套用 `1000025_enrollment_classroom_consistency.sql`。
-- 部署報告編輯器的 scoped RLS 與班級頁 placeholder provisioning 修正前，必須先套用 `1000036_editor_collaboration_reliability.sql`、`1000037_editor_security_hardening.sql`、`1000038_editor_rbac_boundary_hardening.sql`，最後套用 `1000039_editor_report_insert_rls_fix.sql`。
-- `1000039_editor_report_insert_rls_fix.sql` 修正 occurrence_reports INSERT policy；請先在 staging 驗證授權教師、轉課 enrollment 與未授權使用者，再部署 production。
-
-## Migration chain and reconciliation
-
-The deployed history is intentionally immutable:
-
-- 1000001-1000009: core schema, academics, operations and user preferences.
-- 1000010, 1000015, 1000016: intentionally unused historical version numbers.
-- 1000011-1000024: profiles, collaboration, credentials, recurring and reporting patches.
-- 1000025-1000036: scheduling, role, collaboration and reliability patches.
-- 1000037-1000042: editor security, scoped RLS, RBAC hardening and API foundation.
-- 1000043_teaching_scope_reconciliation.sql: the canonical reconciliation entry point.
-
-Do not edit or renumber 1000001-1000042. 1000043 is idempotent and is designed to converge a clean install or a database that received only part of the historical patches. It creates the teaching/member domain, performs owner-based backfill, installs canonical permissions and replaces core authenticated-wide policies with teaching-scoped RLS. Rows whose owner cannot be inferred are assigned only to the admin quarantine teaching.
-
-### Operational procedure
-
-1. Take a database backup and run the migration in staging first.
-2. Apply the complete chain with supabase db push (or the configured deployment runner).
-3. Re-run the deployment command to verify the migration is a no-op.
-4. Verify that teachings and teaching_members exist and that classrooms, courses, and class_sessions have no NULL teaching_id.
-5. Verify policy coverage with:
-   select schemaname, tablename, policyname from pg_policies where schemaname = 'public' order by tablename, policyname;
-6. Run API/RLS integration and frontend smoke tests before merging PR #7.
-
-Rollback is restore-from-backup or a forward corrective migration. Do not delete migration history or manually undo deployed policies in production.
+The CI database gate runs clean install, reruns `1000043`/`1000044`, upgrade fixture and assertions. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.

@@ -1,0 +1,36 @@
+name: api-contract-security
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/volumes/functions/**'
+      - 'supabase/tests/**'
+      - '.github/workflows/api-contract-security.yml'
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  deno-api-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - name: Typecheck API and shared security modules
+        run: >-
+          deno check
+          supabase/volumes/functions/_shared/api.ts
+          supabase/volumes/functions/_shared/telemetry.ts
+          supabase/volumes/functions/_shared/validation.ts
+          supabase/volumes/functions/api-v1/index.ts
+      - name: Run migration and API contract/security tests
+        run: >-
+          deno test --allow-read
+          supabase/tests/migration_chain_static_test.ts
+          supabase/tests/api_contract_static_test.ts
+          supabase/tests/shared_security_test.ts
+          supabase/tests/api_shared_contract_test.ts
