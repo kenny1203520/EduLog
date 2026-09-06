@@ -19,6 +19,7 @@ Deno.test('forward hardening adds epoch, cycle prevention, and action-specific R
   assertStringIncludes(hardening, 'CREATE TABLE IF NOT EXISTS public.rbac_policy_epoch')
   assertStringIncludes(hardening, 'RBAC_ROLE_INHERITANCE_CYCLE')
   assertStringIncludes(hardening, 'CREATE OR REPLACE FUNCTION public.has_api_permission')
+  assertStringIncludes(hardening, 'public.resolve_user_permission(uuid,text,uuid,uuid,date)')
   assertStringIncludes(hardening, 'Teaching enrollments create')
   assert(!hardening.includes('FOR ALL TO authenticated'))
 })

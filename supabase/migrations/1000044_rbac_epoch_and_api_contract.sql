@@ -9,7 +9,7 @@ BEGIN
      OR to_regclass('public.role_inheritance') IS NULL
      OR to_regclass('public.role_permission_policies') IS NULL
      OR to_regprocedure('public.resolve_teaching_permission(uuid,text,uuid,uuid,uuid,date)') IS NULL
-     OR to_regprocedure('public.resolve_user_permission(uuid,text,uuid,uuid)') IS NULL THEN
+     OR to_regprocedure('public.resolve_user_permission(uuid,text,uuid,uuid,date)') IS NULL THEN
     RAISE EXCEPTION '1000044 prerequisites missing; apply migrations through 1000043 first';
   END IF;
 END;
