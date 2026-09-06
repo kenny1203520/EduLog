@@ -1,0 +1,66 @@
+name: database-integration
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/**'
+      - '.github/workflows/database-integration.yml'
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  migration-and-rls:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: edulog_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d edulog_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGPASSWORD: postgres
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: edulog_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bootstrap Supabase-compatible schemas
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
+      - name: Clean-install migration and RLS gate
+        shell: bash
+        run: |
+          for migration in supabase/migrations/*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_chain_integration.sql
+      - name: Reconciliation migrations are rerunnable
+        run: |
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000043_teaching_scope_reconciliation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000044_rbac_epoch_and_api_contract.sql
+      - name: Upgrade an existing database and verify owner backfill
+        shell: bash
+        run: |
+          createdb edulog_upgrade
+          export PGDATABASE=edulog_upgrade
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
+          for migration in supabase/migrations/*.sql; do
+            case "$migration" in
+              *1000043_teaching_scope_reconciliation.sql|*1000044_rbac_epoch_and_api_contract.sql) continue ;;
+            esac
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_fixture.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000043_teaching_scope_reconciliation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000044_rbac_epoch_and_api_contract.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
