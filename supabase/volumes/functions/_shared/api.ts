@@ -17,7 +17,14 @@ export function requestId(req: Request) {
 }
 
 export function response(value: unknown, status: number, id: string, headers: HeadersInit = {}) {
-  return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json', 'X-Request-Id': id, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'none'", ...headers } })
+  const resultHeaders = new Headers(headers)
+  const trace = resultHeaders.get('X-Trace-Id')
+  const isEnvelope = value && typeof value === 'object' && !Array.isArray(value)
+    && ('data' in value || 'error' in value || 'request_id' in value)
+  const body = trace && isEnvelope && !('trace_id' in value)
+    ? { ...value, trace_id: trace }
+    : value
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', 'X-Request-Id': id, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Content-Security-Policy': "default-src 'none'", ...headers } })
 }
 
 export function corsHeaders(req: Request): HeadersInit {
@@ -79,7 +86,12 @@ export async function beginIdempotency(ctx: ApiContext, req: Request, route: str
   const { data, error } = await ctx.adminDb.rpc('reserve_api_idempotency', { p_user_id: ctx.user.id, p_key: key, p_method: req.method, p_route: route })
   if (error) throw new ApiError(500, 'IDEMPOTENCY_ERROR', 'Unable to reserve idempotency key')
   const row = Array.isArray(data) ? data[0] : data
-  if (row?.is_replay && row.response_body) return response(row.response_body, row.response_status ?? 200, ctx.requestId)
+  if (row?.is_replay && row.response_body) {
+    const replayBody = typeof row.response_body === 'object' && !Array.isArray(row.response_body)
+      ? { ...row.response_body, request_id: ctx.requestId }
+      : row.response_body
+    return response(replayBody, row.response_status ?? 200, ctx.requestId, { 'X-Trace-Id': ctx.traceId })
+  }
   return null
 }
 
@@ -98,4 +110,43 @@ export function handleError(error: unknown, id: string, trace: string) {
   const known = error instanceof ApiError ? error : new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred')
   if (!(error instanceof ApiError)) console.error(JSON.stringify({ type: 'api_error', request_id: id, error: error instanceof Error ? error.message : String(error) }))
   return response({ error: { code: known.code, message: known.message, ...(known.fields ? { fields: known.fields } : {}), request_id: id, trace_id: trace } }, known.status, id, known.retryAfter ? { 'Retry-After': String(known.retryAfter) } : {})
+}
+
+export type TelemetryEvent = {
+  request_id: string
+  trace_id: string
+  user_id?: string
+  teaching_id?: string
+  resource?: string
+  route: string
+  method: string
+  status?: number
+  latency_ms: number
+  outcome: 'success' | 'denied' | 'failure'
+}
+export async function emitTelemetry(event: TelemetryEvent) {
+  console.log(JSON.stringify({ type: 'api_telemetry', ...event }))
+  const endpoint = Deno.env.get('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT')
+  if (!endpoint) return
+  try {
+    await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        resourceLogs: [{
+          scopeLogs: [{
+            scope: { name: 'edulog.api' },
+            logRecords: [{
+              timeUnixNano: String(Date.now() * 1_000_000),
+              severityText: event.outcome === 'failure' ? 'ERROR' : 'INFO',
+              body: { stringValue: JSON.stringify(event) },
+              attributes: Object.entries(event).map(([key, value]) => ({ key, value: { stringValue: String(value) } })),
+            }],
+          }],
+        }],
+      }),
+    })
+  } catch (error) {
+    console.error(JSON.stringify({ type: 'otlp_export_failed', request_id: event.request_id, error: error instanceof Error ? error.message : String(error) }))
+  }
 }

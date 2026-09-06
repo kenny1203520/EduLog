@@ -1,12 +1,37 @@
 import { serve } from 'https://deno.land/std@0.177.1/http/server.ts'
-import { ApiError, audit, authenticate, beginIdempotency, completeIdempotency, corsHeaders, enforceRateLimit, handleError, parseJson, requirePermission, requestId, response, traceId } from '../_shared/api.ts'
+import { ApiError, audit, authenticate, beginIdempotency, completeIdempotency, corsHeaders, emitTelemetry, enforceRateLimit, handleError, parseJson, requirePermission, requestId, response, traceId } from '../_shared/api.ts'
 
 const OPENAPI = {
   openapi: '3.0.3',
   info: { title: 'EduLog API', version: '1.0.0' },
   servers: [{ url: '/api/v1' }],
   security: [{ bearerAuth: [] }],
-  components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } } },
+  components: {
+    securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
+    headers: {
+      RequestId: { schema: { type: 'string' }, description: 'Server request correlation identifier' },
+      TraceId: { schema: { type: 'string' }, description: 'W3C trace identifier' },
+    },
+    parameters: {
+      Limit: { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } },
+      Offset: { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
+      Sort: { name: 'sort', in: 'query', schema: { type: 'string', example: 'created_at:desc' } },
+      IdempotencyKey: { name: 'Idempotency-Key', in: 'header', required: true, schema: { type: 'string', minLength: 8, maxLength: 128 } },
+    },
+    schemas: {
+      ApiError: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object', additionalProperties: { type: 'array', items: { type: 'string' } } } } } } },
+      CollectionMeta: { type: 'object', required: ['limit', 'offset'], properties: { limit: { type: 'integer' }, offset: { type: 'integer' }, sort: { type: 'string' } } },
+      ApiEnvelope: { type: 'object', required: ['data', 'request_id', 'trace_id'], properties: { data: {}, meta: { '$ref': '#/components/schemas/CollectionMeta' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } },
+    },
+    responses: {
+      Unauthorized: { description: 'Missing or invalid Supabase JWT', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+      Forbidden: { description: 'Permission or teaching scope denied', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+      ValidationError: { description: 'Schema or business validation failed', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+      RateLimited: { description: 'Rate limit exceeded', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
+    },
+  },
+  'x-idempotency': { methods: ['POST', 'PATCH', 'DELETE'], header: 'Idempotency-Key', replay: 'same response body with the current request_id and trace_id' },
+  'x-pagination': { parameters: ['limit', 'offset', 'search', 'sort'], sort: 'field:asc|desc; supported fields are resource-specific' },
   paths: {
     '/health': { get: { security: [], responses: { '200': { description: 'Healthy' } } } },
     '/me': { get: { responses: { '200': { description: 'Current user' }, '401': { description: 'Unauthorized' } } } },
@@ -15,11 +40,12 @@ const OPENAPI = {
     '/audit-events': { get: { responses: { '200': { description: 'Audit events' }, '401': { description: 'Unauthorized' }, '403': { description: 'Forbidden' }, '429': { description: 'Rate limited' } } } },
     '/classrooms': { get: { responses: { '200': { description: 'Classrooms' }, '401': { description: 'Unauthorized' }, '403': { description: 'Forbidden' }, '429': { description: 'Rate limited' } } }, post: { responses: { '201': { description: 'Created' }, '403': { description: 'Forbidden' }, '409': { description: 'Conflict' }, '422': { description: 'Validation error' } } } },
     '/classrooms/{id}': { get: { responses: { '200': { description: 'Classroom' }, '404': { description: 'Not found' } } }, patch: { responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } }, delete: { responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } } },
-    '/class_sessions': { get: { responses: { '200': { description: 'Class sessions' } } }, post: { responses: { '201': { description: 'Created' } } } },
+    '/class-sessions': { get: { responses: { '200': { description: 'Class sessions' } } }, post: { responses: { '201': { description: 'Created' } } } },
     '/students': { get: { responses: { '200': { description: 'Students' } } }, post: { responses: { '201': { description: 'Created' } } } },
     '/reports': { get: { responses: { '200': { description: 'Reports' } } } },
     '/teachings': { get: { responses: { '200': { description: 'Teaching collection' }, '401': { description: 'Unauthorized' }, '403': { description: 'Forbidden' } } }, post: { responses: { '201': { description: 'Created' }, '409': { description: 'Conflict' }, '422': { description: 'Validation error' } } } },
     '/teachings/{id}': { get: { responses: { '200': { description: 'Teaching' }, '404': { description: 'Not found' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
+    '/teachings/{id}/members': { get: { responses: { '200': { description: 'Teaching members' }, '403': { description: 'Forbidden' } } }, post: { responses: { '201': { description: 'Member added' }, '409': { description: 'Conflict' }, '422': { description: 'Validation error' } } } },
     '/courses': { get: { responses: { '200': { description: 'Courses' } } }, post: { responses: { '201': { description: 'Created' } } } },
     '/courses/{id}': { get: { responses: { '200': { description: 'Course' }, '404': { description: 'Not found' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
     '/lessons': { get: { responses: { '200': { description: 'Lessons' } } }, post: { responses: { '201': { description: 'Created' } } } },
@@ -36,8 +62,9 @@ const OPENAPI = {
 }
 
 const resourceDefinitions = {
-  classrooms: { table: 'classrooms', select: 'id,name,color,address,phone,external_link,user_id,created_at,updated_at', fields: ['name', 'color', 'address', 'phone', 'external_link'] },
-  class_sessions: { table: 'class_sessions', select: 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,user_id,created_at,updated_at', fields: ['name', 'classroom_id', 'course_ids', 'day_of_week', 'start_time', 'end_time', 'capacity', 'lesson_number', 'external_link', 'start_date', 'end_date'] },
+  classrooms: { table: 'classrooms', select: 'id,name,color,address,phone,external_link,teaching_id,user_id,created_at,updated_at', fields: ['name', 'color', 'address', 'phone', 'external_link', 'teaching_id'] },
+  class_sessions: { table: 'class_sessions', select: 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,teaching_id,user_id,created_at,updated_at', fields: ['name', 'classroom_id', 'course_ids', 'day_of_week', 'start_time', 'end_time', 'capacity', 'lesson_number', 'external_link', 'start_date', 'end_date', 'teaching_id'] },
+  'class-sessions': { table: 'class_sessions', select: 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,teaching_id,user_id,created_at,updated_at', fields: ['name', 'classroom_id', 'course_ids', 'day_of_week', 'start_time', 'end_time', 'capacity', 'lesson_number', 'external_link', 'start_date', 'end_date', 'teaching_id'] },
   students: { table: 'students', select: 'id,name,notes,gov_id,email,phone,residence_address,mailing_address,birthday,external_link,user_id,created_at,updated_at', fields: ['name', 'notes', 'gov_id', 'email', 'phone', 'residence_address', 'mailing_address', 'birthday', 'external_link'] },
   reports: { table: 'occurrence_reports', select: 'id,enrollment_id,class_occurrence_id,lesson_id,content,content_document,attendance_status,is_completed,progress_letter,class_participation,classroom_behavior,contact_notes,class_notes,external_link,version,updated_at', fields: [] },
   teachings: { table: 'teachings', select: 'id,name,owner_user_id,is_quarantine,created_at,updated_at', fields: ['name'] },
@@ -61,6 +88,32 @@ function pickBody(body: Record<string, unknown>, fields: readonly string[]) {
   for (const field of fields) if (Object.prototype.hasOwnProperty.call(body, field)) result[field] = body[field]
   return result
 }
+function permissionResource(resource: string) {
+  if (resource === 'report_templates' || resource === 'report-templates') return 'templates'
+  return resource.replaceAll('-', '_')
+}
+const sortableFields: Record<string, readonly string[]> = {
+  teachings: ['name', 'created_at', 'updated_at'],
+  classrooms: ['name', 'created_at', 'updated_at'],
+  class_sessions: ['name', 'start_date', 'created_at', 'updated_at'],
+  'class-sessions': ['name', 'start_date', 'created_at', 'updated_at'],
+  students: ['name', 'created_at', 'updated_at'],
+  courses: ['subject', 'stage', 'display_name', 'created_at', 'updated_at'],
+  lessons: ['title', 'sequence', 'created_at', 'updated_at'],
+  enrollments: ['status', 'start_date', 'created_at', 'updated_at'],
+  occurrences: ['occurrence_date', 'status', 'created_at', 'updated_at'],
+  reports: ['updated_at', 'version'],
+  report_templates: ['name', 'created_at', 'updated_at'],
+  'report-templates': ['name', 'created_at', 'updated_at'],
+  holidays: ['name', 'start_date', 'end_date', 'created_at', 'updated_at'],
+}
+function collectionSort(resource: string, raw: string | null) {
+  const [field = 'created_at', direction = 'desc'] = (raw ?? '').split(':')
+  const fields = sortableFields[resource] ?? []
+  if (!fields.includes(field)) throw new ApiError(400, 'INVALID_SORT', 'Unsupported sort field')
+  if (direction !== 'asc' && direction !== 'desc') throw new ApiError(400, 'INVALID_SORT', 'Sort direction must be asc or desc')
+  return { field, ascending: direction === 'asc' }
+}
 
 async function mutationResponse(ctx: Awaited<ReturnType<typeof authenticate>>, req: Request, status: number, payload: unknown, id: string, headers: HeadersInit) {
   await completeIdempotency(ctx, req, status, payload)
@@ -69,8 +122,10 @@ async function mutationResponse(ctx: Awaited<ReturnType<typeof authenticate>>, r
 serve(async (req) => {
   const id = requestId(req)
   const trace = traceId(req)
-  const headers = corsHeaders(req)
+  const headers = { ...corsHeaders(req), 'X-Trace-Id': trace }
   const started = performance.now()
+  let telemetryOutcome: 'success' | 'denied' | 'failure' = 'success'
+  let telemetryUserId: string | undefined
   const url = new URL(req.url)
   const path = url.pathname.replace(/^\/api-v1/, '').replace(/^\/v1/, '') || '/'
   if (req.method === 'OPTIONS') return response(null, 204, id, headers)
@@ -80,6 +135,7 @@ serve(async (req) => {
     if (path === '/openapi.json' && req.method === 'GET') return response(OPENAPI, 200, id, headers)
 
     const ctx = await authenticate(req, id, trace)
+    telemetryUserId = ctx.user.id
     const replay = await beginIdempotency(ctx, req, path)
     if (replay) return replay
     if (path === '/me' && req.method === 'GET') return response({ data: { id: ctx.user.id, email: ctx.user.email, metadata: ctx.user.user_metadata }, request_id: id }, 200, id, headers)
@@ -117,27 +173,48 @@ serve(async (req) => {
       return response({ data: data ?? [], request_id: id }, 200, id, headers)
     }
 
-    const collectionMatch = path.match(/^\/(teachings|classrooms|class_sessions|students|courses|lessons|enrollments|occurrences|report_templates|report-templates|holidays|reports)$/)
-    const itemMatch = path.match(/^\/(teachings|classrooms|class_sessions|students|courses|lessons|enrollments|occurrences|report_templates|report-templates|holidays|reports)\/([0-9a-fA-F-]{36})$/)
+    const teachingMembersMatch = path.match(/^\/teachings\/([0-9a-fA-F-]{36})\/members$/)
+    if (teachingMembersMatch) {
+      const teachingId = teachingMembersMatch[1]
+      if (req.method === 'GET') {
+        await requirePermission(ctx, 'teaching.members.list')
+        const { data, error } = await ctx.db.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').eq('teaching_id', teachingId).order('created_at')
+        if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load teaching members')
+        return response({ data: data ?? [], request_id: id }, 200, id, headers)
+      }
+      if (req.method === 'POST') {
+        await requirePermission(ctx, 'teaching.members.manage')
+        const body = await parseJson(req) as Record<string, unknown>
+        const userId = typeof body.user_id === 'string' ? body.user_id : ''
+        if (!/^[0-9a-fA-F-]{36}$/.test(userId)) throw new ApiError(422, 'VALIDATION_ERROR', 'user_id must be a UUID', { user_id: ['invalid'] })
+        const payload = { teaching_id: teachingId, user_id: userId, ...pickBody(body, ['role_id', 'status', 'effective_from', 'effective_to']) }
+        const { data, error } = await ctx.db.from('teaching_members').insert(payload).select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').single()
+        if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'MEMBER_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Teaching member already exists' : 'Unable to add teaching member')
+        await audit(ctx, { action: 'create', domain: 'teaching', resource: 'members', resourceId: teachingId, scopeId: teachingId, outcome: 'success' })
+        return mutationResponse(ctx, req, 201, { data, request_id: id }, id, headers)
+      }
+    }    const collectionMatch = path.match(/^\/(teachings|classrooms|class_sessions|class-sessions|students|courses|lessons|enrollments|occurrences|report_templates|report-templates|holidays|reports)$/)
+    const itemMatch = path.match(/^\/(teachings|classrooms|class_sessions|class-sessions|students|courses|lessons|enrollments|occurrences|report_templates|report-templates|holidays|reports)\/([0-9a-fA-F-]{36})$/)
     if (collectionMatch) {
       const resource = collectionMatch[1]
       const definition = resourceDefinition(resource)
       if (req.method === 'GET') {
-        await requirePermission(ctx, 'teaching.' + (resource === 'report_templates' ? 'templates' : resource) + '.list')
+        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.list')
         const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 50), 1), 100)
         const offset = Math.max(Number(url.searchParams.get('offset') ?? 0), 0)
-        let query = ctx.db.from(definition.table).select(definition.select).range(offset, offset + limit - 1)
+        const sort = collectionSort(resource, url.searchParams.get('sort'))
+        let query = ctx.db.from(definition.table).select(definition.select).range(offset, offset + limit - 1).order(sort.field, { ascending: sort.ascending })
         const search = url.searchParams.get('search')?.trim()
         if (search && ['teachings', 'classrooms', 'students', 'report_templates', 'report-templates', 'holidays'].includes(resource)) query = query.ilike('name', '%' + search + '%')
         const { data, error } = await query
         if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load resource')
-        return response({ data: data ?? [], meta: { limit, offset }, request_id: id }, 200, id, headers)
+        return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
       }
       if (req.method === 'POST') {
         if (definition.fields.length === 0) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Resource does not support creation')
-        await requirePermission(ctx, 'teaching.' + (resource === 'report_templates' ? 'templates' : resource) + '.create')
+        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.create')
         const body = await parseJson(req) as Record<string, unknown>
-        const payload = pickBody(body, definition.fields)
+        const payload = { ...pickBody(body, definition.fields), ...(resource === 'teachings' ? { owner_user_id: ctx.user.id } : {}) }
         if (Object.keys(payload).length === 0) throw new ApiError(422, 'VALIDATION_ERROR', 'At least one writable field is required')
         const { data, error } = await ctx.db.from(definition.table).insert(payload).select(definition.select).single()
         if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'RESOURCE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Resource already exists' : 'Unable to create resource')
@@ -150,7 +227,7 @@ serve(async (req) => {
       const resourceId = itemMatch[2]
       const definition = resourceDefinition(resource)
       if (req.method === 'GET') {
-        await requirePermission(ctx, 'teaching.' + (resource === 'report_templates' ? 'templates' : resource) + '.read')
+        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.read')
         const { data, error } = await ctx.db.from(definition.table).select(definition.select).eq('id', resourceId).maybeSingle()
         if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load resource')
         if (!data) throw new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found')
@@ -158,9 +235,9 @@ serve(async (req) => {
       }
       if (req.method === 'PATCH') {
         if (definition.fields.length === 0) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Resource does not support updates')
-        await requirePermission(ctx, 'teaching.' + (resource === 'report_templates' ? 'templates' : resource) + '.update')
+        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.update')
         const body = await parseJson(req) as Record<string, unknown>
-        const payload = pickBody(body, definition.fields)
+        const payload = { ...pickBody(body, definition.fields), ...(resource === 'teachings' ? { owner_user_id: ctx.user.id } : {}) }
         if (Object.keys(payload).length === 0) throw new ApiError(422, 'VALIDATION_ERROR', 'At least one writable field is required')
         const { data, error } = await ctx.db.from(definition.table).update(payload).eq('id', resourceId).select(definition.select).maybeSingle()
         if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'RESOURCE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Resource conflicts with an existing record' : 'Unable to update resource')
@@ -170,7 +247,7 @@ serve(async (req) => {
       }
       if (req.method === 'DELETE') {
         if (definition.fields.length === 0) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Resource does not support deletion')
-        await requirePermission(ctx, 'teaching.' + (resource === 'report_templates' ? 'templates' : resource) + '.delete')
+        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.delete')
         const { data, error } = await ctx.db.from(definition.table).delete().eq('id', resourceId).select('id').maybeSingle()
         if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to delete resource')
         if (!data) throw new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found')
@@ -180,11 +257,12 @@ serve(async (req) => {
     }
     throw new ApiError(404, 'ROUTE_NOT_FOUND', 'Route not found')
   } catch (error) {
+    telemetryOutcome = error instanceof ApiError && error.status === 403 ? 'denied' : 'failure'
     if (error instanceof ApiError && error.status === 403) {
       try { const ctx = await authenticate(req, id, trace); await audit(ctx, { action: req.method, domain: 'teaching', resource: path.split('/')[1] || 'unknown', outcome: 'denied' }) } catch { /* preserve original denial */ }
     }
     return handleError(error, id, trace)
   } finally {
-    console.log(JSON.stringify({ type: 'api_request', request_id: id, trace_id: trace, route: path, method: req.method, duration_ms: Math.round(performance.now() - started) }))
+    void emitTelemetry({ request_id: id, trace_id: trace, user_id: telemetryUserId, route: path, method: req.method, latency_ms: Math.round(performance.now() - started), outcome: telemetryOutcome })
   }
 })
