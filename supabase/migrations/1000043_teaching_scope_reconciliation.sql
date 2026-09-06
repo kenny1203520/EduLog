@@ -77,19 +77,29 @@ FROM public.teachings teaching
 WHERE course.teaching_id IS NULL
   AND teaching.owner_user_id IS NOT DISTINCT FROM course.user_id
   AND teaching.is_quarantine = false;
-UPDATE public.class_sessions session
-SET teaching_id = COALESCE(classroom.teaching_id, course_teaching.teaching_id,
-                            (SELECT id FROM public.teachings WHERE is_quarantine = true))
-FROM public.classrooms classroom
-LEFT JOIN LATERAL (
-  SELECT course.teaching_id
-  FROM public.courses course
-  WHERE course.id = ANY(session.course_ids)
-  ORDER BY course.teaching_id NULLS LAST
-  LIMIT 1
-) course_teaching ON true
-WHERE session.teaching_id IS NULL
-  AND classroom.id IS NOT DISTINCT FROM session.classroom_id;
+WITH resolved_sessions AS (
+  SELECT
+    session.id,
+    COALESCE(
+      classroom.teaching_id,
+      (
+        SELECT course.teaching_id
+        FROM public.courses course
+        WHERE course.id = ANY(session.course_ids)
+        ORDER BY course.teaching_id NULLS LAST
+        LIMIT 1
+      ),
+      (SELECT id FROM public.teachings WHERE is_quarantine = true)
+    ) AS resolved_teaching_id
+  FROM public.class_sessions session
+  LEFT JOIN public.classrooms classroom
+    ON classroom.id IS NOT DISTINCT FROM session.classroom_id
+  WHERE session.teaching_id IS NULL
+)
+UPDATE public.class_sessions target
+SET teaching_id = resolved.resolved_teaching_id
+FROM resolved_sessions resolved
+WHERE target.id = resolved.id;
 
 UPDATE public.classrooms
 SET teaching_id = (SELECT id FROM public.teachings WHERE is_quarantine = true)

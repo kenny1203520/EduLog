@@ -10,6 +10,7 @@ Deno.test('reconciliation migration is present and fail-closed', () => {
   assertStringIncludes(reconciliation, 'RAISE EXCEPTION')
   assertStringIncludes(reconciliation, 'DROP POLICY IF EXISTS "Enable all access for authenticated users"')
   assertStringIncludes(reconciliation, 'GRANT EXECUTE ON FUNCTION public.can_teaching_action')
+  assertStringIncludes(reconciliation, 'WITH resolved_sessions AS')
 })
 
 Deno.test('forward hardening adds epoch, cycle prevention, and action-specific RLS', () => {
