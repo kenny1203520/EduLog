@@ -55,7 +55,7 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,]/g, '')}%`).join(',')
     builder = builder.or(clauses)
   }
-  for (const field of ['teaching_id', 'status', 'course_id', 'classroom_id']) {
+  for (const field of ['teaching_id', 'status', 'course_id', 'classroom_id', 'student_id', 'class_session_id']) {
     const value = queryValue(req, field)
     if (value) builder = builder.eq(field, value)
   }

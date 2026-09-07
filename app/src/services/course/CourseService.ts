@@ -1,4 +1,7 @@
 import { supabase } from '@/lib/supabase'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 
 /**
@@ -7,6 +10,10 @@ import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
  */
 export class CourseService {
     static async getStudentEnrollments(studentId: string): Promise<Enrollment[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<EnrollmentDTO[]>('/enrollments?student_id=' + encodeURIComponent(studentId) + '&limit=100&sort=-created_at')
+            return (response.data || []).map((dto) => new Enrollment(dto))
+        }
         const { data, error } = await supabase
             .from('enrollments')
             .select(`
@@ -23,6 +30,9 @@ export class CourseService {
     }
 
     static async getEnrollmentById(id: string): Promise<Enrollment | null> {
+        if (getApiV1Mode() === 'v1') {
+            try { return new Enrollment((await apiResourceClient.get<EnrollmentDTO>('enrollments', id, 'v1')).data) } catch (error) { if ((error as any)?.status === 404) return null; throw error }
+        }
         const { data, error } = await supabase
             .from('enrollments')
             .select(`
@@ -42,6 +52,10 @@ export class CourseService {
 
     /** Batched form of getEnrollmentById -- one request instead of one per id. */
     static async getEnrollmentsByIds(ids: string[]): Promise<Enrollment[]> {
+        if (getApiV1Mode() === 'v1') {
+            const rows = await Promise.all(ids.map((id) => this.getEnrollmentById(id)))
+            return rows.filter((row): row is Enrollment => Boolean(row))
+        }
         if (ids.length === 0) return []
         const { data, error } = await supabase
             .from('enrollments')
@@ -59,23 +73,30 @@ export class CourseService {
     }
 
     static async enrollStudent(enrollment: Partial<EnrollmentDTO>): Promise<Enrollment> {
+        if (getApiV1Mode() === 'v1') return new Enrollment((await apiResourceClient.create<EnrollmentDTO>('enrollments', enrollment, 'v1')).data)
         const { data, error } = await supabase.from('enrollments').insert(enrollment).select().single()
         if (error) throw new Error(error.message)
         return new Enrollment(data)
     }
 
     static async updateEnrollment(id: string, updates: Partial<EnrollmentDTO>): Promise<Enrollment> {
+        if (getApiV1Mode() === 'v1') return new Enrollment((await apiResourceClient.update<EnrollmentDTO>('enrollments', id, updates, 'v1')).data)
         const { data, error } = await supabase.from('enrollments').update(updates).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return new Enrollment(data)
     }
 
     static async deleteEnrollment(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('enrollments', id, 'v1'); return }
         const { error } = await supabase.from('enrollments').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
     static async getEnrollmentsBySession(sessionId: string): Promise<{ data: Enrollment[] }> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<EnrollmentDTO[]>('/enrollments?class_session_id=' + encodeURIComponent(sessionId) + '&status=regular&limit=100&sort=created_at')
+            return { data: (response.data || []).map((dto: any) => { const enrollment = new Enrollment(dto); if (dto.students) { enrollment.studentName = dto.students.name; enrollment.studentEmail = dto.students.email } return enrollment }).sort((a, b) => (a.studentName || '').localeCompare(b.studentName || '', 'zh-Hant')) }
+        }
         const { data, error } = await supabase
             .from('enrollments')
             .select(`
