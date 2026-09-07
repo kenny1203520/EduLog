@@ -25,7 +25,9 @@ write_runtime_config() {
     printf 'window.__EDULOG_CONFIG__ = Object.freeze({\n'
     printf '  VITE_SUPABASE_URL: %s,\n' "$(js_string "${VITE_SUPABASE_URL:-}")"
     printf '  VITE_SUPABASE_ANON_KEY: %s,\n' "$(js_string "${VITE_SUPABASE_ANON_KEY:-}")"
-    printf '  VITE_SUPABASE_FUNCTIONS_BASE_URL: %s\n' "$(js_string "${VITE_SUPABASE_FUNCTIONS_BASE_URL:-}")"
+    printf '  VITE_SUPABASE_FUNCTIONS_BASE_URL: %s,\n' "$(js_string "${VITE_SUPABASE_FUNCTIONS_BASE_URL:-}")"
+    printf '  VITE_LEGACY_API_BASE_URL: %s,\n' "$(js_string "${VITE_LEGACY_API_BASE_URL:-}")"
+    printf '  VITE_API_V1_MODE: %s\n' "$(js_string "${VITE_API_V1_MODE:-mock}")"
     printf '});\n'
   } > "$runtime_config_path"
 }
