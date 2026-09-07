@@ -76,7 +76,7 @@ Deno.test('historical migration versions are preserved', async () => {
 Deno.test('1000048 resolves student scope through course fallback', () => {
   assertStringIncludes(studentScope, 'CREATE OR REPLACE FUNCTION public.can_access_student')
   assertStringIncludes(studentScope, 'COALESCE(session.teaching_id, classroom.teaching_id, course.teaching_id)')
-  assertStringIncludes(studentScope, 'RAISE EXCEPTION ''1000048 prerequisites missing')
+  assertStringIncludes(studentScope, "RAISE EXCEPTION '1000048 prerequisites missing")
   assertStringIncludes(studentScope, 'GRANT EXECUTE ON FUNCTION public.can_access_student(uuid, text) TO authenticated, service_role')
 })
 
