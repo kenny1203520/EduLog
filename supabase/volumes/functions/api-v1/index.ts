@@ -35,7 +35,7 @@ async function dispatch(ctx: ApiContext, req: Request, url: URL, path: string, i
 serve(async (req) => {
   const id = requestId(req)
   const trace = traceId(req)
-  const headers = { ...corsHeaders(req), 'X-Trace-Id': trace }
+  const headers = { ...corsHeaders(req), 'X-Trace-Id': trace, Deprecation: 'true', Sunset: Deno.env.get('LEGACY_API_SUNSET') ?? 'Wed, 31 Dec 2026 23:59:59 GMT', Link: '</api>; rel="successor-version"' }
   const started = performance.now()
   const url = new URL(req.url)
   const path = normalizedPath(url)
@@ -83,7 +83,9 @@ serve(async (req) => {
         })
       } catch { /* preserve the original response */ }
     }
-    return handleError(error, id, trace)
+    const legacyError = handleError(error, id, trace)
+    for (const [name, value] of Object.entries(headers)) legacyError.headers.set(name, String(value))
+    return legacyError
   } finally {
     void emitTelemetry({
       request_id: id,
