@@ -27,10 +27,15 @@ jobs:
           supabase/volumes/functions/_shared/telemetry.ts
           supabase/volumes/functions/_shared/validation.ts
           supabase/volumes/functions/api-v1/index.ts
+          supabase/volumes/functions/api-v1/resourceRegistry.ts
       - name: Run migration and API contract/security tests
         run: >-
           deno test --allow-read
           supabase/tests/migration_chain_static_test.ts
+          supabase/tests/migration_hardening_static_test.ts
           supabase/tests/api_contract_static_test.ts
           supabase/tests/shared_security_test.ts
+          supabase/tests/auth_security_static_test.ts
           supabase/tests/api_shared_contract_test.ts
+          supabase/tests/api_registry_test.ts
+          supabase/tests/api_system_contract_test.ts

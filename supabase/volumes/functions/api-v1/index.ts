@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.177.1/http/server.ts'
 import { ApiError, audit, authenticate, beginIdempotency, completeIdempotency, corsHeaders, emitTelemetry, enforceRateLimit, handleError, parseJson, requirePermission, requestId, response, traceId } from '../_shared/api.ts'
 import { parsePagination, ValidationError, validateWritableFields } from '../_shared/validation.ts'
+import { collectionSort as registryCollectionSort, permissionResource, resourceDefinition } from './resourceRegistry.ts'
 
 const OPENAPI = {
   openapi: '3.0.3',
@@ -95,55 +96,29 @@ for (const [path, pathItem] of Object.entries(openapi.paths) as [string, Record<
   }
 }
 
-const resourceDefinitions = {
-  classrooms: { table: 'classrooms', select: 'id,name,color,address,phone,external_link,teaching_id,user_id,created_at,updated_at', fields: ['name', 'color', 'address', 'phone', 'external_link', 'teaching_id'] },
-  class_sessions: { table: 'class_sessions', select: 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,teaching_id,user_id,created_at,updated_at', fields: ['name', 'classroom_id', 'course_ids', 'day_of_week', 'start_time', 'end_time', 'capacity', 'lesson_number', 'external_link', 'start_date', 'end_date', 'teaching_id'] },
-  'class-sessions': { table: 'class_sessions', select: 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,teaching_id,user_id,created_at,updated_at', fields: ['name', 'classroom_id', 'course_ids', 'day_of_week', 'start_time', 'end_time', 'capacity', 'lesson_number', 'external_link', 'start_date', 'end_date', 'teaching_id'] },
-  students: { table: 'students', select: 'id,name,notes,gov_id,email,phone,residence_address,mailing_address,birthday,external_link,user_id,created_at,updated_at', fields: ['name', 'notes', 'gov_id', 'email', 'phone', 'residence_address', 'mailing_address', 'birthday', 'external_link'] },
-  reports: { table: 'occurrence_reports', select: 'id,enrollment_id,class_occurrence_id,lesson_id,content,content_document,attendance_status,is_completed,progress_letter,class_participation,classroom_behavior,contact_notes,class_notes,external_link,version,updated_at', fields: [] },
-  teachings: { table: 'teachings', select: 'id,name,owner_user_id,is_quarantine,created_at,updated_at', fields: ['name'] },
-  courses: { table: 'courses', select: 'id,subject,stage,description,display_name,teaching_id,user_id,created_at,updated_at', fields: ['subject', 'stage', 'description', 'display_name', 'teaching_id'] },
-  lessons: { table: 'lessons', select: 'id,course_id,title,sequence,user_id,created_at,updated_at', fields: ['course_id', 'title', 'sequence'] },
-  enrollments: { table: 'enrollments', select: 'id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,user_id,created_at,updated_at', fields: ['student_id', 'course_id', 'classroom_id', 'class_session_id', 'status', 'start_date', 'lesson_number', 'external_link'] },
-  occurrences: { table: 'class_occurrences', select: 'id,class_session_id,occurrence_date,status,teacher_ids,teacher_attendance,notes,is_conducted,created_at,updated_at', fields: ['class_session_id', 'occurrence_date', 'status', 'teacher_ids', 'teacher_attendance', 'notes', 'is_conducted'] },
-  report_templates: { table: 'report_templates', select: 'id,name,content,contact_notes,class_notes,instructor_id,teaching_id,created_at,updated_at', fields: ['name', 'content', 'contact_notes', 'class_notes', 'teaching_id'] },
-  'report-templates': { table: 'report_templates', select: 'id,name,content,contact_notes,class_notes,instructor_id,teaching_id,created_at,updated_at', fields: ['name', 'content', 'contact_notes', 'class_notes', 'teaching_id'] },
-  holidays: { table: 'holidays', select: 'id,name,start_date,end_date,classroom_ids,class_session_ids,created_at,updated_at', fields: ['name', 'start_date', 'end_date', 'classroom_ids', 'class_session_ids'] },
-} as const
-
-function resourceDefinition(resource: string) {
-  const definition = resourceDefinitions[resource as keyof typeof resourceDefinitions]
+function getResourceDefinition(resource: string) {
+  const definition = resourceDefinition(resource)
   if (!definition) throw new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource is not available through this API')
   return definition
 }
 
-function validateBody(body: Record<string, unknown>, fields: readonly string[], allowedExtra: readonly string[] = []) { try { return validateWritableFields(body, [...fields, ...allowedExtra]) } catch (error) { if (error instanceof ValidationError) throw new ApiError(422, 'VALIDATION_ERROR', error.message, error.fields); throw error } }
-function pickBody(body: Record<string, unknown>, fields: readonly string[], allowedExtra: readonly string[] = []) { validateBody(body, fields, allowedExtra); const result: Record<string, unknown> = {}; for (const field of fields) if (Object.prototype.hasOwnProperty.call(body, field)) result[field] = body[field]; return result }
-function permissionResource(resource: string) {
-  if (resource === 'report_templates' || resource === 'report-templates') return 'templates'
-  return resource.replaceAll('-', '_')
-}
-const sortableFields: Record<string, readonly string[]> = {
-  teachings: ['name', 'created_at', 'updated_at'],
-  classrooms: ['name', 'created_at', 'updated_at'],
-  class_sessions: ['name', 'start_date', 'created_at', 'updated_at'],
-  'class-sessions': ['name', 'start_date', 'created_at', 'updated_at'],
-  students: ['name', 'created_at', 'updated_at'],
-  courses: ['subject', 'stage', 'display_name', 'created_at', 'updated_at'],
-  lessons: ['title', 'sequence', 'created_at', 'updated_at'],
-  enrollments: ['status', 'start_date', 'created_at', 'updated_at'],
-  occurrences: ['occurrence_date', 'status', 'created_at', 'updated_at'],
-  reports: ['updated_at', 'version'],
-  report_templates: ['name', 'created_at', 'updated_at'],
-  'report-templates': ['name', 'created_at', 'updated_at'],
-  holidays: ['name', 'start_date', 'end_date', 'created_at', 'updated_at'],
-}
 function collectionSort(resource: string, raw: string | null) {
-  const [field = 'created_at', direction = 'desc'] = (raw ?? '').split(':')
-  const fields = sortableFields[resource] ?? []
-  if (!fields.includes(field)) throw new ApiError(400, 'INVALID_SORT', 'Unsupported sort field')
-  if (direction !== 'asc' && direction !== 'desc') throw new ApiError(400, 'INVALID_SORT', 'Sort direction must be asc or desc')
-  return { field, ascending: direction === 'asc' }
+  try { return registryCollectionSort(resource, raw) }
+  catch { throw new ApiError(400, 'INVALID_SORT', 'Unsupported sort field or direction') }
+}
+
+function validateBody(body: Record<string, unknown>, fields: readonly string[], allowedExtra: readonly string[] = []) {
+  try { return validateWritableFields(body, [...fields, ...allowedExtra]) }
+  catch (error) {
+    if (error instanceof ValidationError) throw new ApiError(422, 'VALIDATION_ERROR', error.message, error.fields)
+    throw error
+  }
+}
+function pickBody(body: Record<string, unknown>, fields: readonly string[], allowedExtra: readonly string[] = []) {
+  validateBody(body, fields, allowedExtra)
+  const result: Record<string, unknown> = {}
+  for (const field of fields) if (Object.prototype.hasOwnProperty.call(body, field)) result[field] = body[field]
+  return result
 }
 
 async function mutationResponse(ctx: Awaited<ReturnType<typeof authenticate>>, req: Request, status: number, payload: unknown, id: string, headers: HeadersInit) {
@@ -176,17 +151,25 @@ serve(async (req) => {
     if (path === '/permissions' && req.method === 'GET') {
       await requirePermission(ctx, 'system.permissions.read')
       const { limit, offset } = parsePagination(url.searchParams)
-      const { data, error } = await ctx.db.from('permissions').select('key,name,description,domain,resource,action,conditions').order('domain').order('resource').order('action').range(offset, offset + limit - 1)
+      const sort = collectionSort('permissions', url.searchParams.get('sort'))
+      let query = ctx.db.from('permissions').select('id,key,name,description,domain,resource,action,conditions,created_at,updated_at').order(sort.field, { ascending: sort.ascending })
+      const search = url.searchParams.get('search')?.trim()
+      if (search) query = query.ilike('key', '%' + search + '%')
+      const { data, error } = await query.range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load permissions')
-      return response({ data: data ?? [], meta: { limit, offset }, request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
     }
 
     if (path === '/roles' && req.method === 'GET') {
       await requirePermission(ctx, 'system.roles.manage')
       const { limit, offset } = parsePagination(url.searchParams)
-      const { data, error } = await ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at').order('sort_order').order('name').range(offset, offset + limit - 1)
+      const sort = collectionSort('roles', url.searchParams.get('sort'))
+      let query = ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at').order(sort.field, { ascending: sort.ascending })
+      const search = url.searchParams.get('search')?.trim()
+      if (search) query = query.ilike('name', '%' + search + '%')
+      const { data, error } = await query.range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load roles')
-      return response({ data: data ?? [], meta: { limit, offset }, request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
     }
 
     const roleItemMatch = path.match(/^\/roles\/([0-9a-fA-F-]{36})$/)
@@ -221,6 +204,7 @@ serve(async (req) => {
     if (path === '/roles' && req.method === 'POST') {
       await requirePermission(ctx, 'system.roles.manage')
       const body = await parseJson(req) as Record<string, unknown>
+      validateBody(body, ['code', 'name', 'description'])
       const name = typeof body.name === 'string' ? body.name.trim() : ''
       if (!name || name.length > 120) throw new ApiError(422, 'VALIDATION_ERROR', 'name is required and must be at most 120 characters', { name: ['required'] })
       const { data, error } = await ctx.db.from('roles').insert({ code: typeof body.code === 'string' ? body.code.trim() || null : null, name, description: typeof body.description === 'string' ? body.description.trim() || null : null, is_system: false }).select('id,code,name,description,is_system,sort_order,created_at,updated_at').single()
@@ -232,9 +216,13 @@ serve(async (req) => {
     if (path === '/audit-events' && req.method === 'GET') {
       await requirePermission(ctx, 'system.audit.list')
       const { limit, offset } = parsePagination(url.searchParams)
-      const { data, error } = await ctx.db.from('audit_events').select('id,actor_user_id,action,domain,resource,resource_id,scope_id,request_id,outcome,metadata,created_at').order('created_at', { ascending: false }).range(offset, offset + limit - 1)
+      const sort = collectionSort('audit-events', url.searchParams.get('sort'))
+      let query = ctx.db.from('audit_events').select('id,actor_user_id,action,domain,resource,resource_id,scope_id,request_id,outcome,metadata,created_at').order(sort.field, { ascending: sort.ascending })
+      const search = url.searchParams.get('search')?.trim()
+      if (search) query = query.ilike('resource', '%' + search + '%')
+      const { data, error } = await query.range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load audit events')
-      return response({ data: data ?? [], meta: { limit, offset }, request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
     }
 
     const teachingMembersMatch = path.match(/^\/teachings\/([0-9a-fA-F-]{36})\/members$/)
@@ -242,9 +230,15 @@ serve(async (req) => {
       const teachingId = teachingMembersMatch[1]
       if (req.method === 'GET') {
         await requirePermission(ctx, 'teaching.members.list')
-        const { data, error } = await ctx.db.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').eq('teaching_id', teachingId).order('created_at')
+        const { limit, offset } = parsePagination(url.searchParams)
+        const rawSort = url.searchParams.get('sort')
+        const sortParts = (rawSort ?? 'created_at:desc').split(':')
+        const sortField = sortParts[0]
+        const sortDirection = sortParts[1] ?? 'desc'
+        if (!['created_at', 'effective_from', 'status'].includes(sortField) || !['asc', 'desc'].includes(sortDirection)) throw new ApiError(400, 'INVALID_SORT', 'Unsupported teaching member sort')
+        const { data, error } = await ctx.db.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').eq('teaching_id', teachingId).order(sortField, { ascending: sortDirection === 'asc' }).range(offset, offset + limit - 1)
         if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load teaching members')
-        return response({ data: data ?? [], request_id: id }, 200, id, headers)
+        return response({ data: data ?? [], meta: { limit, offset, sort: rawSort ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
       }
       if (req.method === 'POST') {
         await requirePermission(ctx, 'teaching.members.manage')
@@ -261,14 +255,14 @@ serve(async (req) => {
     const itemMatch = path.match(/^\/(teachings|classrooms|class_sessions|class-sessions|students|courses|lessons|enrollments|occurrences|report_templates|report-templates|holidays|reports)\/([0-9a-fA-F-]{36})$/)
     if (collectionMatch) {
       const resource = collectionMatch[1]
-      const definition = resourceDefinition(resource)
+      const definition = getResourceDefinition(resource)
       if (req.method === 'GET') {
         await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.list')
         const { limit, offset } = parsePagination(url.searchParams)
         const sort = collectionSort(resource, url.searchParams.get('sort'))
         let query = ctx.db.from(definition.table).select(definition.select).range(offset, offset + limit - 1).order(sort.field, { ascending: sort.ascending })
         const search = url.searchParams.get('search')?.trim()
-        if (search && ['teachings', 'classrooms', 'students', 'report_templates', 'report-templates', 'holidays'].includes(resource)) query = query.ilike('name', '%' + search + '%')
+        if (search && definition.searchField) query = query.ilike(definition.searchField, '%' + search + '%')
         const { data, error } = await query
         if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load resource')
         return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
@@ -288,7 +282,7 @@ serve(async (req) => {
     if (itemMatch) {
       const resource = itemMatch[1]
       const resourceId = itemMatch[2]
-      const definition = resourceDefinition(resource)
+      const definition = getResourceDefinition(resource)
       if (req.method === 'GET') {
         await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.read')
         const { data, error } = await ctx.db.from(definition.table).select(definition.select).eq('id', resourceId).maybeSingle()
