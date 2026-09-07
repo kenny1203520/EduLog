@@ -54,8 +54,13 @@ This directory contains the append-only database history for EduLog. Applied mig
 | 1000044 | `1000044_rbac_epoch_and_api_contract.sql` | RBAC epoch and canonical API/RLS reconciliation |
 
 | 1000045 | 1000045_missing_core_rls_hardening.sql | Forward-only hardening for missing core-table RLS policies |
+| 1000046 | 1000046_api_rate_limit_shared_store.sql | Hashed shared API rate-limit buckets and atomic service-role RPC |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. `1000041a` is an intentional compatibility migration and is ordered before `1000042`.
+
+## 1000046 shared rate limiting
+
+Apply 1000046 after the RLS hardening migration. The migration stores only hashed bucket keys and exposes the atomic consume RPC to service_role; application traffic must use the Supabase/Postgres adapter in production. Memory rate limiting is only for tests/local development. Back up before applying and verify the RPC grant and table policies.
 
 ## 1000045 forward hardening
 
