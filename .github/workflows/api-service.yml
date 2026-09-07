@@ -46,6 +46,7 @@ jobs:
           EDULOG_COOKIE_SECRET: 0123456789abcdef0123456789abcdef
           ANON_KEY: test-anon-key
           SERVICE_ROLE_KEY: test-service-role-key
+          DOCKER_SOCKET_LOCATION: /var/run/docker.sock
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
       - name: Build frontend artifact
         run: npm ci --prefix app
