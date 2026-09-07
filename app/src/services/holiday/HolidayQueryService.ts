@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Holiday } from '@/models/Holiday'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 /**
  * Query service for holidays
@@ -10,6 +12,10 @@ export class HolidayQueryService {
      * Lists all holidays ordered by start date
      */
     static async listHolidays(): Promise<Holiday[]> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<any>('holidays', { perPage: 100, sort: 'start_date', mode: 'v1' })
+            return (result.data || []).map((dto) => new Holiday(dto))
+        }
         const { data, error } = await supabase
             .from('holidays')
             .select('*')

@@ -1,5 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { Student } from '@/models/Student'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 /**
  * Query service for students
@@ -10,6 +12,11 @@ export class StudentQueryService {
      * Fetch all students ordered by name with pagination
      */
     static async getAll(page: number = 1, perPage: number = 1000, search?: string): Promise<{ data: Student[], count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<any>('students', { page, perPage, search, sort: 'name', mode: 'v1' })
+            const students = (result.data || []).map((dto) => new Student(dto))
+            return { data: students, count: result.meta?.total ?? students.length }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
@@ -35,6 +42,10 @@ export class StudentQueryService {
      * Get a single student by ID
      */
     static async getById(id: string): Promise<Student | null> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.get<any>('students', id, 'v1')
+            return result.data ? new Student(result.data) : null
+        }
         const { data, error } = await supabase
             .from('students')
             .select('*, student_contacts(*), student_schools(*), student_credentials(*), enrollments(*, classrooms(name), courses(subject, stage, display_name), class_sessions(*, class_session_schedule_rules(*)))')

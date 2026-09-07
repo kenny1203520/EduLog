@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export interface TeacherDTO {
     id?: string
@@ -72,6 +74,10 @@ export class TeacherService {
         perPage: number = 100,
         search?: string
     ): Promise<{ data: TeacherDTO[]; count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<TeacherDTO>('teachers', { page, perPage, search, sort: 'name', mode: 'v1' })
+            return { data: result.data || [], count: result.meta?.total ?? result.data?.length ?? 0 }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
@@ -142,6 +148,7 @@ export class TeacherService {
     }
 
     static async createTeacher(teacher: TeacherUpsertDTO): Promise<TeacherDTO> {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<TeacherDTO>('teachers', normalizeTeacherPayload(teacher), 'v1')).data
         const { data, error } = await supabase
             .from('teachers')
             .insert([normalizeTeacherPayload(teacher)])
@@ -168,6 +175,7 @@ export class TeacherService {
     }
 
     static async deleteTeacher(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('teachers', id, 'v1'); return }
         const { error } = await supabase
             .from('teachers')
             .delete()
