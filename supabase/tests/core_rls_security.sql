@@ -184,7 +184,19 @@ BEGIN
     'a4000000-0000-4000-8000-000000000001',
     'b4000000-0000-4000-8000-000000000002'
   )) <> 1 THEN
-    RAISE EXCEPTION 'teaching owner student isolation failed';
+    RAISE EXCEPTION 'teaching owner student isolation failed (visible %, scope A %, scope B %, member A %, permission A %)',
+      (SELECT count(*) FROM public.students WHERE id IN (
+        'a4000000-0000-4000-8000-000000000001',
+        'b4000000-0000-4000-8000-000000000002'
+      )),
+      public.can_access_student('a4000000-0000-4000-8000-000000000001', 'teaching.students.read'),
+      public.can_access_student('b4000000-0000-4000-8000-000000000002', 'teaching.students.read'),
+      public.is_teaching_member('a1000000-0000-4000-8000-000000000001'),
+      public.has_teaching_permission(
+        '00000000-0000-0000-0000-000000000003',
+        'teaching.students.read',
+        'a1000000-0000-4000-8000-000000000001'
+      );
   END IF;
   IF (SELECT count(*) FROM public.student_credentials WHERE id IN (
     'a6000000-0000-4000-8000-000000000001',
