@@ -50,6 +50,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000044_rbac_epoch_and_api_contract.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000045_missing_core_rls_hardening.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000046_api_rate_limit_shared_store.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000047_canonical_teacher_permissions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
       - name: Upgrade an existing database and verify owner backfill
@@ -60,7 +61,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *1000043_teaching_scope_reconciliation.sql|*1000044_rbac_epoch_and_api_contract.sql|*1000045_missing_core_rls_hardening.sql|*1000046_api_rate_limit_shared_store.sql) continue ;;
+              *1000043_teaching_scope_reconciliation.sql|*1000044_rbac_epoch_and_api_contract.sql|*1000045_missing_core_rls_hardening.sql|*1000046_api_rate_limit_shared_store.sql|*1000047_canonical_teacher_permissions.sql) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -69,6 +70,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000044_rbac_epoch_and_api_contract.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000045_missing_core_rls_hardening.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000046_api_rate_limit_shared_store.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000047_canonical_teacher_permissions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql

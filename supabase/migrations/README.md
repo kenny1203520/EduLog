@@ -55,8 +55,13 @@ This directory contains the append-only database history for EduLog. Applied mig
 
 | 1000045 | 1000045_missing_core_rls_hardening.sql | Forward-only hardening for missing core-table RLS policies |
 | 1000046 | 1000046_api_rate_limit_shared_store.sql | Hashed shared API rate-limit buckets and atomic service-role RPC |
+| 1000047 | `1000047_canonical_teacher_permissions.sql` | Forward completion of canonical teaching teacher permissions |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. `1000041a` is an intentional compatibility migration and is ordered before `1000042`.
+
+## 1000047 canonical teacher permissions
+
+Apply 1000047 after 1000046. It is a rerunnable forward migration that fills the teaching teacher permission catalogue required by the `/teachers` API and preserves scoped evaluation through teaching membership.
 
 ## 1000046 shared rate limiting
 
@@ -79,4 +84,4 @@ Back up the database first. Apply only migrations not recorded in the migration 
 
 ## Verification
 
-The CI database gate runs clean install, reruns `1000043`/`1000044`, upgrade fixture and assertions. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+The CI database gate runs clean install, reruns `1000043`/`1000044`/`1000045`/`1000046`/`1000047`, upgrade fixture and assertions. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
