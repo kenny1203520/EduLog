@@ -88,6 +88,12 @@ END;
 $$;
 
 -- Regression check for actual row isolation, not only policy metadata.
+-- Use identities present in both clean and upgrade fixtures.
+INSERT INTO auth.users(id, email) VALUES
+  ('00000000-0000-0000-0000-000000000001', 'rls-a@example.test'),
+  ('00000000-0000-0000-0000-000000000002', 'rls-b@example.test')
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO public.students(id, name, user_id) VALUES
   ('81000000-0000-0000-0000-000000000001', 'RLS Student A', '00000000-0000-0000-0000-000000000001'),
   ('82000000-0000-0000-0000-000000000002', 'RLS Student B', '00000000-0000-0000-0000-000000000002')
