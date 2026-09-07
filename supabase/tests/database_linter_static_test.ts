@@ -2,7 +2,7 @@ import { assert, assertFalse, assertStringIncludes } from 'https://deno.land/std
 
 const migrationDir = new URL('../migrations/', import.meta.url)
 const hardening = await Deno.readTextFile(new URL('1000044_rbac_epoch_and_api_contract.sql', migrationDir))
-const coreHardening = await Deno.readTextFile(new URL('1000045_core_rls_hardening.sql', migrationDir))
+const coreHardening = await Deno.readTextFile(new URL('1000045_missing_core_rls_hardening.sql', migrationDir))
 const rateLimit = await Deno.readTextFile(new URL('1000046_api_rate_limit_shared_store.sql', migrationDir))
 const registry = await Deno.readTextFile(new URL('../volumes/functions/api-v1/resourceRegistry.ts', import.meta.url))
 const api = await Deno.readTextFile(new URL('../volumes/functions/api-v1/index.ts', import.meta.url))
