@@ -56,8 +56,13 @@ This directory contains the append-only database history for EduLog. Applied mig
 | 1000045 | 1000045_missing_core_rls_hardening.sql | Forward-only hardening for missing core-table RLS policies |
 | 1000046 | 1000046_api_rate_limit_shared_store.sql | Hashed shared API rate-limit buckets and atomic service-role RPC |
 | 1000047 | `1000047_canonical_teacher_permissions.sql` | Forward completion of canonical teaching teacher permissions |
+| 1000048 | `1000048_student_scope_course_fallback.sql` | Student scope resolution through session, classroom, or course teaching |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. `1000041a` is an intentional compatibility migration and is ordered before `1000042`.
+
+## 1000048 student scope course fallback
+
+Apply 1000048 after 1000047. It is a rerunnable forward migration that preserves the enrollment consistency trigger while resolving student access through the class session, classroom, or course teaching. It never broadens access beyond an active teaching membership and should be verified after a backup.
 
 ## 1000047 canonical teacher permissions
 
@@ -84,4 +89,4 @@ Back up the database first. Apply only migrations not recorded in the migration 
 
 ## Verification
 
-The CI database gate runs clean install, reruns `1000043`/`1000044`/`1000045`/`1000046`/`1000047`, upgrade fixture and assertions. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+The CI database gate runs clean install, reruns `1000043`/`1000044`/`1000045`/`1000046`/`1000047`/`1000048`, upgrade fixture and assertions. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
