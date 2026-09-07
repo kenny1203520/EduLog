@@ -1,0 +1,22 @@
+name: edulog
+
+services:
+  edulog:
+    # The only public application entrypoint in production.
+    ports:
+      - "${EDULOG_PORT:-4173}:4173"
+      - "${EDULOG_HTTPS_PORT:-4174}:4174"
+
+  api:
+    # Express is reachable only from the internal frontend network.
+    expose:
+      - "3000"
+
+  kong:
+    ports: []
+
+  analytics:
+    ports: []
+
+  supavisor:
+    ports: []

@@ -19,6 +19,35 @@ js_string() {
   printf '"'
 }
 
+api_location() {
+  api_upstream="${EDULOG_API_UPSTREAM:-api:3000}"
+  api_body_limit="${EDULOG_API_BODY_LIMIT:-1m}"
+  cat <<EOF
+  location ^~ /api/ {
+    proxy_pass http://$api_upstream;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Request-Id \$http_x_request_id;
+    proxy_set_header traceparent \$http_traceparent;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection \$connection_upgrade;
+    proxy_read_timeout 60s;
+    proxy_send_timeout 60s;
+    client_max_body_size $api_body_limit;
+  }
+EOF
+}
+write_connection_map() {
+  cat > /etc/nginx/conf.d/edulog-connection-map.conf <<'EOF'
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  '' close;
+}
+EOF
+}
 write_runtime_config() {
   runtime_config_path="/usr/share/nginx/html/runtime-config.js"
   {
@@ -80,6 +109,8 @@ common_locations() {
     add_header Cache-Control "public, max-age=31536000, immutable" always;
     include $headers_include;
   }
+
+  api_location
 
   location / {
     try_files \$uri \$uri/ /index.html;
@@ -180,6 +211,7 @@ EOF
 EOF
 }
 
+write_connection_map
 write_runtime_config
 write_security_headers
 

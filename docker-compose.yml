@@ -684,9 +684,43 @@ services:
         "/app/bin/migrate && /app/bin/supavisor eval \"$$(cat /etc/pooler/pooler.exs)\" && /app/bin/server",
       ]
 
+  api:
+    build:
+      context: ./server
+    container_name: edulog-api
+    restart: unless-stopped
+    depends_on:
+      kong:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      API_PORT: 3000
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:4173}
+      SUPABASE_URL: ${EDULOG_SUPABASE_INTERNAL_URL:-http://kong:8000}
+      SUPABASE_ANON_KEY: ${ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      SUPABASE_REALTIME_URL: ${EDULOG_SUPABASE_REALTIME_URL:-ws://realtime:4000}
+      COOKIE_SECRET: ${EDULOG_COOKIE_SECRET}
+      COOKIE_SECURE: ${EDULOG_COOKIE_SECURE:-true}
+      RATE_LIMIT_STORE: ${RATE_LIMIT_STORE:-supabase}
+      API_ALLOWED_ORIGINS: ${EDULOG_ALLOWED_ORIGINS:-}
+      API_BODY_LIMIT: ${EDULOG_API_BODY_LIMIT:-1mb}
+      API_RATE_LIMIT_PER_MINUTE: ${EDULOG_API_RATE_LIMIT_PER_MINUTE:-120}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1) })"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - frontend
+      - net
   edulog:
     container_name: edulog-frontend
     image: ghcr.io/kenny1203520/edulog:${EDULOG_IMAGE_TAG:-latest}
+    depends_on:
+      api:
+        condition: service_healthy
     ports:
       - "${EDULOG_PORT:-4173}:4173"
       - "${EDULOG_HTTPS_PORT:-4174}:4174"
@@ -694,6 +728,9 @@ services:
       VITE_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
       VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
       VITE_SUPABASE_FUNCTIONS_BASE_URL: ${EDULOG_SUPABASE_FUNCTIONS_BASE_URL:-}
+      EDULOG_API_UPSTREAM: ${EDULOG_API_UPSTREAM:-api:3000}
+      EDULOG_API_BODY_LIMIT: ${EDULOG_API_BODY_LIMIT:-1mb}
+      VITE_API_V1_MODE: ${VITE_API_V1_MODE:-v1}
       EDULOG_ALLOWED_HOSTS: ${EDULOG_ALLOWED_HOSTS:-}
       EDULOG_PORT: ${EDULOG_PORT:-4173}
       EDULOG_HTTPS_PORT: ${EDULOG_HTTPS_PORT:-4174}
