@@ -30,7 +30,7 @@ export const resourceDefinitions = {
 
 export type ApiResource = keyof typeof resourceDefinitions
 
-export function resourceDefinition(resource: string) {
+export function resourceDefinition(resource: string): ApiResourceDefinition | undefined {
   return resourceDefinitions[resource as ApiResource]
 }
 

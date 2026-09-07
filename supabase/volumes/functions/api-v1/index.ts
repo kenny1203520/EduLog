@@ -209,7 +209,7 @@ serve(async (req) => {
       if (!name || name.length > 120) throw new ApiError(422, 'VALIDATION_ERROR', 'name is required and must be at most 120 characters', { name: ['required'] })
       const { data, error } = await ctx.db.from('roles').insert({ code: typeof body.code === 'string' ? body.code.trim() || null : null, name, description: typeof body.description === 'string' ? body.description.trim() || null : null, is_system: false }).select('id,code,name,description,is_system,sort_order,created_at,updated_at').single()
       if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'ROLE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Role already exists' : 'Unable to create role')
-      await audit(ctx, { action: 'create', domain: 'system', resource: 'roles', resourceId: data.id, outcome: 'success' })
+      await audit(ctx, { action: 'create', domain: 'system', resource: 'roles', resourceId: (data as Record<string, unknown> | null)?.id, outcome: 'success' })
       return mutationResponse(ctx, req, 201, { data, request_id: id }, id, headers)
     }
 
@@ -275,7 +275,7 @@ serve(async (req) => {
         if (Object.keys(payload).length === 0) throw new ApiError(422, 'VALIDATION_ERROR', 'At least one writable field is required')
         const { data, error } = await ctx.db.from(definition.table).insert(payload).select(definition.select).single()
         if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'RESOURCE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Resource already exists' : 'Unable to create resource')
-        await audit(ctx, { action: 'create', domain: 'teaching', resource, resourceId: data.id, outcome: 'success' })
+        await audit(ctx, { action: 'create', domain: 'teaching', resource, resourceId: (data as Record<string, unknown> | null)?.id, outcome: 'success' })
         return mutationResponse(ctx, req, 201, { data, request_id: id }, id, headers)
       }
     }
