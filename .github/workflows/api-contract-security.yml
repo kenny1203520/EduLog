@@ -39,6 +39,7 @@ jobs:
         run: >-
           deno test --allow-read
           supabase/tests/migration_chain_static_test.ts
+          supabase/tests/core_rls_fixture_static_test.ts
           supabase/tests/teacher_permission_migration_static_test.ts
           supabase/tests/migration_hardening_static_test.ts
           supabase/tests/api_contract_static_test.ts
