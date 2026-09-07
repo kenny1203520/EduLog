@@ -2,6 +2,8 @@ export interface EduLogRuntimeConfig {
   VITE_SUPABASE_URL?: string
   VITE_SUPABASE_ANON_KEY?: string
   VITE_SUPABASE_FUNCTIONS_BASE_URL?: string
+  VITE_LEGACY_API_BASE_URL?: string
+  VITE_API_V1_MODE?: 'mock' | 'legacy' | 'v1'
 }
 
 export type RuntimeConfigKey = keyof EduLogRuntimeConfig
