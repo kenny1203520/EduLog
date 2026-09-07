@@ -20,7 +20,7 @@ export class AuthUserSearchService {
             if (!normalizedQuery) return []
             const params = new URLSearchParams({ query: normalizedQuery })
             if (options?.onlyUnlinked) params.set('only_unlinked', 'true')
-            const response = await apiV1Client.get<AuthUserSearchResultDTO[]>(/users/search?)
+            const response = await apiV1Client.get<AuthUserSearchResultDTO[]>(`/users/search?${params.toString()}`)
             return response.data || []
         }
 
