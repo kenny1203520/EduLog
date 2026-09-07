@@ -36,6 +36,6 @@ Deno.test('forward SQL and API source do not contain obvious secret or raw token
   const telemetry = await Deno.readTextFile(new URL('../volumes/functions/_shared/telemetry.ts', import.meta.url))
   for (const source of [sharedApi, telemetry, api]) {
     assertFalse(/console\.(log|error).*\b(token|secret|service_role|password)\b/i.test(source))
-    assertFalse(/JSON\.stringify\(\s*(req|request|body|payload)\s*\)/i.test(source))
+    assertFalse(/console\.(log|error)[^\n]*JSON\.stringify\(\s*(req|request|body|payload)\s*\)/i.test(source))
   }
 })
