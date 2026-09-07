@@ -14,7 +14,7 @@ export class ClassroomService {
         visibilityMode: ClassroomVisibilityFilterMode = 'all'
     ): Promise<{ data: Classroom[], count: number }> {
         if (getApiV1Mode() === 'v1') {
-            const result = await apiResourceClient.list<ClassroomDTO>('classrooms', { page, perPage, search, sort: 'name:asc', mode: 'v1' })
+            const result = await apiResourceClient.list<ClassroomDTO>('classrooms', { page, perPage, search, sort: 'name', mode: 'v1' })
             const classrooms = (result.data || []).map((d) => new Classroom(d))
             return { data: classrooms, count: result.meta?.total ?? classrooms.length }
         }
@@ -96,29 +96,34 @@ export class ClassroomService {
     }
 
     static async createClassroom(classroom: Partial<ClassroomDTO>): Promise<Classroom> {
+        if (getApiV1Mode() === 'v1') return new Classroom((await apiResourceClient.create<ClassroomDTO>('classrooms', classroom, 'v1')).data)
         const { data, error } = await supabase.from('classrooms').insert(classroom).select().single()
         if (error) throw new Error(error.message)
         return new Classroom(data)
     }
 
     static async updateClassroom(id: string, updates: Partial<ClassroomDTO>): Promise<Classroom> {
+        if (getApiV1Mode() === 'v1') return new Classroom((await apiResourceClient.update<ClassroomDTO>('classrooms', id, updates, 'v1')).data)
         const { data, error } = await supabase.from('classrooms').update(updates).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return new Classroom(data)
     }
 
     static async deleteClassroom(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('classrooms', id, 'v1'); return }
         const { error } = await supabase.from('classrooms').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
     static async createSchedule(schedule: Partial<ClassroomScheduleDTO>): Promise<ClassroomScheduleDTO> {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<ClassroomScheduleDTO>('classroom-schedules', schedule, 'v1')).data
         const { data, error } = await supabase.from('classroom_schedules').insert(schedule).select().single()
         if (error) throw new Error(error.message)
         return data as ClassroomScheduleDTO
     }
 
     static async deleteSchedule(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('classroom-schedules', id, 'v1'); return }
         const { error } = await supabase.from('classroom_schedules').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }

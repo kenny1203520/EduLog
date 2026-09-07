@@ -16,7 +16,7 @@ export interface LessonReportDTO {
 export class CourseCatalogService {
     static async getCourses(page: number = 1, perPage: number = 100): Promise<{ data: Course[], count: number }> {
         if (getApiV1Mode() === 'v1') {
-            const result = await apiResourceClient.list<CourseDTO>('courses', { page, perPage, sort: 'display_name:asc', mode: 'v1' })
+            const result = await apiResourceClient.list<CourseDTO>('courses', { page, perPage, sort: 'display_name', mode: 'v1' })
             const courses = (result.data || []).map((d) => new Course(d))
             return { data: courses, count: result.meta?.total ?? courses.length }
         }
@@ -49,6 +49,10 @@ export class CourseCatalogService {
     }
 
     static async getCourseOptions(page: number = 1, perPage: number = 1000): Promise<{ data: Array<Pick<CourseDTO, 'id' | 'subject' | 'stage' | 'display_name'>>; count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<CourseDTO>('courses', { page, perPage, sort: 'display_name', mode: 'v1' })
+            return { data: (result.data || []).map(({ id, subject, stage, display_name }) => ({ id, subject, stage, display_name })), count: result.meta?.total ?? result.data?.length ?? 0 }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
         const { data, error, count } = await supabase
@@ -63,12 +67,14 @@ export class CourseCatalogService {
     }
 
     static async createCourse(course: Partial<CourseDTO>): Promise<Course> {
+        if (getApiV1Mode() === 'v1') return new Course((await apiResourceClient.create<CourseDTO>('courses', this.normalizeCourse(course), 'v1')).data)
         const { data, error } = await supabase.from('courses').insert(this.normalizeCourse(course)).select().single()
         if (error) throw new Error(error.message)
         return new Course(data)
     }
 
     static async updateCourse(id: string, updates: Partial<CourseDTO>): Promise<Course> {
+        if (getApiV1Mode() === 'v1') return new Course((await apiResourceClient.update<CourseDTO>('courses', id, this.normalizeCourse(updates), 'v1')).data)
         const { data, error } = await supabase.from('courses').update(this.normalizeCourse(updates)).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return new Course(data)
@@ -83,11 +89,13 @@ export class CourseCatalogService {
     }
 
     static async deleteCourse(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('courses', id, 'v1'); return }
         const { error } = await supabase.from('courses').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
     static async getLessonsByCourse(courseId: string): Promise<Lesson[]> {
+        if (getApiV1Mode() === 'v1') { const result = await apiResourceClient.list<LessonDTO>('lessons', { perPage: 100, sort: 'sequence', mode: 'v1', search: courseId }); return (result.data || []).filter((lesson) => lesson.course_id === courseId).map((dto) => new Lesson(dto)) }
         const { data, error } = await supabase
             .from('lessons')
             .select('id, course_id, title, sequence')
@@ -99,18 +107,21 @@ export class CourseCatalogService {
     }
 
     static async createLesson(lesson: Partial<LessonDTO>): Promise<Lesson> {
+        if (getApiV1Mode() === 'v1') return new Lesson((await apiResourceClient.create<LessonDTO>('lessons', lesson, 'v1')).data)
         const { data, error } = await supabase.from('lessons').insert(lesson).select().single()
         if (error) throw new Error(error.message)
         return new Lesson(data)
     }
 
     static async updateLesson(id: string, updates: Partial<LessonDTO>): Promise<Lesson> {
+        if (getApiV1Mode() === 'v1') return new Lesson((await apiResourceClient.update<LessonDTO>('lessons', id, updates, 'v1')).data)
         const { data, error } = await supabase.from('lessons').update(updates).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return new Lesson(data)
     }
 
     static async deleteLesson(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('lessons', id, 'v1'); return }
         const { error } = await supabase.from('lessons').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
