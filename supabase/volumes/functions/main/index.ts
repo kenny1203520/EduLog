@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
       const isValidJWT = await isValidHybridJWT(token);
 
       if (!isValidJWT) {
-        return new Response(JSON.stringify({ msg: 'Invalid JWT' }), {
+        return new Response(JSON.stringify({ error: { code: 'AUTH_INVALID', message: 'Authentication failed' } }), {
           status: 401,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -131,7 +131,7 @@ Deno.serve(async (req: Request) => {
   const service_name = path_parts[1]
 
   if (!service_name || service_name === '') {
-    const error = { msg: 'missing function name in request' }
+    const error = { error: { code: 'FUNCTION_NAME_REQUIRED', message: 'Function name is required' } }
     return new Response(JSON.stringify(error), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },

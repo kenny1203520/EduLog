@@ -1,6 +1,7 @@
 import { assert, assertEquals } from 'https://deno.land/std@0.177.1/testing/asserts.ts'
 
 const functionSource = await Deno.readTextFile(new URL('../volumes/functions/api-v1/index.ts', import.meta.url))
+const registrySource = await Deno.readTextFile(new URL('../volumes/functions/api-v1/resourceRegistry.ts', import.meta.url))
 const sharedApiSource = await Deno.readTextFile(new URL('../volumes/functions/_shared/api.ts', import.meta.url))
 const resourceServiceSource = await Deno.readTextFile(new URL('../volumes/functions/api-v1/resourceService.ts', import.meta.url))
 
@@ -11,8 +12,8 @@ Deno.test('API v1 exposes the versioned resources and aliases', () => {
     '/report-templates', '/holidays', '/roles', '/roles/{id}', '/permissions',
     '/audit-events',
   ]) assert(functionSource.includes(`'${route}'`), `missing OpenAPI route ${route}`)
-  assert(functionSource.includes("'class-sessions'"), 'missing class-sessions compatibility alias')
-  assert(functionSource.includes("'report-templates'"), 'missing report-templates compatibility alias')
+  assert(registrySource.includes("'class-sessions'"), 'missing class-sessions compatibility alias')
+  assert(registrySource.includes("'report-templates'"), 'missing report-templates compatibility alias')
 })
 
 Deno.test('API v1 has allowlisted fields and shared request validation', () => {

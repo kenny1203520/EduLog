@@ -7,7 +7,7 @@ Deno.test('system resources have explicit allowlists and safe operations', () =>
   const audit = resourceDefinitions['audit-events']
 
   assertEquals(roles.domain, 'system')
-  assertEquals(roles.methods, ['GET', 'POST'])
+  assertEquals(roles.methods, ['GET', 'POST', 'PATCH', 'DELETE'])
   assert(roles.select.includes('id,code,name'))
   assert(!roles.select.includes('*'))
   assertEquals(permissions.methods, ['GET'])

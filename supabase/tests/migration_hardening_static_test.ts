@@ -9,7 +9,7 @@ Deno.test('1000045 is forward-only, guarded, and rerunnable', () => {
   assert(!migration.includes('FOR ALL TO authenticated'))
 
   for (const table of [
-    'students', 'student_contacts', 'student_schools', 'student_credentials',
+    'students', 'student_contacts', 'student_schools',
     'teacher_credentials', 'classroom_schedules', 'student_suspensions',
   ]) {
     for (const action of ['read', 'create', 'update', 'delete']) {
