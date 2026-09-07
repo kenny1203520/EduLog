@@ -51,6 +51,7 @@ jobs:
           supabase/tests/api_scoped_authorization_static_test.ts
           supabase/tests/frontend_runtime_config_static_test.ts
           supabase/tests/api_system_contract_test.ts
+          supabase/tests/api_system_endpoint_contract_test.ts
           supabase/tests/rate_limit_static_test.ts
           supabase/tests/auth_failure_matrix_static_test.ts
           supabase/tests/legacy_adapter_static_test.ts
