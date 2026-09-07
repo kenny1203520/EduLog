@@ -45,3 +45,4 @@ jobs:
           supabase/tests/auth_failure_matrix_static_test.ts
           supabase/tests/legacy_adapter_static_test.ts
           supabase/tests/telemetry_context_test.ts
+          supabase/tests/database_linter_static_test.ts

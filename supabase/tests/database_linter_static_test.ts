@@ -1,0 +1,41 @@
+import { assert, assertFalse, assertStringIncludes } from 'https://deno.land/std@0.177.1/testing/asserts.ts'
+
+const migrationDir = new URL('../migrations/', import.meta.url)
+const hardening = await Deno.readTextFile(new URL('1000044_rbac_epoch_and_api_contract.sql', migrationDir))
+const coreHardening = await Deno.readTextFile(new URL('1000045_core_rls_hardening.sql', migrationDir))
+const rateLimit = await Deno.readTextFile(new URL('1000046_api_rate_limit_shared_store.sql', migrationDir))
+const registry = await Deno.readTextFile(new URL('../volumes/functions/api-v1/resourceRegistry.ts', import.meta.url))
+const api = await Deno.readTextFile(new URL('../volumes/functions/api-v1/index.ts', import.meta.url))
+
+const scalarAuthUid = /\(\s*select\s+auth\.uid\(\)/i
+
+Deno.test('forward migrations use initplan-safe auth expressions and scoped policies', () => {
+  assert(scalarAuthUid.test(hardening), '1000044 must contain scalar auth.uid() rewrites')
+  assert(scalarAuthUid.test(coreHardening), '1000045 must contain scalar auth.uid() rewrites')
+  assertFalse(/FOR\s+ALL\s+TO\s+authenticated/i.test(hardening), '1000044 must not restore authenticated-wide policies')
+  assertFalse(/FOR\s+ALL\s+TO\s+authenticated/i.test(coreHardening), '1000045 must not create authenticated-wide policies')
+})
+
+Deno.test('API selects are explicit and resource registry has no wildcard projection', () => {
+  assertFalse(/select\s*\(\s*['"]\*['"]\s*\)/i.test(registry), 'resource registry must not use select(*)')
+  assertFalse(/\.select\(\s*['"]\*['"]\s*\)/i.test(api), 'API handlers must not use select(*)')
+  for (const resource of ['teachings', 'classrooms', 'class_sessions', 'students', 'courses', 'lessons', 'enrollments', 'occurrences', 'reports', 'roles', 'permissions', 'audit-events']) {
+    assert(registry.includes(resource), 'missing resource definition')
+  }
+})
+
+Deno.test('shared rate limit store is fail-closed and service-role only', () => {
+  assertStringIncludes(rateLimit, 'CREATE TABLE IF NOT EXISTS public.api_rate_limit_buckets')
+  assertStringIncludes(rateLimit, 'ON CONFLICT (bucket_key) DO UPDATE')
+  assertStringIncludes(rateLimit, 'REVOKE ALL ON FUNCTION public.consume_api_rate_limit(text, integer, integer) FROM PUBLIC, anon, authenticated')
+  assertStringIncludes(rateLimit, 'GRANT EXECUTE ON FUNCTION public.consume_api_rate_limit(text, integer, integer) TO service_role')
+})
+
+Deno.test('forward SQL and API source do not contain obvious secret or raw token logging', async () => {
+  const sharedApi = await Deno.readTextFile(new URL('../volumes/functions/_shared/api.ts', import.meta.url))
+  const telemetry = await Deno.readTextFile(new URL('../volumes/functions/_shared/telemetry.ts', import.meta.url))
+  for (const source of [sharedApi, telemetry, api]) {
+    assertFalse(/console\.(log|error).*\b(token|secret|service_role|password)\b/i.test(source))
+    assertFalse(/JSON\.stringify\(\s*(req|request|body|payload)\s*\)/i.test(source))
+  }
+})

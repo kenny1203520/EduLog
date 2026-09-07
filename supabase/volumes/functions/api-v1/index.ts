@@ -23,7 +23,7 @@ const OPENAPI = {
     },
     schemas: {
       ApiError: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object', additionalProperties: { type: 'array', items: { type: 'string' } } } } } } },
-      CollectionMeta: { type: 'object', required: ['limit', 'offset'], properties: { limit: { type: 'integer' }, offset: { type: 'integer' }, sort: { type: 'string' } } },
+      CollectionMeta: { type: 'object', required: ['limit', 'offset'], properties: { limit: { type: 'integer' }, offset: { type: 'integer' }, total: { type: 'integer', minimum: 0 }, sort: { type: 'string' } } },
       ApiEnvelope: { type: 'object', required: ['data', 'request_id', 'trace_id'], properties: { data: {}, meta: { '$ref': '#/components/schemas/CollectionMeta' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } },
     },
     responses: {
@@ -127,24 +127,24 @@ serve(async (req) => {
       await requirePermission(ctx, 'system.permissions.read')
       const { limit, offset } = parsePagination(url.searchParams)
       const sort = collectionSort('permissions', url.searchParams.get('sort'))
-      let query = ctx.db.from('permissions').select('id,key,name,description,domain,resource,action,conditions,created_at,updated_at').order(sort.field, { ascending: sort.ascending })
+      let query = ctx.db.from('permissions').select('id,key,name,description,domain,resource,action,conditions,created_at,updated_at', { count: 'exact' }).order(sort.field, { ascending: sort.ascending })
       const search = url.searchParams.get('search')?.trim()
       if (search) query = query.ilike('key', '%' + search + '%')
-      const { data, error } = await query.range(offset, offset + limit - 1)
+      const { data, error, count } = await query.range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load permissions')
-      return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
     }
 
     if (path === '/roles' && req.method === 'GET') {
       await requirePermission(ctx, 'system.roles.manage')
       const { limit, offset } = parsePagination(url.searchParams)
       const sort = collectionSort('roles', url.searchParams.get('sort'))
-      let query = ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at').order(sort.field, { ascending: sort.ascending })
+      let query = ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at', { count: 'exact' }).order(sort.field, { ascending: sort.ascending })
       const search = url.searchParams.get('search')?.trim()
       if (search) query = query.ilike('name', '%' + search + '%')
-      const { data, error } = await query.range(offset, offset + limit - 1)
+      const { data, error, count } = await query.range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load roles')
-      return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
     }
 
     const roleItemMatch = path.match(/^\/roles\/([0-9a-fA-F-]{36})$/)
@@ -192,12 +192,12 @@ serve(async (req) => {
       await requirePermission(ctx, 'system.audit.list')
       const { limit, offset } = parsePagination(url.searchParams)
       const sort = collectionSort('audit-events', url.searchParams.get('sort'))
-      let query = ctx.db.from('audit_events').select('id,actor_user_id,action,domain,resource,resource_id,scope_id,request_id,outcome,metadata,created_at').order(sort.field, { ascending: sort.ascending })
+      let query = ctx.db.from('audit_events').select('id,actor_user_id,action,domain,resource,resource_id,scope_id,request_id,outcome,metadata,created_at', { count: 'exact' }).order(sort.field, { ascending: sort.ascending })
       const search = url.searchParams.get('search')?.trim()
       if (search) query = query.ilike('resource', '%' + search + '%')
-      const { data, error } = await query.range(offset, offset + limit - 1)
+      const { data, error, count } = await query.range(offset, offset + limit - 1)
       if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load audit events')
-      return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
+      return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
     }
 
     const teachingMembersMatch = path.match(/^\/teachings\/([0-9a-fA-F-]{36})\/members$/)
@@ -211,9 +211,9 @@ serve(async (req) => {
         const sortField = sortParts[0]
         const sortDirection = sortParts[1] ?? 'desc'
         if (!['created_at', 'effective_from', 'status'].includes(sortField) || !['asc', 'desc'].includes(sortDirection)) throw new ApiError(400, 'INVALID_SORT', 'Unsupported teaching member sort')
-        const { data, error } = await ctx.db.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').eq('teaching_id', teachingId).order(sortField, { ascending: sortDirection === 'asc' }).range(offset, offset + limit - 1)
+        const { data, error, count } = await ctx.db.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at', { count: 'exact' }).eq('teaching_id', teachingId).order(sortField, { ascending: sortDirection === 'asc' }).range(offset, offset + limit - 1)
         if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load teaching members')
-        return response({ data: data ?? [], meta: { limit, offset, sort: rawSort ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
+        return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: rawSort ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
       }
       if (req.method === 'POST') {
         await requirePermission(ctx, 'teaching.members.manage')
@@ -235,12 +235,12 @@ serve(async (req) => {
         await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.list')
         const { limit, offset } = parsePagination(url.searchParams)
         const sort = collectionSort(resource, url.searchParams.get('sort'))
-        let query = ctx.db.from(definition.table).select(definition.select).range(offset, offset + limit - 1).order(sort.field, { ascending: sort.ascending })
+        let query = ctx.db.from(definition.table).select(definition.select, { count: 'exact' }).range(offset, offset + limit - 1).order(sort.field, { ascending: sort.ascending })
         const search = url.searchParams.get('search')?.trim()
         if (search && definition.searchField) query = query.ilike(definition.searchField, '%' + search + '%')
-        const { data, error } = await query
+        const { data, error, count } = await query
         if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load resource')
-        return response({ data: data ?? [], meta: { limit, offset, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
+        return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
       }
       if (req.method === 'POST') {
         if (definition.fields.length === 0) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Resource does not support creation')
