@@ -71,14 +71,58 @@ export async function audit(ctx: ApiContext, event: { action: string; domain: 's
   if (error) console.error(JSON.stringify({ type: 'audit_write_failed', request_id: ctx.requestId, trace_id: ctx.traceId, outcome: 'failure', error: error.message }))
 }
 
-export interface RateLimitStore { increment(key: string, now: number, windowMs: number): { count: number; resetAt: number } }
+export type RateLimitResult = { allowed: boolean; remaining: number; resetAt: number }
+export interface RateLimitStore { consume(key: string, limit: number, windowMs: number): Promise<RateLimitResult> }
 class MemoryRateLimitStore implements RateLimitStore {
   private readonly buckets = new Map<string, { count: number; resetAt: number }>()
-  increment(key: string, now: number, windowMs: number) { const current = this.buckets.get(key); if (!current || current.resetAt <= now) { const next = { count: 1, resetAt: now + windowMs }; this.buckets.set(key, next); return next }; current.count += 1; return current }
+  async consume(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
+    const now = Date.now()
+    const current = this.buckets.get(key)
+    const next = !current || current.resetAt <= now ? { count: 1, resetAt: now + windowMs } : { count: current.count + 1, resetAt: current.resetAt }
+    this.buckets.set(key, next)
+    return { allowed: next.count <= limit, remaining: Math.max(limit - next.count, 0), resetAt: next.resetAt }
+  }
+}
+export class SupabaseRateLimitStore implements RateLimitStore {
+  constructor(private readonly db: SupabaseClient) {}
+  async consume(key: string, limit: number, windowMs: number): Promise<RateLimitResult> {
+    const { data, error } = await this.db.rpc('consume_api_rate_limit', {
+      p_bucket_key: key,
+      p_limit: limit,
+      p_window_seconds: Math.max(Math.ceil(windowMs / 1000), 1),
+    })
+    if (error) throw new ApiError(500, 'RATE_LIMIT_STORE_UNAVAILABLE', 'Rate limit service is unavailable')
+    const row = Array.isArray(data) ? data[0] : data
+    if (!row || typeof row.allowed !== 'boolean') throw new ApiError(500, 'RATE_LIMIT_STORE_UNAVAILABLE', 'Rate limit service is unavailable')
+    return { allowed: row.allowed, remaining: Number(row.remaining ?? 0), resetAt: new Date(row.reset_at).getTime() }
+  }
 }
 let rateLimitStore: RateLimitStore = new MemoryRateLimitStore()
-export function configureRateLimitStore(store: RateLimitStore) { rateLimitStore = store }
-export function enforceRateLimit(req: Request, route: string) { const now = Date.now(); const limit = Math.max(Number(Deno.env.get('API_RATE_LIMIT_PER_MINUTE') ?? 120), 1); const current = rateLimitStore.increment(clientIp(req) + ':' + route, now, 60_000); if (current.count > limit) throw new ApiError(429, 'RATE_LIMITED', 'Too many requests', undefined, Math.ceil((current.resetAt - now) / 1000)) }
+let rateLimitConfigured = false
+export function configureRateLimitStore(store: RateLimitStore) { rateLimitStore = store; rateLimitConfigured = true }
+async function ensureRateLimitStore() {
+  if (rateLimitConfigured) return
+  const environment = Deno.env.get('ENVIRONMENT') ?? 'development'
+  const url = Deno.env.get('SUPABASE_URL')
+  const serviceRole = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SERVICE_ROLE_KEY')
+  if (url && serviceRole) {
+    configureRateLimitStore(new SupabaseRateLimitStore(createClient(url, serviceRole, { auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false } })))
+    return
+  }
+  if (environment === 'production') throw new ApiError(500, 'RATE_LIMIT_CONFIGURATION', 'Shared rate limit store is not configured')
+  rateLimitConfigured = true
+}
+async function rateLimitBucketKey(req: Request, route: string) {
+  const raw = new TextEncoder().encode(clientIp(req) + ':' + route)
+  const digest = await crypto.subtle.digest('SHA-256', raw)
+  return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+export async function enforceRateLimit(req: Request, route: string) {
+  await ensureRateLimitStore()
+  const limit = Math.max(Number(Deno.env.get('API_RATE_LIMIT_PER_MINUTE') ?? 120), 1)
+  const current = await rateLimitStore.consume(await rateLimitBucketKey(req, route), limit, 60_000)
+  if (!current.allowed) throw new ApiError(429, 'RATE_LIMITED', 'Too many requests', undefined, Math.max(1, Math.ceil((current.resetAt - Date.now()) / 1000)))
+}
 
 export async function beginIdempotency(ctx: ApiContext, req: Request, route: string) {
   if (!['POST', 'PATCH', 'DELETE'].includes(req.method)) return null
@@ -98,7 +142,7 @@ export async function parseJson(req: Request, maxBytes = 1_000_000) {
 }
 export function handleError(error: unknown, id: string, trace: string) { const known = error instanceof ApiError ? error : new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred'); if (!(error instanceof ApiError)) console.error(JSON.stringify({ type: 'api_error', request_id: id, trace_id: trace, outcome: 'failure', error: error instanceof Error ? error.message : String(error) })); return response({ error: { code: known.code, message: known.message, ...(known.fields ? { fields: known.fields } : {}), request_id: id, trace_id: trace } }, known.status, id, { ...(known.retryAfter ? { 'Retry-After': String(known.retryAfter) } : {}), 'X-Trace-Id': trace }) }
 
-export type TelemetryEvent = { request_id: string; trace_id: string; user_id?: string; teaching_id?: string; resource?: string; route: string; method: string; status?: number; latency_ms: number; outcome: 'success' | 'denied' | 'failure' }
+export type TelemetryEvent = { request_id: string; trace_id: string; traceparent?: string; user_id?: string; teaching_id?: string; resource?: string; route: string; method: string; status?: number; latency_ms: number; outcome: 'success' | 'denied' | 'failure' }
 let telemetryConfigured = false
 function configureOtlpFromEnvironment() { if (telemetryConfigured) return; telemetryConfigured = true; const endpoints = { log: Deno.env.get('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'), span: Deno.env.get('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'), metric: Deno.env.get('OTEL_EXPORTER_OTLP_METRICS_ENDPOINT') }; if (Object.values(endpoints).some(Boolean)) configureTelemetryExporter(new OtlpTelemetryExporter(endpoints)) }
-export async function emitTelemetry(event: TelemetryEvent) { configureOtlpFromEnvironment(); const attributes = Object.fromEntries(Object.entries(event).filter(([, value]) => value !== undefined)) as Record<string, string | number | boolean>; console.log(JSON.stringify({ type: 'api_telemetry', ...attributes })); await Promise.all([exportTelemetry({ signal: 'log', name: 'api.request', attributes, timestamp: Date.now() }), exportTelemetry({ signal: 'span', name: 'api.request', attributes, timestamp: Date.now() }), exportTelemetry({ signal: 'metric', name: 'api.request.count', attributes, timestamp: Date.now() })]) }
+export async function emitTelemetry(event: TelemetryEvent) { configureOtlpFromEnvironment(); const attributes = Object.fromEntries(Object.entries(event).filter(([, value]) => value !== undefined)) as Record<string, string | number | boolean>; console.log(JSON.stringify({ type: 'api_telemetry', ...attributes })); const timestamp = Date.now(); const eventAttributes = event.traceparent ? { ...attributes, traceparent: event.traceparent } : attributes; await Promise.all([exportTelemetry({ signal: 'log', name: 'api.request', attributes: eventAttributes, timestamp, endTimestamp: timestamp }), exportTelemetry({ signal: 'span', name: 'api.request', attributes: eventAttributes, timestamp, endTimestamp: Date.now(), traceparent: event.traceparent }), exportTelemetry({ signal: 'metric', name: 'api.request.count', attributes: eventAttributes, timestamp, endTimestamp: Date.now(), traceparent: event.traceparent })]) }

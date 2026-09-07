@@ -118,7 +118,7 @@ Deno.serve(async (req: Request) => {
       }
     } catch (e) {
       console.error(e)
-      return new Response(JSON.stringify({ msg: e.toString() }), {
+      return new Response(JSON.stringify({ error: { code: 'AUTH_INVALID', message: 'Authentication failed' } }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -162,7 +162,7 @@ Deno.serve(async (req: Request) => {
 
     const legacyHeaders = new Headers(workerResponse.headers)
     legacyHeaders.set('Deprecation', 'true')
-    legacyHeaders.set('Link', '</api/v1>; rel=""successor-version""')
+    legacyHeaders.set('Link', '</api/v1>; rel="successor-version"')
     const sunset = Deno.env.get('LEGACY_API_SUNSET')
     if (sunset) legacyHeaders.set('Sunset', sunset)
     return new Response(workerResponse.body, {
@@ -171,10 +171,13 @@ Deno.serve(async (req: Request) => {
       headers: legacyHeaders,
     })
   } catch (e) {
-    const error = { msg: e.toString() }
-    return new Response(JSON.stringify(error), {
+    console.error(JSON.stringify({ type: 'legacy_function_error', outcome: 'failure', message: e instanceof Error ? e.message : 'unknown' }))
+    const errorHeaders = new Headers({ 'Content-Type': 'application/json', 'Deprecation': 'true', 'Link': '</api/v1>; rel="successor-version"' })
+    const sunset = Deno.env.get('LEGACY_API_SUNSET')
+    if (sunset) errorHeaders.set('Sunset', sunset)
+    return new Response(JSON.stringify({ error: { code: 'LEGACY_FUNCTION_ERROR', message: 'Legacy function failed' } }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: errorHeaders,
     })
   }
 })

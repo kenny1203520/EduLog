@@ -2,6 +2,7 @@ import { assert, assertEquals } from 'https://deno.land/std@0.177.1/testing/asse
 
 const functionSource = await Deno.readTextFile(new URL('../volumes/functions/api-v1/index.ts', import.meta.url))
 const sharedApiSource = await Deno.readTextFile(new URL('../volumes/functions/_shared/api.ts', import.meta.url))
+const resourceServiceSource = await Deno.readTextFile(new URL('../volumes/functions/api-v1/resourceService.ts', import.meta.url))
 
 Deno.test('API v1 exposes the versioned resources and aliases', () => {
   for (const route of [
@@ -15,7 +16,7 @@ Deno.test('API v1 exposes the versioned resources and aliases', () => {
 })
 
 Deno.test('API v1 has allowlisted fields and shared request validation', () => {
-  assert(functionSource.includes('validateWritableFields'))
+  assert(resourceServiceSource.includes('validateWritableFields'))
   assert(functionSource.includes('parsePagination'))
   assert(functionSource.includes("select('*')") === false, 'wildcard selects are forbidden')
   assert(functionSource.includes("'Idempotency-Key'"))

@@ -1,7 +1,8 @@
 import { serve } from 'https://deno.land/std@0.177.1/http/server.ts'
-import { ApiError, audit, authenticate, beginIdempotency, completeIdempotency, corsHeaders, emitTelemetry, enforceRateLimit, handleError, parseJson, requirePermission, requestId, response, traceId } from '../_shared/api.ts'
-import { parsePagination, ValidationError, validateWritableFields } from '../_shared/validation.ts'
-import { collectionSort as registryCollectionSort, permissionResource, resourceDefinition } from './resourceRegistry.ts'
+import { ApiError, audit, authenticate, beginIdempotency, corsHeaders, emitTelemetry, enforceRateLimit, handleError, parseJson, requirePermission, requestId, response, traceId } from '../_shared/api.ts'
+import { parsePagination } from '../_shared/validation.ts'
+import { applyResourceOpenApi } from './openapiRegistry.ts'
+import { collectionSort, getResourceDefinition, mutationResponse, permissionResource, pickBody, validateBody } from './resourceService.ts'
 
 const OPENAPI = {
   openapi: '3.0.3',
@@ -96,48 +97,22 @@ for (const [path, pathItem] of Object.entries(openapi.paths) as [string, Record<
   }
 }
 
-function getResourceDefinition(resource: string) {
-  const definition = resourceDefinition(resource)
-  if (!definition) throw new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource is not available through this API')
-  return definition
-}
+applyResourceOpenApi(openapi, commonErrors)
 
-function collectionSort(resource: string, raw: string | null) {
-  try { return registryCollectionSort(resource, raw) }
-  catch { throw new ApiError(400, 'INVALID_SORT', 'Unsupported sort field or direction') }
-}
-
-function validateBody(body: Record<string, unknown>, fields: readonly string[], allowedExtra: readonly string[] = []) {
-  try { return validateWritableFields(body, [...fields, ...allowedExtra]) }
-  catch (error) {
-    if (error instanceof ValidationError) throw new ApiError(422, 'VALIDATION_ERROR', error.message, error.fields)
-    throw error
-  }
-}
-function pickBody(body: Record<string, unknown>, fields: readonly string[], allowedExtra: readonly string[] = []) {
-  validateBody(body, fields, allowedExtra)
-  const result: Record<string, unknown> = {}
-  for (const field of fields) if (Object.prototype.hasOwnProperty.call(body, field)) result[field] = body[field]
-  return result
-}
-
-async function mutationResponse(ctx: Awaited<ReturnType<typeof authenticate>>, req: Request, status: number, payload: unknown, id: string, headers: HeadersInit) {
-  await completeIdempotency(ctx, req, status, payload)
-  return response(payload, status, id, headers)
-}
 serve(async (req) => {
   const id = requestId(req)
   const trace = traceId(req)
   const headers = { ...corsHeaders(req), 'X-Trace-Id': trace }
   const started = performance.now()
   let telemetryOutcome: 'success' | 'denied' | 'failure' = 'success'
+  let telemetryStatus = 200
   let telemetryUserId: string | undefined
   let authenticatedContext: Awaited<ReturnType<typeof authenticate>> | undefined
   const url = new URL(req.url)
   const path = url.pathname.replace(/^\/api-v1/, '').replace(/^\/v1/, '') || '/'
   if (req.method === 'OPTIONS') return response(null, 204, id, headers)
   try {
-    enforceRateLimit(req, path)
+    await enforceRateLimit(req, path)
     if (path === '/health' && req.method === 'GET') return response({ data: { status: 'ok', version: '1.0.0' }, request_id: id }, 200, id, headers)
     if (path === '/openapi.json' && req.method === 'GET') return response(OPENAPI, 200, id, headers)
 
@@ -315,6 +290,7 @@ serve(async (req) => {
     throw new ApiError(404, 'ROUTE_NOT_FOUND', 'Route not found')
   } catch (error) {
     if (error instanceof ValidationError) error = new ApiError(400, 'INVALID_QUERY', error.message, error.fields)
+    telemetryStatus = error instanceof ApiError ? error.status : 500
     telemetryOutcome = error instanceof ApiError && error.status === 403 ? 'denied' : 'failure'
     if (error instanceof ApiError && error.status === 403) {
       try {
@@ -332,6 +308,6 @@ serve(async (req) => {
     }
     return handleError(error, id, trace)
   } finally {
-    void emitTelemetry({ request_id: id, trace_id: trace, user_id: telemetryUserId, route: path, method: req.method, latency_ms: Math.round(performance.now() - started), outcome: telemetryOutcome })
+    void emitTelemetry({ request_id: id, trace_id: trace, traceparent: req.headers.get('traceparent') ?? undefined, user_id: telemetryUserId, resource: path.split('/')[1] ?? undefined, route: path, method: req.method, status: telemetryStatus, latency_ms: Math.round(performance.now() - started), outcome: telemetryOutcome })
   }
 })

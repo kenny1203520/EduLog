@@ -1,5 +1,12 @@
 export type TelemetrySignal = 'log' | 'span' | 'metric'
-export type TelemetryEvent = { signal: TelemetrySignal; name: string; attributes: Record<string, string | number | boolean | undefined>; timestamp: number }
+export type TelemetryEvent = {
+  signal: TelemetrySignal
+  name: string
+  attributes: Record<string, string | number | boolean | undefined>
+  timestamp: number
+  endTimestamp?: number
+  traceparent?: string
+}
 export interface TelemetryExporter { export(event: TelemetryEvent): Promise<void> }
 
 export class OtlpTelemetryExporter implements TelemetryExporter {
@@ -13,10 +20,15 @@ export class OtlpTelemetryExporter implements TelemetryExporter {
 }
 
 export function toOtlpPayload(event: TelemetryEvent) {
-  const attributes = Object.entries(event.attributes).filter(([, value]) => value !== undefined).map(([key, value]) => ({ key, value: typeof value === 'boolean' ? { boolValue: value } : typeof value === 'number' ? { intValue: String(value) } : { stringValue: value } }))
-  if (event.signal === 'span') return { resourceSpans: [{ scopeSpans: [{ scope: { name: 'edulog.api' }, spans: [{ name: event.name, startTimeUnixNano: String(event.timestamp * 1_000_000), endTimeUnixNano: String(event.timestamp * 1_000_000), attributes }] }] }] }
-  if (event.signal === 'metric') return { resourceMetrics: [{ scopeMetrics: [{ scope: { name: 'edulog.api' }, metrics: [{ name: event.name, sum: { dataPoints: [{ asInt: 1, timeUnixNano: String(event.timestamp * 1_000_000), attributes }] } }] }] }] }
-  return { resourceLogs: [{ scopeLogs: [{ scope: { name: 'edulog.api' }, logRecords: [{ timeUnixNano: String(event.timestamp * 1_000_000), body: { stringValue: event.name }, attributes }] }] }] }
+  const eventAttributes = event.traceparent ? { ...event.attributes, traceparent: event.traceparent } : event.attributes
+  const attributes = Object.entries(eventAttributes)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => ({ key, value: typeof value === 'boolean' ? { boolValue: value } : typeof value === 'number' ? { intValue: String(value) } : { stringValue: value } }))
+  const start = event.timestamp * 1_000_000
+  const end = Math.max(event.endTimestamp ?? event.timestamp, event.timestamp) * 1_000_000
+  if (event.signal === 'span') return { resourceSpans: [{ scopeSpans: [{ scope: { name: 'edulog.api' }, spans: [{ name: event.name, startTimeUnixNano: String(start), endTimeUnixNano: String(end), attributes }] }] }] }
+  if (event.signal === 'metric') return { resourceMetrics: [{ scopeMetrics: [{ scope: { name: 'edulog.api' }, metrics: [{ name: event.name, sum: { dataPoints: [{ asInt: 1, timeUnixNano: String(end), attributes }] } }] }] }] }
+  return { resourceLogs: [{ scopeLogs: [{ scope: { name: 'edulog.api' }, logRecords: [{ timeUnixNano: String(end), body: { stringValue: event.name }, attributes }] }] }] }
 }
 
 class NoopExporter implements TelemetryExporter { async export(_event: TelemetryEvent) {} }
@@ -24,5 +36,5 @@ let exporter: TelemetryExporter = new NoopExporter()
 export function configureTelemetryExporter(next: TelemetryExporter) { exporter = next }
 export function getTelemetryExporter() { return exporter }
 export async function exportTelemetry(event: TelemetryEvent) {
-  try { await exporter.export(event) } catch (error) { console.error(JSON.stringify({ type: 'telemetry_export_failed', name: event.name, error: error instanceof Error ? error.message : String(error) })) }
+  try { await exporter.export(event) } catch (error) { console.error(JSON.stringify({ type: 'telemetry_export_failed', name: event.name, error: error instanceof Error ? error.message : 'unknown' })) }
 }
