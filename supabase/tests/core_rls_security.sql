@@ -117,6 +117,91 @@ RESET ROLE;
 
 DO $$
 BEGIN
+-- Exercise the teaching resolver against rows owned by learners rather than
+-- the caller. This proves that a teaching owner may access its own teaching
+-- through membership while a second teaching remains invisible, including its
+-- credential rows.
+INSERT INTO auth.users(id, email) VALUES
+  ('00000000-0000-0000-0000-000000000003', 'teaching-owner-a@example.test'),
+  ('00000000-0000-0000-0000-000000000004', 'teaching-owner-b@example.test'),
+  ('00000000-0000-0000-0000-000000000005', 'teaching-learner-a@example.test'),
+  ('00000000-0000-0000-0000-000000000006', 'teaching-learner-b@example.test')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.teachings(id, name, owner_user_id) VALUES
+  ('a1000000-0000-4000-8000-000000000001', 'RLS Teaching A', '00000000-0000-0000-0000-000000000003'),
+  ('b1000000-0000-4000-8000-000000000002', 'RLS Teaching B', '00000000-0000-0000-0000-000000000004')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.teaching_members(teaching_id, user_id, role_id)
+SELECT teaching.id, teaching.owner_user_id, role.id
+FROM public.teachings teaching
+JOIN public.roles role ON role.code = 'teaching_owner'
+WHERE teaching.id IN (
+  'a1000000-0000-4000-8000-000000000001',
+  'b1000000-0000-4000-8000-000000000002'
+)
+ON CONFLICT (teaching_id, user_id) DO UPDATE
+SET role_id = EXCLUDED.role_id,
+    status = 'active';
+
+INSERT INTO public.classrooms(id, name, user_id, teaching_id) VALUES
+  ('a2000000-0000-4000-8000-000000000001', 'RLS Classroom A', '00000000-0000-0000-0000-000000000003', 'a1000000-0000-4000-8000-000000000001'),
+  ('b2000000-0000-4000-8000-000000000002', 'RLS Classroom B', '00000000-0000-0000-0000-000000000004', 'b1000000-0000-4000-8000-000000000002')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.courses(id, subject, stage, user_id, teaching_id) VALUES
+  ('a3000000-0000-4000-8000-000000000001', 'RLS Course A', 'primary', '00000000-0000-0000-0000-000000000003', 'a1000000-0000-4000-8000-000000000001'),
+  ('b3000000-0000-4000-8000-000000000002', 'RLS Course B', 'primary', '00000000-0000-0000-0000-000000000004', 'b1000000-0000-4000-8000-000000000002')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.students(id, name, user_id) VALUES
+  ('a4000000-0000-4000-8000-000000000001', 'Teaching Learner A', '00000000-0000-0000-0000-000000000005'),
+  ('b4000000-0000-4000-8000-000000000002', 'Teaching Learner B', '00000000-0000-0000-0000-000000000006')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.enrollments(id, student_id, course_id, classroom_id, user_id) VALUES
+  ('a5000000-0000-4000-8000-000000000001', 'a4000000-0000-4000-8000-000000000001', 'a3000000-0000-4000-8000-000000000001', 'a2000000-0000-4000-8000-000000000001', '00000000-0000-0000-0000-000000000003'),
+  ('b5000000-0000-4000-8000-000000000002', 'b4000000-0000-4000-8000-000000000002', 'b3000000-0000-4000-8000-000000000002', 'b2000000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000004')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.student_credentials(id, student_id, platform, username, password, user_id) VALUES
+  ('a6000000-0000-4000-8000-000000000001', 'a4000000-0000-4000-8000-000000000001', 'fixture', 'learner-a', 'fixture-secret-a', '00000000-0000-0000-0000-000000000005'),
+  ('b6000000-0000-4000-8000-000000000002', 'b4000000-0000-4000-8000-000000000002', 'fixture', 'learner-b', 'fixture-secret-b', '00000000-0000-0000-0000-000000000006')
+ON CONFLICT (id) DO NOTHING;
+
+GRANT SELECT ON public.classrooms, public.students, public.student_credentials TO authenticated;
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.classrooms WHERE id IN (
+    'a2000000-0000-4000-8000-000000000001',
+    'b2000000-0000-4000-8000-000000000002'
+  )) <> 1 THEN
+    RAISE EXCEPTION 'teaching owner classroom isolation failed';
+  END IF;
+  IF (SELECT count(*) FROM public.students WHERE id IN (
+    'a4000000-0000-4000-8000-000000000001',
+    'b4000000-0000-4000-8000-000000000002'
+  )) <> 1 THEN
+    RAISE EXCEPTION 'teaching owner student isolation failed';
+  END IF;
+  IF (SELECT count(*) FROM public.student_credentials WHERE id IN (
+    'a6000000-0000-4000-8000-000000000001',
+    'b6000000-0000-4000-8000-000000000002'
+  )) <> 1 THEN
+    RAISE EXCEPTION 'teaching owner credential isolation failed';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.students WHERE id = 'b4000000-0000-4000-8000-000000000002')
+     OR EXISTS (SELECT 1 FROM public.student_credentials WHERE id = 'b6000000-0000-4000-8000-000000000002') THEN
+    RAISE EXCEPTION 'cross-teaching sensitive-data leak detected';
+  END IF;
+END;
+$$;
+RESET ROLE;
+
   IF to_regprocedure('public.can_access_student(uuid,text)') IS NULL
      OR to_regprocedure('public.can_access_classroom(uuid,text)') IS NULL
      OR to_regprocedure('public.can_access_class_session(uuid,text)') IS NULL
