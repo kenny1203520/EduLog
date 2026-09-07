@@ -47,10 +47,14 @@ jobs:
           ANON_KEY: test-anon-key
           SERVICE_ROLE_KEY: test-service-role-key
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+      - name: Build frontend artifact
+        run: npm ci --prefix app
+      - name: Build frontend
+        run: npm run build --prefix app
       - name: Verify Nginx API precedence and SPA fallback
         shell: bash
         run: |
           test "$(grep -n 'location \^~ /api/' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh | head -1 | cut -d: -f1)" -lt "$(grep -n 'location / {' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh | head -1 | cut -d: -f1)"
           grep -q 'proxy_pass http://\$api_upstream' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
           grep -q 'try_files \\$uri \\$uri/ /index.html' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
-          ! grep -R --binary-files=without-match -E 'SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY|service_role' app/dist 2>/dev/null || true
+          ! grep -R --binary-files=without-match -E 'SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY|service_role' app/dist
