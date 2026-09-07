@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { Course, type CourseDTO, Lesson, type LessonDTO } from '@/models/Course'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { apiResourceClient } from '../api/ApiResourceClient'
+import { getApiV1Mode } from '../api/ApiModeClient'
 
 export interface LessonReportDTO {
     id?: string
@@ -13,6 +15,12 @@ export interface LessonReportDTO {
 
 export class CourseCatalogService {
     static async getCourses(page: number = 1, perPage: number = 100): Promise<{ data: Course[], count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<CourseDTO>('courses', { page, perPage, sort: 'display_name:asc', mode: 'v1' })
+            const courses = (result.data || []).map((d) => new Course(d))
+            return { data: courses, count: result.meta?.total ?? courses.length }
+        }
+
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 

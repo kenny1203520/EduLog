@@ -45,6 +45,13 @@ export class ApiModeClient {
   post<T>(path: string, body: unknown, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }, mode?: ApiV1Mode) {
     return this.request<T>(path, { ...options, method: 'POST', body }, mode)
   }
+patch<T>(path: string, body: unknown, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }, mode?: ApiV1Mode) {
+    return this.request<T>(path, { ...options, method: 'PATCH', body }, mode)
+  }
+
+  delete<T>(path: string, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }, mode?: ApiV1Mode) {
+    return this.request<T>(path, { ...options, method: 'DELETE', body: {} }, mode)
+  }
 }
 
 export const apiModeClient = new ApiModeClient()

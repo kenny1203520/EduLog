@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { Classroom, type ClassroomDTO, type ClassroomScheduleDTO } from '@/models/Classroom'
 import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
+import { apiResourceClient } from '../api/ApiResourceClient'
+import { getApiV1Mode } from '../api/ApiModeClient'
 
 export type ClassroomVisibilityFilterMode = 'all' | 'visible' | 'hidden'
 
@@ -11,6 +13,12 @@ export class ClassroomService {
         search?: string,
         visibilityMode: ClassroomVisibilityFilterMode = 'all'
     ): Promise<{ data: Classroom[], count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<ClassroomDTO>('classrooms', { page, perPage, search, sort: 'name:asc', mode: 'v1' })
+            const classrooms = (result.data || []).map((d) => new Classroom(d))
+            return { data: classrooms, count: result.meta?.total ?? classrooms.length }
+        }
+
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
