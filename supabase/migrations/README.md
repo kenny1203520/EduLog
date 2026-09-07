@@ -53,8 +53,13 @@ This directory contains the append-only database history for EduLog. Applied mig
 | 1000043 | `1000043_teaching_scope_reconciliation.sql` | Teaching backfill and canonical scopes |
 | 1000044 | `1000044_rbac_epoch_and_api_contract.sql` | RBAC epoch and canonical API/RLS reconciliation |
 
+| 1000045 | 1000045_missing_core_rls_hardening.sql | Forward-only hardening for missing core-table RLS policies |
+
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. `1000041a` is an intentional compatibility migration and is ordered before `1000042`.
 
+## 1000045 forward hardening
+
+Apply 1000045 after 1000043 and 1000044. It is forward-only and restores action-specific RLS for students, student contacts, student schools, student credentials, teacher credentials, classroom schedules, and student suspensions. It may be rerun after a backup; it fails fast when the canonical scope helpers are unavailable.
 ## Clean install
 
 Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/tests/postgres_bootstrap.sql`, then run every `supabase/migrations/*.sql` file in lexical order with `ON_ERROR_STOP=1`. Finish with `supabase/tests/migration_chain_integration.sql`.
