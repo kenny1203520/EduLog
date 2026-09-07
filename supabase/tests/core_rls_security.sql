@@ -115,8 +115,6 @@ END;
 $$;
 RESET ROLE;
 
-DO $$
-BEGIN
 -- Exercise the teaching resolver against rows owned by learners rather than
 -- the caller. This proves that a teaching owner may access its own teaching
 -- through membership while a second teaching remains invisible, including its
@@ -202,6 +200,8 @@ END;
 $$;
 RESET ROLE;
 
+DO $$
+BEGIN
   IF to_regprocedure('public.can_access_student(uuid,text)') IS NULL
      OR to_regprocedure('public.can_access_classroom(uuid,text)') IS NULL
      OR to_regprocedure('public.can_access_class_session(uuid,text)') IS NULL
