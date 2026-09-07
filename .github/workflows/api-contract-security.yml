@@ -27,6 +27,11 @@ jobs:
           supabase/volumes/functions/_shared/telemetry.ts
           supabase/volumes/functions/_shared/validation.ts
           supabase/volumes/functions/api-v1/index.ts
+          supabase/volumes/functions/api-v1/openapi.ts
+          supabase/volumes/functions/api-v1/controllers/types.ts
+          supabase/volumes/functions/api-v1/controllers/systemController.ts
+          supabase/volumes/functions/api-v1/controllers/teachingMembersController.ts
+          supabase/volumes/functions/api-v1/controllers/resourceController.ts
           supabase/volumes/functions/api-v1/resourceRegistry.ts
           supabase/volumes/functions/api-v1/openapiRegistry.ts
           supabase/volumes/functions/api-v1/resourceService.ts
@@ -40,6 +45,10 @@ jobs:
           supabase/tests/auth_security_static_test.ts
           supabase/tests/api_shared_contract_test.ts
           supabase/tests/api_registry_test.ts
+          supabase/tests/api_resource_validation_test.ts
+          supabase/tests/api_sensitive_projection_test.ts
+          supabase/tests/api_scoped_authorization_static_test.ts
+          supabase/tests/frontend_runtime_config_static_test.ts
           supabase/tests/api_system_contract_test.ts
           supabase/tests/rate_limit_static_test.ts
           supabase/tests/auth_failure_matrix_static_test.ts

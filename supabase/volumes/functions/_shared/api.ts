@@ -59,8 +59,11 @@ export async function authenticate(req: Request, id: string, trace: string, rout
   return { requestId: id, traceId: trace, traceparent: traceParent(req), route, method: req.method, startedAt, requestIp: clientIp(req), user: data.user, db, adminDb }
 }
 
-export async function requirePermission(ctx: ApiContext, key: string, classroomId?: string | null, sessionId?: string | null) {
-  const { data, error } = await ctx.db.rpc('has_api_permission', { p_user_id: ctx.user.id, p_permission_key: key, p_classroom_id: classroomId ?? null, p_class_session_id: sessionId ?? null })
+export async function requirePermission(ctx: ApiContext, key: string, classroomId?: string | null, sessionId?: string | null, teachingId?: string | null) {
+  const request = teachingId
+    ? ctx.db.rpc('has_teaching_permission', { p_user_id: ctx.user.id, p_permission_key: key, p_teaching_id: teachingId, p_classroom_id: classroomId ?? null, p_class_session_id: sessionId ?? null })
+    : ctx.db.rpc('has_api_permission', { p_user_id: ctx.user.id, p_permission_key: key, p_classroom_id: classroomId ?? null, p_class_session_id: sessionId ?? null })
+  const { data, error } = await request
   if (error) throw new ApiError(500, 'AUTHORIZATION_ERROR', 'Unable to evaluate permission')
   if (data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
 }

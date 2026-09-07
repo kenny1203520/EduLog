@@ -1,313 +1,101 @@
 import { serve } from 'https://deno.land/std@0.177.1/http/server.ts'
-import { ApiError, audit, authenticate, beginIdempotency, corsHeaders, emitTelemetry, enforceRateLimit, handleError, parseJson, requirePermission, requestId, response, traceId } from '../_shared/api.ts'
-import { parsePagination, ValidationError } from '../_shared/validation.ts'
-import { applyResourceOpenApi } from './openapiRegistry.ts'
-import { collectionSort, getResourceDefinition, mutationResponse, permissionResource, pickBody, validateBody } from './resourceService.ts'
+import { ApiError, type ApiContext, audit, authenticate, beginIdempotency, corsHeaders, emitTelemetry, enforceRateLimit, handleError, requestId, response, traceId } from '../_shared/api.ts'
+import { ValidationError } from '../_shared/validation.ts'
+import { handleResourceRoutes } from './controllers/resourceController.ts'
+import { handleSystemRoutes } from './controllers/systemController.ts'
+import { handleTeachingMemberRoutes } from './controllers/teachingMembersController.ts'
+import type { RouteHandler } from './controllers/types.ts'
+import { OPENAPI } from './openapi.ts'
 
-const OPENAPI = {
-  openapi: '3.0.3',
-  info: { title: 'EduLog API', version: '1.0.0' },
-  servers: [{ url: '/api/v1' }],
-  security: [{ bearerAuth: [] }],
-  components: {
-    securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
-    headers: {
-      RequestId: { schema: { type: 'string' }, description: 'Server request correlation identifier' },
-      TraceId: { schema: { type: 'string' }, description: 'W3C trace identifier' },
-    },
-    parameters: {
-      Limit: { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } },
-      Offset: { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
-      Sort: { name: 'sort', in: 'query', schema: { type: 'string', example: 'created_at:desc' } },
-      IdempotencyKey: { name: 'Idempotency-Key', in: 'header', required: true, schema: { type: 'string', minLength: 8, maxLength: 128 } },
-    },
-    schemas: {
-      ApiError: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object', additionalProperties: { type: 'array', items: { type: 'string' } } } } } } },
-      CollectionMeta: { type: 'object', required: ['limit', 'offset'], properties: { limit: { type: 'integer' }, offset: { type: 'integer' }, total: { type: 'integer', minimum: 0 }, sort: { type: 'string' } } },
-      ApiEnvelope: { type: 'object', required: ['data', 'request_id', 'trace_id'], properties: { data: {}, meta: { '$ref': '#/components/schemas/CollectionMeta' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } },
-    },
-    responses: {
-      Unauthorized: { description: 'Missing or invalid Supabase JWT', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-      Forbidden: { description: 'Permission or teaching scope denied', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-      ValidationError: { description: 'Schema or business validation failed', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-      RateLimited: { description: 'Rate limit exceeded', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-    },
-  },
-  'x-idempotency': { methods: ['POST', 'PATCH', 'DELETE'], header: 'Idempotency-Key', replay: 'same response body with the current request_id and trace_id' },
-  'x-pagination': { parameters: ['limit', 'offset', 'search', 'sort'], sort: 'field:asc|desc; supported fields are resource-specific' },
-  paths: {
-    '/health': { get: { security: [], responses: { '200': { description: 'Healthy' } } } },
-    '/me': { get: { responses: { '200': { description: 'Current user' }, '401': { description: 'Unauthorized' } } } },
-    '/permissions': { get: { responses: { '200': { description: 'Available permissions' } } } },
-    '/roles': { get: { responses: { '200': { description: 'Roles' }, '401': { description: 'Unauthorized' }, '403': { description: 'Forbidden' }, '429': { description: 'Rate limited' } } }, post: { responses: { '201': { description: 'Created' }, '409': { description: 'Conflict' }, '422': { description: 'Validation error' }, '429': { description: 'Rate limited' } } } },
-    '/audit-events': { get: { responses: { '200': { description: 'Audit events' }, '401': { description: 'Unauthorized' }, '403': { description: 'Forbidden' }, '429': { description: 'Rate limited' } } } },
-    '/classrooms': { get: { responses: { '200': { description: 'Classrooms' }, '401': { description: 'Unauthorized' }, '403': { description: 'Forbidden' }, '429': { description: 'Rate limited' } } }, post: { responses: { '201': { description: 'Created' }, '403': { description: 'Forbidden' }, '409': { description: 'Conflict' }, '422': { description: 'Validation error' } } } },
-    '/classrooms/{id}': { get: { responses: { '200': { description: 'Classroom' }, '404': { description: 'Not found' } } }, patch: { responses: { '200': { description: 'Updated' }, '404': { description: 'Not found' } } }, delete: { responses: { '200': { description: 'Deleted' }, '404': { description: 'Not found' } } } },
-    '/class-sessions': { get: { responses: { '200': { description: 'Class sessions' } } }, post: { responses: { '201': { description: 'Created' } } } },
-    '/students': { get: { responses: { '200': { description: 'Students' } } }, post: { responses: { '201': { description: 'Created' } } } },
-    '/reports': { get: { responses: { '200': { description: 'Reports' } } } },
-    '/teachings': { get: { responses: { '200': { description: 'Teaching collection' }, '401': { description: 'Unauthorized' }, '403': { description: 'Forbidden' } } }, post: { responses: { '201': { description: 'Created' }, '409': { description: 'Conflict' }, '422': { description: 'Validation error' } } } },
-    '/teachings/{id}': { get: { responses: { '200': { description: 'Teaching' }, '404': { description: 'Not found' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
-    '/teachings/{id}/members': { get: { responses: { '200': { description: 'Teaching members' }, '403': { description: 'Forbidden' } } }, post: { responses: { '201': { description: 'Member added' }, '409': { description: 'Conflict' }, '422': { description: 'Validation error' } } } },
-    '/courses': { get: { responses: { '200': { description: 'Courses' } } }, post: { responses: { '201': { description: 'Created' } } } },
-    '/courses/{id}': { get: { responses: { '200': { description: 'Course' }, '404': { description: 'Not found' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
-    '/lessons': { get: { responses: { '200': { description: 'Lessons' } } }, post: { responses: { '201': { description: 'Created' } } } },
-    '/lessons/{id}': { get: { responses: { '200': { description: 'Lesson' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
-    '/enrollments': { get: { responses: { '200': { description: 'Enrollments' } } }, post: { responses: { '201': { description: 'Created' } } } },
-    '/enrollments/{id}': { get: { responses: { '200': { description: 'Enrollment' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
-    '/occurrences': { get: { responses: { '200': { description: 'Occurrences' } } }, post: { responses: { '201': { description: 'Created' } } } },
-    '/occurrences/{id}': { get: { responses: { '200': { description: 'Occurrence' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
-    '/report-templates': { get: { responses: { '200': { description: 'Report templates' } } }, post: { responses: { '201': { description: 'Created' } } } },
-    '/report-templates/{id}': { get: { responses: { '200': { description: 'Report template' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
-    '/holidays': { get: { responses: { '200': { description: 'Holidays' } } }, post: { responses: { '201': { description: 'Created' } } } },
-    '/holidays/{id}': { get: { responses: { '200': { description: 'Holiday' } } }, patch: { responses: { '200': { description: 'Updated' } } }, delete: { responses: { '200': { description: 'Deleted' } } } },
-  },
+const routeHandlers: readonly RouteHandler[] = [
+  handleSystemRoutes,
+  handleTeachingMemberRoutes,
+  handleResourceRoutes,
+]
+
+function normalizedPath(url: URL) {
+  return url.pathname.replace(/^\/api-v1/, '').replace(/^\/api\/v1/, '').replace(/^\/v1/, '') || '/'
 }
 
-const openapi = OPENAPI as any
-const commonErrors = {
-  '400': { '$ref': '#/components/responses/BadRequest' },
-  '401': { '$ref': '#/components/responses/Unauthorized' },
-  '403': { '$ref': '#/components/responses/Forbidden' },
-  '404': { '$ref': '#/components/responses/NotFound' },
-  '409': { '$ref': '#/components/responses/Conflict' },
-  '413': { '$ref': '#/components/responses/PayloadTooLarge' },
-  '422': { '$ref': '#/components/responses/ValidationError' },
-  '429': { '$ref': '#/components/responses/RateLimited' },
-  '500': { '$ref': '#/components/responses/InternalError' },
+function routeDomain(path: string): 'system' | 'teaching' {
+  return path.startsWith('/roles') || path.startsWith('/permissions') || path.startsWith('/audit-events') ? 'system' : 'teaching'
 }
-Object.assign(openapi.components.responses, {
-  BadRequest: { description: 'Malformed request', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-  NotFound: { description: 'Resource not found or not visible', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-  Conflict: { description: 'State conflict', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-  PayloadTooLarge: { description: 'Payload exceeds the configured limit', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-  InternalError: { description: 'Unexpected server error', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiError' } } } },
-})
-openapi.paths['/roles/{id}'] = { get: { responses: { '200': { description: 'Role' } } }, patch: { responses: { '200': { description: 'Updated role' } } }, delete: { responses: { '200': { description: 'Deleted role' } } } }
-for (const [path, pathItem] of Object.entries(openapi.paths) as [string, Record<string, any>][]) {
-  for (const [method, operation] of Object.entries(pathItem)) {
-    if (!['get', 'post', 'patch', 'delete'].includes(method)) continue
-    operation.responses = { ...commonErrors, ...operation.responses }
-    const pathResource = path.split('/')[1] ?? 'unknown'
-    const normalizedResource = pathResource === 'report-templates' ? 'templates' : pathResource.replaceAll('-', '_')
-    const operationAction = method === 'get' ? (path.includes('{') ? 'read' : 'list') : method
-    operation['x-permission'] = path === '/permissions' ? 'system.permissions.read' : path.startsWith('/roles') ? 'system.roles.manage' : path === '/audit-events' ? 'system.audit.list' : path.includes('/members') ? (method === 'get' ? 'teaching.members.list' : 'teaching.members.manage') : path === '/health' || path === '/me' ? undefined : 'teaching.' + normalizedResource + '.' + operationAction
-    if (method === 'get' && path !== '/health') operation.parameters = [...(operation.parameters ?? []), { '$ref': '#/components/parameters/Limit' }, { '$ref': '#/components/parameters/Offset' }, { '$ref': '#/components/parameters/Sort' }]
-    if (['post', 'patch', 'delete'].includes(method)) operation.parameters = [...(operation.parameters ?? []), { '$ref': '#/components/parameters/IdempotencyKey' }]
+
+async function dispatch(ctx: ApiContext, req: Request, url: URL, path: string, id: string, headers: HeadersInit) {
+  if (path === '/me' && req.method === 'GET') {
+    return response({ data: { id: ctx.user.id, email: ctx.user.email, metadata: ctx.user.user_metadata }, meta: null, request_id: id }, 200, id, headers)
   }
+  for (const handler of routeHandlers) {
+    const result = await handler({ ctx, req, url, path, requestId: id, headers })
+    if (result) return result
+  }
+  throw new ApiError(404, 'ROUTE_NOT_FOUND', 'Route not found')
 }
-
-applyResourceOpenApi(openapi, commonErrors)
 
 serve(async (req) => {
   const id = requestId(req)
   const trace = traceId(req)
   const headers = { ...corsHeaders(req), 'X-Trace-Id': trace }
   const started = performance.now()
-  let telemetryOutcome: 'success' | 'denied' | 'failure' = 'success'
-  let telemetryStatus = 200
-  let telemetryUserId: string | undefined
-  let authenticatedContext: Awaited<ReturnType<typeof authenticate>> | undefined
   const url = new URL(req.url)
-  const path = url.pathname.replace(/^\/api-v1/, '').replace(/^\/v1/, '') || '/'
-  if (req.method === 'OPTIONS') return response(null, 204, id, headers)
-  try {
-    await enforceRateLimit(req, path)
-    if (path === '/health' && req.method === 'GET') return response({ data: { status: 'ok', version: '1.0.0' }, request_id: id }, 200, id, headers)
-    if (path === '/openapi.json' && req.method === 'GET') return response(OPENAPI, 200, id, headers)
+  const path = normalizedPath(url)
+  let telemetryOutcome: 'success' | 'denied' | 'failure' = 'success'
+  let telemetryStatus = req.method === 'OPTIONS' ? 204 : 200
+  let telemetryUserId: string | undefined
+  let authenticatedContext: ApiContext | undefined
 
-    const ctx = await authenticate(req, id, trace)
+  try {
+    if (req.method === 'OPTIONS') return response(null, 204, id, headers)
+    await enforceRateLimit(req, path)
+    if (path === '/health' && req.method === 'GET') {
+      return response({ data: { status: 'ok', version: '1.0.0' }, meta: null, request_id: id }, 200, id, headers)
+    }
+    if (path === '/openapi.json' && req.method === 'GET') {
+      return response(OPENAPI, 200, id, headers)
+    }
+
+    const ctx = await authenticate(req, id, trace, path, started)
     authenticatedContext = ctx
     telemetryUserId = ctx.user.id
     const replay = await beginIdempotency(ctx, req, path)
-    if (replay) return replay
-    if (path === '/me' && req.method === 'GET') return response({ data: { id: ctx.user.id, email: ctx.user.email, metadata: ctx.user.user_metadata }, request_id: id }, 200, id, headers)
-
-    if (path === '/permissions' && req.method === 'GET') {
-      await requirePermission(ctx, 'system.permissions.read')
-      const { limit, offset } = parsePagination(url.searchParams)
-      const sort = collectionSort('permissions', url.searchParams.get('sort'))
-      let query = ctx.db.from('permissions').select('id,key,name,description,domain,resource,action,conditions,created_at,updated_at', { count: 'exact' }).order(sort.field, { ascending: sort.ascending })
-      const search = url.searchParams.get('search')?.trim()
-      if (search) query = query.ilike('key', '%' + search + '%')
-      const { data, error, count } = await query.range(offset, offset + limit - 1)
-      if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load permissions')
-      return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
+    if (replay) {
+      for (const [name, value] of Object.entries(headers)) replay.headers.set(name, String(value))
+      telemetryStatus = replay.status
+      return replay
     }
 
-    if (path === '/roles' && req.method === 'GET') {
-      await requirePermission(ctx, 'system.roles.manage')
-      const { limit, offset } = parsePagination(url.searchParams)
-      const sort = collectionSort('roles', url.searchParams.get('sort'))
-      let query = ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at', { count: 'exact' }).order(sort.field, { ascending: sort.ascending })
-      const search = url.searchParams.get('search')?.trim()
-      if (search) query = query.ilike('name', '%' + search + '%')
-      const { data, error, count } = await query.range(offset, offset + limit - 1)
-      if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load roles')
-      return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
-    }
-
-    const roleItemMatch = path.match(/^\/roles\/([0-9a-fA-F-]{36})$/)
-    if (roleItemMatch) {
-      const roleId = roleItemMatch[1]
-      await requirePermission(ctx, 'system.roles.manage')
-      if (req.method === 'GET') {
-        const { data, error } = await ctx.db.from('roles').select('id,code,name,description,is_system,sort_order,created_at,updated_at').eq('id', roleId).maybeSingle()
-        if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load role')
-        if (!data) throw new ApiError(404, 'ROLE_NOT_FOUND', 'Role not found')
-        return response({ data, meta: null, request_id: id }, 200, id, headers)
-      }
-      if (req.method === 'PATCH') {
-        const body = await parseJson(req)
-        validateBody(body, ['code', 'name', 'description'])
-        const payload = Object.fromEntries(Object.entries(body).map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value]))
-        const { data, error } = await ctx.db.from('roles').update(payload).eq('id', roleId).eq('is_system', false).select('id,code,name,description,is_system,sort_order,created_at,updated_at').maybeSingle()
-        if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'ROLE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Role already exists' : 'Unable to update role')
-        if (!data) throw new ApiError(404, 'ROLE_NOT_FOUND', 'Role not found or system role cannot be changed')
-        await audit(ctx, { action: 'update', domain: 'system', resource: 'roles', resourceId: roleId, outcome: 'success' })
-        return mutationResponse(ctx, req, 200, { data, meta: null, request_id: id }, id, headers)
-      }
-      if (req.method === 'DELETE') {
-        const { data, error } = await ctx.db.from('roles').delete().eq('id', roleId).eq('is_system', false).select('id').maybeSingle()
-        if (error) throw new ApiError(409, 'ROLE_IN_USE', 'Role could not be deleted')
-        if (!data) throw new ApiError(404, 'ROLE_NOT_FOUND', 'Role not found or system role cannot be deleted')
-        await audit(ctx, { action: 'delete', domain: 'system', resource: 'roles', resourceId: roleId, outcome: 'success' })
-        return mutationResponse(ctx, req, 200, { data: null, meta: null, request_id: id }, id, headers)
-      }
-    }
-
-    if (path === '/roles' && req.method === 'POST') {
-      await requirePermission(ctx, 'system.roles.manage')
-      const body = await parseJson(req) as Record<string, unknown>
-      validateBody(body, ['code', 'name', 'description'])
-      const name = typeof body.name === 'string' ? body.name.trim() : ''
-      if (!name || name.length > 120) throw new ApiError(422, 'VALIDATION_ERROR', 'name is required and must be at most 120 characters', { name: ['required'] })
-      const { data, error } = await ctx.db.from('roles').insert({ code: typeof body.code === 'string' ? body.code.trim() || null : null, name, description: typeof body.description === 'string' ? body.description.trim() || null : null, is_system: false }).select('id,code,name,description,is_system,sort_order,created_at,updated_at').single()
-      if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'ROLE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Role already exists' : 'Unable to create role')
-      await audit(ctx, { action: 'create', domain: 'system', resource: 'roles', resourceId: (data as unknown as { id?: string } | null)?.id, outcome: 'success' })
-      return mutationResponse(ctx, req, 201, { data, request_id: id }, id, headers)
-    }
-
-    if (path === '/audit-events' && req.method === 'GET') {
-      await requirePermission(ctx, 'system.audit.list')
-      const { limit, offset } = parsePagination(url.searchParams)
-      const sort = collectionSort('audit-events', url.searchParams.get('sort'))
-      let query = ctx.db.from('audit_events').select('id,actor_user_id,action,domain,resource,resource_id,scope_id,request_id,outcome,metadata,created_at', { count: 'exact' }).order(sort.field, { ascending: sort.ascending })
-      const search = url.searchParams.get('search')?.trim()
-      if (search) query = query.ilike('resource', '%' + search + '%')
-      const { data, error, count } = await query.range(offset, offset + limit - 1)
-      if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load audit events')
-      return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
-    }
-
-    const teachingMembersMatch = path.match(/^\/teachings\/([0-9a-fA-F-]{36})\/members$/)
-    if (teachingMembersMatch) {
-      const teachingId = teachingMembersMatch[1]
-      if (req.method === 'GET') {
-        await requirePermission(ctx, 'teaching.members.list')
-        const { limit, offset } = parsePagination(url.searchParams)
-        const rawSort = url.searchParams.get('sort')
-        const sortParts = (rawSort ?? 'created_at:desc').split(':')
-        const sortField = sortParts[0]
-        const sortDirection = sortParts[1] ?? 'desc'
-        if (!['created_at', 'effective_from', 'status'].includes(sortField) || !['asc', 'desc'].includes(sortDirection)) throw new ApiError(400, 'INVALID_SORT', 'Unsupported teaching member sort')
-        const { data, error, count } = await ctx.db.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at', { count: 'exact' }).eq('teaching_id', teachingId).order(sortField, { ascending: sortDirection === 'asc' }).range(offset, offset + limit - 1)
-        if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load teaching members')
-        return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: rawSort ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
-      }
-      if (req.method === 'POST') {
-        await requirePermission(ctx, 'teaching.members.manage')
-        const body = await parseJson(req) as Record<string, unknown>
-        const userId = typeof body.user_id === 'string' ? body.user_id : ''
-        if (!/^[0-9a-fA-F-]{36}$/.test(userId)) throw new ApiError(422, 'VALIDATION_ERROR', 'user_id must be a UUID', { user_id: ['invalid'] })
-        const payload = { teaching_id: teachingId, user_id: userId, ...pickBody(body, ['role_id', 'status', 'effective_from', 'effective_to'], ['user_id']) }
-        const { data, error } = await ctx.db.from('teaching_members').insert(payload).select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').single()
-        if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'MEMBER_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Teaching member already exists' : 'Unable to add teaching member')
-        await audit(ctx, { action: 'create', domain: 'teaching', resource: 'members', resourceId: teachingId, scopeId: teachingId, outcome: 'success' })
-        return mutationResponse(ctx, req, 201, { data, request_id: id }, id, headers)
-      }
-    }    const collectionMatch = path.match(/^\/(teachings|classrooms|class_sessions|class-sessions|students|courses|lessons|enrollments|occurrences|report_templates|report-templates|holidays|reports)$/)
-    const itemMatch = path.match(/^\/(teachings|classrooms|class_sessions|class-sessions|students|courses|lessons|enrollments|occurrences|report_templates|report-templates|holidays|reports)\/([0-9a-fA-F-]{36})$/)
-    if (collectionMatch) {
-      const resource = collectionMatch[1]
-      const definition = getResourceDefinition(resource)
-      if (req.method === 'GET') {
-        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.list')
-        const { limit, offset } = parsePagination(url.searchParams)
-        const sort = collectionSort(resource, url.searchParams.get('sort'))
-        let query = ctx.db.from(definition.table).select(definition.select, { count: 'exact' }).range(offset, offset + limit - 1).order(sort.field, { ascending: sort.ascending })
-        const search = url.searchParams.get('search')?.trim()
-        if (search && definition.searchField) query = query.ilike(definition.searchField, '%' + search + '%')
-        const { data, error, count } = await query
-        if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load resource')
-        return response({ data: data ?? [], meta: { limit, offset, total: count ?? undefined, sort: url.searchParams.get('sort') ?? 'created_at:desc' }, request_id: id }, 200, id, headers)
-      }
-      if (req.method === 'POST') {
-        if (definition.fields.length === 0) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Resource does not support creation')
-        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.create')
-        const body = await parseJson(req) as Record<string, unknown>
-        const payload = { ...pickBody(body, definition.fields), ...(resource === 'teachings' ? { owner_user_id: ctx.user.id } : {}) }
-        if (Object.keys(payload).length === 0) throw new ApiError(422, 'VALIDATION_ERROR', 'At least one writable field is required')
-        const { data, error } = await ctx.db.from(definition.table).insert(payload).select(definition.select).single()
-        if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'RESOURCE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Resource already exists' : 'Unable to create resource')
-        await audit(ctx, { action: 'create', domain: 'teaching', resource, resourceId: (data as unknown as { id?: string } | null)?.id, outcome: 'success' })
-        return mutationResponse(ctx, req, 201, { data, request_id: id }, id, headers)
-      }
-    }
-    if (itemMatch) {
-      const resource = itemMatch[1]
-      const resourceId = itemMatch[2]
-      const definition = getResourceDefinition(resource)
-      if (req.method === 'GET') {
-        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.read')
-        const { data, error } = await ctx.db.from(definition.table).select(definition.select).eq('id', resourceId).maybeSingle()
-        if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load resource')
-        if (!data) throw new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found')
-        return mutationResponse(ctx, req, 200, { data, request_id: id }, id, headers)
-      }
-      if (req.method === 'PATCH') {
-        if (definition.fields.length === 0) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Resource does not support updates')
-        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.update')
-        const body = await parseJson(req) as Record<string, unknown>
-        const payload = { ...pickBody(body, definition.fields), ...(resource === 'teachings' ? { owner_user_id: ctx.user.id } : {}) }
-        if (Object.keys(payload).length === 0) throw new ApiError(422, 'VALIDATION_ERROR', 'At least one writable field is required')
-        const { data, error } = await ctx.db.from(definition.table).update(payload).eq('id', resourceId).select(definition.select).maybeSingle()
-        if (error) throw new ApiError(error.code === '23505' ? 409 : 500, error.code === '23505' ? 'RESOURCE_EXISTS' : 'DATABASE_ERROR', error.code === '23505' ? 'Resource conflicts with an existing record' : 'Unable to update resource')
-        if (!data) throw new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found')
-        await audit(ctx, { action: 'update', domain: 'teaching', resource, resourceId, outcome: 'success' })
-        return mutationResponse(ctx, req, 200, { data, request_id: id }, id, headers)
-      }
-      if (req.method === 'DELETE') {
-        if (definition.fields.length === 0) throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Resource does not support deletion')
-        await requirePermission(ctx, 'teaching.' + (permissionResource(resource)) + '.delete')
-        const { data, error } = await ctx.db.from(definition.table).delete().eq('id', resourceId).select('id').maybeSingle()
-        if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to delete resource')
-        if (!data) throw new ApiError(404, 'RESOURCE_NOT_FOUND', 'Resource not found')
-        await audit(ctx, { action: 'delete', domain: 'teaching', resource, resourceId, outcome: 'success' })
-        return mutationResponse(ctx, req, 200, { data: null, request_id: id }, id, headers)
-      }
-    }
-    throw new ApiError(404, 'ROUTE_NOT_FOUND', 'Route not found')
-  } catch (error) {
+    const result = await dispatch(ctx, req, url, path, id, headers)
+    telemetryStatus = result.status
+    return result
+  } catch (caught) {
+    let error: unknown = caught
     if (error instanceof ValidationError) error = new ApiError(400, 'INVALID_QUERY', error.message, error.fields)
     telemetryStatus = error instanceof ApiError ? error.status : 500
     telemetryOutcome = error instanceof ApiError && error.status === 403 ? 'denied' : 'failure'
-    if (error instanceof ApiError && error.status === 403) {
+    if (authenticatedContext) {
       try {
-        const deniedContext = authenticatedContext ?? await authenticate(req, id, trace, path, started)
-        await audit(deniedContext, { action: req.method, domain: 'teaching', resource: path.split('/')[1] || 'unknown', outcome: 'denied', status: 403 })
-      } catch { /* preserve original denial */ }
-    } else if (authenticatedContext) {
-      void audit(authenticatedContext, {
-        action: req.method,
-        domain: path.startsWith('/roles') || path === '/permissions' || path === '/audit-events' ? 'system' : 'teaching',
-        resource: path.split('/')[1] || 'unknown',
-        outcome: 'failure',
-        status: error instanceof ApiError ? error.status : 500,
-      })
+        await audit(authenticatedContext, {
+          action: req.method.toLowerCase(),
+          domain: routeDomain(path),
+          resource: path.split('/')[1] || 'unknown',
+          outcome: telemetryOutcome,
+          status: telemetryStatus,
+        })
+      } catch { /* preserve the original response */ }
     }
     return handleError(error, id, trace)
   } finally {
-    void emitTelemetry({ request_id: id, trace_id: trace, traceparent: req.headers.get('traceparent') ?? undefined, user_id: telemetryUserId, resource: path.split('/')[1] ?? undefined, route: path, method: req.method, status: telemetryStatus, latency_ms: Math.round(performance.now() - started), outcome: telemetryOutcome })
+    void emitTelemetry({
+      request_id: id,
+      trace_id: trace,
+      traceparent: req.headers.get('traceparent') ?? undefined,
+      user_id: telemetryUserId,
+      resource: path.split('/')[1] || undefined,
+      route: path,
+      method: req.method,
+      status: telemetryStatus,
+      latency_ms: Math.round(performance.now() - started),
+      outcome: telemetryOutcome,
+    })
   }
 })
