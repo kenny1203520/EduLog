@@ -74,7 +74,10 @@ Deno.test('historical migration versions are preserved', async () => {
 
 Deno.test('1000046 uses a service-role-only shared rate limit store', () => {
   assertStringIncludes(rateLimit, 'CREATE TABLE IF NOT EXISTS public.api_rate_limit_buckets')
-  assertStringIncludes(rateLimit, 'CREATE OR REPLACE FUNCTION public.consume_api_rate_limit(text, integer, integer)')
+  assertStringIncludes(rateLimit, 'CREATE OR REPLACE FUNCTION public.consume_api_rate_limit(')
+  assertStringIncludes(rateLimit, 'p_bucket_key text')
+  assertStringIncludes(rateLimit, 'p_limit integer')
+  assertStringIncludes(rateLimit, 'p_window_seconds integer')
   assertStringIncludes(rateLimit, 'ON CONFLICT (bucket_key) DO UPDATE')
   assertStringIncludes(rateLimit, 'GRANT EXECUTE ON FUNCTION public.consume_api_rate_limit(text, integer, integer) TO service_role')
 })

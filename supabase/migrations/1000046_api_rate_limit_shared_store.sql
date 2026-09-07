@@ -52,7 +52,7 @@ BEGIN
         ELSE api_rate_limit_buckets.reset_at
       END,
       updated_at = v_now
-  RETURNING request_count, reset_at INTO v_count, v_reset;
+  RETURNING public.api_rate_limit_buckets.request_count, public.api_rate_limit_buckets.reset_at INTO v_count, v_reset;
 
   RETURN QUERY
   SELECT v_count <= p_limit,
