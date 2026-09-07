@@ -50,6 +50,7 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   if (!def.sortable.includes(sortName)) throw new ApiError(400, 'INVALID_SORT', 'The sort field is not supported')
   const descending = query.sort.startsWith('-')
   let builder = req.db!.from(def.table).select(def.fields.join(', '), { count: 'exact' })
+  if (def.table === 'user_preferences' || def.table === 'user_entity_visibility_preferences') builder = builder.eq('user_id', req.user!.id)
   if (query.search && def.searchable.length) {
     const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,]/g, '')}%`).join(',')
     builder = builder.or(clauses)
@@ -64,8 +65,10 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
 }
 
 async function item(req: Request, res: Response, def: ResourceDefinition) {
-  const id = typeof req.params.id === 'string' ? req.params.id : undefined
-  if (!id) throw new ApiError(400, 'INVALID_ID', 'Resource id is required')
+  const requestedId = typeof req.params.id === 'string' ? req.params.id : undefined
+  if (!requestedId) throw new ApiError(400, 'INVALID_ID', 'Resource id is required')
+  const id = def.table === 'user_preferences' && requestedId === 'me' ? req.user?.id : requestedId
+  if (!id) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   if (req.method === 'GET') {
     await allowed(req, permissionFor(def, 'read'), id)
     const result = await req.db!.from(def.table).select(def.fields.join(', ')).eq(def.idColumn, id).maybeSingle()
@@ -100,7 +103,8 @@ async function collection(req: Request, res: Response, def: ResourceDefinition) 
   if (replay) return res.status(replay.status).json(replay.body)
   const body = pickBody(def, bodySchema.parse(req.body))
   if (!Object.keys(body).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
-  const result = req.method === 'POST' ? await req.db!.from(def.table).insert(body).select(def.fields.join(', ')).single() : await req.db!.from(def.table).update(body).select(def.fields.join(', ')).maybeSingle()
+  const insertBody = def.table === 'user_entity_visibility_preferences' ? { ...body, user_id: req.user!.id } : body
+  const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(def.fields.join(', ')).single() : await req.db!.from(def.table).update(body).select(def.fields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   const status = req.method === 'POST' ? 201 : 200
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, status, envelope)

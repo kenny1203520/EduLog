@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import type { EditorUserSettings } from '@/components/common/text-editor/settings'
 
 export interface UserPreferenceDTO {
@@ -12,6 +14,9 @@ export interface UserPreferenceDTO {
 
 export class UserPreferenceService {
     static async getCurrentUserPreferences(): Promise<UserPreferenceDTO | null> {
+        if (getApiV1Mode() === 'v1') {
+            return (await apiResourceClient.get<UserPreferenceDTO>('user-preferences', 'me', 'v1')).data
+        }
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return null
 
@@ -26,6 +31,9 @@ export class UserPreferenceService {
     }
 
     static async updateCurrentUserTimeZone(timeZone: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiResourceClient.update('user-preferences', 'me', { time_zone: timeZone }, 'v1'); return
+        }
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
 
@@ -37,6 +45,9 @@ export class UserPreferenceService {
     }
 
     static async updateCurrentUserEditorSettings(editorSettings: EditorUserSettings): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiResourceClient.update('user-preferences', 'me', { editor_settings: editorSettings }, 'v1'); return
+        }
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) return
         const { error } = await supabase

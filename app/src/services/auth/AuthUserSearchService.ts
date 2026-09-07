@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export interface AuthUserSearchResultDTO {
     id: string
@@ -13,6 +15,14 @@ export class AuthUserSearchService {
      */
     static async searchUsersByEmail(query: string, options?: { onlyUnlinked?: boolean }): Promise<AuthUserSearchResultDTO[]> {
         const normalizedQuery = query.trim()
+
+        if (getApiV1Mode() === 'v1') {
+            if (!normalizedQuery) return []
+            const params = new URLSearchParams({ query: normalizedQuery })
+            if (options?.onlyUnlinked) params.set('only_unlinked', 'true')
+            const response = await apiV1Client.get<AuthUserSearchResultDTO[]>(/users/search?)
+            return response.data || []
+        }
 
         if (!normalizedQuery) return []
 

@@ -10,6 +10,7 @@ import { createAuthRouter, csrfProtection, requireAuth } from './auth.js'
 import { createResourceRouter } from './resourceRouter.js'
 import { rateLimitMiddleware } from './rateLimit.js'
 import { buildOpenApi } from './openapi.js'
+import { createUserSearchRouter } from './userSearch.js'
 
 export function createApp(env: NodeJS.ProcessEnv = process.env) {
   const config = loadConfig(env)
@@ -35,6 +36,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   app.get('/api/healthz', (_req, res) => res.json({ data: { status: 'ok' }, meta: {}, request_id: _req.requestId, trace_id: _req.traceId }))
   app.get('/api/openapi.json', (_req, res) => res.json(buildOpenApi()))
   app.use('/api/auth', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createAuthRouter(clients, config))
+  app.use('/api/users', csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient), createUserSearchRouter())
   app.use('/api', csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient), createResourceRouter())
   app.use((_req, _res, next) => next(new ApiError(404, 'NOT_FOUND', 'Route was not found')))
   app.use(errorHandler)
