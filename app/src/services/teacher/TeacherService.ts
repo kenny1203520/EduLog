@@ -3,6 +3,7 @@ import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { apiV1Client } from '@/services/api/ApiV1Client'
 
 export interface TeacherDTO {
     id?: string
@@ -266,6 +267,11 @@ export class TeacherService {
 
     // Session-teacher relationships
     static async getSessionTeachers(sessionId: string, onDate?: string): Promise<SessionTeacherAssignmentDTO[]> {
+        if (getApiV1Mode() === 'v1') {
+            const query = onDate ? '?on_date=' + encodeURIComponent(onDate) : ''
+            const result = await apiV1Client.get<SessionTeacherAssignmentDTO[]>('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers' + query)
+            return result.data || []
+        }
         let query = apiDataClient
             .from('class_session_teachers')
             .select(`
@@ -339,6 +345,11 @@ export class TeacherService {
     ): Promise<void> {
         if (teachers.length === 0) return
 
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.post('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers', { teachers })
+            return
+        }
+
         const records = teachers.map(t => ({
             class_session_id: sessionId,
             teacher_id: t.teacher_id,
@@ -354,6 +365,10 @@ export class TeacherService {
     }
 
     static async assignTeacherForDate(sessionId: string, teacherId: string, date: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.post('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers', { teachers: [{ teacher_id: teacherId, effective_from: date, effective_to: date }] })
+            return
+        }
         const { error } = await apiDataClient
             .from('class_session_teachers')
             .upsert({
@@ -367,6 +382,10 @@ export class TeacherService {
     }
 
     static async removeTeacherAssignment(sessionId: string, teacherId: string, effectiveFrom: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.delete('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers?teacher_id=' + encodeURIComponent(teacherId) + '&effective_from=' + encodeURIComponent(effectiveFrom))
+            return
+        }
         const { error } = await apiDataClient
             .from('class_session_teachers')
             .delete()
@@ -378,6 +397,10 @@ export class TeacherService {
     }
 
     static async clearSessionTeachers(sessionId: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.delete('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers')
+            return
+        }
         const { error } = await apiDataClient
             .from('class_session_teachers')
             .delete()
@@ -387,6 +410,10 @@ export class TeacherService {
     }
 
     static async removeTeacherFromSession(sessionId: string, teacherId: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.delete('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers/' + encodeURIComponent(teacherId))
+            return
+        }
         const { error } = await apiDataClient
             .from('class_session_teachers')
             .delete()

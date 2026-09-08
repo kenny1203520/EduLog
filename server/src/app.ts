@@ -23,6 +23,19 @@ import { createSyncRouter } from './syncRouter.js'
 import { createSuspensionRouter } from './suspensionRouter.js'
 import { createHolidayRouter } from './holidayRouter.js'
 import { createAggregateRouter } from './aggregateRouter.js'
+import { createTeacherAssignmentRouter } from './teacherAssignmentRouter.js'
+
+const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
+
+export function resolveAllowedOrigins(config: Pick<ReturnType<typeof loadConfig>, 'API_ALLOWED_ORIGINS' | 'NODE_ENV' | 'API_BASE_URL'>) {
+  const configuredOrigins = config.API_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+  if (configuredOrigins.length) {
+    if (configuredOrigins.includes('*')) throw new Error('API_ALLOWED_ORIGINS cannot contain wildcard origins')
+    return configuredOrigins
+  }
+  if (config.NODE_ENV === 'production') return [new URL(config.API_BASE_URL).origin]
+  return LOCAL_DEVELOPMENT_ORIGINS
+}
 
 export function createApp(env: NodeJS.ProcessEnv = process.env) {
   const config = loadConfig(env)
@@ -35,8 +48,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   app.use(requestContext(logger))
   app.use(express.json({ limit: config.API_BODY_LIMIT, strict: true }))
   app.use((req, res, next) => {
-    const configuredOrigins = config.API_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
-    const allowedOrigins = configuredOrigins.length ? configuredOrigins : config.NODE_ENV === 'production' ? [new URL(config.API_BASE_URL).origin] : []
+    const allowedOrigins = resolveAllowedOrigins(config)
     const origin = req.header('origin')
     if (origin && !allowedOrigins.includes(origin)) return next(new ApiError(403, 'ORIGIN_FORBIDDEN', 'Origin is not allowed'))
     res.setHeader('Vary', 'Origin')
@@ -60,6 +72,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   protectedApi.use(createSuspensionRouter())
   protectedApi.use(createHolidayRouter())
   protectedApi.use(createAggregateRouter())
+  protectedApi.use(createTeacherAssignmentRouter())
   protectedApi.use(createSessionRouter())
   protectedApi.use(createStudentRouter())
   protectedApi.use(createRpcRouter())

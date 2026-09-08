@@ -1,6 +1,6 @@
 import request from 'supertest'
 import { describe, expect, it } from 'vitest'
-import { createApp } from './app.js'
+import { createApp, resolveAllowedOrigins } from './app.js'
 
 const env = {
   NODE_ENV: 'test',
@@ -16,6 +16,27 @@ const env = {
 }
 
 describe('Express API boundary', () => {
+  it('allows the local Vite browser origins in development', () => {
+    expect(resolveAllowedOrigins({ ...env, API_ALLOWED_ORIGINS: '', NODE_ENV: 'development' })).toEqual([
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://[::1]:5173',
+    ])
+  })
+
+  it('rejects wildcard origins instead of combining them with credentials', () => {
+    expect(() => resolveAllowedOrigins({ ...env, API_ALLOWED_ORIGINS: '*', NODE_ENV: 'production' })).toThrow(/wildcard/)
+  })
+
+  it('lets a local browser origin reach auth validation', async () => {
+    const app = createApp({ ...env, API_ALLOWED_ORIGINS: '' })
+    const response = await request(app)
+      .post('/api/auth/login')
+      .set('Origin', 'http://localhost:5173')
+      .send({ email: 'invalid@example.test', password: 'invalid-password' })
+    expect(response.status).not.toBe(403)
+    expect(response.body.error.code).not.toBe('ORIGIN_FORBIDDEN')
+  })
   it('returns JSON health responses for both public health paths', async () => {
     const app = createApp(env)
     const root = await request(app).get('/healthz')
