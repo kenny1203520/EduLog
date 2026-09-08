@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { DateUtils } from '@/utils/DateUtils'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class OccurrenceQueryService {
     private static formatDate(date: Date): string {
@@ -12,6 +14,10 @@ export class OccurrenceQueryService {
         page: number = 1,
         perPage: number = 50
     ): Promise<{ data: ClassOccurrence[]; count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any[]>('/occurrences?class_session_id=' + encodeURIComponent(sessionId) + '&limit=' + perPage + '&offset=' + ((page - 1) * perPage) + '&sort=occurrence_date')
+            return { data: (response.data || []).map((row) => new ClassOccurrence(row)), count: Number((response.meta as any)?.total || 0) }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
@@ -170,6 +176,7 @@ export class OccurrenceQueryService {
     }
 
     static async getOccurrenceById(occurrenceId: string): Promise<ClassOccurrence> {
+        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId)); return new ClassOccurrence(response.data) }
         const { data, error } = await supabase
             .from('class_occurrences')
             .select('*')
@@ -193,3 +200,4 @@ export class OccurrenceQueryService {
         return this.getOccurrencesByDateRange(today, future)
     }
 }
+

@@ -5,6 +5,8 @@ import { HolidayService } from '../holiday/HolidayService'
 import { TeacherService } from '../teacher/TeacherService'
 import { DateUtils } from '@/utils/DateUtils'
 import { ClassSessionFactory } from '@/models/ClassSession'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class OccurrenceCommandService {
     private static formatDate(date: Date): string {
@@ -118,6 +120,7 @@ export class OccurrenceCommandService {
         occurrenceId: string,
         updates: Partial<ClassOccurrenceDTO>
     ): Promise<ClassOccurrence> {
+        if (getApiV1Mode() === 'v1') { const response = await apiResourceClient.update<any>('occurrences', occurrenceId, updates, 'v1'); return new ClassOccurrence(response.data) }
         // Guard: check if occurrence is within a holiday period
         const occurrence = await OccurrenceQueryService.getOccurrenceById(occurrenceId)
         const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
@@ -200,6 +203,7 @@ export class OccurrenceCommandService {
     }
 
     static async deleteOccurrence(occurrenceId: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('occurrences', occurrenceId, 'v1'); return }
         const { error } = await supabase
             .from('class_occurrences')
             .delete()
@@ -237,3 +241,4 @@ export class OccurrenceCommandService {
         return totalGenerated
     }
 }
+
