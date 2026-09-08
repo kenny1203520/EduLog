@@ -21,6 +21,7 @@ import { createTransferRouter } from './transferRouter.js'
 import { createSyncRouter } from './syncRouter.js'
 import { createSuspensionRouter } from './suspensionRouter.js'
 import { createHolidayRouter } from './holidayRouter.js'
+import { createAggregateRouter } from './aggregateRouter.js'
 
 export function createApp(env: NodeJS.ProcessEnv = process.env) {
   const config = loadConfig(env)
@@ -57,6 +58,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   protectedApi.use(createSyncRouter())
   protectedApi.use(createSuspensionRouter())
   protectedApi.use(createHolidayRouter())
+  protectedApi.use(createAggregateRouter())
   protectedApi.use(createSessionRouter())
   protectedApi.use(createStudentRouter())
   protectedApi.use(createResourceRouter())

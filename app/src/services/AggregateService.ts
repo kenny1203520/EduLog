@@ -1,5 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { getRuntimeConfigValue } from '@/lib/runtimeConfig'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { StudentService } from '@/services/student/StudentService'
 
@@ -67,6 +70,12 @@ export class AggregateService {
   }
 
   static async getUserPreferencesAggregate(): Promise<UserPreferencesAggregate> {
+    if (getApiV1Mode() === 'v1') {
+      const [preferences, visibility] = await Promise.all([apiResourceClient.get<any>('user-preferences', 'me', 'v1'), apiResourceClient.list<any>('visibility-preferences', { perPage: 100, mode: 'v1' })])
+      const grouped: Record<string, string[]> = { classroom: [], class_session: [] }
+      for (const row of visibility.data ?? []) (grouped[row.entity_type] ??= []).push(row.entity_id)
+      return { preferences: preferences.data ?? null, visibility: grouped }
+    }
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 
@@ -90,6 +99,10 @@ export class AggregateService {
   }
 
   static async getReportsByEnrollmentAggregate(enrollmentId: string, page: number = 1, perPage: number = 50): Promise<{ enrollment: any, reports: any[], count: number }> {
+    if (getApiV1Mode() === 'v1') {
+      const [enrollment, reports] = await Promise.all([apiResourceClient.get<any>('enrollments', enrollmentId, 'v1'), apiResourceClient.list<any>('reports', { enrollmentId, page, perPage, sort: '-updated_at', mode: 'v1' })])
+      return { enrollment: enrollment.data, reports: reports.data ?? [], count: reports.meta?.total ?? reports.data?.length ?? 0 }
+    }
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 
@@ -114,6 +127,13 @@ export class AggregateService {
   }
 
   static async getClassroomSessionManagerAggregate(page: number = 1, perPage: number = 100, search: string = '', visibilityMode: string = 'all') {
+    if (getApiV1Mode() === 'v1') {
+      const [classrooms, visibility] = await Promise.all([apiResourceClient.list<any>('classrooms', { page, perPage, search, sort: 'name', mode: 'v1' }), apiResourceClient.list<any>('visibility-preferences', { perPage: 100, mode: 'v1' })])
+      const hiddenClassroomIds = new Set((visibility.data ?? []).filter((row) => row.entity_type === 'classroom' && row.is_hidden).map((row) => row.entity_id))
+      const hiddenSessionIds = (visibility.data ?? []).filter((row) => row.entity_type === 'class_session' && row.is_hidden).map((row) => row.entity_id)
+      const filtered = (classrooms.data ?? []).filter((row) => visibilityMode === 'all' || (visibilityMode === 'hidden' ? hiddenClassroomIds.has(row.id) : !hiddenClassroomIds.has(row.id)))
+      return { classrooms: filtered, count: classrooms.meta?.total ?? filtered.length, hiddenClassroomIds: [...hiddenClassroomIds], hiddenSessionIds }
+    }
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 
@@ -139,6 +159,7 @@ export class AggregateService {
   }
 
   static async getDashboardHome(start?: string, end?: string, forceRefresh: boolean = false) {
+    if (getApiV1Mode() === 'v1') { const params = new URLSearchParams(); if (start) params.set('start', start); if (end) params.set('end', end); const result = await apiV1Client.get<any>('/aggregates/dashboard?' + params.toString(), forceRefresh ? { cache: 'no-store' } : undefined); return result.data }
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 
@@ -176,6 +197,7 @@ export class AggregateService {
   }
 
   static async getIncompleteReportsAggregate(daysBack: number = 90, scope: 'all' | 'my_present' | 'my_notifications' = 'all') {
+    if (getApiV1Mode() === 'v1') { const result = await apiV1Client.get<any>('/aggregates/incomplete-reports?daysBack=' + encodeURIComponent(String(daysBack)) + '&scope=' + encodeURIComponent(scope)); return result.data }
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 
@@ -209,6 +231,7 @@ export class AggregateService {
   }
 
   static async getHolidaysAggregate(expandNames: boolean = true) {
+    if (getApiV1Mode() === 'v1') { const result = await apiV1Client.get<any>('/aggregates/holidays-manager?expand=' + String(expandNames)); return result.data }
     const sessionRes = await supabase.auth.getSession()
     const token = sessionRes?.data?.session?.access_token
 

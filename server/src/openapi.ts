@@ -79,6 +79,9 @@ export function buildOpenApi() {
   paths['/api/holidays/check'] = {
     get: { operationId: 'holiday_check', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.holidays.list', parameters: [{ name: 'date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'classroom_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'class_session_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'teacher_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
+  for (const aggregate of ['user-preferences', 'student-reports', 'classroom-session-manager', 'holidays-manager', 'incomplete-reports', 'dashboard']) {
+    paths[`/api/aggregates/${aggregate}`] = { get: { operationId: `aggregate_${aggregate.replaceAll('-', '_')}`, security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  }
   paths['/api/rbac/capability'] = {
     get: { operationId: 'rbac_capability', security: [{ cookieAuth: [] }], parameters: [{ name: 'permission', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
