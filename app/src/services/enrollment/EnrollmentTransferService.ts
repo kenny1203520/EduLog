@@ -11,6 +11,8 @@ import {
     type SingleLessonTransferResult
 } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class EnrollmentTransferService {
     private static getOccurrenceInfo<T extends { class_occurrence: any }>(row: T): any {
@@ -168,6 +170,10 @@ export class EnrollmentTransferService {
         targetOccurrenceId: string,
         reportId: string | null
     ): Promise<string> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<{ status: string; transfer_id: string }>('/enrollment-transfers/single-lesson', { enrollment_id: enrollmentId, source_occurrence_id: sourceOccurrenceId, target_occurrence_id: targetOccurrenceId, report_id: reportId })
+            return response.data.transfer_id
+        }
         const { data, error } = await supabase.rpc('transfer_single_lesson', {
             p_enrollment_id: enrollmentId,
             p_source_occurrence_id: sourceOccurrenceId,
@@ -377,6 +383,10 @@ export class EnrollmentTransferService {
 
     /** Cancels one active single-lesson transfer and moves its report back atomically. */
     static async cancelSingleLessonTransfer(transferId: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.post('/enrollment-transfers/cancel', { transfer_id: transferId })
+            return
+        }
         const { error } = await supabase.rpc('cancel_single_lesson_transfer', {
             p_transfer_id: transferId
         })

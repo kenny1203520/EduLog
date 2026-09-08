@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceCommandService } from './OccurrenceCommandService'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export interface OccurrenceReconciliationResult {
     created: number
@@ -56,6 +58,10 @@ export class OccurrenceSyncService {
         sessionId: string,
         scope: 'future' | 'all' = 'future'
     ): Promise<OccurrenceReconciliationResult> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<OccurrenceReconciliationResult>('/class-sessions/' + sessionId + '/occurrences/sync', { scope })
+            return response.data
+        }
         void scope
         const { data: rawSession, error: sessionError } = await supabase
             .from('class_sessions')

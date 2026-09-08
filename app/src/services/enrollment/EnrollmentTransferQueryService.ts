@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export interface TransferConflictDisplayContext {
     occurrenceId: string
@@ -78,6 +80,10 @@ export interface EffectiveSingleLessonTransferTarget {
 
 export class EnrollmentTransferQueryService {
     static async getSingleLessonTransferHistory(enrollmentId: string): Promise<SingleLessonTransferHistoryItem[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<SingleLessonTransferHistoryItem[]>('/enrollments/' + enrollmentId + '/transfer-history')
+            return response.data || []
+        }
         const { data, error } = await supabase.rpc('get_single_lesson_transfer_history', {
             p_enrollment_id: enrollmentId
         })
@@ -86,6 +92,10 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getEffectiveSingleLessonTransferTargets(enrollmentId: string): Promise<EffectiveSingleLessonTransferTarget[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<EffectiveSingleLessonTransferTarget[]>('/enrollments/' + enrollmentId + '/effective-transfer-targets')
+            return response.data || []
+        }
         const { data, error } = await supabase.rpc('get_effective_single_lesson_transfer_targets', {
             p_enrollment_id: enrollmentId
         })
@@ -94,6 +104,10 @@ export class EnrollmentTransferQueryService {
     }
 
     static async repairSingleLessonTransferReport(enrollmentId: string, targetOccurrenceId: string): Promise<string> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<{ report_id: string }>('/enrollments/' + enrollmentId + '/repair-transfer-report', { target_occurrence_id: targetOccurrenceId })
+            return response.data.report_id
+        }
         const { data, error } = await supabase.rpc('repair_single_lesson_transfer_report', {
             p_enrollment_id: enrollmentId,
             p_target_occurrence_id: targetOccurrenceId
