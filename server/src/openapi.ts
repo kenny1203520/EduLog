@@ -76,6 +76,9 @@ export function buildOpenApi() {
   paths['/api/class-sessions/{id}/occurrences/sync'] = {
     post: { operationId: 'class_session_occurrences_sync', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.sessions.update', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, { $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { scope: { type: 'string', enum: ['future', 'all'], default: 'future' } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
+  paths['/api/holidays/check'] = {
+    get: { operationId: 'holiday_check', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.holidays.list', parameters: [{ name: 'date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'classroom_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'class_session_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'teacher_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
   paths['/api/rbac/capability'] = {
     get: { operationId: 'rbac_capability', security: [{ cookieAuth: [] }], parameters: [{ name: 'permission', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }

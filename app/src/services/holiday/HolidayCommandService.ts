@@ -1,4 +1,6 @@
 import { supabase } from '@/lib/supabase'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { Holiday, type HolidayDTO } from '@/models/Holiday'
 import { DateUtils } from '@/utils/DateUtils'
 
@@ -31,6 +33,10 @@ export class HolidayCommandService {
         classSessionIds?: string[],
         teacherIds?: string[]
     }): Promise<Holiday> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.create<any>('holidays', { start_date: params.startDate, end_date: params.endDate, time_zone: params.timeZone, name: params.name, kind: params.kind === 'teacher_leave' ? 'teacher_leave' : 'closure', classroom_ids: params.classroomIds || [], class_session_ids: params.classSessionIds || [], teacher_ids: params.teacherIds || [] }, 'v1')
+            return new Holiday(result.data)
+        }
         const kind = params.kind === 'teacher_leave' ? 'teacher_leave' : 'closure'
         const { data, error } = await supabase
             .from('holidays')
@@ -60,6 +66,7 @@ export class HolidayCommandService {
      * Updates an existing holiday
      */
     static async updateHoliday(id: string, updates: Partial<HolidayDTO>): Promise<Holiday> {
+        if (getApiV1Mode() === 'v1') { const result = await apiResourceClient.update<any>('holidays', id, updates, 'v1'); return new Holiday(result.data) }
         const existingHoliday = await this.getHolidayById(id)
 
         const { data, error } = await supabase
@@ -83,6 +90,7 @@ export class HolidayCommandService {
      * Deletes a holiday
      */
     static async deleteHoliday(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('holidays', id, 'v1'); return }
         const existingHoliday = await this.getHolidayById(id)
 
         const { error } = await supabase

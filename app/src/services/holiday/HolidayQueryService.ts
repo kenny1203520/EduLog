@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase'
 import { Holiday } from '@/models/Holiday'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { apiV1Client } from '@/services/api/ApiV1Client'
 
 /**
  * Query service for holidays
@@ -33,6 +34,7 @@ export class HolidayQueryService {
      * @param sessionId - Optional session ID
      */
     static async isHoliday(dateStr: string, classroomId?: string, sessionId?: string): Promise<boolean> {
+        if (getApiV1Mode() === 'v1') { const params = new URLSearchParams({ date: dateStr }); if (classroomId) params.set('classroom_id', classroomId); if (sessionId) params.set('class_session_id', sessionId); const result = await apiV1Client.get<{ matched: boolean }>('/holidays/check?' + params.toString()); return result.data.matched }
         let query = supabase
             .from('holidays')
             .select('id')
@@ -70,6 +72,7 @@ export class HolidayQueryService {
         classroomId?: string,
         sessionId?: string
     ): Promise<boolean> {
+        if (getApiV1Mode() === 'v1') { const params = new URLSearchParams({ date: dateStr, teacher_id: teacherId }); if (classroomId) params.set('classroom_id', classroomId); if (sessionId) params.set('class_session_id', sessionId); const result = await apiV1Client.get<{ matched: boolean }>('/holidays/check?' + params.toString()); return result.data.matched }
         let query = supabase
             .from('holidays')
             .select('id')
