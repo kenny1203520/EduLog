@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM dhi.io/node:26-alpine-dev AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -6,7 +6,7 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:22-alpine AS runtime
+FROM dhi.io/node:26-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package*.json ./
