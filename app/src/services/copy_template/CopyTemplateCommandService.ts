@@ -3,6 +3,8 @@ import { USER_DEFAULT_SCOPE_ENTITY_ID } from '@/utils/copyTemplate'
 import type { CopyTemplateDTO, CopyTemplateScopeType } from './CopyTemplateService'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
 import type { TextEditorContentInput } from '@/components/common/text-editor/types'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 /**
  * Command service for copy templates
@@ -23,6 +25,14 @@ export class CopyTemplateCommandService {
         scopeEntityId: string,
         template: TextEditorContentInput
     ): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            const content = createTextEditorContent(template, { templateVariables: true })
+            const existing = await apiResourceClient.list<CopyTemplateDTO>('copy-templates', { templateType, scopeType, scopeEntityId, perPage: 1, mode: 'v1' })
+            const payload = { template_type: templateType, scope_type: scopeType, scope_entity_id: scopeEntityId, template_text: content.plainText, template_document: content.richText }
+            if (existing.data?.[0]?.id) await apiResourceClient.update('copy-templates', existing.data[0].id, payload, 'v1')
+            else await apiResourceClient.create('copy-templates', payload, 'v1')
+            return
+        }
         const userId = await this.getCurrentUserId()
         if (!userId) throw new Error('User not authenticated')
 

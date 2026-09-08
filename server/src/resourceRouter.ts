@@ -103,7 +103,7 @@ async function collection(req: Request, res: Response, def: ResourceDefinition) 
   if (replay) return res.status(replay.status).json(replay.body)
   const body = pickBody(def, bodySchema.parse(req.body))
   if (!Object.keys(body).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
-  const userOwnedTables = new Set(['user_entity_visibility_preferences', 'student_contacts', 'student_schools', 'student_credentials', 'teacher_credentials'])
+  const userOwnedTables = new Set(['user_entity_visibility_preferences', 'copy_templates', 'student_contacts', 'student_schools', 'student_credentials', 'teacher_credentials'])
   const insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
   const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(def.fields.join(', ')).single() : await req.db!.from(def.table).update(body).select(def.fields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
