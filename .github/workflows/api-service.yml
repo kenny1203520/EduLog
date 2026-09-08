@@ -4,14 +4,14 @@ on:
   push:
     paths:
       - 'server/**'
-      - 'app/nginx/**'
+      - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
       - '.github/workflows/api-service.yml'
   pull_request:
     paths:
       - 'server/**'
-      - 'app/nginx/**'
+      - 'app/**'
       - 'docker-compose.yml'
       - 'docker-compose.prod.yml'
       - '.github/workflows/api-service.yml'
@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
           cache-dependency-path: server/package-lock.json
       - run: npm ci
@@ -48,8 +48,20 @@ jobs:
           SERVICE_ROLE_KEY: test-service-role-key
           DOCKER_SOCKET_LOCATION: /var/run/docker.sock
         run: docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
-      - name: Build frontend artifact
+      - name: Assert Node 26 API runtime
+        shell: bash
+        run: |
+          grep -q '"node": ">=26"' server/package.json
+          grep -q 'node:26' server/Dockerfile
+      - name: Scan frontend source boundary
+        shell: bash
+        run: |
+          ! grep -R --exclude='*.spec.*' --binary-files=without-match -E 'supabase\.(from|rpc|functions|channel|storage)|@supabase/supabase-js|VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY|VITE_SUPABASE_FUNCTIONS_BASE_URL' app/src
+
+      - name: Install frontend dependencies
         run: npm ci --prefix app
+      - name: Run frontend tests
+        run: npm test --prefix app -- --run
       - name: Build frontend
         run: npm run build --prefix app
       - name: Verify Nginx API precedence and SPA fallback
@@ -58,4 +70,4 @@ jobs:
           test "$(grep -n 'location \^~ /api/' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh | head -1 | cut -d: -f1)" -lt "$(grep -n 'location / {' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh | head -1 | cut -d: -f1)"
           grep -q 'proxy_pass http://\$api_upstream' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
           grep -q 'try_files \\$uri \\$uri/ /index.html' app/nginx/docker-entrypoint.d/05-edulog-runtime.envsh
-          ! grep -R --binary-files=without-match -E 'SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY|service_role' app/dist
+          ! grep -R --binary-files=without-match -E 'SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY|service_role|VITE_SUPABASE_URL|VITE_SUPABASE_ANON_KEY|VITE_SUPABASE_FUNCTIONS_BASE_URL|functions/v1' app/dist
