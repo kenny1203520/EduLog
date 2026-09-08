@@ -9,6 +9,8 @@ import { DateUtils } from '@/utils/DateUtils'
 import { SessionService } from '../session/SessionService'
 import type { SingleLessonTransferConflict, SingleLessonTransferResult } from './SingleLessonTransferConflictService'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 type EnrollmentCreateOptions = {
     targetReportCount?: number
@@ -46,6 +48,10 @@ export class EnrollmentCommandService {
         enrollmentData: Partial<EnrollmentDTO>,
         options: EnrollmentCreateOptions = {}
     ): Promise<Enrollment> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any>('/enrollments', { ...enrollmentData, ...(options.targetReportCount !== undefined ? { target_report_count: options.targetReportCount } : {}) })
+            return new Enrollment(response.data)
+        }
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
 
@@ -105,6 +111,10 @@ export class EnrollmentCommandService {
         updates: Partial<EnrollmentDTO>,
         options: EnrollmentUpdateOptions = {}
     ): Promise<Enrollment> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.patch<any>('/enrollments/' + encodeURIComponent(enrollmentId), { ...updates, ...(options.targetTotalReports !== undefined ? { target_total_reports: options.targetTotalReports } : {}) })
+            return new Enrollment(response.data)
+        }
         const { data: existing, error: existingError } = await supabase
             .from('enrollments')
             .select('id, status, class_session_id, course_id, classroom_id, start_date, lesson_number')
@@ -175,6 +185,7 @@ export class EnrollmentCommandService {
     }
 
     static async delete(enrollmentId: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiV1Client.delete('/enrollments/' + encodeURIComponent(enrollmentId)); return }
         const { data: enrollment } = await supabase
             .from('enrollments')
             .select('class_session_id')
@@ -331,3 +342,4 @@ export class EnrollmentCommandService {
 
 
 }
+

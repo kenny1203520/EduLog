@@ -12,6 +12,7 @@ import { rateLimitMiddleware } from './rateLimit.js'
 import { buildOpenApi } from './openapi.js'
 import { createUserSearchRouter } from './userSearch.js'
 import { createRbacRouter } from './rbacRouter.js'
+import { createEnrollmentRouter } from './enrollmentRouter.js'
 
 export function createApp(env: NodeJS.ProcessEnv = process.env) {
   const config = loadConfig(env)
@@ -44,4 +45,5 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   app.use(errorHandler)
   return app
 }
+
 
