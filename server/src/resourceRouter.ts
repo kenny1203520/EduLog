@@ -44,6 +44,21 @@ function pickBody(def: Pick<ResourceDefinition, 'writable'>, body: Record<string
 
 function queryValue(req: Request, key: string) { const value = req.query[key]; return typeof value === 'string' ? value : undefined }
 
+function parseFilters(raw: string, def: ResourceDefinition) {
+  let parsed: unknown
+  try { parsed = JSON.parse(raw) } catch { throw new ApiError(400, 'INVALID_FILTER', 'The filters query is invalid') }
+  if (!Array.isArray(parsed)) throw new ApiError(400, 'INVALID_FILTER', 'The filters query is invalid')
+  return parsed.map((item) => {
+    if (!item || typeof item !== 'object') throw new ApiError(400, 'INVALID_FILTER', 'The filters query is invalid')
+    const filter = item as { field?: unknown; operator?: unknown; value?: unknown }
+    const field = typeof filter.field === 'string' ? filter.field : ''
+    const operator = typeof filter.operator === 'string' ? filter.operator : ''
+    if (!field || !def.fields.includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt'].includes(operator)) throw new ApiError(400, 'INVALID_FILTER', 'The filter is not supported')
+    if (operator === 'in' && !Array.isArray(filter.value)) throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
+    return { field, operator, value: filter.value }
+  })
+}
+
 async function list(req: Request, res: Response, def: ResourceDefinition) {
   const query = listQuerySchema.parse(req.query)
   const sortName = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
@@ -55,10 +70,22 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,]/g, '')}%`).join(',')
     builder = builder.or(clauses)
   }
-  for (const field of ['teaching_id', 'status', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id', 'instructor_id', 'template_type', 'scope_type', 'scope_entity_id']) {
+  for (const field of ['teaching_id', 'entity_type', 'entity_id', 'lesson_id', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id', 'instructor_id', 'template_type', 'scope_type', 'scope_entity_id']) {
     const value = queryValue(req, field)
     if (value) builder = builder.eq(field, value)
   }
+  const filters = query.filters ? parseFilters(query.filters, def) : []
+  for (const filter of filters) {
+    if (filter.operator === 'in') builder = builder.in(filter.field, filter.value as unknown[])
+    else if (filter.operator === 'neq') builder = builder.neq(filter.field, filter.value)
+    else if (filter.operator === 'gte') builder = builder.gte(filter.field, filter.value)
+    else if (filter.operator === 'lte') builder = builder.lte(filter.field, filter.value)
+    else if (filter.operator === 'gt') builder = builder.gt(filter.field, filter.value)
+    else if (filter.operator === 'lt') builder = builder.lt(filter.field, filter.value)
+    else builder = builder.eq(filter.field, filter.value)
+  }
+  const entityIds = queryValue(req, 'entity_ids')
+  if (entityIds) builder = builder.in('entity_id', entityIds.split(',').filter(Boolean))
   const { data, error, count } = await builder.order(sortName, { ascending: !descending }).range(query.offset, query.offset + query.limit - 1)
   if (error) throw mapDatabaseError(error)
   return sendData(req, res, data ?? [], { limit: query.limit, offset: query.offset, total: count ?? 0, sort: query.sort })

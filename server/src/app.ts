@@ -8,6 +8,7 @@ import { errorHandler, ApiError } from './errors.js'
 import { createSupabaseClients } from './supabase.js'
 import { createAuthRouter, csrfProtection, requireAuth } from './auth.js'
 import { createResourceRouter } from './resourceRouter.js'
+import { createRpcRouter } from './rpcRouter.js'
 import { rateLimitMiddleware } from './rateLimit.js'
 import { buildOpenApi } from './openapi.js'
 import { createUserSearchRouter } from './userSearch.js'
@@ -61,6 +62,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   protectedApi.use(createAggregateRouter())
   protectedApi.use(createSessionRouter())
   protectedApi.use(createStudentRouter())
+  protectedApi.use(createRpcRouter())
   protectedApi.use(createResourceRouter())
   app.use('/api', protectedApi)
   app.use((_req, _res, next) => next(new ApiError(404, 'NOT_FOUND', 'Route was not found')))
