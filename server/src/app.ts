@@ -19,6 +19,7 @@ import { createSessionRouter } from './sessionRouter.js'
 import { createStudentRouter } from './studentRouter.js'
 import { createTransferRouter } from './transferRouter.js'
 import { createSyncRouter } from './syncRouter.js'
+import { createSuspensionRouter } from './suspensionRouter.js'
 
 export function createApp(env: NodeJS.ProcessEnv = process.env) {
   const config = loadConfig(env)
@@ -53,6 +54,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   protectedApi.use(createOccurrenceRouter())
   protectedApi.use(createTransferRouter())
   protectedApi.use(createSyncRouter())
+  protectedApi.use(createSuspensionRouter())
   protectedApi.use(createSessionRouter())
   protectedApi.use(createStudentRouter())
   protectedApi.use(createResourceRouter())

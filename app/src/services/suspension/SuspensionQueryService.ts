@@ -1,8 +1,14 @@
 import { supabase } from '@/lib/supabase'
 import { Suspension } from '@/models/Suspension'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class SuspensionQueryService {
     static async getSuspensions(enrollmentId: string): Promise<Suspension[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<any>('student-suspensions', { enrollmentId, perPage: 100, sort: '-start_date', mode: 'v1' })
+            return (response.data || []).map(dto => new Suspension(dto))
+        }
         const { data, error } = await supabase
             .from('student_suspensions')
             .select('*')
@@ -15,6 +21,10 @@ export class SuspensionQueryService {
     }
 
     static async isSuspended(enrollmentId: string, dateStr: string): Promise<boolean> {
+        if (getApiV1Mode() === 'v1') {
+            const suspensions = await this.getSuspensions(enrollmentId)
+            return suspensions.some((item) => item.startDate <= dateStr && (!item.endDate || item.endDate >= dateStr))
+        }
         const { count, error } = await supabase
             .from('student_suspensions')
             .select('*', { count: 'exact', head: true })

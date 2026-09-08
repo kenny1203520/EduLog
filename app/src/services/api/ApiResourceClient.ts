@@ -18,6 +18,7 @@ export type ResourceListOptions = {
   sort?: string
   userId?: string
   classroomId?: string
+  enrollmentId?: string
   instructorId?: string
   templateType?: string
   scopeType?: string
@@ -35,6 +36,7 @@ function queryString(options: ResourceListOptions = {}) {
   if (options.sort) params.set('sort', options.sort)
   if (options.userId) params.set('user_id', options.userId)
   if (options.classroomId) params.set('classroom_id', options.classroomId)
+  if (options.enrollmentId) params.set('enrollment_id', options.enrollmentId)
   if (options.instructorId) params.set('instructor_id', options.instructorId)
   if (options.templateType) params.set('template_type', options.templateType)
   if (options.scopeType) params.set('scope_type', options.scopeType)
