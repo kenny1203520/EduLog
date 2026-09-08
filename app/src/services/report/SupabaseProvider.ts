@@ -8,6 +8,7 @@ import {
 import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { ApiRealtimeChannel } from './ApiRealtimeChannel'
 
 export const uint8ArrayToBase64 = (u8: Uint8Array): string => {
     let binary = ''
@@ -78,7 +79,7 @@ export interface SupabaseProviderOptions {
 export class SupabaseProvider {
     public awareness: Awareness
     public ready: Promise<void>
-    private channel: RealtimeChannel
+    private channel: any
     private isDestroyed = false
     private isSubscribed = false
     private snapshotTimer: ReturnType<typeof setTimeout> | null = null
@@ -95,7 +96,7 @@ export class SupabaseProvider {
     private readonly docUpdateHandler = (update: Uint8Array, origin: any) => {
         if (origin === this || this.isDestroyed) return
 
-        if (this.isSubscribed && this.supabase.realtime.isConnected()) {
+        if (this.isSubscribed && this.isRealtimeConnected()) {
             if (update.byteLength > MAX_YJS_UPDATE_BYTES) {
                 this.onStatus?.('error')
                 return
@@ -153,19 +154,22 @@ export class SupabaseProvider {
             this.failReady(new Error('Realtime collaboration subscription timed out'))
         }, REALTIME_READY_TIMEOUT_MS)
 
-        this.channel = this.supabase.channel(`room:${this.roomId}`, {
-            config: {
-                private: true,
-                broadcast: { ack: false },
-                presence: { key: `${this.userId || 'anonymous'}:${this.awareness.clientID}` }
-            }
-        })
+        const presenceKey = `${this.userId || 'anonymous'}:${this.awareness.clientID}`
+        this.channel = getApiV1Mode() === 'v1'
+            ? new ApiRealtimeChannel(this.roomId, presenceKey)
+            : this.supabase.channel(`room:${this.roomId}`, {
+                config: {
+                    private: true,
+                    broadcast: { ack: false },
+                    presence: { key: presenceKey }
+                }
+            })
 
         this.setupYjs()
         this.setupSupabase()
         this.onStatus?.('connecting')
 
-        this.channel.subscribe(async (status) => {
+        this.channel.subscribe(async (status: string) => {
             if (this.isDestroyed) return
 
             if (status === 'SUBSCRIBED') {
@@ -191,13 +195,17 @@ export class SupabaseProvider {
         })
     }
 
+    private isRealtimeConnected(): boolean {
+        return getApiV1Mode() === 'v1' ? this.isSubscribed : this.supabase.realtime.isConnected()
+    }
+
     private setupYjs() {
         this.doc.on('update', this.docUpdateHandler)
         if (this.presenceEnabled) this.awareness.on('update', this.awarenessUpdateHandler)
     }
 
     private setupSupabase() {
-        this.channel.on('broadcast', { event: 'sync-update' }, (payload) => {
+        this.channel.on('broadcast', { event: 'sync-update' }, (payload: any) => {
             if (this.isDestroyed) return
             const encodedUpdate = payload.payload?.update
             if (typeof encodedUpdate !== 'string') return
@@ -455,7 +463,7 @@ export class SupabaseProvider {
     }
 
     private async trackLocalAwareness() {
-        if (this.isDestroyed || !this.isSubscribed || !this.supabase.realtime.isConnected()) return
+        if (this.isDestroyed || !this.isSubscribed || !this.isRealtimeConnected()) return
 
         const localState = this.awareness.getLocalState()
         if (!localState) {
@@ -502,7 +510,7 @@ export class SupabaseProvider {
         } catch (err) {
             console.warn('Failed to unsubscribe report collaboration channel:', err)
         }
-        this.supabase.removeChannel(this.channel)
+        if (getApiV1Mode() !== 'v1') this.supabase.removeChannel(this.channel as RealtimeChannel)
         this.awareness.destroy()
         this.remoteClientIds.clear()
         this.onStatus?.('disconnected')
