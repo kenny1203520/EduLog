@@ -18,6 +18,10 @@ export type ResourceListOptions = {
   sort?: string
   userId?: string
   classroomId?: string
+  instructorId?: string
+  templateType?: string
+  scopeType?: string
+  scopeEntityId?: string
   mode?: ApiV1Mode
 }
 
@@ -31,6 +35,10 @@ function queryString(options: ResourceListOptions = {}) {
   if (options.sort) params.set('sort', options.sort)
   if (options.userId) params.set('user_id', options.userId)
   if (options.classroomId) params.set('classroom_id', options.classroomId)
+  if (options.instructorId) params.set('instructor_id', options.instructorId)
+  if (options.templateType) params.set('template_type', options.templateType)
+  if (options.scopeType) params.set('scope_type', options.scopeType)
+  if (options.scopeEntityId) params.set('scope_entity_id', options.scopeEntityId)
   return params.toString()
 }
 
