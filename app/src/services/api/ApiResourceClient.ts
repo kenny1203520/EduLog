@@ -17,6 +17,7 @@ export type ResourceListOptions = {
   search?: string
   sort?: string
   userId?: string
+  classroomId?: string
   mode?: ApiV1Mode
 }
 
@@ -29,6 +30,7 @@ function queryString(options: ResourceListOptions = {}) {
   if (options.search?.trim()) params.set('search', options.search.trim())
   if (options.sort) params.set('sort', options.sort)
   if (options.userId) params.set('user_id', options.userId)
+  if (options.classroomId) params.set('classroom_id', options.classroomId)
   return params.toString()
 }
 

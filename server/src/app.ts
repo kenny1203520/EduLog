@@ -1,4 +1,4 @@
-import express from 'express'
+import express, { Router } from 'express'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
 import pino from 'pino'
@@ -15,6 +15,7 @@ import { createRbacRouter } from './rbacRouter.js'
 import { createEnrollmentRouter } from './enrollmentRouter.js'
 import { createReportRouter } from './reportRouter.js'
 import { createOccurrenceRouter } from './occurrenceRouter.js'
+import { createSessionRouter } from './sessionRouter.js'
 
 export function createApp(env: NodeJS.ProcessEnv = process.env) {
   const config = loadConfig(env)
@@ -41,8 +42,15 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   app.get('/api/openapi.json', (_req, res) => res.json(buildOpenApi()))
   app.use('/api/auth', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createAuthRouter(clients, config))
   app.use('/api/users', csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient), createUserSearchRouter())
-  app.use('/api', csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient), createRbacRouter())
-  app.use('/api', csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient), createResourceRouter())
+  const protectedApi = Router()
+  protectedApi.use(csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient))
+  protectedApi.use(createRbacRouter())
+  protectedApi.use(createEnrollmentRouter())
+  protectedApi.use(createReportRouter())
+  protectedApi.use(createOccurrenceRouter())
+  protectedApi.use(createSessionRouter())
+  protectedApi.use(createResourceRouter())
+  app.use('/api', protectedApi)
   app.use((_req, _res, next) => next(new ApiError(404, 'NOT_FOUND', 'Route was not found')))
   app.use(errorHandler)
   return app

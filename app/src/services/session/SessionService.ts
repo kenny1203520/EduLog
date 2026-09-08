@@ -4,6 +4,8 @@ import { ClassSessionFactory, type ClassSessionScheduleRuleDTO } from '@/models/
 import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
 import { DateUtils } from '@/utils/DateUtils'
 import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export type SessionVisibilityFilterMode = 'all' | 'visible' | 'hidden'
 
@@ -31,6 +33,12 @@ export class SessionService {
         classroomId?: string | null,
         visibilityMode: SessionVisibilityFilterMode = 'all'
     ): Promise<{ data: ClassSessionDTO[], count: number }> {
+        if (getApiV1Mode() === 'v1' && visibilityMode === 'all') {
+            const response = await apiResourceClient.list<any>('class-sessions', { page, perPage, search, sort: 'name', classroomId: classroomId || undefined, mode: 'v1' })
+            let rows = (response.data || []).map(this.hydrateSession)
+            if (classroomId) rows = rows.filter((row: any) => row.classroom_id === classroomId)
+            return { data: rows, count: Number(response.meta?.total ?? rows.length) }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
@@ -101,6 +109,10 @@ export class SessionService {
     }
 
     static async getClassSessionOptions(page: number = 1, perPage: number = 1000): Promise<{ data: ClassSessionOption[]; count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<ClassSessionOption>('class-sessions', { page, perPage: Math.min(perPage, 100), sort: 'name', mode: 'v1' })
+            return { data: response.data || [], count: Number(response.meta?.total ?? response.data?.length ?? 0) }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
         const { data, error, count } = await supabase
@@ -120,6 +132,11 @@ export class SessionService {
     }
 
     static async saveClassSession(session: Partial<ClassSessionDTO>, id?: string): Promise<ClassSessionDTO> {
+        if (getApiV1Mode() === 'v1') {
+            const payload = { name: session.name || '', classroom_id: session.classroom_id || null, course_ids: session.course_ids || [], capacity: session.capacity ?? 10, lesson_number: session.lesson_number ?? null, external_link: session.external_link || null, start_date: session.start_date || null, end_date: session.end_date || null, time_zone: session.time_zone || 'Asia/Taipei', session_type: session.session_type || 'regular', schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly'), schedule_rules: (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[] }
+            const response = id ? await apiResourceClient.update<any>('class-sessions', id, payload, 'v1') : await apiResourceClient.create<any>('class-sessions', payload, 'v1')
+            return this.hydrateSession(response.data)
+        }
         const rules = (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[]
         const payload = {
             name: session.name || '',
@@ -160,6 +177,10 @@ export class SessionService {
     }
 
     static async getClassSession(id: string): Promise<ClassSessionDTO> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.get<any>('class-sessions', id, 'v1')
+            return this.hydrateSession(response.data)
+        }
         const { data, error } = await supabase
             .from('class_sessions')
             .select(this.scheduleSelect)
@@ -217,6 +238,10 @@ export class SessionService {
     }
 
     static async deleteClassSession(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiResourceClient.remove('class-sessions', id, 'v1')
+            return
+        }
         const { error } = await supabase.from('class_sessions').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
