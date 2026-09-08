@@ -6,6 +6,8 @@ import {
     removeAwarenessStates
 } from 'y-protocols/awareness'
 import type { SupabaseClient, RealtimeChannel } from '@supabase/supabase-js'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export const uint8ArrayToBase64 = (u8: Uint8Array): string => {
     let binary = ''
@@ -275,6 +277,16 @@ export class SupabaseProvider {
 
     private async loadInitialState() {
         try {
+            if (getApiV1Mode() === 'v1') {
+                const response = await apiV1Client.get<{ snapshot_base64: string | null; base_report_version: number | null }>(`/reports/${this.roomId}/collaboration`)
+                const data = response.data
+                if (!data?.snapshot_base64) { this.initialState = 'none'; return }
+                if (data.base_report_version === null || data.base_report_version === undefined) { this.initialState = 'legacy'; return }
+                if (Number(data.base_report_version) !== this.baseReportVersion) { this.initialState = 'stale'; return }
+                Y.applyUpdate(this.doc, decodeBoundedBase64(data.snapshot_base64, MAX_SNAPSHOT_BYTES), this)
+                this.initialState = 'loaded'
+                return
+            }
             const { data, error } = await this.supabase
                 .from('report_collab_docs')
                 .select('snapshot_base64, base_report_version')
@@ -363,6 +375,15 @@ export class SupabaseProvider {
     }
 
     private async persistSnapshot(payload: { key: string; state: string; version: number }): Promise<boolean> {
+        if (getApiV1Mode() === 'v1') {
+            try {
+                const response = await apiV1Client.post<{ saved: boolean }>(`/reports/${this.roomId}/collaboration`, { snapshot_base64: payload.state, base_report_version: payload.version })
+                return response.data?.saved === true
+            } catch (error) {
+                console.error('Failed to save collaboration snapshot through API:', error)
+                return false
+            }
+        }
         for (let attempt = 0; attempt < SNAPSHOT_MAX_ATTEMPTS; attempt += 1) {
             const controller = new AbortController()
             const timeout = setTimeout(() => controller.abort(), SNAPSHOT_REQUEST_TIMEOUT_MS)

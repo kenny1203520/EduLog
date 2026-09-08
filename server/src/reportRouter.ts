@@ -52,4 +52,27 @@ async function remove(req: Request, res: Response) {
   const result = await req.db.from('occurrence_reports').delete().eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
-export function createReportRouter() { const router = Router(); router.post('/reports', wrap(create)); router.patch('/reports/:id', wrap(update)); router.delete('/reports/:id', wrap(remove)); return router }
+async function readCollaboration(req: Request, res: Response) {
+  const id = typeof req.params.id === 'string' ? req.params.id : undefined
+  if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
+  await canAccess(req, id, 'teaching.reports.read')
+  const result = await req.db!.from('report_collab_docs').select('occurrence_report_id,snapshot_base64,base_report_version,updated_at').eq('occurrence_report_id', id).maybeSingle()
+  if (result.error) throw mapDatabaseError(result.error)
+  return res.json({ data: result.data ?? { occurrence_report_id: id, snapshot_base64: null, base_report_version: null, updated_at: null }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+}
+
+async function saveCollaboration(req: Request, res: Response) {
+  const id = typeof req.params.id === 'string' ? req.params.id : undefined
+  if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
+  await canAccess(req, id, 'teaching.reports.update')
+  const input = z.object({ snapshot_base64: z.string().max(1400000), base_report_version: z.number().int().min(1) }).strict().parse(req.body)
+  const replay = await idempotency(req, 200, null)
+  if (replay) return res.status(replay.status).json(replay.body)
+  const result = await req.db!.rpc('save_report_collab_snapshot', { p_occurrence_report_id: id, p_snapshot_base64: input.snapshot_base64, p_base_report_version: input.base_report_version })
+  if (result.error) throw mapDatabaseError(result.error)
+  if (result.data !== true) throw new ApiError(409, 'SNAPSHOT_VERSION_CONFLICT', 'The collaboration snapshot is stale')
+  const body = { data: { saved: true, occurrence_report_id: id, base_report_version: input.base_report_version }, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+  await complete(req, 200, body)
+  return res.json(body)
+}
+export function createReportRouter() { const router = Router(); router.post('/reports', wrap(create)); router.patch('/reports/:id', wrap(update)); router.delete('/reports/:id', wrap(remove)); router.get('/reports/:id/collaboration', wrap(readCollaboration)); router.post('/reports/:id/collaboration', wrap(saveCollaboration)); return router }
