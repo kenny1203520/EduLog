@@ -3,6 +3,8 @@ import { OccurrenceReport, ReportVersion, type OccurrenceReportDTO } from '@/mod
 import { DateUtils } from '@/utils/DateUtils'
 import { AggregateService } from '@/services/AggregateService'
 import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export const REPORT_EDITOR_COLUMNS = 'id, enrollment_id, class_occurrence_id, lesson_id, is_completed, progress_letter, attendance_status, absence_reason, class_participation, classroom_behavior, contact_notes, contact_notes_document, class_notes, class_notes_document, content, content_document, external_link, version, last_edited_by, last_edited_at, created_at, updated_at'
 
@@ -37,6 +39,7 @@ export class ReportQueryService {
         enrollmentId: string,
         occurrenceId: string
     ): Promise<OccurrenceReport | null> {
+        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any[]>('/reports?enrollment_id=' + encodeURIComponent(enrollmentId) + '&class_occurrence_id=' + encodeURIComponent(occurrenceId) + '&limit=1&sort=-created_at'); return response.data?.[0] ? new OccurrenceReport(response.data[0]) : null }
         const { data: existing, error } = await supabase
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
@@ -73,6 +76,7 @@ export class ReportQueryService {
         page: number = 1,
         perPage: number = 50
     ): Promise<{ data: OccurrenceReport[], count: number }> {
+        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any[]>('/reports?enrollment_id=' + encodeURIComponent(enrollmentId) + '&limit=' + perPage + '&offset=' + ((page - 1) * perPage) + '&sort=-created_at'); return { data: (response.data || []).map((row) => new OccurrenceReport(row)), count: Number((response.meta as any)?.total || 0) } }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
         // Try aggregated endpoint first to reduce multiple DB roundtrips
@@ -190,6 +194,7 @@ export class ReportQueryService {
     static async getReportsByOccurrence(
         occurrenceId: string
     ): Promise<OccurrenceReport[]> {
+        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any[]>('/reports?class_occurrence_id=' + encodeURIComponent(occurrenceId) + '&limit=100&sort=-created_at'); return (response.data || []).map((row) => new OccurrenceReport(row)) }
         const { data, error } = await supabase
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
@@ -202,6 +207,7 @@ export class ReportQueryService {
     }
 
     static async getReportById(reportId: string): Promise<OccurrenceReport> {
+        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any>('/reports/' + encodeURIComponent(reportId)); return new OccurrenceReport(response.data) }
         const { data, error } = await supabase
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
@@ -567,3 +573,4 @@ export class ReportQueryService {
     }
 
 }
+

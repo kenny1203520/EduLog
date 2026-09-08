@@ -55,7 +55,7 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,]/g, '')}%`).join(',')
     builder = builder.or(clauses)
   }
-  for (const field of ['teaching_id', 'status', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id']) {
+  for (const field of ['teaching_id', 'status', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id']) {
     const value = queryValue(req, field)
     if (value) builder = builder.eq(field, value)
   }
@@ -169,4 +169,5 @@ export function createResourceRouter() {
 function wrap(handler: (req: Request, res: Response, next?: NextFunction) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res, next)).catch(next)
 }
+
 

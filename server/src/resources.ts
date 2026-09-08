@@ -19,6 +19,9 @@ export const listQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).max(1000000).default(0),
   search: z.string().trim().max(200).optional(),
   sort: z.string().regex(/^-?[A-Za-z_][A-Za-z0-9_]*$/).default('-created_at'),
+  teaching_id: z.string().optional(), status: z.string().optional(), course_id: z.string().optional(), classroom_id: z.string().optional(),
+  student_id: z.string().optional(), teacher_id: z.string().optional(), user_id: z.string().optional(), class_session_id: z.string().optional(),
+  enrollment_id: z.string().optional(), class_occurrence_id: z.string().optional(), occurrence_report_id: z.string().optional(),
 }).strict()
 export const idSchema = z.object({ id }).strict()
 
@@ -45,9 +48,12 @@ export const resources: Record<string, ResourceDefinition> = {
   occurrences: { route: 'occurrences', table: 'class_occurrences', idColumn: 'id', fields: ['id', 'class_session_id', 'occurrence_date', 'status', 'teacher_ids', 'teacher_attendance', 'notes', 'is_conducted', 'created_at', 'updated_at'], writable: ['class_session_id', 'occurrence_date', 'status', 'teacher_ids', 'teacher_attendance', 'notes', 'is_conducted'], sortable: ['occurrence_date', 'status', 'created_at', 'updated_at'], searchable: ['status'], permission: 'teaching.occurrences.list' },
   reports: { route: 'reports', table: 'occurrence_reports', idColumn: 'id', fields: ['id', 'enrollment_id', 'class_occurrence_id', 'lesson_id', 'content', 'content_document', 'attendance_status', 'is_completed', 'progress_letter', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'external_link', 'version', 'absence_reason', 'last_edited_by', 'last_edited_at', 'created_at', 'updated_at'], writable: ['enrollment_id', 'class_occurrence_id', 'lesson_id', 'content', 'content_document', 'attendance_status', 'is_completed', 'progress_letter', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content_document', 'external_link'], sortable: ['updated_at', 'version'], searchable: ['attendance_status', 'progress_letter'], permission: 'teaching.reports.list' },
   'report-templates': { route: 'report-templates', table: 'report_templates', idColumn: 'id', fields: ['id', 'name', 'content', 'contact_notes', 'class_notes', 'instructor_id', 'teaching_id', 'created_at', 'updated_at'], writable: ['name', 'content', 'contact_notes', 'class_notes', 'teaching_id'], sortable: ['name', 'created_at', 'updated_at'], searchable: ['name'], permission: 'teaching.templates.list' },
+  'report-versions': { route: 'report-versions', table: 'report_versions', idColumn: 'id', fields: ['id', 'occurrence_report_id', 'version', 'content', 'edited_by', 'snapshot', 'created_at'], writable: [], sortable: ['version', 'created_at'], searchable: [], permission: 'teaching.reports.list' },
   holidays: { route: 'holidays', table: 'holidays', idColumn: 'id', fields: ['id', 'name', 'start_date', 'end_date', 'classroom_ids', 'class_session_ids', 'created_at', 'updated_at'], writable: ['name', 'start_date', 'end_date', 'classroom_ids', 'class_session_ids'], sortable: ['name', 'start_date', 'end_date', 'created_at', 'updated_at'], searchable: ['name'], permission: 'teaching.holidays.list' },
 }
 export const resourceKeys = Object.keys(resources)
+
+
 
 
 
