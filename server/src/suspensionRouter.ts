@@ -80,9 +80,16 @@ async function update(req: Request, res: Response) {
   const input = updateSchema.parse(req.body); const start = input.start_date ?? current.data.start_date; const end = input.end_date === undefined ? current.data.end_date : input.end_date; validRange(start, end)
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.from('student_suspensions').update({ ...input, time_zone: input.time_zone === undefined ? undefined : safeTimezone(input.time_zone) }).eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Suspension was not found')
-  if (current.data.end_date && (!result.data.end_date || result.data.end_date < current.data.end_date)) {
-    const revertStart = result.data.end_date ? new Date(Date.parse(result.data.end_date + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10) : current.data.start_date
+  const shortened = Boolean(
+    (current.data.end_date && result.data.end_date && result.data.end_date < current.data.end_date)
+      || (!current.data.end_date && result.data.end_date),
+  )
+  if (shortened) {
+    const revertStart = result.data.end_date
+      ? new Date(Date.parse(result.data.end_date + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10)
+      : current.data.start_date
     await revertReports(req, { enrollment_id: result.data.enrollment_id, start_date: revertStart, end_date: current.data.end_date })
+    await ensureReports(req, result.data.enrollment_id, revertStart, current.data.end_date)
   }
   await syncReports(req, result.data.enrollment_id, result.data.start_date, result.data.end_date)
   const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
