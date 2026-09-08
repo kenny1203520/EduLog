@@ -3,6 +3,8 @@ import { Student, type StudentDTO } from '@/models/Student'
 import { EnrollmentService } from '../enrollment/EnrollmentService'
 import { DateUtils } from '@/utils/DateUtils'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 /**
  * Command service for students
@@ -13,6 +15,10 @@ export class StudentCommandService {
      * Create a new student
      */
     static async create(student: Partial<StudentDTO>): Promise<Student> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.create<any>('students', this.normalizeStudent(student), 'v1')
+            return new Student(result.data)
+        }
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
 
@@ -31,6 +37,10 @@ export class StudentCommandService {
      * Update an existing student
      */
     static async update(id: string, updates: Partial<StudentDTO>): Promise<Student> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.update<any>('students', id, this.normalizeStudent(updates), 'v1')
+            return new Student(result.data)
+        }
         const { data, error } = await supabase
             .from('students')
             .update(this.normalizeStudent(updates))
@@ -76,7 +86,6 @@ export class StudentCommandService {
         const { error: e3 } = await supabase.from('student_credentials').delete().eq('student_id', id)
         if (e3) throw new Error('Failed to delete credentials: ' + e3.message)
 
-
         // 5. Finally Delete Student
         const { data, error } = await supabase
             .from('students')
@@ -93,6 +102,7 @@ export class StudentCommandService {
 
     // --- Contacts ---
     static async addContact(contact: any) {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-contacts', contact, 'v1')).data
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
         const { data, error } = await supabase.from('student_contacts').insert({ ...contact, user_id: user.id }).select().single()
@@ -101,21 +111,24 @@ export class StudentCommandService {
     }
 
     static async updateContact(id: string, contact: any) {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<any>('student-contacts', id, contact, 'v1')).data
         const { data, error } = await supabase.from('student_contacts').update(contact).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async deleteContact(id: string) {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove<any>('student-contacts', id, 'v1'); return }
         const { error } = await supabase.from('student_contacts').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
     // --- Schools ---
     static async addSchool(school: any) {
+        const timeZone = DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-schools', { ...school, time_zone: timeZone }, 'v1')).data
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const timeZone = DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
         const { data, error } = await supabase.from('student_schools').insert({ ...school, time_zone: timeZone, user_id: user.id }).select().single()
         if (error) throw new Error(error.message)
         return data
@@ -126,18 +139,21 @@ export class StudentCommandService {
             ...school,
             time_zone: DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
         }
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<any>('student-schools', id, updates, 'v1')).data
         const { data, error } = await supabase.from('student_schools').update(updates).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async deleteSchool(id: string) {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove<any>('student-schools', id, 'v1'); return }
         const { error } = await supabase.from('student_schools').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
     // --- Credentials ---
     static async addCredential(credential: any) {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-credentials', credential, 'v1')).data
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
         const { data, error } = await supabase.from('student_credentials').insert({ ...credential, user_id: user.id }).select().single()
@@ -146,12 +162,14 @@ export class StudentCommandService {
     }
 
     static async updateCredential(id: string, credential: any) {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<any>('student-credentials', id, credential, 'v1')).data
         const { data, error } = await supabase.from('student_credentials').update(credential).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async deleteCredential(id: string) {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove<any>('student-credentials', id, 'v1'); return }
         const { error } = await supabase.from('student_credentials').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
