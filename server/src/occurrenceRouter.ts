@@ -50,6 +50,8 @@ async function generate(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const input = generationSchema.parse(req.body)
   if (input.start_date > input.end_date) throw new ApiError(422, 'INVALID_DATE_RANGE', 'start_date must not be after end_date')
+  const spanDays = Math.floor((Date.parse(`${input.end_date}T00:00:00Z`) - Date.parse(`${input.start_date}T00:00:00Z`)) / 86400000)
+  if (!Number.isFinite(spanDays) || spanDays > 3660) throw new ApiError(422, 'DATE_RANGE_TOO_LARGE', 'The generation range is too large')
   const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.occurrences.create', p_classroom_id: null, p_class_session_id: input.class_session_id })
   if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to generate occurrences')
   const replay = await idempotency(req, 200, null)
