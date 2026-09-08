@@ -4,11 +4,16 @@ const entrypoint = await Deno.readTextFile(new URL('../../app/nginx/docker-entry
 const runtimeConfig = await Deno.readTextFile(new URL('../../app/src/lib/runtimeConfig.ts', import.meta.url))
 const appTypes = await Deno.readTextFile(new URL('../../app/src/env.d.ts', import.meta.url))
 
-Deno.test('container runtime config exposes API rollout settings', () => {
-  for (const key of ['VITE_SUPABASE_FUNCTIONS_BASE_URL', 'VITE_LEGACY_API_BASE_URL', 'VITE_API_V1_MODE']) {
+Deno.test('container runtime config exposes same-origin API rollout settings only', () => {
+  for (const key of ['VITE_LEGACY_API_BASE_URL', 'VITE_API_V1_MODE']) {
     assertStringIncludes(entrypoint, key)
     assertStringIncludes(runtimeConfig, key)
     assertStringIncludes(appTypes, key)
   }
   assertStringIncludes(entrypoint, 'VITE_API_V1_MODE:-mock')
+  for (const secretKey of ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_FUNCTIONS_BASE_URL']) {
+    if (entrypoint.includes(secretKey) || runtimeConfig.includes(secretKey) || appTypes.includes(secretKey)) {
+      throw new Error(`Browser runtime must not expose ${secretKey}`)
+    }
+  }
 })
