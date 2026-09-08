@@ -3,7 +3,7 @@ import type { IncomingMessage, Server } from 'node:http'
 import type { Socket } from 'node:net'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ApiConfig } from './config.js'
-import { validateAccessToken } from './supabase.js'
+import { createUserClient, validateAccessToken } from './supabase.js'
 
 function cookieValue(header: string | undefined, name: string) {
   return header?.split(';').map((item) => item.trim()).find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1)
@@ -15,8 +15,16 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
     const url = new URL(request.url ?? '/', 'http://edulog.local')
     if (url.pathname !== '/api/realtime') return
     const token = cookieValue(request.headers.cookie, 'edulog_access')
+    const roomId = url.searchParams.get('room')
     if (!token) { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); socket.destroy(); return }
-    try { await validateAccessToken(adminClient, token) } catch {
+    if (!roomId || !/^[0-9a-f-]{36}$/i.test(roomId)) { socket.write('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n'); socket.destroy(); return }
+    try {
+      const user = await validateAccessToken(adminClient, token)
+      const userClient = createUserClient(config, token)
+      const authorization = await userClient.rpc('can_access_report', { p_report_id: roomId, p_permission_key: 'teaching.reports.read' })
+      if (authorization.error || authorization.data !== true) { socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return }
+      void user
+    } catch {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); socket.destroy(); return
     }
     if (!config.SUPABASE_REALTIME_URL) { socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n'); socket.destroy(); return }

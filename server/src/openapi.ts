@@ -85,6 +85,24 @@ export function buildOpenApi() {
   paths['/api/rbac/capability'] = {
     get: { operationId: 'rbac_capability', security: [{ cookieAuth: [] }], parameters: [{ name: 'permission', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
+  paths['/api/realtime'] = {
+    get: {
+      operationId: 'realtime_websocket',
+      summary: 'Authenticated report collaboration WebSocket upgrade',
+      description: 'Upgrade to a WebSocket after the HttpOnly session is authenticated and the user can read the requested report room. The room query parameter is a report UUID; the upstream Realtime access token is never exposed to the browser.',
+      security: [{ cookieAuth: [] }],
+      'x-websocket': true,
+      'x-permission': 'teaching.reports.read',
+      parameters: [{ name: 'room', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }],
+      responses: {
+        '101': { description: 'WebSocket protocol upgrade' },
+        '400': { description: 'Invalid report room' },
+        '401': { $ref: '#/components/responses/Unauthorized' },
+        '403': { $ref: '#/components/responses/Forbidden' },
+        '503': { description: 'Realtime upstream is unavailable' },
+      },
+    },
+  }
   paths['/api/permissions/{permissionId}/policies'] = {
     get: { operationId: 'permission_policies_list', security: [{ cookieAuth: [] }], parameters: [{ name: 'permissionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     patch: { operationId: 'permission_policies_replace', security: [{ cookieAuth: [] }], parameters: [{ name: 'permissionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, { $ref: '#/components/parameters/IdempotencyKey' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
