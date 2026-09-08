@@ -18,7 +18,7 @@ async function allowed(req: Request, permission: string, resourceId: string | nu
   if (error || data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
 }
 
-async function idempotency(req: Request, status: number, body: unknown) {
+export async function idempotency(req: Request, status: number, body: unknown) {
   const key = req.header('idempotency-key')?.trim()
   if (!mutationMethods.includes(req.method)) return false
   if (!key) throw new ApiError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Idempotency-Key is required for mutations')
@@ -31,7 +31,7 @@ async function idempotency(req: Request, status: number, body: unknown) {
   return false
 }
 
-async function complete(req: Request, status: number, body: unknown) {
+export async function complete(req: Request, status: number, body: unknown) {
   const key = req.header('idempotency-key')?.trim()
   if (key && req.user && req.adminDb && mutationMethods.includes(req.method)) await req.adminDb.rpc('complete_api_idempotency', { p_user_id: req.user.id, p_key: key, p_status: status, p_body: body })
 }

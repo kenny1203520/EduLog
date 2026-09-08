@@ -1,6 +1,9 @@
 import { supabase } from '@/lib/supabase'
 import type { PermissionDTO, PolicyEffect, PolicyScope, RolePermissionPolicyDTO } from '@/models/Rbac'
 import { AuthorizationError } from '@/services/errors/AppError'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export const INCOMPLETE_REPORT_PERMISSION = 'reports.incomplete.receive'
 export const RBAC_MANAGE_PERMISSION = 'rbac.manage'
@@ -13,6 +16,10 @@ export interface PolicyScopeTarget {
 export class PermissionPolicyService {
     static async canManageRbac(): Promise<boolean> {
         try {
+            if (getApiV1Mode() === 'v1') {
+                const response = await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?permission=${encodeURIComponent(RBAC_MANAGE_PERMISSION)}`)
+                return response.data?.allowed === true
+            }
             const { data: userResult, error: userError } = await supabase.auth.getUser()
             if (userError || !userResult.user) return false
 
@@ -36,13 +43,24 @@ export class PermissionPolicyService {
             return false
         }
     }
+
     static async getPermission(key: string): Promise<PermissionDTO> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<PermissionDTO>('permissions', { search: key, perPage: 100, mode: 'v1' })
+            const permission = result.data?.find((item) => item.key === key)
+            if (!permission) throw new Error('Permission was not found')
+            return permission
+        }
         const { data, error } = await supabase.from('permissions').select('*').eq('key', key).single()
         if (error) throw new Error(error.message)
         return data as PermissionDTO
     }
 
     static async getPolicies(permissionId: string): Promise<RolePermissionPolicyDTO[]> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiV1Client.get<RolePermissionPolicyDTO[]>(`/permissions/${encodeURIComponent(permissionId)}/policies`)
+            return result.data || []
+        }
         const { data, error } = await supabase
             .from('role_permission_policies')
             .select('*')
@@ -56,6 +74,11 @@ export class PermissionPolicyService {
         scope: PolicyScopeTarget,
         policies: Array<{ role_id: string; effect: PolicyEffect }>
     ): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            const permission = await this.getPermission(permissionKey)
+            await apiV1Client.patch(`/permissions/${encodeURIComponent(permission.id)}/policies`, { scope, policies })
+            return
+        }
         const { error } = await supabase.rpc('replace_role_permission_policies', {
             p_permission_key: permissionKey,
             p_scope_type: scope.type,
