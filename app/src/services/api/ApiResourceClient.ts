@@ -16,6 +16,7 @@ export type ResourceListOptions = {
   perPage?: number
   search?: string
   sort?: string
+  userId?: string
   mode?: ApiV1Mode
 }
 
@@ -27,6 +28,7 @@ function queryString(options: ResourceListOptions = {}) {
   params.set('offset', String((page - 1) * perPage))
   if (options.search?.trim()) params.set('search', options.search.trim())
   if (options.sort) params.set('sort', options.sort)
+  if (options.userId) params.set('user_id', options.userId)
   return params.toString()
 }
 

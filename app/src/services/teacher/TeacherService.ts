@@ -102,6 +102,10 @@ export class TeacherService {
     }
 
     static async getAllTeachers(): Promise<TeacherDTO[]> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<TeacherDTO>('teachers', { perPage: 100, sort: 'name', mode: 'v1' })
+            return result.data || []
+        }
         const { data, error } = await supabase
             .from('teachers')
             .select('*')
@@ -112,6 +116,10 @@ export class TeacherService {
     }
 
     static async getAllTeachersWithCredentials(): Promise<TeacherDTO[]> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<TeacherDTO>('teachers', { perPage: 100, sort: 'name', mode: 'v1' })
+            return result.data || []
+        }
         const { data, error } = await supabase
             .from('teachers')
             .select('*, teacher_credentials(*)')
@@ -122,6 +130,7 @@ export class TeacherService {
     }
 
     static async getTeacherById(id: string): Promise<TeacherDTO> {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.get<TeacherDTO>('teachers', id, 'v1')).data
         const { data, error } = await supabase
             .from('teachers')
             .select('*, teacher_credentials(*)')
@@ -135,6 +144,10 @@ export class TeacherService {
     static async getTeacherByUserId(userId: string | null | undefined): Promise<TeacherDTO | null> {
         if (!userId) return null
 
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<TeacherDTO>('teachers', { userId, perPage: 1, mode: 'v1' })
+            return result.data?.[0] || null
+        }
         const { data, error } = await supabase
             .from('teachers')
             .select('*')
@@ -163,6 +176,7 @@ export class TeacherService {
         id: string,
         updates: Partial<Omit<TeacherDTO, 'id' | 'created_at' | 'updated_at'>>
     ): Promise<TeacherDTO> {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<TeacherDTO>('teachers', id, normalizeTeacherPayload(updates), 'v1')).data
         const { data, error } = await supabase
             .from('teachers')
             .update(normalizeTeacherPayload(updates))
@@ -213,6 +227,7 @@ export class TeacherService {
     }
 
     static async addCredential(credential: TeacherCredentialDTO): Promise<TeacherCredentialDTO> {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<TeacherCredentialDTO>('teacher-credentials', credential, 'v1')).data
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('User not authenticated')
 
@@ -227,6 +242,7 @@ export class TeacherService {
     }
 
     static async updateCredential(id: string, credential: Partial<TeacherCredentialDTO>): Promise<TeacherCredentialDTO> {
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<TeacherCredentialDTO>('teacher-credentials', id, credential, 'v1')).data
         const { data, error } = await supabase
             .from('teacher_credentials')
             .update(credential)
@@ -239,6 +255,7 @@ export class TeacherService {
     }
 
     static async deleteCredential(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('teacher-credentials', id, 'v1'); return }
         const { error } = await supabase
             .from('teacher_credentials')
             .delete()
