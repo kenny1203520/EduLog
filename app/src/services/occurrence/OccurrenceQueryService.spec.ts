@@ -3,8 +3,8 @@ import { OccurrenceQueryService } from './OccurrenceQueryService'
 
 const { fromMock } = vi.hoisted(() => ({ fromMock: vi.fn() }))
 
-vi.mock('@/lib/supabase', () => ({
-    supabase: { from: fromMock }
+vi.mock('@/services/api/ApiDataClient', () => ({
+    apiDataClient: { from: fromMock }
 }))
 
 function row(date: string, id = date) {

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { Holiday, type HolidayDTO } from '@/models/Holiday'
@@ -38,7 +38,7 @@ export class HolidayCommandService {
             return new Holiday(result.data)
         }
         const kind = params.kind === 'teacher_leave' ? 'teacher_leave' : 'closure'
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('holidays')
             .insert({
                 start_date: params.startDate,
@@ -69,7 +69,7 @@ export class HolidayCommandService {
         if (getApiV1Mode() === 'v1') { const result = await apiResourceClient.update<any>('holidays', id, updates, 'v1'); return new Holiday(result.data) }
         const existingHoliday = await this.getHolidayById(id)
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('holidays')
             .update(updates)
             .eq('id', id)
@@ -93,7 +93,7 @@ export class HolidayCommandService {
         if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('holidays', id, 'v1'); return }
         const existingHoliday = await this.getHolidayById(id)
 
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('holidays')
             .delete()
             .eq('id', id)
@@ -106,7 +106,7 @@ export class HolidayCommandService {
     }
 
     private static async getHolidayById(id: string): Promise<Holiday | null> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('holidays')
             .select('*')
             .eq('id', id)
@@ -120,7 +120,7 @@ export class HolidayCommandService {
     }
 
     private static async getOccurrencesForHoliday(holiday: Holiday): Promise<HolidayOccurrence[]> {
-        let query = supabase
+        let query = apiDataClient
             .from('class_occurrences')
             .select('id, teacher_ids, teacher_attendance, class_session_id, occurrence_date, class_sessions(classroom_id)')
             .gte('occurrence_date', holiday.startDate)
@@ -129,7 +129,7 @@ export class HolidayCommandService {
         if (holiday.classSessionIds.length > 0) {
             query = query.in('class_session_id', holiday.classSessionIds)
         } else if (holiday.classroomIds.length > 0) {
-            const { data: sessionIds, error: sessionError } = await supabase
+            const { data: sessionIds, error: sessionError } = await apiDataClient
                 .from('class_sessions')
                 .select('id')
                 .in('classroom_id', holiday.classroomIds)
@@ -139,7 +139,7 @@ export class HolidayCommandService {
             }
 
             if (!sessionIds || sessionIds.length === 0) return []
-            query = query.in('class_session_id', sessionIds.map(s => s.id))
+            query = query.in('class_session_id', sessionIds.map((s: any) => s.id))
         }
 
         const { data, error } = await query
@@ -187,7 +187,7 @@ export class HolidayCommandService {
     }
 
     private static async isStillClosureHoliday(occurrence: HolidayOccurrence): Promise<boolean> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('holidays')
             .select('id, start_date, end_date, kind, classroom_ids, class_session_ids')
             .lte('start_date', occurrence.occurrence_date)
@@ -199,13 +199,13 @@ export class HolidayCommandService {
 
         return (data || [])
             .filter((holiday: any) => (holiday.kind || 'closure') === 'closure')
-            .some(holiday => this.holidayAppliesToOccurrence(holiday as HolidayDTO, occurrence))
+            .some((holiday: any) => this.holidayAppliesToOccurrence(holiday as HolidayDTO, occurrence))
     }
 
     private static async getStillAbsentTeacherIds(occurrence: HolidayOccurrence, teacherIds: string[]): Promise<Set<string>> {
         if (teacherIds.length === 0) return new Set()
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('holidays')
             .select('id, start_date, end_date, kind, classroom_ids, class_session_ids, teacher_ids')
             .lte('start_date', occurrence.occurrence_date)
@@ -242,7 +242,7 @@ export class HolidayCommandService {
     ): Promise<void> {
         if (occurrenceIds.length === 0) return
 
-        let query = supabase
+        let query = apiDataClient
             .from('occurrence_reports')
             .select('id, version, attendance_status, absence_reason')
             .in('class_occurrence_id', occurrenceIds)
@@ -263,7 +263,7 @@ export class HolidayCommandService {
             // collaborative snapshot stale, even though nothing changed.
             if (report.attendance_status === attendanceStatus && report.absence_reason === absenceReason) continue
 
-            const { error: updateError } = await supabase
+            const { error: updateError } = await apiDataClient
                 .from('occurrence_reports')
                 .update({
                     attendance_status: attendanceStatus,
@@ -302,7 +302,7 @@ export class HolidayCommandService {
 
                 if (!changed) continue
 
-                const { error: updateError } = await supabase
+                const { error: updateError } = await apiDataClient
                     .from('class_occurrences')
                     .update({ teacher_attendance: nextAttendance })
                     .eq('id', occurrence.id)
@@ -321,7 +321,7 @@ export class HolidayCommandService {
         }
         if (releasableOccurrences.length === 0) return
 
-        const occurrenceIds = releasableOccurrences.map(o => o.id)
+        const occurrenceIds = releasableOccurrences.map((o: any) => o.id)
         await this.updateHolidayControlledReports(occurrenceIds, 'pending', null)
 
         for (const occ of releasableOccurrences) {
@@ -330,7 +330,7 @@ export class HolidayCommandService {
                 return acc
             }, {})
 
-            const { error: updateError } = await supabase
+            const { error: updateError } = await apiDataClient
                 .from('class_occurrences')
                 .update({
                     is_conducted: true,
@@ -366,7 +366,7 @@ export class HolidayCommandService {
 
                 if (!changed) continue
 
-                const { error: updateError } = await supabase
+                const { error: updateError } = await apiDataClient
                     .from('class_occurrences')
                     .update({ teacher_attendance: teacherAttendance })
                     .eq('id', occ.id)
@@ -378,7 +378,7 @@ export class HolidayCommandService {
             return
         }
 
-        const occurrenceIds = occurrences.map(o => o.id)
+        const occurrenceIds = occurrences.map((o: any) => o.id)
         await this.updateHolidayControlledReports(occurrenceIds, 'absent', 'holiday')
 
         // 3. Mark occurrences as not conducted and disable all teacher attendance
@@ -388,7 +388,7 @@ export class HolidayCommandService {
                 return acc
             }, {})
 
-            const { error: updateError } = await supabase
+            const { error: updateError } = await apiDataClient
                 .from('class_occurrences')
                 .update({
                     is_conducted: false,

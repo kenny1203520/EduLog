@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { DateUtils } from '@/utils/DateUtils'
 import { apiV1Client } from '@/services/api/ApiV1Client'
@@ -21,7 +21,7 @@ export class OccurrenceQueryService {
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
-        const { data, error, count } = await supabase
+        const { data, error, count } = await apiDataClient
             .from('class_occurrences')
             .select('*', { count: 'exact' })
             .eq('class_session_id', sessionId)
@@ -31,7 +31,7 @@ export class OccurrenceQueryService {
         if (error) throw new Error(`Failed to fetch occurrences: ${error.message}`)
 
         return {
-            data: (data as any[]).map(dto => new ClassOccurrence(dto)),
+            data: (data as any[]).map((dto: any) => new ClassOccurrence(dto)),
             count: count || 0
         }
     }
@@ -41,7 +41,7 @@ export class OccurrenceQueryService {
         endDate: Date,
         sessionIds?: string[]
     ): Promise<ClassOccurrence[]> {
-        let query = supabase
+        let query = apiDataClient
             .from('class_occurrences')
             .select(`
                 *,
@@ -87,7 +87,7 @@ export class OccurrenceQueryService {
         referenceDate: Date
     ): Promise<ClassOccurrence | null> {
         const reference = this.formatDate(referenceDate)
-        const { data: previous, error: previousError } = await supabase
+        const { data: previous, error: previousError } = await apiDataClient
             .from('class_occurrences')
             .select('*')
             .eq('class_session_id', sessionId)
@@ -99,7 +99,7 @@ export class OccurrenceQueryService {
         if (previousError) throw new Error(previousError.message)
         if (previous) return new ClassOccurrence(previous as any)
 
-        const { data: next, error: nextError } = await supabase
+        const { data: next, error: nextError } = await apiDataClient
             .from('class_occurrences')
             .select('*')
             .eq('class_session_id', sessionId)
@@ -114,7 +114,7 @@ export class OccurrenceQueryService {
 
     static async getOccurrencesByIds(occurrenceIds: string[]): Promise<ClassOccurrence[]> {
         if (occurrenceIds.length === 0) return []
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select(`
                 *,
@@ -150,7 +150,7 @@ export class OccurrenceQueryService {
         direction: 'previous' | 'next'
     ): Promise<ClassOccurrence | null> {
         const date = this.formatDate(occurrenceDate)
-        let query = supabase
+        let query = apiDataClient
             .from('class_occurrences')
             .select('*')
             .eq('class_session_id', sessionId)
@@ -177,7 +177,7 @@ export class OccurrenceQueryService {
 
     static async getOccurrenceById(occurrenceId: string): Promise<ClassOccurrence> {
         if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId)); return new ClassOccurrence(response.data) }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select('*')
             .eq('id', occurrenceId)

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Student } from '@/models/Student'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
@@ -14,13 +14,13 @@ export class StudentQueryService {
     static async getAll(page: number = 1, perPage: number = 1000, search?: string): Promise<{ data: Student[], count: number }> {
         if (getApiV1Mode() === 'v1') {
             const result = await apiResourceClient.list<any>('students', { page, perPage, search, sort: 'name', mode: 'v1' })
-            const students = (result.data || []).map((dto) => new Student(dto))
+            const students = (result.data || []).map((dto: any) => new Student(dto))
             return { data: students, count: result.meta?.total ?? students.length }
         }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
-        let query = supabase
+        let query = apiDataClient
             .from('students')
             .select('*, student_contacts(*), student_schools(*), student_credentials(*), enrollments(*, classrooms(name), courses(subject, stage, display_name), class_sessions(*, class_session_schedule_rules(*)))', { count: 'exact' })            .order('name')
 
@@ -33,7 +33,7 @@ export class StudentQueryService {
         if (error) throw new Error(error.message)
 
         return {
-            data: (data as any[]).map(dto => new Student(dto)),
+            data: (data as any[]).map((dto: any) => new Student(dto)),
             count: count || 0
         }
     }
@@ -46,7 +46,7 @@ export class StudentQueryService {
             const result = await apiResourceClient.get<any>('students', id, 'v1')
             return result.data ? new Student(result.data) : null
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('students')
             .select('*, student_contacts(*), student_schools(*), student_credentials(*), enrollments(*, classrooms(name), courses(subject, stage, display_name), class_sessions(*, class_session_schedule_rules(*)))')
             .eq('id', id)

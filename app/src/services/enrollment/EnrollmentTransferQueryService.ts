@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { apiV1Client } from '@/services/api/ApiV1Client'
@@ -84,7 +84,7 @@ export class EnrollmentTransferQueryService {
             const response = await apiV1Client.get<SingleLessonTransferHistoryItem[]>('/enrollments/' + enrollmentId + '/transfer-history')
             return response.data || []
         }
-        const { data, error } = await supabase.rpc('get_single_lesson_transfer_history', {
+        const { data, error } = await apiDataClient.rpc('get_single_lesson_transfer_history', {
             p_enrollment_id: enrollmentId
         })
         if (error) throw new Error(error.message)
@@ -96,7 +96,7 @@ export class EnrollmentTransferQueryService {
             const response = await apiV1Client.get<EffectiveSingleLessonTransferTarget[]>('/enrollments/' + enrollmentId + '/effective-transfer-targets')
             return response.data || []
         }
-        const { data, error } = await supabase.rpc('get_effective_single_lesson_transfer_targets', {
+        const { data, error } = await apiDataClient.rpc('get_effective_single_lesson_transfer_targets', {
             p_enrollment_id: enrollmentId
         })
         if (error) throw new Error(error.message)
@@ -108,7 +108,7 @@ export class EnrollmentTransferQueryService {
             const response = await apiV1Client.post<{ report_id: string }>('/enrollments/' + enrollmentId + '/repair-transfer-report', { target_occurrence_id: targetOccurrenceId })
             return response.data.report_id
         }
-        const { data, error } = await supabase.rpc('repair_single_lesson_transfer_report', {
+        const { data, error } = await apiDataClient.rpc('repair_single_lesson_transfer_report', {
             p_enrollment_id: enrollmentId,
             p_target_occurrence_id: targetOccurrenceId
         })
@@ -117,7 +117,7 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getEnrollmentSessionInfo(enrollmentId: string): Promise<{ class_session_id: string | null; course_id: string }> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('enrollments')
             .select('class_session_id, course_id')
             .eq('id', enrollmentId)
@@ -135,7 +135,7 @@ export class EnrollmentTransferQueryService {
         oldSessionId: string | null,
         transferDate: string
     ): Promise<TransferMigrationRow[]> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -171,7 +171,7 @@ export class EnrollmentTransferQueryService {
         enrollmentId: string,
         originalDate: string
     ): Promise<SingleLessonTransferReportRow[]> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -191,7 +191,7 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getReportTransferInfo(reportId: string): Promise<SingleLessonTransferReportRow> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -211,7 +211,7 @@ export class EnrollmentTransferQueryService {
     }
 
     static async isSessionScheduledOn(sessionId: string, date: string): Promise<boolean> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_sessions')
             .select('*, class_session_schedule_rules(*)')
             .eq('id', sessionId)
@@ -228,7 +228,7 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getLessonCount(courseId: string, fallbackCount: number): Promise<number> {
-        const { data: lessons } = await supabase
+        const { data: lessons } = await apiDataClient
             .from('lessons')
             .select('id')
             .eq('course_id', courseId)
@@ -237,7 +237,7 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getTargetOccurrences(sessionId: string, targetDate: string): Promise<Array<{ id: string }>> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', sessionId)
@@ -255,7 +255,7 @@ export class EnrollmentTransferQueryService {
         enrollmentId: string,
         occurrenceId: string
     ): Promise<{ id: string } | null> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select('id')
             .eq('enrollment_id', enrollmentId)
@@ -274,7 +274,7 @@ export class EnrollmentTransferQueryService {
         enrollmentId: string,
         occurrenceId: string
     ): Promise<OccurrenceReportDTO | null> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select('*')
             .eq('enrollment_id', enrollmentId)
@@ -293,7 +293,7 @@ export class EnrollmentTransferQueryService {
         occurrenceId: string,
         lessonId?: string | null
     ): Promise<TransferConflictDisplayContext> {
-        const occurrenceQuery = supabase
+        const occurrenceQuery = apiDataClient
             .from('class_occurrences')
             .select(`
                 id,
@@ -316,7 +316,7 @@ export class EnrollmentTransferQueryService {
             .eq('id', occurrenceId)
             .single()
         const lessonQuery = lessonId
-            ? supabase.from('lessons').select('id, title, sequence').eq('id', lessonId).maybeSingle()
+            ? apiDataClient.from('lessons').select('id, title, sequence').eq('id', lessonId).maybeSingle()
             : Promise.resolve({ data: null, error: null })
         const [{ data: occurrence, error: occurrenceError }, { data: lesson, error: lessonError }] =
             await Promise.all([occurrenceQuery, lessonQuery])
@@ -352,7 +352,7 @@ export class EnrollmentTransferQueryService {
     }
 
     static async getTargetOccurrenceId(sessionId: string, targetDate: string): Promise<string> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', sessionId)

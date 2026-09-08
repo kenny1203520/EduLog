@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Enrollment } from '@/models/Enrollment'
 import { DateUtils } from '@/utils/DateUtils'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
@@ -38,7 +38,7 @@ export class EnrollmentTransferService {
     }
 
     private static async deleteReportVersions(reportId: string): Promise<void> {
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('report_versions')
             .delete()
             .eq('occurrence_report_id', reportId)
@@ -51,7 +51,7 @@ export class EnrollmentTransferService {
     private static async deleteReport(reportId: string): Promise<void> {
         await this.deleteReportVersions(reportId)
 
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('occurrence_reports')
             .delete()
             .eq('id', reportId)
@@ -94,7 +94,7 @@ export class EnrollmentTransferService {
             oldSessionId,
             transferDate
         )
-        const reportsToMigrate = futureReports.filter(report => this.isBlankPlaceholderReport(report))
+        const reportsToMigrate = futureReports.filter((report: any) => this.isBlankPlaceholderReport(report))
         const lessonCount = await EnrollmentTransferQueryService.getLessonCount(enrollment.course_id, 12)
         const occurrenceCount = Math.max(lessonCount, reportsToMigrate.length)
         const start = DateUtils.parseLocalDate(transferDate) || new Date(transferDate)
@@ -129,7 +129,7 @@ export class EnrollmentTransferService {
                 continue
             }
 
-            const { error: updateReportError } = await supabase
+            const { error: updateReportError } = await apiDataClient
                 .from('occurrence_reports')
                 .update({
                     class_occurrence_id: newOcc.id,
@@ -142,7 +142,7 @@ export class EnrollmentTransferService {
             }
         }
 
-        const { data: updated, error: updateError } = await supabase
+        const { data: updated, error: updateError } = await apiDataClient
             .from('enrollments')
             .update({
                 class_session_id: newSessionId,
@@ -174,7 +174,7 @@ export class EnrollmentTransferService {
             const response = await apiV1Client.post<{ status: string; transfer_id: string }>('/enrollment-transfers/single-lesson', { enrollment_id: enrollmentId, source_occurrence_id: sourceOccurrenceId, target_occurrence_id: targetOccurrenceId, report_id: reportId })
             return response.data.transfer_id
         }
-        const { data, error } = await supabase.rpc('transfer_single_lesson', {
+        const { data, error } = await apiDataClient.rpc('transfer_single_lesson', {
             p_enrollment_id: enrollmentId,
             p_source_occurrence_id: sourceOccurrenceId,
             p_target_occurrence_id: targetOccurrenceId,
@@ -387,7 +387,7 @@ export class EnrollmentTransferService {
             await apiV1Client.post('/enrollment-transfers/cancel', { transfer_id: transferId })
             return
         }
-        const { error } = await supabase.rpc('cancel_single_lesson_transfer', {
+        const { error } = await apiDataClient.rpc('cancel_single_lesson_transfer', {
             p_transfer_id: transferId
         })
 

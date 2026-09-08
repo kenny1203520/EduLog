@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Holiday } from '@/models/Holiday'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
@@ -15,16 +15,16 @@ export class HolidayQueryService {
     static async listHolidays(): Promise<Holiday[]> {
         if (getApiV1Mode() === 'v1') {
             const result = await apiResourceClient.list<any>('holidays', { perPage: 100, sort: 'start_date', mode: 'v1' })
-            return (result.data || []).map((dto) => new Holiday(dto))
+            return (result.data || []).map((dto: any) => new Holiday(dto))
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('holidays')
             .select('*')
             .order('start_date', { ascending: true })
 
         if (error) throw new Error(`Failed to fetch holidays: ${error.message}`)
 
-        return data.map(dto => new Holiday(dto))
+        return data.map((dto: any) => new Holiday(dto))
     }
 
     /**
@@ -35,7 +35,7 @@ export class HolidayQueryService {
      */
     static async isHoliday(dateStr: string, classroomId?: string, sessionId?: string): Promise<boolean> {
         if (getApiV1Mode() === 'v1') { const params = new URLSearchParams({ date: dateStr }); if (classroomId) params.set('classroom_id', classroomId); if (sessionId) params.set('class_session_id', sessionId); const result = await apiV1Client.get<{ matched: boolean }>('/holidays/check?' + params.toString()); return result.data.matched }
-        let query = supabase
+        let query = apiDataClient
             .from('holidays')
             .select('id')
             .lte('start_date', dateStr)
@@ -73,7 +73,7 @@ export class HolidayQueryService {
         sessionId?: string
     ): Promise<boolean> {
         if (getApiV1Mode() === 'v1') { const params = new URLSearchParams({ date: dateStr, teacher_id: teacherId }); if (classroomId) params.set('classroom_id', classroomId); if (sessionId) params.set('class_session_id', sessionId); const result = await apiV1Client.get<{ matched: boolean }>('/holidays/check?' + params.toString()); return result.data.matched }
-        let query = supabase
+        let query = apiDataClient
             .from('holidays')
             .select('id')
             .lte('start_date', dateStr)

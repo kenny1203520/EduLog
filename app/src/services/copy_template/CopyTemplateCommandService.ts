@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { USER_DEFAULT_SCOPE_ENTITY_ID } from '@/utils/copyTemplate'
 import type { CopyTemplateDTO, CopyTemplateScopeType } from './CopyTemplateService'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
@@ -14,7 +14,7 @@ export class CopyTemplateCommandService {
     private static async getCurrentUserId(): Promise<string | null> {
         const {
             data: { user }
-        } = await supabase.auth.getUser()
+        } = await apiDataClient.auth.getUser()
 
         return user?.id || null
     }
@@ -46,7 +46,7 @@ export class CopyTemplateCommandService {
             template_document: content.richText
         }
 
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('copy_templates')
             .upsert(payload, { onConflict: 'user_id,template_type,scope_type,scope_entity_id' })
 

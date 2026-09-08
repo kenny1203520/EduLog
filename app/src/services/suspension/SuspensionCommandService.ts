@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Suspension, type SuspensionDTO } from '@/models/Suspension'
 import { SuspensionPolicyService } from './SuspensionPolicyService'
 import { DateUtils } from '@/utils/DateUtils'
@@ -14,7 +14,7 @@ export class SuspensionCommandService {
         await SuspensionPolicyService.validateNoOverlap(enrollmentId, startDate, endDate)
 
         const normalizedTimeZone = DateUtils.isValidTimeZone(timeZone) ? timeZone : DateUtils.getDefaultTimeZone()
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('student_suspensions')
             .insert({
                 enrollment_id: enrollmentId,
@@ -38,7 +38,7 @@ export class SuspensionCommandService {
             const response = await apiV1Client.patch<any>('/student-suspensions/' + id, updates)
             return new Suspension(response.data)
         }
-        const { data: oldData, error: fetchError } = await supabase
+        const { data: oldData, error: fetchError } = await apiDataClient
             .from('student_suspensions')
             .select('*')
             .eq('id', id)
@@ -54,7 +54,7 @@ export class SuspensionCommandService {
                 : {})
         }
 
-        const { data: newData, error: updateError } = await supabase
+        const { data: newData, error: updateError } = await apiDataClient
             .from('student_suspensions')
             .update(updatePayload)
             .eq('id', id)
@@ -105,7 +105,7 @@ export class SuspensionCommandService {
             await apiV1Client.delete('/student-suspensions/' + id)
             return
         }
-        const { data: suspension, error: fetchError } = await supabase
+        const { data: suspension, error: fetchError } = await apiDataClient
             .from('student_suspensions')
             .select('*')
             .eq('id', id)
@@ -113,7 +113,7 @@ export class SuspensionCommandService {
 
         if (fetchError) throw new Error(fetchError.message)
 
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('student_suspensions')
             .delete()
             .eq('id', id)

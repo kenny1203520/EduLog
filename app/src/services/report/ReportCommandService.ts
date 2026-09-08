@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import {
     OccurrenceReport,
     type OccurrenceReportDTO,
@@ -67,7 +67,7 @@ type AttendanceOnlyData = {
 
 const REPORT_REQUEST_TIMEOUT_MS = 15000
 async function authenticatedUserId(): Promise<string | null> {
-    const { data } = await supabase.auth.getUser()
+    const { data } = await apiDataClient.auth.getUser()
     return data.user?.id || null
 }
 
@@ -131,7 +131,7 @@ function classifiedSaveError(error: any, fallback: string): SaveReportResult {
     return { success: false, conflict: false, message: fallback, messageKey: 'errors.unknown' }
 }
 async function loadCanonicalReport(reportId: string): Promise<{ data: OccurrenceReportDTO | null, error: any }> {
-    return runReportRequest(() => supabase
+    return runReportRequest(() => apiDataClient
         .from('occurrence_reports')
         .select(REPORT_EDITOR_COLUMNS)
         .eq('id', reportId)
@@ -179,7 +179,7 @@ async function reconcileTimedOutSave(reportId: string, currentVersion: number, e
 export class ReportCommandService {
     /** Full row fetch used only once a version conflict is confirmed, to populate the conflict-resolution UI. */
     private static async fetchFullReportForConflict(reportId: string): Promise<OccurrenceReportDTO | undefined> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
             .eq('id', reportId)
@@ -201,7 +201,7 @@ export class ReportCommandService {
         }
         const newReport = await ReportLifecyclePolicy.buildInitialReportPayload(enrollmentId, occurrenceId)
 
-        let { data: created, error: createError } = await supabase
+        let { data: created, error: createError } = await apiDataClient
             .from('occurrence_reports')
             .insert(newReport)
             .select(REPORT_EDITOR_COLUMNS)
@@ -217,7 +217,7 @@ export class ReportCommandService {
                 attendance_status: 'pending'
             }
 
-            const retryResult = await supabase
+            const retryResult = await apiDataClient
                 .from('occurrence_reports')
                 .insert(retryPayload)
                 .select(REPORT_EDITOR_COLUMNS)
@@ -273,7 +273,7 @@ export class ReportCommandService {
         // is actually detected, instead of on every single autosave.
         let preflight: any
         try {
-            preflight = await runReportRequest(() => supabase
+            preflight = await runReportRequest(() => apiDataClient
                 .from('occurrence_reports')
                 .select('version, absence_reason, attendance_status, enrollment_id')
                 .eq('id', reportId)
@@ -373,7 +373,7 @@ export class ReportCommandService {
 
         let updateResponse: any
         try {
-            updateResponse = await runReportRequest(() => supabase
+            updateResponse = await runReportRequest(() => apiDataClient
                 .from('occurrence_reports')
                 .update(updateData)
                 .eq('id', reportId)
@@ -426,7 +426,7 @@ export class ReportCommandService {
         }
         let preflight: any
         try {
-            preflight = await runReportRequest(() => supabase
+            preflight = await runReportRequest(() => apiDataClient
                 .from('occurrence_reports')
                 .select('version, absence_reason, attendance_status')
                 .eq('id', reportId)
@@ -490,7 +490,7 @@ export class ReportCommandService {
 
         let updateResponse: any
         try {
-            updateResponse = await runReportRequest(() => supabase
+            updateResponse = await runReportRequest(() => apiDataClient
                 .from('occurrence_reports')
                 .update(updateData)
                 .eq('id', reportId)
@@ -522,7 +522,7 @@ export class ReportCommandService {
         currentVersion?: number
     ): Promise<OccurrenceReport> {
         if (currentVersion === undefined) throw new Error('expectedVersion is required to restore a report version')
-        const { data: version, error: versionError } = await supabase
+        const { data: version, error: versionError } = await apiDataClient
             .from('report_versions')
             .select('id, occurrence_report_id, version, content, edited_by, snapshot, created_at')
             .eq('id', versionId)
@@ -532,7 +532,7 @@ export class ReportCommandService {
         if (versionError || !version) throw new Error(`Failed to fetch version: ${versionError?.message}`)
 
         // Guard: check if current report is system-managed and handle version conflicts
-        const { data: current } = await supabase
+        const { data: current } = await apiDataClient
             .from('occurrence_reports')
             .select('version, absence_reason')
             .eq('id', reportId)
@@ -578,7 +578,7 @@ export class ReportCommandService {
         updatePayload.last_edited_by = await authenticatedUserId()
         updatePayload.last_edited_at = new Date().toISOString()
 
-        const { data: updated, error: updateError } = await supabase
+        const { data: updated, error: updateError } = await apiDataClient
             .from('occurrence_reports')
             .update(updatePayload)
             .eq('id', reportId)
@@ -610,7 +610,7 @@ export class ReportCommandService {
         expectedVersion?: number
     ): Promise<OccurrenceReport> {
         if (expectedVersion === undefined) throw new Error('expectedVersion is required to resolve a report conflict')
-        const { data: current, error: fetchError } = await supabase
+        const { data: current, error: fetchError } = await apiDataClient
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
             .eq('id', reportId)
@@ -645,7 +645,7 @@ export class ReportCommandService {
         assignRichTextPair(updatePayload, 'class_notes', 'class_notes_document', resolvedReport.class_notes, resolvedReport.class_notes_document)
         assignRichTextPair(updatePayload, 'content', 'content_document', resolvedReport.content, resolvedReport.content_document)
 
-        const { data: updated, error: updateError } = await supabase
+        const { data: updated, error: updateError } = await apiDataClient
             .from('occurrence_reports')
             .update(updatePayload)
             .eq('id', reportId)
@@ -672,7 +672,7 @@ export class ReportCommandService {
 
     static async deleteReportAndRevertProgress(reportId: string): Promise<void> {
         if (getApiV1Mode() === 'v1') { await apiV1Client.delete('/reports/' + encodeURIComponent(reportId)); return }
-        const { data: report, error: fetchError } = await supabase
+        const { data: report, error: fetchError } = await apiDataClient
             .from('occurrence_reports')
             .select('enrollment_id')
             .eq('id', reportId)
@@ -680,7 +680,7 @@ export class ReportCommandService {
 
         if (fetchError || !report) throw new Error(`Failed to fetch report for deletion: ${fetchError?.message}`)
 
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await apiDataClient
             .from('occurrence_reports')
             .delete()
             .eq('id', reportId)
@@ -692,7 +692,7 @@ export class ReportCommandService {
 
     static async deleteReport(reportId: string): Promise<void> {
         if (getApiV1Mode() === 'v1') { await apiV1Client.delete('/reports/' + encodeURIComponent(reportId)); return }
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('occurrence_reports')
             .delete()
             .eq('id', reportId)
@@ -706,21 +706,21 @@ export class ReportCommandService {
         const enrollmentIds = await OccurrenceRosterService.getEffectiveEnrollmentIds(occurrenceId)
         if (enrollmentIds.length === 0) return ReportQueryService.getReportsByOccurrence(occurrenceId)
 
-        const { data: existing, error: existingError } = await supabase
+        const { data: existing, error: existingError } = await apiDataClient
             .from('occurrence_reports')
             .select('enrollment_id')
             .eq('class_occurrence_id', occurrenceId)
             .in('enrollment_id', enrollmentIds)
 
         if (existingError) throw new Error(existingError.message)
-        const existingIds = new Set((existing || []).map(report => report.enrollment_id))
-        const missingIds = enrollmentIds.filter(id => !existingIds.has(id))
+        const existingIds = new Set((existing || []).map((report: any) => report.enrollment_id))
+        const missingIds = enrollmentIds.filter((id: any) => !existingIds.has(id))
 
         if (missingIds.length > 0) {
             const payloads = await Promise.all(missingIds.map(enrollmentId =>
                 ReportLifecyclePolicy.buildInitialReportPayload(enrollmentId, occurrenceId)
             ))
-            const { error: insertError } = await supabase
+            const { error: insertError } = await apiDataClient
                 .from('occurrence_reports')
                 .upsert(payloads, {
                     onConflict: 'enrollment_id,class_occurrence_id',

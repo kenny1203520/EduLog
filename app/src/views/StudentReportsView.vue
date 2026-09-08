@@ -526,7 +526,6 @@
 import { computed, ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { supabase } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/useAuthStore'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import ReportEditor from '@/components/ReportEditor.vue'
@@ -542,7 +541,6 @@ import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { SuspensionService } from '@/services/suspension/SuspensionService'
 import { Suspension } from '@/models/Suspension'
-import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { useToast } from 'vue-toastification'
 import { DateUtils } from '@/utils/DateUtils'
@@ -597,7 +595,6 @@ const effectiveTransferTargets = ref<Array<{
     target_report_id: string | null
 }>>([])
 const courseLessons = ref<any[]>([])
-let reportSubscription: RealtimeChannel | null = null
 
 // Confirm Modal State
 const showCreateConfirm = ref(false)
@@ -620,35 +617,12 @@ function isMissingTransferredOccurrence(occurrenceId: string | undefined): boole
     return !!occurrenceId && missingTransferredOccurrenceIds.value.has(occurrenceId)
 }
 
-function clearReportSubscription() {
-    if (reportSubscription) {
-        supabase.removeChannel(reportSubscription)
-        reportSubscription = null
-    }
-}
+function clearReportSubscription() {}
 
-function subscribeToReport(reportId: string | null) {
+// Collaboration updates are delivered by the authenticated /api/realtime provider.
+function subscribeToReport(_reportId: string | null) {
     clearReportSubscription()
-
-    if (!reportId) return
-
-    reportSubscription = supabase
-        .channel(`report-${reportId}`)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'occurrence_reports',
-                filter: `id=eq.${reportId}`
-            },
-            (payload) => {
-                handleRealtimeUpdate(payload)
-            }
-        )
-        .subscribe()
 }
-
 async function restorePendingSelection() {
     const snapshot = pendingSelectionState.value
     pendingSelectionState.value = null
@@ -1062,9 +1036,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-    if (reportSubscription) {
-        supabase.removeChannel(reportSubscription)
-    }
 })
 
 // Methods
@@ -1405,27 +1376,6 @@ async function selectOccurrence(
 
 async function handleCancelCreate() {
     await restorePendingSelection()
-}
-
-function handleRealtimeUpdate(payload: any) {
-    const newRecord = payload.new
-    // Ignore our own updates
-    if (newRecord.last_edited_by === authStore.user?.id) return
-
-    // If version is newer, prompt user
-    if (selectedReport.value && newRecord.version > selectedReport.value.version) {
-        toast.info(t('report.update_available') || 'Update Available', {
-            timeout: 0,
-            onClick: () => {
-                refreshReport()
-            }
-        })
-    }
-}
-
-async function refreshReport() {
-    if (!selectedOccurrence.value) return
-    await selectOccurrence(selectedOccurrence.value)
 }
 
 function handleSaveSuccess(updatedReport: OccurrenceReportDTO) {

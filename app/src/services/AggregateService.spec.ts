@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { AggregateService } from './AggregateService'
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
+vi.mock('@/services/api/ApiDataClient', () => ({
+  apiDataClient: {
     auth: {
       getSession: vi.fn()
     }
@@ -22,7 +22,7 @@ describe('AggregateService', () => {
   })
 
   it('getUserPreferencesAggregate calls fetch with auth header', async () => {
-    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
       data: { session: { access_token: 'test-token' } }
     } as any)
     
@@ -43,7 +43,7 @@ describe('AggregateService', () => {
   })
 
   it('getUserPreferencesAggregate uses cache on subsequent calls', async () => {
-    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
       data: { session: null }
     } as any)
     
@@ -61,7 +61,7 @@ describe('AggregateService', () => {
   })
 
   it('throws an error if the response is not ok', async () => {
-    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
       data: { session: null }
     } as any)
     
@@ -75,7 +75,7 @@ describe('AggregateService', () => {
   })
 
   it('keeps incomplete report aggregate cache entries separated by scope', async () => {
-    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
       data: { session: { access_token: 'test-token' } }
     } as any)
 
@@ -100,7 +100,7 @@ describe('AggregateService', () => {
   })
 
   it('never caches policy-aware notification results', async () => {
-    vi.mocked(supabase.auth.getSession).mockResolvedValue({
+    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
       data: { session: { access_token: 'yuan-token' } }
     } as any)
 

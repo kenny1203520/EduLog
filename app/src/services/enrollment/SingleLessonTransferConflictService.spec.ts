@@ -5,7 +5,7 @@ import { EnrollmentTransferToolService } from './EnrollmentTransferToolService'
 import { createDefaultTransferFieldSelections } from '@/services/report/ReportFieldConflictService'
 
 const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
-vi.mock('@/lib/supabase', () => ({ supabase: { rpc: rpcMock } }))
+vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { rpc: rpcMock } }))
 vi.mock('./EnrollmentTransferQueryService', () => ({
     EnrollmentTransferQueryService: {
         getReportForOccurrence: vi.fn(),

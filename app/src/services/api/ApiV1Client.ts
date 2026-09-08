@@ -1,4 +1,3 @@
-import { supabase } from '@/lib/supabase'
 import { getRuntimeConfigValue } from '@/lib/runtimeConfig'
 
 export type ApiMeta = Record<string, unknown> | null
@@ -12,7 +11,7 @@ export type ApiRequestOptions = Omit<RequestInit, 'body'> & { body?: unknown; id
 function randomHex(length: number) { const bytes = new Uint8Array(Math.ceil(length / 2)); crypto.getRandomValues(bytes); return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, length) }
 export function createRequestId() { return `edulog-${randomHex(24)}` }
 export function createTraceparent() { return `00-${randomHex(32)}-${randomHex(16)}-01` }
-function legacyBaseUrl() { const configured = getRuntimeConfigValue('VITE_SUPABASE_FUNCTIONS_BASE_URL'); if (configured) return configured.replace(/\/$/, '') + '/api-v1'; const supabaseUrl = getRuntimeConfigValue('VITE_SUPABASE_URL'); return supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/functions/v1/api-v1` : '/api' }
+function legacyBaseUrl() { return getRuntimeConfigValue('VITE_LEGACY_API_BASE_URL') || '/api' }
 function readCookie(name: string) { if (typeof document === 'undefined') return ''; const value = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`))?.slice(name.length + 1); return value ? decodeURIComponent(value) : '' }
 
 export class ApiV1Client {
@@ -21,8 +20,8 @@ export class ApiV1Client {
   async request<T>(path: string, options: ApiRequestOptions = {}): Promise<ApiEnvelope<T>> {
     const method = (options.method ?? 'GET').toUpperCase(); const requestId = createRequestId(); const headers = new Headers(options.headers)
     headers.set('Accept', 'application/json'); headers.set('X-Request-Id', requestId); headers.set('traceparent', createTraceparent())
-    if (!this.sameOrigin) { const sessionResult = await supabase.auth.getSession(); if (sessionResult.error) throw sessionResult.error; const token = sessionResult.data.session?.access_token; if (!token) throw new ApiV1Error(401, { error: { code: 'AUTH_REQUIRED', message: 'Authentication is required', request_id: requestId, trace_id: '' } }); headers.set('Authorization', `Bearer ${token}`) }
-    else headers.set('X-CSRF-Token', readCookie('edulog_csrf'))
+    if (!this.sameOrigin) throw new ApiV1Error(503, { error: { code: 'EXTERNAL_API_DISABLED', message: 'External browser API access is disabled', request_id: requestId, trace_id: '' } })
+    headers.set('X-CSRF-Token', readCookie('edulog_csrf'))
     if (options.body !== undefined) { headers.set('Content-Type', 'application/json'); if (['POST', 'PATCH', 'DELETE', 'PUT'].includes(method)) headers.set('Idempotency-Key', options.idempotencyKey ?? `ui-${randomHex(32)}`) }
     const response = await fetch(`${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`, { ...options, method, credentials: 'include', headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) })
     const body = await response.json().catch(() => null)

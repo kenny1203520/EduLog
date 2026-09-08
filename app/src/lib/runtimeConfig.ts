@@ -1,7 +1,4 @@
 export interface EduLogRuntimeConfig {
-  VITE_SUPABASE_URL?: string
-  VITE_SUPABASE_ANON_KEY?: string
-  VITE_SUPABASE_FUNCTIONS_BASE_URL?: string
   VITE_LEGACY_API_BASE_URL?: string
   VITE_API_V1_MODE?: 'mock' | 'legacy' | 'v1'
 }
@@ -20,12 +17,5 @@ function readRuntimeConfig(): EduLogRuntimeConfig {
 }
 
 export function getRuntimeConfigValue(key: RuntimeConfigKey): string {
-  return normalizeConfigValue(readRuntimeConfig()[key]) ?? normalizeConfigValue(import.meta.env[key]) ?? ''
-}
-
-export function getSupabaseRuntimeConfig(): { supabaseUrl: string, supabaseAnonKey: string } {
-  return {
-    supabaseUrl: getRuntimeConfigValue('VITE_SUPABASE_URL'),
-    supabaseAnonKey: getRuntimeConfigValue('VITE_SUPABASE_ANON_KEY')
-  }
+  return normalizeConfigValue(readRuntimeConfig()[key]) ?? ''
 }

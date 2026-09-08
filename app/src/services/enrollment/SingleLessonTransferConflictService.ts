@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import type { TransferReportFieldSelections } from '@/services/report/ReportFieldConflictService'
 import { apiV1Client } from '@/services/api/ApiV1Client'
@@ -80,7 +80,7 @@ export class SingleLessonTransferConflictService {
             await EnrollmentTransferToolService.syncSessionPair(conflict.sourceSessionId, conflict.targetSessionId)
             return { status: 'completed', transferId: response.data.transfer_id }
         }
-        const { data, error } = await supabase.rpc('resolve_single_lesson_transfer_conflict', {
+        const { data, error } = await apiDataClient.rpc('resolve_single_lesson_transfer_conflict', {
             p_enrollment_id: conflict.enrollmentId,
             p_source_occurrence_id: conflict.sourceOccurrenceId,
             p_target_occurrence_id: conflict.targetOccurrenceId,

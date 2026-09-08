@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Enrollment, type EnrollmentDTO } from '@/models/Enrollment'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { OccurrenceReportService } from '../occurrence/OccurrenceReportService'
@@ -52,11 +52,11 @@ export class EnrollmentCommandService {
             const response = await apiV1Client.post<any>('/enrollments', { ...enrollmentData, ...(options.targetReportCount !== undefined ? { target_report_count: options.targetReportCount } : {}) })
             return new Enrollment(response.data)
         }
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
 
         const alignedEnrollmentData = await this.alignSessionContext(enrollmentData)
-        const { data: enrollment, error: enrollError } = await supabase
+        const { data: enrollment, error: enrollError } = await apiDataClient
             .from('enrollments')
             .insert({
                 ...alignedEnrollmentData,
@@ -115,7 +115,7 @@ export class EnrollmentCommandService {
             const response = await apiV1Client.patch<any>('/enrollments/' + encodeURIComponent(enrollmentId), { ...updates, ...(options.targetTotalReports !== undefined ? { target_total_reports: options.targetTotalReports } : {}) })
             return new Enrollment(response.data)
         }
-        const { data: existing, error: existingError } = await supabase
+        const { data: existing, error: existingError } = await apiDataClient
             .from('enrollments')
             .select('id, status, class_session_id, course_id, classroom_id, start_date, lesson_number')
             .eq('id', enrollmentId)
@@ -139,7 +139,7 @@ export class EnrollmentCommandService {
             updatePayload = await this.alignSessionContext(updatePayload, existing)
         }
 
-        const { data: updated, error: updateError } = await supabase
+        const { data: updated, error: updateError } = await apiDataClient
             .from('enrollments')
             .update(updatePayload)
             .eq('id', enrollmentId)
@@ -186,7 +186,7 @@ export class EnrollmentCommandService {
 
     static async delete(enrollmentId: string): Promise<void> {
         if (getApiV1Mode() === 'v1') { await apiV1Client.delete('/enrollments/' + encodeURIComponent(enrollmentId)); return }
-        const { data: enrollment } = await supabase
+        const { data: enrollment } = await apiDataClient
             .from('enrollments')
             .select('class_session_id')
             .eq('id', enrollmentId)
@@ -197,7 +197,7 @@ export class EnrollmentCommandService {
         await EnrollmentSupportService.deleteReportsForEnrollment(enrollmentId)
         await EnrollmentSupportService.deleteSuspensionsForEnrollment(enrollmentId)
 
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await apiDataClient
             .from('enrollments')
             .delete()
             .eq('id', enrollmentId)
@@ -218,7 +218,7 @@ export class EnrollmentCommandService {
     ): Promise<void> {
         const normalizedTargetDate = EnrollmentSupportService.normalizeDateOnly(targetDate)
 
-        const { data: enrollment, error: enrollmentError } = await supabase
+        const { data: enrollment, error: enrollmentError } = await apiDataClient
             .from('enrollments')
             .select('id, status')
             .eq('id', enrollmentId)
@@ -242,7 +242,7 @@ export class EnrollmentCommandService {
             console.error('Failed to generate occurrence for makeup enrollment:', err)
         })
 
-        let { data: targetOccurrences, error: targetOccurrenceError } = await supabase
+        let { data: targetOccurrences, error: targetOccurrenceError } = await apiDataClient
             .from('class_occurrences')
             .select('id, created_at')
             .eq('class_session_id', targetSessionId)

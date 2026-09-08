@@ -42,8 +42,8 @@ vi.mock('@/stores/usePreferencesStore', () => ({
     })
 }))
 
-vi.mock('@/lib/supabase', () => ({
-    supabase: {
+vi.mock('@/services/api/ApiDataClient', () => ({
+    apiDataClient: {
         channel: vi.fn(),
         removeChannel: vi.fn()
     }

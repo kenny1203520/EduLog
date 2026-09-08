@@ -17,6 +17,11 @@ export type ResourceListOptions = {
   search?: string
   sort?: string
   userId?: string
+  courseId?: string
+  lessonId?: string
+  entityType?: string
+  entityId?: string
+  entityIds?: string[]
   classroomId?: string
   enrollmentId?: string
   instructorId?: string
@@ -35,6 +40,11 @@ function queryString(options: ResourceListOptions = {}) {
   if (options.search?.trim()) params.set('search', options.search.trim())
   if (options.sort) params.set('sort', options.sort)
   if (options.userId) params.set('user_id', options.userId)
+  if (options.courseId) params.set('course_id', options.courseId)
+  if (options.lessonId) params.set('lesson_id', options.lessonId)
+  if (options.entityType) params.set('entity_type', options.entityType)
+  if (options.entityId) params.set('entity_id', options.entityId)
+  if (options.entityIds?.length) params.set('entity_ids', options.entityIds.join(','))
   if (options.classroomId) params.set('classroom_id', options.classroomId)
   if (options.enrollmentId) params.set('enrollment_id', options.enrollmentId)
   if (options.instructorId) params.set('instructor_id', options.instructorId)

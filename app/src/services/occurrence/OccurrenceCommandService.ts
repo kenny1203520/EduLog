@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ClassOccurrence, type ClassOccurrenceDTO } from '@/models/ClassOccurrence'
 import { OccurrenceQueryService } from './OccurrenceQueryService'
 import { HolidayService } from '../holiday/HolidayService'
@@ -24,7 +24,7 @@ export class OccurrenceCommandService {
             const response = await apiV1Client.post<any>('/occurrences/generate', { class_session_id: sessionId, start_date: this.formatDate(startDate), end_date: this.formatDate(endDate), skip_existing_dates: options.skipExistingDates ? [...options.skipExistingDates] : undefined })
             return (response.data || []).map((dto: any) => new ClassOccurrence(dto))
         }
-        const { data: session, error: sessionError } = await supabase
+        const { data: session, error: sessionError } = await apiDataClient
             .from('class_sessions')
             .select('*, class_session_schedule_rules(*)')
             .eq('id', sessionId)
@@ -51,7 +51,7 @@ export class OccurrenceCommandService {
         }
 
         // Fetch existing occurrences to preserve attendance status
-        const { data: existingOccs } = await supabase
+        const { data: existingOccs } = await apiDataClient
             .from('class_occurrences')
             .select('occurrence_date, teacher_attendance, time_zone')
             .eq('class_session_id', sessionId)
@@ -60,7 +60,7 @@ export class OccurrenceCommandService {
 
         const existingOccurrenceMap: Record<string, any> = {}
         if (existingOccs) {
-            existingOccs.forEach(occ => {
+            existingOccs.forEach((occ: any) => {
                 existingOccurrenceMap[occ.occurrence_date] = occ
             })
         }
@@ -111,7 +111,7 @@ export class OccurrenceCommandService {
             }
         })
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .upsert(occurrences, { onConflict: 'class_session_id,occurrence_date' })
             .select()
@@ -131,7 +131,7 @@ export class OccurrenceCommandService {
         const occurrenceDateStr = occurrence.occurrenceDate instanceof Date
             ? DateUtils.formatLocalDate(occurrence.occurrenceDate)
             : occurrence.occurrenceDate
-        const { data: sessionInfo } = await supabase
+        const { data: sessionInfo } = await apiDataClient
             .from('class_sessions')
             .select('classroom_id')
             .eq('id', occurrence.classSessionId)
@@ -174,7 +174,7 @@ export class OccurrenceCommandService {
             }
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_occurrences')
             .update(updates)
             .eq('id', occurrenceId)
@@ -209,7 +209,7 @@ export class OccurrenceCommandService {
 
     static async deleteOccurrence(occurrenceId: string): Promise<void> {
         if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('occurrences', occurrenceId, 'v1'); return }
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('class_occurrences')
             .delete()
             .eq('id', occurrenceId)
@@ -234,7 +234,7 @@ export class OccurrenceCommandService {
             }
             return totalGenerated
         }
-        let query = supabase.from('class_sessions').select('id')
+        let query = apiDataClient.from('class_sessions').select('id')
 
         if (sessionIds && sessionIds.length > 0) {
             query = query.in('id', sessionIds)

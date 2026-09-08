@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import {
     USER_DEFAULT_SCOPE_ENTITY_ID,
     SYSTEM_ATTENDANCE_TEMPLATE,
@@ -19,7 +19,7 @@ export class CopyTemplateQueryService {
     private static async getCurrentUserId(): Promise<string | null> {
         const {
             data: { user }
-        } = await supabase.auth.getUser()
+        } = await apiDataClient.auth.getUser()
 
         return user?.id || null
     }
@@ -34,7 +34,7 @@ export class CopyTemplateQueryService {
             const response = await apiResourceClient.list<CopyTemplateDTO>('copy-templates', { templateType, scopeType, scopeEntityId, perPage: 1, sort: '-updated_at', mode: 'v1' })
             return response.data?.[0] || null
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('copy_templates')
             .select(COPY_TEMPLATE_COLUMNS)
             .eq('user_id', userId)
@@ -158,7 +158,7 @@ export class CopyTemplateQueryService {
         const userId = await this.getCurrentUserId()
         if (!userId) return []
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('copy_templates')
             .select(COPY_TEMPLATE_COLUMNS)
             .eq('user_id', userId)
@@ -192,7 +192,7 @@ export class CopyTemplateQueryService {
             return {}
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_sessions')
             .select('id, name')
             .in('id', validIds)

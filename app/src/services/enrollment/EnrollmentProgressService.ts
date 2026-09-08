@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { type Lesson } from '@/models/Course'
 
 /**
@@ -29,7 +29,7 @@ export class EnrollmentProgressService {
         }
 
         // Lesson was completed - find next lesson
-        const nextLesson = allLessons.find(l => l.sequence === completedLessonSequence + 1)
+        const nextLesson = allLessons.find((l: any) => l.sequence === completedLessonSequence + 1)
 
         if (!nextLesson) {
             // No next lesson (completed last lesson in course)
@@ -57,7 +57,7 @@ export class EnrollmentProgressService {
         enrollmentId: string,
         lessonId: string
     ): Promise<boolean> {
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select('id')
             .eq('enrollment_id', enrollmentId)
@@ -81,7 +81,7 @@ export class EnrollmentProgressService {
         allLessons: Lesson[]
     ): Promise<Lesson | null> {
         // Get all lesson_ids that have reports
-        const { data: reports, error } = await supabase
+        const { data: reports, error } = await apiDataClient
             .from('occurrence_reports')
             .select('lesson_id')
             .eq('enrollment_id', enrollmentId)
@@ -92,10 +92,10 @@ export class EnrollmentProgressService {
             return null
         }
 
-        const completedLessonIds = new Set(reports?.map(r => r.lesson_id) || [])
+        const completedLessonIds = new Set(reports?.map((r: any) => r.lesson_id) || [])
 
         // Find first lesson not in completed set
-        return allLessons.find(l => l.id && !completedLessonIds.has(l.id)) || null
+        return allLessons.find((l: any) => l.id && !completedLessonIds.has(l.id)) || null
     }
 
     /**
@@ -105,7 +105,7 @@ export class EnrollmentProgressService {
         enrollmentId: string,
         newLessonNumber: number
     ): Promise<void> {
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('enrollments')
             .update({ lesson_number: newLessonNumber })
             .eq('id', enrollmentId)
@@ -120,7 +120,7 @@ export class EnrollmentProgressService {
      */
     static async recalculateEnrollmentProgress(enrollmentId: string): Promise<number> {
         // 1. Get enrollment and its course
-        const { data: enrollment, error: enrollError } = await supabase
+        const { data: enrollment, error: enrollError } = await apiDataClient
             .from('enrollments')
             .select('course_id, lesson_number')
             .eq('id', enrollmentId)
@@ -129,7 +129,7 @@ export class EnrollmentProgressService {
         if (enrollError || !enrollment) throw new Error(`Failed to fetch enrollment: ${enrollError?.message}`)
 
         // 2. Fetch all lessons for the course
-        const { data: lessonsData, error: lessonsError } = await supabase
+        const { data: lessonsData, error: lessonsError } = await apiDataClient
             .from('lessons')
             .select('*')
             .eq('course_id', enrollment.course_id)
@@ -137,7 +137,7 @@ export class EnrollmentProgressService {
 
         if (lessonsError || !lessonsData) throw new Error(`Failed to fetch lessons: ${lessonsError?.message}`)
 
-        const allLessons = lessonsData.map(l => ({
+        const allLessons = lessonsData.map((l: any) => ({
             id: l.id,
             sequence: l.sequence
         })) as any
@@ -167,7 +167,7 @@ export class EnrollmentProgressService {
         allLessons: Lesson[]
     }> {
         // Fetch enrollment to get current progress
-        const { data: enrollment, error: enrollError } = await supabase
+        const { data: enrollment, error: enrollError } = await apiDataClient
             .from('enrollments')
             .select('lesson_number')
             .eq('id', enrollmentId)
@@ -178,7 +178,7 @@ export class EnrollmentProgressService {
         }
 
         // Fetch all lessons for the course
-        const { data: lessonsData, error: lessonsError } = await supabase
+        const { data: lessonsData, error: lessonsError } = await apiDataClient
             .from('lessons')
             .select('*')
             .eq('course_id', courseId)
@@ -188,7 +188,7 @@ export class EnrollmentProgressService {
             throw new Error(`Failed to fetch lessons: ${lessonsError.message}`)
         }
 
-        const lessons = lessonsData.map(l => ({
+        const lessons = lessonsData.map((l: any) => ({
             id: l.id,
             courseId: l.course_id,
             title: l.title,
@@ -198,7 +198,7 @@ export class EnrollmentProgressService {
         }))
 
         const currentLessonNumber = enrollment.lesson_number || 1
-        const recommendedLesson = lessons.find(l => l.sequence === currentLessonNumber) || lessons[0] || null
+        const recommendedLesson = lessons.find((l: any) => l.sequence === currentLessonNumber) || lessons[0] || null
 
         return {
             currentLessonNumber,

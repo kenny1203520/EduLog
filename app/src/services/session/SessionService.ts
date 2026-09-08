@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import type { ClassSessionDTO } from '@/models/Classroom'
 import { ClassSessionFactory, type ClassSessionScheduleRuleDTO } from '@/models/ClassSession'
 import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
@@ -43,7 +43,7 @@ export class SessionService {
         const to = from + perPage - 1
 
         if (visibilityMode === 'all') {
-            let query = supabase
+            let query = apiDataClient
                 .from('class_sessions')
                 .select(this.scheduleSelect, { count: 'exact' })
 
@@ -67,7 +67,7 @@ export class SessionService {
         const allSessions: ClassSessionDTO[] = []
 
         for (let offset = 0; ; offset += chunkSize) {
-            let query = supabase
+            let query = apiDataClient
                 .from('class_sessions')
                 .select(this.scheduleSelect)
 
@@ -115,7 +115,7 @@ export class SessionService {
         }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
-        const { data, error, count } = await supabase
+        const { data, error, count } = await apiDataClient
             .from('class_sessions')
             .select('id, name, classroom_id, course_ids', { count: 'exact' })
             .order('name', { ascending: true })
@@ -160,7 +160,7 @@ export class SessionService {
         const validationErrors = model.validate()
         if (validationErrors.length > 0) throw new Error(validationErrors[0])
 
-        const { data: savedId, error } = await supabase.rpc('save_class_session_with_schedule', {
+        const { data: savedId, error } = await apiDataClient.rpc('save_class_session_with_schedule', {
             p_session: payload,
             p_rules: rules.map(rule => ({
                 schedule_kind: rule.schedule_kind,
@@ -181,7 +181,7 @@ export class SessionService {
             const response = await apiResourceClient.get<any>('class-sessions', id, 'v1')
             return this.hydrateSession(response.data)
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_sessions')
             .select(this.scheduleSelect)
             .eq('id', id)
@@ -242,12 +242,12 @@ export class SessionService {
             await apiResourceClient.remove('class-sessions', id, 'v1')
             return
         }
-        const { error } = await supabase.from('class_sessions').delete().eq('id', id)
+        const { error } = await apiDataClient.from('class_sessions').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
     static async getSessionDetails(sessionId: string) {
-        const { data: session, error: sessionError } = await supabase
+        const { data: session, error: sessionError } = await apiDataClient
             .from('class_sessions')
             .select(`
           *,
@@ -259,7 +259,7 @@ export class SessionService {
 
         if (sessionError) throw new Error(sessionError.message)
 
-        const { count, error: countError } = await supabase
+        const { count, error: countError } = await apiDataClient
             .from('enrollments')
             .select('*', { count: 'exact', head: true })
             .eq('class_session_id', sessionId)
@@ -276,7 +276,7 @@ export class SessionService {
     }
 
     static async getMaxEnrollmentInDateRange(sessionId: string, startDate: string, endDate: string): Promise<number> {
-        const { data: occurrences, error } = await supabase
+        const { data: occurrences, error } = await apiDataClient
             .from('class_occurrences')
             .select(`
                 id,

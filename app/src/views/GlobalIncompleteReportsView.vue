@@ -383,7 +383,7 @@ import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
-import { supabase } from '@/lib/supabase'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 
@@ -520,14 +520,8 @@ watch(selectedReport, async (newVal) => {
 
     editorLoading.value = true
     try {
-        const { data: lessons, error } = await supabase
-            .from('lessons')
-            .select('id, title, sequence')
-            .eq('course_id', newVal.courseId)
-            .order('sequence', { ascending: true })
-
-        if (error) throw error
-        activeLessons.value = lessons || []
+        const response = await apiResourceClient.list<any>('lessons', { courseId: newVal.courseId, sort: 'sequence', perPage: 100 })
+        activeLessons.value = response.data || []
     } catch (e) {
         console.error('Failed to load lessons for report context', e)
         activeLessons.value = []

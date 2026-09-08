@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Suspension } from '@/models/Suspension'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
@@ -7,9 +7,9 @@ export class SuspensionQueryService {
     static async getSuspensions(enrollmentId: string): Promise<Suspension[]> {
         if (getApiV1Mode() === 'v1') {
             const response = await apiResourceClient.list<any>('student-suspensions', { enrollmentId, perPage: 100, sort: '-start_date', mode: 'v1' })
-            return (response.data || []).map(dto => new Suspension(dto))
+            return (response.data || []).map((dto: any) => new Suspension(dto))
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('student_suspensions')
             .select('*')
             .eq('enrollment_id', enrollmentId)
@@ -17,7 +17,7 @@ export class SuspensionQueryService {
 
         if (error) throw new Error(`Failed to fetch suspensions: ${error.message}`)
 
-        return (data || []).map(dto => new Suspension(dto))
+        return (data || []).map((dto: any) => new Suspension(dto))
     }
 
     static async isSuspended(enrollmentId: string, dateStr: string): Promise<boolean> {
@@ -25,7 +25,7 @@ export class SuspensionQueryService {
             const suspensions = await this.getSuspensions(enrollmentId)
             return suspensions.some((item) => item.startDate <= dateStr && (!item.endDate || item.endDate >= dateStr))
         }
-        const { count, error } = await supabase
+        const { count, error } = await apiDataClient
             .from('student_suspensions')
             .select('*', { count: 'exact', head: true })
             .eq('enrollment_id', enrollmentId)

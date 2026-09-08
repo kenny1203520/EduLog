@@ -7,8 +7,8 @@ const { authGetUser, rpcMock } = vi.hoisted(() => ({
     rpcMock: vi.fn()
 }))
 
-vi.mock('@/lib/supabase', () => ({
-    supabase: {
+vi.mock('@/services/api/ApiDataClient', () => ({
+    apiDataClient: {
         auth: { getUser: authGetUser },
         rpc: rpcMock
     }

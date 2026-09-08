@@ -7,7 +7,7 @@ import {
     type ReportCollabPeer,
     type SupabaseProviderOptions
 } from '@/services/report/SupabaseProvider'
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import * as Y from 'yjs'
 import { useAuthStore } from '@/stores/useAuthStore'
 
@@ -224,5 +224,5 @@ function defaultProviderFactory(
     userId: string,
     options: SupabaseProviderOptions
 ): SupabaseProvider {
-    return new SupabaseProvider(supabase, doc, reportId, reportVersion, userId, options)
+    return new SupabaseProvider(apiDataClient, doc, reportId, reportVersion, userId, options)
 }

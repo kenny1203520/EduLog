@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { OccurrenceReport, ReportVersion, type OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 import { AggregateService } from '@/services/AggregateService'
@@ -40,7 +40,7 @@ export class ReportQueryService {
         occurrenceId: string
     ): Promise<OccurrenceReport | null> {
         if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any[]>('/reports?enrollment_id=' + encodeURIComponent(enrollmentId) + '&class_occurrence_id=' + encodeURIComponent(occurrenceId) + '&limit=1&sort=-created_at'); return response.data?.[0] ? new OccurrenceReport(response.data[0]) : null }
-        const { data: existing, error } = await supabase
+        const { data: existing, error } = await apiDataClient
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
             .eq('enrollment_id', enrollmentId)
@@ -59,7 +59,7 @@ export class ReportQueryService {
         // accumulate an unbounded number of versions; cap at the most recent
         // 200 as a safety ceiling rather than leaving the query fully open --
         // real usage is nowhere near this, so it isn't a visible behavior change.
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('report_versions')
             .select('id, occurrence_report_id, version, content, edited_by, snapshot, created_at')
             .eq('occurrence_report_id', reportId)
@@ -68,7 +68,7 @@ export class ReportQueryService {
 
         if (error) throw new Error(`Failed to fetch versions: ${error.message}`)
 
-        return (data || []).map(dto => new ReportVersion(dto))
+        return (data || []).map((dto: any) => new ReportVersion(dto))
     }
 
     static async getReportsByEnrollment(
@@ -96,7 +96,7 @@ export class ReportQueryService {
             return { data: reports, count: agg.count || 0 }
         } catch (e) {
             // Fallback to previous direct query if aggregate fails
-            const { data, error, count } = await supabase
+            const { data, error, count } = await apiDataClient
                 .from('occurrence_reports')
                 .select(`
                     *,
@@ -159,7 +159,7 @@ export class ReportQueryService {
         const byEnrollment = new Map<string, OccurrenceReport[]>()
         if (enrollmentIds.length === 0) return byEnrollment
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -195,7 +195,7 @@ export class ReportQueryService {
         occurrenceId: string
     ): Promise<OccurrenceReport[]> {
         if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any[]>('/reports?class_occurrence_id=' + encodeURIComponent(occurrenceId) + '&limit=100&sort=-created_at'); return (response.data || []).map((row) => new OccurrenceReport(row)) }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
             .eq('class_occurrence_id', occurrenceId)
@@ -203,12 +203,12 @@ export class ReportQueryService {
 
         if (error) throw new Error(error.message)
 
-        return (data || []).map(dto => new OccurrenceReport(dto))
+        return (data || []).map((dto: any) => new OccurrenceReport(dto))
     }
 
     static async getReportById(reportId: string): Promise<OccurrenceReport> {
         if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any>('/reports/' + encodeURIComponent(reportId)); return new OccurrenceReport(response.data) }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
             .eq('id', reportId)
@@ -228,7 +228,7 @@ export class ReportQueryService {
         // opened for editing (a separate getReport()/getReportById() call).
         // Omitting them here is the difference between fetching plain strings
         // and fetching a whole rich-text document per field, per row.
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -273,7 +273,7 @@ export class ReportQueryService {
 
     static async getPendingReports(scope: 'all' | 'my_present' = 'my_present'): Promise<any[]> {
         const results = await this.fetchIncompleteReportsInternal(90, scope)
-        return results.map(r => ({
+        return results.map((r: any) => ({
             id: r.id,
             studentName: r.studentName,
             date: r.date,
@@ -305,10 +305,10 @@ export class ReportQueryService {
     }
 
     private static async getCurrentTeacherIdentity(): Promise<{ id: string, userId: string | null } | null> {
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) return null
 
-        const { data: teacher } = await supabase
+        const { data: teacher } = await apiDataClient
             .from('teachers')
             .select('id, user_id')
             .eq('user_id', user.id)
@@ -328,7 +328,7 @@ export class ReportQueryService {
         // Incompleteness is decided client-side below from plain scalar fields --
         // the three rich-text jsonb columns are never read for that, so they're
         // left out here (they can add up over a 90-day, all-present-reports scan).
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
                 id,
@@ -451,7 +451,7 @@ export class ReportQueryService {
         const from = (page - 1) * pageSize
         const to = from + pageSize - 1
 
-        let query = supabase
+        let query = apiDataClient
             .from('occurrence_reports')
             .select(`
                 id, content, is_completed, updated_at,
@@ -517,16 +517,16 @@ export class ReportQueryService {
         const from = (page - 1) * pageSize
         const to = from + pageSize - 1
 
-        const { data: enrollments } = await supabase
+        const { data: enrollments } = await apiDataClient
             .from('enrollments')
             .select('id')
             .eq('student_id', studentId)
 
         if (!enrollments?.length) return { data: [], count: 0 }
 
-        const enrollmentIds = enrollments.map(e => e.id)
+        const enrollmentIds = enrollments.map((e: any) => e.id)
 
-        let query = supabase
+        let query = apiDataClient
             .from('occurrence_reports')
             .select(`
                 id, content, is_completed, updated_at,

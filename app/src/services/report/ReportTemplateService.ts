@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { ReportTemplate, type ReportTemplateDTO } from '@/models/ReportTemplate'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
@@ -16,9 +16,9 @@ export class ReportTemplateService {
     static async getTemplates(instructorId: string): Promise<ReportTemplate[]> {
         if (getApiV1Mode() === 'v1') {
             const response = await apiResourceClient.list<ReportTemplateDTO>('report-templates', { instructorId, perPage: 100, sort: 'name', mode: 'v1' })
-            return (response.data || []).map(dto => new ReportTemplate(dto))
+            return (response.data || []).map((dto: any) => new ReportTemplate(dto))
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('report_templates')
             .select(REPORT_TEMPLATE_EDITOR_COLUMNS)
             .eq('instructor_id', instructorId)
@@ -26,7 +26,7 @@ export class ReportTemplateService {
 
         if (error) throw new Error(`Failed to fetch templates: ${error.message}`)
 
-        return (data as ReportTemplateDTO[]).map(dto => new ReportTemplate(dto))
+        return (data as ReportTemplateDTO[]).map((dto: any) => new ReportTemplate(dto))
     }
 
     /**
@@ -53,7 +53,7 @@ export class ReportTemplateService {
                 : await apiResourceClient.create<ReportTemplateDTO>('report-templates', writable, 'v1')
             return new ReportTemplate(response.data)
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('report_templates')
             .upsert(payload)
             .select(REPORT_TEMPLATE_EDITOR_COLUMNS)
@@ -72,7 +72,7 @@ export class ReportTemplateService {
             await apiResourceClient.remove('report-templates', id, 'v1')
             return
         }
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('report_templates')
             .delete()
             .eq('id', id)

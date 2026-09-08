@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { Enrollment } from '@/models/Enrollment'
@@ -10,9 +10,9 @@ export class EnrollmentQueryService {
     static async getByStudentId(studentId: string): Promise<Enrollment[]> {
         if (getApiV1Mode() === 'v1') {
             const response = await apiV1Client.get<any[]>('/enrollments?student_id=' + encodeURIComponent(studentId) + '&limit=100&sort=-created_at')
-            return (response.data || []).map((dto) => new Enrollment(dto))
+            return (response.data || []).map((dto: any) => new Enrollment(dto))
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('enrollments')
             .select(`
                 *,
@@ -44,7 +44,7 @@ export class EnrollmentQueryService {
 
         if (error) throw new Error(`Failed to fetch enrollments: ${error.message}`)
 
-        return (data as any[]).map(dto => new Enrollment(dto))
+        return (data as any[]).map((dto: any) => new Enrollment(dto))
     }
 
     /**
@@ -53,9 +53,9 @@ export class EnrollmentQueryService {
     static async getActiveEnrollmentCandidates(): Promise<Enrollment[]> {
         if (getApiV1Mode() === 'v1') {
             const response = await apiV1Client.get<any[]>('/enrollments?status=regular&limit=100&sort=-created_at')
-            return (response.data || []).map((dto) => new Enrollment(dto))
+            return (response.data || []).map((dto: any) => new Enrollment(dto))
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('enrollments')
             .select(`
                 *,
@@ -69,6 +69,6 @@ export class EnrollmentQueryService {
 
         if (error) throw new Error(`Failed to fetch active enrollments: ${error.message}`)
 
-        return (data as any[]).map(dto => new Enrollment(dto))
+        return (data as any[]).map((dto: any) => new Enrollment(dto))
     }
 }

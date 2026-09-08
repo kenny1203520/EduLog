@@ -11,11 +11,11 @@ EduLog 前端使用 Vue 3 + TypeScript + Vite，提供教師/助教的日常報�
 - Vue I18n
 - Tailwind CSS 4
 - Vite PWA
-- Supabase JS Client
+- Same-origin Express API client
 
 ## 環境需求
 
-- Node.js 20+
+- Node.js 20+ (Express API runtime uses Node.js 26 LTS)
 - npm 10+
 
 ## 環境變數
@@ -26,19 +26,14 @@ EduLog 前端使用 Vue 3 + TypeScript + Vite，提供教師/助教的日常報�
 cp .env.example .env
 ```
 
-填入以下值：
+前端只讀取 Nginx 啟動時產生的 `/runtime-config.js`。瀏覽器不需要 Supabase URL、anon key 或 Functions URL。
+
+本機可使用：
 
 ```env
-VITE_SUPABASE_URL=http://localhost:8000
-VITE_SUPABASE_ANON_KEY=<your_supabase_anon_key>
+VITE_API_V1_MODE=mock
+VITE_LEGACY_API_BASE_URL=/api
 ```
-
-`VITE_SUPABASE_ANON_KEY` 請對應 `../supabase/.env` 的 `ANON_KEY`。
-
-Docker production image 會在容器啟動時產生 `/runtime-config.js`，因此
-`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`、`VITE_SUPABASE_FUNCTIONS_BASE_URL`
-可由 `docker-compose.yml` 的 environment 設定。修改這些環境變數後只需要重啟容器，不需要重新建置 image。
-
 ## 開發
 
 ```bash
@@ -66,7 +61,7 @@ Production Docker image 使用 Nginx 服務 `dist` 靜態檔，不使用 `vite p
 
 - `src/views/`：頁面層
 - `src/components/`：可重用元件
-- `src/services/`：資料存取與 Supabase 互動
+- `src/services/`：同源 Express API 資料存取與領域服務
 - `src/models/`：領域模型
 - `src/stores/`：Pinia 狀態管理
 - `src/locales/`：多語系字串（`zh-TW` / `en`）

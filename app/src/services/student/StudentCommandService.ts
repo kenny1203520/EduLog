@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Student, type StudentDTO } from '@/models/Student'
 import { EnrollmentService } from '../enrollment/EnrollmentService'
 import { DateUtils } from '@/utils/DateUtils'
@@ -19,10 +19,10 @@ export class StudentCommandService {
             const result = await apiResourceClient.create<any>('students', this.normalizeStudent(student), 'v1')
             return new Student(result.data)
         }
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('students')
             .insert({ ...this.normalizeStudent(student), user_id: user.id })
             .select()
@@ -41,7 +41,7 @@ export class StudentCommandService {
             const result = await apiResourceClient.update<any>('students', id, this.normalizeStudent(updates), 'v1')
             return new Student(result.data)
         }
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('students')
             .update(this.normalizeStudent(updates))
             .eq('id', id)
@@ -76,19 +76,19 @@ export class StudentCommandService {
         }
 
         // 1. Delete Contacts
-        const { error: e1 } = await supabase.from('student_contacts').delete().eq('student_id', id)
+        const { error: e1 } = await apiDataClient.from('student_contacts').delete().eq('student_id', id)
         if (e1) throw new Error('Failed to delete contacts: ' + e1.message)
 
         // 2. Delete Schools
-        const { error: e2 } = await supabase.from('student_schools').delete().eq('student_id', id)
+        const { error: e2 } = await apiDataClient.from('student_schools').delete().eq('student_id', id)
         if (e2) throw new Error('Failed to delete schools: ' + e2.message)
 
         // 3. Delete Credentials
-        const { error: e3 } = await supabase.from('student_credentials').delete().eq('student_id', id)
+        const { error: e3 } = await apiDataClient.from('student_credentials').delete().eq('student_id', id)
         if (e3) throw new Error('Failed to delete credentials: ' + e3.message)
 
         // 5. Finally Delete Student
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('students')
             .delete()
             .eq('id', id)
@@ -104,23 +104,23 @@ export class StudentCommandService {
     // --- Contacts ---
     static async addContact(contact: any) {
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-contacts', contact, 'v1')).data
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const { data, error } = await supabase.from('student_contacts').insert({ ...contact, user_id: user.id }).select().single()
+        const { data, error } = await apiDataClient.from('student_contacts').insert({ ...contact, user_id: user.id }).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async updateContact(id: string, contact: any) {
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<any>('student-contacts', id, contact, 'v1')).data
-        const { data, error } = await supabase.from('student_contacts').update(contact).eq('id', id).select().single()
+        const { data, error } = await apiDataClient.from('student_contacts').update(contact).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async deleteContact(id: string) {
         if (getApiV1Mode() === 'v1') { await apiResourceClient.remove<any>('student-contacts', id, 'v1'); return }
-        const { error } = await supabase.from('student_contacts').delete().eq('id', id)
+        const { error } = await apiDataClient.from('student_contacts').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
@@ -128,9 +128,9 @@ export class StudentCommandService {
     static async addSchool(school: any) {
         const timeZone = DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-schools', { ...school, time_zone: timeZone }, 'v1')).data
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const { data, error } = await supabase.from('student_schools').insert({ ...school, time_zone: timeZone, user_id: user.id }).select().single()
+        const { data, error } = await apiDataClient.from('student_schools').insert({ ...school, time_zone: timeZone, user_id: user.id }).select().single()
         if (error) throw new Error(error.message)
         return data
     }
@@ -141,37 +141,37 @@ export class StudentCommandService {
             time_zone: DateUtils.isValidTimeZone(school.time_zone) ? school.time_zone : DateUtils.getDefaultTimeZone()
         }
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<any>('student-schools', id, updates, 'v1')).data
-        const { data, error } = await supabase.from('student_schools').update(updates).eq('id', id).select().single()
+        const { data, error } = await apiDataClient.from('student_schools').update(updates).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async deleteSchool(id: string) {
         if (getApiV1Mode() === 'v1') { await apiResourceClient.remove<any>('student-schools', id, 'v1'); return }
-        const { error } = await supabase.from('student_schools').delete().eq('id', id)
+        const { error } = await apiDataClient.from('student_schools').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 
     // --- Credentials ---
     static async addCredential(credential: any) {
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-credentials', credential, 'v1')).data
-        const { data: { user } } = await supabase.auth.getUser()
+        const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const { data, error } = await supabase.from('student_credentials').insert({ ...credential, user_id: user.id }).select().single()
+        const { data, error } = await apiDataClient.from('student_credentials').insert({ ...credential, user_id: user.id }).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async updateCredential(id: string, credential: any) {
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<any>('student-credentials', id, credential, 'v1')).data
-        const { data, error } = await supabase.from('student_credentials').update(credential).eq('id', id).select().single()
+        const { data, error } = await apiDataClient.from('student_credentials').update(credential).eq('id', id).select().single()
         if (error) throw new Error(error.message)
         return data
     }
 
     static async deleteCredential(id: string) {
         if (getApiV1Mode() === 'v1') { await apiResourceClient.remove<any>('student-credentials', id, 'v1'); return }
-        const { error } = await supabase.from('student_credentials').delete().eq('id', id)
+        const { error } = await apiDataClient.from('student_credentials').delete().eq('id', id)
         if (error) throw new Error(error.message)
     }
 }

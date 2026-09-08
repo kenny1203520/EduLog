@@ -5,8 +5,8 @@ const { fromMock } = vi.hoisted(() => ({
     fromMock: vi.fn()
 }))
 
-vi.mock('@/lib/supabase', () => ({
-    supabase: {
+vi.mock('@/services/api/ApiDataClient', () => ({
+    apiDataClient: {
         from: fromMock
     }
 }))

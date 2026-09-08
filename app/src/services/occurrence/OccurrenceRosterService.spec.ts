@@ -3,7 +3,7 @@ import { OccurrenceRosterService } from './OccurrenceRosterService'
 
 const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
 
-vi.mock('@/lib/supabase', () => ({ supabase: { rpc: rpcMock } }))
+vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { rpc: rpcMock } }))
 
 describe('OccurrenceRosterService', () => {
     beforeEach(() => vi.clearAllMocks())

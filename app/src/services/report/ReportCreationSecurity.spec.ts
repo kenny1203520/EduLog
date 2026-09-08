@@ -5,7 +5,7 @@ import { ReportLifecyclePolicy } from './ReportLifecyclePolicy'
 
 const { fromMock } = vi.hoisted(() => ({ fromMock: vi.fn() }))
 
-vi.mock('@/lib/supabase', () => ({ supabase: { from: fromMock } }))
+vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: fromMock } }))
 vi.mock('./ReportLifecyclePolicy', () => ({
     ReportLifecyclePolicy: { buildInitialReportPayload: vi.fn() }
 }))
