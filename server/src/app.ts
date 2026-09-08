@@ -16,6 +16,7 @@ import { createEnrollmentRouter } from './enrollmentRouter.js'
 import { createReportRouter } from './reportRouter.js'
 import { createOccurrenceRouter } from './occurrenceRouter.js'
 import { createSessionRouter } from './sessionRouter.js'
+import { createStudentRouter } from './studentRouter.js'
 
 export function createApp(env: NodeJS.ProcessEnv = process.env) {
   const config = loadConfig(env)
@@ -49,6 +50,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   protectedApi.use(createReportRouter())
   protectedApi.use(createOccurrenceRouter())
   protectedApi.use(createSessionRouter())
+  protectedApi.use(createStudentRouter())
   protectedApi.use(createResourceRouter())
   app.use('/api', protectedApi)
   app.use((_req, _res, next) => next(new ApiError(404, 'NOT_FOUND', 'Route was not found')))

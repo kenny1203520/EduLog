@@ -66,6 +66,7 @@ export class StudentCommandService {
      * Performs manual cascade delete to ensure all related records are removed.
      */
     static async delete(id: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('students', id, 'v1'); return }
         // 0. Delete Enrollments via EnrollmentService (this triggers occurrence sync)
         const enrollments = await EnrollmentService.getByStudentId(id)
         for (const enr of enrollments) {
