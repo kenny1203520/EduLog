@@ -12,6 +12,8 @@ import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
 import { safeExternalHref } from '@/utils/safeExternalHref'
 import { AuthorizationError } from '@/services/errors/AppError'
+import { ApiV1Error, apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 function assignRichTextPair(
     target: Record<string, unknown>,
@@ -42,6 +44,22 @@ type ReportSaveData = {
     externalLink?: string
 }
 
+function toApiReportData(data?: ReportSaveData): Record<string, unknown> {
+    if (!data) return {}
+    const result: Record<string, unknown> = {}
+    if (data.lessonId !== undefined) result.lesson_id = data.lessonId
+    if (data.isCompleted !== undefined) result.is_completed = data.isCompleted
+    if (data.progressLetter !== undefined) result.progress_letter = data.progressLetter
+    if (data.attendanceStatus !== undefined) result.attendance_status = data.attendanceStatus
+    if (data.absenceReason !== undefined) result.absence_reason = data.absenceReason
+    if (data.classParticipation !== undefined) result.class_participation = data.classParticipation
+    if (data.classroomBehavior !== undefined) result.classroom_behavior = data.classroomBehavior
+    if (data.contactNotes !== undefined || data.contactNotesDocument !== undefined) assignRichTextPair(result, 'contact_notes', 'contact_notes_document', data.contactNotes, data.contactNotesDocument)
+    if (data.classNotes !== undefined || data.classNotesDocument !== undefined) assignRichTextPair(result, 'class_notes', 'class_notes_document', data.classNotes, data.classNotesDocument)
+    if (data.content !== undefined || data.contentDocument !== undefined) assignRichTextPair(result, 'content', 'content_document', data.content, data.contentDocument)
+    if (data.externalLink !== undefined) result.external_link = safeExternalHref(data.externalLink) || null
+    return result
+}
 type AttendanceOnlyData = {
     attendanceStatus: 'present' | 'absent' | 'pending'
     absenceReason?: string | null
@@ -177,6 +195,10 @@ export class ReportCommandService {
         enrollmentId: string,
         occurrenceId: string
     ): Promise<OccurrenceReport> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any>('/reports', { enrollment_id: enrollmentId, class_occurrence_id: occurrenceId })
+            return new OccurrenceReport(response.data)
+        }
         const newReport = await ReportLifecyclePolicy.buildInitialReportPayload(enrollmentId, occurrenceId)
 
         let { data: created, error: createError } = await supabase
@@ -235,6 +257,15 @@ export class ReportCommandService {
         _userId?: string,
         detailedData?: ReportSaveData
     ): Promise<SaveReportResult> {
+        if (getApiV1Mode() === 'v1') {
+            try {
+                const response = await apiV1Client.patch<any>('/reports/' + encodeURIComponent(reportId), { ...toApiReportData(detailedData), expected_version: currentVersion })
+                return { success: true, conflict: false, newVersion: response.data.version, updatedReport: response.data }
+            } catch (error) {
+                if (error instanceof ApiV1Error && error.status === 409) return { success: false, conflict: true, errorCode: 'conflict', message: error.message, messageKey: 'errors.conflict' }
+                return { success: false, conflict: false, message: error instanceof Error ? error.message : 'Failed to save report', messageKey: 'errors.unknown' }
+            }
+        }
         // Narrow pre-fetch: the CAS check and the system-managed guard below
         // only ever read these three columns. The three rich-text jsonb
         // columns are only needed to populate the conflict-resolution UI,
@@ -384,6 +415,15 @@ export class ReportCommandService {
         _userId: string | undefined,
         attendanceData: AttendanceOnlyData
     ): Promise<SaveReportResult> {
+        if (getApiV1Mode() === 'v1') {
+            try {
+                const response = await apiV1Client.patch<any>('/reports/' + encodeURIComponent(reportId), { attendance_status: attendanceData.attendanceStatus, ...(attendanceData.absenceReason !== undefined ? { absence_reason: attendanceData.absenceReason } : {}), expected_version: currentVersion })
+                return { success: true, conflict: false, newVersion: response.data.version, updatedReport: response.data }
+            } catch (error) {
+                if (error instanceof ApiV1Error && error.status === 409) return { success: false, conflict: true, errorCode: 'conflict', message: error.message, messageKey: 'errors.conflict' }
+                return { success: false, conflict: false, message: error instanceof Error ? error.message : 'Failed to save attendance', messageKey: 'errors.unknown' }
+            }
+        }
         let preflight: any
         try {
             preflight = await runReportRequest(() => supabase
@@ -631,6 +671,7 @@ export class ReportCommandService {
     }
 
     static async deleteReportAndRevertProgress(reportId: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiV1Client.delete('/reports/' + encodeURIComponent(reportId)); return }
         const { data: report, error: fetchError } = await supabase
             .from('occurrence_reports')
             .select('enrollment_id')
@@ -650,6 +691,7 @@ export class ReportCommandService {
     }
 
     static async deleteReport(reportId: string): Promise<void> {
+        if (getApiV1Mode() === 'v1') { await apiV1Client.delete('/reports/' + encodeURIComponent(reportId)); return }
         const { error } = await supabase
             .from('occurrence_reports')
             .delete()
@@ -702,3 +744,5 @@ export class ReportCommandService {
         return ReportQueryService.getReportsByOccurrence(occurrenceId)
     }
 }
+
+
