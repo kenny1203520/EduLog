@@ -6,6 +6,7 @@ import { TeacherService } from '../teacher/TeacherService'
 import { DateUtils } from '@/utils/DateUtils'
 import { ClassSessionFactory } from '@/models/ClassSession'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export class OccurrenceCommandService {
@@ -19,6 +20,10 @@ export class OccurrenceCommandService {
         endDate: Date,
         options: { skipExistingDates?: Set<string> } = {}
     ): Promise<ClassOccurrence[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any>('/occurrences/generate', { class_session_id: sessionId, start_date: this.formatDate(startDate), end_date: this.formatDate(endDate), skip_existing_dates: options.skipExistingDates ? [...options.skipExistingDates] : undefined })
+            return (response.data || []).map((dto: any) => new ClassOccurrence(dto))
+        }
         const { data: session, error: sessionError } = await supabase
             .from('class_sessions')
             .select('*, class_session_schedule_rules(*)')
@@ -217,6 +222,18 @@ export class OccurrenceCommandService {
         endDate: Date,
         sessionIds?: string[]
     ): Promise<number> {
+        if (getApiV1Mode() === 'v1') {
+            let totalGenerated = 0
+            for (let page = 1; ; page += 1) {
+                const response = await apiResourceClient.list<any>('class-sessions', { page, perPage: 100, mode: 'v1' })
+                for (const session of response.data || []) {
+                    if (sessionIds && sessionIds.length > 0 && !sessionIds.includes(session.id)) continue
+                    totalGenerated += (await this.generateOccurrences(session.id, startDate, endDate)).length
+                }
+                if (!response.data?.length || (response.meta?.total !== undefined && page * 100 >= Number(response.meta.total)) || (response.data?.length ?? 0) < 100) break
+            }
+            return totalGenerated
+        }
         let query = supabase.from('class_sessions').select('id')
 
         if (sessionIds && sessionIds.length > 0) {
