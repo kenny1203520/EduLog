@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { assertClientManagedAttendanceReason, firstUncompletedSequence } from './reportRouter.js'
 
-describe('report API contract', () => {
-  it('uses scoped report RPCs and optimistic version checks', () => {
-    const source = readFileSync(new URL('./reportRouter.ts', import.meta.url), 'utf8')
-    expect(source).toContain("rpc('can_create_occurrence_report'")
-    expect(source).toContain("rpc('can_access_report'")
-    expect(source).toContain('expected_version')
-    expect(source).toContain('VERSION_CONFLICT')
-    expect(source).toContain('SYSTEM_MANAGED_REPORT')
+describe('report lifecycle progress', () => {
+  it('selects the first lesson not represented by a report', () => {
+    expect(firstUncompletedSequence([{ id: 'a', sequence: 1 }, { id: 'b', sequence: 2 }], new Set(['a']), 1)).toBe(2)
+    expect(firstUncompletedSequence([{ id: 'a', sequence: 1 }], new Set(['a']), 1)).toBe(1)
+  })
+
+  it('rejects forged server-managed attendance reasons', () => {
+    expect(() => assertClientManagedAttendanceReason('holiday')).toThrow('Holiday and suspension')
+    expect(() => assertClientManagedAttendanceReason('suspension')).toThrow('Holiday and suspension')
+    expect(() => assertClientManagedAttendanceReason('teacher_note')).not.toThrow()
   })
 })

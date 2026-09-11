@@ -9,6 +9,6 @@ describe('suspension API contract', () => {
     expect(source).toContain('syncReports')
     expect(source).toContain('revertReports')
     expect(source).toContain('idempotency(req')
-    expect(source).toContain('teaching.enrollments.update')
+    expect(source).toContain('teaching.students.update')
   })
 })

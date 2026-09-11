@@ -2,14 +2,16 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
+import { setAuditContext } from './context.js'
 
 const fields = 'id,class_session_id,occurrence_date,status,notes,original_start_time,original_end_time,actual_start_time,actual_end_time,teacher_ids,teacher_attendance,is_conducted,time_zone,created_at,updated_at'
 const bodySchema = z.object({ status: z.enum(['scheduled', 'completed', 'cancelled']).optional(), notes: z.string().max(10000).nullable().optional(), actual_start_time: z.string().max(32).nullable().optional(), actual_end_time: z.string().max(32).nullable().optional(), teacher_attendance: z.record(z.string(), z.boolean()).optional(), is_conducted: z.boolean().optional() }).strict()
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next) }
-async function authorize(req: Request, id: string) {
+async function authorize(req: Request, id: string, action: 'update' | 'delete' = 'update') {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const occurrence = await req.db.from('class_occurrences').select('class_session_id,occurrence_date').eq('id', id).maybeSingle(); if (occurrence.error) throw mapDatabaseError(occurrence.error); if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
-  const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.occurrences.update', p_classroom_id: null, p_class_session_id: occurrence.data.class_session_id }); if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify this occurrence')
+  setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: id, action, permission: `teaching.occurrences.${action}`, scopeId: occurrence.data.class_session_id })
+  const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.occurrences.${action}`, p_classroom_id: null, p_class_session_id: occurrence.data.class_session_id }); if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify this occurrence')
   return occurrence.data
 }
 async function update(req: Request, res: Response) {
@@ -29,7 +31,7 @@ async function update(req: Request, res: Response) {
 async function remove(req: Request, res: Response) {
   if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Occurrence id is required')
-  await authorize(req, id); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  await authorize(req, id, 'delete'); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db.from('class_occurrences').delete().eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
@@ -49,6 +51,7 @@ function nextDate(value: string) {
 async function generate(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const input = generationSchema.parse(req.body)
+  setAuditContext(req, { domain: 'teaching', resource: 'occurrences', action: 'create', permission: 'teaching.occurrences.create', scopeId: input.class_session_id })
   if (input.start_date > input.end_date) throw new ApiError(422, 'INVALID_DATE_RANGE', 'start_date must not be after end_date')
   const spanDays = Math.floor((Date.parse(`${input.end_date}T00:00:00Z`) - Date.parse(`${input.start_date}T00:00:00Z`)) / 86400000)
   if (!Number.isFinite(spanDays) || spanDays > 3660) throw new ApiError(422, 'DATE_RANGE_TOO_LARGE', 'The generation range is too large')

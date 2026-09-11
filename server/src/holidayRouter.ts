@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
+import { setAuditContext } from './context.js'
 
 const fields = 'id,start_date,end_date,time_zone,name,kind,classroom_ids,class_session_ids,teacher_ids,created_at,updated_at'
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -38,10 +39,28 @@ function applies(holiday: Holiday, occurrence: Occurrence) {
   return (!classrooms.length && !sessions.length) || (occurrence.class_session_id ? sessions.includes(occurrence.class_session_id) : false) || (!!classroomId && classrooms.includes(classroomId))
 }
 
-async function permission(req: Request, action: 'create' | 'update' | 'delete' | 'list', idsToCheck: { classroomId?: string; sessionId?: string } = {}) {
+type HolidayScope = { classroom_ids?: string[] | null; class_session_ids?: string[] | null }
+
+export async function permission(req: Request, action: 'create' | 'update' | 'delete' | 'list', scope: HolidayScope = {}) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const result = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.holidays.${action}`, p_classroom_id: idsToCheck.classroomId ?? null, p_class_session_id: idsToCheck.sessionId ?? null })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage holidays')
+  const classroomIds = array(scope.classroom_ids)
+  const sessionIds = array(scope.class_session_ids)
+  setAuditContext(req, { domain: action === 'list' ? 'teaching' : classroomIds.length || sessionIds.length ? 'teaching' : 'system', resource: 'holidays', action, permission: `teaching.holidays.${action}`, scopeId: classroomIds[0] ?? sessionIds[0] ?? null })
+  if (!classroomIds.length && !sessionIds.length) {
+    const rpcName = action === 'list' ? 'has_api_permission' : 'has_system_permission'
+    const args = { p_user_id: req.user.id, p_permission_key: `teaching.holidays.${action}`, ...(action === 'list' ? { p_classroom_id: null, p_class_session_id: null } : {}) }
+    const result = await req.db.rpc(rpcName, args)
+    if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage holidays')
+    return
+  }
+  for (const classroomId of classroomIds) {
+    const result = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.holidays.${action}`, p_classroom_id: classroomId, p_class_session_id: null })
+    if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage holidays')
+  }
+  for (const sessionId of sessionIds) {
+    const result = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.holidays.${action}`, p_classroom_id: null, p_class_session_id: sessionId })
+    if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage holidays')
+  }
 }
 
 async function occurrences(req: Request, holiday: Holiday) {
@@ -125,7 +144,7 @@ async function sync(req: Request, holiday: Holiday) {
 }
 
 async function create(req: Request, res: Response) {
-  const input = createSchema.parse(req.body); validRange(input.start_date, input.end_date); await permission(req, 'create', { classroomId: input.classroom_ids[0], sessionId: input.class_session_ids[0] })
+  const input = createSchema.parse(req.body); validRange(input.start_date, input.end_date); await permission(req, 'create', input)
   const replay = await idempotency(req, 201, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.from('holidays').insert({ ...input, time_zone: safeTimezone(input.time_zone) }).select(fields).single(); if (result.error) throw mapDatabaseError(result.error)
   await sync(req, result.data as Holiday); const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, body); return res.status(201).json(body)
@@ -134,7 +153,9 @@ async function create(req: Request, res: Response) {
 async function update(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Holiday id is required')
   const current = await req.db!.from('holidays').select(fields).eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Holiday was not found')
-  const input = updateSchema.parse(req.body); const start = input.start_date ?? current.data.start_date; const end = input.end_date ?? current.data.end_date; validRange(start, end); await permission(req, 'update', { classroomId: array(input.classroom_ids ?? current.data.classroom_ids)[0], sessionId: array(input.class_session_ids ?? current.data.class_session_ids)[0] })
+  const input = updateSchema.parse(req.body); const start = input.start_date ?? current.data.start_date; const end = input.end_date ?? current.data.end_date; validRange(start, end)
+  await permission(req, 'update', current.data as Holiday)
+  await permission(req, 'update', { classroom_ids: input.classroom_ids ?? current.data.classroom_ids, class_session_ids: input.class_session_ids ?? current.data.class_session_ids })
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   await release(req, current.data as Holiday)
   const result = await req.db!.from('holidays').update({ ...input, time_zone: input.time_zone === undefined ? undefined : safeTimezone(input.time_zone) }).eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Holiday was not found')
@@ -144,14 +165,14 @@ async function update(req: Request, res: Response) {
 async function remove(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Holiday id is required')
   const current = await req.db!.from('holidays').select(fields).eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Holiday was not found')
-  await permission(req, 'delete', { classroomId: array(current.data.classroom_ids)[0], sessionId: array(current.data.class_session_ids)[0] }); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  await permission(req, 'delete', current.data as Holiday); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   await release(req, current.data as Holiday); const result = await req.db!.from('holidays').delete().eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Holiday was not found')
   const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
 }
 
 async function check(req: Request, res: Response) {
   const input = z.object({ date, classroom_id: z.string().uuid().optional(), class_session_id: z.string().uuid().optional(), teacher_id: z.string().uuid().optional() }).strict().parse(req.query)
-  await permission(req, 'list', { classroomId: input.classroom_id, sessionId: input.class_session_id })
+  await permission(req, 'list', { classroom_ids: input.classroom_id ? [input.classroom_id] : [], class_session_ids: input.class_session_id ? [input.class_session_id] : [] })
   let query = req.db!.from('holidays').select(fields).lte('start_date', input.date).gte('end_date', input.date)
   if (input.teacher_id) query = query.eq('kind', 'teacher_leave').contains('teacher_ids', [input.teacher_id])
   else query = query.eq('kind', 'closure')

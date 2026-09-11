@@ -11,13 +11,7 @@ const allowedRpcs = new Set([
   'get_effective_occurrence_enrollment_ids',
   'get_single_lesson_transfer_history',
   'get_effective_single_lesson_transfer_targets',
-  'repair_single_lesson_transfer_report',
-  'transfer_single_lesson',
-  'cancel_single_lesson_transfer',
-  'resolve_single_lesson_transfer_conflict',
-  'save_class_session_with_schedule',
   'resolve_user_permission',
-  'replace_role_permission_policies',
 ])
 
 async function invoke(req: Request, res: Response) {

@@ -10,11 +10,9 @@ async function remove(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!id) throw new ApiError(400, 'INVALID_ID', 'Student id is required')
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const permission = await req.db.rpc('has_api_permission', {
-    p_user_id: req.user.id,
+  const permission = await req.db.rpc('can_access_student', {
+    p_student_id: id,
     p_permission_key: 'teaching.students.delete',
-    p_classroom_id: null,
-    p_class_session_id: null,
   })
   if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to delete students')
   const replay = await idempotency(req, 200, null)

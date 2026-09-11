@@ -5,9 +5,10 @@ describe('class session teacher assignment API contract', () => {
   it('exposes scoped CRUD routes with canonical permission and idempotency guards', () => {
     const source = readFileSync(new URL('./teacherAssignmentRouter.ts', import.meta.url), 'utf8')
     expect(source).toContain("rpc('has_api_permission'")
-    expect(source).toContain('teaching.sessions.')
+    expect(source).toContain('teaching.class_sessions.')
     expect(source).toContain("router.get('/class-sessions/:sessionId/teachers'")
     expect(source).toContain("router.post('/class-sessions/:sessionId/teachers'")
+    expect((source.match(/await authorize\(req, id, 'update'\)/g) ?? []).length).toBe(3)
     expect(source).toContain('idempotency(req')
     expect(source).toContain("from('class_session_teachers')")
   })

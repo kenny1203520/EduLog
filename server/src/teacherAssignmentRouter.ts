@@ -30,7 +30,7 @@ async function authorize(req: Request, id: string, action: 'read' | 'list' | 'cr
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const result = await req.db.rpc('has_api_permission', {
     p_user_id: req.user.id,
-    p_permission_key: 'teaching.sessions.' + action,
+    p_permission_key: 'teaching.class_sessions.' + action,
     p_classroom_id: null,
     p_class_session_id: id,
   })
@@ -64,7 +64,10 @@ async function list(req: Request, res: Response) {
 
 async function create(req: Request, res: Response) {
   const id = sessionId(req)
-  await authorize(req, id, 'create')
+  // Assignments are relationship-management mutations on an existing class
+  // session. Keep POST, PATCH, and DELETE aligned with the RLS policy and
+  // OpenAPI contract: all require class-session update permission.
+  await authorize(req, id, 'update')
   const input = bulkSchema.parse(req.body)
   const replay = await idempotency(req, 201, null)
   if (replay) return res.status(replay.status).json(replay.body)
@@ -79,7 +82,7 @@ async function create(req: Request, res: Response) {
 
 async function remove(req: Request, res: Response) {
   const id = sessionId(req)
-  await authorize(req, id, 'delete')
+  await authorize(req, id, 'update')
   const removalBody = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}
   const input = removeSchema.parse({
     teacher_id: removalBody.teacher_id ?? req.query.teacher_id,

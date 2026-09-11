@@ -16,7 +16,7 @@ async function enrollment(req: Request, id: string) {
   const result = await req.db.from('enrollments').select('id,class_session_id').eq('id', id).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
-  const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.enrollments.update', p_classroom_id: null, p_class_session_id: result.data.class_session_id })
+  const permission = await req.db.rpc('can_access_enrollment', { p_enrollment_id: id, p_permission_key: 'teaching.students.update' })
   if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage suspensions')
   return result.data
 }

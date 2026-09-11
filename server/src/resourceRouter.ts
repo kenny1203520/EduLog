@@ -1,22 +1,13 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
-import { sendCreated, sendData } from './response.js'
+import { sendData } from './response.js'
 import { listQuerySchema, resources, type ResourceDefinition } from './resources.js'
+import { authorizeCollection, authorizeResource, permissionForResource } from './authorization.js'
+import { setAuditContext } from './context.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
 const bodySchema = z.record(z.string(), z.unknown())
-
-function permissionFor(def: ResourceDefinition, action: string) {
-  return `${def.permission.slice(0, def.permission.lastIndexOf('.') + 1)}${action}`
-}
-
-async function allowed(req: Request, permission: string, resourceId: string | null) {
-  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const { data, error } = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: permission, p_classroom_id: resourceId, p_class_session_id: null })
-  if (error || data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
-}
 
 export async function idempotency(req: Request, status: number, body: unknown) {
   const key = req.header('idempotency-key')?.trim()
@@ -27,8 +18,17 @@ export async function idempotency(req: Request, status: number, body: unknown) {
   const { data, error } = await req.adminDb.rpc('reserve_api_idempotency', { p_user_id: req.user.id, p_key: key, p_method: req.method, p_route: req.originalUrl.split('?')[0] })
   if (error) throw mapDatabaseError(error)
   const row = Array.isArray(data) ? data[0] : data
-  if (row?.is_replay) { const replay = row.response_body ?? {}; return { status: row.response_status ?? 200, body: replay } as const }
+  if (row?.is_replay) {
+    const replay = row.response_body && typeof row.response_body === 'object'
+      ? { ...(row.response_body as Record<string, unknown>), ...(isErrorEnvelope(row.response_body) ? { error: { ...(row.response_body as { error: Record<string, unknown> }).error, request_id: req.requestId, trace_id: req.traceId } } : {}), request_id: req.requestId, trace_id: req.traceId }
+      : { data: row.response_body ?? null, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+    return { status: row.response_status ?? 200, body: replay } as const
+  }
   return false
+}
+
+function isErrorEnvelope(value: unknown): value is { error: Record<string, unknown> } {
+  return Boolean(value && typeof value === 'object' && 'error' in value && value.error && typeof value.error === 'object')
 }
 
 export async function complete(req: Request, status: number, body: unknown) {
@@ -36,10 +36,20 @@ export async function complete(req: Request, status: number, body: unknown) {
   if (key && req.user && req.adminDb && mutationMethods.includes(req.method)) await req.adminDb.rpc('complete_api_idempotency', { p_user_id: req.user.id, p_key: key, p_status: status, p_body: body })
 }
 
-function pickBody(def: Pick<ResourceDefinition, 'writable'>, body: Record<string, unknown>) {
-  const unknown = Object.keys(body).filter((key) => !def.writable.includes(key))
+function pickBody(def: Pick<ResourceDefinition, 'writable' | 'compatibilityFields'>, body: Record<string, unknown>) {
+  const compatibilityFields = def.compatibilityFields ?? []
+  const unknown = Object.keys(body).filter((key) => !def.writable.includes(key) && !compatibilityFields.includes(key))
   if (unknown.length) throw new ApiError(422, 'UNKNOWN_FIELD', 'The request contains a non-writable field', Object.fromEntries(unknown.map((key) => [key, ['Field is not writable']])) )
+  if (compatibilityFields.includes('is_system') && body.is_system !== undefined && body.is_system !== false) {
+    throw new ApiError(403, 'SYSTEM_ROLE_FORBIDDEN', 'System roles cannot be created or modified through this API', { is_system: ['Only custom roles are supported'] })
+  }
   return Object.fromEntries(Object.entries(body).filter(([key]) => def.writable.includes(key)))
+}
+
+function validateBody(def: ResourceDefinition, body: Record<string, unknown>, action: 'create' | 'update') {
+  const schema = action === 'create' ? def.createSchema : def.updateSchema
+  if (!schema) return body
+  return schema.parse(body)
 }
 
 function queryValue(req: Request, key: string) { const value = req.query[key]; return typeof value === 'string' ? value : undefined }
@@ -60,12 +70,23 @@ function parseFilters(raw: string, def: ResourceDefinition) {
 }
 
 async function list(req: Request, res: Response, def: ResourceDefinition) {
-  const query = listQuerySchema.parse(req.query)
+  setAuditContext(req, { resource: def.route, action: 'list' })
+  const parsedQuery = listQuerySchema.safeParse(req.query)
+  if (!parsedQuery.success) {
+    const fields = parsedQuery.error.issues.reduce<Record<string, string[]>>((result, issue) => {
+      const key = issue.path.join('.') || 'query'
+      ;(result[key] ??= []).push(issue.message)
+      return result
+    }, {})
+    throw new ApiError(400, 'INVALID_QUERY', 'The query is invalid', fields)
+  }
+  const query = parsedQuery.data
   const sortName = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
   if (!def.sortable.includes(sortName)) throw new ApiError(400, 'INVALID_SORT', 'The sort field is not supported')
   const descending = query.sort.startsWith('-')
-  let builder = req.db!.from(def.table).select(def.fields.join(', '), { count: 'exact' })
-  if (def.table === 'user_preferences' || def.table === 'user_entity_visibility_preferences') builder = builder.eq('user_id', req.user!.id)
+  const listFields = def.listFields ?? def.fields
+  let builder = req.db!.from(def.table).select(listFields.join(', '), { count: 'exact' })
+  if (def.table === 'user_preferences' || def.table === 'user_entity_visibility_preferences' || def.table === 'copy_templates') builder = builder.eq('user_id', req.user!.id)
   if (query.search && def.searchable.length) {
     const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,]/g, '')}%`).join(',')
     builder = builder.or(clauses)
@@ -73,6 +94,11 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   for (const field of ['teaching_id', 'entity_type', 'entity_id', 'lesson_id', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id', 'instructor_id', 'template_type', 'scope_type', 'scope_entity_id']) {
     const value = queryValue(req, field)
     if (value) builder = builder.eq(field, value)
+  }
+  const status = queryValue(req, 'status')
+  if (status) {
+    if (!def.fields.includes('status')) throw new ApiError(400, 'INVALID_FILTER', 'The status filter is not supported for this resource')
+    builder = builder.eq('status', status)
   }
   const filters = query.filters ? parseFilters(query.filters, def) : []
   for (const filter of filters) {
@@ -96,44 +122,58 @@ async function item(req: Request, res: Response, def: ResourceDefinition) {
   if (!requestedId) throw new ApiError(400, 'INVALID_ID', 'Resource id is required')
   const id = def.table === 'user_preferences' && requestedId === 'me' ? req.user?.id : requestedId
   if (!id) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (!z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Resource id is invalid')
+  setAuditContext(req, { resource: def.route, resourceId: id, action: req.method.toLowerCase() })
+  const itemFields = def.itemFields ?? def.fields
+  const existing = await req.db!.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
+  if (existing.error) throw mapDatabaseError(existing.error as unknown as { code?: string; message?: string })
+  if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   if (req.method === 'GET') {
-    await allowed(req, permissionFor(def, 'read'), id)
-    const result = await req.db!.from(def.table).select(def.fields.join(', ')).eq(def.idColumn, id).maybeSingle()
-    if (result.error) throw mapDatabaseError(result.error)
-    if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
-    return sendData(req, res, result.data)
+    await authorizeResource(req, def, permissionForResource(def, 'read'), id, existing.data as unknown as Record<string, unknown>)
+    return sendData(req, res, existing.data)
   }
   const action = req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
-  await allowed(req, permissionFor(def, action), id)
-  const replay = await idempotency(req, 200, null)
-  if (replay) return res.status(replay.status).json(replay.body)
+  await authorizeResource(req, def, permissionForResource(def, action), id, existing.data as unknown as Record<string, unknown>)
+  const isMutation = mutationMethods.includes(req.method)
+  if (isMutation) {
+    const replay = await idempotency(req, 200, null)
+    if (replay) return res.status(replay.status).json(replay.body)
+  }
   let response: Response
   if (req.method === 'DELETE') {
-    const result = await req.db!.from(def.table).delete().eq(def.idColumn, id).select(def.fields.join(', ')).maybeSingle()
+    const result = await req.db!.from(def.table).delete().eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
     if (result.error) throw mapDatabaseError(result.error)
     if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
   }
-  const body = pickBody(def, bodySchema.parse(req.body))
+  const body = validateBody(def, pickBody(def, bodySchema.parse(req.body)), 'update')
   if (!Object.keys(body).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
-  const result = await req.db!.from(def.table).update(body).eq(def.idColumn, id).select(def.fields.join(', ')).maybeSingle()
+  const result = await req.db!.from(def.table).update(body).eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); response = res.json(envelope); return response
 }
 
 async function collection(req: Request, res: Response, def: ResourceDefinition) {
-  if (req.method === 'GET') { await allowed(req, def.permission, null); return list(req, res, def) }
+  setAuditContext(req, { resource: def.route, action: req.method.toLowerCase() })
+  if (req.method === 'GET') {
+    await authorizeCollection(req, def, permissionForResource(def, 'list'), req.query as Record<string, unknown>)
+    return list(req, res, def)
+  }
   const action = req.method === 'POST' ? 'create' : 'update'
-  await allowed(req, permissionFor(def, action), null)
-  const replay = await idempotency(req, 201, null)
+  const parsedBody = bodySchema.parse(req.body)
+  await authorizeCollection(req, def, permissionForResource(def, action), {}, parsedBody)
+  const replay = await idempotency(req, req.method === 'POST' ? 201 : 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
-  const body = pickBody(def, bodySchema.parse(req.body))
+  const body = validateBody(def, pickBody(def, parsedBody), req.method === 'POST' ? 'create' : 'update')
   if (!Object.keys(body).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
-  const userOwnedTables = new Set(['user_entity_visibility_preferences', 'copy_templates', 'student_contacts', 'student_schools', 'student_credentials', 'teacher_credentials'])
+  const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
   const insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
-  const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(def.fields.join(', ')).single() : await req.db!.from(def.table).update(body).select(def.fields.join(', ')).maybeSingle()
+  const itemFields = def.itemFields ?? def.fields
+  const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single() : await req.db!.from(def.table).update(body).select(itemFields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
+  const createdId = result.data && typeof result.data === 'object' && typeof (result.data as Record<string, unknown>).id === 'string' ? (result.data as Record<string, unknown>).id as string : null
+  if (createdId) setAuditContext(req, { resourceId: createdId })
   const status = req.method === 'POST' ? 201 : 200
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, status, envelope)
   return res.status(status).json(envelope)
@@ -150,11 +190,12 @@ async function members(req: Request, res: Response) {
   const userId = typeof req.params.userId === 'string' ? req.params.userId : undefined
   if (!teachingId) throw new ApiError(400, 'INVALID_TEACHING_ID', 'Teaching id is required')
   const action = req.method === 'GET' ? 'list' : req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
+  setAuditContext(req, { domain: 'teaching', resource: 'members', action, resourceId: userId ?? null, teachingId: teachingId ?? null, scopeId: teachingId ?? null, permission: `teaching.members.${action}` })
   await teachingAllowed(req, `teaching.members.${action}`, teachingId)
   if (req.method === 'GET') {
     const result = await req.db!.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').eq('teaching_id', teachingId).order('created_at', { ascending: true })
     if (result.error) throw mapDatabaseError(result.error)
-    return sendData(req, res, result.data ?? {}, { limit: result.data?.length ?? 0, offset: 0, total: result.data?.length ?? 0, sort: 'created_at' })
+    return sendData(req, res, result.data ?? [], { limit: result.data?.length ?? 0, offset: 0, total: result.data?.length ?? 0, sort: 'created_at' })
   }
   if (req.method === 'POST') {
     const body = bodySchema.parse(req.body)
@@ -184,11 +225,12 @@ export function createResourceRouter() {
   router.patch('/teachings/:teachingId/members/:userId', wrap((req, res) => members(req, res)))
   router.delete('/teachings/:teachingId/members/:userId', wrap((req, res) => members(req, res)))
   for (const [route, def] of Object.entries(resources)) {
-    router.get(`/${route}`, wrap((req, res) => collection(req, res, def)))
-    router.post(`/${route}`, wrap((req, res) => collection(req, res, def)))
-    router.get(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
-    router.patch(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
-    router.delete(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
+    const methods = new Set(def.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
+    if (methods.has('GET')) router.get(`/${route}`, wrap((req, res) => collection(req, res, def)))
+    if (methods.has('POST')) router.post(`/${route}`, wrap((req, res) => collection(req, res, def)))
+    if (methods.has('GET')) router.get(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
+    if (methods.has('PATCH')) router.patch(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
+    if (methods.has('DELETE')) router.delete(`/${route}/:id`, wrap((req, res) => item(req, res, def)))
   }
   return router
 }

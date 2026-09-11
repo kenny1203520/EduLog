@@ -21,6 +21,23 @@ export function mapDatabaseError(error: { code?: string; message?: string } | nu
   if (error.code === '42501') return new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
   if (error.code === '23503') return new ApiError(422, 'INVALID_REFERENCE', 'A referenced resource is invalid')
   if (error.code === '23514') return new ApiError(422, 'BUSINESS_VALIDATION_FAILED', 'The request violates a business rule')
+  if (error.code === '22P02') return new ApiError(400, 'INVALID_VALUE', 'A request value has an invalid format')
+  if (error.code === '22007' || error.code === '22008') return new ApiError(422, 'INVALID_DATE_VALUE', 'A date or time value is invalid')
+  if (error.code === '22023' && /IDEMPOTENCY_KEY_REUSED/i.test(error.message ?? '')) return new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'The Idempotency-Key is already bound to another request')
+  if (error.code === '22023') return new ApiError(422, 'INVALID_ARGUMENT', 'A request argument is invalid')
+  if (error.code === 'P0001') {
+    const message = error.message ?? ''
+    const known: Array<[RegExp, number, string, string]> = [
+      [/AUTHENTICATION_REQUIRED|Authentication required/i, 401, 'AUTH_REQUIRED', 'Authentication is required'],
+      [/PERMISSION_DENIED|FORBIDDEN|_FORBIDDEN|RBAC_MANAGE_REQUIRED/i, 403, 'PERMISSION_DENIED', 'You do not have permission to perform this action'],
+      [/NOT_FOUND|NOT_EXIST|NOT_IN_ENROLLMENT/i, 404, 'NOT_FOUND', 'Resource was not found'],
+      [/ALREADY_EXISTS|REPORT_ALREADY_EXISTS|CONFLICT|STALE/i, 409, 'BUSINESS_CONFLICT', 'The request conflicts with the current resource state'],
+      [/INVALID_POLICY_SCOPE|INVALID_|MISMATCH|REQUIRED|SOURCE_AND_TARGET|DATE_NOT/i, 422, 'BUSINESS_VALIDATION_FAILED', 'The request violates a business rule'],
+    ]
+    const match = known.find(([pattern]) => pattern.test(message))
+    if (match) return new ApiError(match[1], match[2], match[3])
+    return new ApiError(422, 'BUSINESS_VALIDATION_FAILED', 'The request violates a business rule')
+  }
   return new ApiError(500, 'DATABASE_ERROR', 'The request could not be completed')
 }
 
@@ -34,6 +51,8 @@ export function sendError(req: Request, res: Response, error: unknown) {
     : error instanceof ZodError
       ? new ApiError(422, 'VALIDATION_FAILED', 'The request is invalid', error.issues.reduce<Record<string, string[]>>((fields, issue) => { const key = issue.path.join('.') || 'request'; (fields[key] ??= []).push(issue.message); return fields }, {}))
       : new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred')
+
+  req.auditContext = { ...(req.auditContext ?? {}), errorCode: apiError.code }
 
   if (!(error instanceof ApiError) && !(error instanceof ZodError)) {
     req.log.error({ error_type: error instanceof Error ? error.name : 'UnknownError', request_id: req.requestId, trace_id: req.traceId }, 'unhandled_api_error')

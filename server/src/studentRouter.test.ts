@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 describe('student delete API contract', () => {
   it('uses canonical authorization, idempotency and explicit cascade order', () => {
     const source = readFileSync(new URL('./studentRouter.ts', import.meta.url), 'utf8')
-    expect(source).toContain("rpc('has_api_permission'")
+    expect(source).toContain("rpc('can_access_student'")
     expect(source).toContain("teaching.students.delete")
     expect(source).toContain("'occurrence_reports'")
     expect(source).toContain("'student_credentials'")

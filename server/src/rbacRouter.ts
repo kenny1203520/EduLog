@@ -17,6 +17,28 @@ function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
 }
 
+async function authorizePolicyScope(req: Request, scope: z.infer<typeof policyUpdate>['scope']) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (scope.type === 'system') {
+    const result = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'system.roles.manage', p_classroom_id: null, p_class_session_id: null })
+    if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')
+    return
+  }
+  if (!scope.id) throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'A scoped policy requires a scope id')
+  if (scope.type === 'teaching') {
+    const result = await req.db.rpc('has_teaching_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.members.manage', p_teaching_id: scope.id, p_classroom_id: null, p_class_session_id: null })
+    if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')
+    return
+  }
+  const result = await req.db.rpc('has_api_permission', {
+    p_user_id: req.user.id,
+    p_permission_key: 'teaching.members.manage',
+    p_classroom_id: scope.type === 'classroom' ? scope.id : null,
+    p_class_session_id: scope.type === 'class_session' ? scope.id : null,
+  })
+  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')
+}
+
 export function createRbacRouter() {
   const router = Router()
 
@@ -52,6 +74,7 @@ export function createRbacRouter() {
     const permission = await req.db.from('permissions').select('id,key').eq('id', permissionId).maybeSingle()
     if (permission.error) throw mapDatabaseError(permission.error)
     if (!permission.data) throw new ApiError(404, 'NOT_FOUND', 'Permission was not found')
+    await authorizePolicyScope(req, input.scope)
     const replay = await idempotency(req, 200, null)
     if (replay) return res.status(replay.status).json(replay.body)
     const scopeId = input.scope.type === 'system' ? null : input.scope.id ?? null

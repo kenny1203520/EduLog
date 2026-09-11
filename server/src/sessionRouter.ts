@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
+import { setAuditContext } from './context.js'
 
 const sessionFields = 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,time_zone,session_type,schedule_mode,teaching_id,user_id,created_at,updated_at,class_session_schedule_rules(id,class_session_id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)'
 
@@ -45,20 +46,72 @@ function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
 }
 
-async function authorize(req: Request, action: 'create' | 'update' | 'delete', id: string | null) {
+async function authorize(req: Request, action: 'read' | 'create' | 'update' | 'delete', id: string | null) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const result = await req.db.rpc('has_api_permission', {
     p_user_id: req.user.id,
-    p_permission_key: `teaching.sessions.${action}`,
+    p_permission_key: `teaching.class_sessions.${action}`,
     p_classroom_id: null,
     p_class_session_id: id,
   })
+  setAuditContext(req, { domain: 'teaching', resource: 'class-sessions', action, resourceId: id, permission: `teaching.class_sessions.${action}`, scopeId: id })
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify class sessions')
+}
+
+async function authorizeSaveScope(req: Request, action: 'create' | 'update', id: string | null, input: z.infer<typeof sessionSchema>) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const classroomId = input.classroom_id ?? null
+  const teachingIds = new Set<string>()
+  let existingTeachingId: string | null = null
+  if (id) {
+    // Authorize the persisted session before resolving any proposed
+    // classroom/course scope. This prevents a same-route idempotency replay
+    // from using an allowed replacement scope to target a foreign session.
+    await authorize(req, action, id)
+    const existing = await req.db.from('class_sessions').select('teaching_id').eq('id', id).maybeSingle()
+    if (existing.error) throw mapDatabaseError(existing.error)
+    if (!existing.data?.teaching_id) throw new ApiError(404, 'NOT_FOUND', 'Class session was not found')
+    existingTeachingId = existing.data.teaching_id
+    teachingIds.add(existing.data.teaching_id)
+  }
+  if (classroomId) {
+    const classroom = await req.db.from('classrooms').select('teaching_id').eq('id', classroomId).maybeSingle()
+    if (classroom.error) throw mapDatabaseError(classroom.error)
+    if (!classroom.data?.teaching_id) throw new ApiError(422, 'INVALID_REFERENCE', 'The classroom is invalid')
+    teachingIds.add(classroom.data.teaching_id)
+  }
+  if (input.course_ids.length) {
+    const courses = await req.db.from('courses').select('id,teaching_id').in('id', input.course_ids)
+    if (courses.error) throw mapDatabaseError(courses.error)
+    if ((courses.data ?? []).length !== input.course_ids.length || (courses.data ?? []).some((course) => !course.teaching_id)) {
+      throw new ApiError(422, 'INVALID_REFERENCE', 'A course reference is invalid')
+    }
+    for (const course of courses.data ?? []) teachingIds.add(course.teaching_id)
+  }
+  if (teachingIds.size !== 1) throw new ApiError(422, 'TEACHING_SCOPE_REQUIRED', 'A classroom or course teaching scope is required')
+  const teachingId = [...teachingIds][0]
+  if (existingTeachingId && existingTeachingId !== teachingId) throw new ApiError(422, 'SESSION_TEACHING_MISMATCH', 'The class session teaching scope cannot change')
+  const permission = classroomId || id
+    ? await req.db.rpc('has_api_permission', {
+      p_user_id: req.user.id,
+      p_permission_key: `teaching.class_sessions.${action}`,
+      p_classroom_id: classroomId,
+      p_class_session_id: id,
+    })
+    : await req.db.rpc('has_teaching_permission', {
+      p_user_id: req.user.id,
+      p_permission_key: `teaching.class_sessions.${action}`,
+      p_teaching_id: teachingId,
+      p_classroom_id: null,
+      p_class_session_id: null,
+    })
+  if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify class sessions')
 }
 
 async function read(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!id) throw new ApiError(400, 'INVALID_ID', 'Class session id is required')
+  await authorize(req, 'read', id)
   const result = await req.db!.from('class_sessions').select(sessionFields).eq('id', id).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Class session was not found')
@@ -68,7 +121,7 @@ async function read(req: Request, res: Response) {
 async function save(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : null
   const input = sessionSchema.parse(req.body)
-  await authorize(req, id ? 'update' : 'create', id)
+  await authorizeSaveScope(req, id ? 'update' : 'create', id, input)
   const replay = await idempotency(req, id ? 200 : 201, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.rpc('save_class_session_with_schedule', {

@@ -28,6 +28,7 @@ export function requireAuth(clients: SupabaseClients, config: ApiConfig) {
       if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       const user = await validateAccessToken(clients.adminClient, token)
       req.user = user
+      req.log = req.log.child({ actor_user_id: user.id })
       req.accessToken = token
       req.db = createUserClient(config, token)
       req.adminDb = clients.adminClient
@@ -86,4 +87,3 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig) {
   router.get('/me', requireAuth(clients, config), (req, res) => res.json({ data: safeUser(req.user as never), meta: {}, request_id: req.requestId, trace_id: req.traceId }))
   return router
 }
-

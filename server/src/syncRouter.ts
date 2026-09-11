@@ -27,7 +27,7 @@ async function sync(req: Request, res: Response) {
   const sessionId = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!sessionId) throw new ApiError(400, 'INVALID_ID', 'Class session id is required')
   const input = syncBody.parse(req.body ?? {})
-  const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.sessions.update', p_classroom_id: null, p_class_session_id: sessionId })
+  const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.class_sessions.update', p_classroom_id: null, p_class_session_id: sessionId })
   if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to synchronize this session')
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
