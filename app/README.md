@@ -70,3 +70,5 @@ Production Docker image 使用 Nginx 服務 `dist` 靜態檔，不使用 `vite p
 ## 相關文件
 
 請優先參考專案根目錄的 `../README.md` 取得完整啟動流程（含 Supabase 與 Migration）。
+
+EDULOG_API_DEV_TARGET=http://localhost:3000

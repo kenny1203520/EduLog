@@ -119,7 +119,13 @@ export class TeacherService {
     static async getAllTeachersWithCredentials(): Promise<TeacherDTO[]> {
         if (getApiV1Mode() === 'v1') {
             const result = await apiResourceClient.list<TeacherDTO>('teachers', { perPage: 100, sort: 'name', mode: 'v1' })
-            return result.data || []
+            const teachers = result.data || []
+            // Collections intentionally omit sensitive profile fields. Hydrate
+            // the authorized item projection before edit forms can mutate rows.
+            return Promise.all(teachers.map(async (teacher) => {
+                if (!teacher.id) return teacher
+                return (await apiResourceClient.get<TeacherDTO>('teachers', teacher.id, 'v1')).data
+            }))
         }
         const { data, error } = await apiDataClient
             .from('teachers')

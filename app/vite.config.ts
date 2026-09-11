@@ -57,7 +57,15 @@ export default defineConfig(({ mode }) => {
     server: {
       ...(allowedHosts === undefined ? {} : { allowedHosts }),
       ...(https === undefined ? {} : { https }),
-      headers: securityHeaders
+      headers: securityHeaders,
+      proxy: {
+          "/api": {
+          target: env.EDULOG_API_DEV_TARGET || 'http://localhost:3000',
+          changeOrigin: true,
+          ws: true,
+          secure: false,
+          },
+      },
     },
     preview: {
       ...(allowedHosts === undefined ? {} : { allowedHosts }),
