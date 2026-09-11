@@ -65,3 +65,16 @@ BEGIN
   END IF;
 END;
 $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.holidays
+    WHERE id = '90000000-0000-0000-0000-0000000000aa'
+      AND COALESCE(cardinality(classroom_ids), 0) = 0
+      AND COALESCE(cardinality(class_session_ids), 0) = 0
+  ) THEN
+    RAISE EXCEPTION 'legacy global holiday compatibility row was lost';
+  END IF;
+END;
+$$;

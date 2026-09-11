@@ -31,3 +31,12 @@ INSERT INTO public.class_session_teachers(class_session_id, teacher_id, role_id)
   ('60000000-0000-0000-0000-0000000000aa', '80000000-0000-0000-0000-0000000000bb', (SELECT id FROM public.roles WHERE code = 'teacher')),
   ('60000000-0000-0000-0000-0000000000ad', '80000000-0000-0000-0000-0000000000bb', (SELECT id FROM public.roles WHERE code = 'teacher'))
 ON CONFLICT DO NOTHING;
+
+-- Legacy global holidays must remain readable after scope hardening. Mutation
+-- is validated separately by core_rls_security.sql and is system-only.
+INSERT INTO public.holidays(id, name, start_date, end_date, classroom_ids, class_session_ids)
+VALUES (
+  '90000000-0000-0000-0000-0000000000aa',
+  'Legacy global holiday', CURRENT_DATE, CURRENT_DATE, '{}'::uuid[], '{}'::uuid[]
+)
+ON CONFLICT (id) DO NOTHING;
