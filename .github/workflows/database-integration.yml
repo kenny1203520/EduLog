@@ -52,6 +52,19 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000046_api_rate_limit_shared_store.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000047_canonical_teacher_permissions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000048_student_scope_course_fallback.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000049_holiday_scope_rls_hardening.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000050_scope_integrity_and_session_rpc.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000051_child_scope_write_hardening.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000052_transfer_scope_authorization.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000053_enrollment_scope_and_student_guard.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000054_rbac_teaching_scope_rpc.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000055_idempotency_route_binding.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000056_canonical_rbac_policy_scope_rls.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000057_holiday_read_permission_alias.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000058_teaching_role_scope_isolation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000059_idempotency_key_contract.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000060_permission_scope_and_session_regression.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000061_scope_and_idempotency_concurrency.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
       - name: Upgrade an existing database and verify owner backfill
@@ -62,7 +75,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *1000043_teaching_scope_reconciliation.sql|*1000044_rbac_epoch_and_api_contract.sql|*1000045_missing_core_rls_hardening.sql|*1000046_api_rate_limit_shared_store.sql|*1000047_canonical_teacher_permissions.sql|*1000048_student_scope_course_fallback.sql) continue ;;
+              *1000043_teaching_scope_reconciliation.sql|*1000044_rbac_epoch_and_api_contract.sql|*1000045_missing_core_rls_hardening.sql|*1000046_api_rate_limit_shared_store.sql|*1000047_canonical_teacher_permissions.sql|*1000048_student_scope_course_fallback.sql|*1000049_holiday_scope_rls_hardening.sql|*1000050_scope_integrity_and_session_rpc.sql|*1000051_child_scope_write_hardening.sql|*1000052_transfer_scope_authorization.sql|*1000053_enrollment_scope_and_student_guard.sql|*1000054_rbac_teaching_scope_rpc.sql|*1000055_idempotency_route_binding.sql|*1000056_canonical_rbac_policy_scope_rls.sql|*1000057_holiday_read_permission_alias.sql|*1000058_teaching_role_scope_isolation.sql|*1000059_idempotency_key_contract.sql|*1000060_permission_scope_and_session_regression.sql|*1000061_scope_and_idempotency_concurrency.sql) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -73,6 +86,19 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000046_api_rate_limit_shared_store.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000047_canonical_teacher_permissions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000048_student_scope_course_fallback.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000049_holiday_scope_rls_hardening.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000050_scope_integrity_and_session_rpc.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000051_child_scope_write_hardening.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000052_transfer_scope_authorization.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000053_enrollment_scope_and_student_guard.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000054_rbac_teaching_scope_rpc.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000055_idempotency_route_binding.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000056_canonical_rbac_policy_scope_rls.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000057_holiday_read_permission_alias.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000058_teaching_role_scope_isolation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000059_idempotency_key_contract.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000060_permission_scope_and_session_regression.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000061_scope_and_idempotency_concurrency.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
