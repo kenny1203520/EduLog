@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { mapDatabaseError } from './errors.js'
+import { mapDatabaseError, sendError } from './errors.js'
+import { ZodError, z } from 'zod'
 
 describe('database error taxonomy', () => {
   it('maps malformed UUID/value errors to a safe 400 response', () => {
@@ -20,5 +21,13 @@ describe('database error taxonomy', () => {
       code: 'PERMISSION_DENIED',
     })
     expect(mapDatabaseError({ code: 'P0001', message: 'internal SQL details' }).message).toBe('The request violates a business rule')
+  })
+
+  it('maps GET schema failures to the query error contract', () => {
+    const status = { value: 0 }
+    const response = { status: (value: number) => { status.value = value; return response }, json: (body: unknown) => body } as any
+    const request = { method: 'GET', query: {}, requestId: 'request-1', traceId: 'trace-1' } as any
+    sendError(request, response, new ZodError(z.object({ limit: z.coerce.number() }).safeParse({ limit: 'bad' }).error?.issues ?? []))
+    expect(status.value).toBe(400)
   })
 })

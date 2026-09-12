@@ -51,7 +51,7 @@ export function sendError(req: Request, res: Response, error: unknown) {
     : (error as { status?: number; type?: string }).status === 400 && (error as { type?: string }).type === 'entity.parse.failed'
       ? new ApiError(400, 'MALFORMED_JSON', 'The request body is malformed')
     : error instanceof ZodError
-      ? new ApiError(422, 'VALIDATION_FAILED', 'The request is invalid', error.issues.reduce<Record<string, string[]>>((fields, issue) => { const key = issue.path.join('.') || 'request'; (fields[key] ??= []).push(issue.message); return fields }, {}))
+      ? new ApiError(req.method === 'GET' || (req.method === 'DELETE' && Object.keys(req.query ?? {}).length > 0) ? 400 : 422, req.method === 'GET' || (req.method === 'DELETE' && Object.keys(req.query ?? {}).length > 0) ? 'INVALID_QUERY' : 'VALIDATION_FAILED', req.method === 'GET' || (req.method === 'DELETE' && Object.keys(req.query ?? {}).length > 0) ? 'The query is invalid' : 'The request is invalid', error.issues.reduce<Record<string, string[]>>((fields, issue) => { const key = issue.path.join('.') || 'request'; (fields[key] ??= []).push(issue.message); return fields }, {}))
       : new ApiError(500, 'INTERNAL_ERROR', 'An unexpected error occurred')
 
   req.auditContext = { ...(req.auditContext ?? {}), errorCode: apiError.code }

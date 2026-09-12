@@ -53,4 +53,14 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(getMock).toHaveBeenCalledWith('/occurrences/occurrence-1/roster')
     expect(result.data).toEqual(['enrollment-1'])
   })
+
+  it('maps collaboration document reads to the report collaboration route', async () => {
+    getMock.mockResolvedValueOnce({ data: { snapshot_base64: null, base_report_version: null }, meta: {}, request_id: 'r', trace_id: 't' })
+    const result = await apiDataClient.from('report_collab_docs')
+      .select('snapshot_base64, base_report_version')
+      .eq('occurrence_report_id', 'report-1')
+      .maybeSingle()
+    expect(getMock).toHaveBeenCalledWith('/reports/report-1/collaboration')
+    expect(result.data).toEqual({ snapshot_base64: null, base_report_version: null })
+  })
 })
