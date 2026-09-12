@@ -3685,6 +3685,7 @@ BEGIN
   IF p_operation = 'update'
      AND v_enrollment.status = 'regular'
      AND (p_patch ? 'lesson_id' OR p_patch ? 'is_completed')
+     AND v_report.is_completed IS TRUE
      AND v_report.lesson_id IS NOT NULL THEN
     SELECT * INTO v_occurrence FROM public.class_occurrences WHERE id = v_report.class_occurrence_id;
     IF v_occurrence.id IS NOT NULL THEN
