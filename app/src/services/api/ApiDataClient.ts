@@ -92,6 +92,13 @@ async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>
   return null
 }
 
+function reportPayload(payload: unknown, filters: QueryFilter[]) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload
+  const version = filters.find((filter) => filter.field === 'version' && filter.operator === 'eq')?.value
+  const { version: _version, last_edited_by: _lastEditedBy, last_edited_at: _lastEditedAt, ...safePayload } = payload as Record<string, unknown>
+  return typeof version === 'number' ? { ...safePayload, expected_version: version } : safePayload
+}
+
 class ApiQuery implements PromiseLike<QueryResult> {
   private readonly resource: string
   private readonly filters: QueryFilter[] = []
@@ -147,7 +154,7 @@ class ApiQuery implements PromiseLike<QueryResult> {
         const rows = Array.isArray(response.data) ? response.data : response.data == null ? [] : [response.data]; const data = this.expectSingle ? (rows[0] ?? null) : rows; if (this.expectSingle && data == null && !this.allowMissing) return { data: null, error: { message: 'No rows found' } }; return { data, error: null, count: typeof response.meta?.total === 'number' ? response.meta.total : rows.length }
       }
       const payloads = Array.isArray(this.payload) ? this.payload : [this.payload]
-      const body = payloads[0]
+      const body = this.resource === 'reports' ? reportPayload(payloads[0], this.filters) : payloads[0]
       if (this.resource === 'teaching-members') {
         const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {}
         const teachingId = stringArg(payload, 'teaching_id') ?? stringArg(Object.fromEntries(this.filters.map((filter) => [filter.field, filter.value])), 'teaching_id')
@@ -177,11 +184,18 @@ class ApiQuery implements PromiseLike<QueryResult> {
       }
       if (this.operation === 'insert' || this.operation === 'upsert') {
         const rows: unknown[] = []
-        for (const payload of payloads) rows.push((await apiV1Client.post(`/${this.resource}`, payload)).data)
+        for (const payload of payloads) rows.push((await apiV1Client.post(`/${this.resource}`, this.resource === 'reports' ? reportPayload(payload, this.filters) : payload)).data)
         return { data: Array.isArray(this.payload) ? rows : rows[0], error: null, count: rows.length }
       }
       if (this.operation === 'update') { if (!idFilter) throw new Error('API update requires an id filter'); response = await apiV1Client.patch(`/${this.resource}/${encodeURIComponent(String(idFilter.value))}`, body) }
-      else { if (!idFilter) throw new Error('API delete requires an id filter'); response = await apiV1Client.delete(`/${this.resource}/${encodeURIComponent(String(idFilter.value))}`) }
+      else if (!idFilter) {
+        const filterQuery = new URLSearchParams({ limit: '100', offset: '0', filters: JSON.stringify(this.filters) })
+        const listed = await apiV1Client.get<any[]>(`/${this.resource}?${filterQuery.toString()}`)
+        const ids = (Array.isArray(listed.data) ? listed.data : []).map((row) => row?.id).filter((id): id is string => typeof id === 'string')
+        const rows: unknown[] = []
+        for (const id of ids) rows.push((await apiV1Client.delete(`/${this.resource}/${encodeURIComponent(id)}`)).data)
+        response = { data: rows, meta: {}, request_id: listed.request_id, trace_id: listed.trace_id }
+      } else response = await apiV1Client.delete(`/${this.resource}/${encodeURIComponent(String(idFilter.value))}`)
       const data = response.data; return { data, error: null, count: Array.isArray(data) ? data.length : null }
     } catch (error) { return { data: null, error: toError(error), count: null } }
   }
