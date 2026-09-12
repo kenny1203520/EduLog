@@ -89,6 +89,20 @@ async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>
     const response = await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?permission=${encodeURIComponent(permission)}`)
     return { data: { is_allowed: response.data.allowed, is_denied: !response.data.allowed } as T, error: null }
   }
+  if (name === 'replace_role_permission_policies') {
+    const permissionKey = stringArg(args, 'p_permission_key')
+    const scopeType = stringArg(args, 'p_scope_type')
+    const policies = Array.isArray(args.p_policies) ? args.p_policies : null
+    if (!permissionKey || !scopeType || !policies) return null
+    const permissions = await apiV1Client.get<Array<{ id: string; key: string }>>(`/permissions?search=${encodeURIComponent(permissionKey)}&limit=100&offset=0&sort=key`)
+    const permission = permissions.data.find((candidate) => candidate.key === permissionKey)
+    if (!permission) throw new Error('Permission was not found')
+    const response = await apiV1Client.patch<T>(`/permissions/${encodeURIComponent(permission.id)}/policies`, {
+      scope: { type: scopeType, id: scopeType === 'system' ? null : stringArg(args, 'p_scope_id') },
+      policies,
+    })
+    return { data: (response.data ?? true) as T, error: null }
+  }
   return null
 }
 

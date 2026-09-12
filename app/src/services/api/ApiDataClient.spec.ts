@@ -54,6 +54,24 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(result.data).toEqual(['enrollment-1'])
   })
 
+  it('maps RBAC policy replacement to the permission policy REST route', async () => {
+    const permissionId = '00000000-0000-4000-8000-000000000010'
+    getMock.mockResolvedValueOnce({ data: [{ id: permissionId, key: 'rbac.manage' }], meta: {}, request_id: 'r', trace_id: 't' })
+    patchMock.mockResolvedValueOnce({ data: { permission_id: permissionId }, meta: {}, request_id: 'r2', trace_id: 't2' })
+    const result = await apiDataClient.rpc('replace_role_permission_policies', {
+      p_permission_key: 'rbac.manage',
+      p_scope_type: 'teaching',
+      p_scope_id: '00000000-0000-4000-8000-000000000011',
+      p_policies: [{ role_id: '00000000-0000-4000-8000-000000000012', effect: 'allow' }],
+    })
+    expect(getMock).toHaveBeenCalledWith('/permissions?search=rbac.manage&limit=100&offset=0&sort=key')
+    expect(patchMock).toHaveBeenCalledWith(`/permissions/${permissionId}/policies`, {
+      scope: { type: 'teaching', id: '00000000-0000-4000-8000-000000000011' },
+      policies: [{ role_id: '00000000-0000-4000-8000-000000000012', effect: 'allow' }],
+    })
+    expect(result.error).toBeNull()
+  })
+
   it('maps collaboration document reads to the report collaboration route', async () => {
     getMock.mockResolvedValueOnce({ data: { snapshot_base64: null, base_report_version: null }, meta: {}, request_id: 'r', trace_id: 't' })
     const result = await apiDataClient.from('report_collab_docs')
