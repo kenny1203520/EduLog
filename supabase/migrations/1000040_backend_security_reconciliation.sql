@@ -3499,10 +3499,14 @@ BEGIN
     RETURN QUERY SELECT false, NULL::integer, NULL::jsonb;
     RETURN;
   END IF;
-  SELECT method, route, response_status, response_body, processing_started_at
+  SELECT idem.method,
+         idem.route,
+         idem.response_status,
+         idem.response_body,
+         idem.processing_started_at
     INTO v_method, v_route, v_status, v_body, v_started
-  FROM public.api_idempotency_keys
-  WHERE user_id = p_user_id AND idempotency_key = p_key
+  FROM public.api_idempotency_keys AS idem
+  WHERE idem.user_id = p_user_id AND idem.idempotency_key = p_key
   FOR UPDATE;
   IF v_method IS DISTINCT FROM p_method OR v_route IS DISTINCT FROM p_route THEN
     RAISE EXCEPTION USING ERRCODE = '22023', MESSAGE = 'IDEMPOTENCY_KEY_REUSED';

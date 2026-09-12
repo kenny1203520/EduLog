@@ -247,6 +247,8 @@ Deno.test('1000061 binds RBAC scopes and serializes idempotency reservations', (
   assertStringIncludes(concurrencyScope, "public.has_teaching_permission(auth.uid(), 'teaching.members.manage'")
   assertStringIncludes(concurrencyScope, "public.has_api_permission(auth.uid(), 'teaching.members.manage'")
   assertStringIncludes(concurrencyScope, 'processing_started_at')
+  assertStringIncludes(concurrencyScope, 'idem.response_status')
+  assertStringIncludes(concurrencyScope, 'FROM public.api_idempotency_keys AS idem')
   assertStringIncludes(concurrencyScope, 'IDEMPOTENCY_IN_PROGRESS')
   assertStringIncludes(concurrencyScope, "interval '15 minutes'")
   assertStringIncludes(concurrencyScope, 'RETURNING true INTO v_inserted')
