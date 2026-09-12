@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
+import { setAuditContext } from './context.js'
 
 const fields = 'id,enrollment_id,start_date,end_date,time_zone,reason,created_at,updated_at'
 const createSchema = z.object({ enrollment_id: z.string().uuid(), start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), time_zone: z.string().min(1).max(64).optional(), reason: z.string().max(2000).nullable().optional() }).strict()
@@ -13,6 +14,7 @@ function safeTimezone(value?: string | null) { return value && value.length <= 6
 
 async function enrollment(req: Request, id: string) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  setAuditContext(req, { domain: 'teaching', resource: 'student-suspensions', resourceId: null, action: 'manage', permission: 'teaching.students.update', scopeId: id, scopeType: 'enrollment' })
   const result = await req.db.from('enrollments').select('id,class_session_id').eq('id', id).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
@@ -69,17 +71,21 @@ async function create(req: Request, res: Response) {
   if ((existing.data ?? []).some((row) => input.start_date <= (row.end_date ?? '9999-12-31') && (input.end_date ?? '9999-12-31') >= row.start_date)) throw new ApiError(409, 'SUSPENSION_OVERLAP', 'Suspension period overlaps an existing suspension')
   const result = await req.db!.from('student_suspensions').insert({ ...input, time_zone: safeTimezone(input.time_zone) }).select(fields).single()
   if (result.error) throw mapDatabaseError(result.error)
+  setAuditContext(req, { resourceId: result.data?.id ?? null, scopeId: input.enrollment_id, permission: 'teaching.students.update', scopeType: 'enrollment' })
   await syncReports(req, input.enrollment_id, input.start_date, input.end_date)
   const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, body); return res.status(201).json(body)
 }
 
 async function update(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Suspension id is required')
+  if (!z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Suspension id is invalid')
+  const input = updateSchema.parse(req.body)
   const current = await req.db!.from('student_suspensions').select(fields).eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Suspension was not found')
   await enrollment(req, current.data.enrollment_id)
-  const input = updateSchema.parse(req.body); const start = input.start_date ?? current.data.start_date; const end = input.end_date === undefined ? current.data.end_date : input.end_date; validRange(start, end)
+  const start = input.start_date ?? current.data.start_date; const end = input.end_date === undefined ? current.data.end_date : input.end_date; validRange(start, end)
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.from('student_suspensions').update({ ...input, time_zone: input.time_zone === undefined ? undefined : safeTimezone(input.time_zone) }).eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Suspension was not found')
+  setAuditContext(req, { resourceId: result.data.id, scopeId: result.data.enrollment_id, permission: 'teaching.students.update', scopeType: 'enrollment' })
   const shortened = Boolean(
     (current.data.end_date && result.data.end_date && result.data.end_date < current.data.end_date)
       || (!current.data.end_date && result.data.end_date),
@@ -97,9 +103,11 @@ async function update(req: Request, res: Response) {
 
 async function remove(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Suspension id is required')
+  if (!z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Suspension id is invalid')
   const current = await req.db!.from('student_suspensions').select(fields).eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Suspension was not found')
   await enrollment(req, current.data.enrollment_id); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.from('student_suspensions').delete().eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Suspension was not found')
+  setAuditContext(req, { resourceId: result.data.id, scopeId: result.data.enrollment_id, permission: 'teaching.students.update', scopeType: 'enrollment' })
   await revertReports(req, result.data)
   const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
 }

@@ -17,6 +17,7 @@ declare global {
         resourceId?: string | null
         teachingId?: string | null
         scopeId?: string | null
+        scopeType?: string | null
         permission?: string | null
         errorCode?: string | null
       }
@@ -46,7 +47,8 @@ export function requestContext(logger: pino.Logger) {
       resource: req.path.split('/').filter(Boolean)[1] ?? 'unknown',
       resourceId: typeof params.id === 'string' ? params.id : typeof params.userId === 'string' ? params.userId : null,
       teachingId: typeof params.teachingId === 'string' ? params.teachingId : null,
-      scopeId: typeof params.teachingId === 'string' ? params.teachingId : null,
+        scopeId: typeof params.teachingId === 'string' ? params.teachingId : null,
+        scopeType: typeof params.teachingId === 'string' ? 'teaching' : null,
     }
     req.log = logger.child({ request_id: req.requestId, trace_id: req.traceId, route: req.path, method: req.method })
     res.setHeader('X-Request-Id', req.requestId)

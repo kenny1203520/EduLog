@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
+import { setAuditContext } from './context.js'
 
 const assignmentFields = 'id,class_session_id,teacher_id,effective_from,effective_to,role_id,created_at,updated_at,roles(id,name,code),teachers(id,user_id,name,email,phone,address,bio,created_at,updated_at)'
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -28,6 +29,7 @@ function sessionId(req: Request) {
 
 async function authorize(req: Request, id: string, action: 'read' | 'list' | 'create' | 'update' | 'delete') {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  setAuditContext(req, { domain: 'teaching', resource: 'class-session-teachers', resourceId: null, action, permission: `teaching.class_sessions.${action}`, scopeId: id, scopeType: 'class_session' })
   const result = await req.db.rpc('has_api_permission', {
     p_user_id: req.user.id,
     p_permission_key: 'teaching.class_sessions.' + action,
@@ -64,17 +66,18 @@ async function list(req: Request, res: Response) {
 
 async function create(req: Request, res: Response) {
   const id = sessionId(req)
+  const input = bulkSchema.parse(req.body)
   // Assignments are relationship-management mutations on an existing class
   // session. Keep POST, PATCH, and DELETE aligned with the RLS policy and
   // OpenAPI contract: all require class-session update permission.
   await authorize(req, id, 'update')
-  const input = bulkSchema.parse(req.body)
   const replay = await idempotency(req, 201, null)
   if (replay) return res.status(replay.status).json(replay.body)
   if (input.teachers.length === 0) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one teacher assignment is required')
   const rows = await Promise.all(input.teachers.map(async (teacher) => ({ ...teacher, role_id: await resolveRoleId(req, teacher.role_id), class_session_id: id })))
   const result = await req.db!.from('class_session_teachers').insert(rows).select(assignmentFields)
   if (result.error) throw mapDatabaseError(result.error)
+  setAuditContext(req, { resourceId: null, scopeId: id, scopeType: 'class_session' })
   const body = { data: result.data ?? [], meta: { count: result.data?.length ?? 0 }, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 201, body)
   return res.status(201).json(body)
@@ -82,23 +85,24 @@ async function create(req: Request, res: Response) {
 
 async function remove(req: Request, res: Response) {
   const id = sessionId(req)
-  await authorize(req, id, 'update')
   const removalBody = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}
   const input = removeSchema.parse({
     teacher_id: removalBody.teacher_id ?? req.query.teacher_id,
     effective_from: removalBody.effective_from ?? req.query.effective_from,
   })
+  if (req.params.teacherId && !z.string().uuid().safeParse(req.params.teacherId).success) throw new ApiError(400, 'INVALID_ID', 'Teacher id is invalid')
+  await authorize(req, id, 'update')
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   let builder = req.db!.from('class_session_teachers').delete().eq('class_session_id', id)
   if (req.params.teacherId) {
-    if (!z.string().uuid().safeParse(req.params.teacherId).success) throw new ApiError(400, 'INVALID_ID', 'Teacher id is invalid')
     builder = builder.eq('teacher_id', req.params.teacherId)
   }
   if (input.teacher_id) builder = builder.eq('teacher_id', input.teacher_id)
   if (input.effective_from) builder = builder.eq('effective_from', input.effective_from)
   const result = await builder.select(assignmentFields)
   if (result.error) throw mapDatabaseError(result.error)
+  setAuditContext(req, { resourceId: null, scopeId: id, scopeType: 'class_session' })
   const body = { data: result.data ?? [], meta: { count: result.data?.length ?? 0 }, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 200, body)
   return res.json(body)
@@ -106,16 +110,17 @@ async function remove(req: Request, res: Response) {
 
 async function update(req: Request, res: Response) {
   const id = sessionId(req)
-  await authorize(req, id, 'update')
   const assignmentId = typeof req.params.assignmentId === 'string' && z.string().uuid().safeParse(req.params.assignmentId).success ? req.params.assignmentId : undefined
   if (!assignmentId) throw new ApiError(400, 'INVALID_ID', 'Assignment id is invalid')
   const input = assignmentSchema.partial().strict().parse(req.body)
   if (!Object.keys(input).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one assignment field is required')
+  await authorize(req, id, 'update')
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.from('class_session_teachers').update(input).eq('id', assignmentId).eq('class_session_id', id).select(assignmentFields).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Teacher assignment was not found')
+  setAuditContext(req, { resourceId: assignmentId, scopeId: id, scopeType: 'class_session' })
   const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 200, body)
   return res.json(body)

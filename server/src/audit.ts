@@ -13,12 +13,15 @@ export function auditRequest(req: Request, status: number) {
   const resource = req.auditContext?.resource ?? segments[1] ?? 'unknown'
   const outcome = status >= 500 ? 'failure' : status >= 400 ? 'denied' : 'success'
   const domain = ['roles', 'permissions', 'audit-events', 'users'].includes(resource) ? 'system' : 'teaching'
+  // Only explicit route context may identify a resource.  Guessing from URL
+  // segments turns teaching/session scope ids into resource ids and produces
+  // misleading audit records.
   const resourceId = safeUuid(req.auditContext?.resourceId)
-    ?? (safeUuid(segments[2]) && segments[2] !== 'members' ? safeUuid(segments[2]) : safeUuid(segments[4]))
   const teachingId = safeUuid(req.auditContext?.teachingId)
     ?? (resource === 'teachings' ? safeUuid(segments[2]) : null)
   const scopeId = safeUuid(req.auditContext?.scopeId) ?? teachingId
-  const event = { actor_user_id: req.user.id, action: req.auditContext?.action ?? req.method.toLowerCase(), domain: req.auditContext?.domain ?? domain, resource, resource_id: resourceId, scope_id: scopeId, request_id: req.requestId, outcome, metadata: { user_id: req.user.id, teaching_id: teachingId, resource, resource_id: resourceId, scope_id: scopeId, permission: req.auditContext?.permission ?? null, error_code: req.auditContext?.errorCode ?? null, route: req.route?.path ?? req.path, method: req.method, status, latency_ms: Math.round(performance.now() - req.startedAt), request_id: req.requestId, trace_id: req.traceId, outcome } }
+  const scopeType = req.auditContext?.scopeType ?? (scopeId === teachingId && teachingId ? 'teaching' : null)
+  const event = { actor_user_id: req.user.id, action: req.auditContext?.action ?? req.method.toLowerCase(), domain: req.auditContext?.domain ?? domain, resource, resource_id: resourceId, scope_id: scopeId, request_id: req.requestId, outcome, metadata: { user_id: req.user.id, teaching_id: teachingId, resource, resource_id: resourceId, scope_type: scopeType, scope_id: scopeId, permission: req.auditContext?.permission ?? null, error_code: req.auditContext?.errorCode ?? null, route: req.route?.path ?? req.path, method: req.method, status, latency_ms: Math.round(performance.now() - req.startedAt), request_id: req.requestId, trace_id: req.traceId, outcome } }
   void insertAudit(req.adminDb, event, req)
 }
 

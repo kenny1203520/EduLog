@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { sendData } from './response.js'
 import { complete, idempotency } from './resourceRouter.js'
+import { setAuditContext } from './context.js'
 
 const capabilityQuery = z.object({ permission: z.string().trim().min(1).max(200) }).strict()
 const policyUpdate = z.object({
@@ -19,6 +20,7 @@ function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
 
 async function authorizePolicyScope(req: Request, scope: z.infer<typeof policyUpdate>['scope']) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  setAuditContext(req, { domain: scope.type === 'system' ? 'system' : 'teaching', resource: 'rbac-policies', action: 'manage', scopeId: scope.id ?? null, scopeType: scope.type, permission: scope.type === 'system' ? 'system.roles.manage' : 'teaching.members.manage' })
   if (scope.type === 'system') {
     const result = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'system.roles.manage', p_classroom_id: null, p_class_session_id: null })
     if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')

@@ -1,6 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
+import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
+import { setAuditContext } from './context.js'
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
@@ -9,7 +11,9 @@ function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
 async function remove(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!id) throw new ApiError(400, 'INVALID_ID', 'Student id is required')
+  if (!z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Student id is invalid')
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  setAuditContext(req, { domain: 'teaching', resource: 'students', resourceId: id, action: 'delete', permission: 'teaching.students.delete', scopeId: id })
   const permission = await req.db.rpc('can_access_student', {
     p_student_id: id,
     p_permission_key: 'teaching.students.delete',
