@@ -8,6 +8,12 @@ import { setAuditContext } from './context.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
 const bodySchema = z.record(z.string(), z.unknown())
+const memberListQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  offset: z.coerce.number().int().min(0).max(1000000).default(0),
+  sort: z.enum(['created_at', '-created_at', 'effective_from', '-effective_from', 'status', '-status', 'user_id', '-user_id']).default('created_at'),
+  search: z.string().trim().max(200).optional(),
+}).strict()
 
 export async function idempotency(req: Request, status: number, body: unknown) {
   const key = req.header('idempotency-key')?.trim()
@@ -65,7 +71,7 @@ export function parseFilters(raw: string, def: ResourceDefinition) {
     const filter = item as { field?: unknown; operator?: unknown; value?: unknown }
     const field = typeof filter.field === 'string' ? filter.field : ''
     const operator = typeof filter.operator === 'string' ? filter.operator : ''
-    if (!field || !def.fields.includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'contains', 'is'].includes(operator)) throw new ApiError(400, 'INVALID_FILTER', 'The filter is not supported')
+    if (!field || !(def.filterable ?? def.fields).includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'contains', 'is'].includes(operator)) throw new ApiError(400, 'INVALID_FILTER', 'The filter is not supported')
     if (operator === 'in' && !Array.isArray(filter.value)) throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
     if (operator === 'ilike' && typeof filter.value !== 'string') throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
     if (operator === 'is' && !['null', 'true', 'false'].includes(String(filter.value))) throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
@@ -81,7 +87,7 @@ export function parseOr(raw: string, def: ResourceDefinition) {
     const field = parts.shift() ?? ''
     const operator = (parts.shift() ?? '') as FilterOperator
     const value = parts.join('.')
-    if (!field || !def.fields.includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'is'].includes(operator) || /[(),\n\r]/.test(value)) {
+    if (!field || !(def.filterable ?? def.fields).includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'is'].includes(operator) || /[(),\n\r]/.test(value)) {
       throw new ApiError(400, 'INVALID_FILTER', 'The or filter is not supported')
     }
     if (operator === 'is' && !['null', 'true', 'false'].includes(value)) throw new ApiError(400, 'INVALID_FILTER', 'The or filter value is invalid')
@@ -114,13 +120,13 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   if (query.or) builder = builder.or(parseOr(query.or, def))
   const queryFields = ['teaching_id', 'entity_type', 'entity_id', 'lesson_id', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id', 'instructor_id', 'template_type', 'scope_type', 'scope_entity_id']
   for (const field of queryFields) {
-    if (queryValue(req, field) && !def.fields.includes(field)) throw new ApiError(400, 'INVALID_FILTER', `The ${field} filter is not supported for this resource`)
+    if (queryValue(req, field) && !(def.filterable ?? def.fields).includes(field)) throw new ApiError(400, 'INVALID_FILTER', `The ${field} filter is not supported for this resource`)
     const value = queryValue(req, field)
     if (value) builder = builder.eq(field, value)
   }
   const status = queryValue(req, 'status')
   if (status) {
-    if (!def.fields.includes('status')) throw new ApiError(400, 'INVALID_FILTER', 'The status filter is not supported for this resource')
+    if (!(def.filterable ?? def.fields).includes('status')) throw new ApiError(400, 'INVALID_FILTER', 'The status filter is not supported for this resource')
     builder = builder.eq('status', status)
   }
   const filters = query.filters ? parseFilters(query.filters, def) : []
@@ -135,13 +141,13 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     else if (filter.operator === 'contains') builder = builder.contains(filter.field, filter.value as never)
     else if (filter.operator === 'is') {
       const value = String(filter.value)
-      builder = builder.is(filter.field, value === 'null' ? null : value === 'true')
+      builder = builder.is(filter.field, value === 'null' ? null : value === 'true' ? true : false)
     }
     else builder = builder.eq(filter.field, filter.value)
   }
   const entityIds = queryValue(req, 'entity_ids')
   if (entityIds) {
-    if (!def.fields.includes('entity_id')) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is not supported for this resource')
+    if (!(def.filterable ?? def.fields).includes('entity_id')) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is not supported for this resource')
     const values = entityIds.split(',').filter(Boolean)
     if (!values.length || values.some((value) => !z.string().uuid().safeParse(value).success)) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is invalid')
     builder = builder.in('entity_id', values)
@@ -230,13 +236,22 @@ async function members(req: Request, res: Response) {
   if (!teachingId) throw new ApiError(400, 'INVALID_TEACHING_ID', 'Teaching id is required')
   if (!z.string().uuid().safeParse(teachingId).success) throw new ApiError(400, 'INVALID_TEACHING_ID', 'Teaching id is invalid')
   if (userId && !z.string().uuid().safeParse(userId).success) throw new ApiError(400, 'INVALID_USER_ID', 'Member user id is invalid')
-  const action = req.method === 'GET' ? 'list' : req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
+  const action = req.method === 'GET' ? (userId ? 'read' : 'list') : req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
   setAuditContext(req, { domain: 'teaching', resource: 'members', action, resourceId: userId ?? null, teachingId: teachingId ?? null, scopeId: teachingId ?? null, permission: `teaching.members.${action}` })
   await teachingAllowed(req, `teaching.members.${action}`, teachingId)
   if (req.method === 'GET') {
-    const result = await req.db!.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').eq('teaching_id', teachingId).order('created_at', { ascending: true })
+    const query = memberListQuery.parse(req.query)
+    let builder = req.db!.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at', { count: 'exact' }).eq('teaching_id', teachingId)
+    if (userId) builder = builder.eq('user_id', userId)
+    if (query.search) builder = builder.ilike('user_id', `%${query.search.replace(/[%,_()]/g, '')}%`)
+    const sortName = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
+    const result = await builder.order(sortName, { ascending: !query.sort.startsWith('-') }).range(query.offset, query.offset + query.limit - 1)
     if (result.error) throw mapDatabaseError(result.error)
-    return sendData(req, res, result.data ?? [], { limit: result.data?.length ?? 0, offset: 0, total: result.data?.length ?? 0, sort: 'created_at' })
+    if (userId) {
+      if (!result.data?.[0]) throw new ApiError(404, 'NOT_FOUND', 'Teaching member was not found')
+      return sendData(req, res, result.data[0])
+    }
+    return sendData(req, res, result.data ?? [], { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: query.sort })
   }
   if (req.method === 'POST') {
     const body = z.object({ user_id: z.string().uuid(), role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict().parse(req.body)
@@ -251,7 +266,7 @@ async function members(req: Request, res: Response) {
   }
   if (!userId) throw new ApiError(400, 'INVALID_USER_ID', 'Member user id is required')
   const updateBody = req.method === 'PATCH'
-    ? z.object({ role_id: z.string().uuid().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict().parse(req.body)
+    ? z.object({ role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict().parse(req.body)
     : null
   if (req.method === 'PATCH' && !Object.keys(updateBody ?? {}).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one member field is required')
   const replay = await idempotency(req, 200, null)

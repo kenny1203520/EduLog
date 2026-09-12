@@ -11,11 +11,21 @@ export type ApiCollectionMeta = {
 
 export type ApiCollection<T> = ApiEnvelope<T[]> & { meta?: ApiCollectionMeta | null }
 
+export type ApiFilter = {
+  field: string
+  operator: 'eq' | 'neq' | 'in' | 'gte' | 'lte' | 'gt' | 'lt' | 'ilike' | 'contains' | 'is'
+  value: unknown
+}
+
 export type ResourceListOptions = {
   page?: number
   perPage?: number
   search?: string
   sort?: string
+  teachingId?: string
+  status?: string
+  filters?: ApiFilter[]
+  or?: string
   userId?: string
   courseId?: string
   lessonId?: string
@@ -39,6 +49,10 @@ function queryString(options: ResourceListOptions = {}) {
   params.set('offset', String((page - 1) * perPage))
   if (options.search?.trim()) params.set('search', options.search.trim())
   if (options.sort) params.set('sort', options.sort)
+  if (options.teachingId) params.set('teaching_id', options.teachingId)
+  if (options.status) params.set('status', options.status)
+  if (options.filters?.length) params.set('filters', JSON.stringify(options.filters))
+  if (options.or?.trim()) params.set('or', options.or.trim())
   if (options.userId) params.set('user_id', options.userId)
   if (options.courseId) params.set('course_id', options.courseId)
   if (options.lessonId) params.set('lesson_id', options.lessonId)
@@ -108,6 +122,47 @@ export class ApiResourceClient {
   async remove<T>(resource: string, id: string, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
     try {
       return await this.client.delete<T>(`/${resource}/${encodeURIComponent(id)}`, undefined, mode)
+    } catch (error) {
+      throw mapApiError(error)
+    }
+  }
+
+  async listMembers<T>(teachingId: string, options: Omit<ResourceListOptions, 'mode'> = {}, mode?: ApiV1Mode): Promise<ApiCollection<T>> {
+    try {
+      const query = queryString(options)
+      return await this.client.get<T[]>(`/teachings/${encodeURIComponent(teachingId)}/members?${query}`, undefined, mode ?? getApiV1Mode()) as ApiCollection<T>
+    } catch (error) {
+      throw mapApiError(error)
+    }
+  }
+
+  async getMember<T>(teachingId: string, userId: string, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
+    try {
+      return await this.client.get<T>(`/teachings/${encodeURIComponent(teachingId)}/members/${encodeURIComponent(userId)}`, undefined, mode)
+    } catch (error) {
+      throw mapApiError(error)
+    }
+  }
+
+  async createMember<T>(teachingId: string, body: unknown, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
+    try {
+      return await this.client.post<T>(`/teachings/${encodeURIComponent(teachingId)}/members`, body, undefined, mode)
+    } catch (error) {
+      throw mapApiError(error)
+    }
+  }
+
+  async updateMember<T>(teachingId: string, userId: string, body: unknown, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
+    try {
+      return await this.client.patch<T>(`/teachings/${encodeURIComponent(teachingId)}/members/${encodeURIComponent(userId)}`, body, undefined, mode)
+    } catch (error) {
+      throw mapApiError(error)
+    }
+  }
+
+  async removeMember<T>(teachingId: string, userId: string, mode?: ApiV1Mode): Promise<ApiEnvelope<T>> {
+    try {
+      return await this.client.delete<T>(`/teachings/${encodeURIComponent(teachingId)}/members/${encodeURIComponent(userId)}`, undefined, mode)
     } catch (error) {
       throw mapApiError(error)
     }

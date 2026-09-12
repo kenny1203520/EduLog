@@ -157,6 +157,12 @@ const schemas: Record<string, { createSchema?: z.ZodType<Record<string, unknown>
 }
 for (const [route, schema] of Object.entries(schemas)) Object.assign(resources[route], schema)
 
+// Keep query fields explicit even for resources that use the default registry
+// definition. Nested projections are readable but are never valid filter keys.
+for (const definition of Object.values(resources)) {
+  definition.filterable ??= definition.fields.filter((field) => !field.includes('('))
+}
+
 // Generic routes must never silently accept an unvalidated write.  A missing
 // schema is a security regression because it moves the first validation point
 // after authorization/idempotency and makes the REST contract unknowable.

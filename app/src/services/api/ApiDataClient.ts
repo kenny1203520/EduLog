@@ -53,6 +53,7 @@ class ApiQuery implements PromiseLike<QueryResult> {
         const rows = Array.isArray(response.data) ? response.data : response.data == null ? [] : [response.data]; const data = this.expectSingle ? (rows[0] ?? null) : rows; if (this.expectSingle && data == null && !this.allowMissing) return { data: null, error: { message: 'No rows found' } }; return { data, error: null, count: typeof response.meta?.total === 'number' ? response.meta.total : rows.length }
       }
       const payloads = Array.isArray(this.payload) ? this.payload : [this.payload]
+      const body = payloads[0]
       const idInFilter = this.filters.find((filter) => filter.field === 'id' && filter.operator === 'in')
       if (idInFilter && Array.isArray(idInFilter.value)) {
         const rows: unknown[] = []
@@ -69,7 +70,6 @@ class ApiQuery implements PromiseLike<QueryResult> {
         for (const payload of payloads) rows.push((await apiV1Client.post(`/${this.resource}`, payload)).data)
         return { data: Array.isArray(this.payload) ? rows : rows[0], error: null, count: rows.length }
       }
-      const body = payloads[0]
       if (this.operation === 'update') { if (!idFilter) throw new Error('API update requires an id filter'); response = await apiV1Client.patch(`/${this.resource}/${encodeURIComponent(String(idFilter.value))}`, body) }
       else { if (!idFilter) throw new Error('API delete requires an id filter'); response = await apiV1Client.delete(`/${this.resource}/${encodeURIComponent(String(idFilter.value))}`) }
       const data = response.data; return { data, error: null, count: Array.isArray(data) ? data.length : null }
