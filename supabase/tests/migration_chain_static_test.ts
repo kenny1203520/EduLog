@@ -3,25 +3,32 @@ import { assert, assertStringIncludes } from 'https://deno.land/std@0.177.1/test
 const migrationDir = new URL('../migrations/', import.meta.url)
 const canonical = await Deno.readTextFile(new URL('1000040_backend_security_reconciliation.sql', migrationDir))
 const legacyUpgrade = await Deno.readTextFile(new URL('1000041_legacy_upgrade_consistency.sql', migrationDir))
-const reconciliation = canonical
-const hardening = canonical
-const compatibility = canonical
-const rateLimit = canonical
-const studentScope = canonical
-const holidayScope = canonical
-const scopeIntegrity = canonical
-const childScope = canonical
-const transferScope = canonical
-const enrollmentScope = canonical
-const rbacTeachingScope = canonical
-const idempotencyBinding = canonical
-const rbacPolicyScope = canonical
-const holidayRead = canonical
-const teachingRoleScope = canonical
-const idempotencyContract = canonical
-const permissionScope = canonical
-const concurrencyScope = canonical
-const lifecycle = canonical
+function section(marker: string): string {
+  const start = canonical.indexOf(`-- Former migration ${marker}`)
+  if (start < 0) throw new Error(`missing consolidated migration section: ${marker}`)
+  const next = canonical.indexOf('\n-- Former migration ', start + 1)
+  return canonical.slice(start, next < 0 ? undefined : next)
+}
+
+const reconciliation = section('1000043_teaching_scope_reconciliation.sql')
+const hardening = section('1000044_rbac_epoch_and_api_contract.sql')
+const compatibility = section('1000041a_has_api_permission_compatibility.sql')
+const rateLimit = section('1000046_api_rate_limit_shared_store.sql')
+const studentScope = section('1000048_student_scope_course_fallback.sql')
+const holidayScope = section('1000049_holiday_scope_rls_hardening.sql')
+const scopeIntegrity = section('1000050_scope_integrity_and_session_rpc.sql')
+const childScope = section('1000051_child_scope_write_hardening.sql')
+const transferScope = section('1000052_transfer_scope_authorization.sql')
+const enrollmentScope = section('1000053_enrollment_scope_and_student_guard.sql')
+const rbacTeachingScope = section('1000054_rbac_teaching_scope_rpc.sql')
+const idempotencyBinding = section('1000055_idempotency_route_binding.sql')
+const rbacPolicyScope = section('1000056_canonical_rbac_policy_scope_rls.sql')
+const holidayRead = section('1000057_holiday_read_permission_alias.sql')
+const teachingRoleScope = section('1000058_teaching_role_scope_isolation.sql')
+const idempotencyContract = section('1000059_idempotency_key_contract.sql')
+const permissionScope = section('1000060_permission_scope_and_session_regression.sql')
+const concurrencyScope = section('1000061_scope_and_idempotency_concurrency.sql')
+const lifecycle = section('1000062_report_lifecycle_atomicity.sql')
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))

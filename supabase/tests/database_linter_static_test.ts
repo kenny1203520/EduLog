@@ -2,9 +2,15 @@ import { assert, assertFalse, assertStringIncludes } from 'https://deno.land/std
 
 const migrationDir = new URL('../migrations/', import.meta.url)
 const canonical = await Deno.readTextFile(new URL('1000040_backend_security_reconciliation.sql', migrationDir))
-const hardening = canonical
-const coreHardening = canonical
-const rateLimit = canonical
+function section(marker: string): string {
+  const start = canonical.indexOf(`-- Former migration ${marker}`)
+  if (start < 0) throw new Error(`missing consolidated migration section: ${marker}`)
+  const next = canonical.indexOf('\n-- Former migration ', start + 1)
+  return canonical.slice(start, next < 0 ? undefined : next)
+}
+const hardening = section('1000044_rbac_epoch_and_api_contract.sql')
+const coreHardening = section('1000045_missing_core_rls_hardening.sql')
+const rateLimit = section('1000046_api_rate_limit_shared_store.sql')
 const registry = await Deno.readTextFile(new URL('../volumes/functions/api-v1/resourceRegistry.ts', import.meta.url))
 const api = await Deno.readTextFile(new URL('../volumes/functions/api-v1/index.ts', import.meta.url))
 
