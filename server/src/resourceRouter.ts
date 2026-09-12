@@ -54,7 +54,9 @@ function validateBody(def: ResourceDefinition, body: Record<string, unknown>, ac
 
 function queryValue(req: Request, key: string) { const value = req.query[key]; return typeof value === 'string' ? value : undefined }
 
-function parseFilters(raw: string, def: ResourceDefinition) {
+type FilterOperator = 'eq' | 'neq' | 'in' | 'gte' | 'lte' | 'gt' | 'lt' | 'ilike' | 'contains' | 'is'
+
+export function parseFilters(raw: string, def: ResourceDefinition) {
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { throw new ApiError(400, 'INVALID_FILTER', 'The filters query is invalid') }
   if (!Array.isArray(parsed)) throw new ApiError(400, 'INVALID_FILTER', 'The filters query is invalid')
@@ -63,10 +65,28 @@ function parseFilters(raw: string, def: ResourceDefinition) {
     const filter = item as { field?: unknown; operator?: unknown; value?: unknown }
     const field = typeof filter.field === 'string' ? filter.field : ''
     const operator = typeof filter.operator === 'string' ? filter.operator : ''
-    if (!field || !def.fields.includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt'].includes(operator)) throw new ApiError(400, 'INVALID_FILTER', 'The filter is not supported')
+    if (!field || !def.fields.includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'contains', 'is'].includes(operator)) throw new ApiError(400, 'INVALID_FILTER', 'The filter is not supported')
     if (operator === 'in' && !Array.isArray(filter.value)) throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
-    return { field, operator, value: filter.value }
+    if (operator === 'ilike' && typeof filter.value !== 'string') throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
+    if (operator === 'is' && !['null', 'true', 'false'].includes(String(filter.value))) throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
+    return { field, operator: operator as FilterOperator, value: filter.value }
   })
+}
+
+export function parseOr(raw: string, def: ResourceDefinition) {
+  const clauses = raw.split(',').map((clause) => clause.trim()).filter(Boolean)
+  if (!clauses.length) throw new ApiError(400, 'INVALID_FILTER', 'The or filter is invalid')
+  return clauses.map((clause) => {
+    const parts = clause.split('.')
+    const field = parts.shift() ?? ''
+    const operator = (parts.shift() ?? '') as FilterOperator
+    const value = parts.join('.')
+    if (!field || !def.fields.includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'is'].includes(operator) || /[(),\n\r]/.test(value)) {
+      throw new ApiError(400, 'INVALID_FILTER', 'The or filter is not supported')
+    }
+    if (operator === 'is' && !['null', 'true', 'false'].includes(value)) throw new ApiError(400, 'INVALID_FILTER', 'The or filter value is invalid')
+    return `${field}.${operator}.${value}`
+  }).join(',')
 }
 
 async function list(req: Request, res: Response, def: ResourceDefinition) {
@@ -88,9 +108,10 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   let builder = req.db!.from(def.table).select(listFields.join(', '), { count: 'exact' })
   if (def.table === 'user_preferences' || def.table === 'user_entity_visibility_preferences' || def.table === 'copy_templates') builder = builder.eq('user_id', req.user!.id)
   if (query.search && def.searchable.length) {
-    const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,]/g, '')}%`).join(',')
+    const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,()]/g, '')}%`).join(',')
     builder = builder.or(clauses)
   }
+  if (query.or) builder = builder.or(parseOr(query.or, def))
   const queryFields = ['teaching_id', 'entity_type', 'entity_id', 'lesson_id', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id', 'instructor_id', 'template_type', 'scope_type', 'scope_entity_id']
   for (const field of queryFields) {
     if (queryValue(req, field) && !def.fields.includes(field)) throw new ApiError(400, 'INVALID_FILTER', `The ${field} filter is not supported for this resource`)
@@ -110,6 +131,12 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     else if (filter.operator === 'lte') builder = builder.lte(filter.field, filter.value)
     else if (filter.operator === 'gt') builder = builder.gt(filter.field, filter.value)
     else if (filter.operator === 'lt') builder = builder.lt(filter.field, filter.value)
+    else if (filter.operator === 'ilike') builder = builder.ilike(filter.field, filter.value as string)
+    else if (filter.operator === 'contains') builder = builder.contains(filter.field, filter.value as never)
+    else if (filter.operator === 'is') {
+      const value = String(filter.value)
+      builder = builder.is(filter.field, value === 'null' ? null : value === 'true')
+    }
     else builder = builder.eq(filter.field, filter.value)
   }
   const entityIds = queryValue(req, 'entity_ids')

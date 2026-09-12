@@ -40,6 +40,7 @@ export const listQuerySchema = z.object({
   teaching_id: optionalUuid, status: z.string().optional(), course_id: optionalUuid, classroom_id: optionalUuid,
   student_id: optionalUuid, teacher_id: optionalUuid, user_id: optionalUuid, class_session_id: optionalUuid,
   enrollment_id: optionalUuid, filters: z.string().max(8000).optional(), instructor_id: optionalUuid, template_type: z.string().optional(), scope_type: z.string().optional(), scope_entity_id: optionalUuid, lesson_id: optionalUuid, entity_type: z.string().optional(), entity_id: optionalUuid, entity_ids: z.string().optional(), class_occurrence_id: optionalUuid, occurrence_report_id: optionalUuid,
+  or: z.string().trim().max(2000).optional(),
 }).strict()
 export const idSchema = z.object({ id }).strict()
 

@@ -1,15 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { listQuerySchema } from './resources.js'
+import { parseFilters, parseOr } from './resourceRouter.js'
+import { resources } from './resources.js'
 
-describe('resource collection query contract', () => {
-  it('accepts scoped filters used by report and enrollment clients', () => {
-    const result = listQuerySchema.parse({ limit: '10', offset: '0', enrollment_id: '00000000-0000-4000-8000-000000000001', class_occurrence_id: '00000000-0000-4000-8000-000000000002', sort: '-created_at' })
-    expect(result.enrollment_id).toBe('00000000-0000-4000-8000-000000000001')
-    expect(result.class_occurrence_id).toBe('00000000-0000-4000-8000-000000000002')
+describe('resource query filters', () => {
+  it('accepts server-side ilike, contains and null filters', () => {
+    expect(parseFilters(JSON.stringify([
+      { field: 'status', operator: 'ilike', value: '%active%' },
+      { field: 'teacher_ids', operator: 'contains', value: ['teacher-1'] },
+      { field: 'notes', operator: 'is', value: 'null' },
+    ]), resources.occurrences)).toEqual([
+      { field: 'status', operator: 'ilike', value: '%active%' },
+      { field: 'teacher_ids', operator: 'contains', value: ['teacher-1'] },
+      { field: 'notes', operator: 'is', value: 'null' },
+    ])
   })
 
-  it('accepts the enrollment status filter used by the frontend', () => {
-    const result = listQuerySchema.parse({ status: 'regular' })
-    expect(result.status).toBe('regular')
+  it('validates OR expressions against the resource allowlist', () => {
+    expect(parseOr('name.ilike.%Ada%,email.ilike.%example.test%', resources.teachers))
+      .toBe('name.ilike.%Ada%,email.ilike.%example.test%')
+    expect(() => parseOr('password.eq.secret', resources.teachers)).toThrowError('The or filter is not supported')
+    expect(() => parseOr('name.ilike.%Ada%(admin)', resources.teachers)).toThrowError('The or filter is not supported')
   })
 })
