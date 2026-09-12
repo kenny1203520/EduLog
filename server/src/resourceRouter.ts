@@ -157,7 +157,7 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   return sendData(req, res, data ?? [], { limit: query.limit, offset: query.offset, total: count ?? 0, sort: query.sort })
 }
 
-async function item(req: Request, res: Response, def: ResourceDefinition) {
+export async function item(req: Request, res: Response, def: ResourceDefinition) {
   const requestedId = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!requestedId) throw new ApiError(400, 'INVALID_ID', 'Resource id is required')
   const id = def.table === 'user_preferences' && requestedId === 'me' ? req.user?.id : requestedId
@@ -178,6 +178,15 @@ async function item(req: Request, res: Response, def: ResourceDefinition) {
   }
   const action = req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
   await authorizeResource(req, def, permissionForResource(def, action), id, existing.data as unknown as Record<string, unknown>)
+  if (req.method === 'PATCH' && mutationBody) {
+    // Re-resolve authorization from the persisted row plus the validated
+    // mutation.  A writable foreign key can otherwise move an item into a
+    // different teaching/classroom/session scope after the old row passed.
+    await authorizeResource(req, def, permissionForResource(def, 'update'), id, {
+      ...(existing.data as unknown as Record<string, unknown>),
+      ...mutationBody,
+    })
+  }
   const isMutation = mutationMethods.includes(req.method)
   if (isMutation) {
     const replay = await idempotency(req, 200, null)
