@@ -63,4 +63,15 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(getMock).toHaveBeenCalledWith('/reports/report-1/collaboration')
     expect(result.data).toEqual({ snapshot_base64: null, base_report_version: null })
   })
+
+  it('maps teaching member table compatibility to the nested scoped route', async () => {
+    getMock.mockResolvedValueOnce({ data: { teaching_id: 'teaching-1', user_id: 'user-1' }, meta: {}, request_id: 'r', trace_id: 't' })
+    const result = await apiDataClient.from('teaching_members')
+      .select('*')
+      .eq('teaching_id', 'teaching-1')
+      .eq('user_id', 'user-1')
+      .maybeSingle()
+    expect(getMock).toHaveBeenCalledWith('/teachings/teaching-1/members/user-1')
+    expect(result.data.user_id).toBe('user-1')
+  })
 })

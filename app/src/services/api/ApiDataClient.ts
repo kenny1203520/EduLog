@@ -131,7 +131,14 @@ class ApiQuery implements PromiseLike<QueryResult> {
       const idFilter = this.filters.find((filter) => filter.field === 'id' || (this.resource === 'user-preferences' && filter.field === 'user_id'))
       let response: ApiEnvelope<any>
       if (this.operation === 'select') {
-        if (this.resource === 'report-collab-docs') {
+        if (this.resource === 'teaching-members') {
+          const teachingId = this.filters.find((filter) => filter.field === 'teaching_id' && filter.operator === 'eq')?.value
+          const userId = this.filters.find((filter) => filter.field === 'user_id' && filter.operator === 'eq')?.value
+          if (typeof teachingId !== 'string') throw new Error('API teaching member query requires a teaching_id filter')
+          response = typeof userId === 'string'
+            ? await apiV1Client.get(`/teachings/${encodeURIComponent(teachingId)}/members/${encodeURIComponent(userId)}`)
+            : await apiV1Client.get(`/teachings/${encodeURIComponent(teachingId)}/members?limit=${this.limitValue ?? 100}&offset=${this.offsetValue}${this.sort ? `&sort=${encodeURIComponent(this.sort)}` : ''}`)
+        } else if (this.resource === 'report-collab-docs') {
           const reportId = this.filters.find((filter) => filter.field === 'occurrence_report_id' && filter.operator === 'eq')?.value
           if (typeof reportId !== 'string') throw new Error('API collaboration query requires an occurrence_report_id filter')
           response = await apiV1Client.get(`/reports/${encodeURIComponent(reportId)}/collaboration`)
@@ -141,6 +148,22 @@ class ApiQuery implements PromiseLike<QueryResult> {
       }
       const payloads = Array.isArray(this.payload) ? this.payload : [this.payload]
       const body = payloads[0]
+      if (this.resource === 'teaching-members') {
+        const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {}
+        const teachingId = stringArg(payload, 'teaching_id') ?? stringArg(Object.fromEntries(this.filters.map((filter) => [filter.field, filter.value])), 'teaching_id')
+        const userId = stringArg(payload, 'user_id') ?? stringArg(Object.fromEntries(this.filters.map((filter) => [filter.field, filter.value])), 'user_id')
+        if (!teachingId) throw new Error('API teaching member mutation requires a teaching_id')
+        if (this.operation === 'insert' || this.operation === 'upsert') {
+          const { teaching_id: _teachingId, ...memberPayload } = payload
+          const result = await apiV1Client.post(`/teachings/${encodeURIComponent(teachingId)}/members`, memberPayload)
+          return { data: result.data, error: null, count: 1 }
+        }
+        if (!userId) throw new Error('API teaching member mutation requires a user_id')
+        const path = `/teachings/${encodeURIComponent(teachingId)}/members/${encodeURIComponent(userId)}`
+        const { teaching_id: _teachingId, user_id: _userId, ...memberPayload } = payload
+        const result = this.operation === 'delete' ? await apiV1Client.delete(path) : await apiV1Client.patch(path, memberPayload)
+        return { data: result.data, error: null, count: 1 }
+      }
       const idInFilter = this.filters.find((filter) => filter.field === 'id' && filter.operator === 'in')
       if (idInFilter && Array.isArray(idInFilter.value)) {
         const rows: unknown[] = []
