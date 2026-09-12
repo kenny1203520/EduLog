@@ -21,7 +21,7 @@ const sessionSchema = z.object({
   course_ids: z.array(z.string().uuid()).max(100).default([]),
   capacity: z.number().int().min(0).max(100000).default(10),
   lesson_number: z.number().int().min(0).nullable().optional(),
-  external_link: z.string().url().max(2048).nullable().optional(),
+  external_link: z.url().max(2048).nullable().optional(),
   start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   time_zone: z.string().min(1).max(64).default('Asia/Taipei'),
@@ -118,6 +118,60 @@ async function read(req: Request, res: Response) {
   return res.json({ data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
 }
 
+const sessionDetailsFields = `${sessionFields},classrooms(id,name,address,external_link)`
+
+async function readDetails(req: Request, res: Response) {
+  const id = typeof req.params.id === 'string' ? req.params.id : undefined
+  if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Class session id is invalid')
+  await authorize(req, 'read', id)
+
+  const [session, enrollments] = await Promise.all([
+    req.db!.from('class_sessions').select(sessionDetailsFields).eq('id', id).maybeSingle(),
+    req.db!.from('enrollments').select('id', { count: 'exact', head: true }).eq('class_session_id', id).eq('status', 'regular'),
+  ])
+  if (session.error) throw mapDatabaseError(session.error)
+  if (enrollments.error) throw mapDatabaseError(enrollments.error)
+  if (!session.data) throw new ApiError(404, 'NOT_FOUND', 'Class session was not found')
+
+  const classroom = Array.isArray(session.data.classrooms) ? session.data.classrooms[0] : session.data.classrooms
+  const data = {
+    ...session.data,
+    classroom_name: classroom?.name ?? 'Unknown',
+    classroom_address: classroom?.address ?? '',
+    current_enrollments: enrollments.count ?? 0,
+  }
+  delete (data as Record<string, unknown>).classrooms
+  setAuditContext(req, { resource: 'class-sessions', resourceId: id, action: 'read' })
+  return sendDetails(req, res, data)
+}
+
+async function readEnrollmentPeak(req: Request, res: Response) {
+  const id = typeof req.params.id === 'string' ? req.params.id : undefined
+  if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Class session id is invalid')
+  const query = z.object({
+    start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }).strict().parse(req.query)
+  if (query.start_date > query.end_date) throw new ApiError(422, 'INVALID_DATE_RANGE', 'end_date must not be before start_date')
+  await authorize(req, 'read', id)
+
+  const occurrences = await req.db!.from('class_occurrences').select('id').eq('class_session_id', id).gte('occurrence_date', query.start_date).lte('occurrence_date', query.end_date)
+  if (occurrences.error) throw mapDatabaseError(occurrences.error)
+  const occurrenceIds = (occurrences.data ?? []).map((row) => row.id).filter((value): value is string => typeof value === 'string')
+  if (!occurrenceIds.length) return sendDetails(req, res, { max_enrollment: 0 })
+
+  const reports = await req.db!.from('occurrence_reports').select('class_occurrence_id').in('class_occurrence_id', occurrenceIds)
+  if (reports.error) throw mapDatabaseError(reports.error)
+  const counts = new Map<string, number>()
+  for (const report of reports.data ?? []) counts.set(report.class_occurrence_id, (counts.get(report.class_occurrence_id) ?? 0) + 1)
+  const maxEnrollment = Math.max(0, ...counts.values())
+  return sendDetails(req, res, { max_enrollment: maxEnrollment })
+}
+
+function sendDetails(req: Request, res: Response, data: unknown) {
+  return res.json({ data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
+}
+
 async function save(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : null
   const input = sessionSchema.parse(req.body)
@@ -178,6 +232,8 @@ export function createSessionRouter() {
   router.post('/class-sessions', wrap(save))
   router.patch('/class-sessions/:id', wrap(save))
   router.delete('/class-sessions/:id', wrap(remove))
+  router.get('/class-sessions/:id/details', wrap(readDetails))
+  router.get('/class-sessions/:id/enrollment-peak', wrap(readEnrollmentPeak))
   router.get('/class-sessions/:id', wrap(read))
   return router
 }

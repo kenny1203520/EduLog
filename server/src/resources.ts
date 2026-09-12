@@ -78,7 +78,7 @@ export const resourceKeys = Object.keys(resources)
 
 const optionalText = z.string().max(10000).nullable().optional()
 const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
-const optionalUrl = z.string().url().max(2048).nullable().optional()
+const optionalUrl = z.url().max(2048).nullable().optional()
 const optionalTime = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional()
 const optionalDocument = z.record(z.string(), z.unknown()).nullable().optional()
 const schemas: Record<string, { createSchema?: z.ZodType<Record<string, unknown>>; updateSchema?: z.ZodType<Record<string, unknown>> }> = {
