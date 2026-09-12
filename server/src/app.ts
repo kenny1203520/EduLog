@@ -33,7 +33,7 @@ export function resolveAllowedOrigins(config: Pick<ReturnType<typeof loadConfig>
     if (configuredOrigins.includes('*')) throw new Error('API_ALLOWED_ORIGINS cannot contain wildcard origins')
     return configuredOrigins
   }
-  if (config.NODE_ENV === 'production') return [new URL(config.API_BASE_URL).origin]
+  if (config.NODE_ENV === 'production') throw new Error('Production requires explicit API_ALLOWED_ORIGINS')
   return LOCAL_DEVELOPMENT_ORIGINS
 }
 

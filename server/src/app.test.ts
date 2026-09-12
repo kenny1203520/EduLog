@@ -28,6 +28,10 @@ describe('Express API boundary', () => {
     expect(() => resolveAllowedOrigins({ ...env, API_ALLOWED_ORIGINS: '*', NODE_ENV: 'production' })).toThrow(/wildcard/)
   })
 
+  it('fails closed when production has no explicit origin allowlist', () => {
+    expect(() => resolveAllowedOrigins({ ...env, API_ALLOWED_ORIGINS: '', NODE_ENV: 'production' })).toThrow(/explicit API_ALLOWED_ORIGINS/)
+  })
+
   it('lets a local browser origin reach auth validation', async () => {
     const app = createApp({ ...env, API_ALLOWED_ORIGINS: '' })
     const response = await request(app)
