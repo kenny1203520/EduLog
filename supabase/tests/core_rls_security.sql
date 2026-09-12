@@ -651,6 +651,18 @@ RESET ROLE;
 -- definer helper rather than requiring broad direct table reads from the
 -- invoker. The same least-privilege role can manage its classroom and
 -- class-session scopes without unrelated read permissions.
+-- The owner replacement above intentionally replaces every policy for
+-- teaching.members.manage in Teaching A. Restore the fixture-only manager
+-- grant after that replacement so this test exercises the intended
+-- least-privilege path rather than depending on statement order.
+INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
+SELECT role.id, permission.id, 'teaching', 'a1000000-0000-4000-8000-000000000001', 'allow'
+FROM public.roles role
+CROSS JOIN public.permissions permission
+WHERE role.code = 'rls_scoped_manager'
+  AND permission.key = 'teaching.members.manage'
+ON CONFLICT DO NOTHING;
+
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', false);
