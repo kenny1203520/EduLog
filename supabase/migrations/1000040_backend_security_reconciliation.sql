@@ -3626,6 +3626,7 @@ BEGIN
   END IF;
 
   IF p_operation = 'delete' THEN
+    DELETE FROM public.report_versions WHERE occurrence_report_id = p_report_id;
     DELETE FROM public.occurrence_reports WHERE id = p_report_id RETURNING * INTO v_report;
     SELECT * INTO v_enrollment FROM public.enrollments WHERE id = v_report.enrollment_id FOR UPDATE;
   ELSE

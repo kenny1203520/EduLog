@@ -119,6 +119,7 @@ Deno.test('report lifecycle migration is transactional and rerunnable', () => {
   assertStringIncludes(lifecycle, 'v_enrollment.class_session_id')
   assertStringIncludes(lifecycle, 'v_base_session.end_date')
   assertStringIncludes(lifecycle, 'v_report.is_completed IS TRUE')
+  assertStringIncludes(lifecycle, 'DELETE FROM public.report_versions WHERE occurrence_report_id = p_report_id')
   assertStringIncludes(lifecycle, "holiday.kind = 'closure'")
   assertStringIncludes(lifecycle, "v_next_absence_reason := 'suspension'")
   assertStringIncludes(lifecycle, "NULLIF(p_patch->'content_document', 'null'::jsonb)")
