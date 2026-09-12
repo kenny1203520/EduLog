@@ -13,6 +13,8 @@ const memberListQuery = z.object({
   offset: z.coerce.number().int().min(0).max(1000000).default(0),
   sort: z.enum(['created_at', '-created_at', 'effective_from', '-effective_from', 'status', '-status', 'user_id', '-user_id']).default('created_at'),
   search: z.string().trim().max(200).optional(),
+  status: z.string().trim().min(1).max(32).optional(),
+  user_id: z.string().uuid().optional(),
 }).strict()
 
 export async function idempotency(req: Request, status: number, body: unknown) {
@@ -62,6 +64,13 @@ function queryValue(req: Request, key: string) { const value = req.query[key]; r
 
 type FilterOperator = 'eq' | 'neq' | 'in' | 'gte' | 'lte' | 'gt' | 'lt' | 'ilike' | 'contains' | 'is'
 
+function filterableFields(def: ResourceDefinition) {
+  // Query exposure must be opt-in. Falling back to `fields` would turn a
+  // missing registry entry into a filter/existence oracle for item-only
+  // sensitive columns.
+  return def.filterable ?? []
+}
+
 export function parseFilters(raw: string, def: ResourceDefinition) {
   let parsed: unknown
   try { parsed = JSON.parse(raw) } catch { throw new ApiError(400, 'INVALID_FILTER', 'The filters query is invalid') }
@@ -71,7 +80,7 @@ export function parseFilters(raw: string, def: ResourceDefinition) {
     const filter = item as { field?: unknown; operator?: unknown; value?: unknown }
     const field = typeof filter.field === 'string' ? filter.field : ''
     const operator = typeof filter.operator === 'string' ? filter.operator : ''
-    if (!field || !(def.filterable ?? def.fields).includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'contains', 'is'].includes(operator)) throw new ApiError(400, 'INVALID_FILTER', 'The filter is not supported')
+    if (!field || !filterableFields(def).includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'contains', 'is'].includes(operator)) throw new ApiError(400, 'INVALID_FILTER', 'The filter is not supported')
     if (operator === 'in' && !Array.isArray(filter.value)) throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
     if (operator === 'ilike' && typeof filter.value !== 'string') throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
     if (operator === 'is' && !['null', 'true', 'false'].includes(String(filter.value))) throw new ApiError(400, 'INVALID_FILTER', 'The filter value is invalid')
@@ -87,7 +96,7 @@ export function parseOr(raw: string, def: ResourceDefinition) {
     const field = parts.shift() ?? ''
     const operator = (parts.shift() ?? '') as FilterOperator
     const value = parts.join('.')
-    if (!field || !(def.filterable ?? def.fields).includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'is'].includes(operator) || /[(),\n\r]/.test(value)) {
+    if (!field || !filterableFields(def).includes(field) || !['eq', 'neq', 'in', 'gte', 'lte', 'gt', 'lt', 'ilike', 'is'].includes(operator) || /[(),\n\r]/.test(value)) {
       throw new ApiError(400, 'INVALID_FILTER', 'The or filter is not supported')
     }
     if (operator === 'is' && !['null', 'true', 'false'].includes(value)) throw new ApiError(400, 'INVALID_FILTER', 'The or filter value is invalid')
@@ -120,13 +129,13 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   if (query.or) builder = builder.or(parseOr(query.or, def))
   const queryFields = ['teaching_id', 'entity_type', 'entity_id', 'lesson_id', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id', 'instructor_id', 'template_type', 'scope_type', 'scope_entity_id']
   for (const field of queryFields) {
-    if (queryValue(req, field) && !(def.filterable ?? def.fields).includes(field)) throw new ApiError(400, 'INVALID_FILTER', `The ${field} filter is not supported for this resource`)
+    if (queryValue(req, field) && !filterableFields(def).includes(field)) throw new ApiError(400, 'INVALID_FILTER', `The ${field} filter is not supported for this resource`)
     const value = queryValue(req, field)
     if (value) builder = builder.eq(field, value)
   }
   const status = queryValue(req, 'status')
   if (status) {
-    if (!(def.filterable ?? def.fields).includes('status')) throw new ApiError(400, 'INVALID_FILTER', 'The status filter is not supported for this resource')
+    if (!filterableFields(def).includes('status')) throw new ApiError(400, 'INVALID_FILTER', 'The status filter is not supported for this resource')
     builder = builder.eq('status', status)
   }
   const filters = query.filters ? parseFilters(query.filters, def) : []
@@ -147,7 +156,7 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   }
   const entityIds = queryValue(req, 'entity_ids')
   if (entityIds) {
-    if (!(def.filterable ?? def.fields).includes('entity_id')) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is not supported for this resource')
+    if (!filterableFields(def).includes('entity_id')) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is not supported for this resource')
     const values = entityIds.split(',').filter(Boolean)
     if (!values.length || values.some((value) => !z.string().uuid().safeParse(value).success)) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is invalid')
     builder = builder.in('entity_id', values)
@@ -252,7 +261,9 @@ async function members(req: Request, res: Response) {
     const query = memberListQuery.parse(req.query)
     let builder = req.db!.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at', { count: 'exact' }).eq('teaching_id', teachingId)
     if (userId) builder = builder.eq('user_id', userId)
+    else if (query.user_id) builder = builder.eq('user_id', query.user_id)
     if (query.search) builder = builder.ilike('user_id', `%${query.search.replace(/[%,_()]/g, '')}%`)
+    if (query.status) builder = builder.eq('status', query.status)
     const sortName = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
     const result = await builder.order(sortName, { ascending: !query.sort.startsWith('-') }).range(query.offset, query.offset + query.limit - 1)
     if (result.error) throw mapDatabaseError(result.error)
@@ -291,6 +302,7 @@ export function createResourceRouter() {
   const router = Router()
   router.get('/teachings/:teachingId/members', wrap((req, res) => members(req, res)))
   router.post('/teachings/:teachingId/members', wrap((req, res) => members(req, res)))
+  router.get('/teachings/:teachingId/members/:userId', wrap((req, res) => members(req, res)))
   router.patch('/teachings/:teachingId/members/:userId', wrap((req, res) => members(req, res)))
   router.delete('/teachings/:teachingId/members/:userId', wrap((req, res) => members(req, res)))
   for (const [route, def] of Object.entries(resources)) {

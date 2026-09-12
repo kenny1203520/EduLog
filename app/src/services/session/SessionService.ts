@@ -5,6 +5,7 @@ import { VisibilityPreferenceService } from '../VisibilityPreferenceService'
 import { DateUtils } from '@/utils/DateUtils'
 import { SessionEligibilityPolicy } from '@/models/SessionEligibilityPolicy'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export type SessionVisibilityFilterMode = 'all' | 'visible' | 'hidden'
@@ -247,6 +248,10 @@ export class SessionService {
     }
 
     static async getSessionDetails(sessionId: string) {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any>('/class-sessions/' + encodeURIComponent(sessionId) + '/details')
+            return response.data
+        }
         const { data: session, error: sessionError } = await apiDataClient
             .from('class_sessions')
             .select(`
@@ -276,6 +281,11 @@ export class SessionService {
     }
 
     static async getMaxEnrollmentInDateRange(sessionId: string, startDate: string, endDate: string): Promise<number> {
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+            const response = await apiV1Client.get<{ max_enrollment: number }>('/class-sessions/' + encodeURIComponent(sessionId) + '/enrollment-peak?' + params.toString())
+            return Number(response.data?.max_enrollment ?? 0)
+        }
         const { data: occurrences, error } = await apiDataClient
             .from('class_occurrences')
             .select(`

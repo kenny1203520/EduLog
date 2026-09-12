@@ -81,7 +81,13 @@ const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional
 const optionalUrl = z.url().max(2048).nullable().optional()
 const optionalTime = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional()
 const optionalDocument = z.record(z.string(), z.unknown()).nullable().optional()
-const schemas: Record<string, { createSchema?: z.ZodType<Record<string, unknown>>; updateSchema?: z.ZodType<Record<string, unknown>> }> = {
+/**
+ * Runtime request schemas are exported so the OpenAPI document can be built
+ * from the same contract that runs before a database call.  Keeping these in
+ * one registry prevents a request from being accepted by the API while its
+ * documented shape says something else.
+ */
+export const resourceSchemas: Record<string, { createSchema?: z.ZodType<Record<string, unknown>>; updateSchema?: z.ZodType<Record<string, unknown>> }> = {
   classrooms: {
     createSchema: z.object({ name: z.string().trim().min(1).max(200), color: optionalText, address: optionalText, phone: optionalText, external_link: optionalUrl, teaching_id: z.string().uuid().optional() }).strict(),
     updateSchema: z.object({ name: z.string().trim().min(1).max(200).optional(), color: optionalText, address: optionalText, phone: optionalText, external_link: optionalUrl, teaching_id: z.string().uuid().nullable().optional() }).strict(),
@@ -155,12 +161,14 @@ const schemas: Record<string, { createSchema?: z.ZodType<Record<string, unknown>
     updateSchema: z.object({ name: z.string().trim().min(1).max(200).optional() }).strict(),
   },
 }
-for (const [route, schema] of Object.entries(schemas)) Object.assign(resources[route], schema)
+for (const [route, schema] of Object.entries(resourceSchemas)) Object.assign(resources[route], schema)
 
 // Keep query fields explicit even for resources that use the default registry
-// definition. Nested projections are readable but are never valid filter keys.
+// definition. Prefer the collection projection so item-only sensitive fields
+// cannot become existence oracles through filters. Nested projections are
+// never valid filter keys.
 for (const definition of Object.values(resources)) {
-  definition.filterable ??= definition.fields.filter((field) => !field.includes('('))
+  definition.filterable ??= (definition.listFields ?? definition.fields).filter((field) => !field.includes('('))
 }
 
 // Generic routes must never silently accept an unvalidated write.  A missing
@@ -171,8 +179,6 @@ for (const definition of Object.values(resources)) {
   if (methods.has('POST') && !definition.createSchema) throw new Error(`Resource ${definition.route} is missing createSchema`)
   if (methods.has('PATCH') && !definition.updateSchema) throw new Error(`Resource ${definition.route} is missing updateSchema`)
 }
-
-
 
 
 

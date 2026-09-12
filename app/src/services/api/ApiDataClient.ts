@@ -158,7 +158,18 @@ class ApiQuery implements PromiseLike<QueryResult> {
           if (typeof teachingId !== 'string') throw new Error('API teaching member query requires a teaching_id filter')
           response = typeof userId === 'string'
             ? await apiV1Client.get(`/teachings/${encodeURIComponent(teachingId)}/members/${encodeURIComponent(userId)}`)
-            : await apiV1Client.get(`/teachings/${encodeURIComponent(teachingId)}/members?limit=${this.limitValue ?? 100}&offset=${this.offsetValue}${this.sort ? `&sort=${encodeURIComponent(this.sort)}` : ''}`)
+            : await apiV1Client.get(`/teachings/${encodeURIComponent(teachingId)}/members?${(() => {
+              const params = new URLSearchParams({ limit: String(this.limitValue ?? 100), offset: String(this.offsetValue) })
+              if (this.sort) params.set('sort', this.sort)
+              for (const filter of this.filters) {
+                if (filter.field === 'teaching_id') continue
+                if (filter.field === 'status' && filter.operator === 'eq' && typeof filter.value === 'string') params.set('status', filter.value)
+                else if (filter.field === 'user_id' && filter.operator === 'eq' && typeof filter.value === 'string') params.set('user_id', filter.value)
+                else if (filter.field === 'user_id' && filter.operator === 'ilike' && typeof filter.value === 'string') params.set('search', filter.value.replace(/^%|%$/g, ''))
+                else throw new Error(`API teaching member filter is not supported: ${filter.field}`)
+              }
+              return params.toString()
+            })()}`)
         } else if (this.resource === 'report-collab-docs') {
           const reportId = this.filters.find((filter) => filter.field === 'occurrence_report_id' && filter.operator === 'eq')?.value
           if (typeof reportId !== 'string') throw new Error('API collaboration query requires an occurrence_report_id filter')

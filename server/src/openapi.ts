@@ -1,4 +1,5 @@
-import { resources } from './resources.js'
+import { z } from 'zod'
+import { resources, resourceSchemas } from './resources.js'
 import { permissionForResource } from './authorization.js'
 
 const errorResponses = {
@@ -24,10 +25,23 @@ function fieldSchema(field: string) {
   return { type: 'string' }
 }
 
+function runtimeSchema(def: typeof resources[keyof typeof resources], action: 'create' | 'update') {
+  const schema = resourceSchemas[def.route]?.[action === 'create' ? 'createSchema' : 'updateSchema']
+  if (!schema) return { type: 'object', properties: {}, additionalProperties: false }
+  const document = z.toJSONSchema(schema) as Record<string, unknown>
+  // OpenAPI 3.1 accepts the JSON Schema vocabulary but does not need the
+  // dialect marker repeated on every request schema.
+  delete document.$schema
+  return document
+}
+
 function mutationSchema(def: typeof resources[keyof typeof resources], action: 'create' | 'update') {
-  const properties = Object.fromEntries([...def.writable, ...(def.compatibilityFields ?? [])].map((field) => [field, fieldSchema(field)]))
-  if (def.route === 'roles' && def.compatibilityFields?.includes('is_system')) properties.is_system = { type: 'boolean', const: false, description: 'Compatibility input only; system roles cannot be created or modified' }
-  return { type: 'object', properties, additionalProperties: false, ...(def.route === 'roles' && action === 'create' ? { required: ['name'] } : {}) }
+  const document = runtimeSchema(def, action) as { properties?: Record<string, unknown>; additionalProperties?: unknown }
+  const properties = { ...(document.properties ?? {}) }
+  if (def.compatibilityFields?.includes('is_system')) {
+    properties.is_system = { type: 'boolean', const: false, description: 'Compatibility input only; system roles cannot be created or modified' }
+  }
+  return { ...document, type: 'object', properties, additionalProperties: false }
 }
 
 export function buildOpenApi() {
@@ -45,13 +59,14 @@ export function buildOpenApi() {
     const base = { security: [{ cookieAuth: [] }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
     const collectionPath: Record<string, unknown> = {}
     const permission = (action: 'create' | 'read' | 'update' | 'delete' | 'list') => def.selfAuthorization ? undefined : permissionForResource(def, action)
-    const queryParameters = [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }, { $ref: '#/components/parameters/Or' }, ...(def.fields.includes('status') ? [{ $ref: '#/components/parameters/Status' }] : []), ...['teaching_id', 'course_id', 'classroom_id', 'class_session_id', 'class_occurrence_id', 'lesson_id', 'student_id', 'teacher_id', 'instructor_id', 'user_id', 'enrollment_id', 'occurrence_report_id', 'entity_type', 'entity_id', 'entity_ids', 'template_type', 'scope_type', 'scope_entity_id'].filter((field) => (def.filterable ?? def.fields).includes(field)).map((field) => ({ $ref: `#/components/parameters/${field}` }))]
+    const filterableFields = def.filterable ?? []
+    const queryParameters = [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }, { $ref: '#/components/parameters/Or' }, ...(filterableFields.includes('status') ? [{ $ref: '#/components/parameters/Status' }] : []), ...['teaching_id', 'course_id', 'classroom_id', 'class_session_id', 'class_occurrence_id', 'lesson_id', 'student_id', 'teacher_id', 'instructor_id', 'user_id', 'enrollment_id', 'occurrence_report_id', 'entity_type', 'entity_id', 'entity_ids', 'template_type', 'scope_type', 'scope_entity_id'].filter((field) => filterableFields.includes(field)).map((field) => ({ $ref: `#/components/parameters/${field}` }))]
     if (methods.has('GET')) collectionPath.get = { ...base, operationId: `${name}_list`, ...(permission('list') ? { 'x-permission': permission('list') } : {}), 'x-readable-fields': def.listFields ?? def.fields, 'x-sortable-fields': def.sortable, 'x-searchable-fields': def.searchable, parameters: queryParameters }
-    if (methods.has('POST')) collectionPath.post = { ...base, operationId: `${name}_create`, ...(permission('create') ? { 'x-permission': permission('create') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'create') } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
+    if (methods.has('POST')) collectionPath.post = { ...base, operationId: `${name}_create`, ...(permission('create') ? { 'x-permission': permission('create') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], 'x-request-schema-source': 'resource-registry', parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'create') } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
     paths[collection] = collectionPath
     const itemPath: Record<string, unknown> = {}
     if (methods.has('GET')) itemPath.get = { ...base, operationId: `${name}_get`, ...(permission('read') ? { 'x-permission': permission('read') } : {}), 'x-readable-fields': def.itemFields ?? def.fields, parameters: [{ $ref: '#/components/parameters/ResourceId' }] }
-    if (methods.has('PATCH')) itemPath.patch = { ...base, operationId: `${name}_update`, ...(permission('update') ? { 'x-permission': permission('update') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'update') } } } }
+    if (methods.has('PATCH')) itemPath.patch = { ...base, operationId: `${name}_update`, ...(permission('update') ? { 'x-permission': permission('update') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], 'x-request-schema-source': 'resource-registry', parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'update') } } } }
     if (methods.has('DELETE')) itemPath.delete = { ...base, operationId: `${name}_delete`, ...(permission('delete') ? { 'x-permission': permission('delete') } : {}), 'x-writable-fields': [], parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }] }
     paths[item] = itemPath
   }
@@ -93,13 +108,19 @@ export function buildOpenApi() {
   addSpecialized('/api/class-sessions/{sessionId}/teachers/{assignmentId}', 'patch', 'class_session_teachers_update', 'teaching.class_sessions.update', '200', [pathParam('sessionId'), pathParam('assignmentId'), mutationParam], body)
   addSpecialized('/api/class-sessions/{sessionId}/teachers/{teacherId}', 'delete', 'class_session_teachers_delete_teacher', 'teaching.class_sessions.update', '200', [pathParam('sessionId'), pathParam('teacherId'), mutationParam])
   paths['/api/class-sessions'] = {
-    get: { operationId: 'class_sessions_list', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.list', parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: { operationId: 'class_sessions_list', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.list', parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }, { $ref: '#/components/parameters/classroom_id' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     post: { operationId: 'class_sessions_create_with_schedule', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.create', parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ClassSessionMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/class-sessions/{id}'] = {
     get: { operationId: 'class_sessions_get', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.read', parameters: [pathParam('id')], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     patch: { operationId: 'class_sessions_update_with_schedule', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.update', parameters: [pathParam('id'), { $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ClassSessionMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { operationId: 'class_sessions_delete', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.delete', parameters: [pathParam('id'), { $ref: '#/components/parameters/IdempotencyKey' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/class-sessions/{id}/details'] = {
+    get: { operationId: 'class_sessions_details', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.read', 'x-permissions': ['teaching.class_sessions.read', 'teaching.enrollments.list'], parameters: [pathParam('id')], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/class-sessions/{id}/enrollment-peak'] = {
+    get: { operationId: 'class_sessions_enrollment_peak', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.read', 'x-permissions': ['teaching.class_sessions.read', 'teaching.occurrences.list', 'teaching.reports.list'], parameters: [pathParam('id'), { name: 'start_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'end_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/teachings/{teachingId}/members'] = {
     get: { operationId: 'teaching_members_list', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.members.list', parameters: [pathParam('teachingId'), { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },

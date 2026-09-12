@@ -58,6 +58,17 @@ async function authorize(req: Request, action: 'read' | 'create' | 'update' | 'd
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify class sessions')
 }
 
+async function authorizeRelatedRead(req: Request, permission: string, sessionId: string) {
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const result = await req.db.rpc('has_api_permission', {
+    p_user_id: req.user.id,
+    p_permission_key: permission,
+    p_classroom_id: null,
+    p_class_session_id: sessionId,
+  })
+  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read the related session data')
+}
+
 async function authorizeSaveScope(req: Request, action: 'create' | 'update', id: string | null, input: z.infer<typeof sessionSchema>) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const classroomId = input.classroom_id ?? null
@@ -124,6 +135,7 @@ async function readDetails(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Class session id is invalid')
   await authorize(req, 'read', id)
+  await authorizeRelatedRead(req, 'teaching.enrollments.list', id)
 
   const [session, enrollments] = await Promise.all([
     req.db!.from('class_sessions').select(sessionDetailsFields).eq('id', id).maybeSingle(),
@@ -154,6 +166,10 @@ async function readEnrollmentPeak(req: Request, res: Response) {
   }).strict().parse(req.query)
   if (query.start_date > query.end_date) throw new ApiError(422, 'INVALID_DATE_RANGE', 'end_date must not be before start_date')
   await authorize(req, 'read', id)
+  await Promise.all([
+    authorizeRelatedRead(req, 'teaching.occurrences.list', id),
+    authorizeRelatedRead(req, 'teaching.reports.list', id),
+  ])
 
   const occurrences = await req.db!.from('class_occurrences').select('id').eq('class_session_id', id).gte('occurrence_date', query.start_date).lte('occurrence_date', query.end_date)
   if (occurrences.error) throw mapDatabaseError(occurrences.error)

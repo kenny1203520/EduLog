@@ -1,7 +1,8 @@
 import type { Request } from 'express'
 import { describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { ZodError } from 'zod'
-import { collection, idempotency } from './resourceRouter.js'
+import { collection, idempotency, parseFilters } from './resourceRouter.js'
 import { resources } from './resources.js'
 
 describe('idempotency replay contract', () => {
@@ -66,5 +67,29 @@ describe('resource mutation validation boundary', () => {
     expect(from).not.toHaveBeenCalled()
     expect(rpc).not.toHaveBeenCalled()
     expect(adminRpc).not.toHaveBeenCalled()
+  })
+
+  it('keeps teaching member status and user filtering on the server route', () => {
+    const source = readFileSync(new URL('./resourceRouter.ts', import.meta.url), 'utf8')
+    expect(source).toContain("status: z.string().trim().min(1).max(32).optional()")
+    expect(source).toContain("user_id: z.string().uuid().optional()")
+    expect(source).toContain("builder = builder.eq('status', query.status)")
+    expect(source).toContain("builder = builder.eq('user_id', query.user_id)")
+  })
+
+  it('registers the single teaching member route advertised by the contract', () => {
+    const source = readFileSync(new URL('./resourceRouter.ts', import.meta.url), 'utf8')
+    expect(source).toContain("router.get('/teachings/:teachingId/members/:userId'")
+  })
+
+  it('rejects item-only sensitive fields as collection filters', () => {
+    expect(resources.students.filterable).not.toContain('gov_id')
+    expect(resources.teachers.filterable).not.toContain('gov_id')
+    expect(() => parseFilters(JSON.stringify([{ field: 'gov_id', operator: 'eq', value: 'secret' }]), resources.students)).toThrow('The filter is not supported')
+  })
+
+  it('fails closed when a resource omits an explicit filter allowlist', () => {
+    const definition = { ...resources.students, filterable: undefined }
+    expect(() => parseFilters(JSON.stringify([{ field: 'name', operator: 'eq', value: 'Alice' }]), definition)).toThrow('The filter is not supported')
   })
 })

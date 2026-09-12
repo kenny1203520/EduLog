@@ -18,4 +18,13 @@ describe('class session API contract', () => {
     expect(source).not.toContain('select(\'*\')')
     expect(source).not.toContain('p_session: { ...req.body')
   })
+
+  it('provides server-side session details and enrollment peak contracts', () => {
+    const source = readFileSync(new URL('./sessionRouter.ts', import.meta.url), 'utf8')
+    expect(source).toContain("router.get('/class-sessions/:id/details'")
+    expect(source).toContain("router.get('/class-sessions/:id/enrollment-peak'")
+    expect(source).toContain("select('id', { count: 'exact', head: true })")
+    expect(source).toContain("from('occurrence_reports').select('class_occurrence_id')")
+    expect(source).not.toContain("from('occurrence_reports').select('*')")
+  })
 })
