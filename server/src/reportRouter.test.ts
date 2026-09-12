@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assertClientManagedAttendanceReason, firstUncompletedSequence } from './reportRouter.js'
+import { assertClientManagedAttendanceReason, assertReportAttendanceUpdate, firstUncompletedSequence } from './reportRouter.js'
 
 describe('report lifecycle progress', () => {
   it('selects the first lesson not represented by a report', () => {
@@ -11,5 +11,11 @@ describe('report lifecycle progress', () => {
     expect(() => assertClientManagedAttendanceReason('holiday')).toThrow('Holiday and suspension')
     expect(() => assertClientManagedAttendanceReason('suspension')).toThrow('Holiday and suspension')
     expect(() => assertClientManagedAttendanceReason('teacher_note')).not.toThrow()
+  })
+
+  it('allows editing other fields while retaining a system-managed attendance reason', () => {
+    expect(() => assertReportAttendanceUpdate({ absence_reason: 'holiday', attendance_status: 'absent' }, { absence_reason: 'holiday' })).not.toThrow()
+    expect(() => assertReportAttendanceUpdate({ absence_reason: 'holiday', attendance_status: 'absent' }, { attendance_status: 'present' })).toThrow('managed by the system')
+    expect(() => assertReportAttendanceUpdate({ absence_reason: 'holiday', attendance_status: 'absent' }, { absence_reason: null })).toThrow('managed by the system')
   })
 })

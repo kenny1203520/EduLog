@@ -72,6 +72,14 @@ describe('student API resource boundaries', () => {
     expect(resources.roles.createSchema?.safeParse({ name: 'Custom role' }).success).toBe(true)
   })
 
+  it('requires typed schemas for every generic write route', () => {
+    for (const resource of Object.values(resources)) {
+      const methods = new Set(resource.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
+      if (methods.has('POST')) expect(resource.createSchema, resource.route).toBeDefined()
+      if (methods.has('PATCH')) expect(resource.updateSchema, resource.route).toBeDefined()
+    }
+  })
+
   it('keeps sensitive profile fields in authorized detail projections only', () => {
     expect(resources.students.listFields).not.toEqual(expect.arrayContaining(['gov_id', 'email', 'student_credentials(id,student_id,platform,username,url,created_at,updated_at)']))
     expect(resources.students.itemFields).toEqual(expect.arrayContaining(['gov_id', 'student_contacts(id,student_id,name,relation,phone,email,created_at,updated_at)', 'student_schools(id,student_id,name,status,grade,school_student_id,start_date,end_date,time_zone,class,created_at,updated_at)', 'student_credentials(id,student_id,platform,username,url,created_at,updated_at)']))

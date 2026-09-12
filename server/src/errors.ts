@@ -31,6 +31,8 @@ export function mapDatabaseError(error: { code?: string; message?: string } | nu
       [/AUTHENTICATION_REQUIRED|Authentication required/i, 401, 'AUTH_REQUIRED', 'Authentication is required'],
       [/PERMISSION_DENIED|FORBIDDEN|_FORBIDDEN|RBAC_MANAGE_REQUIRED/i, 403, 'PERMISSION_DENIED', 'You do not have permission to perform this action'],
       [/NOT_FOUND|NOT_EXIST|NOT_IN_ENROLLMENT/i, 404, 'NOT_FOUND', 'Resource was not found'],
+      [/VERSION_CONFLICT/i, 409, 'VERSION_CONFLICT', 'The resource version is stale'],
+      [/SYSTEM_MANAGED_REPORT/i, 422, 'SYSTEM_MANAGED_REPORT', 'Attendance is managed by the system'],
       [/ALREADY_EXISTS|REPORT_ALREADY_EXISTS|CONFLICT|STALE/i, 409, 'BUSINESS_CONFLICT', 'The request conflicts with the current resource state'],
       [/INVALID_POLICY_SCOPE|INVALID_|MISMATCH|REQUIRED|SOURCE_AND_TARGET|DATE_NOT/i, 422, 'BUSINESS_VALIDATION_FAILED', 'The request violates a business rule'],
     ]

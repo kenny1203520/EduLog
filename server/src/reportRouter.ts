@@ -16,17 +16,25 @@ const reportBody = z.object({
   expected_version: z.number().int().min(1).optional(),
 }).strict()
 type Body = z.infer<typeof reportBody>
-export function assertClientManagedAttendanceReason(reason: string | null | undefined) {
-  if (reason === 'holiday' || reason === 'suspension') throw new ApiError(422, 'SYSTEM_MANAGED_ATTENDANCE', 'Holiday and suspension attendance are managed by the server')
-}
+  export function assertClientManagedAttendanceReason(reason: string | null | undefined) {
+    if (reason === 'holiday' || reason === 'suspension') throw new ApiError(422, 'SYSTEM_MANAGED_ATTENDANCE', 'Holiday and suspension attendance are managed by the server')
+  }
+  export function assertReportAttendanceUpdate(current: { absence_reason: string | null; attendance_status: string }, input: Pick<Body, 'absence_reason' | 'attendance_status'>) {
+    const systemManaged = current.absence_reason === 'holiday' || current.absence_reason === 'suspension'
+    if (!systemManaged) assertClientManagedAttendanceReason(input.absence_reason)
+    if (systemManaged && ((input.attendance_status !== undefined && input.attendance_status !== current.attendance_status) || (input.absence_reason !== undefined && input.absence_reason !== current.absence_reason))) {
+      throw new ApiError(422, 'SYSTEM_MANAGED_REPORT', 'Attendance is managed by the system')
+    }
+  }
 export function firstUncompletedSequence(lessons: Array<{ id: string; sequence: number }>, representedLessonIds: Set<string>, currentLessonNumber: number) {
   return lessons.find((lesson) => !representedLessonIds.has(lesson.id))?.sequence ?? currentLessonNumber
 }
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next) }
 async function canAccess(req: Request, id: string, permission: string) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: permission.split('.').at(-1) ?? 'read', permission })
-  const result = await req.db.rpc('can_access_report', { p_report_id: id, p_permission_key: permission })
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: permission.split('.').at(-1) ?? 'read', permission, scopeType: 'occurrence_report' })
+  const rpcName = permission.endsWith('.update') || permission.endsWith('.delete') ? 'can_mutate_occurrence_report' : 'can_access_report'
+  const result = await req.db.rpc(rpcName, { p_report_id: id, p_permission_key: permission })
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to access this report')
 }
 function pick(input: Body) { return Object.fromEntries(Object.entries(input).filter(([key]) => (writable as readonly string[]).includes(key))) }
@@ -37,9 +45,9 @@ async function reconcileEnrollmentProgress(req: Request, enrollmentId: string) {
   if (!enrollment.data?.course_id) return
   const lessons = await req.db!.from('lessons').select('id,sequence').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true })
   if (lessons.error) throw mapDatabaseError(lessons.error)
-  const reports = await req.db!.from('occurrence_reports').select('lesson_id').eq('enrollment_id', enrollmentId).not('lesson_id', 'is', null)
+  const reports = await req.db!.from('occurrence_reports').select('lesson_id,is_completed').eq('enrollment_id', enrollmentId).not('lesson_id', 'is', null)
   if (reports.error) throw mapDatabaseError(reports.error)
-  const represented = new Set((reports.data ?? []).map((row) => row.lesson_id).filter((id): id is string => typeof id === 'string'))
+  const represented = new Set((reports.data ?? []).filter((row) => row.is_completed === true).map((row) => row.lesson_id).filter((id): id is string => typeof id === 'string'))
   const nextLesson = firstUncompletedSequence((lessons.data ?? []) as Array<{ id: string; sequence: number }>, represented, enrollment.data.lesson_number ?? 1)
   if (nextLesson !== enrollment.data.lesson_number) {
     const updated = await req.db!.from('enrollments').update({ lesson_number: nextLesson }).eq('id', enrollmentId)
@@ -96,35 +104,30 @@ async function resolveInitialAttendance(req: Request, enrollmentId: string, occu
 }
 async function create(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const input = reportBody.parse(req.body); if (!input.enrollment_id || !input.class_occurrence_id) throw new ApiError(422, 'REPORT_CONTEXT_REQUIRED', 'enrollment_id and class_occurrence_id are required')
-  assertClientManagedAttendanceReason(input.absence_reason)
-  const permission = await req.db.rpc('can_create_occurrence_report', { p_enrollment_id: input.enrollment_id, p_class_occurrence_id: input.class_occurrence_id })
+    const input = reportBody.parse(req.body); if (!input.enrollment_id || !input.class_occurrence_id) throw new ApiError(422, 'REPORT_CONTEXT_REQUIRED', 'enrollment_id and class_occurrence_id are required')
+    assertClientManagedAttendanceReason(input.absence_reason)
+    setAuditContext(req, { domain: 'teaching', resource: 'reports', action: 'create', permission: 'teaching.reports.create', scopeId: input.class_occurrence_id, scopeType: 'class_occurrence' })
+    const permission = await req.db.rpc('can_create_occurrence_report', { p_enrollment_id: input.enrollment_id, p_class_occurrence_id: input.class_occurrence_id })
   if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to create this report')
   const replay = await idempotency(req, 201, null); if (replay) return res.status(replay.status).json(replay.body)
   const automaticAttendance = await resolveInitialAttendance(req, input.enrollment_id, input.class_occurrence_id)
   const payload = { enrollment_id: input.enrollment_id, class_occurrence_id: input.class_occurrence_id, content: input.content ?? '', version: 1, is_completed: input.is_completed ?? false, attendance_status: input.attendance_status ?? automaticAttendance.attendance_status, ...pick(input), ...(automaticAttendance.attendance_status === 'absent' ? automaticAttendance : {}) }
   const result = await req.db.from('occurrence_reports').insert(payload).select(fields).single(); if (result.error) throw mapDatabaseError(result.error)
-  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: result.data?.id ?? null, teachingId: null, permission: 'teaching.reports.create' })
+    setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: result.data?.id ?? null, teachingId: null, action: 'create', permission: 'teaching.reports.create', scopeId: input.class_occurrence_id, scopeType: 'class_occurrence' })
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, envelope); return res.status(201).json(envelope)
 }
 async function update(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
   const input = reportBody.parse(req.body); if (input.expected_version === undefined) throw new ApiError(422, 'EXPECTED_VERSION_REQUIRED', 'expected_version is required for report updates')
-  assertClientManagedAttendanceReason(input.absence_reason)
   await canAccess(req, id, 'teaching.reports.update')
   const current = await req.db.from('occurrence_reports').select('version,absence_reason,attendance_status,enrollment_id,lesson_id,is_completed').eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
   if (current.data.version !== input.expected_version) throw new ApiError(409, 'VERSION_CONFLICT', 'The report was modified by another user')
-  const systemManaged = current.data.absence_reason === 'holiday' || current.data.absence_reason === 'suspension'
-  if (systemManaged && ((input.attendance_status !== undefined && input.attendance_status !== current.data.attendance_status) || (input.absence_reason !== undefined && input.absence_reason !== current.data.absence_reason))) throw new ApiError(422, 'SYSTEM_MANAGED_REPORT', 'Attendance is managed by the system')
+    assertReportAttendanceUpdate(current.data, input)
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
-  const result = await req.db.from('occurrence_reports').update({ ...pick(input), version: input.expected_version + 1, last_edited_by: req.user.id, last_edited_at: new Date().toISOString() }).eq('id', id).eq('version', input.expected_version).select(fields).maybeSingle()
+  const result = await req.db.rpc('apply_occurrence_report_lifecycle', { p_report_id: id, p_expected_version: input.expected_version, p_patch: pick(input), p_actor: req.user.id, p_operation: 'update' })
   if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(409, 'VERSION_CONFLICT', 'The report was modified by another user')
-  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, permission: 'teaching.reports.update' })
-  if (input.lesson_id !== undefined || input.is_completed !== undefined) {
-    await ensureNextOccurrenceReport(req, current.data.enrollment_id, id)
-    await reconcileEnrollmentProgress(req, current.data.enrollment_id)
-  }
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, permission: 'teaching.reports.update', scopeType: 'occurrence_report' })
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
 async function remove(req: Request, res: Response) {
@@ -132,9 +135,9 @@ async function remove(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
   await canAccess(req, id, 'teaching.reports.delete'); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const existing = await req.db.from('occurrence_reports').select('enrollment_id').eq('id', id).maybeSingle(); if (existing.error) throw mapDatabaseError(existing.error); if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
-  const result = await req.db.from('occurrence_reports').delete().eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
-  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, permission: 'teaching.reports.delete' })
-  await reconcileEnrollmentProgress(req, existing.data.enrollment_id)
+  const current = await req.db.from('occurrence_reports').select('version').eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
+  const result = await req.db.rpc('apply_occurrence_report_lifecycle', { p_report_id: id, p_expected_version: current.data.version, p_patch: {}, p_actor: req.user?.id, p_operation: 'delete' }); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, permission: 'teaching.reports.delete', scopeType: 'occurrence_report' })
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
 async function readCollaboration(req: Request, res: Response) {

@@ -20,6 +20,8 @@ export type ResourceDefinition = {
   permission: string
   /** Explicit action permissions keep the API contract aligned with the RBAC catalogue. */
   permissions?: Partial<Record<'create' | 'read' | 'update' | 'delete' | 'list' | 'manage', string>>
+  /** Query fields accepted by the collection endpoint. Defaults to the common registry fields. */
+  filterable?: readonly string[]
   scope?: 'system' | 'self' | 'teaching' | 'course' | 'classroom' | 'classroom-child' | 'session' | 'session-child' | 'student' | 'enrollment' | 'occurrence' | 'report' | 'holiday' | 'teacher' | 'teacher-child' | 'student-child' | 'enrollment-child' | 'report-child'
   genericMethods?: readonly ('GET' | 'POST' | 'PATCH' | 'DELETE')[]
   createStatus?: number
@@ -50,7 +52,6 @@ export const resources: Record<string, ResourceDefinition> = {
   'audit-events': { route: 'audit-events', table: 'audit_events', idColumn: 'id', fields: ['id', 'actor_user_id', 'action', 'domain', 'resource', 'resource_id', 'scope_id', 'request_id', 'outcome', 'metadata', 'created_at'], writable: [], sortable: ['created_at', 'action', 'domain', 'resource', 'outcome'], searchable: ['resource', 'action', 'outcome'], permission: 'system.audit.list', permissions: { list: 'system.audit.list', read: 'system.audit.list' }, scope: 'system', genericMethods: ['GET'] },
   teachings: { route: 'teachings', table: 'teachings', idColumn: 'id', fields: ['id', 'name', 'owner_user_id', 'is_quarantine', 'created_at', 'updated_at'], writable: ['name'], sortable: commonSort, searchable: ['name'], permission: 'teaching.teachings.list', scope: 'teaching' },
   courses: { route: 'courses', table: 'courses', idColumn: 'id', fields: ['id', 'subject', 'stage', 'description', 'description_document', 'display_name', 'teaching_id', 'user_id', 'created_at', 'updated_at', 'lessons(id,course_id,title,sequence,user_id,created_at,updated_at)'], writable: ['subject', 'stage', 'description', 'display_name', 'teaching_id'], sortable: ['subject', 'stage', 'display_name', 'created_at', 'updated_at'], searchable: ['display_name', 'subject'], permission: 'teaching.courses.list', scope: 'teaching' },
-  'lesson-reports': { route: 'lesson-reports', table: 'lesson_reports', idColumn: 'id', fields: ['id', 'enrollment_id', 'lesson_id', 'content', 'version', 'updated_at', 'created_at'], writable: ['enrollment_id', 'lesson_id', 'content', 'version'], sortable: ['updated_at', 'created_at', 'version'], searchable: ['content'], permission: 'teaching.reports.list', scope: 'enrollment-child' },
   lessons: { route: 'lessons', table: 'lessons', idColumn: 'id', fields: ['id', 'course_id', 'title', 'sequence', 'user_id', 'created_at', 'updated_at'], writable: ['course_id', 'title', 'sequence'], sortable: ['title', 'sequence', 'created_at', 'updated_at'], searchable: ['title'], permission: 'teaching.lessons.list', scope: 'course' },
   'classroom-schedules': { route: 'classroom-schedules', table: 'classroom_schedules', idColumn: 'id', fields: ['id', 'classroom_id', 'day_of_week', 'start_time', 'end_time', 'user_id', 'created_at', 'updated_at'], writable: ['classroom_id', 'day_of_week', 'start_time', 'end_time'], sortable: ['day_of_week', 'start_time', 'created_at', 'updated_at'], searchable: [], permission: 'teaching.classrooms.list', scope: 'classroom-child' },
   'class-session-schedule-rules': { route: 'class-session-schedule-rules', table: 'class_session_schedule_rules', idColumn: 'id', fields: ['id', 'class_session_id', 'schedule_kind', 'day_of_week', 'day_of_month', 'occurrence_date', 'start_time', 'end_time', 'created_at', 'updated_at'], writable: ['class_session_id', 'schedule_kind', 'day_of_week', 'day_of_month', 'occurrence_date', 'start_time', 'end_time'], sortable: ['occurrence_date', 'day_of_week', 'day_of_month', 'start_time', 'created_at', 'updated_at'], searchable: ['schedule_kind'], permission: 'teaching.class_sessions.list', scope: 'session-child' },
@@ -69,7 +70,7 @@ export const resources: Record<string, ResourceDefinition> = {
   'report-templates': { route: 'report-templates', table: 'report_templates', idColumn: 'id', fields: ['id', 'name', 'content', 'contact_notes', 'class_notes', 'content_document', 'contact_notes_document', 'class_notes_document', 'instructor_id', 'teaching_id', 'created_at', 'updated_at'], writable: ['name', 'content', 'contact_notes', 'class_notes', 'content_document', 'contact_notes_document', 'class_notes_document', 'instructor_id', 'teaching_id'], sortable: ['name', 'created_at', 'updated_at'], searchable: ['name'], permission: 'teaching.templates.list', scope: 'teaching' },
   'copy-templates': { route: 'copy-templates', table: 'copy_templates', idColumn: 'id', fields: ['id', 'user_id', 'template_type', 'scope_type', 'scope_entity_id', 'template_text', 'template_document', 'created_at', 'updated_at'], writable: ['template_type', 'scope_type', 'scope_entity_id', 'template_text', 'template_document'], sortable: ['updated_at', 'created_at', 'template_type', 'scope_type'], searchable: ['template_type', 'scope_type', 'scope_entity_id'], permission: 'system.users.read', scope: 'self', selfAuthorization: true },
   'student-suspensions': { route: 'student-suspensions', table: 'student_suspensions', idColumn: 'id', fields: ['id', 'enrollment_id', 'start_date', 'end_date', 'time_zone', 'reason', 'created_at', 'updated_at'], writable: ['enrollment_id', 'start_date', 'end_date', 'time_zone', 'reason'], sortable: ['start_date', 'end_date', 'created_at', 'updated_at'], searchable: ['reason'], permission: 'teaching.enrollments.list', scope: 'enrollment-child', genericMethods: ['GET'] },
-  'report-versions': { route: 'report-versions', table: 'report_versions', idColumn: 'id', fields: ['id', 'occurrence_report_id', 'version', 'content', 'edited_by', 'snapshot', 'created_at'], writable: [], sortable: ['version', 'created_at'], searchable: [], permission: 'teaching.reports.list', scope: 'report-child' },
+  'report-versions': { route: 'report-versions', table: 'report_versions', idColumn: 'id', fields: ['id', 'occurrence_report_id', 'version', 'content', 'edited_by', 'snapshot', 'created_at'], writable: [], sortable: ['version', 'created_at'], searchable: [], permission: 'teaching.reports.list', scope: 'report-child', genericMethods: ['GET'] },
   holidays: { route: 'holidays', table: 'holidays', idColumn: 'id', fields: ['id', 'name', 'kind', 'start_date', 'end_date', 'classroom_ids', 'class_session_ids', 'teacher_ids', 'time_zone', 'created_at', 'updated_at'], writable: ['name', 'kind', 'start_date', 'end_date', 'classroom_ids', 'class_session_ids', 'teacher_ids', 'time_zone'], sortable: ['name', 'start_date', 'end_date', 'created_at', 'updated_at'], searchable: ['name', 'kind'], permission: 'teaching.holidays.list', scope: 'holiday', genericMethods: ['GET'] },
 }
 export const resourceKeys = Object.keys(resources)
@@ -77,6 +78,8 @@ export const resourceKeys = Object.keys(resources)
 const optionalText = z.string().max(10000).nullable().optional()
 const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 const optionalUrl = z.string().url().max(2048).nullable().optional()
+const optionalTime = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional()
+const optionalDocument = z.record(z.string(), z.unknown()).nullable().optional()
 const schemas: Record<string, { createSchema?: z.ZodType<Record<string, unknown>>; updateSchema?: z.ZodType<Record<string, unknown>> }> = {
   classrooms: {
     createSchema: z.object({ name: z.string().trim().min(1).max(200), color: optionalText, address: optionalText, phone: optionalText, external_link: optionalUrl, teaching_id: z.string().uuid().optional() }).strict(),
@@ -110,8 +113,57 @@ const schemas: Record<string, { createSchema?: z.ZodType<Record<string, unknown>
     createSchema: z.object({ time_zone: z.string().min(1).max(100), editor_settings: z.record(z.string(), z.unknown()).optional() }).strict(),
     updateSchema: z.object({ time_zone: z.string().min(1).max(100).optional(), editor_settings: z.record(z.string(), z.unknown()).optional() }).strict(),
   },
+  'visibility-preferences': {
+    createSchema: z.object({ entity_type: z.string().trim().min(1).max(100), entity_id: z.string().uuid(), is_hidden: z.boolean() }).strict(),
+    updateSchema: z.object({ entity_type: z.string().trim().min(1).max(100).optional(), entity_id: z.string().uuid().optional(), is_hidden: z.boolean().optional() }).strict(),
+  },
+  'student-contacts': {
+    createSchema: z.object({ student_id: z.string().uuid(), name: z.string().trim().min(1).max(200), relation: optionalText, phone: optionalText, email: z.string().email().nullable().optional() }).strict(),
+    updateSchema: z.object({ student_id: z.string().uuid().optional(), name: z.string().trim().min(1).max(200).optional(), relation: optionalText, phone: optionalText, email: z.string().email().nullable().optional() }).strict(),
+  },
+  'student-schools': {
+    createSchema: z.object({ student_id: z.string().uuid(), name: z.string().trim().min(1).max(200), status: optionalText, grade: optionalText, school_student_id: optionalText, start_date: optionalDate, end_date: optionalDate, time_zone: z.string().max(100).nullable().optional(), class: optionalText }).strict(),
+    updateSchema: z.object({ student_id: z.string().uuid().optional(), name: z.string().trim().min(1).max(200).optional(), status: optionalText, grade: optionalText, school_student_id: optionalText, start_date: optionalDate, end_date: optionalDate, time_zone: z.string().max(100).nullable().optional(), class: optionalText }).strict(),
+  },
+  'student-credentials': {
+    createSchema: z.object({ student_id: z.string().uuid(), platform: z.string().trim().min(1).max(120), username: optionalText, password: optionalText, url: optionalUrl }).strict(),
+    updateSchema: z.object({ student_id: z.string().uuid().optional(), platform: z.string().trim().min(1).max(120).optional(), username: optionalText, password: optionalText, url: optionalUrl }).strict(),
+  },
+  'teacher-credentials': {
+    createSchema: z.object({ teacher_id: z.string().uuid(), platform: z.string().trim().min(1).max(120), username: optionalText, password: optionalText, url: optionalUrl }).strict(),
+    updateSchema: z.object({ teacher_id: z.string().uuid().optional(), platform: z.string().trim().min(1).max(120).optional(), username: optionalText, password: optionalText, url: optionalUrl }).strict(),
+  },
+  'classroom-schedules': {
+    createSchema: z.object({ classroom_id: z.string().uuid(), day_of_week: z.number().int().min(0).max(6), start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/), end_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/) }).strict(),
+    updateSchema: z.object({ classroom_id: z.string().uuid().optional(), day_of_week: z.number().int().min(0).max(6).optional(), start_time: optionalTime, end_time: optionalTime }).strict(),
+  },
+  'class-session-schedule-rules': {
+    createSchema: z.object({ class_session_id: z.string().uuid(), schedule_kind: z.string().trim().min(1).max(40), day_of_week: z.number().int().min(0).max(6).nullable().optional(), day_of_month: z.number().int().min(1).max(31).nullable().optional(), occurrence_date: optionalDate, start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional(), end_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional() }).strict(),
+    updateSchema: z.object({ class_session_id: z.string().uuid().optional(), schedule_kind: z.string().trim().min(1).max(40).optional(), day_of_week: z.number().int().min(0).max(6).nullable().optional(), day_of_month: z.number().int().min(1).max(31).nullable().optional(), occurrence_date: optionalDate, start_time: optionalTime, end_time: optionalTime }).strict(),
+  },
+  'class-session-teachers': {
+    createSchema: z.object({ class_session_id: z.string().uuid(), teacher_id: z.string().uuid(), role_id: z.string().uuid().nullable().optional(), effective_from: optionalDate, effective_to: optionalDate }).strict(),
+    updateSchema: z.object({ class_session_id: z.string().uuid().optional(), teacher_id: z.string().uuid().optional(), role_id: z.string().uuid().nullable().optional(), effective_from: optionalDate, effective_to: optionalDate }).strict(),
+  },
+  'copy-templates': {
+    createSchema: z.object({ template_type: z.string().trim().min(1).max(100), scope_type: z.string().trim().min(1).max(100), scope_entity_id: z.string().uuid().nullable().optional(), template_text: optionalText, template_document: optionalDocument }).strict(),
+    updateSchema: z.object({ template_type: z.string().trim().min(1).max(100).optional(), scope_type: z.string().trim().min(1).max(100).optional(), scope_entity_id: z.string().uuid().nullable().optional(), template_text: optionalText, template_document: optionalDocument }).strict(),
+  },
+  teachings: {
+    createSchema: z.object({ name: z.string().trim().min(1).max(200) }).strict(),
+    updateSchema: z.object({ name: z.string().trim().min(1).max(200).optional() }).strict(),
+  },
 }
 for (const [route, schema] of Object.entries(schemas)) Object.assign(resources[route], schema)
+
+// Generic routes must never silently accept an unvalidated write.  A missing
+// schema is a security regression because it moves the first validation point
+// after authorization/idempotency and makes the REST contract unknowable.
+for (const definition of Object.values(resources)) {
+  const methods = new Set(definition.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
+  if (methods.has('POST') && !definition.createSchema) throw new Error(`Resource ${definition.route} is missing createSchema`)
+  if (methods.has('PATCH') && !definition.updateSchema) throw new Error(`Resource ${definition.route} is missing updateSchema`)
+}
 
 
 

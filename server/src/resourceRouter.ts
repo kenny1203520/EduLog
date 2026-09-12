@@ -91,7 +91,9 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,]/g, '')}%`).join(',')
     builder = builder.or(clauses)
   }
-  for (const field of ['teaching_id', 'entity_type', 'entity_id', 'lesson_id', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id', 'instructor_id', 'template_type', 'scope_type', 'scope_entity_id']) {
+  const queryFields = ['teaching_id', 'entity_type', 'entity_id', 'lesson_id', 'course_id', 'classroom_id', 'student_id', 'teacher_id', 'user_id', 'class_session_id', 'enrollment_id', 'class_occurrence_id', 'occurrence_report_id', 'instructor_id', 'template_type', 'scope_type', 'scope_entity_id']
+  for (const field of queryFields) {
+    if (queryValue(req, field) && !def.fields.includes(field)) throw new ApiError(400, 'INVALID_FILTER', `The ${field} filter is not supported for this resource`)
     const value = queryValue(req, field)
     if (value) builder = builder.eq(field, value)
   }
@@ -111,7 +113,12 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     else builder = builder.eq(filter.field, filter.value)
   }
   const entityIds = queryValue(req, 'entity_ids')
-  if (entityIds) builder = builder.in('entity_id', entityIds.split(',').filter(Boolean))
+  if (entityIds) {
+    if (!def.fields.includes('entity_id')) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is not supported for this resource')
+    const values = entityIds.split(',').filter(Boolean)
+    if (!values.length || values.some((value) => !z.string().uuid().safeParse(value).success)) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is invalid')
+    builder = builder.in('entity_id', values)
+  }
   const { data, error, count } = await builder.order(sortName, { ascending: !descending }).range(query.offset, query.offset + query.limit - 1)
   if (error) throw mapDatabaseError(error)
   return sendData(req, res, data ?? [], { limit: query.limit, offset: query.offset, total: count ?? 0, sort: query.sort })
@@ -123,6 +130,10 @@ async function item(req: Request, res: Response, def: ResourceDefinition) {
   const id = def.table === 'user_preferences' && requestedId === 'me' ? req.user?.id : requestedId
   if (!id) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   if (!z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Resource id is invalid')
+  const mutationBody = req.method === 'PATCH'
+    ? validateBody(def, pickBody(def, bodySchema.parse(req.body)), 'update')
+    : null
+  if (req.method === 'PATCH' && !Object.keys(mutationBody ?? {}).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
   setAuditContext(req, { resource: def.route, resourceId: id, action: req.method.toLowerCase() })
   const itemFields = def.itemFields ?? def.fields
   const existing = await req.db!.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
@@ -146,15 +157,13 @@ async function item(req: Request, res: Response, def: ResourceDefinition) {
     if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
   }
-  const body = validateBody(def, pickBody(def, bodySchema.parse(req.body)), 'update')
-  if (!Object.keys(body).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
-  const result = await req.db!.from(def.table).update(body).eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
+  const result = await req.db!.from(def.table).update(mutationBody ?? {}).eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); response = res.json(envelope); return response
 }
 
-async function collection(req: Request, res: Response, def: ResourceDefinition) {
+export async function collection(req: Request, res: Response, def: ResourceDefinition) {
   setAuditContext(req, { resource: def.route, action: req.method.toLowerCase() })
   if (req.method === 'GET') {
     await authorizeCollection(req, def, permissionForResource(def, 'list'), req.query as Record<string, unknown>)
@@ -162,11 +171,14 @@ async function collection(req: Request, res: Response, def: ResourceDefinition) 
   }
   const action = req.method === 'POST' ? 'create' : 'update'
   const parsedBody = bodySchema.parse(req.body)
-  await authorizeCollection(req, def, permissionForResource(def, action), {}, parsedBody)
+  const body = validateBody(def, pickBody(def, parsedBody), action)
+  if (!Object.keys(body).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
+  // Authorization must consume the same filtered/validated representation
+  // that will be persisted.  Passing parsedBody here allowed compatibility or
+  // future non-persisted fields to influence scope resolution.
+  await authorizeCollection(req, def, permissionForResource(def, action), {}, body)
   const replay = await idempotency(req, req.method === 'POST' ? 201 : 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
-  const body = validateBody(def, pickBody(def, parsedBody), req.method === 'POST' ? 'create' : 'update')
-  if (!Object.keys(body).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
   const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
   const insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
   const itemFields = def.itemFields ?? def.fields
@@ -189,6 +201,8 @@ async function members(req: Request, res: Response) {
   const teachingId = typeof req.params.teachingId === 'string' ? req.params.teachingId : undefined
   const userId = typeof req.params.userId === 'string' ? req.params.userId : undefined
   if (!teachingId) throw new ApiError(400, 'INVALID_TEACHING_ID', 'Teaching id is required')
+  if (!z.string().uuid().safeParse(teachingId).success) throw new ApiError(400, 'INVALID_TEACHING_ID', 'Teaching id is invalid')
+  if (userId && !z.string().uuid().safeParse(userId).success) throw new ApiError(400, 'INVALID_USER_ID', 'Member user id is invalid')
   const action = req.method === 'GET' ? 'list' : req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
   setAuditContext(req, { domain: 'teaching', resource: 'members', action, resourceId: userId ?? null, teachingId: teachingId ?? null, scopeId: teachingId ?? null, permission: `teaching.members.${action}` })
   await teachingAllowed(req, `teaching.members.${action}`, teachingId)
@@ -198,7 +212,7 @@ async function members(req: Request, res: Response) {
     return sendData(req, res, result.data ?? [], { limit: result.data?.length ?? 0, offset: 0, total: result.data?.length ?? 0, sort: 'created_at' })
   }
   if (req.method === 'POST') {
-    const body = bodySchema.parse(req.body)
+    const body = z.object({ user_id: z.string().uuid(), role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict().parse(req.body)
     const allowedFields = ['user_id', 'role_id', 'status', 'effective_from', 'effective_to']
     const unknown = Object.keys(body).filter((key) => !allowedFields.includes(key))
     if (unknown.length) throw new ApiError(422, 'UNKNOWN_FIELD', 'The request contains a non-writable field')
@@ -209,11 +223,15 @@ async function members(req: Request, res: Response) {
     const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, envelope); return res.status(201).json(envelope)
   }
   if (!userId) throw new ApiError(400, 'INVALID_USER_ID', 'Member user id is required')
+  const updateBody = req.method === 'PATCH'
+    ? z.object({ role_id: z.string().uuid().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict().parse(req.body)
+    : null
+  if (req.method === 'PATCH' && !Object.keys(updateBody ?? {}).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one member field is required')
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const result = req.method === 'DELETE'
     ? await req.db!.from('teaching_members').delete().eq('teaching_id', teachingId).eq('user_id', userId).select('teaching_id,user_id,role_id,status,effective_from,effective_to').maybeSingle()
-    : await req.db!.from('teaching_members').update(pickBody({ writable: ['role_id', 'status', 'effective_from', 'effective_to'] }, bodySchema.parse(req.body))).eq('teaching_id', teachingId).eq('user_id', userId).select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').maybeSingle()
+    : await req.db!.from('teaching_members').update(updateBody ?? {}).eq('teaching_id', teachingId).eq('user_id', userId).select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Teaching member was not found')
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)

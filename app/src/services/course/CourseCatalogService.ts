@@ -2,15 +2,6 @@ import { Course, type CourseDTO, Lesson, type LessonDTO } from '@/models/Course'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
 import { apiResourceClient } from '../api/ApiResourceClient'
 
-export interface LessonReportDTO {
-    id?: string
-    enrollment_id: string
-    lesson_id: string
-    content: string
-    version: number
-    updated_at?: string
-}
-
 function toCourse(dto: CourseDTO & { lessons?: LessonDTO[] }) {
     const course = new Course(dto)
     for (const lesson of [...(dto.lessons ?? [])].sort((a, b) => a.sequence - b.sequence)) course.addLesson(new Lesson(lesson))
@@ -66,15 +57,4 @@ export class CourseCatalogService {
         await apiResourceClient.remove('lessons', id)
     }
 
-    static async getLessonReport(enrollmentId: string, lessonId: string): Promise<LessonReportDTO | null> {
-        const result = await apiResourceClient.list<LessonReportDTO>('lesson-reports', { perPage: 1, enrollmentId, lessonId })
-        return result.data?.[0] ?? null
-    }
-
-    static async upsertLessonReport(report: Partial<LessonReportDTO>): Promise<LessonReportDTO> {
-        if (!report.enrollment_id || !report.lesson_id) throw new Error('Lesson report requires enrollment_id and lesson_id')
-        const existing = await this.getLessonReport(report.enrollment_id, report.lesson_id)
-        if (existing?.id) return (await apiResourceClient.update<LessonReportDTO>('lesson-reports', existing.id, report)).data
-        return (await apiResourceClient.create<LessonReportDTO>('lesson-reports', report)).data
-    }
 }
