@@ -616,11 +616,12 @@ SET role_id = COALESCE(teaching_members.role_id, EXCLUDED.role_id),
 DO $$
 BEGIN
   ALTER TABLE public.role_permission_policies DROP CONSTRAINT IF EXISTS role_permission_policies_scope_type_check;
+  ALTER TABLE public.role_permission_policies DROP CONSTRAINT IF EXISTS role_permission_policy_scope_shape;
   ALTER TABLE public.role_permission_policies DROP CONSTRAINT IF EXISTS role_permission_policies_scope_shape;
   ALTER TABLE public.role_permission_policies ADD CONSTRAINT role_permission_policies_scope_type_check CHECK (
     scope_type IN ('system', 'teaching', 'classroom', 'class_session')
   );
-  ALTER TABLE public.role_permission_policies ADD CONSTRAINT role_permission_policies_scope_shape CHECK (
+  ALTER TABLE public.role_permission_policies ADD CONSTRAINT role_permission_policy_scope_shape CHECK (
     (scope_type = 'system' AND scope_id IS NULL)
     OR (scope_type IN ('teaching', 'classroom', 'class_session') AND scope_id IS NOT NULL)
   );

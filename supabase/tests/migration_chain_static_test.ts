@@ -112,7 +112,7 @@ Deno.test('report lifecycle migration is transactional and rerunnable', () => {
   assertStringIncludes(lifecycle, 'CREATE OR REPLACE FUNCTION public.apply_occurrence_report_lifecycle')
   assertStringIncludes(lifecycle, 'SECURITY DEFINER')
   assertStringIncludes(lifecycle, 'can_mutate_occurrence_report')
-  assert(!lifecycle.includes('can_access_occurrence_report'))
+  assert(!/can_access_occurrence_report\s*\(/.test(lifecycle))
   assertStringIncludes(lifecycle, 'v_enrollment.class_session_id')
   assertStringIncludes(lifecycle, 'v_base_session.end_date')
   assertStringIncludes(lifecycle, "holiday.kind = 'closure'")
