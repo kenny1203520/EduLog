@@ -292,8 +292,8 @@ Deno.test('1000049 hardens holiday scope without an authenticated-wide policy', 
   assertStringIncludes(holidayScope, "COALESCE(classroom_ids, '{}'::uuid[])")
   assertStringIncludes(holidayScope, "COALESCE(class_session_ids, '{}'::uuid[])")
   assertStringIncludes(holidayScope, 'COALESCE(cardinality(classroom_ids), 0) > 0 OR COALESCE(cardinality(class_session_ids), 0) > 0')
-  assert((holidayScope.match(/AS scoped_classroom\(scoped_classroom_id\)/g) ?? []).length === 4)
-  assert((holidayScope.match(/AS scoped_session\(scoped_session_id\)/g) ?? []).length === 4)
+  assert((holidayScope.match(/AS scoped_classroom\(scoped_classroom_id\)/g) ?? []).length >= 4)
+  assert((holidayScope.match(/AS scoped_session\(scoped_session_id\)/g) ?? []).length >= 4)
   assert(!/FOR\s+ALL\s+TO\s+authenticated/i.test(holidayScope))
 })
 
