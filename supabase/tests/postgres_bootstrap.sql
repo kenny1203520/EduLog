@@ -8,6 +8,11 @@ BEGIN
 END;
 $$;
 
+-- Supabase's service_role bypasses RLS by role attribute. Keep the isolated
+-- PostgreSQL test stack faithful to that boundary; application migrations
+-- still restrict service_role grants to explicit server-side operations.
+ALTER ROLE service_role BYPASSRLS;
+
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE TABLE IF NOT EXISTS auth.users (
   id uuid PRIMARY KEY,
