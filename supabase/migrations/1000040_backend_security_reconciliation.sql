@@ -1320,6 +1320,16 @@ CREATE POLICY "Canonical sessions update" ON public.class_sessions FOR UPDATE TO
 CREATE POLICY "Canonical sessions delete" ON public.class_sessions FOR DELETE TO authenticated
   USING (public.can_teaching_action(teaching_id, 'class_sessions', 'delete'));
 
+-- Invoker RPCs still need table privileges before their RLS policies can
+-- evaluate the caller's JWT scope. These grants do not widen row access;
+-- the canonical policies above remain the enforcement boundary.
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+  public.classrooms,
+  public.courses,
+  public.class_sessions,
+  public.class_session_schedule_rules
+TO authenticated;
+
 CREATE POLICY "Canonical teachers read" ON public.teachers FOR SELECT TO authenticated
   USING (user_id = (select auth.uid()) OR EXISTS (SELECT 1 FROM public.class_session_teachers assignment JOIN public.class_sessions session ON session.id = assignment.class_session_id WHERE assignment.teacher_id = teachers.id AND public.can_access_class_session(session.id, 'teaching.teachers.read')));
 CREATE POLICY "Canonical teachers create" ON public.teachers FOR INSERT TO authenticated
