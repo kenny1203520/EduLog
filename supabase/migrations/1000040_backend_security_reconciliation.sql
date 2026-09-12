@@ -2552,7 +2552,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.replace_role_permission_policies(
   p_permission_key text, p_scope_type text, p_scope_id uuid, p_policies jsonb
 ) RETURNS void
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_permission_id uuid;
   v_allowed boolean := false;
@@ -3399,7 +3399,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.replace_role_permission_policies(
   p_permission_key text, p_scope_type text, p_scope_id uuid, p_policies jsonb
 ) RETURNS void
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_permission_id uuid;
   v_allowed boolean := false;

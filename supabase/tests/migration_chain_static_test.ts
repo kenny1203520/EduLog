@@ -242,6 +242,8 @@ Deno.test('1000061 binds RBAC scopes and serializes idempotency reservations', (
   assertStringIncludes(concurrencyScope, "RAISE EXCEPTION '1000061 prerequisites missing")
   assertStringIncludes(concurrencyScope, 'policy.scope_id = p_teaching_id')
   assertStringIncludes(concurrencyScope, 'CREATE OR REPLACE FUNCTION public.rbac_scope_exists')
+  assertStringIncludes(concurrencyScope, 'CREATE OR REPLACE FUNCTION public.replace_role_permission_policies')
+  assertStringIncludes(concurrencyScope, 'LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$')
   assertStringIncludes(concurrencyScope, "public.has_teaching_permission(auth.uid(), 'teaching.members.manage'")
   assertStringIncludes(concurrencyScope, "public.has_api_permission(auth.uid(), 'teaching.members.manage'")
   assertStringIncludes(concurrencyScope, 'processing_started_at')
