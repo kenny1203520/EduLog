@@ -8,6 +8,89 @@ const tableToResource: Record<string, string> = {
 }
 function resourceFor(table: string) { return tableToResource[table] ?? table.replaceAll('_', '-') }
 function toError(error: unknown) { return error instanceof Error ? { message: error.message } : { message: String(error) } }
+function stringArg(args: Record<string, unknown>, key: string) {
+  return typeof args[key] === 'string' ? args[key] as string : null
+}
+
+async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>): Promise<{ data: T; error: null } | null> {
+  const occurrenceId = stringArg(args, 'p_occurrence_id')
+  if (name === 'get_effective_occurrence_enrollment_ids' && occurrenceId) {
+    const response = await apiV1Client.get<string[]>(`/occurrences/${encodeURIComponent(occurrenceId)}/roster`)
+    return { data: response.data as T, error: null }
+  }
+
+  const enrollmentId = stringArg(args, 'p_enrollment_id')
+  if (name === 'get_single_lesson_transfer_history' && enrollmentId) {
+    const response = await apiV1Client.get<T>(`/enrollments/${encodeURIComponent(enrollmentId)}/transfer-history`)
+    return { data: response.data, error: null }
+  }
+  if (name === 'get_effective_single_lesson_transfer_targets' && enrollmentId) {
+    const response = await apiV1Client.get<T>(`/enrollments/${encodeURIComponent(enrollmentId)}/effective-transfer-targets`)
+    return { data: response.data, error: null }
+  }
+  if (name === 'repair_single_lesson_transfer_report' && enrollmentId) {
+    const response = await apiV1Client.post<T>(`/enrollments/${encodeURIComponent(enrollmentId)}/repair-transfer-report`, {
+      target_occurrence_id: stringArg(args, 'p_target_occurrence_id'),
+    })
+    const data = (response.data as any)?.report_id ?? response.data
+    return { data, error: null }
+  }
+  if (name === 'transfer_single_lesson') {
+    const response = await apiV1Client.post<T>('/enrollment-transfers/single-lesson', {
+      enrollment_id: stringArg(args, 'p_enrollment_id'),
+      source_occurrence_id: stringArg(args, 'p_source_occurrence_id'),
+      target_occurrence_id: stringArg(args, 'p_target_occurrence_id'),
+      report_id: stringArg(args, 'p_report_id'),
+    })
+    const data = (response.data as any)?.transfer_id ?? response.data
+    return { data, error: null }
+  }
+  if (name === 'resolve_single_lesson_transfer_conflict') {
+    const response = await apiV1Client.post<T>('/enrollment-transfers/conflicts/resolve', {
+      enrollment_id: stringArg(args, 'p_enrollment_id'),
+      source_occurrence_id: stringArg(args, 'p_source_occurrence_id'),
+      target_occurrence_id: stringArg(args, 'p_target_occurrence_id'),
+      source_report_id: stringArg(args, 'p_source_report_id'),
+      source_version: args.p_source_version ?? null,
+      target_report_id: stringArg(args, 'p_target_report_id'),
+      target_version: args.p_target_version,
+      field_sources: args.p_field_sources,
+    })
+    const data = (response.data as any)?.transfer_id ?? response.data
+    return { data, error: null }
+  }
+  if (name === 'cancel_single_lesson_transfer') {
+    const response = await apiV1Client.post<T>('/enrollment-transfers/cancel', { transfer_id: stringArg(args, 'p_transfer_id') })
+    return { data: response.data, error: null }
+  }
+  if (name === 'save_report_collab_snapshot') {
+    const id = occurrenceId
+    if (!id) return null
+    const response = await apiV1Client.post<T>(`/reports/${encodeURIComponent(id)}/collaboration`, {
+      snapshot_base64: stringArg(args, 'p_snapshot_base64'),
+      base_report_version: args.p_base_report_version,
+    })
+    const data = (response.data as any)?.saved ?? response.data
+    return { data, error: null }
+  }
+  if (name === 'save_class_session_with_schedule') {
+    const session = args.p_session && typeof args.p_session === 'object' ? args.p_session as Record<string, unknown> : {}
+    const rules = Array.isArray(args.p_rules) ? args.p_rules : []
+    const id = stringArg(args, 'p_session_id')
+    const response = id
+      ? await apiV1Client.patch<T>(`/class-sessions/${encodeURIComponent(id)}`, { ...session, schedule_rules: rules })
+      : await apiV1Client.post<T>('/class-sessions', { ...session, schedule_rules: rules })
+    const data = (response.data as any)?.id ?? response.data
+    return { data, error: null }
+  }
+  if (name === 'resolve_user_permission') {
+    const permission = stringArg(args, 'p_permission_key')
+    if (!permission) return null
+    const response = await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?permission=${encodeURIComponent(permission)}`)
+    return { data: { is_allowed: response.data.allowed, is_denied: !response.data.allowed } as T, error: null }
+  }
+  return null
+}
 
 class ApiQuery implements PromiseLike<QueryResult> {
   private readonly resource: string
@@ -48,7 +131,11 @@ class ApiQuery implements PromiseLike<QueryResult> {
       const idFilter = this.filters.find((filter) => filter.field === 'id' || (this.resource === 'user-preferences' && filter.field === 'user_id'))
       let response: ApiEnvelope<any>
       if (this.operation === 'select') {
-        if (idFilter && this.filters.length === 1) response = await apiV1Client.get(`/${this.resource}/${encodeURIComponent(String(idFilter.value))}`)
+        if (this.resource === 'report-collab-docs') {
+          const reportId = this.filters.find((filter) => filter.field === 'occurrence_report_id' && filter.operator === 'eq')?.value
+          if (typeof reportId !== 'string') throw new Error('API collaboration query requires an occurrence_report_id filter')
+          response = await apiV1Client.get(`/reports/${encodeURIComponent(reportId)}/collaboration`)
+        } else if (idFilter && this.filters.length === 1) response = await apiV1Client.get(`/${this.resource}/${encodeURIComponent(String(idFilter.value))}`)
         else { const query = new URLSearchParams({ limit: String(this.limitValue ?? 100), offset: String(this.offsetValue) }); if (this.sort) query.set('sort', this.sort); if (this.filters.length) query.set('filters', JSON.stringify(this.filters)); if (this.orExpression) query.set('or', this.orExpression); response = await apiV1Client.get(`/${this.resource}?${query.toString()}`) }
         const rows = Array.isArray(response.data) ? response.data : response.data == null ? [] : [response.data]; const data = this.expectSingle ? (rows[0] ?? null) : rows; if (this.expectSingle && data == null && !this.allowMissing) return { data: null, error: { message: 'No rows found' } }; return { data, error: null, count: typeof response.meta?.total === 'number' ? response.meta.total : rows.length }
       }
@@ -81,5 +168,12 @@ class ApiQuery implements PromiseLike<QueryResult> {
 export const apiDataClient = {
   from(table: string) { return new ApiQuery(table) },
   auth: { async getUser() { try { const response = await apiV1Client.get<any>('/auth/me'); return { data: { user: response.data }, error: null } } catch (error) { return { data: { user: null }, error: toError(error) } } }, async getSession() { return { data: { session: null }, error: null } } },
-  async rpc<T = any>(name: string, args: Record<string, unknown> = {}) { try { const response = await apiV1Client.post<T>(`/rpc/${encodeURIComponent(name)}`, args); return { data: response.data, error: null } } catch (error) { return { data: null, error: toError(error) } } },
+  async rpc<T = any>(name: string, args: Record<string, unknown> = {}) {
+    try {
+      const canonical = await invokeCanonicalRpc<T>(name, args)
+      if (canonical) return canonical
+      const response = await apiV1Client.post<T>(`/rpc/${encodeURIComponent(name)}`, args)
+      return { data: response.data, error: null }
+    } catch (error) { return { data: null, error: toError(error) } }
+  },
 }

@@ -46,4 +46,11 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(postMock).toHaveBeenCalledTimes(2)
     expect(result.data).toEqual([{ id: 'created' }, { id: 'created' }])
   })
+
+  it('maps known compatibility RPCs to scoped REST operations', async () => {
+    getMock.mockResolvedValueOnce({ data: ['enrollment-1'], meta: {}, request_id: 'r', trace_id: 't' })
+    const result = await apiDataClient.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: 'occurrence-1' })
+    expect(getMock).toHaveBeenCalledWith('/occurrences/occurrence-1/roster')
+    expect(result.data).toEqual(['enrollment-1'])
+  })
 })
