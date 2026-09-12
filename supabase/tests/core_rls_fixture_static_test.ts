@@ -17,3 +17,9 @@ Deno.test('cross-teaching fixture stays outside PL/pgSQL blocks', () => {
   assertStringIncludes(fixtureSection, 'cross-teaching sensitive-data leak detected')
   assertStringIncludes(source.slice(helper - 20, helper + 240), 'DO $$\nBEGIN')
 })
+
+Deno.test('role fixtures target the partial code uniqueness index', () => {
+  const roleCodeTargets = source.match(/ON CONFLICT \(code\) WHERE code IS NOT NULL DO NOTHING;/g) ?? []
+  assert(roleCodeTargets.length >= 2)
+  assert(!/ON CONFLICT \(code\) DO NOTHING;/.test(source))
+})
