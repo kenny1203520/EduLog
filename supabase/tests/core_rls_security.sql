@@ -437,7 +437,7 @@ INSERT INTO auth.users(id, email) VALUES
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.roles(code, name, description, is_system, sort_order)
 VALUES ('rls_system_admin', 'RLS system admin', 'Fixture-only system role', true, 999)
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) WHERE code IS NOT NULL DO NOTHING;
 INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id)
 SELECT '00000000-0000-0000-0000-000000000007', role.id, 'system', NULL
 FROM public.roles role
