@@ -14,6 +14,17 @@ INSERT INTO public.courses(id, subject, stage, user_id) VALUES
   ('50000000-0000-0000-0000-0000000000bb', 'Course owned by B', 'primary', '00000000-0000-0000-0000-0000000000bb')
 ON CONFLICT (id) DO NOTHING;
 
+-- This row represents a legacy template created before report_templates had a
+-- teaching_id. The 1000041 bridge must resolve it from instructor ownership.
+INSERT INTO public.report_templates(id, name, content, instructor_id)
+VALUES (
+  '51000000-0000-0000-0000-0000000000aa',
+  'Legacy owner template',
+  '{}',
+  '00000000-0000-0000-0000-0000000000aa'
+)
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id) VALUES
   ('60000000-0000-0000-0000-0000000000aa', 'Classroom wins', '30000000-0000-0000-0000-0000000000aa', ARRAY['50000000-0000-0000-0000-0000000000bb']::uuid[], '09:00', '10:00', '00000000-0000-0000-0000-0000000000aa'),
   ('60000000-0000-0000-0000-0000000000ab', 'Course fallback', NULL, ARRAY['50000000-0000-0000-0000-0000000000bb']::uuid[], '10:00', '11:00', '00000000-0000-0000-0000-0000000000bb'),

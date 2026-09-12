@@ -69,6 +69,17 @@ $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
+    SELECT 1
+    FROM public.report_templates template
+    JOIN public.teachings teaching ON teaching.id = template.teaching_id
+    WHERE template.id = '51000000-0000-0000-0000-0000000000aa'
+      AND teaching.owner_user_id = '00000000-0000-0000-0000-0000000000aa'
+      AND teaching.is_quarantine = false
+  ) THEN
+    RAISE EXCEPTION 'legacy report template teaching bridge failed';
+  END IF;
+
+  IF NOT EXISTS (
     SELECT 1 FROM public.holidays
     WHERE id = '90000000-0000-0000-0000-0000000000aa'
       AND COALESCE(cardinality(classroom_ids), 0) = 0

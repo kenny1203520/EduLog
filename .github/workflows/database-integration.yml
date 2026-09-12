@@ -48,6 +48,7 @@ jobs:
       - name: Reconciliation migrations are rerunnable
         run: |
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000040_backend_security_reconciliation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000041_legacy_upgrade_consistency.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
@@ -59,12 +60,13 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *1000040_backend_security_reconciliation.sql) continue ;;
+              *1000040_backend_security_reconciliation.sql|*1000041_legacy_upgrade_consistency.sql) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_fixture.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000040_backend_security_reconciliation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000041_legacy_upgrade_consistency.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql

@@ -1,6 +1,6 @@
 # EduLog migration chain
 
-This directory contains the append-only database history for EduLog. Migrations through `1000039` are historical and must not be edited. The unreleased `1000040_backend_security_reconciliation.sql` consolidates the former 1000040–1000062 work into one canonical, dependency-ordered migration.
+This directory contains the append-only database history for EduLog. Migrations through `1000039` are historical and must not be edited. The unreleased `1000040_backend_security_reconciliation.sql` consolidates the former 1000040–1000062 work into one canonical, dependency-ordered migration. The following `1000041_legacy_upgrade_consistency.sql` is a separate forward bridge for databases upgraded from the historical chain.
 
 ## Ordered migrations
 
@@ -47,8 +47,9 @@ This directory contains the append-only database history for EduLog. Migrations 
 | 1000038 | `1000038_editor_rbac_boundary_hardening.sql` | Editor RBAC boundaries |
 | 1000039 | `1000039_editor_report_insert_rls_fix.sql` | Report insert RLS |
 | 1000040 | `1000040_backend_security_reconciliation.sql` | Consolidated report/editor RLS, API/RBAC, teaching scope, rate limiting, child-resource scope, idempotency, and report lifecycle |
+| 1000041 | `1000041_legacy_upgrade_consistency.sql` | Legacy-to-canonical teaching-scope backfill and derived-resource consistency checks |
 
-The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. The consolidated 1000040 file preserves the former 1000040–1000062 sections in dependency order because none of those files has been deployed.
+The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. The consolidated 1000040 file preserves the former 1000040–1000062 sections in dependency order because none of those files has been deployed. `1000041` must run after 1000040; it is intentionally not folded into the canonical security migration so operators can identify and verify the legacy-data upgrade step independently.
 
 ## Consolidated 1000040 security migration
 
@@ -71,12 +72,12 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a pre-reconciliation database, apply `1000040_backend_security_reconciliation.sql` after the legacy fixture/compatibility checks, then run `supabase/tests/migration_upgrade_assertions.sql`, `supabase/tests/report_lifecycle_integration.sql`, and `supabase/tests/core_rls_security.sql`. Do not edit migrations through 1000039.
+Back up the database first. Apply only migrations not recorded in the migration history. For a pre-reconciliation database, apply `1000040_backend_security_reconciliation.sql` followed by `1000041_legacy_upgrade_consistency.sql` after the legacy fixture/compatibility checks, then run `supabase/tests/migration_upgrade_assertions.sql`, `supabase/tests/report_lifecycle_integration.sql`, and `supabase/tests/core_rls_security.sql`. Do not edit migrations through 1000039.
 
 ## Rerun and rollback
 
-The consolidated `1000040_backend_security_reconciliation.sql` is written to be rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
+The consolidated `1000040_backend_security_reconciliation.sql` and the `1000041` bridge are written to be rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
 
 ## Verification
 
-The CI database gate runs clean install, reruns the consolidated 1000040 migration, the report lifecycle assertion, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+The CI database gate runs clean install, reruns the consolidated 1000040 migration and the 1000041 bridge, the report lifecycle assertion, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.

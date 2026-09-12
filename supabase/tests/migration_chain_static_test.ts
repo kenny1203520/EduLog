@@ -2,6 +2,7 @@ import { assert, assertStringIncludes } from 'https://deno.land/std@0.177.1/test
 
 const migrationDir = new URL('../migrations/', import.meta.url)
 const canonical = await Deno.readTextFile(new URL('1000040_backend_security_reconciliation.sql', migrationDir))
+const legacyUpgrade = await Deno.readTextFile(new URL('1000041_legacy_upgrade_consistency.sql', migrationDir))
 const reconciliation = canonical
 const hardening = canonical
 const compatibility = canonical
@@ -81,13 +82,23 @@ Deno.test('historical migration versions are preserved', async () => {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   assert(names.includes('1000040_backend_security_reconciliation.sql'))
-  assert(!names.some((name) => /^100004[1-9].*\.sql$/.test(name) || /^100005[0-9].*\.sql$/.test(name) || /^100006[0-2].*\.sql$/.test(name)))
+  assert(names.includes('1000041_legacy_upgrade_consistency.sql'))
+  assert(!names.some((name) => /^100004[2-9].*\.sql$/.test(name) || /^100005[0-9].*\.sql$/.test(name) || /^100006[0-2].*\.sql$/.test(name)))
   assert(canonical.indexOf('Former migration 1000041a_has_api_permission_compatibility.sql') < canonical.indexOf('Former migration 1000042_api_rbac_rest_foundation.sql'))
   assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
   assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
   assert(!names.some((name) => name.startsWith('1000015')))
   assert(!names.some((name) => name.startsWith('1000016')))
+})
+
+Deno.test('1000041 bridges historical data into canonical teaching scope', () => {
+  assertStringIncludes(legacyUpgrade, 'requires 1000040_backend_security_reconciliation.sql')
+  assertStringIncludes(legacyUpgrade, 'UPDATE public.report_templates')
+  assertStringIncludes(legacyUpgrade, 'Legacy report templates did not carry a teaching scope')
+  assertStringIncludes(legacyUpgrade, 'ON CONFLICT (teaching_id, user_id) DO UPDATE')
+  assertStringIncludes(legacyUpgrade, 'report teaching consistency failed')
+  assert(!legacyUpgrade.includes('CREATE POLICY "Enable all access for authenticated users"'))
 })
 
 Deno.test('report lifecycle migration is transactional and rerunnable', () => {
@@ -254,6 +265,8 @@ Deno.test('1000046 uses a service-role-only shared rate limit store', () => {
 Deno.test('upgrade fixture satisfies the teachers email contract', () => {
   assertStringIncludes(upgradeFixture, 'INSERT INTO public.teachers(id, name, user_id, email)')
   assertStringIncludes(upgradeFixture, 'teacher-b@example.test')
+  assertStringIncludes(upgradeFixture, 'Legacy owner template')
+  assertStringIncludes(upgradeFixture, '51000000-0000-0000-0000-0000000000aa')
   assertStringIncludes(upgradeFixture, 'Legacy global holiday')
   assertStringIncludes(upgradeFixture, "'{}'::uuid[]")
 })
