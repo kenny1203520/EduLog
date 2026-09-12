@@ -1,6 +1,7 @@
 name: API service and deployment
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'server/**'
