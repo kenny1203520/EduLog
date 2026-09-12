@@ -2642,9 +2642,10 @@ GRANT EXECUTE ON FUNCTION public.reserve_api_idempotency(uuid,text,text,text) TO
 -- ===========================================================================
 
 -- Forward-only RBAC policy-management boundary.
--- Policy replacement is executed as SECURITY INVOKER, so the table RLS
--- boundary must authorize the same system/teaching/classroom/session scopes
--- as the API and the replacement RPC.
+-- Direct table writes remain RLS-protected. The canonical replacement RPC
+-- validates the caller first and then uses SECURITY DEFINER for the atomic
+-- delete/insert, preventing a replacement from revoking its own RLS grant
+-- between statements.
 
 DO $$
 BEGIN
@@ -2781,12 +2782,12 @@ WITH CHECK (
   END
 );
 
--- Keep the RPC guard in lockstep with the table policy. The RPC is invoker
--- security by design; RLS below remains the final write boundary.
+-- Keep the RPC guard in lockstep with the table policy. The RPC validates the
+-- caller before entering its SECURITY DEFINER atomic replacement boundary.
 CREATE OR REPLACE FUNCTION public.replace_role_permission_policies(
   p_permission_key text, p_scope_type text, p_scope_id uuid, p_policies jsonb
 ) RETURNS void
-LANGUAGE plpgsql SECURITY INVOKER SET search_path = public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_permission_id uuid;
   v_allowed boolean := false;
