@@ -1,24 +1,27 @@
 import { assert, assertStringIncludes } from 'https://deno.land/std@0.177.1/testing/asserts.ts'
 
 const migrationDir = new URL('../migrations/', import.meta.url)
-const reconciliation = await Deno.readTextFile(new URL('1000043_teaching_scope_reconciliation.sql', migrationDir))
-const hardening = await Deno.readTextFile(new URL('1000044_rbac_epoch_and_api_contract.sql', migrationDir))
-const compatibility = await Deno.readTextFile(new URL('1000041a_has_api_permission_compatibility.sql', migrationDir))
-const rateLimit = await Deno.readTextFile(new URL('1000046_api_rate_limit_shared_store.sql', migrationDir))
-const studentScope = await Deno.readTextFile(new URL('1000048_student_scope_course_fallback.sql', migrationDir))
-const holidayScope = await Deno.readTextFile(new URL('1000049_holiday_scope_rls_hardening.sql', migrationDir))
-const scopeIntegrity = await Deno.readTextFile(new URL('1000050_scope_integrity_and_session_rpc.sql', migrationDir))
-const childScope = await Deno.readTextFile(new URL('1000051_child_scope_write_hardening.sql', migrationDir))
-const transferScope = await Deno.readTextFile(new URL('1000052_transfer_scope_authorization.sql', migrationDir))
-const enrollmentScope = await Deno.readTextFile(new URL('1000053_enrollment_scope_and_student_guard.sql', migrationDir))
-const rbacTeachingScope = await Deno.readTextFile(new URL('1000054_rbac_teaching_scope_rpc.sql', migrationDir))
-const idempotencyBinding = await Deno.readTextFile(new URL('1000055_idempotency_route_binding.sql', migrationDir))
-const rbacPolicyScope = await Deno.readTextFile(new URL('1000056_canonical_rbac_policy_scope_rls.sql', migrationDir))
-const holidayRead = await Deno.readTextFile(new URL('1000057_holiday_read_permission_alias.sql', migrationDir))
-const teachingRoleScope = await Deno.readTextFile(new URL('1000058_teaching_role_scope_isolation.sql', migrationDir))
-const idempotencyContract = await Deno.readTextFile(new URL('1000059_idempotency_key_contract.sql', migrationDir))
-const permissionScope = await Deno.readTextFile(new URL('1000060_permission_scope_and_session_regression.sql', migrationDir))
-const concurrencyScope = await Deno.readTextFile(new URL('1000061_scope_and_idempotency_concurrency.sql', migrationDir))
+const canonical = await Deno.readTextFile(new URL('1000040_backend_security_reconciliation.sql', migrationDir))
+const reconciliation = canonical
+const hardening = canonical
+const compatibility = canonical
+const rateLimit = canonical
+const studentScope = canonical
+const holidayScope = canonical
+const scopeIntegrity = canonical
+const childScope = canonical
+const transferScope = canonical
+const enrollmentScope = canonical
+const rbacTeachingScope = canonical
+const idempotencyBinding = canonical
+const rbacPolicyScope = canonical
+const holidayRead = canonical
+const teachingRoleScope = canonical
+const idempotencyContract = canonical
+const permissionScope = canonical
+const concurrencyScope = canonical
+const lifecycle = canonical
+const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
 
@@ -74,16 +77,42 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
-  assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
-  assert(names.indexOf('1000041a_has_api_permission_compatibility.sql') < names.indexOf('1000042_api_rbac_rest_foundation.sql'))
+  assert(names.includes('1000040_backend_security_reconciliation.sql'))
+  assert(!names.some((name) => /^100004[1-9].*\.sql$/.test(name) || /^100005[0-9].*\.sql$/.test(name) || /^100006[0-2].*\.sql$/.test(name)))
+  assert(canonical.indexOf('Former migration 1000041a_has_api_permission_compatibility.sql') < canonical.indexOf('Former migration 1000042_api_rbac_rest_foundation.sql'))
   assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
   assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
   assert(!names.some((name) => name.startsWith('1000015')))
   assert(!names.some((name) => name.startsWith('1000016')))
+})
+
+Deno.test('report lifecycle migration is transactional and rerunnable', () => {
+  assertStringIncludes(lifecycle, 'CREATE OR REPLACE FUNCTION public.apply_occurrence_report_lifecycle')
+  assertStringIncludes(lifecycle, 'SECURITY DEFINER')
+  assertStringIncludes(lifecycle, 'can_mutate_occurrence_report')
+  assert(!lifecycle.includes('can_access_occurrence_report'))
+  assertStringIncludes(lifecycle, 'v_enrollment.class_session_id')
+  assertStringIncludes(lifecycle, 'v_base_session.end_date')
+  assertStringIncludes(lifecycle, "holiday.kind = 'closure'")
+  assertStringIncludes(lifecycle, "v_next_absence_reason := 'suspension'")
+  assertStringIncludes(lifecycle, "NULLIF(p_patch->'content_document', 'null'::jsonb)")
+  assertStringIncludes(lifecycle, 'FOR UPDATE')
+  assertStringIncludes(lifecycle, 'ON CONFLICT (enrollment_id, class_occurrence_id) DO NOTHING')
+  assertStringIncludes(lifecycle, 'generate_series')
+  assertStringIncludes(lifecycle, 'VERSION_CONFLICT')
+  assertStringIncludes(lifecycle, 'GRANT EXECUTE ON FUNCTION public.apply_occurrence_report_lifecycle')
+})
+
+Deno.test('report lifecycle integration is executable and authenticated', () => {
+  assertStringIncludes(lifecycleIntegration, 'SET LOCAL ROLE authenticated')
+  assertStringIncludes(lifecycleIntegration, 'apply_occurrence_report_lifecycle')
+  assertStringIncludes(lifecycleIntegration, 'VERSION_CONFLICT')
+  assertStringIncludes(lifecycleIntegration, 'cross-teaching report write was authorized')
+  assertStringIncludes(lifecycleIntegration, 'ROLLBACK')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

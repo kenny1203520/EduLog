@@ -2,7 +2,11 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000041_editor_rbac_rpc_guard.sql'), 'utf8')
+const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000040_backend_security_reconciliation.sql'), 'utf8')
+const rpcSection = migration.slice(
+    migration.indexOf('Former migration 1000041_editor_rbac_rpc_guard.sql'),
+    migration.indexOf('Former migration 1000041a_has_api_permission_compatibility.sql'),
+)
 
 describe('editor RBAC RPC guard migration contract', () => {
     it('guards policy replacement and keeps execution scoped to authenticated administrators', () => {
@@ -14,6 +18,6 @@ describe('editor RBAC RPC guard migration contract', () => {
         expect(migration).toContain('SET search_path = public')
         expect(migration).toContain('REVOKE ALL ON FUNCTION public.replace_role_permission_policies')
         expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.replace_role_permission_policies')
-        expect(migration).not.toContain('FOR UPDATE')
+        expect(rpcSection).not.toContain('FOR UPDATE')
     })
 })

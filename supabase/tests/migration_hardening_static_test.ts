@@ -1,6 +1,6 @@
 import { assert, assertStringIncludes } from 'https://deno.land/std@0.177.1/testing/asserts.ts'
 
-const migration = await Deno.readTextFile(new URL('../migrations/1000045_missing_core_rls_hardening.sql', import.meta.url))
+const migration = await Deno.readTextFile(new URL('../migrations/1000040_backend_security_reconciliation.sql', import.meta.url))
 
 Deno.test('1000045 is forward-only, guarded, and rerunnable', () => {
   assertStringIncludes(migration, '1000045 prerequisites missing')
