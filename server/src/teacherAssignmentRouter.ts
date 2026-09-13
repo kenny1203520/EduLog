@@ -6,16 +6,21 @@ import { setAuditContext } from './context.js'
 
 const assignmentFields = 'id,class_session_id,teacher_id,effective_from,effective_to,role_id,created_at,updated_at,roles(id,name,code),teachers(id,user_id,name,email,phone,address,bio,created_at,updated_at)'
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-const assignmentSchema = z.object({
+const assignmentFieldsSchema = z.object({
   teacher_id: z.string().uuid(),
   role_id: z.string().uuid().optional(),
   effective_from: dateSchema,
   effective_to: dateSchema.nullable().optional(),
-}).strict().superRefine((value, ctx) => {
-  if (value.effective_to && value.effective_to < value.effective_from) ctx.addIssue({ code: 'custom', path: ['effective_to'], message: 'effective_to must not be before effective_from' })
+}).strict()
+const validateAssignmentRange = (value: { effective_from?: string; effective_to?: string | null }, ctx: z.RefinementCtx) => {
+  if (value.effective_from && value.effective_to && value.effective_to < value.effective_from) ctx.addIssue({ code: 'custom', path: ['effective_to'], message: 'effective_to must not be before effective_from' })
+}
+export const assignmentSchema = assignmentFieldsSchema.superRefine(validateAssignmentRange)
+export const teacherAssignmentCreateSchema = z.object({ teachers: z.array(assignmentSchema).max(100) }).strict()
+export const teacherAssignmentUpdateSchema = assignmentFieldsSchema.partial().strict().superRefine((value, ctx) => {
+  if (value.effective_from && value.effective_to) validateAssignmentRange(value, ctx)
 })
-const bulkSchema = z.object({ teachers: z.array(assignmentSchema).max(100) }).strict()
-const removeSchema = z.object({ teacher_id: z.string().uuid().optional(), effective_from: dateSchema.optional() }).strict()
+export const teacherAssignmentRemoveSchema = z.object({ teacher_id: z.string().uuid().optional(), effective_from: dateSchema.optional() }).strict()
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
@@ -66,7 +71,7 @@ async function list(req: Request, res: Response) {
 
 async function create(req: Request, res: Response) {
   const id = sessionId(req)
-  const input = bulkSchema.parse(req.body)
+  const input = teacherAssignmentCreateSchema.parse(req.body)
   // Assignments are relationship-management mutations on an existing class
   // session. Keep POST, PATCH, and DELETE aligned with the RLS policy and
   // OpenAPI contract: all require class-session update permission.
@@ -86,7 +91,7 @@ async function create(req: Request, res: Response) {
 async function remove(req: Request, res: Response) {
   const id = sessionId(req)
   const removalBody = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}
-  const input = removeSchema.parse({
+  const input = teacherAssignmentRemoveSchema.parse({
     teacher_id: removalBody.teacher_id ?? req.query.teacher_id,
     effective_from: removalBody.effective_from ?? req.query.effective_from,
   })
@@ -112,7 +117,7 @@ async function update(req: Request, res: Response) {
   const id = sessionId(req)
   const assignmentId = typeof req.params.assignmentId === 'string' && z.string().uuid().safeParse(req.params.assignmentId).success ? req.params.assignmentId : undefined
   if (!assignmentId) throw new ApiError(400, 'INVALID_ID', 'Assignment id is invalid')
-  const input = assignmentSchema.partial().strict().parse(req.body)
+  const input = teacherAssignmentUpdateSchema.parse(req.body)
   if (!Object.keys(input).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one assignment field is required')
   await authorize(req, id, 'update')
   const replay = await idempotency(req, 200, null)

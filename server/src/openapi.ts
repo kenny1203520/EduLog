@@ -4,6 +4,11 @@ import { enrollmentBodySchema, enrollmentCreateSchema } from './enrollmentRouter
 import { occurrenceBodySchema, occurrenceGenerationSchema } from './occurrenceRouter.js'
 import { reportCreateSchema, reportUpdateSchema } from './reportRouter.js'
 import { sessionSchema } from './sessionRouter.js'
+import { suspensionCreateSchema, suspensionUpdateSchema } from './suspensionRouter.js'
+import { holidayCreateSchema, holidayUpdateSchema } from './holidayRouter.js'
+import { teacherAssignmentCreateSchema, teacherAssignmentUpdateSchema } from './teacherAssignmentRouter.js'
+import { conflictBody, transferBody, repairBody, cancelBody } from './transferRouter.js'
+import { reportCollaborationSchema } from './reportRouter.js'
 import { permissionForResource } from './authorization.js'
 
 const errorResponses = {
@@ -225,30 +230,26 @@ export function buildOpenApi() {
     ReportCreateMutation: runtimeDocument(reportCreateSchema),
     ReportUpdateMutation: runtimeDocument(reportUpdateSchema),
     OccurrenceMutation: runtimeDocument(occurrenceBodySchema),
-    SuspensionCreateMutation: { type: 'object', required: ['enrollment_id', 'start_date'], additionalProperties: false, properties: { enrollment_id: { type: 'string', format: 'uuid' }, start_date: { type: 'string', format: 'date' }, end_date: { type: ['string', 'null'], format: 'date' }, time_zone: { type: 'string', maxLength: 64 }, reason: { type: ['string', 'null'], maxLength: 2000 } } },
-    SuspensionUpdateMutation: { type: 'object', additionalProperties: false, properties: { start_date: { type: 'string', format: 'date' }, end_date: { type: ['string', 'null'], format: 'date' }, time_zone: { type: 'string', maxLength: 64 }, reason: { type: ['string', 'null'], maxLength: 2000 } } },
-    HolidayCreateMutation: { type: 'object', required: ['name', 'kind', 'start_date', 'end_date'], additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 200 }, kind: { type: 'string' }, start_date: { type: 'string', format: 'date' }, end_date: { type: 'string', format: 'date' }, classroom_ids: { type: 'array', items: { type: 'string', format: 'uuid' } }, class_session_ids: { type: 'array', items: { type: 'string', format: 'uuid' } }, teacher_ids: { type: 'array', items: { type: 'string', format: 'uuid' } }, time_zone: { type: 'string', maxLength: 100 } } },
-    HolidayUpdateMutation: { type: 'object', additionalProperties: false, properties: { name: { type: 'string', minLength: 1, maxLength: 200 }, kind: { type: 'string' }, start_date: { type: 'string', format: 'date' }, end_date: { type: 'string', format: 'date' }, classroom_ids: { type: 'array', items: { type: 'string', format: 'uuid' } }, class_session_ids: { type: 'array', items: { type: 'string', format: 'uuid' } }, teacher_ids: { type: 'array', items: { type: 'string', format: 'uuid' } }, time_zone: { type: 'string', maxLength: 100 } } },
-    ReportCollaborationMutation: { type: 'object', required: ['snapshot_base64', 'base_report_version'], additionalProperties: false, properties: { snapshot_base64: { type: 'string', maxLength: 1400000 }, base_report_version: { type: 'integer', minimum: 1 } } },
-    TeacherAssignmentMutation: { type: 'object', required: ['teacher_id'], additionalProperties: false, properties: { teacher_id: { type: 'string', format: 'uuid' }, role_id: { type: ['string', 'null'], format: 'uuid' }, effective_from: { type: ['string', 'null'], format: 'date' }, effective_to: { type: ['string', 'null'], format: 'date' } } },
-    TeacherAssignmentUpdateMutation: { type: 'object', additionalProperties: false, properties: { teacher_id: { type: 'string', format: 'uuid' }, role_id: { type: ['string', 'null'], format: 'uuid' }, effective_from: { type: ['string', 'null'], format: 'date' }, effective_to: { type: ['string', 'null'], format: 'date' } } },
+    SuspensionCreateMutation: runtimeDocument(suspensionCreateSchema),
+    SuspensionUpdateMutation: runtimeDocument(suspensionUpdateSchema),
+    HolidayCreateMutation: runtimeDocument(holidayCreateSchema),
+    HolidayUpdateMutation: runtimeDocument(holidayUpdateSchema),
+    ReportCollaborationMutation: runtimeDocument(reportCollaborationSchema),
+    TeacherAssignmentMutation: runtimeDocument(teacherAssignmentCreateSchema),
+    TeacherAssignmentUpdateMutation: runtimeDocument(teacherAssignmentUpdateSchema),
     TeachingMemberCreateMutation: runtimeDocument(teachingMemberCreateSchema),
     TeachingMemberUpdateMutation: runtimeDocument(teachingMemberUpdateSchema),
+    TransferMutation: runtimeDocument(transferBody),
+    // Zod's JSON Schema emitter represents nullable fields conservatively and
+    // can omit them from `required`; the runtime validator still requires
+    // source_version (it only permits null as its value). Preserve that
+    // distinction explicitly in the public contract.
     TransferConflictMutation: {
-      type: 'object',
-      required: ['enrollment_id', 'source_occurrence_id', 'target_occurrence_id', 'target_report_id', 'target_version', 'field_sources'],
-      additionalProperties: false,
-      properties: {
-        enrollment_id: { type: 'string', format: 'uuid' },
-        source_occurrence_id: { type: 'string', format: 'uuid' },
-        target_occurrence_id: { type: 'string', format: 'uuid' },
-        source_report_id: { type: ['string', 'null'], format: 'uuid' },
-        source_version: { type: ['integer', 'null'], minimum: 1 },
-        target_report_id: { type: 'string', format: 'uuid' },
-        target_version: { type: 'integer', minimum: 1 },
-        field_sources: { type: 'object', additionalProperties: false },
-      },
+      ...runtimeDocument(conflictBody),
+      required: ['enrollment_id', 'source_occurrence_id', 'target_occurrence_id', 'source_report_id', 'source_version', 'target_report_id', 'target_version', 'field_sources'],
     },
+    TransferRepairMutation: runtimeDocument(repairBody),
+    TransferCancelMutation: runtimeDocument(cancelBody),
     RpcInvocation: { oneOf: [
       { type: 'object', required: ['class_occurrence_id'], additionalProperties: false, properties: { class_occurrence_id: { type: 'string', format: 'uuid' } } },
       { type: 'object', required: ['enrollment_id'], additionalProperties: false, properties: { enrollment_id: { type: 'string', format: 'uuid' } } },
@@ -260,7 +261,7 @@ export function buildOpenApi() {
     components: {
       securitySchemes: { cookieAuth: { type: 'apiKey', in: 'cookie', name: 'edulog_access' }, bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
       parameters: { ResourceId: { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, Filters: { name: 'filters', in: 'query', description: 'JSON array of allowlisted field filters', schema: { type: 'string', maxLength: 8000 } }, Or: { name: 'or', in: 'query', description: 'Allowlisted PostgREST OR expression', schema: { type: 'string', maxLength: 2000 } }, Limit: { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 25 } }, Offset: { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } }, Sort: { name: 'sort', in: 'query', schema: { type: 'string' } }, Search: { name: 'search', in: 'query', schema: { type: 'string' } }, Status: { name: 'status', in: 'query', schema: { type: 'string' } }, ...Object.fromEntries(['teaching_id', 'course_id', 'classroom_id', 'class_session_id', 'class_occurrence_id', 'lesson_id', 'student_id', 'teacher_id', 'instructor_id', 'user_id', 'enrollment_id', 'occurrence_report_id', 'entity_type', 'entity_id', 'entity_ids', 'template_type', 'scope_type', 'scope_entity_id'].map((field) => [field, { name: field, in: 'query', schema: { type: 'string', ...(field.endsWith('_id') || field === 'entity_id' || field === 'scope_entity_id' ? { format: 'uuid' } : {}), ...(field === 'entity_ids' ? { description: 'Comma-separated UUIDs' } : {}) } }])), IdempotencyKey: { name: 'Idempotency-Key', in: 'header', required: true, schema: { type: 'string', minLength: 8, maxLength: 255 } } },
-      schemas: { ...specializedSchemas, Envelope: { type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'], properties: { data: {}, meta: { type: 'object' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } }, Error: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object' } } } } }, OccurrenceGenerationMutation: runtimeDocument(occurrenceGenerationSchema), ClassSessionMutation: runtimeDocument(sessionSchema), LoginRequest: { type: 'object', required: ['email', 'password'], additionalProperties: false, properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', minLength: 1 } } }, TransferRepairMutation: { type: 'object', required: ['target_occurrence_id'], additionalProperties: false, properties: { target_occurrence_id: { type: 'string', format: 'uuid' } } }, SingleLessonTransferMutation: { type: 'object', required: ['enrollment_id', 'source_occurrence_id', 'target_occurrence_id'], additionalProperties: false, properties: { enrollment_id: { type: 'string', format: 'uuid' }, source_occurrence_id: { type: 'string', format: 'uuid' }, target_occurrence_id: { type: 'string', format: 'uuid' }, report_id: { type: ['string', 'null'], format: 'uuid' } } }, TransferCancelMutation: { type: 'object', required: ['transfer_id'], additionalProperties: false, properties: { transfer_id: { type: 'string', format: 'uuid' } } }, TransferConflictMutation: { type: 'object', required: ['enrollment_id', 'source_occurrence_id', 'source_report_id', 'target_occurrence_id', 'target_report_id', 'target_version', 'field_sources'], additionalProperties: false, properties: { enrollment_id: { type: 'string', format: 'uuid' }, source_occurrence_id: { type: 'string', format: 'uuid' }, target_occurrence_id: { type: 'string', format: 'uuid' }, source_report_id: { type: ['string', 'null'], format: 'uuid' }, target_report_id: { type: 'string', format: 'uuid' }, target_version: { type: 'integer', minimum: 1 }, field_sources: { type: 'object', additionalProperties: false } } } },
+      schemas: { ...specializedSchemas, Envelope: { type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'], properties: { data: {}, meta: { type: 'object' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } }, Error: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object' } } } } }, OccurrenceGenerationMutation: runtimeDocument(occurrenceGenerationSchema), ClassSessionMutation: runtimeDocument(sessionSchema), LoginRequest: { type: 'object', required: ['email', 'password'], additionalProperties: false, properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', minLength: 1 } } }, SingleLessonTransferMutation: { type: 'object', required: ['enrollment_id', 'source_occurrence_id', 'target_occurrence_id'], additionalProperties: false, properties: { enrollment_id: { type: 'string', format: 'uuid' }, source_occurrence_id: { type: 'string', format: 'uuid' }, target_occurrence_id: { type: 'string', format: 'uuid' }, report_id: { type: ['string', 'null'], format: 'uuid' } } } },
       responses: {
         Envelope: { description: 'EduLog API response envelope', content: { 'application/json': { schema: { $ref: '#/components/schemas/Envelope' } } } },
         ...Object.fromEntries(Object.entries({ BadRequest: 'Invalid request', Unauthorized: 'Authentication required', Forbidden: 'Permission denied', NotFound: 'Resource not found', Conflict: 'Resource conflict', PayloadTooLarge: 'Payload too large', UnprocessableEntity: 'Validation failed', RateLimited: 'Rate limit exceeded', InternalError: 'Unexpected error' }).map(([name, description]) => [name, { description, content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }]))

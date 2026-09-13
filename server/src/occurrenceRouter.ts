@@ -10,7 +10,7 @@ function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { retu
 async function authorize(req: Request, id: string, action: 'update' | 'delete' = 'update') {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const occurrence = await req.db.from('class_occurrences').select('class_session_id,occurrence_date').eq('id', id).maybeSingle(); if (occurrence.error) throw mapDatabaseError(occurrence.error); if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
-  setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: id, action, permission: `teaching.occurrences.${action}`, scopeId: occurrence.data.class_session_id })
+  setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: id, action, permission: `teaching.occurrences.${action}`, scopeId: occurrence.data.class_session_id, scopeType: 'class_session' })
   const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.occurrences.${action}`, p_classroom_id: null, p_class_session_id: occurrence.data.class_session_id }); if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify this occurrence')
   return occurrence.data
 }
@@ -51,7 +51,7 @@ function nextDate(value: string) {
 async function generate(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const input = occurrenceGenerationSchema.parse(req.body)
-  setAuditContext(req, { domain: 'teaching', resource: 'occurrences', action: 'create', permission: 'teaching.occurrences.create', scopeId: input.class_session_id })
+  setAuditContext(req, { domain: 'teaching', resource: 'occurrences', action: 'create', permission: 'teaching.occurrences.create', scopeId: input.class_session_id, scopeType: 'class_session' })
   if (input.start_date > input.end_date) throw new ApiError(422, 'INVALID_DATE_RANGE', 'start_date must not be after end_date')
   const spanDays = Math.floor((Date.parse(`${input.end_date}T00:00:00Z`) - Date.parse(`${input.start_date}T00:00:00Z`)) / 86400000)
   if (!Number.isFinite(spanDays) || spanDays > 3660) throw new ApiError(422, 'DATE_RANGE_TOO_LARGE', 'The generation range is too large')

@@ -7,7 +7,7 @@ import { setAuditContext } from './context.js'
 const fields = 'id,start_date,end_date,time_zone,name,kind,classroom_ids,class_session_ids,teacher_ids,created_at,updated_at'
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const ids = z.array(z.string().uuid()).max(500).default([])
-const createSchema = z.object({
+export const holidayCreateSchema = z.object({
   start_date: date,
   end_date: date,
   time_zone: z.string().min(1).max(64).optional(),
@@ -17,7 +17,7 @@ const createSchema = z.object({
   class_session_ids: ids,
   teacher_ids: ids,
 }).strict()
-const updateSchema = createSchema.partial().strict()
+export const holidayUpdateSchema = holidayCreateSchema.partial().strict()
 
 type Holiday = {
   id: string; start_date: string; end_date: string; time_zone: string | null; name: string | null
@@ -45,7 +45,14 @@ export async function permission(req: Request, action: 'create' | 'update' | 'de
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const classroomIds = array(scope.classroom_ids)
   const sessionIds = array(scope.class_session_ids)
-  setAuditContext(req, { domain: action === 'list' ? 'teaching' : classroomIds.length || sessionIds.length ? 'teaching' : 'system', resource: 'holidays', action, permission: `teaching.holidays.${action}`, scopeId: classroomIds[0] ?? sessionIds[0] ?? null })
+  setAuditContext(req, {
+    domain: action === 'list' ? 'teaching' : classroomIds.length || sessionIds.length ? 'teaching' : 'system',
+    resource: 'holidays',
+    action,
+    permission: `teaching.holidays.${action}`,
+    scopeId: classroomIds[0] ?? sessionIds[0] ?? null,
+    scopeType: classroomIds.length ? 'classroom' : sessionIds.length ? 'class_session' : null,
+  })
   if (!classroomIds.length && !sessionIds.length) {
     const rpcName = action === 'list' ? 'has_api_permission' : 'has_system_permission'
     const args = { p_user_id: req.user.id, p_permission_key: `teaching.holidays.${action}`, ...(action === 'list' ? { p_classroom_id: null, p_class_session_id: null } : {}) }
@@ -144,7 +151,7 @@ async function sync(req: Request, holiday: Holiday) {
 }
 
 async function create(req: Request, res: Response) {
-  const input = createSchema.parse(req.body); validRange(input.start_date, input.end_date); await permission(req, 'create', input)
+  const input = holidayCreateSchema.parse(req.body); validRange(input.start_date, input.end_date); await permission(req, 'create', input)
   const replay = await idempotency(req, 201, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.from('holidays').insert({ ...input, time_zone: safeTimezone(input.time_zone) }).select(fields).single(); if (result.error) throw mapDatabaseError(result.error)
   await sync(req, result.data as Holiday); const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, body); return res.status(201).json(body)
@@ -153,7 +160,7 @@ async function create(req: Request, res: Response) {
 async function update(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Holiday id is required')
   const current = await req.db!.from('holidays').select(fields).eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Holiday was not found')
-  const input = updateSchema.parse(req.body); const start = input.start_date ?? current.data.start_date; const end = input.end_date ?? current.data.end_date; validRange(start, end)
+  const input = holidayUpdateSchema.parse(req.body); const start = input.start_date ?? current.data.start_date; const end = input.end_date ?? current.data.end_date; validRange(start, end)
   await permission(req, 'update', current.data as Holiday)
   await permission(req, 'update', { classroom_ids: input.classroom_ids ?? current.data.classroom_ids, class_session_ids: input.class_session_ids ?? current.data.class_session_ids })
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)

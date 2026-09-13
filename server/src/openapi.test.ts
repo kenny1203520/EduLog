@@ -144,4 +144,24 @@ describe('generated API contract', () => {
     expect(spec.components.schemas.ReportCreateMutation.additionalProperties).toBe(false)
     expect(spec.components.schemas.TeachingMemberUpdateMutation.additionalProperties).toBe(false)
   })
+
+  it('keeps specialized mutation schemas sourced from runtime validators', () => {
+    const spec = buildOpenApi() as { components: { schemas: Record<string, any> }; paths: Record<string, Record<string, any> | undefined> }
+    const teacherCreate = spec.components.schemas.TeacherAssignmentMutation
+    expect(teacherCreate).toMatchObject({ type: 'object', additionalProperties: false, required: ['teachers'] })
+    expect(teacherCreate.properties.teachers.items).toMatchObject({ type: 'object', additionalProperties: false })
+
+    const holidayCreate = spec.components.schemas.HolidayCreateMutation
+    expect(holidayCreate.required).toEqual(expect.arrayContaining(['start_date', 'end_date', 'classroom_ids', 'class_session_ids', 'teacher_ids']))
+    expect(holidayCreate.properties.kind).toMatchObject({ default: 'closure', enum: ['closure', 'teacher_leave'] })
+    expect(holidayCreate.properties.name.anyOf).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'string' }), expect.objectContaining({ type: 'null' })]))
+
+    const conflict = spec.components.schemas.TransferConflictMutation
+    expect(conflict.required).toEqual(expect.arrayContaining(['source_version', 'field_sources']))
+    expect(Object.keys(conflict.properties.field_sources?.properties ?? {})).toEqual(expect.arrayContaining([
+      'lesson_id', 'is_completed', 'progress_letter', 'attendance', 'class_participation',
+      'classroom_behavior', 'contact_notes', 'class_notes', 'content', 'external_link',
+    ]))
+    expect(spec.paths['/api/class-sessions/{sessionId}/teachers']?.post?.requestBody?.content?.['application/json']?.schema?.$ref).toBe('#/components/schemas/TeacherAssignmentMutation')
+  })
 })

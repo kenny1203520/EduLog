@@ -16,7 +16,7 @@ function rpcError(error: unknown): never {
 }
 
 async function teachingPermission(req: Request, permission: string, teachingId: string | null) {
-  setAuditContext(req, { domain: 'teaching', permission, teachingId, scopeId: teachingId })
+  setAuditContext(req, { domain: 'teaching', permission, teachingId, scopeId: teachingId, scopeType: 'teaching' })
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   if (!teachingId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   const { data, error } = await req.db.rpc('has_teaching_permission', {
@@ -38,7 +38,12 @@ async function coursePermission(req: Request, permission: string, courseId: stri
 }
 
 async function apiPermission(req: Request, permission: string, classroomId: string | null, sessionId: string | null) {
-  setAuditContext(req, { domain: permission.startsWith('system.') ? 'system' : 'teaching', permission, scopeId: classroomId ?? sessionId })
+  setAuditContext(req, {
+    domain: permission.startsWith('system.') ? 'system' : 'teaching',
+    permission,
+    scopeId: classroomId ?? sessionId,
+    scopeType: classroomId ? 'classroom' : sessionId ? 'class_session' : null,
+  })
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const { data, error } = await req.db.rpc('has_api_permission', {
     p_user_id: req.user.id,
@@ -70,7 +75,14 @@ async function holidayPermission(req: Request, permission: string, row?: Record<
 }
 
 async function entityPermission(req: Request, kind: 'student' | 'enrollment' | 'report', permission: string, id: string) {
-  setAuditContext(req, { domain: 'teaching', resource: kind === 'report' ? 'reports' : `${kind}s`, resourceId: id, permission })
+  setAuditContext(req, {
+    domain: 'teaching',
+    resource: kind === 'report' ? 'reports' : `${kind}s`,
+    resourceId: id,
+    permission,
+    scopeId: id,
+    scopeType: kind === 'student' ? 'student' : kind === 'enrollment' ? 'enrollment' : 'occurrence_report',
+  })
   if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const functionName = kind === 'student' ? 'can_access_student' : kind === 'enrollment' ? 'can_access_enrollment' : 'can_access_report'
   const { data, error } = await req.db.rpc(functionName, { [`p_${kind}_id`]: id, p_permission_key: permission })
@@ -99,7 +111,7 @@ export async function authorizeResource(
   id: string | null,
   row?: Record<string, unknown>,
 ) {
-  setAuditContext(req, { resource: def.route, resourceId: id, permission })
+  setAuditContext(req, { resource: def.route, resourceId: id, permission, scopeType: def.scope ?? null })
   const scope: ScopeKind = def.scope ?? 'system'
   if (scope === 'system') return apiPermission(req, permission, null, null)
   if (scope === 'self') return selfPermission(req, row)
@@ -171,7 +183,7 @@ export function permissionForResource(def: ResourceDefinition, action: string) {
 }
 
 export async function authorizeCollection(req: Request, def: ResourceDefinition, permission: string, query: Record<string, unknown> = {}, body?: Record<string, unknown>) {
-  setAuditContext(req, { resource: def.route, permission })
+  setAuditContext(req, { resource: def.route, permission, scopeType: def.scope ?? null })
   const value = (key: string) => {
     const candidate = body?.[key] ?? query[key]
     return typeof candidate === 'string' ? candidate : null

@@ -54,7 +54,7 @@ async function authorize(req: Request, action: 'read' | 'create' | 'update' | 'd
     p_classroom_id: null,
     p_class_session_id: id,
   })
-  setAuditContext(req, { domain: 'teaching', resource: 'class-sessions', action, resourceId: id, permission: `teaching.class_sessions.${action}`, scopeId: id })
+  setAuditContext(req, { domain: 'teaching', resource: 'class-sessions', action, resourceId: id, permission: `teaching.class_sessions.${action}`, scopeId: id, scopeType: 'class_session' })
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify class sessions')
 }
 
@@ -153,7 +153,7 @@ async function readDetails(req: Request, res: Response) {
     current_enrollments: enrollments.count ?? 0,
   }
   delete (data as Record<string, unknown>).classrooms
-  setAuditContext(req, { resource: 'class-sessions', resourceId: id, action: 'read' })
+  setAuditContext(req, { resource: 'class-sessions', resourceId: id, action: 'read', scopeId: id, scopeType: 'class_session' })
   return sendDetails(req, res, data)
 }
 

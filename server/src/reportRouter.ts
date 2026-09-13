@@ -17,6 +17,7 @@ export const reportBodySchema = z.object({
 }).strict()
 export const reportCreateSchema = reportBodySchema.omit({ expected_version: true }).required({ enrollment_id: true, class_occurrence_id: true })
 export const reportUpdateSchema = reportBodySchema.omit({ enrollment_id: true, class_occurrence_id: true }).required({ expected_version: true })
+export const reportCollaborationSchema = z.object({ snapshot_base64: z.string().max(1400000), base_report_version: z.number().int().min(1) }).strict()
 type Body = z.infer<typeof reportBodySchema>
 type MutationContext = {
   report_id: string
@@ -204,7 +205,7 @@ async function saveCollaboration(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
   await canAccess(req, id, 'teaching.reports.update')
-  const input = z.object({ snapshot_base64: z.string().max(1400000), base_report_version: z.number().int().min(1) }).strict().parse(req.body)
+  const input = reportCollaborationSchema.parse(req.body)
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.rpc('save_report_collab_snapshot', { p_occurrence_report_id: id, p_snapshot_base64: input.snapshot_base64, p_base_report_version: input.base_report_version })

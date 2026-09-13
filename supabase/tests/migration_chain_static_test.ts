@@ -139,6 +139,13 @@ Deno.test('report lifecycle integration is executable and authenticated', () => 
   assertStringIncludes(lifecycleIntegration, 'get_occurrence_report_mutation_context')
 })
 
+Deno.test('lifecycle replay fixture changes the canonical policy instead of ignoring a conflict', () => {
+  assertStringIncludes(lifecycleIntegration, 'UPDATE public.role_permission_policies policy')
+  assertStringIncludes(lifecycleIntegration, "SET effect = 'deny'")
+  assertStringIncludes(lifecycleIntegration, "explicit deny fixture policy was not found")
+  assert(!lifecycleIntegration.includes('ON CONFLICT DO NOTHING;\n  IF EXISTS (SELECT 1 FROM public.replay_deleted_report_idempotency'))
+})
+
 Deno.test('1000063 protects direct report RPC calls and DELETE replay', () => {
   assertStringIncludes(reportContract, 'bind_api_idempotency_scope')
   assertStringIncludes(reportContract, 'replay_deleted_report_idempotency')

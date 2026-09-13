@@ -174,14 +174,27 @@ BEGIN
   IF v_replay.is_replay IS DISTINCT FROM true OR v_replay.response_status <> 200 THEN
     RAISE EXCEPTION 'delete replay was not authorized';
   END IF;
-  INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
-  SELECT member.role_id, permission.id, 'teaching', teaching.id, 'deny'
-  FROM public.teaching_members member
-  JOIN public.permissions permission ON permission.key = 'teaching.reports.delete'
-  JOIN public.teachings teaching ON teaching.id = '92000000-0000-4000-8000-000000000001'
-  WHERE member.teaching_id = teaching.id
+  -- The owner policy is seeded by ensure_teaching_owner_policies().  An
+  -- INSERT ... ON CONFLICT DO NOTHING would silently retain that allow row,
+  -- making this regression test claim that deny precedence works while never
+  -- installing a deny.  Update the canonical row in-place so the fixture
+  -- exercises the same unique policy boundary used in production.
+  UPDATE public.role_permission_policies policy
+  SET effect = 'deny'
+  FROM public.teaching_members member,
+       public.permissions permission,
+       public.teachings teaching
+  WHERE policy.role_id = member.role_id
+    AND policy.permission_id = permission.id
+    AND policy.scope_type = 'teaching'
+    AND policy.scope_id = teaching.id
+    AND member.teaching_id = teaching.id
     AND member.user_id = '91000000-0000-4000-8000-000000000001'
-  ON CONFLICT DO NOTHING;
+    AND teaching.id = '92000000-0000-4000-8000-000000000001'
+    AND permission.key = 'teaching.reports.delete';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'explicit deny fixture policy was not found';
+  END IF;
   IF EXISTS (SELECT 1 FROM public.replay_deleted_report_idempotency(
     '91000000-0000-4000-8000-000000000001', 'lifecycle-delete-replay-001',
     'DELETE', '/api/reports/9b00000', '9b000000-0000-4000-8000-000000000001', 'teaching.reports.delete'

@@ -7,14 +7,14 @@ import { setAuditContext } from './context.js'
 const historyFields = 'id,created_at,cancelled_at,course_display_name,source_occurrence_date,source_start_time,source_end_time,source_session_name,source_classroom_name,target_occurrence_date,target_start_time,target_end_time,target_session_name,target_classroom_name'
 const targetFields = 'transfer_id,source_occurrence_id,target_occurrence_id,is_effective_target,target_report_id'
 
-const transferBody = z.object({
+export const transferBody = z.object({
   enrollment_id: z.string().uuid(),
   source_occurrence_id: z.string().uuid(),
   target_occurrence_id: z.string().uuid(),
   report_id: z.string().uuid().nullable().optional(),
 }).strict()
 
-const conflictBody = z.object({
+export const conflictBody = z.object({
   enrollment_id: z.string().uuid(),
   source_occurrence_id: z.string().uuid(),
   target_occurrence_id: z.string().uuid(),
@@ -36,8 +36,8 @@ const conflictBody = z.object({
   }).strict(),
 }).strict()
 
-const repairBody = z.object({ target_occurrence_id: z.string().uuid() }).strict()
-const idBody = z.object({ transfer_id: z.string().uuid() }).strict()
+export const repairBody = z.object({ target_occurrence_id: z.string().uuid() }).strict()
+export const cancelBody = z.object({ transfer_id: z.string().uuid() }).strict()
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
@@ -69,7 +69,7 @@ async function assertPermission(req: Request, sessionId: string | null, action: 
     p_classroom_id: null,
     p_class_session_id: sessionId,
   })
-  setAuditContext(req, { domain: 'teaching', resource: 'enrollments', action, permission: `teaching.enrollments.${action}`, scopeId: sessionId })
+  setAuditContext(req, { domain: 'teaching', resource: 'enrollments', action, permission: `teaching.enrollments.${action}`, scopeId: sessionId, scopeType: 'class_session' })
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to access this enrollment')
 }
 
@@ -79,7 +79,7 @@ async function assertOccurrencePermission(req: Request, occurrenceId: string, ac
   if (occurrence.error) throw mapDatabaseError(occurrence.error)
   if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   const result = await req.db.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: `teaching.occurrences.${action}`, p_classroom_id: null, p_class_session_id: occurrence.data.class_session_id })
-  setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: occurrenceId, action, permission: `teaching.occurrences.${action}`, scopeId: occurrence.data.class_session_id })
+  setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: occurrenceId, action, permission: `teaching.occurrences.${action}`, scopeId: occurrence.data.class_session_id, scopeType: 'class_session' })
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to access this occurrence')
 }
 
@@ -152,7 +152,7 @@ async function resolveConflict(req: Request, res: Response) {
 }
 
 async function cancel(req: Request, res: Response) {
-  const input = idBody.parse(req.body)
+  const input = cancelBody.parse(req.body)
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const permission = await req.db.rpc('can_access_single_lesson_transfer', {
     p_transfer_id: input.transfer_id,

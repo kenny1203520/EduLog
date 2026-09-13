@@ -13,7 +13,7 @@ async function remove(req: Request, res: Response) {
   if (!id) throw new ApiError(400, 'INVALID_ID', 'Student id is required')
   if (!z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Student id is invalid')
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  setAuditContext(req, { domain: 'teaching', resource: 'students', resourceId: id, action: 'delete', permission: 'teaching.students.delete', scopeId: id })
+  setAuditContext(req, { domain: 'teaching', resource: 'students', resourceId: id, action: 'delete', permission: 'teaching.students.delete', scopeId: id, scopeType: 'student' })
   const permission = await req.db.rpc('can_access_student', {
     p_student_id: id,
     p_permission_key: 'teaching.students.delete',
