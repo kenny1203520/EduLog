@@ -92,4 +92,10 @@ describe('resource mutation validation boundary', () => {
     const definition = { ...resources.students, filterable: undefined }
     expect(() => parseFilters(JSON.stringify([{ field: 'name', operator: 'eq', value: 'Alice' }]), definition)).toThrow('The filter is not supported')
   })
+
+  it('exposes report version cleanup as a scoped item delete, not a mutable collection', () => {
+    expect(resources['report-versions'].genericMethods).toEqual(['GET', 'DELETE'])
+    expect(resources['report-versions'].writable).toEqual([])
+    expect(resources['report-versions'].permissions?.delete).toBe('teaching.reports.delete')
+  })
 })

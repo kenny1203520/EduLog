@@ -71,7 +71,11 @@ export const resources: Record<string, ResourceDefinition> = {
   'report-templates': { route: 'report-templates', table: 'report_templates', idColumn: 'id', fields: ['id', 'name', 'content', 'contact_notes', 'class_notes', 'content_document', 'contact_notes_document', 'class_notes_document', 'instructor_id', 'teaching_id', 'created_at', 'updated_at'], writable: ['name', 'content', 'contact_notes', 'class_notes', 'content_document', 'contact_notes_document', 'class_notes_document', 'instructor_id', 'teaching_id'], sortable: ['name', 'created_at', 'updated_at'], searchable: ['name'], permission: 'teaching.templates.list', scope: 'teaching' },
   'copy-templates': { route: 'copy-templates', table: 'copy_templates', idColumn: 'id', fields: ['id', 'user_id', 'template_type', 'scope_type', 'scope_entity_id', 'template_text', 'template_document', 'created_at', 'updated_at'], writable: ['template_type', 'scope_type', 'scope_entity_id', 'template_text', 'template_document'], sortable: ['updated_at', 'created_at', 'template_type', 'scope_type'], searchable: ['template_type', 'scope_type', 'scope_entity_id'], permission: 'system.users.read', scope: 'self', selfAuthorization: true },
   'student-suspensions': { route: 'student-suspensions', table: 'student_suspensions', idColumn: 'id', fields: ['id', 'enrollment_id', 'start_date', 'end_date', 'time_zone', 'reason', 'created_at', 'updated_at'], writable: ['enrollment_id', 'start_date', 'end_date', 'time_zone', 'reason'], sortable: ['start_date', 'end_date', 'created_at', 'updated_at'], searchable: ['reason'], permission: 'teaching.enrollments.list', scope: 'enrollment-child', genericMethods: ['GET'] },
-  'report-versions': { route: 'report-versions', table: 'report_versions', idColumn: 'id', fields: ['id', 'occurrence_report_id', 'version', 'content', 'edited_by', 'snapshot', 'created_at'], writable: [], sortable: ['version', 'created_at'], searchable: [], permission: 'teaching.reports.list', scope: 'report-child', genericMethods: ['GET'] },
+  // Version rows are immutable through the public API.  DELETE is intentionally
+  // the only mutation exposed: enrollment/transfer cleanup removes history
+  // after the parent report has been archived by the domain service.  The item
+  // route resolves the parent report scope before the user-JWT RLS delete.
+  'report-versions': { route: 'report-versions', table: 'report_versions', idColumn: 'id', fields: ['id', 'occurrence_report_id', 'version', 'content', 'edited_by', 'snapshot', 'created_at'], writable: [], sortable: ['version', 'created_at'], searchable: [], permission: 'teaching.reports.list', permissions: { list: 'teaching.reports.list', read: 'teaching.reports.read', delete: 'teaching.reports.delete' }, scope: 'report-child', genericMethods: ['GET', 'DELETE'] },
   holidays: { route: 'holidays', table: 'holidays', idColumn: 'id', fields: ['id', 'name', 'kind', 'start_date', 'end_date', 'classroom_ids', 'class_session_ids', 'teacher_ids', 'time_zone', 'created_at', 'updated_at'], writable: ['name', 'kind', 'start_date', 'end_date', 'classroom_ids', 'class_session_ids', 'teacher_ids', 'time_zone'], sortable: ['name', 'start_date', 'end_date', 'created_at', 'updated_at'], searchable: ['name', 'kind'], permission: 'teaching.holidays.list', scope: 'holiday', genericMethods: ['GET'] },
 }
 export const resourceKeys = Object.keys(resources)
@@ -179,7 +183,6 @@ for (const definition of Object.values(resources)) {
   if (methods.has('POST') && !definition.createSchema) throw new Error(`Resource ${definition.route} is missing createSchema`)
   if (methods.has('PATCH') && !definition.updateSchema) throw new Error(`Resource ${definition.route} is missing updateSchema`)
 }
-
 
 
 
