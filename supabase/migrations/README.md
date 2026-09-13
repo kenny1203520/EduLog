@@ -75,12 +75,13 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000061 | `1000061_scope_and_idempotency_concurrency.sql` | Scope and idempotency concurrency |
 | 1000062 | `1000062_report_lifecycle_atomicity.sql` | Forward-only atomic report lifecycle |
 | 1000063 | `1000063_report_mutation_contract_and_delete_replay.sql` | Report RPC validation and DELETE replay |
+| 1000064 | `1000064_report_delete_replay_rbac.sql` | Current-user RBAC validation for DELETE replay |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply `1000040` through `1000061` in lexical order; `1000041a` is applied between `1000041` and `1000042`.
 
 ## Current canonical chain
 
-The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, then apply `1000062_report_lifecycle_atomicity.sql` and `1000063_report_mutation_contract_and_delete_replay.sql`. Do not use the deleted consolidated migration names; they are not part of the current chain.
+The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, then apply `1000062_report_lifecycle_atomicity.sql`, `1000063_report_mutation_contract_and_delete_replay.sql`, and `1000064_report_delete_replay_rbac.sql`. Do not use the deleted consolidated migration names; they are not part of the current chain.
 
 ## Clean install
 
@@ -88,15 +89,15 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a database at `1000039`, apply the individual `1000040`–`1000061` files in lexical order, then apply `1000062_report_lifecycle_atomicity.sql`. Finish with `supabase/tests/migration_upgrade_assertions.sql`, `supabase/tests/report_lifecycle_integration.sql`, and `supabase/tests/core_rls_security.sql`. Do not edit historical migrations.
+Back up the database first. Apply only migrations not recorded in the migration history. For a database at `1000039`, apply the individual `1000040`–`1000061` files in lexical order, then apply `1000062_report_lifecycle_atomicity.sql`, `1000063_report_mutation_contract_and_delete_replay.sql`, and `1000064_report_delete_replay_rbac.sql`. Finish with `supabase/tests/migration_upgrade_assertions.sql`, `supabase/tests/report_lifecycle_integration.sql`, and `supabase/tests/core_rls_security.sql`. Do not edit historical migrations.
 
 ## Rerun and rollback
 
-The individual `1000040`–`1000063` migrations are written to be rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
+The individual `1000040`–`1000064` migrations are written to be rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
 
 ## Verification
 
-The CI database gate runs clean install, historical upgrade, `1000062` rerun, report lifecycle assertions, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+The CI database gate runs clean install, historical upgrade, `1000062`–`1000064` rerun, report lifecycle and replay assertions, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
 
 ## Append-only history boundary
 

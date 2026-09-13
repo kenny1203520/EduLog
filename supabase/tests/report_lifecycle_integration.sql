@@ -164,6 +164,20 @@ BEGIN
   IF v_replay.is_replay IS DISTINCT FROM true OR v_replay.response_status <> 200 THEN
     RAISE EXCEPTION 'delete replay was not authorized';
   END IF;
+  INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
+  SELECT member.role_id, permission.id, 'teaching', teaching.id, 'deny'
+  FROM public.teaching_members member
+  JOIN public.permissions permission ON permission.key = 'teaching.reports.delete'
+  JOIN public.teachings teaching ON teaching.id = '92000000-0000-4000-8000-000000000001'
+  WHERE member.teaching_id = teaching.id
+    AND member.user_id = '91000000-0000-4000-8000-000000000001'
+  ON CONFLICT DO NOTHING;
+  IF EXISTS (SELECT 1 FROM public.replay_deleted_report_idempotency(
+    '91000000-0000-4000-8000-000000000001', 'lifecycle-delete-replay-001',
+    'DELETE', '/api/reports/9b00000', '9b000000-0000-4000-8000-000000000001', 'teaching.reports.delete'
+  )) THEN
+    RAISE EXCEPTION 'delete replay survived explicit permission deny';
+  END IF;
   DELETE FROM public.teaching_members
   WHERE teaching_id = '92000000-0000-4000-8000-000000000001'
     AND user_id = '91000000-0000-4000-8000-000000000001';

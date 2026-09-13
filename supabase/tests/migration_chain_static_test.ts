@@ -22,6 +22,7 @@ const permissionScope = await readMigration('1000060_permission_scope_and_sessio
 const concurrencyScope = await readMigration('1000061_scope_and_idempotency_concurrency.sql')
 const lifecycle = await readMigration('1000062_report_lifecycle_atomicity.sql')
 const reportContract = await readMigration('1000063_report_mutation_contract_and_delete_replay.sql')
+const replayRbac = await readMigration('1000064_report_delete_replay_rbac.sql')
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
@@ -78,7 +79,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
@@ -147,6 +148,14 @@ Deno.test('1000063 protects direct report RPC calls and DELETE replay', () => {
   assertStringIncludes(lifecycleIntegration, 'out-of-range lifecycle patch unexpectedly succeeded')
   assertStringIncludes(lifecycleIntegration, "set_config('request.jwt.claim.role', 'service_role', true)")
   assertStringIncludes(reportContract, 'GRANT EXECUTE ON FUNCTION public.apply_occurrence_report_lifecycle')
+})
+
+Deno.test('1000064 rechecks current user RBAC during service-role replay', () => {
+  assertStringIncludes(replayRbac, 'resolve_teaching_permission')
+  assertStringIncludes(replayRbac, 'is_teaching_member')
+  assertStringIncludes(replayRbac, 'v_denied')
+  assert(!replayRbac.includes('has_teaching_permission('))
+  assertStringIncludes(replayRbac, "GRANT EXECUTE ON FUNCTION public.replay_deleted_report_idempotency")
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {
