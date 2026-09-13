@@ -88,4 +88,24 @@ describe('generated API contract', () => {
     const parameters = spec.paths['/api/class-sessions']?.get?.parameters ?? []
     expect(parameters.some((parameter) => parameter.$ref === '#/components/parameters/classroom_id')).toBe(true)
   })
+
+  it('defines every shared response reference used by the generated document', () => {
+    const spec = buildOpenApi() as {
+      paths: Record<string, Record<string, { responses?: Record<string, { $ref?: string }> } | undefined>>
+      components: { responses: Record<string, { content?: Record<string, { schema?: { $ref?: string } }> }> }
+    }
+    expect(spec.components.responses.Envelope).toBeDefined()
+    expect(spec.components.responses.Envelope.content?.['application/json']?.schema?.$ref).toBe('#/components/schemas/Envelope')
+    for (const path of Object.values(spec.paths)) {
+      for (const operation of Object.values(path)) {
+        if (!operation?.responses) continue
+        for (const response of Object.values(operation.responses)) {
+          if (response.$ref?.startsWith('#/components/responses/')) {
+            const name = response.$ref.slice('#/components/responses/'.length)
+            expect(spec.components.responses[name]).toBeDefined()
+          }
+        }
+      }
+    }
+  })
 })
