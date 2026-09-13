@@ -99,6 +99,34 @@ BEGIN
   END;
   IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 3 THEN RAISE EXCEPTION 'failed lifecycle patch did not rollback'; END IF;
 
+  BEGIN
+    PERFORM public.apply_occurrence_report_lifecycle(
+      '9b000000-0000-4000-8000-000000000001', 3, '{"unknown_field":true}'::jsonb
+    );
+    RAISE EXCEPTION 'unknown lifecycle patch field unexpectedly succeeded';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'INVALID_REPORT_PATCH_FIELD' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.apply_occurrence_report_lifecycle(
+      '9b000000-0000-4000-8000-000000000001', 3, '{"is_completed":"yes"}'::jsonb
+    );
+    RAISE EXCEPTION 'wrong lifecycle patch type unexpectedly succeeded';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'INVALID_REPORT_PATCH' THEN RAISE; END IF;
+  END;
+  BEGIN
+    PERFORM public.apply_occurrence_report_lifecycle(
+      '9b000000-0000-4000-8000-000000000001', 3, '{"class_participation":6}'::jsonb
+    );
+    RAISE EXCEPTION 'out-of-range lifecycle patch unexpectedly succeeded';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'INVALID_REPORT_PATCH' THEN RAISE; END IF;
+  END;
+  IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 3 THEN
+    RAISE EXCEPTION 'rejected lifecycle patch mutated report';
+  END IF;
+
   SELECT set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000002', true);
   IF public.can_mutate_occurrence_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.update') THEN
     RAISE EXCEPTION 'cross-teaching report write was authorized';
@@ -110,6 +138,7 @@ END;
 $$;
 
 SET LOCAL ROLE service_role;
+SELECT set_config('request.jwt.claim.role', 'service_role', true);
 INSERT INTO public.api_idempotency_keys(
   user_id, idempotency_key, method, route, response_status, response_body,
   resource_id, teaching_id, classroom_id, class_session_id, permission_key

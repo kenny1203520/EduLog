@@ -123,4 +123,22 @@ describe('generated API contract', () => {
     const duplicates = [...operationLocations.entries()].filter(([, locations]) => locations.length > 1)
     expect(duplicates).toEqual([])
   })
+
+  it('does not advertise unrestricted bodies for formal mutation operations', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    const unrestricted: string[] = []
+    for (const [path, pathItem] of Object.entries(spec.paths)) {
+      for (const [method, operation] of Object.entries(pathItem ?? {})) {
+        const schema = operation?.requestBody?.content?.['application/json']?.schema
+        if (schema?.additionalProperties === true && path !== '/api/rpc/{name}') unrestricted.push(`${method.toUpperCase()} ${path}`)
+      }
+    }
+    expect(unrestricted).toEqual([])
+  })
+
+  it('documents report progress letters with the database-compatible format', () => {
+    const spec = buildOpenApi() as { components: { schemas: Record<string, any> } }
+    expect(spec.components.schemas.ReportUpdateMutation.properties.progress_letter.pattern).toBe('^[A-Z](-[A-Z])?$')
+    expect(spec.components.schemas.ReportCreateMutation.additionalProperties).toBe(false)
+  })
 })

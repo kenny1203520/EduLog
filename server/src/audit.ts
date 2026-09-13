@@ -8,7 +8,7 @@ export function safeUuid(value: unknown): string | null {
 }
 
 export function auditRequest(req: Request, status: number) {
-  if (!req.adminDb || !req.user || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return
+  if (!req.adminDb || !req.user || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return Promise.resolve()
   const segments = req.path.split('/').filter(Boolean)
   const resource = req.auditContext?.resource ?? segments[1] ?? 'unknown'
   const outcome = status >= 500 ? 'failure' : status >= 400 ? 'denied' : 'success'
@@ -22,10 +22,14 @@ export function auditRequest(req: Request, status: number) {
   const scopeId = safeUuid(req.auditContext?.scopeId) ?? teachingId
   const scopeType = req.auditContext?.scopeType ?? (scopeId === teachingId && teachingId ? 'teaching' : null)
   const event = { actor_user_id: req.user.id, action: req.auditContext?.action ?? req.method.toLowerCase(), domain: req.auditContext?.domain ?? domain, resource, resource_id: resourceId, scope_id: scopeId, request_id: req.requestId, outcome, metadata: { user_id: req.user.id, teaching_id: teachingId, resource, resource_id: resourceId, scope_type: scopeType, scope_id: scopeId, permission: req.auditContext?.permission ?? null, error_code: req.auditContext?.errorCode ?? null, route: req.route?.path ?? req.path, method: req.method, status, latency_ms: Math.round(performance.now() - req.startedAt), request_id: req.requestId, trace_id: req.traceId, outcome } }
-  void insertAudit(req.adminDb, event, req)
+  return insertAudit(req.adminDb, event, req)
 }
 
 async function insertAudit(client: SupabaseClient, event: Record<string, unknown>, req: Request) {
-  const { error } = await client.from('audit_events').insert(event)
-  if (error) req.log.error({ type: 'audit_write_failed', outcome: 'failure', code: 'AUDIT_WRITE_FAILED', request_id: req.requestId, trace_id: req.traceId }, 'audit_write_failed')
+  try {
+    const { error } = await client.from('audit_events').insert(event)
+    if (error) req.log.error({ type: 'audit_write_failed', outcome: 'failure', code: 'AUDIT_WRITE_FAILED', request_id: req.requestId, trace_id: req.traceId }, 'audit_write_failed')
+  } catch {
+    req.log.error({ type: 'audit_write_failed', outcome: 'failure', code: 'AUDIT_WRITE_FAILED', request_id: req.requestId, trace_id: req.traceId }, 'audit_write_failed')
+  }
 }

@@ -148,7 +148,9 @@ BEGIN
     RAISE EXCEPTION 'INVALID_REPORT_PATCH';
   END IF;
   IF p_patch ? 'progress_letter' AND p_patch->'progress_letter' <> 'null'::jsonb
-     AND (jsonb_typeof(p_patch->'progress_letter') <> 'string' OR length(p_patch->>'progress_letter') > 32) THEN
+     AND (jsonb_typeof(p_patch->'progress_letter') <> 'string'
+          OR length(p_patch->>'progress_letter') > 32
+          OR p_patch->>'progress_letter' !~ '^[A-Z](-[A-Z])?$') THEN
     RAISE EXCEPTION 'INVALID_REPORT_PATCH';
   END IF;
   IF p_patch ? 'absence_reason' AND p_patch->'absence_reason' <> 'null'::jsonb
