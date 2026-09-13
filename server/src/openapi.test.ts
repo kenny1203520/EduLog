@@ -163,5 +163,11 @@ describe('generated API contract', () => {
       'classroom_behavior', 'contact_notes', 'class_notes', 'content', 'external_link',
     ]))
     expect(spec.paths['/api/class-sessions/{sessionId}/teachers']?.post?.requestBody?.content?.['application/json']?.schema?.$ref).toBe('#/components/schemas/TeacherAssignmentMutation')
+    const teacherListParameters = spec.paths['/api/class-sessions/{sessionId}/teachers']?.get?.parameters ?? []
+    expect(teacherListParameters.some((parameter: any) => parameter.name === 'on_date')).toBe(true)
+    const teacherDeleteParameters = spec.paths['/api/class-sessions/{sessionId}/teachers']?.delete?.parameters ?? []
+    expect(teacherDeleteParameters.some((parameter: any) => parameter.name === 'teacher_id')).toBe(true)
+    expect(teacherDeleteParameters.some((parameter: any) => parameter.name === 'effective_from')).toBe(true)
+    expect(spec.paths['/api/enrollment-transfers/single-lesson']?.post?.requestBody?.content?.['application/json']?.schema?.$ref).toBe('#/components/schemas/SingleLessonTransferMutation')
   })
 })

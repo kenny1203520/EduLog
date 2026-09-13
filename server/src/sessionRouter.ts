@@ -58,7 +58,7 @@ async function authorize(req: Request, action: 'read' | 'create' | 'update' | 'd
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify class sessions')
 }
 
-async function authorizeRelatedRead(req: Request, permission: string, sessionId: string) {
+export async function authorizeRelatedRead(req: Request, permission: string, sessionId: string) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const result = await req.db.rpc('has_api_permission', {
     p_user_id: req.user.id,

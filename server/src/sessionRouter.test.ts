@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
+import type { Request } from 'express'
+import { authorizeRelatedRead } from './sessionRouter.js'
 
 describe('class session API contract', () => {
   it('uses the guarded schedule RPC and explicit mutation contract', () => {
@@ -26,5 +28,21 @@ describe('class session API contract', () => {
     expect(source).toContain("select('id', { count: 'exact', head: true })")
     expect(source).toContain("from('occurrence_reports').select('class_occurrence_id')")
     expect(source).not.toContain("from('occurrence_reports').select('*')")
+  })
+
+  it('denies a missing related permission before any aggregate data query', async () => {
+    const from = vi.fn()
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null })
+    const req = { db: { rpc, from }, user: { id: '00000000-0000-4000-8000-000000000001' } } as unknown as Request
+    await expect(authorizeRelatedRead(req, 'teaching.reports.list', '10000000-0000-4000-8000-000000000001')).rejects.toMatchObject({ status: 403, code: 'PERMISSION_DENIED' })
+    expect(rpc).toHaveBeenCalledOnce()
+    expect(from).not.toHaveBeenCalled()
+  })
+
+  it('allows a related permission through the same canonical RPC boundary', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+    const req = { db: { rpc }, user: { id: '00000000-0000-4000-8000-000000000001' } } as unknown as Request
+    await expect(authorizeRelatedRead(req, 'teaching.enrollments.list', '10000000-0000-4000-8000-000000000001')).resolves.toBeUndefined()
+    expect(rpc).toHaveBeenCalledWith('has_api_permission', expect.objectContaining({ p_permission_key: 'teaching.enrollments.list', p_class_session_id: '10000000-0000-4000-8000-000000000001' }))
   })
 })

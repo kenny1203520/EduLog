@@ -2,13 +2,12 @@ import { z } from 'zod'
 import { resources, resourceSchemas, teachingMemberCreateSchema, teachingMemberUpdateSchema } from './resources.js'
 import { enrollmentBodySchema, enrollmentCreateSchema } from './enrollmentRouter.js'
 import { occurrenceBodySchema, occurrenceGenerationSchema } from './occurrenceRouter.js'
-import { reportCreateSchema, reportUpdateSchema } from './reportRouter.js'
+import { reportCreateSchema, reportUpdateSchema, reportCollaborationSchema } from './reportRouter.js'
 import { sessionSchema } from './sessionRouter.js'
 import { suspensionCreateSchema, suspensionUpdateSchema } from './suspensionRouter.js'
 import { holidayCreateSchema, holidayUpdateSchema } from './holidayRouter.js'
 import { teacherAssignmentCreateSchema, teacherAssignmentUpdateSchema } from './teacherAssignmentRouter.js'
 import { conflictBody, transferBody, repairBody, cancelBody } from './transferRouter.js'
-import { reportCollaborationSchema } from './reportRouter.js'
 import { permissionForResource } from './authorization.js'
 
 const errorResponses = {
@@ -124,11 +123,16 @@ export function buildOpenApi() {
   addSpecialized('/api/occurrences/generate', 'post', 'occurrences_generate', 'teaching.occurrences.create', '200', [mutationParam], refBody('OccurrenceGenerationMutation'))
   addSpecialized('/api/reports/{id}/collaboration', 'get', 'report_collaboration_read', 'teaching.reports.read', '200', [idParam])
   addSpecialized('/api/reports/{id}/collaboration', 'post', 'report_collaboration_save', 'teaching.reports.update', '200', [idParam, mutationParam], refBody('ReportCollaborationMutation'))
+  const teacherAssignmentDateParameter = { name: 'on_date', in: 'query', required: false, schema: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' } }
+  const teacherAssignmentRemoveParameters = [
+    { name: 'teacher_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+    { name: 'effective_from', in: 'query', required: false, schema: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' } },
+  ]
   for (const [method, operationId, permission, status] of [
     ['get', 'class_session_teachers_by_session_list', 'teaching.class_sessions.list', '200'],
     ['post', 'class_session_teachers_create', 'teaching.class_sessions.update', '201'],
     ['delete', 'class_session_teachers_delete', 'teaching.class_sessions.update', '200'],
-  ] as const) addSpecialized('/api/class-sessions/{sessionId}/teachers', method, operationId, permission, status, [pathParam('sessionId'), ...(method === 'get' ? [] : [mutationParam])], method === 'post' ? refBody('TeacherAssignmentMutation') : undefined)
+  ] as const) addSpecialized('/api/class-sessions/{sessionId}/teachers', method, operationId, permission, status, [pathParam('sessionId'), ...(method === 'get' ? [teacherAssignmentDateParameter] : method === 'delete' ? [...teacherAssignmentRemoveParameters, mutationParam] : [mutationParam])], method === 'post' ? refBody('TeacherAssignmentMutation') : undefined)
   addSpecialized('/api/class-sessions/{sessionId}/teachers/{assignmentId}', 'patch', 'class_session_teachers_update', 'teaching.class_sessions.update', '200', [pathParam('sessionId'), pathParam('assignmentId'), mutationParam], refBody('TeacherAssignmentUpdateMutation'))
   addSpecialized('/api/class-sessions/{sessionId}/teachers/{teacherId}', 'delete', 'class_session_teachers_delete_teacher', 'teaching.class_sessions.update', '200', [pathParam('sessionId'), pathParam('teacherId'), mutationParam])
   paths['/api/class-sessions'] = {
@@ -261,7 +265,7 @@ export function buildOpenApi() {
     components: {
       securitySchemes: { cookieAuth: { type: 'apiKey', in: 'cookie', name: 'edulog_access' }, bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
       parameters: { ResourceId: { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, Filters: { name: 'filters', in: 'query', description: 'JSON array of allowlisted field filters', schema: { type: 'string', maxLength: 8000 } }, Or: { name: 'or', in: 'query', description: 'Allowlisted PostgREST OR expression', schema: { type: 'string', maxLength: 2000 } }, Limit: { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 25 } }, Offset: { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } }, Sort: { name: 'sort', in: 'query', schema: { type: 'string' } }, Search: { name: 'search', in: 'query', schema: { type: 'string' } }, Status: { name: 'status', in: 'query', schema: { type: 'string' } }, ...Object.fromEntries(['teaching_id', 'course_id', 'classroom_id', 'class_session_id', 'class_occurrence_id', 'lesson_id', 'student_id', 'teacher_id', 'instructor_id', 'user_id', 'enrollment_id', 'occurrence_report_id', 'entity_type', 'entity_id', 'entity_ids', 'template_type', 'scope_type', 'scope_entity_id'].map((field) => [field, { name: field, in: 'query', schema: { type: 'string', ...(field.endsWith('_id') || field === 'entity_id' || field === 'scope_entity_id' ? { format: 'uuid' } : {}), ...(field === 'entity_ids' ? { description: 'Comma-separated UUIDs' } : {}) } }])), IdempotencyKey: { name: 'Idempotency-Key', in: 'header', required: true, schema: { type: 'string', minLength: 8, maxLength: 255 } } },
-      schemas: { ...specializedSchemas, Envelope: { type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'], properties: { data: {}, meta: { type: 'object' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } }, Error: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object' } } } } }, OccurrenceGenerationMutation: runtimeDocument(occurrenceGenerationSchema), ClassSessionMutation: runtimeDocument(sessionSchema), LoginRequest: { type: 'object', required: ['email', 'password'], additionalProperties: false, properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', minLength: 1 } } }, SingleLessonTransferMutation: { type: 'object', required: ['enrollment_id', 'source_occurrence_id', 'target_occurrence_id'], additionalProperties: false, properties: { enrollment_id: { type: 'string', format: 'uuid' }, source_occurrence_id: { type: 'string', format: 'uuid' }, target_occurrence_id: { type: 'string', format: 'uuid' }, report_id: { type: ['string', 'null'], format: 'uuid' } } } },
+      schemas: { ...specializedSchemas, Envelope: { type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'], properties: { data: {}, meta: { type: 'object' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } }, Error: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object' } } } } }, OccurrenceGenerationMutation: runtimeDocument(occurrenceGenerationSchema), ClassSessionMutation: runtimeDocument(sessionSchema), LoginRequest: { type: 'object', required: ['email', 'password'], additionalProperties: false, properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', minLength: 1 } } }, SingleLessonTransferMutation: runtimeDocument(transferBody) },
       responses: {
         Envelope: { description: 'EduLog API response envelope', content: { 'application/json': { schema: { $ref: '#/components/schemas/Envelope' } } } },
         ...Object.fromEntries(Object.entries({ BadRequest: 'Invalid request', Unauthorized: 'Authentication required', Forbidden: 'Permission denied', NotFound: 'Resource not found', Conflict: 'Resource conflict', PayloadTooLarge: 'Payload too large', UnprocessableEntity: 'Validation failed', RateLimited: 'Rate limit exceeded', InternalError: 'Unexpected error' }).map(([name, description]) => [name, { description, content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }]))

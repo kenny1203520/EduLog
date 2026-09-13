@@ -173,7 +173,7 @@ async function update(req: Request, res: Response) {
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, teachingId: context.teaching_id, permission: 'teaching.reports.update', scopeId: context.class_occurrence_id, scopeType: 'class_occurrence' })
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
-async function remove(req: Request, res: Response) {
+export async function remove(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: 'delete', permission: 'teaching.reports.delete', scopeType: 'occurrence_report' })
