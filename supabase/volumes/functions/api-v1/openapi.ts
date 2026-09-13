@@ -11,6 +11,9 @@ export function createOpenApiDocument() {
     components: {
       securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
       parameters: {
+        ResourceId: { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        TeachingId: { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        UserId: { name: 'user_id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
         Limit: { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 50 } },
         Offset: { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } },
         Sort: { name: 'sort', in: 'query', schema: { type: 'string', example: 'created_at:desc' } },
@@ -21,13 +24,17 @@ export function createOpenApiDocument() {
         CollectionMeta: { type: 'object', required: ['limit', 'offset', 'total', 'sort'], properties: { limit: { type: 'integer' }, offset: { type: 'integer' }, total: { type: 'integer', minimum: 0 }, sort: { type: 'string' } } },
         ApiEnvelope: { type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'], properties: { data: {}, meta: { oneOf: [{ '$ref': '#/components/schemas/CollectionMeta' }, { type: 'null' }] }, request_id: { type: 'string' }, trace_id: { type: 'string' } } },
       },
-      responses: {},
+      responses: {
+        // Keep the shared response component because older generated specs
+        // referenced it even when an operation used the envelope inline.
+        Envelope: { description: 'EduLog API response envelope', content: { 'application/json': { schema: { '$ref': '#/components/schemas/ApiEnvelope' } } } },
+      },
     },
     'x-idempotency': { methods: ['POST', 'PATCH', 'DELETE'], header: 'Idempotency-Key', replay: 'same status and data with current request_id and trace_id' },
     'x-pagination': { parameters: ['limit', 'offset', 'search', 'sort', 'filter[field]'], sort: 'field:asc|desc; supported fields are resource-specific' },
     paths: {
-      '/health': { get: { security: [], responses: { '200': { description: 'Healthy' } } } },
-      '/me': { get: { responses: { '200': { description: 'Current authenticated user' } } } },
+      '/health': { get: { operationId: 'healthCheck', security: [], responses: { '200': { description: 'Healthy' } } } },
+      '/me': { get: { operationId: 'getCurrentUser', responses: { '200': { description: 'Current authenticated user' } } } },
       '/teachings/{id}/members': {},
       '/teachings/{id}/members/{user_id}': {},
     },
@@ -50,12 +57,13 @@ export function createOpenApiDocument() {
   applyResourceOpenApi(document, commonErrors)
   const memberBody = { type: 'object', additionalProperties: false, properties: { user_id: { type: 'string', format: 'uuid' }, role_id: { type: 'string', format: 'uuid', nullable: true }, status: { type: 'string', enum: ['active', 'suspended', 'removed'] }, effective_from: { type: 'string', format: 'date' }, effective_to: { type: 'string', format: 'date', nullable: true } } }
   document.paths['/teachings/{id}/members'] = {
-    get: { 'x-permission': 'teaching.members.list', parameters: [{ '$ref': '#/components/parameters/Limit' }, { '$ref': '#/components/parameters/Offset' }, { '$ref': '#/components/parameters/Sort' }], responses: { '200': { description: 'Teaching members' }, ...commonErrors } },
-    post: { 'x-permission': 'teaching.members.manage', 'x-idempotency-required': true, parameters: [{ '$ref': '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: { ...memberBody, required: ['user_id'] } } } }, responses: { '201': { description: 'Member added' }, ...commonErrors } },
+    get: { operationId: 'listTeachingMembers', 'x-permission': 'teaching.members.list', parameters: [{ '$ref': '#/components/parameters/TeachingId' }, { '$ref': '#/components/parameters/Limit' }, { '$ref': '#/components/parameters/Offset' }, { '$ref': '#/components/parameters/Sort' }], responses: { '200': { description: 'Teaching members' }, ...commonErrors } },
+    post: { operationId: 'createTeachingMember', 'x-permission': 'teaching.members.manage', 'x-idempotency-required': true, parameters: [{ '$ref': '#/components/parameters/TeachingId' }, { '$ref': '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: { ...memberBody, required: ['user_id'] } } } }, responses: { '201': { description: 'Member added' }, ...commonErrors } },
   }
   document.paths['/teachings/{id}/members/{user_id}'] = {
-    patch: { 'x-permission': 'teaching.members.manage', 'x-idempotency-required': true, parameters: [{ '$ref': '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: memberBody } } }, responses: { '200': { description: 'Member updated' }, ...commonErrors } },
-    delete: { 'x-permission': 'teaching.members.manage', 'x-idempotency-required': true, parameters: [{ '$ref': '#/components/parameters/IdempotencyKey' }], responses: { '200': { description: 'Member removed' }, ...commonErrors } },
+    get: { operationId: 'getTeachingMember', 'x-permission': 'teaching.members.read', parameters: [{ '$ref': '#/components/parameters/TeachingId' }, { '$ref': '#/components/parameters/UserId' }], responses: { '200': { description: 'Teaching member' }, ...commonErrors } },
+    patch: { operationId: 'updateTeachingMember', 'x-permission': 'teaching.members.manage', 'x-idempotency-required': true, parameters: [{ '$ref': '#/components/parameters/TeachingId' }, { '$ref': '#/components/parameters/UserId' }, { '$ref': '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: memberBody } } }, responses: { '200': { description: 'Member updated' }, ...commonErrors } },
+    delete: { operationId: 'deleteTeachingMember', 'x-permission': 'teaching.members.manage', 'x-idempotency-required': true, parameters: [{ '$ref': '#/components/parameters/TeachingId' }, { '$ref': '#/components/parameters/UserId' }, { '$ref': '#/components/parameters/IdempotencyKey' }], responses: { '200': { description: 'Member removed' }, ...commonErrors } },
   }
   return document
 }

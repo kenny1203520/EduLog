@@ -130,7 +130,7 @@ describe('generated API contract', () => {
 
   it('documents cookie authentication for protected operations', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
-    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/healthz', 'GET /api/openapi.json'])
+    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/auth/csrf', 'GET /api/healthz', 'GET /api/openapi.json'])
     for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const [method, operation] of Object.entries(pathItem ?? {})) {
         if (!operation || !operation.operationId || operation['x-websocket']) continue
@@ -138,6 +138,19 @@ describe('generated API contract', () => {
         expect(operation.security, `${method.toUpperCase()} ${path}`).toEqual([{ cookieAuth: [] }])
       }
     }
+  })
+
+  it('documents auth CSRF and user search routes that are mounted outside the registry', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    expect(spec.paths['/api/auth/csrf']?.get?.operationId).toBe('csrfToken')
+    expect(spec.paths['/api/users/search']?.get?.operationId).toBe('users_search')
+    expect(spec.paths['/api/users/search']?.get?.['x-permission']).toBe('system.users.list')
+  })
+
+  it('declares valid cookie and bearer security schemes', () => {
+    const spec = buildOpenApi() as { components: { securitySchemes: Record<string, any> } }
+    expect(spec.components.securitySchemes.cookieAuth).toEqual({ type: 'apiKey', in: 'cookie', name: 'edulog_access' })
+    expect(spec.components.securitySchemes.bearerAuth).toEqual({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
   })
 
   it('generates globally unique operation ids', () => {

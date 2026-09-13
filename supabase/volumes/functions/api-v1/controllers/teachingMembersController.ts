@@ -62,6 +62,13 @@ export const handleTeachingMemberRoutes: RouteHandler = async ({ ctx, req, url, 
 
   if (itemMatch) {
     const userId = itemMatch[2]
+    if (req.method === 'GET') {
+      await requirePermission(ctx, 'teaching.members.read', null, null, teachingId)
+      const { data, error } = await ctx.db.from('teaching_members').select(memberSelect).eq('teaching_id', teachingId).eq('user_id', userId).maybeSingle()
+      if (error) throw new ApiError(500, 'DATABASE_ERROR', 'Unable to load teaching member')
+      if (!data) throw new ApiError(404, 'MEMBER_NOT_FOUND', 'Teaching member not found')
+      return response({ data, meta: null, request_id: requestId }, 200, requestId, headers)
+    }
     await requirePermission(ctx, 'teaching.members.manage', null, null, teachingId)
     if (req.method === 'PATCH') {
       const body = await parseJson(req) as Record<string, unknown>

@@ -63,7 +63,9 @@ export function buildOpenApi() {
     '/api/auth/login': { post: { operationId: 'login', requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/LoginRequest' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/auth/refresh': { post: { operationId: 'refresh', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/auth/logout': { post: { operationId: 'logout', responses: { '204': { description: 'Session cleared' }, ...errorResponses } } },
+    '/api/auth/csrf': { get: { operationId: 'csrfToken', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
     '/api/auth/me': { get: { operationId: 'me', security: [{ cookieAuth: [] }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
+    '/api/users/search': { get: { operationId: 'users_search', security: [{ cookieAuth: [] }], 'x-permission': 'system.users.list', parameters: [{ name: 'query', in: 'query', required: true, schema: { type: 'string', minLength: 1, maxLength: 200 } }, { name: 'only_unlinked', in: 'query', required: false, schema: { type: 'boolean' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } },
   }
   for (const def of Object.values(resources)) {
     const collection = `/api/${def.route}`
