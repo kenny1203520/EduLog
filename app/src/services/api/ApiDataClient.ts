@@ -12,6 +12,17 @@ function stringArg(args: Record<string, unknown>, key: string) {
   return typeof args[key] === 'string' ? args[key] as string : null
 }
 
+// Ownership is assigned by the API's user-JWT Supabase client/RLS.  Keeping
+// client supplied ownership fields out of compatibility writes prevents the
+// legacy facade from turning otherwise valid child mutations into 422s and
+// prevents callers from attempting to move a row between owners.
+function sanitizeWritePayload(resource: string, payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload
+  if (resource === 'teachers' || resource === 'teaching-members') return payload
+  const { user_id: _userId, ...safePayload } = payload as Record<string, unknown>
+  return safePayload
+}
+
 async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>): Promise<{ data: T; error: null } | null> {
   const occurrenceId = stringArg(args, 'p_occurrence_id')
   if (name === 'get_effective_occurrence_enrollment_ids' && occurrenceId) {
@@ -178,7 +189,8 @@ class ApiQuery implements PromiseLike<QueryResult> {
         else { const query = new URLSearchParams({ limit: String(this.limitValue ?? 100), offset: String(this.offsetValue) }); if (this.sort) query.set('sort', this.sort); if (this.filters.length) query.set('filters', JSON.stringify(this.filters)); if (this.orExpression) query.set('or', this.orExpression); response = await apiV1Client.get(`/${this.resource}?${query.toString()}`) }
         const rows = Array.isArray(response.data) ? response.data : response.data == null ? [] : [response.data]; const data = this.expectSingle ? (rows[0] ?? null) : rows; if (this.expectSingle && data == null && !this.allowMissing) return { data: null, error: { message: 'No rows found' } }; return { data, error: null, count: typeof response.meta?.total === 'number' ? response.meta.total : rows.length }
       }
-      const payloads = Array.isArray(this.payload) ? this.payload : [this.payload]
+      const payloads = (Array.isArray(this.payload) ? this.payload : [this.payload])
+        .map((payload) => sanitizeWritePayload(this.resource, payload))
       const body = this.resource === 'reports' ? reportPayload(payloads[0], this.filters) : payloads[0]
       if (this.resource === 'teaching-members') {
         const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {}
@@ -229,7 +241,24 @@ class ApiQuery implements PromiseLike<QueryResult> {
 
 export const apiDataClient = {
   from(table: string) { return new ApiQuery(table) },
-  auth: { async getUser() { try { const response = await apiV1Client.get<any>('/auth/me'); return { data: { user: response.data }, error: null } } catch (error) { return { data: { user: null }, error: toError(error) } } }, async getSession() { return { data: { session: null }, error: null } } },
+  auth: {
+    async getUser() {
+      try {
+        const response = await apiV1Client.get<any>('/auth/me')
+        return { data: { user: response.data }, error: null }
+      } catch (error) {
+        return { data: { user: null }, error: toError(error) }
+      }
+    },
+    async getSession() {
+      try {
+        const response = await apiV1Client.get<any>('/auth/me')
+        return { data: { session: response.data ? { user: response.data } : null }, error: null }
+      } catch (error) {
+        return { data: { session: null }, error: toError(error) }
+      }
+    },
+  },
   async rpc<T = any>(name: string, args: Record<string, unknown> = {}) {
     try {
       const canonical = await invokeCanonicalRpc<T>(name, args)

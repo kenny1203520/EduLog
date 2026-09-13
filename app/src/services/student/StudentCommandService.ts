@@ -24,7 +24,7 @@ export class StudentCommandService {
 
         const { data, error } = await apiDataClient
             .from('students')
-            .insert({ ...this.normalizeStudent(student), user_id: user.id })
+            .insert(this.normalizeStudent(student))
             .select()
             .single()
 
@@ -106,7 +106,7 @@ export class StudentCommandService {
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-contacts', contact, 'v1')).data
         const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const { data, error } = await apiDataClient.from('student_contacts').insert({ ...contact, user_id: user.id }).select().single()
+        const { data, error } = await apiDataClient.from('student_contacts').insert(contact).select().single()
         if (error) throw new Error(error.message)
         return data
     }
@@ -130,7 +130,7 @@ export class StudentCommandService {
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-schools', { ...school, time_zone: timeZone }, 'v1')).data
         const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const { data, error } = await apiDataClient.from('student_schools').insert({ ...school, time_zone: timeZone, user_id: user.id }).select().single()
+        const { data, error } = await apiDataClient.from('student_schools').insert({ ...school, time_zone: timeZone }).select().single()
         if (error) throw new Error(error.message)
         return data
     }
@@ -157,7 +157,7 @@ export class StudentCommandService {
         if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<any>('student-credentials', credential, 'v1')).data
         const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
-        const { data, error } = await apiDataClient.from('student_credentials').insert({ ...credential, user_id: user.id }).select().single()
+        const { data, error } = await apiDataClient.from('student_credentials').insert(credential).select().single()
         if (error) throw new Error(error.message)
         return data
     }

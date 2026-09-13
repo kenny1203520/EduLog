@@ -240,7 +240,7 @@ export class TeacherService {
 
         const { data, error } = await apiDataClient
             .from('teacher_credentials')
-            .insert({ ...credential, user_id: user.id })
+            .insert(credential)
             .select()
             .single()
 

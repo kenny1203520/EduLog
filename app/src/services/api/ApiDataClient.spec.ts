@@ -47,6 +47,27 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(result.data).toEqual([{ id: 'created' }, { id: 'created' }])
   })
 
+  it('does not forward client-controlled ownership on child writes', async () => {
+    await apiDataClient.from('student_contacts').insert({
+      student_id: '00000000-0000-4000-8000-000000000001',
+      name: 'Parent',
+      user_id: '00000000-0000-4000-8000-000000000099',
+    })
+
+    expect(postMock).toHaveBeenCalledWith('/student-contacts', {
+      student_id: '00000000-0000-4000-8000-000000000001',
+      name: 'Parent',
+    })
+  })
+
+  it('exposes the BFF session instead of returning a permanent null session', async () => {
+    getMock.mockResolvedValueOnce({ data: { id: 'user-1' }, meta: {}, request_id: 'r', trace_id: 't' })
+    const result = await apiDataClient.auth.getSession()
+    expect(getMock).toHaveBeenCalledWith('/auth/me')
+    expect(result.data.session).toEqual({ user: { id: 'user-1' } })
+    expect(result.error).toBeNull()
+  })
+
   it('maps known compatibility RPCs to scoped REST operations', async () => {
     getMock.mockResolvedValueOnce({ data: ['enrollment-1'], meta: {}, request_id: 'r', trace_id: 't' })
     const result = await apiDataClient.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: 'occurrence-1' })
