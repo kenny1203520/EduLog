@@ -93,6 +93,16 @@ describe('resource mutation validation boundary', () => {
     expect(() => parseFilters(JSON.stringify([{ field: 'name', operator: 'eq', value: 'Alice' }]), definition)).toThrow('The filter is not supported')
   })
 
+  it('registers explicit filter allowlists for every resource without exposing credential secrets', () => {
+    for (const definition of Object.values(resources)) {
+      expect(definition.filterable?.length).toBeGreaterThan(0)
+      expect(definition.filterable).not.toContain('password')
+      expect(definition.filterable).not.toContain('gov_id')
+    }
+    expect(resources.reports.filterable).toContain('class_occurrences.occurrence_date')
+    expect(resources['student-credentials'].filterable).toContain('student_id')
+  })
+
   it('exposes report version cleanup as a scoped item delete, not a mutable collection', () => {
     expect(resources['report-versions'].genericMethods).toEqual(['GET', 'DELETE'])
     expect(resources['report-versions'].writable).toEqual([])

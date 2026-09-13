@@ -80,6 +80,55 @@ export const resources: Record<string, ResourceDefinition> = {
 }
 export const resourceKeys = Object.keys(resources)
 
+// Query filters are opt-in.  The compatibility client serializes Supabase
+// query-builder predicates into `filters`, so leaving this registry empty
+// makes otherwise valid list/search/date-range operations fail closed with
+// INVALID_FILTER.  Keep sensitive columns out of this map: collection
+// filtering must not become an existence oracle for credentials or identity
+// fields.  Relation paths are explicit because the user-JWT repository may
+// filter through an allowlisted PostgREST relation.
+const filterableFieldsByResource: Record<string, readonly string[]> = {
+  'user-preferences': ['user_id'],
+  'visibility-preferences': ['id', 'user_id', 'entity_type', 'entity_id', 'is_hidden'],
+  users: ['id', 'display_name', 'email'],
+  roles: ['id', 'code', 'name', 'is_system'],
+  permissions: ['id', 'key', 'domain', 'resource', 'action'],
+  'audit-events': ['id', 'actor_user_id', 'action', 'domain', 'resource', 'resource_id', 'scope_id', 'outcome'],
+  teachings: ['id', 'owner_user_id', 'is_quarantine'],
+  courses: ['id', 'teaching_id', 'user_id', 'subject', 'stage', 'display_name'],
+  lessons: ['id', 'course_id', 'user_id', 'sequence', 'title'],
+  'classroom-schedules': ['id', 'classroom_id', 'user_id', 'day_of_week'],
+  'class-session-schedule-rules': ['id', 'class_session_id', 'schedule_kind', 'occurrence_date', 'day_of_week'],
+  classrooms: ['id', 'teaching_id', 'user_id', 'name'],
+  'class-sessions': ['id', 'teaching_id', 'classroom_id', 'user_id', 'name', 'start_date', 'end_date'],
+  'class-session-teachers': ['id', 'class_session_id', 'teacher_id', 'role_id', 'effective_from'],
+  students: ['id', 'user_id', 'name'],
+  'student-contacts': ['id', 'student_id', 'name', 'relation'],
+  'student-schools': ['id', 'student_id', 'name', 'status', 'grade', 'class'],
+  'student-credentials': ['id', 'student_id', 'platform', 'username'],
+  teachers: ['id', 'user_id', 'name', 'email'],
+  'teacher-credentials': ['id', 'teacher_id', 'platform', 'username'],
+  enrollments: ['id', 'student_id', 'course_id', 'classroom_id', 'class_session_id', 'status', 'user_id'],
+  occurrences: ['id', 'class_session_id', 'occurrence_date', 'status', 'teacher_ids', 'notes', 'is_conducted'],
+  reports: [
+    'id', 'enrollment_id', 'class_occurrence_id', 'lesson_id', 'attendance_status',
+    'absence_reason', 'version', 'last_edited_by', 'content', 'class_occurrences.occurrence_date',
+    'class_occurrences.class_session_id', 'class_occurrences.class_sessions.classroom_id',
+    'enrollments.course_id',
+  ],
+  'report-templates': ['id', 'teaching_id', 'instructor_id', 'name'],
+  'copy-templates': ['id', 'user_id', 'template_type', 'scope_type', 'scope_entity_id'],
+  'student-suspensions': ['id', 'enrollment_id', 'start_date', 'end_date'],
+  'report-versions': ['id', 'occurrence_report_id', 'version', 'edited_by'],
+  holidays: ['id', 'name', 'kind', 'start_date', 'end_date', 'classroom_ids', 'class_session_ids', 'teacher_ids'],
+}
+
+for (const [route, fields] of Object.entries(filterableFieldsByResource)) {
+  const definition = resources[route]
+  if (!definition) throw new Error(`Filter registry references unknown resource ${route}`)
+  definition.filterable = fields
+}
+
 const optionalText = z.string().max(10000).nullable().optional()
 const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
 const optionalUrl = z.url().max(2048).nullable().optional()
@@ -183,6 +232,3 @@ for (const definition of Object.values(resources)) {
   if (methods.has('POST') && !definition.createSchema) throw new Error(`Resource ${definition.route} is missing createSchema`)
   if (methods.has('PATCH') && !definition.updateSchema) throw new Error(`Resource ${definition.route} is missing updateSchema`)
 }
-
-
-
