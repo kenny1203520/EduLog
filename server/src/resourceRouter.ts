@@ -266,7 +266,14 @@ async function members(req: Request, res: Response) {
     let builder = req.db!.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at', { count: 'exact' }).eq('teaching_id', teachingId)
     if (userId) builder = builder.eq('user_id', userId)
     else if (query.user_id) builder = builder.eq('user_id', query.user_id)
-    if (query.search) builder = builder.ilike('user_id', `%${query.search.replace(/[%,_()]/g, '')}%`)
+    if (query.search) {
+      // user_id is a UUID column.  PostgreSQL cannot apply ILIKE to UUID,
+      // and coercing arbitrary text would turn search into a runtime 500.
+      // Keep the compatibility query parameter but make it an exact UUID
+      // lookup, matching the explicit user_id filter semantics.
+      if (!z.string().uuid().safeParse(query.search).success) throw new ApiError(400, 'INVALID_SEARCH', 'Member search must be a user UUID')
+      builder = builder.eq('user_id', query.search)
+    }
     if (query.status) builder = builder.eq('status', query.status)
     const sortName = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
     const result = await builder.order(sortName, { ascending: !query.sort.startsWith('-') }).range(query.offset, query.offset + query.limit - 1)

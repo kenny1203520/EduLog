@@ -75,6 +75,8 @@ describe('resource mutation validation boundary', () => {
     expect(source).toContain("user_id: z.string().uuid().optional()")
     expect(source).toContain("builder = builder.eq('status', query.status)")
     expect(source).toContain("builder = builder.eq('user_id', query.user_id)")
+    expect(source).toContain("Member search must be a user UUID")
+    expect(source).not.toContain("builder.ilike('user_id'")
   })
 
   it('registers the single teaching member route advertised by the contract', () => {
