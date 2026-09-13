@@ -103,6 +103,22 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(result.data).toEqual({ snapshot_base64: null, base_report_version: null })
   })
 
+  it('maps collaboration snapshot writes using the canonical report id argument', async () => {
+    postMock.mockResolvedValueOnce({ data: { saved: true }, meta: {}, request_id: 'r', trace_id: 't' })
+    const result = await apiDataClient.rpc('save_report_collab_snapshot', {
+      p_occurrence_report_id: 'report-1',
+      p_snapshot_base64: 'c25hcHNob3Q=',
+      p_base_report_version: 3,
+    })
+
+    expect(postMock).toHaveBeenCalledWith('/reports/report-1/collaboration', {
+      snapshot_base64: 'c25hcHNob3Q=',
+      base_report_version: 3,
+    })
+    expect(result.data).toEqual(true)
+    expect(result.error).toBeNull()
+  })
+
   it('maps teaching member table compatibility to the nested scoped route', async () => {
     getMock.mockResolvedValueOnce({ data: { teaching_id: 'teaching-1', user_id: 'user-1' }, meta: {}, request_id: 'r', trace_id: 't' })
     const result = await apiDataClient.from('teaching_members')
