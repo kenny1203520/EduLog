@@ -220,6 +220,10 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
     await authorizeCollection(req, def, permissionForResource(def, 'list'), req.query as Record<string, unknown>)
     return list(req, res, def)
   }
+  // Collection PATCH is intentionally not supported. A collection update
+  // without an explicit item id is a mass-update footgun and could mutate
+  // rows outside the caller's intended scope. Use PATCH /:id instead.
+  if (req.method !== 'POST') throw new ApiError(405, 'METHOD_NOT_ALLOWED', 'Use an item endpoint for updates')
   const action = req.method === 'POST' ? 'create' : 'update'
   const parsedBody = bodySchema.parse(req.body)
   const body = validateBody(def, pickBody(def, parsedBody), action)

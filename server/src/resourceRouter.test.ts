@@ -108,4 +108,10 @@ describe('resource mutation validation boundary', () => {
     expect(resources['report-versions'].writable).toEqual([])
     expect(resources['report-versions'].permissions?.delete).toBe('teaching.reports.delete')
   })
+
+  it('does not register collection PATCH routes that could mass-update rows', () => {
+    const source = readFileSync(new URL('./resourceRouter.ts', import.meta.url), 'utf8')
+    expect(source).not.toContain("router.patch(`/${route}`")
+    expect(source).toContain("if (req.method !== 'POST') throw new ApiError(405, 'METHOD_NOT_ALLOWED'")
+  })
 })
