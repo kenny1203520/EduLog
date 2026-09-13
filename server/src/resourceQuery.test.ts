@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseFilters, parseOr } from './resourceRouter.js'
-import { resources } from './resources.js'
+import { listQuerySchema, resources } from './resources.js'
 
 describe('resource query filters', () => {
   it('accepts server-side ilike, contains and null filters', () => {
@@ -20,5 +20,12 @@ describe('resource query filters', () => {
       .toBe('name.ilike.%Ada%,email.ilike.%example.test%')
     expect(() => parseOr('password.eq.secret', resources.teachers)).toThrowError('The or filter is not supported')
     expect(() => parseOr('name.ilike.%Ada%(admin)', resources.teachers)).toThrowError('The or filter is not supported')
+  })
+
+  it('accepts only allowlisted relation sorts used by report queries', () => {
+    expect(listQuerySchema.parse({ sort: 'class_occurrences(occurrence_date)' }).sort)
+      .toBe('class_occurrences(occurrence_date)')
+    expect(resources.reports.sortable).toContain('class_occurrences(occurrence_date)')
+    expect(() => listQuerySchema.parse({ sort: 'class_occurrences(occurrence_date).asc' })).toThrow()
   })
 })
