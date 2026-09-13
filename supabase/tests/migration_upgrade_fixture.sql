@@ -15,7 +15,7 @@ INSERT INTO public.courses(id, subject, stage, user_id) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- This row represents a legacy template created before report_templates had a
--- teaching_id. The 1000041 bridge must resolve it from instructor ownership.
+-- teaching_id. The historical scope migrations must resolve it from instructor ownership.
 INSERT INTO public.report_templates(id, name, content, instructor_id)
 VALUES (
   '51000000-0000-0000-0000-0000000000aa',

@@ -48,8 +48,10 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
       - name: Reconciliation migrations are rerunnable
         run: |
-          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000040_backend_security_reconciliation.sql
-          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000041_legacy_upgrade_consistency.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000062_report_lifecycle_atomicity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000062_report_lifecycle_atomicity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000063_report_mutation_contract_and_delete_replay.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000063_report_mutation_contract_and_delete_replay.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
@@ -61,14 +63,34 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *1000040_backend_security_reconciliation.sql|*1000041_legacy_upgrade_consistency.sql) continue ;;
+              *100004[0-9]*|*100005*|*100006*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_fixture.sql
-          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000040_backend_security_reconciliation.sql
-          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000041_legacy_upgrade_consistency.sql
+          for migration in supabase/migrations/100004*.sql supabase/migrations/100005*.sql supabase/migrations/100006*.sql; do
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
+      - name: Upgrade an existing 1000061 database to 1000062
+        shell: bash
+        run: |
+          createdb edulog_history
+          export PGDATABASE=edulog_history
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
+          for migration in supabase/migrations/*.sql; do
+            case "$migration" in
+              *1000062*|*1000063*) continue ;;
+            esac
+            psql -v ON_ERROR_STOP=1 -f "$migration"
+          done
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000062_report_lifecycle_atomicity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000062_report_lifecycle_atomicity.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000063_report_mutation_contract_and_delete_replay.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000063_report_mutation_contract_and_delete_replay.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql

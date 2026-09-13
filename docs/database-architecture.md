@@ -19,8 +19,8 @@
 重要事項：
 
 - `1000001–1000039` 視為歷史 migration，不應重寫。
-- 原先尚未部署的後續 patch 已整合到 `1000040_backend_security_reconciliation.sql`，因此目前沒有分開的 `1000042` 以後 migration 檔案。
-- `1000041_legacy_upgrade_consistency.sql` 是既有資料庫升級與一致性檢查的獨立步驟，必須在 `1000040` 後執行。
+- `1000040`–`1000061` 保留為逐檔、append-only 的 migration history；`1000062_report_lifecycle_atomicity.sql` 是後續 forward-only lifecycle 修正。
+- `1000041a_has_api_permission_compatibility.sql` 是排序於 `1000041` 與 `1000042` 之間的相容 migration；不存在 consolidated security migration。
 - `1000010`、`1000015`、`1000016` 是歷史未使用編號，不是待補的 migration。
 - 需要修正已套用資料庫時，新增 forward migration，不修改已部署檔案。
 

@@ -1,9 +1,6 @@
 import { assert, assertStringIncludes } from 'https://deno.land/std@0.177.1/testing/asserts.ts'
 
-const canonical = await Deno.readTextFile(new URL('../migrations/1000040_backend_security_reconciliation.sql', import.meta.url))
-const start = canonical.indexOf('-- Former migration 1000046_api_rate_limit_shared_store.sql')
-const end = canonical.indexOf('\n-- Former migration ', start + 1)
-const migration = canonical.slice(start, end < 0 ? undefined : end)
+const migration = await Deno.readTextFile(new URL('../migrations/1000046_api_rate_limit_shared_store.sql', import.meta.url))
 
 Deno.test('1000046 defines a service-role-only atomic shared rate limit RPC', () => {
   assertStringIncludes(migration, 'CREATE TABLE IF NOT EXISTS public.api_rate_limit_buckets')

@@ -1,6 +1,10 @@
 # EduLog migration chain
 
-This directory contains the append-only database history for EduLog. Migrations through `1000039` are historical and must not be edited. The unreleased `1000040_backend_security_reconciliation.sql` consolidates the former 1000040–1000062 work into one canonical, dependency-ordered migration. The following `1000041_legacy_upgrade_consistency.sql` is a separate forward bridge for databases upgraded from the historical chain.
+The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Migrations `1000040` through `1000061` are preserved byte-for-byte from the historical baseline; `1000062_report_lifecycle_atomicity.sql` is the forward-only lifecycle correction. `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
+
+This directory contains the append-only database history for EduLog. Migrations through `1000061` are historical and must not be edited. The current canonical chain keeps the individual migration files and adds `1000062_report_lifecycle_atomicity.sql` as a forward-only fix.
+
+The former consolidated migration names are intentionally absent. `1000041a_has_api_permission_compatibility.sql` is an intentional compatibility migration and sorts between `1000041` and `1000042`.
 
 ## Ordered migrations
 
@@ -46,25 +50,37 @@ This directory contains the append-only database history for EduLog. Migrations 
 | 1000037 | `1000037_editor_security_hardening.sql` | Editor security hardening |
 | 1000038 | `1000038_editor_rbac_boundary_hardening.sql` | Editor RBAC boundaries |
 | 1000039 | `1000039_editor_report_insert_rls_fix.sql` | Report insert RLS |
-| 1000040 | `1000040_backend_security_reconciliation.sql` | Consolidated report/editor RLS, API/RBAC, teaching scope, rate limiting, child-resource scope, idempotency, and report lifecycle |
-| 1000041 | `1000041_legacy_upgrade_consistency.sql` | Legacy-to-canonical teaching-scope backfill and derived-resource consistency checks |
+| 1000040 | `1000040_editor_report_owner_rls_fix.sql` | Report owner/editor RLS |
+| 1000041 | `1000041_editor_rbac_rpc_guard.sql` | Editor RBAC RPC guard |
+| 1000041a | `1000041a_has_api_permission_compatibility.sql` | Pre-RBAC compatibility shim |
+| 1000042 | `1000042_api_rbac_rest_foundation.sql` | API/RBAC foundation |
+| 1000043 | `1000043_teaching_scope_reconciliation.sql` | Teaching scope reconciliation and backfill |
+| 1000044 | `1000044_rbac_epoch_and_api_contract.sql` | RBAC epoch and canonical API policies |
+| 1000045 | `1000045_missing_core_rls_hardening.sql` | Core sensitive-resource RLS hardening |
+| 1000046 | `1000046_api_rate_limit_shared_store.sql` | Shared rate-limit buckets and RPC |
+| 1000047 | `1000047_canonical_teacher_permissions.sql` | Canonical teacher permissions |
+| 1000048 | `1000048_student_scope_course_fallback.sql` | Student scope course fallback |
+| 1000049 | `1000049_holiday_scope_rls_hardening.sql` | Holiday scope RLS |
+| 1000050 | `1000050_scope_integrity_and_session_rpc.sql` | Scope integrity and session RPC |
+| 1000051 | `1000051_child_scope_write_hardening.sql` | Child-resource scope write hardening |
+| 1000052 | `1000052_transfer_scope_authorization.sql` | Transfer scope authorization |
+| 1000053 | `1000053_enrollment_scope_and_student_guard.sql` | Enrollment and student guard |
+| 1000054 | `1000054_rbac_teaching_scope_rpc.sql` | Teaching-scoped RBAC RPC |
+| 1000055 | `1000055_idempotency_route_binding.sql` | Idempotency route binding |
+| 1000056 | `1000056_canonical_rbac_policy_scope_rls.sql` | Canonical RBAC policy scope RLS |
+| 1000057 | `1000057_holiday_read_permission_alias.sql` | Holiday read permission alias |
+| 1000058 | `1000058_teaching_role_scope_isolation.sql` | Teaching role scope isolation |
+| 1000059 | `1000059_idempotency_key_contract.sql` | Idempotency key contract |
+| 1000060 | `1000060_permission_scope_and_session_regression.sql` | Permission scope and session regression |
+| 1000061 | `1000061_scope_and_idempotency_concurrency.sql` | Scope and idempotency concurrency |
+| 1000062 | `1000062_report_lifecycle_atomicity.sql` | Forward-only atomic report lifecycle |
+| 1000063 | `1000063_report_mutation_contract_and_delete_replay.sql` | Report RPC validation and DELETE replay |
 
-The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. The consolidated 1000040 file preserves the former 1000040–1000062 sections in dependency order because none of those files has been deployed. `1000041` must run after 1000040; it is intentionally not folded into the canonical security migration so operators can identify and verify the legacy-data upgrade step independently.
+The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply `1000040` through `1000061` in lexical order; `1000041a` is applied between `1000041` and `1000042`.
 
-## Consolidated 1000040 security migration
+## Current canonical chain
 
-The single unreleased migration contains these ordered sections:
-
-1. Report editor ownership and collaboration RLS.
-2. Editor RBAC RPC guard and the pre-API fail-closed compatibility shim.
-3. API/RBAC foundation, teaching backfill, canonical teaching scope helpers, and RLS.
-4. RBAC epoch/cycle prevention and canonical action-specific policies.
-5. Core sensitive-resource RLS hardening and hashed shared rate-limit storage.
-6. Teacher permission catalogue, student/course scope fallback, holiday scope isolation, and session scope integrity.
-7. Child-resource, transfer, enrollment, and teaching-scoped RBAC authorization.
-8. Idempotency route/length/concurrency rules and report lifecycle atomicity.
-
-Each section remains guarded, uses `CREATE OR REPLACE`/`DROP POLICY IF EXISTS`/conflict-safe backfills where appropriate, and is executed in the same order as the former files. The result is one canonical database state instead of multiple patches repeatedly redefining the same resolver and policy.
+The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, then apply `1000062_report_lifecycle_atomicity.sql` and `1000063_report_mutation_contract_and_delete_replay.sql`. Do not use the deleted consolidated migration names; they are not part of the current chain.
 
 ## Clean install
 
@@ -72,12 +88,16 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a pre-reconciliation database, apply `1000040_backend_security_reconciliation.sql` followed by `1000041_legacy_upgrade_consistency.sql` after the legacy fixture/compatibility checks, then run `supabase/tests/migration_upgrade_assertions.sql`, `supabase/tests/report_lifecycle_integration.sql`, and `supabase/tests/core_rls_security.sql`. Do not edit migrations through 1000039.
+Back up the database first. Apply only migrations not recorded in the migration history. For a database at `1000039`, apply the individual `1000040`–`1000061` files in lexical order, then apply `1000062_report_lifecycle_atomicity.sql`. Finish with `supabase/tests/migration_upgrade_assertions.sql`, `supabase/tests/report_lifecycle_integration.sql`, and `supabase/tests/core_rls_security.sql`. Do not edit historical migrations.
 
 ## Rerun and rollback
 
-The consolidated `1000040_backend_security_reconciliation.sql` and the `1000041` bridge are written to be rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
+The individual `1000040`–`1000063` migrations are written to be rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
 
 ## Verification
 
-The CI database gate runs clean install, reruns the consolidated 1000040 migration and the 1000041 bridge, the report lifecycle assertion, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+The CI database gate runs clean install, historical upgrade, `1000062` rerun, report lifecycle assertions, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+
+## Append-only history boundary
+
+Do not consolidate, rename, delete, or rewrite `1000040`–`1000061`. An existing database records migration versions, so replacing a file with the same version cannot repair an already-applied database. All lifecycle changes, strict mutation context, or later fixes must use `1000062+` forward-only migrations. The `1000041a` compatibility migration remains before `1000042` so its function grant target exists during clean installation.
