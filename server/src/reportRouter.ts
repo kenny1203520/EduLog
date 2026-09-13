@@ -7,7 +7,7 @@ import { setAuditContext } from './context.js'
 
 const fields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,version,last_edited_by,last_edited_at,created_at,updated_at'
 const writable = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
-const reportBody = z.object({
+export const reportBodySchema = z.object({
   enrollment_id: z.string().uuid().optional(), class_occurrence_id: z.string().uuid().optional(), lesson_id: z.string().uuid().nullable().optional(),
   is_completed: z.boolean().optional(), progress_letter: z.string().regex(/^[A-Z](-[A-Z])?$/).max(32).nullable().optional(), attendance_status: z.enum(['present', 'absent', 'pending']).optional(), absence_reason: z.string().max(64).nullable().optional(),
   class_participation: z.number().min(0).max(5).nullable().optional(), classroom_behavior: z.number().min(0).max(5).nullable().optional(),
@@ -15,7 +15,9 @@ const reportBody = z.object({
   content: z.string().max(10000).nullable().optional(), content_document: z.record(z.string(), z.unknown()).nullable().optional(), external_link: z.string().max(2048).nullable().optional(),
   expected_version: z.number().int().min(1).optional(),
 }).strict()
-type Body = z.infer<typeof reportBody>
+export const reportCreateSchema = reportBodySchema.omit({ expected_version: true }).required({ enrollment_id: true, class_occurrence_id: true })
+export const reportUpdateSchema = reportBodySchema.omit({ enrollment_id: true, class_occurrence_id: true }).required({ expected_version: true })
+type Body = z.infer<typeof reportBodySchema>
 type MutationContext = {
   report_id: string
   version: number
@@ -141,7 +143,7 @@ async function resolveInitialAttendance(req: Request, enrollmentId: string, occu
 }
 async function create(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-    const input = reportBody.parse(req.body); if (!input.enrollment_id || !input.class_occurrence_id) throw new ApiError(422, 'REPORT_CONTEXT_REQUIRED', 'enrollment_id and class_occurrence_id are required')
+    const input = reportCreateSchema.parse(req.body)
     assertClientManagedAttendanceReason(input.absence_reason)
     setAuditContext(req, { domain: 'teaching', resource: 'reports', action: 'create', permission: 'teaching.reports.create', scopeId: input.class_occurrence_id, scopeType: 'class_occurrence' })
     const permission = await req.db.rpc('can_create_occurrence_report', { p_enrollment_id: input.enrollment_id, p_class_occurrence_id: input.class_occurrence_id })
@@ -156,7 +158,7 @@ async function create(req: Request, res: Response) {
 async function update(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
-  const input = reportBody.parse(req.body); if (input.expected_version === undefined) throw new ApiError(422, 'EXPECTED_VERSION_REQUIRED', 'expected_version is required for report updates')
+  const input = reportUpdateSchema.parse(req.body)
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: 'update', permission: 'teaching.reports.update', scopeType: 'occurrence_report' })
   const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: id, p_permission_key: 'teaching.reports.update' }).maybeSingle()
   if (contextResult.error) throw mapDatabaseError(contextResult.error)

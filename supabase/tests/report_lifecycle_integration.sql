@@ -80,11 +80,21 @@ BEGIN
 
   SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 2, jsonb_build_object('is_completed', true, 'lesson_id', '95000000-0000-4000-8000-000000000001'));
   IF v_report.version <> 3 OR v_report.is_completed IS NOT TRUE THEN RAISE EXCEPTION 'completed lifecycle regression'; END IF;
+  IF (SELECT lesson_number FROM public.enrollments WHERE id = '99000000-0000-4000-8000-000000000001') <> 2 THEN
+    RAISE EXCEPTION 'completed report did not advance enrollment progress';
+  END IF;
   SELECT count(*) INTO v_next_count FROM public.occurrence_reports WHERE enrollment_id = '99000000-0000-4000-8000-000000000001';
   IF v_next_count <> 2 THEN RAISE EXCEPTION 'next report was not provisioned'; END IF;
+  SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 3, '{"lesson_id":null,"is_completed":false}'::jsonb);
+  IF v_report.version <> 4 OR v_report.is_completed IS TRUE OR v_report.lesson_id IS NOT NULL THEN RAISE EXCEPTION 'lesson removal lifecycle regression'; END IF;
+  SELECT count(*) INTO v_next_count FROM public.occurrence_reports WHERE enrollment_id = '99000000-0000-4000-8000-000000000001';
+  IF v_next_count <> 2 THEN RAISE EXCEPTION 'lesson removal provisioned an unexpected report'; END IF;
+  IF (SELECT lesson_number FROM public.enrollments WHERE id = '99000000-0000-4000-8000-000000000001') <> 1 THEN
+    RAISE EXCEPTION 'lesson removal did not recalculate enrollment progress';
+  END IF;
   SELECT version INTO v_version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001';
   BEGIN
-    PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 2, '{"content":"retry"}'::jsonb);
+    PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 3, '{"content":"retry"}'::jsonb);
     RAISE EXCEPTION 'stale retry unexpectedly succeeded';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'VERSION_CONFLICT' THEN RAISE; END IF;
@@ -92,16 +102,16 @@ BEGIN
   IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> v_version THEN RAISE EXCEPTION 'stale retry mutated data'; END IF;
 
   BEGIN
-    PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 3, '{"content_document":null,"progress_letter":"not-valid"}'::jsonb);
+    PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 4, '{"content_document":null,"progress_letter":"not-valid"}'::jsonb);
     RAISE EXCEPTION 'invalid lifecycle patch unexpectedly succeeded';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'INVALID_REPORT_PATCH' THEN RAISE; END IF;
   END;
-  IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 3 THEN RAISE EXCEPTION 'failed lifecycle patch did not rollback'; END IF;
+  IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 4 THEN RAISE EXCEPTION 'failed lifecycle patch did not rollback'; END IF;
 
   BEGIN
     PERFORM public.apply_occurrence_report_lifecycle(
-      '9b000000-0000-4000-8000-000000000001', 3, '{"unknown_field":true}'::jsonb
+      '9b000000-0000-4000-8000-000000000001', 4, '{"unknown_field":true}'::jsonb
     );
     RAISE EXCEPTION 'unknown lifecycle patch field unexpectedly succeeded';
   EXCEPTION WHEN raise_exception THEN
@@ -109,7 +119,7 @@ BEGIN
   END;
   BEGIN
     PERFORM public.apply_occurrence_report_lifecycle(
-      '9b000000-0000-4000-8000-000000000001', 3, '{"is_completed":"yes"}'::jsonb
+      '9b000000-0000-4000-8000-000000000001', 4, '{"is_completed":"yes"}'::jsonb
     );
     RAISE EXCEPTION 'wrong lifecycle patch type unexpectedly succeeded';
   EXCEPTION WHEN raise_exception THEN
@@ -117,13 +127,13 @@ BEGIN
   END;
   BEGIN
     PERFORM public.apply_occurrence_report_lifecycle(
-      '9b000000-0000-4000-8000-000000000001', 3, '{"class_participation":6}'::jsonb
+      '9b000000-0000-4000-8000-000000000001', 4, '{"class_participation":6}'::jsonb
     );
     RAISE EXCEPTION 'out-of-range lifecycle patch unexpectedly succeeded';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM <> 'INVALID_REPORT_PATCH' THEN RAISE; END IF;
   END;
-  IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 3 THEN
+  IF (SELECT version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') <> 4 THEN
     RAISE EXCEPTION 'rejected lifecycle patch mutated report';
   END IF;
 
@@ -132,7 +142,7 @@ BEGIN
     RAISE EXCEPTION 'cross-teaching report write was authorized';
   END IF;
   SELECT set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000001', true);
-  PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 3, '{}'::jsonb, auth.uid(), 'delete');
+  PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 4, '{}'::jsonb, auth.uid(), 'delete');
   IF EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') THEN RAISE EXCEPTION 'delete lifecycle regression'; END IF;
 END;
 $$;

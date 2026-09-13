@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { sendData } from './response.js'
-import { listQuerySchema, resources, type ResourceDefinition } from './resources.js'
+import { listQuerySchema, resources, type ResourceDefinition, teachingMemberCreateSchema, teachingMemberUpdateSchema } from './resources.js'
 import { authorizeCollection, authorizeResource, permissionForResource } from './authorization.js'
 import { setAuditContext } from './context.js'
 
@@ -278,7 +278,7 @@ async function members(req: Request, res: Response) {
     return sendData(req, res, result.data ?? [], { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: query.sort })
   }
   if (req.method === 'POST') {
-    const body = z.object({ user_id: z.string().uuid(), role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict().parse(req.body)
+    const body = teachingMemberCreateSchema.parse(req.body)
     const allowedFields = ['user_id', 'role_id', 'status', 'effective_from', 'effective_to']
     const unknown = Object.keys(body).filter((key) => !allowedFields.includes(key))
     if (unknown.length) throw new ApiError(422, 'UNKNOWN_FIELD', 'The request contains a non-writable field')
@@ -290,7 +290,7 @@ async function members(req: Request, res: Response) {
   }
   if (!userId) throw new ApiError(400, 'INVALID_USER_ID', 'Member user id is required')
   const updateBody = req.method === 'PATCH'
-    ? z.object({ role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict().parse(req.body)
+    ? teachingMemberUpdateSchema.parse(req.body)
     : null
   if (req.method === 'PATCH' && !Object.keys(updateBody ?? {}).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one member field is required')
   const replay = await idempotency(req, 200, null)

@@ -138,7 +138,10 @@ describe('generated API contract', () => {
 
   it('documents report progress letters with the database-compatible format', () => {
     const spec = buildOpenApi() as { components: { schemas: Record<string, any> } }
-    expect(spec.components.schemas.ReportUpdateMutation.properties.progress_letter.pattern).toBe('^[A-Z](-[A-Z])?$')
+    const progressLetter = spec.components.schemas.ReportUpdateMutation.properties.progress_letter
+    const progressSchemas = progressLetter.anyOf ?? [progressLetter]
+    expect(progressSchemas).toEqual(expect.arrayContaining([expect.objectContaining({ pattern: '^[A-Z](-[A-Z])?$' })]))
     expect(spec.components.schemas.ReportCreateMutation.additionalProperties).toBe(false)
+    expect(spec.components.schemas.TeachingMemberUpdateMutation.additionalProperties).toBe(false)
   })
 })

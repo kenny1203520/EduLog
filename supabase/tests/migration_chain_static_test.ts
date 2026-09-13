@@ -133,6 +133,9 @@ Deno.test('report lifecycle integration is executable and authenticated', () => 
   assertStringIncludes(lifecycleIntegration, 'cross-teaching report write was authorized')
   assertStringIncludes(lifecycleIntegration, 'ROLLBACK')
   assertStringIncludes(lifecycleIntegration, 'incomplete report did not provision a next report')
+  assertStringIncludes(lifecycleIntegration, 'completed report did not advance enrollment progress')
+  assertStringIncludes(lifecycleIntegration, 'lesson removal provisioned an unexpected report')
+  assertStringIncludes(lifecycleIntegration, 'lesson removal did not recalculate enrollment progress')
   assertStringIncludes(lifecycleIntegration, 'get_occurrence_report_mutation_context')
 })
 

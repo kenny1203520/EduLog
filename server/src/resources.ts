@@ -218,6 +218,8 @@ export const resourceSchemas: Record<string, { createSchema?: z.ZodType<Record<s
     updateSchema: z.object({ name: z.string().trim().min(1).max(200).optional() }).strict(),
   },
 }
+export const teachingMemberCreateSchema = z.object({ user_id: z.string().uuid(), role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict()
+export const teachingMemberUpdateSchema = z.object({ role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict()
 for (const [route, schema] of Object.entries(resourceSchemas)) Object.assign(resources[route], schema)
 
 // Keep query fields explicit even for resources that use the default registry
