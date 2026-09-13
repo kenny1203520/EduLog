@@ -259,7 +259,7 @@ async function members(req: Request, res: Response) {
   if (!z.string().uuid().safeParse(teachingId).success) throw new ApiError(400, 'INVALID_TEACHING_ID', 'Teaching id is invalid')
   if (userId && !z.string().uuid().safeParse(userId).success) throw new ApiError(400, 'INVALID_USER_ID', 'Member user id is invalid')
   const action = req.method === 'GET' ? (userId ? 'read' : 'list') : req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
-  setAuditContext(req, { domain: 'teaching', resource: 'members', action, resourceId: userId ?? null, teachingId: teachingId ?? null, scopeId: teachingId ?? null, permission: `teaching.members.${action}` })
+  setAuditContext(req, { domain: 'teaching', resource: 'members', action, resourceId: userId ?? null, teachingId: teachingId ?? null, scopeId: teachingId ?? null, scopeType: 'teaching', permission: `teaching.members.${action}` })
   await teachingAllowed(req, `teaching.members.${action}`, teachingId)
   if (req.method === 'GET') {
     const query = memberListQuery.parse(req.query)

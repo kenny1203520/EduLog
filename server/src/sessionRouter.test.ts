@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import type { Request } from 'express'
 import { authorizeRelatedRead } from './sessionRouter.js'
+import { readDetails } from './sessionRouter.js'
 
 describe('class session API contract', () => {
   it('uses the guarded schedule RPC and explicit mutation contract', () => {
@@ -44,5 +45,21 @@ describe('class session API contract', () => {
     const req = { db: { rpc }, user: { id: '00000000-0000-4000-8000-000000000001' } } as unknown as Request
     await expect(authorizeRelatedRead(req, 'teaching.enrollments.list', '10000000-0000-4000-8000-000000000001')).resolves.toBeUndefined()
     expect(rpc).toHaveBeenCalledWith('has_api_permission', expect.objectContaining({ p_permission_key: 'teaching.enrollments.list', p_class_session_id: '10000000-0000-4000-8000-000000000001' }))
+  })
+
+  it('stops the details endpoint before aggregate queries when a related permission is denied', async () => {
+    const from = vi.fn()
+    const rpc = vi.fn().mockImplementation(async (_name: string, args: { p_permission_key: string }) => ({
+      data: args.p_permission_key === 'teaching.class_sessions.read', error: null,
+    }))
+    const req = {
+      params: { id: '10000000-0000-4000-8000-000000000001' },
+      db: { rpc, from }, user: { id: '00000000-0000-4000-8000-000000000001' }, auditContext: {},
+    } as unknown as Request
+    const response = { json: vi.fn() } as never
+
+    await expect(readDetails(req, response)).rejects.toMatchObject({ status: 403, code: 'PERMISSION_DENIED' })
+    expect(from).not.toHaveBeenCalled()
+    expect(rpc).toHaveBeenCalledTimes(2)
   })
 })

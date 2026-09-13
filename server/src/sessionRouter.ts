@@ -131,7 +131,7 @@ async function read(req: Request, res: Response) {
 
 const sessionDetailsFields = `${sessionFields},classrooms(id,name,address,external_link)`
 
-async function readDetails(req: Request, res: Response) {
+export async function readDetails(req: Request, res: Response) {
   const id = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Class session id is invalid')
   await authorize(req, 'read', id)

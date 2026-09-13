@@ -46,6 +46,11 @@ export function firstUncompletedSequence(lessons: Array<{ id: string; sequence: 
   return lessons.find((lesson) => !representedLessonIds.has(lesson.id))?.sequence ?? currentLessonNumber
 }
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) { return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next) }
+function reportId(req: Request) {
+  const id = typeof req.params.id === 'string' ? req.params.id : undefined
+  if (!id || !z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Report id is invalid')
+  return id
+}
 async function canAccess(req: Request, id: string, permission: string) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: permission.split('.').at(-1) ?? 'read', permission, scopeType: 'occurrence_report' })
@@ -158,7 +163,7 @@ async function create(req: Request, res: Response) {
 }
 async function update(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
+  const id = reportId(req)
   const input = reportUpdateSchema.parse(req.body)
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: 'update', permission: 'teaching.reports.update', scopeType: 'occurrence_report' })
   const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: id, p_permission_key: 'teaching.reports.update' }).maybeSingle()
@@ -175,7 +180,7 @@ async function update(req: Request, res: Response) {
 }
 export async function remove(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
+  const id = reportId(req)
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: 'delete', permission: 'teaching.reports.delete', scopeType: 'occurrence_report' })
   const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: id, p_permission_key: 'teaching.reports.delete' }).maybeSingle()
   if (contextResult.error) throw mapDatabaseError(contextResult.error)
@@ -193,8 +198,7 @@ export async function remove(req: Request, res: Response) {
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
 async function readCollaboration(req: Request, res: Response) {
-  const id = typeof req.params.id === 'string' ? req.params.id : undefined
-  if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
+  const id = reportId(req)
   await canAccess(req, id, 'teaching.reports.read')
   const result = await req.db!.from('report_collab_docs').select('occurrence_report_id,snapshot_base64,base_report_version,updated_at').eq('occurrence_report_id', id).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
@@ -202,8 +206,7 @@ async function readCollaboration(req: Request, res: Response) {
 }
 
 async function saveCollaboration(req: Request, res: Response) {
-  const id = typeof req.params.id === 'string' ? req.params.id : undefined
-  if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
+  const id = reportId(req)
   await canAccess(req, id, 'teaching.reports.update')
   const input = reportCollaborationSchema.parse(req.body)
   const replay = await idempotency(req, 200, null)

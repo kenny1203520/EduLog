@@ -34,7 +34,7 @@ describe('report lifecycle progress', () => {
     const response = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
     const req = {
       method: 'DELETE', originalUrl: '/api/reports/r1', requestId: 'request-1', traceId: 'trace-1',
-      params: { id: 'r1' },
+      params: { id: 'a1000000-0000-4000-8000-000000000001' },
       header: vi.fn((name: string) => name.toLowerCase() === 'idempotency-key' ? 'delete-key-1' : undefined),
       user: { id: 'u1' }, db: { rpc: dbRpc }, adminDb: { rpc: adminRpc }, auditContext: {},
     } as unknown as Request
@@ -42,7 +42,7 @@ describe('report lifecycle progress', () => {
     await remove(req, response)
 
     expect(dbRpc).toHaveBeenCalledWith('apply_occurrence_report_lifecycle', expect.objectContaining({ p_operation: 'delete', p_expected_version: 2 }))
-    expect(adminRpc).toHaveBeenCalledWith('bind_api_idempotency_scope', expect.objectContaining({ p_resource_id: 'r1', p_permission_key: 'teaching.reports.delete' }))
+    expect(adminRpc).toHaveBeenCalledWith('bind_api_idempotency_scope', expect.objectContaining({ p_resource_id: 'a1000000-0000-4000-8000-000000000001', p_permission_key: 'teaching.reports.delete' }))
     expect(adminRpc).toHaveBeenCalledWith('complete_api_idempotency', expect.objectContaining({ p_status: 200 }))
     expect(response.json).toHaveBeenCalledWith(expect.objectContaining({ data: { id: 'r1', deleted: true }, request_id: 'request-1', trace_id: 'trace-1' }))
   })
@@ -56,7 +56,7 @@ describe('report lifecycle progress', () => {
     const response = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
     const req = {
       method: 'DELETE', originalUrl: '/api/reports/r1', requestId: 'request-2', traceId: 'trace-2',
-      params: { id: 'r1' },
+      params: { id: 'a1000000-0000-4000-8000-000000000001' },
       header: vi.fn((name: string) => name.toLowerCase() === 'idempotency-key' ? 'delete-key-1' : undefined),
       user: { id: 'u1' }, db: { rpc: dbRpc }, adminDb: { rpc: adminRpc }, auditContext: {},
     } as unknown as Request
@@ -74,12 +74,27 @@ describe('report lifecycle progress', () => {
     const response = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
     const req = {
       method: 'DELETE', originalUrl: '/api/reports/r1', requestId: 'request-3', traceId: 'trace-3',
-      params: { id: 'r1' },
+      params: { id: 'a1000000-0000-4000-8000-000000000001' },
       header: vi.fn((name: string) => name.toLowerCase() === 'idempotency-key' ? 'delete-key-1' : undefined),
       user: { id: 'u1' }, db: { rpc: dbRpc }, adminDb: { rpc: adminRpc }, auditContext: {},
     } as unknown as Request
 
     await expect(remove(req, response)).rejects.toMatchObject({ status: 403, code: 'PERMISSION_DENIED' })
     expect(response.json).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed report ids before calling database or idempotency RPCs', async () => {
+    const dbRpc = vi.fn()
+    const adminRpc = vi.fn()
+    const response = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
+    const req = {
+      method: 'DELETE', originalUrl: '/api/reports/not-a-uuid', requestId: 'request-4', traceId: 'trace-4',
+      params: { id: 'not-a-uuid' }, header: vi.fn(),
+      user: { id: 'u1' }, db: { rpc: dbRpc }, adminDb: { rpc: adminRpc }, auditContext: {},
+    } as unknown as Request
+
+    await expect(remove(req, response)).rejects.toMatchObject({ status: 400, code: 'INVALID_ID' })
+    expect(dbRpc).not.toHaveBeenCalled()
+    expect(adminRpc).not.toHaveBeenCalled()
   })
 })
