@@ -2,11 +2,8 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000040_backend_security_reconciliation.sql'), 'utf8')
-const rpcSection = migration.slice(
-    migration.indexOf('Former migration 1000041_editor_rbac_rpc_guard.sql'),
-    migration.indexOf('Former migration 1000041a_has_api_permission_compatibility.sql'),
-)
+const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000041_editor_rbac_rpc_guard.sql'), 'utf8')
+const rpcSection = migration
 
 describe('editor RBAC RPC guard migration contract', () => {
     it('guards policy replacement and keeps execution scoped to authenticated administrators', () => {

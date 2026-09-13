@@ -16,6 +16,19 @@ const reportBody = z.object({
   expected_version: z.number().int().min(1).optional(),
 }).strict()
 type Body = z.infer<typeof reportBody>
+type MutationContext = {
+  report_id: string
+  version: number
+  attendance_status: string
+  absence_reason: string | null
+  enrollment_id: string
+  class_occurrence_id: string
+  teaching_id: string
+  classroom_id: string | null
+  class_session_id: string
+  lesson_id: string | null
+  is_completed: boolean
+}
   export function assertClientManagedAttendanceReason(reason: string | null | undefined) {
     if (reason === 'holiday' || reason === 'suspension') throw new ApiError(422, 'SYSTEM_MANAGED_ATTENDANCE', 'Holiday and suspension attendance are managed by the server')
   }
@@ -38,6 +51,30 @@ async function canAccess(req: Request, id: string, permission: string) {
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to access this report')
 }
 function pick(input: Body) { return Object.fromEntries(Object.entries(input).filter(([key]) => (writable as readonly string[]).includes(key))) }
+
+function replayBody(req: Request, row: { response_status?: number | null; response_body?: unknown }) {
+  const stored = row.response_body && typeof row.response_body === 'object' ? row.response_body as Record<string, unknown> : null
+  if (stored && 'error' in stored && stored.error && typeof stored.error === 'object') {
+    return { ...(stored as object), error: { ...(stored.error as Record<string, unknown>), request_id: req.requestId, trace_id: req.traceId }, request_id: req.requestId, trace_id: req.traceId }
+  }
+  return stored ? { ...stored, request_id: req.requestId, trace_id: req.traceId } : { data: row.response_body ?? null, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+}
+
+async function replayDeletedReport(req: Request, id: string) {
+  const key = req.header('idempotency-key')?.trim()
+  if (!key || !req.user || !req.adminDb) return null
+  const result = await req.adminDb.rpc('replay_deleted_report_idempotency', {
+    p_user_id: req.user.id,
+    p_key: key,
+    p_method: req.method,
+    p_route: req.originalUrl.split('?')[0],
+    p_resource_id: id,
+    p_permission_key: 'teaching.reports.delete',
+  })
+  if (result.error) throw mapDatabaseError(result.error)
+  const row = (Array.isArray(result.data) ? result.data[0] : result.data) as { is_replay?: boolean; response_status?: number | null; response_body?: unknown } | null
+  return row?.is_replay ? { status: row.response_status ?? 200, body: replayBody(req, row) } : null
+}
 
 async function reconcileEnrollmentProgress(req: Request, enrollmentId: string) {
   const enrollment = await req.db!.from('enrollments').select('course_id,lesson_number').eq('id', enrollmentId).maybeSingle()
@@ -120,24 +157,36 @@ async function update(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
   const input = reportBody.parse(req.body); if (input.expected_version === undefined) throw new ApiError(422, 'EXPECTED_VERSION_REQUIRED', 'expected_version is required for report updates')
-  await canAccess(req, id, 'teaching.reports.update')
-  const current = await req.db.from('occurrence_reports').select('version,absence_reason,attendance_status,enrollment_id,lesson_id,is_completed').eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
-  if (current.data.version !== input.expected_version) throw new ApiError(409, 'VERSION_CONFLICT', 'The report was modified by another user')
-    assertReportAttendanceUpdate(current.data, input)
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: 'update', permission: 'teaching.reports.update', scopeType: 'occurrence_report' })
+  const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: id, p_permission_key: 'teaching.reports.update' }).maybeSingle()
+  if (contextResult.error) throw mapDatabaseError(contextResult.error)
+  const context = contextResult.data as MutationContext | null
+  if (!context) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to update this report')
+  if (context.version !== input.expected_version) throw new ApiError(409, 'VERSION_CONFLICT', 'The report was modified by another user')
+  assertReportAttendanceUpdate(context, input)
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db.rpc('apply_occurrence_report_lifecycle', { p_report_id: id, p_expected_version: input.expected_version, p_patch: pick(input), p_actor: req.user.id, p_operation: 'update' })
   if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(409, 'VERSION_CONFLICT', 'The report was modified by another user')
-  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, permission: 'teaching.reports.update', scopeType: 'occurrence_report' })
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, teachingId: context.teaching_id, permission: 'teaching.reports.update', scopeId: context.class_occurrence_id, scopeType: 'class_occurrence' })
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
 async function remove(req: Request, res: Response) {
-  if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const id = typeof req.params.id === 'string' ? req.params.id : undefined; if (!id) throw new ApiError(400, 'INVALID_ID', 'Report id is required')
-  await canAccess(req, id, 'teaching.reports.delete'); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
-  const existing = await req.db.from('occurrence_reports').select('enrollment_id').eq('id', id).maybeSingle(); if (existing.error) throw mapDatabaseError(existing.error); if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
-  const current = await req.db.from('occurrence_reports').select('version').eq('id', id).maybeSingle(); if (current.error) throw mapDatabaseError(current.error); if (!current.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
-  const result = await req.db.rpc('apply_occurrence_report_lifecycle', { p_report_id: id, p_expected_version: current.data.version, p_patch: {}, p_actor: req.user?.id, p_operation: 'delete' }); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
-  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, permission: 'teaching.reports.delete', scopeType: 'occurrence_report' })
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: 'delete', permission: 'teaching.reports.delete', scopeType: 'occurrence_report' })
+  const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: id, p_permission_key: 'teaching.reports.delete' }).maybeSingle()
+  if (contextResult.error) throw mapDatabaseError(contextResult.error)
+  const context = contextResult.data as MutationContext | null
+  if (!context) {
+    const deletedReplay = await replayDeletedReport(req, id)
+    if (deletedReplay) return res.status(deletedReplay.status).json(deletedReplay.body)
+    throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to delete this report')
+  }
+  const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
+  const bound = await req.adminDb!.rpc('bind_api_idempotency_scope', { p_user_id: req.user.id, p_key: req.header('idempotency-key')!.trim(), p_resource_id: id, p_teaching_id: context.teaching_id, p_classroom_id: context.classroom_id, p_class_session_id: context.class_session_id, p_permission_key: 'teaching.reports.delete' })
+  if (bound.error) throw mapDatabaseError(bound.error)
+  const result = await req.db.rpc('apply_occurrence_report_lifecycle', { p_report_id: id, p_expected_version: context.version, p_patch: {}, p_actor: req.user.id, p_operation: 'delete' }); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
+  setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, teachingId: context.teaching_id, permission: 'teaching.reports.delete', scopeId: context.class_occurrence_id, scopeType: 'class_occurrence' })
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
 async function readCollaboration(req: Request, res: Response) {

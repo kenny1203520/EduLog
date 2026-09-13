@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const repoRoot = resolve(process.cwd(), '..')
-const migration = readFileSync(resolve(repoRoot, 'supabase/migrations/1000040_backend_security_reconciliation.sql'), 'utf8')
+const migration = readFileSync(resolve(repoRoot, 'supabase/migrations/1000040_editor_report_owner_rls_fix.sql'), 'utf8')
 
 describe('editor report owner RLS migration contract', () => {
     it('uses owner-aware, date-scoped access and key-based inserts', () => {

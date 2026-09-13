@@ -101,7 +101,7 @@ export function buildOpenApi() {
   addSpecialized('/api/reports/{id}/collaboration', 'get', 'report_collaboration_read', 'teaching.reports.read', '200', [idParam])
   addSpecialized('/api/reports/{id}/collaboration', 'post', 'report_collaboration_save', 'teaching.reports.update', '200', [idParam, mutationParam], body)
   for (const [method, operationId, permission, status] of [
-    ['get', 'class_session_teachers_list', 'teaching.class_sessions.list', '200'],
+    ['get', 'class_session_teachers_by_session_list', 'teaching.class_sessions.list', '200'],
     ['post', 'class_session_teachers_create', 'teaching.class_sessions.update', '201'],
     ['delete', 'class_session_teachers_delete', 'teaching.class_sessions.update', '200'],
   ] as const) addSpecialized('/api/class-sessions/{sessionId}/teachers', method, operationId, permission, status, [pathParam('sessionId'), ...(method === 'get' ? [] : [mutationParam])], method === 'post' ? body : undefined)

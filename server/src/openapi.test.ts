@@ -108,4 +108,19 @@ describe('generated API contract', () => {
       }
     }
   })
+
+  it('generates globally unique operation ids', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, { operationId?: string } | undefined>> }
+    const operationLocations = new Map<string, string[]>()
+    for (const [path, pathItem] of Object.entries(spec.paths)) {
+      for (const [method, operation] of Object.entries(pathItem)) {
+        if (!operation?.operationId) continue
+        const locations = operationLocations.get(operation.operationId) ?? []
+        locations.push(`${method.toUpperCase()} ${path}`)
+        operationLocations.set(operation.operationId, locations)
+      }
+    }
+    const duplicates = [...operationLocations.entries()].filter(([, locations]) => locations.length > 1)
+    expect(duplicates).toEqual([])
+  })
 })
