@@ -83,6 +83,24 @@ describe('report lifecycle progress', () => {
     expect(response.json).not.toHaveBeenCalled()
   })
 
+  it('binds a deleted-report replay to the current route and method', async () => {
+    const dbRpc = vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }))
+    const adminRpc = vi.fn().mockResolvedValue({ data: [], error: null })
+    const response = { status: vi.fn().mockReturnThis(), json: vi.fn() } as unknown as Response
+    const req = {
+      method: 'DELETE', originalUrl: '/api/reports/other-report', requestId: 'request-5', traceId: 'trace-5',
+      params: { id: 'a1000000-0000-4000-8000-000000000001' },
+      header: vi.fn((name: string) => name.toLowerCase() === 'idempotency-key' ? 'delete-key-1' : undefined),
+      user: { id: 'u1' }, db: { rpc: dbRpc }, adminDb: { rpc: adminRpc }, auditContext: {},
+    } as unknown as Request
+
+    await expect(remove(req, response)).rejects.toMatchObject({ status: 403, code: 'PERMISSION_DENIED' })
+    expect(adminRpc).toHaveBeenCalledWith('replay_deleted_report_idempotency', expect.objectContaining({
+      p_route: '/api/reports/other-report', p_method: 'DELETE', p_resource_id: 'a1000000-0000-4000-8000-000000000001',
+    }))
+    expect(response.json).not.toHaveBeenCalled()
+  })
+
   it('rejects malformed report ids before calling database or idempotency RPCs', async () => {
     const dbRpc = vi.fn()
     const adminRpc = vi.fn()

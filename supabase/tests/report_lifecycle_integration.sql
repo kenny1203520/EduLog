@@ -49,6 +49,27 @@ INSERT INTO public.occurrence_reports(id, enrollment_id, class_occurrence_id, le
 VALUES ('9b000000-0000-4000-8000-000000000001', '99000000-0000-4000-8000-000000000001', '9a000000-0000-4000-8000-000000000001', '95000000-0000-4000-8000-000000000001', 'before', 1, false, 'pending')
 ON CONFLICT (id) DO NOTHING;
 
+-- A closed-at-first-occurrence session proves that lifecycle provisioning
+-- respects class_sessions.end_date instead of creating an out-of-range row.
+INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, end_date, teaching_id)
+VALUES ('96000000-0000-4000-8000-000000000002', 'Lifecycle Closed Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '11:00', '12:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-05', DATE '2026-01-05', '92000000-0000-4000-8000-000000000001')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.class_session_schedule_rules(id, class_session_id, schedule_kind, day_of_week, start_time, end_time)
+VALUES ('97000000-0000-4000-8000-000000000002', '96000000-0000-4000-8000-000000000002', 'weekly', 1, '11:00', '12:00')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.students(id, name, user_id)
+VALUES ('98000000-0000-4000-8000-000000000002', 'Lifecycle Closed Student', '91000000-0000-4000-8000-000000000001')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.enrollments(id, student_id, course_id, classroom_id, class_session_id, status, user_id, start_date, lesson_number)
+VALUES ('99000000-0000-4000-8000-000000000002', '98000000-0000-4000-8000-000000000002', '94000000-0000-4000-8000-000000000001', '93000000-0000-4000-8000-000000000001', '96000000-0000-4000-8000-000000000002', 'regular', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', 1)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.class_occurrences(id, class_session_id, occurrence_date, status, is_conducted)
+VALUES ('9a000000-0000-4000-8000-000000000002', '96000000-0000-4000-8000-000000000002', DATE '2026-01-05', 'completed', true)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.occurrence_reports(id, enrollment_id, class_occurrence_id, lesson_id, content, version, is_completed, attendance_status)
+VALUES ('9b000000-0000-4000-8000-000000000002', '99000000-0000-4000-8000-000000000002', '9a000000-0000-4000-8000-000000000002', '95000000-0000-4000-8000-000000000001', 'closed-at-first-occurrence', 1, false, 'pending')
+ON CONFLICT (id) DO NOTHING;
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.occurrence_reports, public.enrollments, public.class_occurrences TO authenticated;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
@@ -137,12 +158,24 @@ BEGIN
     RAISE EXCEPTION 'rejected lifecycle patch mutated report';
   END IF;
 
+  SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle(
+    '9b000000-0000-4000-8000-000000000002', 1,
+    '{"is_completed":true,"lesson_id":"95000000-0000-4000-8000-000000000001"}'::jsonb
+  );
+  IF v_report.version <> 2 OR v_report.is_completed IS NOT TRUE THEN
+    RAISE EXCEPTION 'closed session lifecycle update failed';
+  END IF;
+  IF (SELECT count(*) FROM public.occurrence_reports WHERE enrollment_id = '99000000-0000-4000-8000-000000000002') <> 1 THEN
+    RAISE EXCEPTION 'closed session provisioned an out-of-range report';
+  END IF;
+
   SELECT set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000002', true);
   IF public.can_mutate_occurrence_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.update') THEN
     RAISE EXCEPTION 'cross-teaching report write was authorized';
   END IF;
   SELECT set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000001', true);
-  PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', 4, '{}'::jsonb, auth.uid(), 'delete');
+  SELECT version INTO v_version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001';
+  PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', v_version, '{}'::jsonb, auth.uid(), 'delete');
   IF EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') THEN RAISE EXCEPTION 'delete lifecycle regression'; END IF;
 END;
 $$;

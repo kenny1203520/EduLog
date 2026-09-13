@@ -109,6 +109,37 @@ describe('generated API contract', () => {
     }
   })
 
+  it('does not emit dangling local JSON references', () => {
+    const spec = buildOpenApi() as Record<string, unknown>
+    const missing: string[] = []
+    const visit = (value: unknown, location: string) => {
+      if (!value || typeof value !== 'object') return
+      if ('$ref' in value && typeof (value as { $ref?: unknown }).$ref === 'string') {
+        const reference = (value as { $ref: string }).$ref
+        if (reference.startsWith('#/')) {
+          const target = reference.slice(2).split('/').map((part) => part.replaceAll('~1', '/').replaceAll('~0', '~'))
+            .reduce<unknown>((current, part) => current && typeof current === 'object' ? (current as Record<string, unknown>)[part] : undefined, spec)
+          if (target === undefined) missing.push(`${location} -> ${reference}`)
+        }
+      }
+      for (const [key, child] of Object.entries(value)) visit(child, `${location}/${key}`)
+    }
+    visit(spec, '#')
+    expect(missing).toEqual([])
+  })
+
+  it('documents cookie authentication for protected operations', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/healthz', 'GET /api/openapi.json'])
+    for (const [path, pathItem] of Object.entries(spec.paths)) {
+      for (const [method, operation] of Object.entries(pathItem ?? {})) {
+        if (!operation || !operation.operationId || operation['x-websocket']) continue
+        if (publicOperations.has(`${method.toUpperCase()} ${path}`)) continue
+        expect(operation.security, `${method.toUpperCase()} ${path}`).toEqual([{ cookieAuth: [] }])
+      }
+    }
+  })
+
   it('generates globally unique operation ids', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, { operationId?: string } | undefined>> }
     const operationLocations = new Map<string, string[]>()

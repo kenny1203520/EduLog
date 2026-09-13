@@ -137,6 +137,9 @@ Deno.test('report lifecycle integration is executable and authenticated', () => 
   assertStringIncludes(lifecycleIntegration, 'lesson removal provisioned an unexpected report')
   assertStringIncludes(lifecycleIntegration, 'lesson removal did not recalculate enrollment progress')
   assertStringIncludes(lifecycleIntegration, 'get_occurrence_report_mutation_context')
+  assertStringIncludes(lifecycleIntegration, 'Lifecycle Closed Session')
+  assertStringIncludes(lifecycleIntegration, 'closed session provisioned an out-of-range report')
+  assertStringIncludes(lifecycleIntegration, "DATE '2026-01-05', DATE '2026-01-05'")
 })
 
 Deno.test('lifecycle replay fixture changes the canonical policy instead of ignoring a conflict', () => {
