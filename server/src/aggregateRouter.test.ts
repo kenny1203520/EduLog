@@ -16,5 +16,10 @@ describe('aggregate API contract', () => {
     expect(source).toContain("/aggregates/student-reports")
     expect(source).toContain("/aggregates/incomplete-reports")
     expect(source).toContain("/aggregates/dashboard")
+    expect(source).toContain("router.get('/dashboard', wrap(dashboard))")
+  })
+
+  it('keeps nested class session selects balanced for PostgREST', () => {
+    expect(source).toContain("class_sessions(id,name,classroom_id,classrooms(id,name)))').eq('attendance_status'")
   })
 })
