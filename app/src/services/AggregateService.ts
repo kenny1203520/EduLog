@@ -1,9 +1,6 @@
 import { apiV1Client } from '@/services/api/ApiV1Client'
-import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { StudentService } from '@/services/student/StudentService'
-import { apiDataClient } from '@/services/api/ApiDataClient'
-import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 export interface UserPreferencesAggregate {
   preferences: {
@@ -41,45 +38,23 @@ export class AggregateService {
   static clearCache(key?: string) { if (key) this._cache.delete(key); else this._cache.clear() }
 
   static async getUserPreferencesAggregate(): Promise<UserPreferencesAggregate> {
-    return this.withCache('user_preferences', this.DEFAULT_TTL_MS, async () => {
-      if (getApiV1Mode() === 'mock') {
-        const session = await (apiDataClient.auth as any).getSession?.()
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-        if (session?.data?.session?.access_token) headers.Authorization = `Bearer ${session.data.session.access_token}`
-        const response = await fetch('/api/aggregates/user-preferences', { headers })
-        if (!response.ok) throw new Error(`AggregateService error: ${response.status} ${await response.text()}`)
-        const body = await response.json()
-        return body.data ?? body
-      }
-      const [preferences, visibility] = await Promise.all([
-        apiResourceClient.get<any>('user-preferences', 'me'),
-        apiResourceClient.list<any>('visibility-preferences', { perPage: 100 })
-      ])
-      const grouped: Record<string, string[]> = { classroom: [], class_session: [] }
-      for (const row of visibility.data ?? []) (grouped[row.entity_type] ??= []).push(row.entity_id)
-      return { preferences: preferences.data ?? null, visibility: grouped }
-    })
+    return this.withCache('user_preferences', this.DEFAULT_TTL_MS, async () =>
+      (await apiV1Client.get<UserPreferencesAggregate>('/pages/me/preferences')).data,
+    )
   }
 
   static async getReportsByEnrollmentAggregate(enrollmentId: string, page: number = 1, perPage: number = 50): Promise<{ enrollment: any, reports: any[], count: number }> {
     return this.withCache(`reports_enrollment:${enrollmentId}:p${page}:s${perPage}`, this.DEFAULT_TTL_MS, async () => {
-      const [enrollment, reports] = await Promise.all([
-        apiResourceClient.get<any>('enrollments', enrollmentId),
-        apiResourceClient.list<any>('reports', { enrollmentId, page, perPage, sort: '-updated_at' })
-      ])
-      return { enrollment: enrollment.data, reports: reports.data ?? [], count: reports.meta?.total ?? reports.data?.length ?? 0 }
+      const offset = Math.max(0, (page - 1) * perPage)
+      const query = new URLSearchParams({ limit: String(perPage), offset: String(offset), sort: '-updated_at' })
+      const response = await apiV1Client.get<{ enrollment: any, reports: any[], count: number }>(`/pages/enrollments/${encodeURIComponent(enrollmentId)}/reports?${query}`)
+      return { enrollment: response.data?.enrollment ?? null, reports: response.data?.reports ?? [], count: Number(response.meta?.total ?? response.data?.count ?? 0) }
     })
   }
 
   static async getClassroomSessionManagerAggregate(page: number = 1, perPage: number = 100, search: string = '', visibilityMode: string = 'all') {
-    const [classrooms, visibility] = await Promise.all([
-      apiResourceClient.list<any>('classrooms', { page, perPage, search, sort: 'name' }),
-      apiResourceClient.list<any>('visibility-preferences', { perPage: 100 })
-    ])
-    const hiddenClassroomIds = new Set((visibility.data ?? []).filter((row) => row.entity_type === 'classroom' && row.is_hidden).map((row) => row.entity_id))
-    const hiddenSessionIds = (visibility.data ?? []).filter((row) => row.entity_type === 'class_session' && row.is_hidden).map((row) => row.entity_id)
-    const filtered = (classrooms.data ?? []).filter((row) => visibilityMode === 'all' || (visibilityMode === 'hidden' ? hiddenClassroomIds.has(row.id) : !hiddenClassroomIds.has(row.id)))
-    return { classrooms: filtered, count: classrooms.meta?.total ?? filtered.length, hiddenClassroomIds: [...hiddenClassroomIds], hiddenSessionIds }
+    const query = new URLSearchParams({ limit: String(perPage), offset: String(Math.max(0, (page - 1) * perPage)), search, visibility: visibilityMode })
+    return (await apiV1Client.get<any>(`/pages/classrooms/overview?${query}`)).data
   }
 
   static async getDashboardHome(start?: string, end?: string, forceRefresh: boolean = false) {
@@ -88,19 +63,20 @@ export class AggregateService {
     if (end) params.set('end', end)
     const key = `dashboard:${start ?? ''}:${end ?? ''}`
     if (forceRefresh) this.clearCache(key)
-    return this.withCache(key, this.DEFAULT_TTL_MS, async () => (await apiV1Client.get<any>('/aggregates/dashboard?' + params.toString(), forceRefresh ? { cache: 'no-store' } : undefined)).data)
+    return this.withCache(key, this.DEFAULT_TTL_MS, async () => (await apiV1Client.get<any>('/pages/dashboard?' + params.toString(), forceRefresh ? { cache: 'no-store' } : undefined)).data)
   }
 
   static async getIncompleteReportsAggregate(daysBack: number = 90, scope: 'all' | 'my_present' | 'my_notifications' = 'all') {
     // request.cache = 'no-store'
-    const fetchReports = async () => (await apiV1Client.get<any>('/aggregates/incomplete-reports?daysBack=' + encodeURIComponent(String(daysBack)) + '&scope=' + encodeURIComponent(scope), scope === 'my_notifications' ? { cache: 'no-store' } : undefined)).data
+    const params = new URLSearchParams({ days_back: String(daysBack), scope, limit: '100', offset: '0' })
+    const fetchReports = async () => (await apiV1Client.get<any>('/pages/reports/incomplete?' + params.toString(), scope === 'my_notifications' ? { cache: 'no-store' } : undefined)).data
     if (scope === 'my_notifications') return fetchReports()
-    const response = await apiV1Client.get<any>('/aggregates/incomplete-reports?daysBack=' + encodeURIComponent(String(daysBack)) + '&scope=' + encodeURIComponent(scope))
+    const response = await apiV1Client.get<any>('/pages/reports/incomplete?' + params.toString())
     return response.data
   }
 
   static async getHolidaysAggregate(expandNames: boolean = true) {
-    return (await apiV1Client.get<any>('/aggregates/holidays-manager?expand=' + String(expandNames))).data
+    return (await apiV1Client.get<any>('/pages/holidays/overview?expand=' + String(expandNames))).data
   }
 
   static async getCoursesCached(page: number = 1, perPage: number = 100) {

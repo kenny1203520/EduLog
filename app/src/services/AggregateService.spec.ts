@@ -1,14 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { AggregateService } from './AggregateService'
-import { apiDataClient } from '@/services/api/ApiDataClient'
-
-vi.mock('@/services/api/ApiDataClient', () => ({
-  apiDataClient: {
-    auth: {
-      getSession: vi.fn()
-    }
-  }
-}))
 
 describe('AggregateService', () => {
   beforeEach(() => {
@@ -21,35 +12,26 @@ describe('AggregateService', () => {
     vi.restoreAllMocks()
   })
 
-  it('getUserPreferencesAggregate calls fetch with auth header', async () => {
-    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
-      data: { session: { access_token: 'test-token' } }
-    } as any)
-    
+  it('getUserPreferencesAggregate calls the page API with same-origin credentials', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: true,
-      json: async () => ({ preferences: { time_zone: 'UTC' }, visibility: {} }),
+      json: async () => ({ data: { preferences: { time_zone: 'UTC' }, visibility: {} }, request_id: 'request', trace_id: 'trace' }),
       text: async () => ''
     } as any)
 
     const result = await AggregateService.getUserPreferencesAggregate()
     expect(result.preferences?.time_zone).toBe('UTC')
-    expect(globalThis.fetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer test-token'
-      }
-    }))
+    const [url, options] = vi.mocked(globalThis.fetch).mock.calls[0]
+    expect(url).toBe('/api/pages/me/preferences')
+    expect(options).toEqual(expect.objectContaining({ credentials: 'include' }))
+    expect((options?.headers as Headers).get('X-Request-Id')).toMatch(/^edulog-/)
+    expect((options?.headers as Headers).get('traceparent')).toMatch(/^00-/)
   })
 
   it('getUserPreferencesAggregate uses cache on subsequent calls', async () => {
-    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
-      data: { session: null }
-    } as any)
-    
     vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: true,
-      json: async () => ({ preferences: { time_zone: 'UTC' } }),
+      json: async () => ({ data: { preferences: { time_zone: 'UTC' }, visibility: {} }, request_id: 'request', trace_id: 'trace' }),
       text: async () => ''
     } as any)
 
@@ -61,33 +43,25 @@ describe('AggregateService', () => {
   })
 
   it('throws an error if the response is not ok', async () => {
-    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
-      data: { session: null }
-    } as any)
-    
     vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: false,
       status: 500,
-      text: async () => 'Internal Server Error'
+      json: async () => ({ error: { code: 'INTERNAL_ERROR', message: 'Internal Server Error', request_id: 'request', trace_id: 'trace' } }),
     } as any)
 
-    await expect(AggregateService.getUserPreferencesAggregate()).rejects.toThrow('AggregateService error: 500 Internal Server Error')
+    await expect(AggregateService.getUserPreferencesAggregate()).rejects.toMatchObject({ status: 500, code: 'INTERNAL_ERROR' })
   })
 
   it('keeps incomplete report aggregate cache entries separated by scope', async () => {
-    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
-      data: { session: { access_token: 'test-token' } }
-    } as any)
-
     vi.mocked(globalThis.fetch)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [{ id: 'my-report' }],
+        json: async () => ({ data: [{ id: 'my-report' }], request_id: 'request', trace_id: 'trace' }),
         text: async () => ''
       } as any)
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => [{ id: 'all-report' }],
+        json: async () => ({ data: [{ id: 'all-report' }], request_id: 'request', trace_id: 'trace' }),
         text: async () => ''
       } as any)
 
@@ -95,18 +69,14 @@ describe('AggregateService', () => {
     await AggregateService.getIncompleteReportsAggregate(90, 'all')
 
     expect(globalThis.fetch).toHaveBeenCalledTimes(2)
-    expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toContain('scope=my_present')
-    expect(vi.mocked(globalThis.fetch).mock.calls[1][0]).toContain('scope=all')
+    expect(vi.mocked(globalThis.fetch).mock.calls[0][0]).toContain('/api/pages/reports/incomplete?days_back=90&scope=my_present')
+    expect(vi.mocked(globalThis.fetch).mock.calls[1][0]).toContain('/api/pages/reports/incomplete?days_back=90&scope=all')
   })
 
   it('never caches policy-aware notification results', async () => {
-    vi.mocked(apiDataClient.auth.getSession).mockResolvedValue({
-      data: { session: { access_token: 'yuan-token' } }
-    } as any)
-
     vi.mocked(globalThis.fetch).mockResolvedValue({
       ok: true,
-      json: async () => [],
+      json: async () => ({ data: [], request_id: 'request', trace_id: 'trace' }),
       text: async () => ''
     } as any)
 
