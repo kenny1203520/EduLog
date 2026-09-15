@@ -149,11 +149,27 @@ describe('generated API contract', () => {
     expect(spec.paths['/api/users/search']?.get?.['x-permission']).toBe('system.users.list')
   })
 
-  it('documents the canonical page-level dashboard read model', () => {
+  it('documents page read models separately from REST resources', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
-    expect(spec.paths['/api/dashboard']?.get?.operationId).toBe('dashboard')
-    expect(spec.paths['/api/dashboard']?.get?.['x-permission']).toBe('teaching.reports.list')
-    expect(spec.paths['/api/dashboard']?.get?.responses?.['200']?.$ref).toBe('#/components/responses/Envelope')
+    const pagePaths = [
+      '/api/pages/dashboard',
+      '/api/pages/me/preferences',
+      '/api/pages/enrollments/{enrollmentId}/reports',
+      '/api/pages/classrooms/overview',
+      '/api/pages/holidays/overview',
+      '/api/pages/reports/incomplete',
+    ]
+    for (const path of pagePaths) {
+      const operation = spec.paths[path]?.get
+      expect(operation, path).toBeDefined()
+      expect(operation?.['x-page-api'], path).toBe(true)
+      expect(operation?.responses?.['200']?.$ref, path).toBe('#/components/responses/Envelope')
+      expect(operation?.security, path).toEqual([{ cookieAuth: [] }])
+    }
+    expect(spec.paths['/api/pages/dashboard']?.get?.operationId).toBe('page_dashboard')
+    expect(spec.paths['/api/pages/dashboard']?.get?.['x-permission']).toBe('teaching.reports.list')
+    expect(spec.paths['/api/aggregates/dashboard']).toBeUndefined()
+    expect(spec.paths['/api/dashboard']).toBeUndefined()
   })
 
   it('keeps RPC exposure, runtime guard, and OpenAPI metadata in sync', () => {

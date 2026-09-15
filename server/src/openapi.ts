@@ -192,19 +192,82 @@ export function buildOpenApi() {
   paths['/api/holidays/check'] = {
     get: { operationId: 'holiday_check', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.holidays.list', parameters: [{ name: 'date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'classroom_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'class_session_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'teacher_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
-  for (const aggregate of ['user-preferences', 'student-reports', 'classroom-session-manager', 'holidays-manager', 'incomplete-reports', 'dashboard']) {
-    paths[`/api/aggregates/${aggregate}`] = { get: { operationId: `aggregate_${aggregate.replaceAll('-', '_')}`, security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
-  }
-  paths['/api/dashboard'] = {
+  const pageBase = { security: [{ cookieAuth: [] }], 'x-page-api': true, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
+  paths['/api/pages/me/preferences'] = {
     get: {
-      operationId: 'dashboard',
-      security: [{ cookieAuth: [] }],
+      ...pageBase,
+      operationId: 'page_me_preferences',
+      summary: 'Read the signed-in user preferences read model',
+      'x-permission': 'self.user_preferences.read',
+    },
+  }
+  paths['/api/pages/enrollments/{enrollmentId}/reports'] = {
+    get: {
+      ...pageBase,
+      operationId: 'page_enrollment_reports',
+      summary: 'Read an enrollment and its visible reports for the enrollment page',
+      'x-permission': 'teaching.reports.list',
+      parameters: [
+        { name: 'enrollmentId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+        { $ref: '#/components/parameters/Limit' },
+        { $ref: '#/components/parameters/Offset' },
+        { name: 'sort', in: 'query', schema: { type: 'string', enum: ['occurrence_date', '-occurrence_date', 'updated_at', '-updated_at'], default: '-occurrence_date' } },
+      ],
+    },
+  }
+  paths['/api/pages/classrooms/overview'] = {
+    get: {
+      ...pageBase,
+      operationId: 'page_classrooms_overview',
+      summary: 'Read the classroom management page read model',
+      'x-permission': 'teaching.classrooms.list',
+      parameters: [
+        { $ref: '#/components/parameters/Limit' },
+        { $ref: '#/components/parameters/Offset' },
+        { $ref: '#/components/parameters/Search' },
+        { name: 'visibility', in: 'query', schema: { type: 'string', enum: ['all', 'visible', 'hidden'], default: 'all' } },
+      ],
+    },
+  }
+  paths['/api/pages/holidays/overview'] = {
+    get: {
+      ...pageBase,
+      operationId: 'page_holidays_overview',
+      summary: 'Read the holiday management page read model',
+      'x-permission': 'teaching.holidays.list',
+      parameters: [
+        { name: 'expand', in: 'query', schema: { type: 'boolean', default: true } },
+        { $ref: '#/components/parameters/Limit' },
+        { $ref: '#/components/parameters/Offset' },
+        { $ref: '#/components/parameters/Search' },
+        { name: 'sort', in: 'query', schema: { type: 'string', enum: ['start_date', '-start_date', 'name', '-name'], default: '-start_date' } },
+      ],
+    },
+  }
+  paths['/api/pages/reports/incomplete'] = {
+    get: {
+      ...pageBase,
+      operationId: 'page_incomplete_reports',
+      summary: 'Read incomplete reports for the report workflow page',
+      'x-permission': 'teaching.reports.list',
+      parameters: [
+        { name: 'days_back', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 3650, default: 90 } },
+        { name: 'scope', in: 'query', schema: { type: 'string', enum: ['all', 'my_present', 'my_notifications'], default: 'all' } },
+        { $ref: '#/components/parameters/Limit' },
+        { $ref: '#/components/parameters/Offset' },
+      ],
+    },
+  }
+  paths['/api/pages/dashboard'] = {
+    get: {
+      ...pageBase,
+      operationId: 'page_dashboard',
+      summary: 'Read the dashboard page read model',
       'x-permission': 'teaching.reports.list',
       parameters: [
         { name: 'start', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
         { name: 'end', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
       ],
-      responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses },
     },
   }
   paths['/api/rpc/{name}'] = {

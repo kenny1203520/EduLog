@@ -3,11 +3,33 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { sendData } from './response.js'
 import { isIncompleteReport, isTeacherPresent, reportMissingFlags } from './reportSemantics.js'
+import { setAuditContext } from './context.js'
 
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
 const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,content,content_document,is_completed,progress_letter,attendance_status,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,version,absence_reason,external_link,updated_at'
 
 function requireDb(req: Request) { if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required'); return req.db }
+
+async function requirePagePermission(req: Request, permission: string, resource: string, resourceId: string | null = null) {
+  const db = requireDb(req)
+  setAuditContext(req, { domain: permission.startsWith('system.') ? 'system' : 'teaching', resource, resourceId, action: 'read', permission })
+  const result = await db.rpc('has_api_permission', {
+    p_user_id: req.user!.id,
+    p_permission_key: permission,
+    p_classroom_id: null,
+    p_class_session_id: null,
+  })
+  if (result.error) throw mapDatabaseError(result.error)
+  if (result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read this page')
+}
+
+async function requireEnrollmentReportsPermission(req: Request, enrollmentId: string) {
+  const db = requireDb(req)
+  setAuditContext(req, { domain: 'teaching', resource: 'enrollment-reports', resourceId: enrollmentId, action: 'read', permission: 'teaching.reports.list', scopeId: enrollmentId, scopeType: 'enrollment' })
+  const result = await db.rpc('can_access_enrollment', { p_enrollment_id: enrollmentId, p_permission_key: 'teaching.reports.list' })
+  if (result.error) throw mapDatabaseError(result.error)
+  if (result.data !== true) throw new ApiError(404, 'NOT_FOUND', 'The enrollment was not found')
+}
 
 async function preferences(req: Request, res: Response) {
   const db = requireDb(req)
@@ -22,29 +44,43 @@ async function preferences(req: Request, res: Response) {
 }
 
 async function studentReports(req: Request, res: Response) {
-  const db = requireDb(req); const query = z.object({ enrollment_id: z.string().uuid(), page: z.coerce.number().int().min(1).max(100000).default(1), perPage: z.coerce.number().int().min(1).max(100).default(50) }).strict().parse(req.query)
-  const from = (query.page - 1) * query.perPage
-  const enrollment = await db.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,created_at,updated_at,students(id,name),courses(id,subject,stage,display_name),classrooms(id,name,address)').eq('id', query.enrollment_id).maybeSingle()
-  const reports = await db.from('occurrence_reports').select(`${reportFields},class_occurrences(id,occurrence_date,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,class_session_id,class_sessions(id,name,classroom_id,classrooms(id,name))),lessons(id,title,sequence)`, { count: 'exact' }).eq('enrollment_id', query.enrollment_id).order('occurrence_date', { foreignTable: 'class_occurrences', ascending: false }).range(from, from + query.perPage - 1)
+  const db = requireDb(req)
+  const enrollmentId = typeof req.params.enrollmentId === 'string' ? req.params.enrollmentId : null
+  if (!enrollmentId || !z.string().uuid().safeParse(enrollmentId).success) throw new ApiError(400, 'INVALID_ID', 'Enrollment id is invalid')
+  const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), offset: z.coerce.number().int().min(0).max(1000000).default(0), sort: z.enum(['occurrence_date', '-occurrence_date', 'updated_at', '-updated_at']).default('-occurrence_date') }).strict().parse(req.query)
+  await requireEnrollmentReportsPermission(req, enrollmentId)
+  const enrollment = await db.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,created_at,updated_at,students(id,name),courses(id,subject,stage,display_name),classrooms(id,name,address)').eq('id', enrollmentId).maybeSingle()
+  let reportsQuery = db.from('occurrence_reports').select(`${reportFields},class_occurrences(id,occurrence_date,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,class_session_id,class_sessions(id,name,classroom_id,classrooms(id,name))),lessons(id,title,sequence)`, { count: 'exact' }).eq('enrollment_id', enrollmentId)
+  const descending = query.sort.startsWith('-')
+  const sortField = query.sort.replace(/^-/, '')
+  reportsQuery = sortField === 'occurrence_date'
+    ? reportsQuery.order('occurrence_date', { foreignTable: 'class_occurrences', ascending: !descending })
+    : reportsQuery.order(sortField, { ascending: !descending })
+  const reports = await reportsQuery.range(query.offset, query.offset + query.limit - 1)
   if (enrollment.error) throw mapDatabaseError(enrollment.error); if (reports.error) throw mapDatabaseError(reports.error)
-  return sendData(req, res, { enrollment: enrollment.data ?? null, reports: reports.data ?? [], count: reports.count ?? 0 }, { limit: query.perPage, offset: from, total: reports.count ?? 0, sort: '-occurrence_date' })
+  return sendData(req, res, { enrollment: enrollment.data ?? null, reports: reports.data ?? [], count: reports.count ?? 0 }, { limit: query.limit, offset: query.offset, total: reports.count ?? 0, sort: query.sort })
 }
 
 async function classroomManager(req: Request, res: Response) {
-  const db = requireDb(req); const query = z.object({ page: z.coerce.number().int().min(1).default(1), perPage: z.coerce.number().int().min(1).max(100).default(100), search: z.string().max(200).default(''), visibilityMode: z.enum(['all', 'visible', 'hidden']).default('all') }).strict().parse(req.query)
+  const db = requireDb(req); const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0), search: z.string().max(200).default(''), visibility: z.enum(['all', 'visible', 'hidden']).default('all') }).strict().parse(req.query)
+  await requirePagePermission(req, 'teaching.classrooms.list', 'classrooms-overview')
   const all = await db.from('classrooms').select('id,name,color,address,phone,external_link,teaching_id,user_id,created_at,updated_at,classroom_schedules(id,classroom_id,day_of_week,start_time,end_time,user_id,created_at,updated_at)', { count: 'exact' }).ilike('name', `%${query.search.replace(/[%_,]/g, '')}%`).order('name').range(0, 100000)
   if (all.error) throw mapDatabaseError(all.error)
   const visibility = await db.from('user_entity_visibility_preferences').select('entity_type,entity_id').eq('user_id', req.user!.id).eq('is_hidden', true).in('entity_type', ['classroom', 'class_session'])
   if (visibility.error) throw mapDatabaseError(visibility.error)
   const hiddenClassroomIds = new Set((visibility.data ?? []).filter((row) => row.entity_type === 'classroom').map((row) => row.entity_id)); const hiddenSessionIds = (visibility.data ?? []).filter((row) => row.entity_type === 'class_session').map((row) => row.entity_id)
-  const filtered = (all.data ?? []).filter((row) => query.visibilityMode === 'all' || (query.visibilityMode === 'hidden' ? hiddenClassroomIds.has(row.id) : !hiddenClassroomIds.has(row.id)))
-  const offset = (query.page - 1) * query.perPage
-  return sendData(req, res, { classrooms: filtered.slice(offset, offset + query.perPage), count: filtered.length, hiddenClassroomIds: [...hiddenClassroomIds], hiddenSessionIds }, { limit: query.perPage, offset, total: filtered.length, sort: 'name' })
+  const filtered = (all.data ?? []).filter((row) => query.visibility === 'all' || (query.visibility === 'hidden' ? hiddenClassroomIds.has(row.id) : !hiddenClassroomIds.has(row.id)))
+  return sendData(req, res, { classrooms: filtered.slice(query.offset, query.offset + query.limit), count: filtered.length, hiddenClassroomIds: [...hiddenClassroomIds], hiddenSessionIds }, { limit: query.limit, offset: query.offset, total: filtered.length, sort: 'name' })
 }
 
 async function holidays(req: Request, res: Response) {
-  const db = requireDb(req); const expand = req.query.expand === 'true'
-  const result = await db.from('holidays').select('id,start_date,end_date,time_zone,name,kind,classroom_ids,class_session_ids,teacher_ids,created_at,updated_at').order('start_date', { ascending: false })
+  const db = requireDb(req); const query = z.object({ expand: z.coerce.boolean().default(true), limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0), search: z.string().max(200).default(''), sort: z.enum(['start_date', '-start_date', 'name', '-name']).default('-start_date') }).strict().parse(req.query); const expand = query.expand
+  await requirePagePermission(req, 'teaching.holidays.list', 'holidays-overview')
+  const descending = query.sort.startsWith('-')
+  const sortField = query.sort.replace(/^-/, '')
+  let holidayQuery = db.from('holidays').select('id,start_date,end_date,time_zone,name,kind,classroom_ids,class_session_ids,teacher_ids,created_at,updated_at', { count: 'exact' })
+  if (query.search) holidayQuery = holidayQuery.ilike('name', `%${query.search.replace(/[%_,]/g, '')}%`)
+  const result = await holidayQuery.order(sortField, { ascending: !descending }).range(query.offset, query.offset + query.limit - 1)
   if (result.error) throw mapDatabaseError(result.error)
   let data: any[] = result.data ?? []
   if (expand && data.length) {
@@ -54,22 +90,24 @@ async function holidays(req: Request, res: Response) {
     const map = (rows: any[] | null) => Object.fromEntries((rows ?? []).map((row) => [row.id, row.name])); const classroomMap = map(classrooms.data); const sessionMap = map(sessions.data); const teacherMap = map(teachers.data)
     data = data.map((row) => ({ ...row, classroomNames: (row.classroom_ids ?? []).map((id: string) => classroomMap[id]).filter(Boolean), classSessionNames: (row.class_session_ids ?? []).map((id: string) => sessionMap[id]).filter(Boolean), teacherNames: (row.teacher_ids ?? []).map((id: string) => teacherMap[id]).filter(Boolean) }))
   }
-  return sendData(req, res, data, { limit: data.length, offset: 0, total: data.length, sort: '-start_date' })
+  return sendData(req, res, data, { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: query.sort })
 }
 
 async function incomplete(req: Request, res: Response) {
-  const db = requireDb(req); const query = z.object({ daysBack: z.coerce.number().int().min(1).max(3650).default(90), scope: z.enum(['all', 'my_present', 'my_notifications']).default('all') }).strict().parse(req.query)
-  const from = new Date(Date.now() - query.daysBack * 86400000).toISOString().slice(0, 10); const today = new Date().toISOString().slice(0, 10)
+  const db = requireDb(req); const query = z.object({ days_back: z.coerce.number().int().min(1).max(3650).default(90), scope: z.enum(['all', 'my_present', 'my_notifications']).default('all'), limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0) }).strict().parse(req.query)
+  await requirePagePermission(req, 'teaching.reports.list', 'incomplete-reports')
+  const from = new Date(Date.now() - query.days_back * 86400000).toISOString().slice(0, 10); const today = new Date().toISOString().slice(0, 10)
   const teacher = await db.from('teachers').select('id,user_id').eq('user_id', req.user!.id).maybeSingle(); if (teacher.error) throw mapDatabaseError(teacher.error)
   if ((query.scope === 'my_present' || query.scope === 'my_notifications') && !teacher.data) return sendData(req, res, [], { limit: 0, offset: 0, total: 0, sort: '-updated_at' })
   const result = await db.from('occurrence_reports').select(`${reportFields},enrollments!inner(id,student_id,course_id,students(id,name)),class_occurrences!inner(id,occurrence_date,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,is_conducted,teacher_ids,teacher_attendance,class_sessions(id,name,classroom_id,classrooms(id,name)))`).eq('attendance_status', 'present').gte('class_occurrences.occurrence_date', from).lte('class_occurrences.occurrence_date', today)
   if (result.error) throw mapDatabaseError(result.error)
   const rows = (result.data ?? []).filter((row: any) => isIncompleteReport(row) && (query.scope === 'all' || isTeacherPresent(teacher.data!.id, req.user!.id, row.class_occurrences?.teacher_ids ?? [], row.class_occurrences?.teacher_attendance ?? {}))).map((row: any) => ({ id: row.id, reportId: row.id, enrollmentId: row.enrollment_id, occurrenceId: row.class_occurrence_id, studentName: row.enrollments?.students?.name ?? row.enrollments?.students?.[0]?.name ?? 'Unknown', courseId: row.enrollments?.course_id, className: row.class_occurrences?.class_sessions?.name ?? row.class_occurrences?.class_sessions?.[0]?.name ?? '-', classroomName: row.class_occurrences?.class_sessions?.classrooms?.name ?? row.class_occurrences?.class_sessions?.[0]?.classrooms?.name ?? '-', date: row.class_occurrences?.occurrence_date, content: row.content ?? '', ...reportMissingFlags(row), version: row.version, attendanceStatus: row.attendance_status, updatedAt: row.updated_at }))
-  return sendData(req, res, rows, { limit: rows.length, offset: 0, total: rows.length, sort: '-updated_at' })
+  return sendData(req, res, rows.slice(query.offset, query.offset + query.limit), { limit: query.limit, offset: query.offset, total: rows.length, sort: '-updated_at' })
 }
 
 async function dashboard(req: Request, res: Response) {
   const db = requireDb(req); const query = z.object({ start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict().parse(req.query)
+  await requirePagePermission(req, 'teaching.reports.list', 'dashboard')
   const [students, courses, teacher, pending] = await Promise.all([
     db.from('students').select('id', { count: 'exact', head: true }),
     db.from('courses').select('id', { count: 'exact', head: true }),
@@ -82,4 +120,13 @@ async function dashboard(req: Request, res: Response) {
   if (query.start && query.end) { const result = await db.from('class_occurrences').select('id,class_session_id,occurrence_date,status,teacher_ids,teacher_attendance,is_conducted,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,class_sessions(name,time_zone,classrooms(name,color))').gte('occurrence_date', query.start).lte('occurrence_date', query.end).order('occurrence_date', { ascending: true }); if (result.error) throw mapDatabaseError(result.error); occurrences = (result.data ?? []).filter((row: any) => row.is_conducted === true && (!teacher.data || isTeacherPresent(teacher.data.id, req.user!.id, row.teacher_ids ?? [], row.teacher_attendance ?? {}))) }
   return sendData(req, res, { pendingReportsScope: 'my_present', stats: { totalStudents: students.count ?? 0, activeCourses: courses.count ?? 0, pendingReportsCount: pendingReports.length, pendingReportsScope: 'my_present' }, pendingReports, occurrences })
 }
-export function createAggregateRouter() { const router = Router(); router.get('/aggregates/user-preferences', wrap(preferences)); router.get('/aggregates/student-reports', wrap(studentReports)); router.get('/aggregates/classroom-session-manager', wrap(classroomManager)); router.get('/aggregates/holidays-manager', wrap(holidays)); router.get('/aggregates/incomplete-reports', wrap(incomplete)); router.get('/aggregates/dashboard', wrap(dashboard)); router.get('/dashboard', wrap(dashboard)); return router }
+export function createAggregateRouter() {
+  const router = Router()
+  router.get('/pages/me/preferences', wrap(preferences))
+  router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReports))
+  router.get('/pages/classrooms/overview', wrap(classroomManager))
+  router.get('/pages/holidays/overview', wrap(holidays))
+  router.get('/pages/reports/incomplete', wrap(incomplete))
+  router.get('/pages/dashboard', wrap(dashboard))
+  return router
+}

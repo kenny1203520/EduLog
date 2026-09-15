@@ -11,12 +11,15 @@ describe('aggregate API contract', () => {
     expect(source).not.toContain("select('*')")
   })
 
-  it('keeps dashboard, reports, preferences and incomplete-report routes available', () => {
-    expect(source).toContain("/aggregates/user-preferences")
-    expect(source).toContain("/aggregates/student-reports")
-    expect(source).toContain("/aggregates/incomplete-reports")
-    expect(source).toContain("/aggregates/dashboard")
-    expect(source).toContain("router.get('/dashboard', wrap(dashboard))")
+  it('exposes page read models without restoring the removed aggregate aliases', () => {
+    expect(source).toContain("router.get('/pages/me/preferences', wrap(preferences))")
+    expect(source).toContain("router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReports))")
+    expect(source).toContain("router.get('/pages/classrooms/overview', wrap(classroomManager))")
+    expect(source).toContain("router.get('/pages/holidays/overview', wrap(holidays))")
+    expect(source).toContain("router.get('/pages/reports/incomplete', wrap(incomplete))")
+    expect(source).toContain("router.get('/pages/dashboard', wrap(dashboard))")
+    expect(source).not.toContain('/aggregates/')
+    expect(source).not.toContain("router.get('/dashboard'")
   })
 
   it('keeps nested class session selects balanced for PostgREST', () => {
