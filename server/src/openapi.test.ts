@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { permissionForResource } from './authorization.js'
 import { buildOpenApi } from './openapi.js'
 import { resources } from './resources.js'
+import { allowedRpcs } from './rpcContract.js'
+import { isAllowedRpc as routerAllowsRpc } from './rpcRouter.js'
 
 describe('generated API contract', () => {
   it('does not advertise unsupported system mutations', () => {
@@ -152,6 +154,13 @@ describe('generated API contract', () => {
     expect(spec.paths['/api/dashboard']?.get?.operationId).toBe('dashboard')
     expect(spec.paths['/api/dashboard']?.get?.['x-permission']).toBe('teaching.reports.list')
     expect(spec.paths['/api/dashboard']?.get?.responses?.['200']?.$ref).toBe('#/components/responses/Envelope')
+  })
+
+  it('keeps RPC exposure, runtime guard, and OpenAPI metadata in sync', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    expect(spec.paths['/api/rpc/{name}']?.post?.['x-rpc-allowlist']).toEqual([...allowedRpcs])
+    for (const name of allowedRpcs) expect(routerAllowsRpc(name)).toBe(true)
+    expect(routerAllowsRpc('arbitrary_postgres_function')).toBe(false)
   })
 
   it('declares valid cookie and bearer security schemes', () => {

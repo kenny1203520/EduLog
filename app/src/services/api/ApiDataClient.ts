@@ -34,16 +34,19 @@ async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>
     const response = await apiV1Client.get<string[]>(`/occurrences/${encodeURIComponent(occurrenceId)}/roster`)
     return { data: response.data as T, error: null }
   }
+  if (name === 'get_effective_occurrence_enrollment_ids') throw new Error('API occurrence roster requires p_occurrence_id')
 
   const enrollmentId = stringArg(args, 'p_enrollment_id')
   if (name === 'get_single_lesson_transfer_history' && enrollmentId) {
     const response = await apiV1Client.get<T>(`/enrollments/${encodeURIComponent(enrollmentId)}/transfer-history`)
     return { data: response.data, error: null }
   }
+  if (name === 'get_single_lesson_transfer_history') throw new Error('API transfer history requires p_enrollment_id')
   if (name === 'get_effective_single_lesson_transfer_targets' && enrollmentId) {
     const response = await apiV1Client.get<T>(`/enrollments/${encodeURIComponent(enrollmentId)}/effective-transfer-targets`)
     return { data: response.data, error: null }
   }
+  if (name === 'get_effective_single_lesson_transfer_targets') throw new Error('API transfer targets requires p_enrollment_id')
   if (name === 'repair_single_lesson_transfer_report' && enrollmentId) {
     const response = await apiV1Client.post<T>(`/enrollments/${encodeURIComponent(enrollmentId)}/repair-transfer-report`, {
       target_occurrence_id: stringArg(args, 'p_target_occurrence_id'),
@@ -51,6 +54,7 @@ async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>
     const data = (response.data as any)?.report_id ?? response.data
     return { data, error: null }
   }
+  if (name === 'repair_single_lesson_transfer_report') throw new Error('API transfer repair requires p_enrollment_id')
   if (name === 'transfer_single_lesson') {
     const response = await apiV1Client.post<T>('/enrollment-transfers/single-lesson', {
       enrollment_id: stringArg(args, 'p_enrollment_id'),
@@ -101,7 +105,7 @@ async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>
   }
   if (name === 'resolve_user_permission') {
     const permission = stringArg(args, 'p_permission_key')
-    if (!permission) return null
+    if (!permission) throw new Error('API permission check requires p_permission_key')
     const response = await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?permission=${encodeURIComponent(permission)}`)
     return { data: { is_allowed: response.data.allowed, is_denied: !response.data.allowed } as T, error: null }
   }
@@ -268,8 +272,7 @@ export const apiDataClient = {
     try {
       const canonical = await invokeCanonicalRpc<T>(name, args)
       if (canonical) return canonical
-      const response = await apiV1Client.post<T>(`/rpc/${encodeURIComponent(name)}`, args)
-      return { data: response.data, error: null }
+      return { data: null, error: { message: `Unsupported API operation: ${name}` } }
     } catch (error) { return { data: null, error: toError(error) } }
   },
 }

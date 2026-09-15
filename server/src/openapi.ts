@@ -9,6 +9,7 @@ import { holidayCreateSchema, holidayUpdateSchema } from './holidayRouter.js'
 import { teacherAssignmentCreateSchema, teacherAssignmentUpdateSchema } from './teacherAssignmentRouter.js'
 import { conflictBody, transferBody, repairBody, cancelBody } from './transferRouter.js'
 import { permissionForResource } from './authorization.js'
+import { allowedRpcs } from './rpcContract.js'
 
 const errorResponses = {
   '400': { $ref: '#/components/responses/BadRequest' },
@@ -211,7 +212,7 @@ export function buildOpenApi() {
       operationId: 'invoke_allowed_rpc',
       summary: 'Invoke an allowlisted business RPC through the authenticated user-JWT client',
       security: [{ cookieAuth: [] }],
-      'x-rpc-allowlist': ['get_effective_occurrence_enrollment_ids', 'get_single_lesson_transfer_history', 'get_effective_single_lesson_transfer_targets', 'resolve_user_permission'],
+      'x-rpc-allowlist': [...allowedRpcs],
       parameters: [{ name: 'name', in: 'path', required: true, schema: { type: 'string' } }, { $ref: '#/components/parameters/IdempotencyKey' }],
       requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RpcInvocation' } } } },
       responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses },

@@ -75,6 +75,21 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(result.data).toEqual(['enrollment-1'])
   })
 
+  it('fails closed instead of falling back to an arbitrary RPC endpoint', async () => {
+    const result = await apiDataClient.rpc('unknown_database_function', { secret: 'value' })
+    expect(postMock).not.toHaveBeenCalled()
+    expect(result.data).toBeNull()
+    expect(result.error?.message).toContain('Unsupported API operation')
+  })
+
+  it('rejects incomplete canonical RPC input before making a request', async () => {
+    const result = await apiDataClient.rpc('get_single_lesson_transfer_history')
+    expect(getMock).not.toHaveBeenCalled()
+    expect(postMock).not.toHaveBeenCalled()
+    expect(result.data).toBeNull()
+    expect(result.error?.message).toContain('p_enrollment_id')
+  })
+
   it('maps RBAC policy replacement to the permission policy REST route', async () => {
     const permissionId = '00000000-0000-4000-8000-000000000010'
     getMock.mockResolvedValueOnce({ data: [{ id: permissionId, key: 'rbac.manage' }], meta: {}, request_id: 'r', trace_id: 't' })

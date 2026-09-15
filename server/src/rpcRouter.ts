@@ -2,22 +2,22 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
+import { allowedRpcs } from './rpcContract.js'
 
 const rpcBody = z.record(z.string(), z.unknown())
 
 // Only business RPCs already covered by RLS/SECURITY DEFINER guards may be
 // reached through the BFF. Arbitrary Postgres function execution is forbidden.
-const allowedRpcs = new Set([
-  'get_effective_occurrence_enrollment_ids',
-  'get_single_lesson_transfer_history',
-  'get_effective_single_lesson_transfer_targets',
-  'resolve_user_permission',
-])
+const allowedRpcSet = new Set<string>(allowedRpcs)
+
+export function isAllowedRpc(name: string): boolean {
+  return allowedRpcSet.has(name)
+}
 
 async function invoke(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const name = typeof req.params.name === 'string' ? req.params.name : ''
-  if (!allowedRpcs.has(name)) throw new ApiError(404, 'NOT_FOUND', 'RPC was not found')
+  if (!isAllowedRpc(name)) throw new ApiError(404, 'NOT_FOUND', 'RPC was not found')
   const input = rpcBody.parse(req.body ?? {})
   const args = name === 'resolve_user_permission' ? { ...input, p_user_id: req.user.id } : input
   const replay = await idempotency(req, 200, null)
