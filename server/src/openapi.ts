@@ -194,6 +194,18 @@ export function buildOpenApi() {
   for (const aggregate of ['user-preferences', 'student-reports', 'classroom-session-manager', 'holidays-manager', 'incomplete-reports', 'dashboard']) {
     paths[`/api/aggregates/${aggregate}`] = { get: { operationId: `aggregate_${aggregate.replaceAll('-', '_')}`, security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.list', responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   }
+  paths['/api/dashboard'] = {
+    get: {
+      operationId: 'dashboard',
+      security: [{ cookieAuth: [] }],
+      'x-permission': 'teaching.reports.list',
+      parameters: [
+        { name: 'start', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+        { name: 'end', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+      ],
+      responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses },
+    },
+  }
   paths['/api/rpc/{name}'] = {
     post: {
       operationId: 'invoke_allowed_rpc',

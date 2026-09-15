@@ -147,6 +147,13 @@ describe('generated API contract', () => {
     expect(spec.paths['/api/users/search']?.get?.['x-permission']).toBe('system.users.list')
   })
 
+  it('documents the canonical page-level dashboard read model', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    expect(spec.paths['/api/dashboard']?.get?.operationId).toBe('dashboard')
+    expect(spec.paths['/api/dashboard']?.get?.['x-permission']).toBe('teaching.reports.list')
+    expect(spec.paths['/api/dashboard']?.get?.responses?.['200']?.$ref).toBe('#/components/responses/Envelope')
+  })
+
   it('declares valid cookie and bearer security schemes', () => {
     const spec = buildOpenApi() as { components: { securitySchemes: Record<string, any> } }
     expect(spec.components.securitySchemes.cookieAuth).toEqual({ type: 'apiKey', in: 'cookie', name: 'edulog_access' })
