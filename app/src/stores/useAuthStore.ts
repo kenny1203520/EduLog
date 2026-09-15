@@ -28,8 +28,13 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function signIn(email: string, password: string) {
-    const { error } = await authService.login(email, password)
+    const result = await authService.login(email, password)
+    const { error } = result
     if (error) throw error
+    if (result.user) {
+      session.value = result.session ?? { user: result.user }
+      user.value = result.user
+    }
   }
 
   async function signOut() {
