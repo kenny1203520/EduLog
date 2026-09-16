@@ -23,9 +23,13 @@ const concurrencyScope = await readMigration('1000061_scope_and_idempotency_conc
 const lifecycle = await readMigration('1000062_report_lifecycle_atomicity.sql')
 const reportContract = await readMigration('1000063_report_mutation_contract_and_delete_replay.sql')
 const replayRbac = await readMigration('1000064_report_delete_replay_rbac.sql')
+const scopeCompatibility = await readMigration('1000057a_rbac_scope_constraint_compatibility.sql')
+const scopeForwardFix = await readMigration('1000065_rbac_scope_constraint_reconciliation.sql')
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
+const rbacScopeIntegration = await Deno.readTextFile(new URL('rbac_scope_constraint_integration.sql', import.meta.url))
+const rbacScopeLegacyFixture = await Deno.readTextFile(new URL('rbac_scope_constraint_legacy_fixture.sql', import.meta.url))
 
 Deno.test('reconciliation migration is present and fail-closed', () => {
   assertStringIncludes(reconciliation, 'CREATE TABLE IF NOT EXISTS public.teachings')
@@ -79,9 +83,16 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
+  const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
+  const teachingRoleName = '1000058_teaching_role_scope_isolation.sql'
+  const replayRbacName = '1000064_report_delete_replay_rbac.sql'
+  const scopeForwardFixName = '1000065_rbac_scope_constraint_reconciliation.sql'
+  assert(names.includes(compatibilityName))
+  assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
+  assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
@@ -280,8 +291,9 @@ Deno.test('1000061 binds RBAC scopes and serializes idempotency reservations', (
   assertStringIncludes(concurrencyScope, "public.has_teaching_permission(auth.uid(), 'teaching.members.manage'")
   assertStringIncludes(concurrencyScope, "public.has_api_permission(auth.uid(), 'teaching.members.manage'")
   assertStringIncludes(concurrencyScope, 'processing_started_at')
-  assertStringIncludes(concurrencyScope, 'idem.response_status')
-  assertStringIncludes(concurrencyScope, 'FROM public.api_idempotency_keys AS idem')
+  assertStringIncludes(concurrencyScope, 'SELECT method, route, response_status, response_body, processing_started_at')
+  assertStringIncludes(concurrencyScope, 'FROM public.api_idempotency_keys')
+  assertStringIncludes(concurrencyScope, 'FOR UPDATE;')
   assertStringIncludes(concurrencyScope, 'IDEMPOTENCY_IN_PROGRESS')
   assertStringIncludes(concurrencyScope, "interval '15 minutes'")
   assertStringIncludes(concurrencyScope, 'RETURNING true INTO v_inserted')
@@ -291,6 +303,27 @@ Deno.test('1000061 binds RBAC scopes and serializes idempotency reservations', (
   assertStringIncludes(concurrencyScope, "public.can_access_classroom(scoped_classroom_id, 'teaching.holidays.list'")
   assertStringIncludes(concurrencyScope, "public.can_access_class_session(scoped_session_id, 'teaching.holidays.list'")
   assertStringIncludes(concurrencyScope, "'teaching.holidays.read', 'teaching.holidays.list'")
+})
+
+Deno.test('RBAC scope constraint migrations preserve and extend teaching scopes', () => {
+  for (const migration of [scopeCompatibility, scopeForwardFix]) {
+    assertStringIncludes(migration, "scope_type IN ('system', 'teaching', 'classroom', 'class_session')")
+    assertStringIncludes(migration, 'role_permission_policies_scope_type_check')
+    assertStringIncludes(migration, 'DROP CONSTRAINT IF EXISTS role_permission_policies_scope_type_check')
+    assertStringIncludes(migration, 'DROP CONSTRAINT IF EXISTS user_role_assignments_scope_type_check')
+    assertStringIncludes(migration, 'role_permission_policy_scope_shape')
+    assertStringIncludes(migration, 'role_permission_policies_scope_shape')
+    assertStringIncludes(migration, 'user_role_assignment_scope_shape')
+    assertStringIncludes(migration, 'user_role_assignments_scope_type_check')
+    assertStringIncludes(migration, 'review data before migration')
+  }
+  assertStringIncludes(scopeForwardFix, 'apply migrations through 1000064 first')
+  assertStringIncludes(rbacScopeIntegration, 'role_permission_policies does not allow teaching scope')
+  assertStringIncludes(rbacScopeIntegration, 'user_role_assignments does not allow teaching scope')
+  assertStringIncludes(rbacScopeIntegration, 'invalid role policy scope was accepted')
+  assertStringIncludes(rbacScopeIntegration, 'invalid role assignment scope was accepted')
+  assertStringIncludes(rbacScopeLegacyFixture, "CHECK (scope_type IN ('system', 'classroom', 'class_session')) NOT VALID")
+  assertStringIncludes(rbacScopeLegacyFixture, 'role_permission_policy_scope_shape')
 })
 
 
