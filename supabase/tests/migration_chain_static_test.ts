@@ -26,6 +26,7 @@ const replayRbac = await readMigration('1000064_report_delete_replay_rbac.sql')
 const scopeCompatibility = await readMigration('1000057a_rbac_scope_constraint_compatibility.sql')
 const scopeForwardFix = await readMigration('1000065_rbac_scope_constraint_reconciliation.sql')
 const atomicPolicyReplacement = await readMigration('1000066_atomic_scoped_rbac_policy_replacement.sql')
+const qualifiedIdempotency = await readMigration('1000067_idempotency_output_column_qualification.sql')
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
@@ -84,7 +85,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -92,10 +93,12 @@ Deno.test('historical migration versions are preserved', async () => {
   const replayRbacName = '1000064_report_delete_replay_rbac.sql'
   const scopeForwardFixName = '1000065_rbac_scope_constraint_reconciliation.sql'
   const atomicPolicyReplacementName = '1000066_atomic_scoped_rbac_policy_replacement.sql'
+  const qualifiedIdempotencyName = '1000067_idempotency_output_column_qualification.sql'
   assert(names.includes(compatibilityName))
   assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
   assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
   assert(names.indexOf(scopeForwardFixName) < names.indexOf(atomicPolicyReplacementName), 'atomic policy replacement must follow 1000065')
+  assert(names.indexOf(atomicPolicyReplacementName) < names.indexOf(qualifiedIdempotencyName), 'idempotency qualification must follow 1000066')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
@@ -200,6 +203,16 @@ Deno.test('1000066 makes scoped policy replacement atomic and narrowly authorize
   assertStringIncludes(atomicPolicyReplacement, 'REVOKE ALL ON FUNCTION public.replace_role_permission_policies')
   assertStringIncludes(atomicPolicyReplacement, 'TO authenticated, service_role')
   assertStringIncludes(coreRls, 'direct RBAC policy write bypassed RLS')
+})
+
+Deno.test('1000067 qualifies idempotency columns that shadow output variables', () => {
+  assertStringIncludes(qualifiedIdempotency, 'CREATE OR REPLACE FUNCTION public.reserve_api_idempotency')
+  assertStringIncludes(qualifiedIdempotency, 'idem.response_status')
+  assertStringIncludes(qualifiedIdempotency, 'idem.response_body')
+  assertStringIncludes(qualifiedIdempotency, 'idem.processing_started_at')
+  assertStringIncludes(qualifiedIdempotency, 'FOR UPDATE;')
+  assertStringIncludes(qualifiedIdempotency, 'IDEMPOTENCY_IN_PROGRESS')
+  assertStringIncludes(qualifiedIdempotency, 'TO service_role')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {
