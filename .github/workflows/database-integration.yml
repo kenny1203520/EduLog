@@ -62,6 +62,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000066_atomic_scoped_rbac_policy_replacement.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000067_idempotency_output_column_qualification.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000067_idempotency_output_column_qualification.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000068_class_session_scoped_table_access.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000068_class_session_scoped_table_access.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
@@ -87,7 +89,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
-      - name: Upgrade an existing 1000061 database through 1000067
+      - name: Upgrade an existing 1000061 database through 1000068
         shell: bash
         run: |
           createdb edulog_history
@@ -95,7 +97,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *1000062*|*1000063*|*1000064*|*1000065*|*1000066*|*1000067*) continue ;;
+              *1000062*|*1000063*|*1000064*|*1000065*|*1000066*|*1000067*|*1000068*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -112,6 +114,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000066_atomic_scoped_rbac_policy_replacement.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000067_idempotency_output_column_qualification.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000067_idempotency_output_column_qualification.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000068_class_session_scoped_table_access.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000068_class_session_scoped_table_access.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql

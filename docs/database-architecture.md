@@ -19,12 +19,13 @@
 重要事項：
 
 - `1000001–1000039` 視為歷史 migration，不應重寫。
-- 既有 `1000040`–`1000064` 保留為逐檔、append-only 的 migration history；新增 `1000057a` 僅供 clean/upgrade chain 在 `1000058` 前替換舊 RBAC scope checks，`1000065` 修復已套用 `1000058` 的資料庫，`1000066` 修復 RBAC policy replacement RPC 的原子寫入/RLS 自我阻擋問題，`1000067` 修復 idempotency replay 查詢欄位名稱衝突。
+- 既有 `1000040`–`1000064` 保留為逐檔、append-only 的 migration history；新增 `1000057a` 僅供 clean/upgrade chain 在 `1000058` 前替換舊 RBAC scope checks，`1000065` 修復已套用 `1000058` 的資料庫，`1000066` 修復 RBAC policy replacement RPC 的原子寫入/RLS 自我阻擋問題，`1000067` 修復 idempotency replay 查詢欄位名稱衝突，`1000068` 修復 class-session RPC 的資料表權限並以教學範圍 RLS 限制 session/schedule-rule CRUD。
 - `1000041a_has_api_permission_compatibility.sql` 是排序於 `1000041` 與 `1000042` 之間的相容 migration；不存在 consolidated security migration。
 - `1000010`、`1000015`、`1000016` 是歷史未使用編號，不是待補的 migration。
-- 需要修正已套用資料庫時，新增 forward migration，不修改已部署檔案；已套用 `1000058` 的資料庫依序執行 `1000065`、`1000066`、`1000067`，不可倒序套用 `1000057a`。
+- 需要修正已套用資料庫時，新增 forward migration，不修改已部署檔案；已套用 `1000058` 的資料庫依序執行 `1000065`–`1000068`，不可倒序套用 `1000057a`。
 - `1000066` 僅讓 RBAC policy replacement RPC 在完成 canonical scope/permission 驗證後以單一交易執行；直接對 `role_permission_policies` 的讀寫仍受 RLS 限制，匿名角色不可呼叫該 RPC。
 - `1000067` 為 idempotency replay 查詢中的資料表欄位加上別名，避免和 PL/pgSQL `RETURNS TABLE` 輸出變數混淆；保留 service-role-only 呼叫權限。
+- `1000068` 讓 authenticated 執行 class-session RPC 必需的 SQL 權限與 RLS 分離：移除 session/schedule-rule 舊 policy，重建逐動作 teaching scope policies，且 RPC 必須維持 invoker security。
 
 推薦流程：
 

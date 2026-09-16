@@ -27,6 +27,7 @@ const scopeCompatibility = await readMigration('1000057a_rbac_scope_constraint_c
 const scopeForwardFix = await readMigration('1000065_rbac_scope_constraint_reconciliation.sql')
 const atomicPolicyReplacement = await readMigration('1000066_atomic_scoped_rbac_policy_replacement.sql')
 const qualifiedIdempotency = await readMigration('1000067_idempotency_output_column_qualification.sql')
+const sessionTableAccess = await readMigration('1000068_class_session_scoped_table_access.sql')
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
@@ -85,7 +86,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -94,11 +95,13 @@ Deno.test('historical migration versions are preserved', async () => {
   const scopeForwardFixName = '1000065_rbac_scope_constraint_reconciliation.sql'
   const atomicPolicyReplacementName = '1000066_atomic_scoped_rbac_policy_replacement.sql'
   const qualifiedIdempotencyName = '1000067_idempotency_output_column_qualification.sql'
+  const sessionTableAccessName = '1000068_class_session_scoped_table_access.sql'
   assert(names.includes(compatibilityName))
   assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
   assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
   assert(names.indexOf(scopeForwardFixName) < names.indexOf(atomicPolicyReplacementName), 'atomic policy replacement must follow 1000065')
   assert(names.indexOf(atomicPolicyReplacementName) < names.indexOf(qualifiedIdempotencyName), 'idempotency qualification must follow 1000066')
+  assert(names.indexOf(qualifiedIdempotencyName) < names.indexOf(sessionTableAccessName), 'session table access must follow 1000067')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
@@ -213,6 +216,24 @@ Deno.test('1000067 qualifies idempotency columns that shadow output variables', 
   assertStringIncludes(qualifiedIdempotency, 'FOR UPDATE;')
   assertStringIncludes(qualifiedIdempotency, 'IDEMPOTENCY_IN_PROGRESS')
   assertStringIncludes(qualifiedIdempotency, 'TO service_role')
+})
+
+Deno.test('1000068 grants session DML only behind canonical scoped RLS', () => {
+  assertStringIncludes(sessionTableAccess, "RAISE EXCEPTION '1000068 prerequisites missing")
+  assertStringIncludes(sessionTableAccess, "to_regprocedure('public.can_access_class_session(uuid,text)')")
+  assertStringIncludes(sessionTableAccess, "to_regprocedure('public.save_class_session_with_schedule(jsonb,jsonb,uuid)')")
+  assertStringIncludes(sessionTableAccess, 'DROP POLICY IF EXISTS "Enable all access for authenticated users" ON public.class_session_schedule_rules')
+  assertStringIncludes(sessionTableAccess, 'Canonical sessions create')
+  assertStringIncludes(sessionTableAccess, 'Canonical session schedule rules create')
+  assertStringIncludes(sessionTableAccess, 'public.can_access_class_session(class_session_id, \'teaching.class_sessions.update\')')
+  assertStringIncludes(sessionTableAccess, 'REVOKE ALL ON TABLE public.class_sessions, public.class_session_schedule_rules FROM PUBLIC, anon')
+  assertStringIncludes(sessionTableAccess, 'TO authenticated, service_role')
+  assertStringIncludes(sessionTableAccess, "cmd = 'ALL'")
+  assertStringIncludes(sessionTableAccess, 'broad authenticated policy remains')
+  assertStringIncludes(sessionTableAccess, "has_table_privilege('authenticated', 'public.class_sessions', 'INSERT')")
+  assertStringIncludes(sessionTableAccess, "has_table_privilege('authenticated', 'public.class_session_schedule_rules', 'DELETE')")
+  assertStringIncludes(coreRls, 'cross-teaching schedule rule insert unexpectedly succeeded')
+  assertStringIncludes(coreRls, 'same-teaching schedule rule RPC create failed')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

@@ -1,8 +1,8 @@
 # EduLog migration chain
 
-The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000064` remain unchanged. `1000057a_rbac_scope_constraint_compatibility.sql` is a new clean/upgrade compatibility step before `1000058`; `1000065_rbac_scope_constraint_reconciliation.sql` is the forward-only repair for databases that have already applied `1000058`, `1000066_atomic_scoped_rbac_policy_replacement.sql` repairs the authorized policy replacement RPC without weakening direct-table RLS, and `1000067_idempotency_output_column_qualification.sql` fixes the ambiguous replay lookup. `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
+The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000064` remain unchanged. `1000057a_rbac_scope_constraint_compatibility.sql` is a new clean/upgrade compatibility step before `1000058`; `1000065_rbac_scope_constraint_reconciliation.sql` is the forward-only repair for databases that have already applied `1000058`, `1000066_atomic_scoped_rbac_policy_replacement.sql` repairs the authorized policy replacement RPC without weakening direct-table RLS, `1000067_idempotency_output_column_qualification.sql` fixes the ambiguous replay lookup, and `1000068_class_session_scoped_table_access.sql` restores session RPC table privileges behind canonical teaching-scoped RLS. `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
 
-This directory contains the append-only database history for EduLog. Existing migrations through `1000064` must not be edited. The current chain adds the pre-`1000058` compatibility step and `1000065`–`1000067` forward-only repairs without rewriting applied migration files.
+This directory contains the append-only database history for EduLog. Existing migrations through `1000064` must not be edited. The current chain adds the pre-`1000058` compatibility step and `1000065`–`1000068` forward-only repairs without rewriting applied migration files.
 
 The former consolidated migration names are intentionally absent. `1000041a_has_api_permission_compatibility.sql` is an intentional compatibility migration and sorts between `1000041` and `1000042`.
 
@@ -80,12 +80,13 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000065 | `1000065_rbac_scope_constraint_reconciliation.sql` | Forward-only RBAC scope constraint repair |
 | 1000066 | `1000066_atomic_scoped_rbac_policy_replacement.sql` | Atomic, scope-authorized RBAC policy replacement |
 | 1000067 | `1000067_idempotency_output_column_qualification.sql` | Qualify idempotency replay columns |
+| 1000068 | `1000068_class_session_scoped_table_access.sql` | Restore session RPC table access behind scoped RLS |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
 ## Current canonical chain
 
-The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062_report_lifecycle_atomicity.sql` through `1000067_idempotency_output_column_qualification.sql` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
+The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062_report_lifecycle_atomicity.sql` through `1000068_class_session_scoped_table_access.sql` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
 
 ## Clean install
 
@@ -93,7 +94,7 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a database at `1000039`, apply the individual `1000040`–`1000061` files in lexical order, including `1000057a` before `1000058`, then apply `1000062`–`1000067` in order. A database that has already recorded `1000058` must not apply `1000057a` out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, and core RLS assertions. Do not edit historical migrations.
+Back up the database first. Apply only migrations not recorded in the migration history. For a database at `1000039`, apply the individual `1000040`–`1000061` files in lexical order, including `1000057a` before `1000058`, then apply `1000062`–`1000068` in order. A database that has already recorded `1000058` must not apply `1000057a` out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, and core RLS assertions. Do not edit historical migrations.
 
 ## Rerun and rollback
 
@@ -101,8 +102,8 @@ The individual migrations are written to be rerunnable where PostgreSQL permits 
 
 ## Verification
 
-The CI database gate runs clean install, historical upgrade, `1000062`–`1000067` rerun, RBAC scope constraint checks, report lifecycle and replay assertions, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+The CI database gate runs clean install, historical upgrade, `1000062`–`1000068` rerun, RBAC scope constraint checks, report lifecycle and replay assertions, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
 
 ## Append-only history boundary
 
-Do not consolidate, rename, delete, or rewrite existing migrations `1000040`–`1000064`. An existing database records migration versions, so replacing a file with the same version cannot repair an already-applied database. Use new forward migrations such as `1000065+` for deployed databases. The `1000057a` compatibility file is for ordered clean/upgrade chains before `1000058`; it is not a replacement for `1000065` on a database that has already applied `1000058`. The `1000041a` compatibility migration remains before `1000042` so its function grant target exists during clean installation. `1000066` keeps the policy replacement RPC explicitly scope-authorized and atomic while preserving RLS for direct table access. `1000067` qualifies idempotency table columns to avoid collisions with its output variables.
+Do not consolidate, rename, delete, or rewrite existing migrations `1000040`–`1000064`. An existing database records migration versions, so replacing a file with the same version cannot repair an already-applied database. Use new forward migrations such as `1000065+` for deployed databases. The `1000057a` compatibility file is for ordered clean/upgrade chains before `1000058`; it is not a replacement for `1000065` on a database that has already applied `1000058`. The `1000041a` compatibility migration remains before `1000042` so its function grant target exists during clean installation. `1000066` keeps the policy replacement RPC explicitly scope-authorized and atomic while preserving RLS for direct table access. `1000067` qualifies idempotency table columns to avoid collisions with its output variables. `1000068` grants authenticated session table operations only alongside per-action teaching-scoped RLS policies, and requires the session RPC to remain invoker-security.

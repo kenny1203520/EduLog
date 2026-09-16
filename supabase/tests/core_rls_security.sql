@@ -12,14 +12,18 @@ DECLARE
 BEGIN
   FOREACH target_table IN ARRAY ARRAY[
     'students', 'student_contacts', 'student_schools', 'student_credentials',
-    'teacher_credentials', 'classroom_schedules', 'student_suspensions'
+    'teacher_credentials', 'classroom_schedules', 'student_suspensions',
+    'class_sessions', 'class_session_schedule_rules'
   ] LOOP
     SELECT count(*) INTO broad_count
     FROM pg_policies
     WHERE schemaname = 'public'
       AND tablename = target_table
       AND cmd = 'ALL'
-      AND roles @> ARRAY['authenticated'::name];
+      AND (
+        roles @> ARRAY['authenticated'::name]
+        OR roles @> ARRAY['public'::name]
+      );
     IF broad_count <> 0 THEN
       RAISE EXCEPTION 'authenticated-wide policy remains on %: %', target_table, broad_count;
     END IF;
@@ -31,7 +35,10 @@ BEGIN
         AND tablename = target_table
         AND cmd = action_name
         AND permissive = 'PERMISSIVE'
-        AND roles @> ARRAY['authenticated'::name];
+        AND (
+          roles @> ARRAY['authenticated'::name]
+          OR roles @> ARRAY['public'::name]
+        );
       IF policy_count <> 1 THEN
         RAISE EXCEPTION 'expected one authenticated % policy on %, found %', action_name, target_table, policy_count;
       END IF;
@@ -71,7 +78,15 @@ BEGIN
       ('Canonical student suspensions read', 'student_suspensions'),
       ('Canonical student suspensions create', 'student_suspensions'),
       ('Canonical student suspensions update', 'student_suspensions'),
-      ('Canonical student suspensions delete', 'student_suspensions')
+      ('Canonical student suspensions delete', 'student_suspensions'),
+      ('Canonical sessions read', 'class_sessions'),
+      ('Canonical sessions create', 'class_sessions'),
+      ('Canonical sessions update', 'class_sessions'),
+      ('Canonical sessions delete', 'class_sessions'),
+      ('Canonical session schedule rules read', 'class_session_schedule_rules'),
+      ('Canonical session schedule rules create', 'class_session_schedule_rules'),
+      ('Canonical session schedule rules update', 'class_session_schedule_rules'),
+      ('Canonical session schedule rules delete', 'class_session_schedule_rules')
     ) AS policies(name, table_name)
   LOOP
     IF NOT EXISTS (
@@ -874,6 +889,10 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'same-teaching session RPC create failed';
   END IF;
+  IF (SELECT count(*) FROM public.class_session_schedule_rules
+      WHERE class_session_id = created_session_id) <> 1 THEN
+    RAISE EXCEPTION 'same-teaching schedule rule RPC create failed';
+  END IF;
 
   PERFORM public.save_class_session_with_schedule(
     jsonb_build_object(
@@ -918,6 +937,43 @@ BEGIN
     RAISE EXCEPTION 'mixed-teaching session RPC unexpectedly succeeded';
   EXCEPTION WHEN raise_exception THEN
     IF SQLERRM = 'mixed-teaching session RPC unexpectedly succeeded' THEN RAISE; END IF;
+  END;
+
+  IF EXISTS (
+    SELECT 1 FROM public.class_session_schedule_rules
+    WHERE class_session_id = 'b3500000-0000-4000-8000-000000000002'
+  ) THEN
+    RAISE EXCEPTION 'cross-teaching schedule rule was visible';
+  END IF;
+
+  BEGIN
+    INSERT INTO public.class_sessions(
+      id, name, classroom_id, course_ids, start_time, end_time, user_id, teaching_id
+    ) VALUES (
+      'b3550000-0000-4000-8000-000000000002',
+      'Cross-teaching session write',
+      'b2000000-0000-4000-8000-000000000002',
+      ARRAY['b3000000-0000-4000-8000-000000000002']::uuid[],
+      '09:00:00', '10:00:00',
+      '00000000-0000-0000-0000-000000000003',
+      'b1000000-0000-4000-8000-000000000002'
+    );
+    RAISE EXCEPTION 'cross-teaching class session insert unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+
+  BEGIN
+    INSERT INTO public.class_session_schedule_rules(
+      id, class_session_id, schedule_kind, day_of_week, start_time, end_time
+    ) VALUES (
+      'b3600000-0000-4000-8000-000000000002',
+      'b3500000-0000-4000-8000-000000000002',
+      'weekly', 3, '09:00:00', '10:00:00'
+    );
+    RAISE EXCEPTION 'cross-teaching schedule rule insert unexpectedly succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
   END;
 
   DELETE FROM public.class_sessions WHERE id = created_session_id;
