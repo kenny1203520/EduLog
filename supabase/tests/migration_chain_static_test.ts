@@ -170,6 +170,7 @@ Deno.test('1000063 protects direct report RPC calls and DELETE replay', () => {
   assertStringIncludes(lifecycleIntegration, 'unknown lifecycle patch field unexpectedly succeeded')
   assertStringIncludes(lifecycleIntegration, 'wrong lifecycle patch type unexpectedly succeeded')
   assertStringIncludes(lifecycleIntegration, 'out-of-range lifecycle patch unexpectedly succeeded')
+  assertStringIncludes(lifecycleIntegration, "PERFORM set_config('request.jwt.claim.sub'")
   assertStringIncludes(lifecycleIntegration, "set_config('request.jwt.claim.role', 'service_role', true)")
   assertStringIncludes(reportContract, 'GRANT EXECUTE ON FUNCTION public.apply_occurrence_report_lifecycle')
 })

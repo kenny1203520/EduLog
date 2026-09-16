@@ -169,11 +169,11 @@ BEGIN
     RAISE EXCEPTION 'closed session provisioned an out-of-range report';
   END IF;
 
-  SELECT set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000002', true);
+  PERFORM set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000002', true);
   IF public.can_mutate_occurrence_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.update') THEN
     RAISE EXCEPTION 'cross-teaching report write was authorized';
   END IF;
-  SELECT set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000001', true);
+  PERFORM set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000001', true);
   SELECT version INTO v_version FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001';
   PERFORM public.apply_occurrence_report_lifecycle('9b000000-0000-4000-8000-000000000001', v_version, '{}'::jsonb, auth.uid(), 'delete');
   IF EXISTS (SELECT 1 FROM public.occurrence_reports WHERE id = '9b000000-0000-4000-8000-000000000001') THEN RAISE EXCEPTION 'delete lifecycle regression'; END IF;
