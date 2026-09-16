@@ -1,8 +1,8 @@
 # EduLog migration chain
 
-The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Migrations `1000040` through `1000061` are preserved byte-for-byte from the historical baseline; `1000062_report_lifecycle_atomicity.sql` is the forward-only lifecycle correction. `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
+The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000064` remain unchanged. `1000057a_rbac_scope_constraint_compatibility.sql` is a new clean/upgrade compatibility step before `1000058`; `1000065_rbac_scope_constraint_reconciliation.sql` is the forward-only repair for databases that have already applied `1000058`. `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
 
-This directory contains the append-only database history for EduLog. Migrations through `1000061` are historical and must not be edited. The current canonical chain keeps the individual migration files and adds `1000062_report_lifecycle_atomicity.sql` as a forward-only fix.
+This directory contains the append-only database history for EduLog. Existing migrations through `1000064` must not be edited. The current chain adds the pre-`1000058` compatibility step and `1000065` forward-only repair without rewriting applied migration files.
 
 The former consolidated migration names are intentionally absent. `1000041a_has_api_permission_compatibility.sql` is an intentional compatibility migration and sorts between `1000041` and `1000042`.
 
@@ -69,6 +69,7 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000055 | `1000055_idempotency_route_binding.sql` | Idempotency route binding |
 | 1000056 | `1000056_canonical_rbac_policy_scope_rls.sql` | Canonical RBAC policy scope RLS |
 | 1000057 | `1000057_holiday_read_permission_alias.sql` | Holiday read permission alias |
+| 1000057a | `1000057a_rbac_scope_constraint_compatibility.sql` | Replace legacy RBAC scope checks before teaching-scoped policies |
 | 1000058 | `1000058_teaching_role_scope_isolation.sql` | Teaching role scope isolation |
 | 1000059 | `1000059_idempotency_key_contract.sql` | Idempotency key contract |
 | 1000060 | `1000060_permission_scope_and_session_regression.sql` | Permission scope and session regression |
@@ -76,12 +77,13 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000062 | `1000062_report_lifecycle_atomicity.sql` | Forward-only atomic report lifecycle |
 | 1000063 | `1000063_report_mutation_contract_and_delete_replay.sql` | Report RPC validation and DELETE replay |
 | 1000064 | `1000064_report_delete_replay_rbac.sql` | Current-user RBAC validation for DELETE replay |
+| 1000065 | `1000065_rbac_scope_constraint_reconciliation.sql` | Forward-only RBAC scope constraint repair |
 
-The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply `1000040` through `1000061` in lexical order; `1000041a` is applied between `1000041` and `1000042`.
+The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
 ## Current canonical chain
 
-The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, then apply `1000062_report_lifecycle_atomicity.sql`, `1000063_report_mutation_contract_and_delete_replay.sql`, and `1000064_report_delete_replay_rbac.sql`. Do not use the deleted consolidated migration names; they are not part of the current chain.
+The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062_report_lifecycle_atomicity.sql` through `1000065_rbac_scope_constraint_reconciliation.sql` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
 
 ## Clean install
 
@@ -89,16 +91,16 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a database at `1000039`, apply the individual `1000040`–`1000061` files in lexical order, then apply `1000062_report_lifecycle_atomicity.sql`, `1000063_report_mutation_contract_and_delete_replay.sql`, and `1000064_report_delete_replay_rbac.sql`. Finish with `supabase/tests/migration_upgrade_assertions.sql`, `supabase/tests/report_lifecycle_integration.sql`, and `supabase/tests/core_rls_security.sql`. Do not edit historical migrations.
+Back up the database first. Apply only migrations not recorded in the migration history. For a database at `1000039`, apply the individual `1000040`–`1000061` files in lexical order, including `1000057a` before `1000058`, then apply `1000062`–`1000065` in order. A database that has already recorded `1000058` must not apply `1000057a` out of order; apply the pending `1000065` forward repair instead. Finish with the migration upgrade, RBAC scope, report lifecycle, and core RLS assertions. Do not edit historical migrations.
 
 ## Rerun and rollback
 
-The individual `1000040`–`1000064` migrations are written to be rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
+The individual migrations are written to be rerunnable where PostgreSQL permits it (`IF EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT`, and guarded backfills). Always take a backup before rerunning. Prefer restoring the backup or applying a reviewed forward migration for rollback; do not use destructive `down` scripts against production history.
 
 ## Verification
 
-The CI database gate runs clean install, historical upgrade, `1000062`–`1000064` rerun, report lifecycle and replay assertions, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+The CI database gate runs clean install, historical upgrade, `1000062`–`1000065` rerun, RBAC scope constraint checks, report lifecycle and replay assertions, upgrade fixture and assertions, rate-limit checks, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
 
 ## Append-only history boundary
 
-Do not consolidate, rename, delete, or rewrite `1000040`–`1000061`. An existing database records migration versions, so replacing a file with the same version cannot repair an already-applied database. All lifecycle changes, strict mutation context, or later fixes must use `1000062+` forward-only migrations. The `1000041a` compatibility migration remains before `1000042` so its function grant target exists during clean installation.
+Do not consolidate, rename, delete, or rewrite existing migrations `1000040`–`1000064`. An existing database records migration versions, so replacing a file with the same version cannot repair an already-applied database. Use new forward migrations such as `1000065+` for deployed databases. The `1000057a` compatibility file is for ordered clean/upgrade chains before `1000058`; it is not a replacement for `1000065` on a database that has already applied `1000058`. The `1000041a` compatibility migration remains before `1000042` so its function grant target exists during clean installation.

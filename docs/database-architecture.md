@@ -19,10 +19,10 @@
 重要事項：
 
 - `1000001–1000039` 視為歷史 migration，不應重寫。
-- `1000040`–`1000061` 保留為逐檔、append-only 的 migration history；`1000062_report_lifecycle_atomicity.sql` 是後續 forward-only lifecycle 修正。
+- 既有 `1000040`–`1000064` 保留為逐檔、append-only 的 migration history；新增 `1000057a` 僅供 clean/upgrade chain 在 `1000058` 前替換舊 RBAC scope checks，`1000065` 則修復已套用 `1000058` 的資料庫。
 - `1000041a_has_api_permission_compatibility.sql` 是排序於 `1000041` 與 `1000042` 之間的相容 migration；不存在 consolidated security migration。
 - `1000010`、`1000015`、`1000016` 是歷史未使用編號，不是待補的 migration。
-- 需要修正已套用資料庫時，新增 forward migration，不修改已部署檔案。
+- 需要修正已套用資料庫時，新增 forward migration，不修改已部署檔案；已套用 `1000058` 的資料庫只執行 `1000065`，不可倒序套用 `1000057a`。
 
 推薦流程：
 
