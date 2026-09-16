@@ -25,6 +25,7 @@ const reportContract = await readMigration('1000063_report_mutation_contract_and
 const replayRbac = await readMigration('1000064_report_delete_replay_rbac.sql')
 const scopeCompatibility = await readMigration('1000057a_rbac_scope_constraint_compatibility.sql')
 const scopeForwardFix = await readMigration('1000065_rbac_scope_constraint_reconciliation.sql')
+const atomicPolicyReplacement = await readMigration('1000066_atomic_scoped_rbac_policy_replacement.sql')
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
@@ -83,16 +84,18 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
   const teachingRoleName = '1000058_teaching_role_scope_isolation.sql'
   const replayRbacName = '1000064_report_delete_replay_rbac.sql'
   const scopeForwardFixName = '1000065_rbac_scope_constraint_reconciliation.sql'
+  const atomicPolicyReplacementName = '1000066_atomic_scoped_rbac_policy_replacement.sql'
   assert(names.includes(compatibilityName))
   assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
   assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
+  assert(names.indexOf(scopeForwardFixName) < names.indexOf(atomicPolicyReplacementName), 'atomic policy replacement must follow 1000065')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
@@ -183,6 +186,19 @@ Deno.test('1000064 rechecks current user RBAC during service-role replay', () =>
   assertStringIncludes(replayRbac, 'v_denied')
   assert(!replayRbac.includes('has_teaching_permission('))
   assertStringIncludes(replayRbac, "GRANT EXECUTE ON FUNCTION public.replay_deleted_report_idempotency")
+})
+
+Deno.test('1000066 makes scoped policy replacement atomic and narrowly authorized', () => {
+  assertStringIncludes(atomicPolicyReplacement, 'LANGUAGE plpgsql\nSECURITY DEFINER')
+  assertStringIncludes(atomicPolicyReplacement, "public.has_system_permission(v_user_id, 'system.roles.manage')")
+  assertStringIncludes(atomicPolicyReplacement, "public.has_teaching_permission(v_user_id, 'teaching.members.manage'")
+  assertStringIncludes(atomicPolicyReplacement, "public.has_api_permission(v_user_id, 'teaching.members.manage'")
+  assertStringIncludes(atomicPolicyReplacement, 'INVALID_POLICY_PAYLOAD')
+  assertStringIncludes(atomicPolicyReplacement, 'DUPLICATE_POLICY_ROLE')
+  assertStringIncludes(atomicPolicyReplacement, 'pg_advisory_xact_lock')
+  assertStringIncludes(atomicPolicyReplacement, 'REVOKE ALL ON FUNCTION public.replace_role_permission_policies')
+  assertStringIncludes(atomicPolicyReplacement, 'TO authenticated, service_role')
+  assertStringIncludes(coreRls, 'direct RBAC policy write bypassed RLS')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

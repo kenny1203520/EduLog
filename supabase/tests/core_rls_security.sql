@@ -580,6 +580,41 @@ WHERE role.code = 'rls_scoped_manager'
   AND permission.key = 'teaching.students.read'
 ON CONFLICT DO NOTHING;
 
+DO $$
+BEGIN
+  IF NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.replace_role_permission_policies(text,text,uuid,jsonb)'::regprocedure) THEN
+    RAISE EXCEPTION 'scoped RBAC policy RPC is not SECURITY DEFINER';
+  END IF;
+  IF has_function_privilege('anon', 'public.replace_role_permission_policies(text,text,uuid,jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'anonymous role can execute scoped RBAC policy RPC';
+  END IF;
+END;
+$$;
+
+-- The scoped replacement RPC has a narrowly validated SECURITY DEFINER write
+-- path; direct writes by an unrelated authenticated user must still be denied
+-- by the table's RLS policies.
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000006', false);
+DO $$
+DECLARE
+  manager_role uuid;
+  student_read_permission uuid;
+BEGIN
+  SELECT id INTO manager_role FROM public.roles WHERE code = 'rls_scoped_manager';
+  SELECT id INTO student_read_permission FROM public.permissions WHERE key = 'teaching.students.read';
+  BEGIN
+    INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
+    VALUES (manager_role, student_read_permission, 'classroom', 'b2000000-0000-4000-8000-000000000002', 'allow');
+    RAISE EXCEPTION 'direct RBAC policy write bypassed RLS';
+  EXCEPTION WHEN insufficient_privilege THEN
+    NULL;
+  END;
+END;
+$$;
+RESET ROLE;
+
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', false);
@@ -671,6 +706,20 @@ DECLARE
   scoped_role uuid;
 BEGIN
   SELECT id INTO scoped_role FROM public.roles WHERE code = 'rls_scoped_manager';
+  BEGIN
+    PERFORM public.replace_role_permission_policies(
+      'teaching.students.read', 'teaching',
+      'a1000000-0000-4000-8000-000000000001',
+      jsonb_build_array(
+        jsonb_build_object('role_id', scoped_role, 'effect', 'allow'),
+        jsonb_build_object('role_id', scoped_role, 'effect', 'deny')
+      )
+    );
+    RAISE EXCEPTION 'duplicate RBAC policy roles were accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM = 'duplicate RBAC policy roles were accepted' THEN RAISE; END IF;
+    IF SQLERRM <> 'DUPLICATE_POLICY_ROLE' THEN RAISE; END IF;
+  END;
   PERFORM public.replace_role_permission_policies(
     'teaching.students.read', 'teaching',
     'a1000000-0000-4000-8000-000000000001',
