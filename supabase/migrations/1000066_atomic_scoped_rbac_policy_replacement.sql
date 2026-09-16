@@ -11,7 +11,7 @@ BEGIN
      OR to_regclass('public.teachings') IS NULL
      OR to_regprocedure('public.rbac_scope_exists(text,uuid)') IS NULL
      OR to_regprocedure('public.has_system_permission(uuid,text)') IS NULL
-     OR to_regprocedure('public.has_teaching_permission(uuid,text,uuid,uuid,uuid,date)') IS NULL
+     OR to_regprocedure('public.has_teaching_permission(uuid,text,uuid,uuid,uuid)') IS NULL
      OR to_regprocedure('public.has_api_permission(uuid,text,uuid,uuid)') IS NULL THEN
     RAISE EXCEPTION '1000066 prerequisites missing; apply migrations through 1000065 first';
   END IF;

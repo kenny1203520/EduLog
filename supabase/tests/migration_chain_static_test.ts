@@ -190,6 +190,7 @@ Deno.test('1000064 rechecks current user RBAC during service-role replay', () =>
 
 Deno.test('1000066 makes scoped policy replacement atomic and narrowly authorized', () => {
   assertStringIncludes(atomicPolicyReplacement, 'LANGUAGE plpgsql\nSECURITY DEFINER')
+  assertStringIncludes(atomicPolicyReplacement, "to_regprocedure('public.has_teaching_permission(uuid,text,uuid,uuid,uuid)')")
   assertStringIncludes(atomicPolicyReplacement, "public.has_system_permission(v_user_id, 'system.roles.manage')")
   assertStringIncludes(atomicPolicyReplacement, "public.has_teaching_permission(v_user_id, 'teaching.members.manage'")
   assertStringIncludes(atomicPolicyReplacement, "public.has_api_permission(v_user_id, 'teaching.members.manage'")
