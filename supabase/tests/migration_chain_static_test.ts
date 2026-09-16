@@ -28,6 +28,7 @@ const scopeForwardFix = await readMigration('1000065_rbac_scope_constraint_recon
 const atomicPolicyReplacement = await readMigration('1000066_atomic_scoped_rbac_policy_replacement.sql')
 const qualifiedIdempotency = await readMigration('1000067_idempotency_output_column_qualification.sql')
 const sessionTableAccess = await readMigration('1000068_class_session_scoped_table_access.sql')
+const reportTemplateBackfill = await readMigration('1000069_report_template_teaching_backfill.sql')
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
@@ -86,7 +87,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -96,12 +97,14 @@ Deno.test('historical migration versions are preserved', async () => {
   const atomicPolicyReplacementName = '1000066_atomic_scoped_rbac_policy_replacement.sql'
   const qualifiedIdempotencyName = '1000067_idempotency_output_column_qualification.sql'
   const sessionTableAccessName = '1000068_class_session_scoped_table_access.sql'
+  const reportTemplateBackfillName = '1000069_report_template_teaching_backfill.sql'
   assert(names.includes(compatibilityName))
   assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
   assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
   assert(names.indexOf(scopeForwardFixName) < names.indexOf(atomicPolicyReplacementName), 'atomic policy replacement must follow 1000065')
   assert(names.indexOf(atomicPolicyReplacementName) < names.indexOf(qualifiedIdempotencyName), 'idempotency qualification must follow 1000066')
   assert(names.indexOf(qualifiedIdempotencyName) < names.indexOf(sessionTableAccessName), 'session table access must follow 1000067')
+  assert(names.indexOf(sessionTableAccessName) < names.indexOf(reportTemplateBackfillName), 'report template backfill must follow 1000068')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
@@ -234,6 +237,17 @@ Deno.test('1000068 grants session DML only behind canonical scoped RLS', () => {
   assertStringIncludes(sessionTableAccess, "has_table_privilege('authenticated', 'public.class_session_schedule_rules', 'DELETE')")
   assertStringIncludes(coreRls, 'cross-teaching schedule rule insert unexpectedly succeeded')
   assertStringIncludes(coreRls, 'same-teaching schedule rule RPC create failed')
+})
+
+Deno.test('1000069 assigns legacy report templates to owner teaching or quarantine', () => {
+  assertStringIncludes(reportTemplateBackfill, "RAISE EXCEPTION '1000069 prerequisites missing")
+  assertStringIncludes(reportTemplateBackfill, 'template.instructor_id')
+  assertStringIncludes(reportTemplateBackfill, 'teaching.owner_user_id = template.instructor_id')
+  assertStringIncludes(reportTemplateBackfill, 'UPDATE public.report_templates AS template')
+  assertStringIncludes(reportTemplateBackfill, 'quarantine.is_quarantine = true')
+  assertStringIncludes(reportTemplateBackfill, 'INSERT INTO public.teaching_members(teaching_id, user_id, role_id)')
+  assertStringIncludes(reportTemplateBackfill, 'ON CONFLICT DO NOTHING')
+  assertStringIncludes(reportTemplateBackfill, 'report templates without a teaching scope')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {
