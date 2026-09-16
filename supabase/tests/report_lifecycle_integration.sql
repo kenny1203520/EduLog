@@ -212,6 +212,7 @@ BEGIN
   -- making this regression test claim that deny precedence works while never
   -- installing a deny.  Update the canonical row in-place so the fixture
   -- exercises the same unique policy boundary used in production.
+  RESET ROLE;
   UPDATE public.role_permission_policies policy
   SET effect = 'deny'
   FROM public.teaching_members member,
@@ -234,9 +235,11 @@ BEGIN
   )) THEN
     RAISE EXCEPTION 'delete replay survived explicit permission deny';
   END IF;
+  RESET ROLE;
   DELETE FROM public.teaching_members
   WHERE teaching_id = '92000000-0000-4000-8000-000000000001'
     AND user_id = '91000000-0000-4000-8000-000000000001';
+  SET LOCAL ROLE service_role;
   IF EXISTS (SELECT 1 FROM public.replay_deleted_report_idempotency(
     '91000000-0000-4000-8000-000000000001', 'lifecycle-delete-replay-001',
     'DELETE', '/api/reports/9b00000', '9b000000-0000-4000-8000-000000000001', 'teaching.reports.delete'
