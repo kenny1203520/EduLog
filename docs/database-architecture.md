@@ -19,14 +19,15 @@
 重要事項：
 
 - `1000001–1000039` 視為歷史 migration，不應重寫。
-- 既有 `1000040`–`1000064` 保留為逐檔、append-only 的 migration history；新增 `1000057a` 僅供 clean/upgrade chain 在 `1000058` 前替換舊 RBAC scope checks，`1000065` 修復已套用 `1000058` 的資料庫，`1000066` 修復 RBAC policy replacement RPC 的原子寫入/RLS 自我阻擋問題，`1000067` 修復 idempotency replay 查詢欄位名稱衝突，`1000068` 修復 class-session RPC 的資料表權限並以教學範圍 RLS 限制 session/schedule-rule CRUD，`1000069` 將舊 report template 依 instructor owner 回填至個別 teaching 或隔離至 quarantine。
+- 既有 `1000040`–`1000064` 保留為逐檔、append-only 的 migration history；新增 `1000057a` 僅供 clean/upgrade chain 在 `1000058` 前替換舊 RBAC scope checks，`1000065` 修復已套用 `1000058` 的資料庫，`1000066` 修復 RBAC policy replacement RPC 的原子寫入/RLS 自我阻擋問題，`1000067` 修復 idempotency replay 查詢欄位名稱衝突，`1000068` 修復 class-session RPC 的資料表權限並以教學範圍 RLS 限制 session/schedule-rule CRUD，`1000069` 將舊 report template 依 instructor owner 回填至個別 teaching 或隔離至 quarantine，`1000070` 授予 invoker session RPC 查詢 classroom/course 的 SELECT table privilege，同時保留 canonical RLS row scope。
 - `1000041a_has_api_permission_compatibility.sql` 是排序於 `1000041` 與 `1000042` 之間的相容 migration；不存在 consolidated security migration。
 - `1000010`、`1000015`、`1000016` 是歷史未使用編號，不是待補的 migration。
-- 需要修正已套用資料庫時，新增 forward migration，不修改已部署檔案；已套用 `1000058` 的資料庫依序執行 `1000065`–`1000069`，不可倒序套用 `1000057a`。
+- 需要修正已套用資料庫時，新增 forward migration，不修改已部署檔案；已套用 `1000058` 的資料庫依序執行 `1000065`–`1000070`，不可倒序套用 `1000057a`。
 - `1000066` 僅讓 RBAC policy replacement RPC 在完成 canonical scope/permission 驗證後以單一交易執行；直接對 `role_permission_policies` 的讀寫仍受 RLS 限制，匿名角色不可呼叫該 RPC。
 - `1000067` 為 idempotency replay 查詢中的資料表欄位加上別名，避免和 PL/pgSQL `RETURNS TABLE` 輸出變數混淆；保留 service-role-only 呼叫權限。
 - `1000068` 讓 authenticated 執行 class-session RPC 必需的 SQL 權限與 RLS 分離：移除 session/schedule-rule 舊 policy，重建逐動作 teaching scope policies，且 RPC 必須維持 invoker security。
 - `1000069` 補足歷史上漏掉的 report-template teaching backfill：先沿用 instructor 對應的 owner teaching，必要時建立該 owner 的個別 teaching，無法解析者只進 admin quarantine，並為 owner 建立預設 membership。
+- `1000070` 為 invoker-security `save_class_session_with_schedule` 提供讀取參照 classroom/course 的必要 SQL privilege；migration 先確認兩表 RLS 與 teaching-scoped SELECT policies 存在，再撤銷 PUBLIC/anon SELECT、只授予 authenticated/service_role SELECT。
 
 推薦流程：
 
@@ -220,11 +221,7 @@ can_access_report
 
 ## 7. 目前驗證狀態
 
-截至目前工作目錄的 latest commit `824c73e`：
-
-- GitHub required checks：`server`、`deno`、`deno-api-contract`、`migration-and-rls`、`deployment-contract`、`frontend-regression` 全部通過。
-- PR #7 狀態仍為 `OPEN`，merge state 為 `CLEAN`。
-- 本機未提供完整 PostgreSQL/Supabase runtime；production migration 狀態仍應以實際部署 catalog 與 backup/upgrade 驗證為準。
+CI 狀態會隨 PR revision 改變，請以 PR #7 最新 revision 的 required checks 為準；不要沿用舊 commit 的結果判定目前可合併。本機未提供完整 PostgreSQL/Supabase runtime，因此 migration/RLS 的正式驗證需由 CI 的 PostgreSQL integration gate 完成；production migration 狀態仍應以實際部署 catalog 與 backup/upgrade 驗證為準。
 
 ## 8. 前端/後端實作時的使用規則
 

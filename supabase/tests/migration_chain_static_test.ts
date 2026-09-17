@@ -29,6 +29,7 @@ const atomicPolicyReplacement = await readMigration('1000066_atomic_scoped_rbac_
 const qualifiedIdempotency = await readMigration('1000067_idempotency_output_column_qualification.sql')
 const sessionTableAccess = await readMigration('1000068_class_session_scoped_table_access.sql')
 const reportTemplateBackfill = await readMigration('1000069_report_template_teaching_backfill.sql')
+const sessionReferenceReads = await readMigration('1000070_class_session_rpc_reference_reads.sql')
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
@@ -87,7 +88,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -98,6 +99,7 @@ Deno.test('historical migration versions are preserved', async () => {
   const qualifiedIdempotencyName = '1000067_idempotency_output_column_qualification.sql'
   const sessionTableAccessName = '1000068_class_session_scoped_table_access.sql'
   const reportTemplateBackfillName = '1000069_report_template_teaching_backfill.sql'
+  const sessionReferenceReadsName = '1000070_class_session_rpc_reference_reads.sql'
   assert(names.includes(compatibilityName))
   assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
   assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
@@ -105,6 +107,7 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(names.indexOf(atomicPolicyReplacementName) < names.indexOf(qualifiedIdempotencyName), 'idempotency qualification must follow 1000066')
   assert(names.indexOf(qualifiedIdempotencyName) < names.indexOf(sessionTableAccessName), 'session table access must follow 1000067')
   assert(names.indexOf(sessionTableAccessName) < names.indexOf(reportTemplateBackfillName), 'report template backfill must follow 1000068')
+  assert(names.indexOf(reportTemplateBackfillName) < names.indexOf(sessionReferenceReadsName), 'session RPC reference privileges must follow 1000069')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
@@ -248,6 +251,17 @@ Deno.test('1000069 assigns legacy report templates to owner teaching or quaranti
   assertStringIncludes(reportTemplateBackfill, 'INSERT INTO public.teaching_members(teaching_id, user_id, role_id)')
   assertStringIncludes(reportTemplateBackfill, 'ON CONFLICT DO NOTHING')
   assertStringIncludes(reportTemplateBackfill, 'report templates without a teaching scope')
+})
+
+Deno.test('1000070 grants session RPC reference reads only behind scoped RLS', () => {
+  assertStringIncludes(sessionReferenceReads, "RAISE EXCEPTION '1000070 prerequisites missing")
+  assertStringIncludes(sessionReferenceReads, "WHEN 'classrooms' THEN 'Canonical classrooms read'")
+  assertStringIncludes(sessionReferenceReads, "ELSE 'Canonical courses read'")
+  assertStringIncludes(sessionReferenceReads, "AND qual LIKE '%can_teaching_action%'")
+  assertStringIncludes(sessionReferenceReads, 'REVOKE SELECT ON TABLE public.classrooms, public.courses FROM PUBLIC, anon')
+  assertStringIncludes(sessionReferenceReads, 'GRANT SELECT ON TABLE public.classrooms, public.courses TO authenticated, service_role')
+  assertStringIncludes(sessionReferenceReads, "has_table_privilege('anon', 'public.courses', 'SELECT')")
+  assertStringIncludes(coreRls, 'class-session RPC leaked a cross-teaching course')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

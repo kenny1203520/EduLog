@@ -863,6 +863,15 @@ DO $$
 DECLARE
   created_session_id uuid;
 BEGIN
+  IF (SELECT count(*) FROM public.courses
+      WHERE id = 'a3000000-0000-4000-8000-000000000001') <> 1 THEN
+    RAISE EXCEPTION 'same-teaching course reference was not visible to the authenticated RPC caller';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.courses
+             WHERE id = 'b3000000-0000-4000-8000-000000000002') THEN
+    RAISE EXCEPTION 'class-session RPC leaked a cross-teaching course';
+  END IF;
+
   created_session_id := public.save_class_session_with_schedule(
     jsonb_build_object(
       'name', 'RLS Session RPC A',
