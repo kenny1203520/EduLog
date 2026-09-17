@@ -127,5 +127,6 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           # These fixture assertions target a pre-1000043 upgrade and run in
           # the preceding legacy-upgrade job; this database starts at 1000061.
+          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_chain_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
