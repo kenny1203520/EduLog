@@ -35,6 +35,7 @@ const sensitiveDataPermissions = await readMigration('1000072_sensitive_data_per
 const dashboardPageReadModel = await readMigration('1000073_dashboard_page_read_model.sql')
 const dashboardPageHardening = await readMigration('1000074_dashboard_read_model_hardening.sql')
 const dashboardQuerySegmentation = await readMigration('1000075_dashboard_query_segmentation.sql')
+const dashboardCountsSetBased = await readMigration('1000076_dashboard_counts_set_based.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -95,7 +96,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -112,6 +113,7 @@ Deno.test('historical migration versions are preserved', async () => {
   const dashboardPageReadModelName = '1000073_dashboard_page_read_model.sql'
   const dashboardPageHardeningName = '1000074_dashboard_read_model_hardening.sql'
   const dashboardQuerySegmentationName = '1000075_dashboard_query_segmentation.sql'
+  const dashboardCountsSetBasedName = '1000076_dashboard_counts_set_based.sql'
   assert(names.includes(compatibilityName))
   assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
   assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
@@ -125,6 +127,7 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(names.indexOf(sensitiveDataPermissionsName) < names.indexOf(dashboardPageReadModelName), 'dashboard read model must follow the sensitive data boundary')
   assert(names.indexOf(dashboardPageReadModelName) < names.indexOf(dashboardPageHardeningName), 'dashboard hardening must follow the dashboard read model')
   assert(names.indexOf(dashboardPageHardeningName) < names.indexOf(dashboardQuerySegmentationName), 'dashboard query segmentation must follow dashboard hardening')
+  assert(names.indexOf(dashboardQuerySegmentationName) < names.indexOf(dashboardCountsSetBasedName), 'set-based dashboard counts must follow query segmentation')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
@@ -134,6 +137,7 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(names.includes(dashboardPageReadModelName))
   assert(names.includes(dashboardPageHardeningName))
   assert(names.includes(dashboardQuerySegmentationName))
+  assert(names.includes(dashboardCountsSetBasedName))
   assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
   assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
@@ -372,6 +376,23 @@ Deno.test('1000075 adds an invoker Dashboard counts RPC', () => {
   assertStringIncludes(dashboardQuerySegmentation, 'GRANT EXECUTE ON FUNCTION public.get_dashboard_counts() TO authenticated, service_role')
   assertStringIncludes(dashboardQuerySegmentation, "NOTIFY pgrst, 'reload schema'")
   assert(!dashboardQuerySegmentation.includes('SECURITY DEFINER'))
+})
+
+Deno.test('1000076 replaces row-by-row Dashboard counts with a bounded controlled aggregate', () => {
+  assertStringIncludes(dashboardCountsSetBased, "RAISE EXCEPTION '1000076 prerequisites missing")
+  assertStringIncludes(dashboardCountsSetBased, 'CREATE OR REPLACE FUNCTION public.get_dashboard_counts()')
+  assertStringIncludes(dashboardCountsSetBased, 'SECURITY DEFINER')
+  assertStringIncludes(dashboardCountsSetBased, 'SET search_path = pg_catalog, public')
+  assertStringIncludes(dashboardCountsSetBased, 'v_user_id uuid := auth.uid()')
+  assertStringIncludes(dashboardCountsSetBased, 'WITH enrollment_scopes AS MATERIALIZED')
+  assertStringIncludes(dashboardCountsSetBased, 'candidate_teachings AS MATERIALIZED')
+  assertStringIncludes(dashboardCountsSetBased, "public.can_access_teaching(candidate.teaching_id, 'teaching.students.read')")
+  assertStringIncludes(dashboardCountsSetBased, "public.can_teaching_action(candidate.teaching_id, 'courses', 'read')")
+  assertStringIncludes(dashboardCountsSetBased, 'REVOKE ALL ON FUNCTION public.get_dashboard_counts() FROM PUBLIC, anon, service_role')
+  assertStringIncludes(dashboardCountsSetBased, 'GRANT EXECUTE ON FUNCTION public.get_dashboard_counts() TO authenticated')
+  assertStringIncludes(dashboardCountsSetBased, "NOTIFY pgrst, 'reload schema'")
+  assert(!dashboardCountsSetBased.includes('p_user_id'))
+  assertStringIncludes(coreRls, 'dashboard controlled count no longer matches caller-visible RLS rows')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

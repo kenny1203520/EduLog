@@ -62,7 +62,8 @@ BEGIN
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_counts()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.get_dashboard_counts()', 'EXECUTE') THEN
+     OR has_function_privilege('anon', 'public.get_dashboard_counts()', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_dashboard_counts()', 'EXECUTE') THEN
     RAISE EXCEPTION 'API RBAC forward migration did not create required objects';
   END IF;
 
@@ -83,6 +84,26 @@ BEGIN
       AND prosecdef
   ) THEN
     RAISE EXCEPTION 'dashboard read model must execute as the caller';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    WHERE procedure.oid = to_regprocedure('public.get_dashboard_counts()')
+      AND procedure.prosecdef
+      AND procedure.proconfig @> ARRAY['search_path=pg_catalog, public']
+  ) THEN
+    RAISE EXCEPTION 'dashboard count RPC must use its controlled aggregate security boundary';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_roles owner_role ON owner_role.oid = procedure.proowner
+    WHERE procedure.oid = to_regprocedure('public.get_dashboard_counts()')
+      AND owner_role.rolname IN ('anon', 'authenticated')
+  ) THEN
+    RAISE EXCEPTION 'dashboard count RPC has an unsafe owner';
   END IF;
 END;
 $$;

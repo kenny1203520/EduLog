@@ -215,6 +215,9 @@ SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 DO $$
+DECLARE dashboard_counts jsonb;
+DECLARE expected_student_count bigint;
+DECLARE expected_course_count bigint;
 BEGIN
   IF (SELECT count(*) FROM public.classrooms WHERE id IN (
     'a2000000-0000-4000-8000-000000000001',
@@ -237,6 +240,14 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.students WHERE id = 'b4000000-0000-4000-8000-000000000002')
      OR EXISTS (SELECT 1 FROM public.student_credentials WHERE id = 'b6000000-0000-4000-8000-000000000002') THEN
     RAISE EXCEPTION 'cross-teaching sensitive-data leak detected';
+  END IF;
+
+  SELECT count(student.id) INTO expected_student_count FROM public.students student;
+  SELECT count(course.id) INTO expected_course_count FROM public.courses course;
+  dashboard_counts := public.get_dashboard_counts();
+  IF (dashboard_counts->>'totalStudents')::bigint <> expected_student_count
+     OR (dashboard_counts->>'activeCourses')::bigint <> expected_course_count THEN
+    RAISE EXCEPTION 'dashboard controlled count no longer matches caller-visible RLS rows';
   END IF;
 END;
 $$;
