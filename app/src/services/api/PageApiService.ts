@@ -1,6 +1,6 @@
 import { apiV1Client, type ApiEnvelope } from './ApiV1Client'
 import type { CourseDTO, LessonDTO } from '@/models/Course'
-import type { StudentDTO } from '@/models/Student'
+import type { StudentDTO, StudentCapabilitiesDTO, StudentSchoolSummaryDTO } from '@/models/Student'
 import type { EnrollmentDTO } from '@/models/Enrollment'
 import type { ClassSessionDTO } from '@/models/ClassSession'
 import type { TeacherDTO } from '@/services/teacher/TeacherService'
@@ -20,9 +20,12 @@ export interface PageListQuery {
 }
 
 export type CourseOverviewDTO = CourseDTO & { lessons?: LessonDTO[] }
-export type StudentOverviewDTO = Pick<StudentDTO, 'id' | 'name' | 'notes' | 'notes_document' | 'external_link' | 'created_at' | 'updated_at'>
+export type StudentOverviewDTO = Pick<StudentDTO, 'id' | 'name' | 'notes' | 'notes_document' | 'external_link' | 'created_at' | 'updated_at'> & {
+  current_school?: StudentSchoolSummaryDTO | null
+}
 export type StudentProfileDTO = Pick<StudentDTO, 'id' | 'name' | 'notes' | 'notes_document' | 'external_link' | 'created_at' | 'updated_at' | 'enrollments'> & {
-  capabilities?: { read_sensitive: boolean; update_sensitive: boolean }
+  current_school?: StudentSchoolSummaryDTO | null
+  capabilities: StudentCapabilitiesDTO
 }
 export type StudentPrivateDetailsDTO = { student: Pick<StudentDTO, 'id' | 'gov_id' | 'email' | 'phone' | 'residence_address' | 'mailing_address' | 'birthday'>; contacts: StudentDTO['student_contacts']; schools: StudentDTO['student_schools'] }
 export type StudentReportsDTO = { student: Pick<StudentDTO, 'id' | 'name'>; enrollments: EnrollmentDTO[] }

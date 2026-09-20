@@ -83,19 +83,31 @@ async function refreshData() {
                     <div class="grid min-w-0 grid-cols-1 gap-8 xl:grid-cols-12">
                         <!-- Left Column: Main Details & Enrollments -->
                         <div class="min-w-0 space-y-8 xl:col-span-8">
-                            <StudentMainDetails :student-id="studentId" />
+                            <StudentMainDetails :student-id="studentId"
+                                :can-read-sensitive="studentStore.currentStudent.capabilities.read_sensitive"
+                                :can-update-sensitive="studentStore.currentStudent.capabilities.update_sensitive" />
                             <StudentEnrollments :student-id="studentId"
                                 :enrollments="studentStore.currentStudent.enrollments || []" />
                         </div>
 
                         <!-- Right Column: Contacts, Schools, Credentials -->
                         <div class="min-w-0 space-y-8 xl:col-span-4">
-                            <StudentContacts :student-id="studentId"
-                                :contacts="studentStore.currentStudent.contacts || []" />
-                            <StudentSchools :student-id="studentId"
-                                :schools="studentStore.currentStudent.schools || []" />
-                            <StudentCredentials :student-id="studentId"
-                                :credentials="studentStore.currentStudent.credentials || []" />
+                            <template v-if="studentStore.currentStudent.capabilities.read_sensitive">
+                                <StudentContacts :student-id="studentId"
+                                    :contacts="studentStore.currentStudent.contacts || []" />
+                                <StudentSchools :student-id="studentId"
+                                    :schools="studentStore.currentStudent.schools || []" />
+                                <StudentCredentials :student-id="studentId"
+                                    :credentials="studentStore.currentStudent.credentials || []" />
+                            </template>
+                            <section v-else class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+                                <h2 class="font-bold">需要額外權限</h2>
+                                <p class="mt-1">目前僅顯示學生的在學學校、年級與班級摘要；完整學籍、聯絡資料與帳密受到額外權限保護。</p>
+                                <dl v-if="studentStore.currentStudent.currentSchoolSummary" class="mt-4 space-y-1">
+                                    <div><dt class="inline font-semibold">學校：</dt><dd class="inline">{{ studentStore.currentStudent.currentSchoolSummary.name }}</dd></div>
+                                    <div><dt class="inline font-semibold">年級／班級：</dt><dd class="inline">{{ studentStore.currentStudent.displayGrade || '-' }}</dd></div>
+                                </dl>
+                            </section>
                         </div>
                     </div>
                 </div>
