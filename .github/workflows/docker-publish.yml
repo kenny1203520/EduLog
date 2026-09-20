@@ -15,6 +15,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  API_IMAGE_NAME: ghcr.io/kenny1203520/edulog-api
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -88,7 +89,7 @@ jobs:
         id: meta-api
         uses: docker/metadata-action@v5.0.0
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api
+          images: ${{ env.API_IMAGE_NAME }}
 
       - name: Build and push frontend Docker image
         id: build-and-push-frontend
