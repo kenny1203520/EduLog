@@ -65,6 +65,7 @@ BEGIN
      OR to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer)') IS NULL
      OR to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)') IS NULL
      OR to_regprocedure('public.get_class_session_workspace(uuid)') IS NULL
+     OR to_regprocedure('public.get_student_profile_page(uuid)') IS NULL
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_counts()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
@@ -74,6 +75,7 @@ BEGIN
      OR NOT has_function_privilege('authenticated', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_student_profile_page(uuid)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_counts()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
@@ -83,6 +85,7 @@ BEGIN
      OR has_function_privilege('anon', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_student_profile_page(uuid)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_dashboard_counts()', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
@@ -90,7 +93,8 @@ BEGIN
      OR has_function_privilege('service_role', 'public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
-     OR has_function_privilege('service_role', 'public.get_class_session_workspace(uuid)', 'EXECUTE') THEN
+     OR has_function_privilege('service_role', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_student_profile_page(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'API RBAC forward migration did not create required objects';
   END IF;
 
@@ -151,6 +155,26 @@ BEGIN
       AND owner_role.rolname IN ('anon', 'authenticated')
   ) THEN
     RAISE EXCEPTION 'Student overview RPC has an unsafe owner';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    WHERE procedure.oid = to_regprocedure('public.get_student_profile_page(uuid)')
+      AND procedure.prosecdef
+      AND procedure.proconfig @> ARRAY['search_path=pg_catalog, public']
+  ) THEN
+    RAISE EXCEPTION 'Student profile RPC must use its controlled read-model security boundary';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_roles owner_role ON owner_role.oid = procedure.proowner
+    WHERE procedure.oid = to_regprocedure('public.get_student_profile_page(uuid)')
+      AND owner_role.rolname IN ('anon', 'authenticated')
+  ) THEN
+    RAISE EXCEPTION 'Student profile RPC has an unsafe owner';
   END IF;
 
   IF (
