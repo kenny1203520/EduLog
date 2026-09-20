@@ -96,4 +96,32 @@ describe('GlobalIncompleteReportsView notification scope', () => {
         expect(ReportQueryService.getGlobalIncompleteReportsPage).not.toHaveBeenCalledWith('my_present', expect.anything())
         expect(ReportQueryService.getGlobalIncompleteReportsPage).not.toHaveBeenCalledWith('all', expect.anything())
     })
+
+    it('uses the server total and preserves page parameters for subsequent loads', async () => {
+        vi.mocked(ReportQueryService.getGlobalIncompleteReportsPage)
+            .mockResolvedValueOnce({
+                data: [],
+                meta: { limit: 25, offset: 0, total: 26, sort: '-date' },
+                request_id: 'r',
+                trace_id: 't'
+            })
+            .mockResolvedValueOnce({
+                data: [],
+                meta: { limit: 25, offset: 25, total: 26, sort: '-date' },
+                request_id: 'r2',
+                trace_id: 't2'
+            })
+
+        const wrapper = mount(GlobalIncompleteReportsView, { global: globalOptions })
+        await flushPromises()
+
+        ;(wrapper.vm as any).goToPage(1)
+        await flushPromises()
+
+        expect(ReportQueryService.getGlobalIncompleteReportsPage).toHaveBeenLastCalledWith('my_notifications', expect.objectContaining({
+            limit: 25,
+            offset: 25,
+            sort: '-date'
+        }))
+    })
 })
