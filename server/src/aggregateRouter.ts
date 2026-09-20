@@ -12,7 +12,7 @@ const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,content,con
 
 function requireDb(req: Request) { if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required'); return req.db }
 
-async function requirePagePermission(req: Request, permission: string, resource: string, resourceId: string | null = null) {
+async function requirePagePermission(req: Request, permission: string, resource: string, resourceId: string | null = null, operation = 'page.permission') {
   const db = requireDb(req)
   setAuditContext(req, { domain: permission.startsWith('system.') ? 'system' : 'teaching', resource, resourceId, action: 'read', permission })
   const result = await db.rpc('has_api_permission', {
@@ -21,7 +21,10 @@ async function requirePagePermission(req: Request, permission: string, resource:
     p_classroom_id: null,
     p_class_session_id: null,
   })
-  if (result.error) throw mapDatabaseError(result.error)
+  if (result.error) {
+    req.log.error({ operation, database_error_code: result.error.code ?? 'UNKNOWN', request_id: req.requestId, trace_id: req.traceId }, 'database_operation_failed')
+    throw mapDatabaseError(result.error)
+  }
   if (result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read this page')
 }
 
@@ -125,19 +128,51 @@ async function incomplete(req: Request, res: Response) {
 }
 
 async function dashboard(req: Request, res: Response) {
-  const db = requireDb(req); const query = z.object({ start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).strict().parse(req.query)
-  await requirePagePermission(req, 'teaching.reports.list', 'dashboard')
-  const [students, courses, teacher, pending] = await Promise.all([
-    db.from('students').select('id', { count: 'exact', head: true }),
-    db.from('courses').select('id', { count: 'exact', head: true }),
-    db.from('teachers').select('id,user_id').eq('user_id', req.user!.id).maybeSingle(),
-    db.from('occurrence_reports').select('id,content,lesson_id,is_completed,progress_letter,class_participation,classroom_behavior,enrollment_id,class_occurrence_id,updated_at,attendance_status,enrollments!inner(id,student_id,students(id,name)),class_occurrences!inner(id,occurrence_date,class_session_id,teacher_ids,teacher_attendance,class_sessions(id,name,classroom_id,classrooms(id,name)))').eq('attendance_status', 'present').gte('class_occurrences.occurrence_date', new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10)).lte('class_occurrences.occurrence_date', new Date().toISOString().slice(0, 10)),
-  ])
-  if (students.error) throw mapDatabaseError(students.error); if (courses.error) throw mapDatabaseError(courses.error); if (teacher.error) throw mapDatabaseError(teacher.error); if (pending.error) throw mapDatabaseError(pending.error)
-  const pendingReports = (pending.data ?? []).filter((row: any) => teacher.data && isIncompleteReport(row) && isTeacherPresent(teacher.data.id, req.user!.id, row.class_occurrences?.teacher_ids ?? [], row.class_occurrences?.teacher_attendance ?? {})).map((row: any) => ({ id: row.id, studentName: row.enrollments?.students?.name ?? row.enrollments?.students?.[0]?.name ?? 'Unknown', date: row.class_occurrences?.occurrence_date, className: row.class_occurrences?.class_sessions?.name ?? row.class_occurrences?.class_sessions?.[0]?.name ?? '-', classroomName: row.class_occurrences?.class_sessions?.classrooms?.name ?? row.class_occurrences?.class_sessions?.[0]?.classrooms?.name ?? '-', enrollmentId: row.enrollment_id, contentPreview: row.content?.trim()?.slice(0, 300) ?? '', ...reportMissingFlags(row) }))
-  let occurrences: any[] = []
-  if (query.start && query.end) { const result = await db.from('class_occurrences').select('id,class_session_id,occurrence_date,status,teacher_ids,teacher_attendance,is_conducted,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,class_sessions(name,time_zone,classrooms(name,color))').gte('occurrence_date', query.start).lte('occurrence_date', query.end).order('occurrence_date', { ascending: true }); if (result.error) throw mapDatabaseError(result.error); occurrences = (result.data ?? []).filter((row: any) => row.is_conducted === true && (!teacher.data || isTeacherPresent(teacher.data.id, req.user!.id, row.teacher_ids ?? [], row.teacher_attendance ?? {}))) }
-  return sendData(req, res, { pendingReportsScope: 'my_present', stats: { totalStudents: students.count ?? 0, activeCourses: courses.count ?? 0, pendingReportsCount: pendingReports.length, pendingReportsScope: 'my_present' }, pendingReports, occurrences })
+  const db = requireDb(req)
+  const query = z.object({
+    start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  }).strict().superRefine((value, context) => {
+    if ((value.start == null) !== (value.end == null)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['start'], message: 'start and end must be provided together' })
+      return
+    }
+    if (!value.start || !value.end) return
+    const start = Date.parse(`${value.start}T00:00:00.000Z`)
+    const end = Date.parse(`${value.end}T00:00:00.000Z`)
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['start'], message: 'start and end must be valid calendar dates' })
+      return
+    }
+    if (end < start) context.addIssue({ code: z.ZodIssueCode.custom, path: ['end'], message: 'end must not be earlier than start' })
+    if (end - start > 31 * 86400000) context.addIssue({ code: z.ZodIssueCode.custom, path: ['end'], message: 'date range must not exceed 31 days' })
+  }).parse(req.query)
+  await requirePagePermission(req, 'teaching.reports.list', 'dashboard', null, 'dashboard.permission')
+  const result = await db.rpc('get_dashboard_page', {
+    p_start: query.start ?? null,
+    p_end: query.end ?? null,
+  })
+  if (result.error) {
+    req.log.error({ operation: 'dashboard.read_model', database_error_code: result.error.code ?? 'UNKNOWN', request_id: req.requestId, trace_id: req.traceId }, 'database_operation_failed')
+    throw mapDatabaseError(result.error)
+  }
+  const page = result.data as {
+    pendingReportsScope?: string
+    stats?: { totalStudents?: number; activeCourses?: number; pendingReportsCount?: number; pendingReportsScope?: string }
+    pendingReports?: unknown[]
+    occurrences?: unknown[]
+  } | null
+  return sendData(req, res, {
+    pendingReportsScope: page?.pendingReportsScope ?? 'my_present',
+    stats: {
+      totalStudents: page?.stats?.totalStudents ?? 0,
+      activeCourses: page?.stats?.activeCourses ?? 0,
+      pendingReportsCount: page?.stats?.pendingReportsCount ?? 0,
+      pendingReportsScope: page?.stats?.pendingReportsScope ?? 'my_present',
+    },
+    pendingReports: page?.pendingReports ?? [],
+    occurrences: page?.occurrences ?? [],
+  })
 }
 
 const pageListQuery = z.object({

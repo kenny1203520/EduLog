@@ -21,6 +21,24 @@ BEGIN
     RAISE EXCEPTION 'student RLS enrollment lookup index is missing or invalid';
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class index_relation
+    JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace
+    JOIN pg_index index_metadata ON index_metadata.indexrelid = index_relation.oid
+    JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
+    JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
+    WHERE index_schema.nspname = 'public'
+      AND index_relation.relname = 'students_user_id_idx'
+      AND table_schema.nspname = 'public'
+      AND table_relation.relname = 'students'
+      AND index_metadata.indisvalid
+      AND index_metadata.indisready
+      AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'user_id'
+  ) THEN
+    RAISE EXCEPTION 'student owner lookup index is missing or invalid';
+  END IF;
+
   SELECT count(*) INTO forbidden_count
   FROM pg_policies
   WHERE schemaname = 'public'
@@ -38,8 +56,20 @@ BEGIN
     RAISE EXCEPTION 'action-specific core RLS policies are incomplete: %', forbidden_count;
   END IF;
   IF to_regprocedure('public.has_api_permission(uuid,text,uuid,uuid)') IS NULL
-     OR to_regclass('public.rbac_policy_epoch') IS NULL THEN
+     OR to_regclass('public.rbac_policy_epoch') IS NULL
+     OR to_regprocedure('public.get_dashboard_page(date,date)') IS NULL
+     OR NOT has_function_privilege('authenticated', 'public.get_dashboard_page(date,date)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE') THEN
     RAISE EXCEPTION 'API RBAC forward migration did not create required objects';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc
+    WHERE oid = to_regprocedure('public.get_dashboard_page(date,date)')
+      AND prosecdef
+  ) THEN
+    RAISE EXCEPTION 'dashboard read model must execute as the caller';
   END IF;
 END;
 $$;
@@ -66,7 +96,6 @@ INSERT INTO public.classrooms(id, name, user_id, teaching_id) VALUES
   ('40000000-0000-0000-0000-000000000002', 'B classroom', '00000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002')
 ON CONFLICT (id) DO NOTHING;
 
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO authenticated;
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
@@ -74,6 +103,24 @@ DO $$
 BEGIN
   IF (SELECT count(*) FROM public.classrooms) <> 1 THEN
     RAISE EXCEPTION 'cross-teaching RLS isolation failed';
+  END IF;
+END;
+$$;
+RESET ROLE;
+
+GRANT EXECUTE ON FUNCTION public.get_dashboard_page(date, date) TO authenticated;
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+DO $$
+DECLARE page jsonb;
+BEGIN
+  page := public.get_dashboard_page(current_date, current_date);
+  IF jsonb_typeof(page) <> 'object'
+     OR page->'stats' IS NULL
+     OR jsonb_typeof(page->'pendingReports') <> 'array'
+     OR jsonb_typeof(page->'occurrences') <> 'array' THEN
+    RAISE EXCEPTION 'dashboard page read model returned an invalid response shape';
   END IF;
 END;
 $$;

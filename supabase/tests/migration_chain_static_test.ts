@@ -32,6 +32,8 @@ const reportTemplateBackfill = await readMigration('1000069_report_template_teac
 const sessionReferenceReads = await readMigration('1000070_class_session_rpc_reference_reads.sql')
 const studentRlsLookupIndex = await readMigration('1000071_student_rls_enrollment_lookup_index.sql')
 const sensitiveDataPermissions = await readMigration('1000072_sensitive_data_permissions.sql')
+const dashboardPageReadModel = await readMigration('1000073_dashboard_page_read_model.sql')
+const dashboardPageHardening = await readMigration('1000074_dashboard_read_model_hardening.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -92,7 +94,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -106,6 +108,8 @@ Deno.test('historical migration versions are preserved', async () => {
   const sessionReferenceReadsName = '1000070_class_session_rpc_reference_reads.sql'
   const studentRlsLookupIndexName = '1000071_student_rls_enrollment_lookup_index.sql'
   const sensitiveDataPermissionsName = '1000072_sensitive_data_permissions.sql'
+  const dashboardPageReadModelName = '1000073_dashboard_page_read_model.sql'
+  const dashboardPageHardeningName = '1000074_dashboard_read_model_hardening.sql'
   assert(names.includes(compatibilityName))
   assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
   assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
@@ -116,12 +120,16 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(names.indexOf(reportTemplateBackfillName) < names.indexOf(sessionReferenceReadsName), 'session RPC reference privileges must follow 1000069')
   assert(names.indexOf(sessionReferenceReadsName) < names.indexOf(studentRlsLookupIndexName), 'student RLS lookup index must follow 1000070')
   assert(names.indexOf(studentRlsLookupIndexName) < names.indexOf(sensitiveDataPermissionsName), 'sensitive data boundary must follow the student RLS index')
+  assert(names.indexOf(sensitiveDataPermissionsName) < names.indexOf(dashboardPageReadModelName), 'dashboard read model must follow the sensitive data boundary')
+  assert(names.indexOf(dashboardPageReadModelName) < names.indexOf(dashboardPageHardeningName), 'dashboard hardening must follow the dashboard read model')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
   assert(names.includes('1000062_report_lifecycle_atomicity.sql'))
   assert(names.includes('1000063_report_mutation_contract_and_delete_replay.sql'))
   assert(names.includes(studentRlsLookupIndexName))
+  assert(names.includes(dashboardPageReadModelName))
+  assert(names.includes(dashboardPageHardeningName))
   assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
   assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
@@ -278,7 +286,10 @@ Deno.test('1000071 indexes the correlated enrollment lookup used by student RLS'
   assertStringIncludes(studentRlsLookupIndex, 'CREATE INDEX IF NOT EXISTS enrollments_student_id_idx')
   assert(!studentRlsLookupIndex.includes('CONCURRENTLY'), 'the migration must remain compatible with Supabase migration runners')
   assertStringIncludes(studentRlsLookupIndex, 'ON public.enrollments USING btree (student_id)')
-  assertStringIncludes(studentRlsLookupIndex, 'invalid enrollments_student_id_idx')
+  assertStringIncludes(studentRlsLookupIndex, 'found an invalid or conflicting enrollments_student_id_idx')
+  assertStringIncludes(studentRlsLookupIndex, 'index_metadata.indisvalid')
+  assertStringIncludes(studentRlsLookupIndex, 'index_metadata.indisready')
+  assertStringIncludes(studentRlsLookupIndex, 'pg_get_indexdef(index_metadata.indexrelid, 1, true)')
   assertStringIncludes(studentRlsLookupIndex, 'exact student counts')
   assertStringIncludes(migrationChainIntegration, 'enrollments_student_id_idx')
 })
@@ -312,6 +323,34 @@ Deno.test('1000072 isolates sensitive student and teacher data behind owner capa
   assertStringIncludes(sensitiveDataIntegration, 'sensitive permissions were implicitly granted to a non-owner role')
   assertStringIncludes(sensitiveDataIntegration, 'Canonical student credentials read')
   assertStringIncludes(sensitiveDataIntegration, 'Canonical teacher credentials read')
+})
+
+Deno.test('1000073 creates an invoker dashboard read model with safe projections', () => {
+  assertStringIncludes(dashboardPageReadModel, "RAISE EXCEPTION '1000073 prerequisites missing")
+  assertStringIncludes(dashboardPageReadModel, 'CREATE INDEX IF NOT EXISTS class_occurrences_occurrence_date_idx')
+  assertStringIncludes(dashboardPageReadModel, 'CREATE INDEX IF NOT EXISTS occurrence_reports_attendance_occurrence_idx')
+  assertStringIncludes(dashboardPageReadModel, 'CREATE OR REPLACE FUNCTION public.get_dashboard_page(')
+  assertStringIncludes(dashboardPageReadModel, 'SECURITY INVOKER')
+  assertStringIncludes(dashboardPageReadModel, 'p_start date DEFAULT NULL')
+  assertStringIncludes(dashboardPageReadModel, 'DASHBOARD_DATE_RANGE_INVALID')
+  assertStringIncludes(dashboardPageReadModel, 'DASHBOARD_DATE_RANGE_TOO_LARGE')
+  assertStringIncludes(dashboardPageReadModel, "REVOKE ALL ON FUNCTION public.get_dashboard_page(date, date) FROM PUBLIC, anon")
+  assertStringIncludes(dashboardPageReadModel, "GRANT EXECUTE ON FUNCTION public.get_dashboard_page(date, date) TO authenticated, service_role")
+  assert(!dashboardPageReadModel.includes('select *'))
+  assert(!dashboardPageReadModel.includes('password'))
+})
+
+Deno.test('1000074 hardens dashboard counts for RLS and column privileges', () => {
+  assertStringIncludes(dashboardPageHardening, "RAISE EXCEPTION '1000074 prerequisites missing")
+  assertStringIncludes(dashboardPageHardening, 'CREATE INDEX IF NOT EXISTS students_user_id_idx')
+  assertStringIncludes(dashboardPageHardening, 'CREATE INDEX IF NOT EXISTS enrollments_student_id_idx')
+  assertStringIncludes(dashboardPageHardening, 'CREATE OR REPLACE FUNCTION public.get_dashboard_page(')
+  assertStringIncludes(dashboardPageHardening, 'SECURITY INVOKER')
+  assertStringIncludes(dashboardPageHardening, 'count(student.id)')
+  assert(!dashboardPageHardening.includes('count(*) FROM public.students'))
+  assertStringIncludes(dashboardPageHardening, "NOTIFY pgrst, 'reload schema'")
+  assertStringIncludes(dashboardPageHardening, 'REVOKE ALL ON FUNCTION public.get_dashboard_page(date, date) FROM PUBLIC, anon')
+  assertStringIncludes(dashboardPageHardening, 'GRANT EXECUTE ON FUNCTION public.get_dashboard_page(date, date) TO authenticated, service_role')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

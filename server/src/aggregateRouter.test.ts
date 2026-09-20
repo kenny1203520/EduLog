@@ -29,14 +29,25 @@ describe('aggregate API contract', () => {
   })
 
   it('keeps nested class session selects balanced for PostgREST', () => {
-    expect(source).toContain("class_sessions(id,name,classroom_id,classrooms(id,name)))').eq('attendance_status'")
+    expect(source).toContain('class_sessions(id,name,classroom_id,classrooms(id,name)))')
   })
 
-  it('uses exact head counts for dashboard stats without loading student rows', () => {
-    expect(source).toContain("db.from('students').select('id', { count: 'exact', head: true })")
+  it('uses the RLS-scoped dashboard read model for exact page stats', () => {
+    expect(source).toContain("db.rpc('get_dashboard_page'")
+    expect(source).toContain('p_start: query.start ?? null')
+    expect(source).toContain('p_end: query.end ?? null')
     expect(source).not.toContain("dashboard.students_count")
     expect(source).not.toContain('dashboardQuery')
     expect(source).not.toContain('edulog-dashboard-diagnostics')
+    expect(source).toContain("'dashboard', null, 'dashboard.permission'")
+    expect(source).toContain("operation: 'dashboard.read_model'")
+    expect(source).toContain('database_error_code')
+  })
+
+  it('validates dashboard date ranges before calling the database', () => {
+    expect(source).toContain('start and end must be provided together')
+    expect(source).toContain('end must not be earlier than start')
+    expect(source).toContain('date range must not exceed 31 days')
   })
 
   it('uses scoped permission checks and explicit safe projections for new page read models', () => {
