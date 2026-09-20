@@ -2,8 +2,9 @@ import crypto from 'node:crypto'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, sendError } from './errors.js'
-import { createUserClient, refresh, safeUser, signIn, validateAccessToken, type SupabaseClients } from './supabase.js'
+import { clearAccessTokenValidation, createUserClient, refresh, safeUser, signIn, validateAccessToken, type SupabaseClients } from './supabase.js'
 import type { ApiConfig } from './config.js'
+import { measureRequestPhase } from './context.js'
 
 const accessCookie = 'edulog_access'
 const refreshCookie = 'edulog_refresh'
@@ -26,7 +27,7 @@ export function requireAuth(clients: SupabaseClients, config: ApiConfig) {
     try {
       const token = req.cookies?.[accessCookie] ?? req.header('authorization')?.replace(/^Bearer\s+/i, '').trim()
       if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-      const user = await validateAccessToken(clients.adminClient, token)
+      const user = await measureRequestPhase(req, 'auth', () => validateAccessToken(clients.adminClient, token, config))
       req.user = user
       req.log = req.log.child({ actor_user_id: user.id })
       req.accessToken = token
@@ -75,6 +76,7 @@ export function createAuthRouter(clients: SupabaseClients, config: ApiConfig) {
     try {
       const token = req.cookies?.[accessCookie]
       if (token) await clients.adminClient.auth.admin.signOut(token).catch(() => undefined)
+      clearAccessTokenValidation(token)
       res.clearCookie(accessCookie, { path: '/' }); res.clearCookie(refreshCookie, { path: '/' }); res.clearCookie(csrfCookie, { path: '/' })
       res.status(204).end()
     } catch (error) { next(error) }

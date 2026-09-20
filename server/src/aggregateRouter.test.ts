@@ -7,7 +7,7 @@ const source = readFileSync(resolve(process.cwd(), 'src/aggregateRouter.ts'), 'u
 describe('aggregate API contract', () => {
   it('uses the authenticated Supabase client and explicit fields', () => {
     expect(source).toContain('req.db')
-    expect(source).toContain("select('id,name,color,external_link")
+    expect(source).toContain("db.rpc('get_classrooms_overview'")
     expect(source).not.toContain("select('*')")
   })
 
@@ -59,8 +59,13 @@ describe('aggregate API contract', () => {
     expect(source).toContain("authorizeResource(req, resources.students, 'teaching.students.read', studentId)")
     expect(source).toContain("rpc('can_access_sensitive_student', { p_student_id: studentId, p_permission_key: 'teaching.students.read_sensitive' })")
     expect(source).toContain("authorizeResource(req, resources['class-sessions'], 'teaching.class_sessions.read', sessionId)")
-    expect(source).toContain("select('id,subject,stage,display_name,description,description_document,created_at,updated_at,lessons(")
-    expect(source).toContain("select('id,user_id,name,bio,bio_document,created_at,updated_at'")
+    expect(source).toContain("db.rpc('get_courses_overview'")
+    expect(source).toContain("db.rpc('get_teachers_overview'")
+    expect(source).toContain("db.rpc('get_incomplete_reports_page'")
+    expect(source).toContain("db.rpc('get_holidays_overview'")
+    expect(source).toContain("db.rpc('get_class_session_workspace'")
+    expect(source).toContain("'courses_overview.read'")
+    expect(source).toContain("'teachers_overview.read'")
     expect(source).not.toContain('classrooms(id,name,address)')
     expect(source).not.toContain('id,name,color,address,phone')
     expect(source).toContain("router.get('/pages/students/:studentId/private-details'")
@@ -71,7 +76,13 @@ describe('aggregate API contract', () => {
   })
 
   it('uses database pagination for classrooms and aliases nested schedule rules for page DTOs', () => {
-    expect(source).toContain("classroomQuery.order('name').range(query.offset, query.offset + query.limit - 1)")
-    expect(source).toContain('schedule_rules:class_session_schedule_rules(')
+    expect(source).toContain("db.rpc('get_classrooms_overview'")
+    expect(source).toContain("'classrooms_overview.read'")
+    expect(source).toContain('classroomTotal')
+    expect(source).toContain('visibleClassroomCount')
+    expect(source).toContain('hiddenClassroomCount')
+    expect(source).toContain('sessionTotal')
+    expect(source).toContain('visibleSessionCount')
+    expect(source).toContain('hiddenSessionCount')
   })
 })

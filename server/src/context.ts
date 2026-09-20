@@ -25,6 +25,9 @@ declare global {
       accessToken?: string
       db?: import('@supabase/supabase-js').SupabaseClient
       adminDb?: import('@supabase/supabase-js').SupabaseClient
+      performancePhases?: Record<string, number>
+      databaseCalls?: number
+      cacheStatus?: 'hit' | 'miss' | 'bypass'
       log: pino.Logger
     }
   }
@@ -32,6 +35,38 @@ declare global {
 
 export function setAuditContext(req: Request, patch: NonNullable<Request['auditContext']>) {
   req.auditContext = { ...(req.auditContext ?? {}), ...patch }
+}
+
+export async function measureRequestPhase<T>(req: Request, phase: string, work: () => PromiseLike<T>): Promise<T> {
+  const startedAt = performance.now()
+  try {
+    return await work()
+  } finally {
+    req.performancePhases ??= {}
+    req.performancePhases[phase] = (req.performancePhases[phase] ?? 0) + performance.now() - startedAt
+  }
+}
+
+export function measureRequestPhaseSync<T>(req: Request, phase: string, work: () => T): T {
+  const startedAt = performance.now()
+  try {
+    return work()
+  } finally {
+    req.performancePhases ??= {}
+    req.performancePhases[phase] = (req.performancePhases[phase] ?? 0) + performance.now() - startedAt
+  }
+}
+
+export function recordDatabaseCall(req: Request) {
+  req.databaseCalls = (req.databaseCalls ?? 0) + 1
+}
+
+function serverTiming(req: Request) {
+  const phases = Object.entries(req.performancePhases ?? {})
+    .filter(([name, duration]) => /^[a-z_]+$/i.test(name) && Number.isFinite(duration))
+    .map(([name, duration]) => `${name};dur=${duration.toFixed(1)}`)
+  phases.push(`total;dur=${Math.max(0, performance.now() - req.startedAt).toFixed(1)}`)
+  return phases.join(', ')
 }
 
 export function requestContext(logger: pino.Logger) {
@@ -42,6 +77,9 @@ export function requestContext(logger: pino.Logger) {
     req.traceparent = suppliedTraceparent && /^00-[\da-f]{32}-[\da-f]{16}-[\da-f]{2}$/i.test(suppliedTraceparent) ? suppliedTraceparent : undefined
     req.traceId = req.traceparent?.split('-')[1] ?? crypto.randomBytes(16).toString('hex')
     req.startedAt = performance.now()
+    req.performancePhases = {}
+    req.databaseCalls = 0
+    req.cacheStatus = 'bypass'
     const params = req.params as Record<string, unknown>
     req.auditContext = {
       resource: req.path.split('/').filter(Boolean)[1] ?? 'unknown',
@@ -53,9 +91,15 @@ export function requestContext(logger: pino.Logger) {
     req.log = logger.child({ request_id: req.requestId, trace_id: req.traceId, route: req.path, method: req.method })
     res.setHeader('X-Request-Id', req.requestId)
     res.setHeader('X-Trace-Id', req.traceId)
+    const writeHead = res.writeHead.bind(res)
+    res.writeHead = ((...args: Parameters<Response['writeHead']>) => {
+      if (!res.headersSent) res.setHeader('Server-Timing', serverTiming(req))
+      return writeHead(...args)
+    }) as Response['writeHead']
     res.on('finish', () => {
       const outcome = res.statusCode >= 500 ? 'failure' : res.statusCode >= 400 ? 'denied' : 'success'
-      req.log.info({ status: res.statusCode, latency_ms: Math.round(performance.now() - req.startedAt), outcome }, 'api_request')
+      const payload = res.getHeader('content-length')
+      req.log.info({ status: res.statusCode, latency_ms: Math.round(performance.now() - req.startedAt), outcome, database_calls: req.databaseCalls ?? 0, payload_bytes: typeof payload === 'string' ? Number(payload) : undefined, cache_status: req.cacheStatus ?? 'bypass' }, 'api_request')
       auditRequest(req, res.statusCode)
     })
     next()

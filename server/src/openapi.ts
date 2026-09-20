@@ -268,6 +268,7 @@ export function buildOpenApi() {
         { $ref: '#/components/parameters/Search' },
         { name: 'visibility', in: 'query', schema: { type: 'string', enum: ['all', 'visible', 'hidden'], default: 'all' } },
       ],
+      responses: { '200': pageResponse('PageClassroomsOverviewData'), ...errorResponses },
     },
   }
   paths['/api/pages/holidays/overview'] = {
@@ -432,6 +433,24 @@ export function buildOpenApi() {
     ] },
   }
   const pageResponseSchemas = {
+    PageClassroomsOverviewData: {
+      type: 'object',
+      required: ['classrooms', 'count', 'hiddenClassroomIds', 'hiddenSessionIds', 'classSessions', 'sessionCount', 'classroomTotal', 'visibleClassroomCount', 'hiddenClassroomCount', 'sessionTotal', 'visibleSessionCount', 'hiddenSessionCount'],
+      properties: {
+        classrooms: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, color: { type: ['string', 'null'] }, external_link: { type: ['string', 'null'] }, teaching_id: { type: ['string', 'null'], format: 'uuid' }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } } },
+        count: { type: 'integer', minimum: 0 },
+        classroomTotal: { type: 'integer', minimum: 0 },
+        visibleClassroomCount: { type: 'integer', minimum: 0 },
+        hiddenClassroomCount: { type: 'integer', minimum: 0 },
+        hiddenClassroomIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+        hiddenSessionIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+        classSessions: { type: 'array', items: { type: 'object' } },
+        sessionCount: { type: 'integer', minimum: 0 },
+        sessionTotal: { type: 'integer', minimum: 0 },
+        visibleSessionCount: { type: 'integer', minimum: 0 },
+        hiddenSessionCount: { type: 'integer', minimum: 0 },
+      },
+    },
     PageCoursesOverviewData: { type: 'array', items: { type: 'object', required: ['id', 'subject', 'stage'], properties: { id: { type: 'string', format: 'uuid' }, subject: { type: 'string' }, stage: { type: 'string' }, display_name: { type: ['string', 'null'] }, description: { type: ['string', 'null'] }, description_document: { type: ['object', 'null'] }, lessons: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, course_id: { type: 'string', format: 'uuid' }, title: { type: 'string' }, sequence: { type: 'integer' } } } } } } },
     PageStudentsOverviewData: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } } },
     PageStudentProfileData: { type: 'object', required: ['id', 'name', 'capabilities'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, enrollments: { type: 'array', items: { type: 'object' } }, capabilities: { type: 'object', required: ['read_sensitive', 'update_sensitive'], properties: { read_sensitive: { type: 'boolean' }, update_sensitive: { type: 'boolean' } } } } },

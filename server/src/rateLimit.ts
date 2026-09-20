@@ -3,6 +3,7 @@ import type { Request, Response, NextFunction } from 'express'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ApiConfig } from './config.js'
 import { ApiError } from './errors.js'
+import { measureRequestPhase } from './context.js'
 
 export function rateLimitMiddleware(config: ApiConfig, adminClient: SupabaseClient) {
   const memory = new Map<string, { count: number; resetAt: number }>()
@@ -16,7 +17,7 @@ export function rateLimitMiddleware(config: ApiConfig, adminClient: SupabaseClie
       let remaining: number
       let resetAt: number
       if (config.RATE_LIMIT_STORE === 'supabase') {
-        const result = await adminClient.rpc('consume_api_rate_limit', { p_bucket_key: bucketKey, p_limit: limit, p_window_seconds: windowSeconds })
+        const result = await measureRequestPhase(req, 'rate_limit', () => adminClient.rpc('consume_api_rate_limit', { p_bucket_key: bucketKey, p_limit: limit, p_window_seconds: windowSeconds }))
         if (result.error || !result.data) throw new ApiError(503, 'RATE_LIMIT_STORE_UNAVAILABLE', 'Rate limit service is unavailable')
         const row = Array.isArray(result.data) ? result.data[0] : result.data
         if (!row || typeof row.allowed !== 'boolean') throw new ApiError(503, 'RATE_LIMIT_STORE_UNAVAILABLE', 'Rate limit service is unavailable')
@@ -32,4 +33,3 @@ export function rateLimitMiddleware(config: ApiConfig, adminClient: SupabaseClie
     } catch (error) { next(error) }
   }
 }
-

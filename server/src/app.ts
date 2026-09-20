@@ -47,6 +47,10 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   app.use(helmet({ contentSecurityPolicy: false }))
   app.use(cookieParser())
   app.use(requestContext(logger))
+  // Authenticated responses must not enter a browser, proxy, or CDN shared
+  // cache.  The frontend Page API cache is a short-lived in-memory cache per
+  // signed-in tab and never changes this HTTP boundary.
+  app.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
   app.use(express.json({ limit: config.API_BODY_LIMIT, strict: true }))
   app.use((req, res, next) => {
     const allowedOrigins = resolveAllowedOrigins(config)

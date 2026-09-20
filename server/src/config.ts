@@ -7,6 +7,11 @@ const ConfigSchema = z.object({
   SUPABASE_URL: z.url(),
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
+  // Optional for external Supabase projects.  Self-hosted Compose supplies
+  // the same server-only JWT secret used by GoTrue so access tokens can be
+  // checked locally before the account-existence validation.
+  SUPABASE_JWT_SECRET: z.string().min(32).optional(),
+  SUPABASE_JWT_ISSUER: z.url().optional(),
   SUPABASE_REALTIME_URL: z.url().optional(),
   COOKIE_SECRET: z.string().min(32),
   COOKIE_SECURE: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),

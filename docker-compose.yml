@@ -696,6 +696,9 @@ services:
       SUPABASE_URL: ${EDULOG_SUPABASE_INTERNAL_URL:-http://kong:8000}
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      # Server-only token verification material. Never pass this to the Vue
+      # container or expose it through an API response.
+      SUPABASE_JWT_SECRET: ${JWT_SECRET}
       SUPABASE_REALTIME_URL: ${EDULOG_SUPABASE_REALTIME_URL:-ws://realtime:4000}
       COOKIE_SECRET: ${EDULOG_COOKIE_SECRET}
       COOKIE_SECURE: ${EDULOG_COOKIE_SECURE:-true}
