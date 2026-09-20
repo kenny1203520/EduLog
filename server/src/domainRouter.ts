@@ -176,6 +176,27 @@ async function provisionReports(req: Request, res: Response) {
   return res.status(201).json(body)
 }
 
+async function progressSummaryReports(req: Request, res: Response) {
+  const query = z.object({
+    enrollment_ids: z.string().min(1).max(10000),
+    limit: z.coerce.number().int().min(1).max(1000).default(1000),
+    sort: z.enum(['created_at', '-created_at', 'updated_at', '-updated_at']).default('-created_at'),
+  }).strict().parse(req.query)
+  const enrollmentIds = [...new Set(query.enrollment_ids.split(',').filter(Boolean))]
+  if (enrollmentIds.length > 100 || enrollmentIds.some((id) => !uuid.safeParse(id).success)) throw new ApiError(400, 'INVALID_QUERY', 'enrollment_ids contains an invalid id')
+  for (const enrollmentId of enrollmentIds) {
+    const enrollment = await req.db!.from('enrollments').select('id,class_session_id').eq('id', enrollmentId).maybeSingle()
+    if (enrollment.error) throw mapDatabaseError(enrollment.error)
+    if (!enrollment.data) continue
+    await permission(req, 'teaching.reports.list', enrollment.data.class_session_id)
+  }
+  const descending = query.sort.startsWith('-')
+  const field = descending ? query.sort.slice(1) : query.sort
+  const result = await req.db!.from('occurrence_reports').select('id,enrollment_id,lesson_id,is_completed,progress_letter,attendance_status,created_at,updated_at,class_occurrences(occurrence_date)').in('enrollment_id', enrollmentIds).order(field, { ascending: !descending }).limit(query.limit)
+  if (result.error) throw mapDatabaseError(result.error)
+  return res.json(envelope(req, result.data ?? [], { limit: query.limit, offset: 0, total: result.data?.length ?? 0, sort: query.sort }))
+}
+
 async function enrollmentProgress(req: Request, res: Response) {
   const enrollmentId = uuid.parse(req.params.id)
   const enrollment = await req.db!.from('enrollments').select('id,course_id,lesson_number,status,class_session_id').eq('id', enrollmentId).maybeSingle()
@@ -261,6 +282,7 @@ export function createDomainRouter() {
   router.get('/occurrences/:id/navigation', wrap(navigation))
   router.get('/occurrences/:id', wrap(occurrenceItem))
   router.post('/occurrences/:occurrenceId/reports', wrap(provisionReports))
+  router.get('/reports/progress-summary', wrap(progressSummaryReports))
   router.post('/reports/:reportId/versions/:versionId/restore', wrap(restoreVersion))
   router.post('/reports/:reportId/conflicts/resolve', wrap(resolveConflict))
   router.get('/enrollments/:id/progress', wrap(enrollmentProgress))

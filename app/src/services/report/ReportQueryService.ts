@@ -5,6 +5,8 @@ import { AggregateService } from '@/services/AggregateService'
 import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { PageApiService } from '@/services/api/PageApiService'
 
 export const REPORT_EDITOR_COLUMNS = 'id, enrollment_id, class_occurrence_id, lesson_id, is_completed, progress_letter, attendance_status, absence_reason, class_participation, classroom_behavior, contact_notes, contact_notes_document, class_notes, class_notes_document, content, content_document, external_link, version, last_edited_by, last_edited_at, created_at, updated_at'
 
@@ -53,6 +55,15 @@ export class ReportQueryService {
     }
 
     static async getReportVersions(reportId: string): Promise<ReportVersion[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<any>('report-versions', {
+                filters: [{ field: 'occurrence_report_id', operator: 'eq', value: reportId }],
+                perPage: 200,
+                sort: '-version',
+                mode: 'v1'
+            })
+            return (response.data || []).map((dto: any) => new ReportVersion(dto))
+        }
         // Each row's snapshot is a full to_jsonb(OLD.*) copy of the report at
         // that point, so this has no natural per-row size cap the way a plain
         // list query does. A heavily-edited report could in principle
@@ -159,6 +170,22 @@ export class ReportQueryService {
         const byEnrollment = new Map<string, OccurrenceReport[]>()
         if (enrollmentIds.length === 0) return byEnrollment
 
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({ enrollment_ids: enrollmentIds.join(','), limit: '1000', sort: '-created_at' })
+            const response = await apiV1Client.get<any[]>(`/reports/progress-summary?${params}`)
+            for (const row of response.data || []) {
+                const report = new OccurrenceReport({
+                    ...row,
+                    content: '',
+                    occurrence_date: row.class_occurrences?.occurrence_date
+                })
+                const list = byEnrollment.get(report.enrollmentId)
+                if (list) list.push(report)
+                else byEnrollment.set(report.enrollmentId, [report])
+            }
+            return byEnrollment
+        }
+
         const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(`
@@ -222,6 +249,10 @@ export class ReportQueryService {
     static async getReportsWithDetails(
         enrollmentId: string
     ): Promise<any[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await PageApiService.getEnrollmentReports(enrollmentId, { limit: 100, offset: 0, sort: '-occurrence_date' })
+            return response.data?.reports || []
+        }
         // List/preview consumers (StudentReportsView, TransferModal) only ever
         // read the plain-text content/notes fields, never the *_document rich
         // text jsonb columns -- those are only needed once a single report is
@@ -272,6 +303,20 @@ export class ReportQueryService {
     }
 
     static async getPendingReports(scope: 'all' | 'my_present' = 'my_present'): Promise<any[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await PageApiService.getIncompleteReports({ days_back: 90, scope, limit: 100, offset: 0 })
+            return (response.data || []).map((r: any) => ({
+                id: r.id,
+                studentName: r.studentName,
+                date: r.date,
+                className: r.className,
+                classroom: r.classroomName,
+                occurrenceId: r.occurrenceId,
+                enrollmentId: r.enrollmentId,
+                isMissing: false,
+                reportId: r.id
+            }))
+        }
         const results = await this.fetchIncompleteReportsInternal(90, scope)
         return results.map((r: any) => ({
             id: r.id,
@@ -287,6 +332,10 @@ export class ReportQueryService {
     }
 
     static async getGlobalIncompleteReports(scope: 'all' | 'my_present' | 'my_notifications' = 'all'): Promise<any[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await PageApiService.getIncompleteReports({ days_back: 90, scope, limit: 100, offset: 0 })
+            return response.data || []
+        }
         // Try aggregate endpoint first
         try {
             const agg = await AggregateService.getIncompleteReportsAggregate(90, scope)
@@ -448,6 +497,25 @@ export class ReportQueryService {
         } = {}
     ): Promise<{ data: any[], count: number }> {
         const { page = 1, pageSize = 10, excludeReportId, classroomId, sessionId, sortBy = 'desc', search } = params
+
+        if (getApiV1Mode() === 'v1') {
+            const filters: Array<{ field: string; operator: 'eq' | 'neq' | 'ilike'; value: unknown }> = [
+                { field: 'lesson_id', operator: 'eq', value: lessonId },
+                { field: 'content', operator: 'neq', value: '' },
+            ]
+            if (excludeReportId) filters.push({ field: 'id', operator: 'neq', value: excludeReportId })
+            if (classroomId) filters.push({ field: 'class_occurrences.class_sessions.classroom_id', operator: 'eq', value: classroomId })
+            if (sessionId) filters.push({ field: 'class_occurrences.class_session_id', operator: 'eq', value: sessionId })
+            if (search) filters.push({ field: 'content', operator: 'ilike', value: `%${search}%` })
+            const response = await apiResourceClient.list<any>('reports', {
+                page,
+                perPage: pageSize,
+                sort: `${sortBy === 'asc' ? '' : '-'}class_occurrences(occurrence_date)`,
+                filters,
+                mode: 'v1'
+            })
+            return { data: response.data || [], count: Number(response.meta?.total || 0) }
+        }
         const from = (page - 1) * pageSize
         const to = from + pageSize - 1
 
@@ -514,6 +582,31 @@ export class ReportQueryService {
         } = {}
     ): Promise<{ data: any[], count: number }> {
         const { page = 1, pageSize = 10, excludeReportId, courseId, sortBy = 'desc', search } = params
+
+        if (getApiV1Mode() === 'v1') {
+            const enrollmentResponse = await apiResourceClient.list<{ id: string }>('enrollments', {
+                filters: [{ field: 'student_id', operator: 'eq', value: studentId }],
+                perPage: 100,
+                mode: 'v1'
+            })
+            const enrollmentIds = (enrollmentResponse.data || []).map((row) => row.id)
+            if (!enrollmentIds.length) return { data: [], count: 0 }
+            const filters: Array<{ field: string; operator: 'eq' | 'neq' | 'in' | 'ilike'; value: unknown }> = [
+                { field: 'enrollment_id', operator: 'in', value: enrollmentIds },
+                { field: 'content', operator: 'neq', value: '' },
+            ]
+            if (excludeReportId) filters.push({ field: 'id', operator: 'neq', value: excludeReportId })
+            if (courseId) filters.push({ field: 'enrollments.course_id', operator: 'eq', value: courseId })
+            if (search) filters.push({ field: 'content', operator: 'ilike', value: `%${search}%` })
+            const response = await apiResourceClient.list<any>('reports', {
+                page,
+                perPage: pageSize,
+                sort: `${sortBy === 'asc' ? '' : '-'}class_occurrences(occurrence_date)`,
+                filters,
+                mode: 'v1'
+            })
+            return { data: response.data || [], count: Number(response.meta?.total || 0) }
+        }
         const from = (page - 1) * pageSize
         const to = from + pageSize - 1
 
