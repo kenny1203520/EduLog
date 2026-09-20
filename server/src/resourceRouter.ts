@@ -165,7 +165,11 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     if (!values.length || values.some((value) => !z.string().uuid().safeParse(value).success)) throw new ApiError(400, 'INVALID_FILTER', 'The entity_ids filter is invalid')
     builder = builder.in('entity_id', values)
   }
-  const { data, error, count } = await builder.order(sortName, { ascending: !descending }).range(query.offset, query.offset + query.limit - 1)
+  const relationSort = /^([A-Za-z_][A-Za-z0-9_]*)\(([A-Za-z_][A-Za-z0-9_]*)\)$/.exec(sortName)
+  const ordered = relationSort
+    ? builder.order(relationSort[2], { ascending: !descending, foreignTable: relationSort[1] })
+    : builder.order(sortName, { ascending: !descending })
+  const { data, error, count } = await ordered.range(query.offset, query.offset + query.limit - 1)
   if (error) throw mapDatabaseError(error)
   return sendData(req, res, data ?? [], { limit: query.limit, offset: query.offset, total: count ?? 0, sort: query.sort })
 }

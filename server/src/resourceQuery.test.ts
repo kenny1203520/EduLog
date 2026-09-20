@@ -28,4 +28,9 @@ describe('resource query filters', () => {
     expect(resources.reports.sortable).toContain('class_occurrences(occurrence_date)')
     expect(() => listQuerySchema.parse({ sort: 'class_occurrences(occurrence_date).asc' })).toThrow()
   })
+
+  it('keeps relation sort syntax restricted to a single allowlisted relation column', () => {
+    expect(resources.reports.sortable).not.toContain('class_occurrences(class_sessions(name))')
+    expect(() => listQuerySchema.parse({ sort: 'class_occurrences(class_sessions(name))' })).toThrow()
+  })
 })
