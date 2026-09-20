@@ -58,8 +58,11 @@ BEGIN
   IF to_regprocedure('public.has_api_permission(uuid,text,uuid,uuid)') IS NULL
      OR to_regclass('public.rbac_policy_epoch') IS NULL
      OR to_regprocedure('public.get_dashboard_page(date,date)') IS NULL
+     OR to_regprocedure('public.get_dashboard_counts()') IS NULL
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_page(date,date)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE') THEN
+     OR NOT has_function_privilege('authenticated', 'public.get_dashboard_counts()', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_dashboard_counts()', 'EXECUTE') THEN
     RAISE EXCEPTION 'API RBAC forward migration did not create required objects';
   END IF;
 
@@ -131,6 +134,11 @@ BEGIN
      OR jsonb_typeof(page->'pendingReports') <> 'array'
      OR jsonb_typeof(page->'occurrences') <> 'array' THEN
     RAISE EXCEPTION 'dashboard page read model returned an invalid response shape';
+  END IF;
+  IF jsonb_typeof(public.get_dashboard_counts()) <> 'object'
+     OR (public.get_dashboard_counts() ? 'totalStudents') IS FALSE
+     OR (public.get_dashboard_counts() ? 'activeCourses') IS FALSE THEN
+    RAISE EXCEPTION 'dashboard segmented counts returned an invalid response shape';
   END IF;
 END;
 $$;

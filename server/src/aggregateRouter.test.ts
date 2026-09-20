@@ -32,15 +32,16 @@ describe('aggregate API contract', () => {
     expect(source).toContain('class_sessions(id,name,classroom_id,classrooms(id,name)))')
   })
 
-  it('uses the RLS-scoped dashboard read model for exact page stats', () => {
-    expect(source).toContain("db.rpc('get_dashboard_page'")
-    expect(source).toContain('p_start: query.start ?? null')
-    expect(source).toContain('p_end: query.end ?? null')
-    expect(source).not.toContain("dashboard.students_count")
-    expect(source).not.toContain('dashboardQuery')
+  it('segments Dashboard reads into independently scoped RLS queries', () => {
+    expect(source).toContain("db.rpc('get_dashboard_counts'")
+    expect(source).toContain("loadIncompleteReports(req, pendingQuery, teacher, 'dashboard.pending_reports')")
+    expect(source).toContain("loadDashboardOccurrences(req, query.start, query.end, teacher)")
+    expect(source).not.toContain("db.rpc('get_dashboard_page'")
     expect(source).not.toContain('edulog-dashboard-diagnostics')
     expect(source).toContain("'dashboard', null, 'dashboard.permission'")
-    expect(source).toContain("operation: 'dashboard.read_model'")
+    expect(source).toContain("'dashboard.counts'")
+    expect(source).toContain("'dashboard.pending_reports'")
+    expect(source).toContain("'dashboard.occurrences'")
     expect(source).toContain('database_error_code')
   })
 

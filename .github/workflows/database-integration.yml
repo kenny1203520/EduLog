@@ -76,6 +76,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000073_dashboard_page_read_model.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000074_dashboard_read_model_hardening.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000074_dashboard_read_model_hardening.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000075_dashboard_query_segmentation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000075_dashboard_query_segmentation.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
@@ -103,7 +105,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_upgrade_assertions.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rbac_scope_constraint_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
-      - name: Upgrade an existing 1000061 database through 1000074
+      - name: Upgrade an existing 1000061 database through 1000075
         shell: bash
         run: |
           createdb edulog_history
@@ -111,7 +113,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *1000062*|*1000063*|*1000064*|*1000065*|*1000066*|*1000067*|*1000068*|*1000069*|*1000070*|*1000071*|*1000072*|*1000073*|*1000074*) continue ;;
+              *1000062*|*1000063*|*1000064*|*1000065*|*1000066*|*1000067*|*1000068*|*1000069*|*1000070*|*1000071*|*1000072*|*1000073*|*1000074*|*1000075*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -142,6 +144,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000073_dashboard_page_read_model.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000074_dashboard_read_model_hardening.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000074_dashboard_read_model_hardening.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000075_dashboard_query_segmentation.sql
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000075_dashboard_query_segmentation.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/sensitive_data_integration.sql
           # These fixture assertions target a pre-1000043 upgrade and run in

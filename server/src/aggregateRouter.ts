@@ -9,8 +9,14 @@ import { resources } from './resources.js'
 
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
 const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,content,content_document,is_completed,progress_letter,attendance_status,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,version,absence_reason,external_link,updated_at'
+const dashboardOccurrenceFields = 'id,class_session_id,occurrence_date,status,teacher_ids,teacher_attendance,is_conducted,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,class_sessions(id,name,time_zone,classrooms(id,name,color))'
 
 function requireDb(req: Request) { if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required'); return req.db }
+
+function throwDatabaseError(req: Request, operation: string, error: { code?: string }): never {
+  req.log.error({ operation, database_error_code: error.code ?? 'UNKNOWN', request_id: req.requestId, trace_id: req.traceId }, 'database_operation_failed')
+  throw mapDatabaseError(error as any)
+}
 
 async function requirePagePermission(req: Request, permission: string, resource: string, resourceId: string | null = null, operation = 'page.permission') {
   const db = requireDb(req)
@@ -115,20 +121,53 @@ async function holidays(req: Request, res: Response) {
   return sendData(req, res, data, { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: query.sort })
 }
 
-async function incomplete(req: Request, res: Response) {
-  const db = requireDb(req); const query = z.object({ days_back: z.coerce.number().int().min(1).max(3650).default(90), scope: z.enum(['all', 'my_present', 'my_notifications']).default('all'), limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0) }).strict().parse(req.query)
-  await requirePagePermission(req, 'teaching.reports.list', 'incomplete-reports')
-  const from = new Date(Date.now() - query.days_back * 86400000).toISOString().slice(0, 10); const today = new Date().toISOString().slice(0, 10)
-  const teacher = await db.from('teachers').select('id,user_id').eq('user_id', req.user!.id).maybeSingle(); if (teacher.error) throw mapDatabaseError(teacher.error)
-  if ((query.scope === 'my_present' || query.scope === 'my_notifications') && !teacher.data) return sendData(req, res, [], { limit: 0, offset: 0, total: 0, sort: '-updated_at' })
+const incompleteQuerySchema = z.object({ days_back: z.coerce.number().int().min(1).max(3650).default(90), scope: z.enum(['all', 'my_present', 'my_notifications']).default('all'), limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0) }).strict()
+type TeacherScope = { id: string; user_id: string } | null
+
+async function loadCurrentTeacher(req: Request, operation: string): Promise<TeacherScope> {
+  const db = requireDb(req)
+  const result = await db.from('teachers').select('id,user_id').eq('user_id', req.user!.id).maybeSingle()
+  if (result.error) throwDatabaseError(req, operation, result.error)
+  return result.data as TeacherScope
+}
+
+async function loadIncompleteReports(req: Request, query: z.infer<typeof incompleteQuerySchema>, teacher: TeacherScope, operation: string) {
+  const db = requireDb(req)
+  const from = new Date(Date.now() - query.days_back * 86400000).toISOString().slice(0, 10)
+  const today = new Date().toISOString().slice(0, 10)
+  if ((query.scope === 'my_present' || query.scope === 'my_notifications') && !teacher) return { rows: [], total: 0 }
   const result = await db.from('occurrence_reports').select(`${reportFields},enrollments!inner(id,student_id,course_id,students(id,name)),class_occurrences!inner(id,occurrence_date,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,is_conducted,teacher_ids,teacher_attendance,class_sessions(id,name,classroom_id,classrooms(id,name)))`).eq('attendance_status', 'present').gte('class_occurrences.occurrence_date', from).lte('class_occurrences.occurrence_date', today)
-  if (result.error) throw mapDatabaseError(result.error)
-  const rows = (result.data ?? []).filter((row: any) => isIncompleteReport(row) && (query.scope === 'all' || isTeacherPresent(teacher.data!.id, req.user!.id, row.class_occurrences?.teacher_ids ?? [], row.class_occurrences?.teacher_attendance ?? {}))).map((row: any) => ({ id: row.id, reportId: row.id, enrollmentId: row.enrollment_id, occurrenceId: row.class_occurrence_id, studentName: row.enrollments?.students?.name ?? row.enrollments?.students?.[0]?.name ?? 'Unknown', courseId: row.enrollments?.course_id, className: row.class_occurrences?.class_sessions?.name ?? row.class_occurrences?.class_sessions?.[0]?.name ?? '-', classroomName: row.class_occurrences?.class_sessions?.classrooms?.name ?? row.class_occurrences?.class_sessions?.[0]?.classrooms?.name ?? '-', date: row.class_occurrences?.occurrence_date, content: row.content ?? '', ...reportMissingFlags(row), version: row.version, attendanceStatus: row.attendance_status, updatedAt: row.updated_at }))
-  return sendData(req, res, rows.slice(query.offset, query.offset + query.limit), { limit: query.limit, offset: query.offset, total: rows.length, sort: '-updated_at' })
+  if (result.error) throwDatabaseError(req, operation, result.error)
+  const rows = (result.data ?? []).filter((row: any) => isIncompleteReport(row) && (query.scope === 'all' || isTeacherPresent(teacher!.id, req.user!.id, row.class_occurrences?.teacher_ids ?? [], row.class_occurrences?.teacher_attendance ?? {}))).map((row: any) => ({ id: row.id, reportId: row.id, enrollmentId: row.enrollment_id, occurrenceId: row.class_occurrence_id, studentName: row.enrollments?.students?.name ?? row.enrollments?.students?.[0]?.name ?? 'Unknown', courseId: row.enrollments?.course_id, className: row.class_occurrences?.class_sessions?.name ?? row.class_occurrences?.class_sessions?.[0]?.name ?? '-', classroomName: row.class_occurrences?.class_sessions?.classrooms?.name ?? row.class_occurrences?.class_sessions?.classrooms?.[0]?.name ?? '-', date: row.class_occurrences?.occurrence_date, content: row.content ?? '', ...reportMissingFlags(row), version: row.version, attendanceStatus: row.attendance_status, updatedAt: row.updated_at }))
+  return { rows: rows.slice(query.offset, query.offset + query.limit), total: rows.length }
+}
+
+async function incomplete(req: Request, res: Response) {
+  const query = incompleteQuerySchema.parse(req.query)
+  await requirePagePermission(req, 'teaching.reports.list', 'incomplete-reports')
+  const teacher = await loadCurrentTeacher(req, 'incomplete_reports.teacher_scope')
+  const result = await loadIncompleteReports(req, query, teacher, 'incomplete_reports.read')
+  return sendData(req, res, result.rows, { limit: query.limit, offset: query.offset, total: result.total, sort: '-updated_at' })
+}
+
+async function loadDashboardCounts(req: Request) {
+  const db = requireDb(req)
+  const result = await db.rpc('get_dashboard_counts')
+  if (result.error) throwDatabaseError(req, 'dashboard.counts', result.error)
+  return (result.data ?? {}) as { totalStudents?: number; activeCourses?: number }
+}
+
+async function loadDashboardOccurrences(req: Request, start: string | undefined, end: string | undefined, teacher: TeacherScope) {
+  if (!start || !end) return []
+  const db = requireDb(req)
+  const result = await db.from('class_occurrences').select(dashboardOccurrenceFields).eq('is_conducted', true).gte('occurrence_date', start).lte('occurrence_date', end).order('occurrence_date', { ascending: true }).order('id', { ascending: true }).range(0, 99)
+  if (result.error) throwDatabaseError(req, 'dashboard.occurrences', result.error)
+  const rows = result.data ?? []
+  if (!teacher) return rows
+  return rows.filter((row: any) => isTeacherPresent(teacher.id, req.user!.id, row.teacher_ids ?? [], row.teacher_attendance ?? {}))
 }
 
 async function dashboard(req: Request, res: Response) {
-  const db = requireDb(req)
   const query = z.object({
     start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     end: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -148,30 +187,23 @@ async function dashboard(req: Request, res: Response) {
     if (end - start > 31 * 86400000) context.addIssue({ code: z.ZodIssueCode.custom, path: ['end'], message: 'date range must not exceed 31 days' })
   }).parse(req.query)
   await requirePagePermission(req, 'teaching.reports.list', 'dashboard', null, 'dashboard.permission')
-  const result = await db.rpc('get_dashboard_page', {
-    p_start: query.start ?? null,
-    p_end: query.end ?? null,
-  })
-  if (result.error) {
-    req.log.error({ operation: 'dashboard.read_model', database_error_code: result.error.code ?? 'UNKNOWN', request_id: req.requestId, trace_id: req.traceId }, 'database_operation_failed')
-    throw mapDatabaseError(result.error)
-  }
-  const page = result.data as {
-    pendingReportsScope?: string
-    stats?: { totalStudents?: number; activeCourses?: number; pendingReportsCount?: number; pendingReportsScope?: string }
-    pendingReports?: unknown[]
-    occurrences?: unknown[]
-  } | null
+  const teacher = await loadCurrentTeacher(req, 'dashboard.teacher_scope')
+  const pendingQuery = { days_back: 90, scope: 'my_present' as const, limit: 100, offset: 0 }
+  const [counts, pendingReports, occurrences] = await Promise.all([
+    loadDashboardCounts(req),
+    loadIncompleteReports(req, pendingQuery, teacher, 'dashboard.pending_reports'),
+    loadDashboardOccurrences(req, query.start, query.end, teacher),
+  ])
   return sendData(req, res, {
-    pendingReportsScope: page?.pendingReportsScope ?? 'my_present',
+    pendingReportsScope: 'my_present',
     stats: {
-      totalStudents: page?.stats?.totalStudents ?? 0,
-      activeCourses: page?.stats?.activeCourses ?? 0,
-      pendingReportsCount: page?.stats?.pendingReportsCount ?? 0,
-      pendingReportsScope: page?.stats?.pendingReportsScope ?? 'my_present',
+      totalStudents: counts.totalStudents ?? 0,
+      activeCourses: counts.activeCourses ?? 0,
+      pendingReportsCount: pendingReports.total,
+      pendingReportsScope: 'my_present',
     },
-    pendingReports: page?.pendingReports ?? [],
-    occurrences: page?.occurrences ?? [],
+    pendingReports: pendingReports.rows,
+    occurrences,
   })
 }
 
