@@ -47,10 +47,16 @@ export interface HolidayOverviewPageDTO { id: string; start_date: string; end_da
 export interface ClassroomOverviewPageDTO {
   classrooms: Array<Record<string, unknown>>
   count: number
+  classroomTotal?: number
+  visibleClassroomCount?: number
+  hiddenClassroomCount?: number
   hiddenClassroomIds: string[]
   hiddenSessionIds: string[]
   classSessions: ClassSessionOverviewDTO[]
   sessionCount: number
+  sessionTotal?: number
+  visibleSessionCount?: number
+  hiddenSessionCount?: number
 }
 
 function queryString(query: PageListQuery = {}) {

@@ -16,10 +16,14 @@ export interface UserPreferencesAggregate {
 
 export class AggregateService {
   private static _cache: Map<string, { expiresAt: number, data?: any, promise?: Promise<any> }> = new Map()
-  private static DEFAULT_TTL_MS = 30 * 1000
-  private static MEDIUM_TTL_MS = 60 * 1000
+  private static cacheInvalidationListenerInstalled = false
+  // Private in-memory cache only.  It is deliberately short lived and is
+  // cleared on sign-out; HTTP responses themselves remain `private, no-store`.
+  private static DEFAULT_TTL_MS = 10 * 1000
+  private static MEDIUM_TTL_MS = 10 * 1000
 
   private static async withCache<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+    this.installCacheInvalidationListener()
     const now = Date.now()
     const entry = this._cache.get(key)
     if (entry?.data !== undefined && entry.expiresAt > now) return entry.data as T
@@ -37,6 +41,12 @@ export class AggregateService {
 
   static clearCache(key?: string) { if (key) this._cache.delete(key); else this._cache.clear() }
 
+  private static installCacheInvalidationListener() {
+    if (this.cacheInvalidationListenerInstalled || typeof window === 'undefined') return
+    window.addEventListener('edulog:api-mutation', () => this.clearCache())
+    this.cacheInvalidationListenerInstalled = true
+  }
+
   static async getUserPreferencesAggregate(): Promise<UserPreferencesAggregate> {
     return this.withCache('user_preferences', this.DEFAULT_TTL_MS, async () =>
       (await PageApiService.getUserPreferences()).data as UserPreferencesAggregate,
@@ -52,7 +62,10 @@ export class AggregateService {
   }
 
   static async getClassroomSessionManagerAggregate(page: number = 1, perPage: number = 100, search: string = '', visibilityMode: string = 'all') {
-    return (await PageApiService.getClassroomsOverview({ limit: perPage, offset: Math.max(0, (page - 1) * perPage), search, visibility: visibilityMode })).data
+    const key = `classrooms:p${page}:s${perPage}:q${search}:v${visibilityMode}`
+    return this.withCache(key, this.DEFAULT_TTL_MS, async () =>
+      (await PageApiService.getClassroomsOverview({ limit: perPage, offset: Math.max(0, (page - 1) * perPage), search, visibility: visibilityMode })).data,
+    )
   }
 
   static async getAllClassroomsOverview(search: string = '', visibilityMode: string = 'all') {
@@ -68,16 +81,19 @@ export class AggregateService {
   }
 
   static async getClassSessionsOverview(page: number = 1, perPage: number = 100, search: string = '', classroomId?: string | null, visibilityMode: string = 'all') {
-    const response = await PageApiService.getClassroomsOverview({
-      limit: 1,
-      offset: 0,
-      visibility: visibilityMode,
-      search,
-      session_limit: perPage,
-      session_offset: Math.max(0, (page - 1) * perPage),
-      classroom_id: classroomId || undefined,
+    const key = `sessions:p${page}:s${perPage}:q${search}:c${classroomId ?? ''}:v${visibilityMode}`
+    return this.withCache(key, this.DEFAULT_TTL_MS, async () => {
+      const response = await PageApiService.getClassroomsOverview({
+        limit: 1,
+        offset: 0,
+        visibility: visibilityMode,
+        search,
+        session_limit: perPage,
+        session_offset: Math.max(0, (page - 1) * perPage),
+        classroom_id: classroomId || undefined,
+      })
+      return { data: response.data.classSessions, count: response.data.sessionCount, hiddenSessionIds: response.data.hiddenSessionIds }
     })
-    return { data: response.data.classSessions, count: response.data.sessionCount, hiddenSessionIds: response.data.hiddenSessionIds }
   }
 
   static async getAllClassSessionsOverview(search: string = '', classroomId?: string | null, visibilityMode: string = 'all') {

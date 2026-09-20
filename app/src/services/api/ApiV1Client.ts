@@ -26,6 +26,12 @@ export class ApiV1Client {
     const response = await fetch(`${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`, { ...options, method, credentials: 'include', headers, body: options.body === undefined ? undefined : JSON.stringify(options.body) })
     const body = await response.json().catch(() => null)
     if (!response.ok) { const errorBody = body as ApiErrorBody | null; if (errorBody?.error) throw new ApiV1Error(response.status, errorBody); throw new Error(`API request failed with status ${response.status}`) }
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && typeof window !== 'undefined') {
+      // Page data is private to the current session.  Notify the in-memory
+      // read cache only after a successful mutation; no resource ids or body
+      // values are put on the event.
+      window.dispatchEvent(new Event('edulog:api-mutation'))
+    }
     return body as ApiEnvelope<T>
   }
   get<T>(path: string, options?: Omit<ApiRequestOptions, 'method' | 'body'>) { return this.request<T>(path, { ...options, method: 'GET' }) }

@@ -5,7 +5,6 @@ import { AggregateService } from '@/services/AggregateService'
 import { ClassOccurrence } from '@/models/ClassOccurrence'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { useFeedback } from '@/composables/useFeedback'
 
 const { t } = useI18n()
@@ -52,11 +51,12 @@ async function loadDashboard() {
         loadError.value = null
 
         const todayStr = DateUtils.todayString(preferences.timeZone)
-        const agg = await AggregateService.getDashboardHome(todayStr, todayStr, true)
+        const agg = await AggregateService.getDashboardHome(todayStr, todayStr)
         
         stats.value.totalStudents = agg.stats?.totalStudents || 0
         stats.value.activeCourses = agg.stats?.activeCourses || 0
-        await applyDashboardPendingReports(agg)
+        pendingReports.value = (agg.pendingReports || []).map(normalizePendingReport)
+        pendingReportsCount.value = Number(agg.stats?.pendingReportsCount ?? pendingReports.value.length)
 
         if (agg.occurrences && Array.isArray(agg.occurrences)) {
             const mappedOccs: ClassOccurrence[] = agg.occurrences.map((d: any) => {
@@ -91,30 +91,14 @@ async function loadDashboard() {
         console.error('Failed to load dashboard data:', e)
         loadError.value = t('dashboard.load_error')
         reportError(e)
-        await loadMyNotificationPendingReports()
+        pendingReports.value = []
+        pendingReportsCount.value = 0
     } finally {
         loading.value = false
     }
 }
 
 onMounted(loadDashboard)
-
-async function applyDashboardPendingReports(_agg: any) {
-    // Role-aware recipient rules are resolved by the dedicated incomplete-report endpoint.
-    await loadMyNotificationPendingReports()
-}
-
-async function loadMyNotificationPendingReports() {
-    try {
-        const myReports = await OccurrenceReportService.getGlobalIncompleteReports('my_notifications')
-        pendingReports.value = (myReports || []).map(normalizePendingReport)
-        pendingReportsCount.value = pendingReports.value.length
-    } catch (fallbackError) {
-        console.error('Failed to load notification-eligible pending reports:', fallbackError)
-        pendingReports.value = []
-        pendingReportsCount.value = 0
-    }
-}
 
 function normalizePendingReport(report: any) {
     return {

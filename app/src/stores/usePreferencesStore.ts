@@ -20,6 +20,10 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const timeZone = ref(DateUtils.getDefaultTimeZone())
     const isLoadingRemotePreferences = ref(false)
     let isApplyingRemotePreferences = false
+    // Do not turn the initial values (or values being hydrated from the BFF)
+    // into a PATCH request.  Persistence starts only after the first load has
+    // settled, when a user can actually change a preference.
+    let canPersistRemotePreferences = false
 
     function parseStoredEditorSettings(): unknown {
         try { return JSON.parse(localStorage.getItem('editorSettings') || 'null') }
@@ -69,7 +73,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
 
     watch(editorSettings, (value) => {
         localStorage.setItem('editorSettings', JSON.stringify(value))
-        if (isApplyingRemotePreferences) return
+        if (isApplyingRemotePreferences || !canPersistRemotePreferences) return
         UserPreferenceService.updateCurrentUserEditorSettings(value).catch(error => {
             console.warn('Failed to save editor preferences:', error)
         })
@@ -86,7 +90,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
             return
         }
         localStorage.setItem('timeZone', val)
-        if (isApplyingRemotePreferences) return
+        if (isApplyingRemotePreferences || !canPersistRemotePreferences) return
         UserPreferenceService.updateCurrentUserTimeZone(val).catch(error => {
             console.warn('Failed to save time zone preference:', error)
         })
@@ -146,6 +150,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
         } finally {
             isApplyingRemotePreferences = false
             isLoadingRemotePreferences.value = false
+            canPersistRemotePreferences = true
         }
     }
 
