@@ -216,6 +216,7 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 DO $$
 DECLARE dashboard_counts jsonb;
+DECLARE student_overview jsonb;
 DECLARE expected_student_count bigint;
 DECLARE expected_course_count bigint;
 BEGIN
@@ -248,6 +249,17 @@ BEGIN
   IF (dashboard_counts->>'totalStudents')::bigint <> expected_student_count
      OR (dashboard_counts->>'activeCourses')::bigint <> expected_course_count THEN
     RAISE EXCEPTION 'dashboard controlled count no longer matches caller-visible RLS rows';
+  END IF;
+
+  student_overview := public.get_students_overview(100, 0, '', 'name');
+  IF (student_overview->>'total')::bigint <> expected_student_count
+     OR jsonb_array_length(student_overview->'items') <> expected_student_count
+     OR EXISTS (
+       SELECT 1
+       FROM jsonb_array_elements(student_overview->'items') item
+       WHERE item->>'id' = 'b4000000-0000-4000-8000-000000000002'
+     ) THEN
+    RAISE EXCEPTION 'student overview no longer matches caller-visible RLS rows';
   END IF;
 END;
 $$;

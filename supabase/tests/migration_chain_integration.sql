@@ -61,9 +61,12 @@ BEGIN
      OR to_regprocedure('public.get_dashboard_counts()') IS NULL
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_counts()', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_counts()', 'EXECUTE')
-     OR has_function_privilege('service_role', 'public.get_dashboard_counts()', 'EXECUTE') THEN
+     OR has_function_privilege('anon', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_dashboard_counts()', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'API RBAC forward migration did not create required objects';
   END IF;
 
@@ -104,6 +107,26 @@ BEGIN
       AND owner_role.rolname IN ('anon', 'authenticated')
   ) THEN
     RAISE EXCEPTION 'dashboard count RPC has an unsafe owner';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    WHERE procedure.oid = to_regprocedure('public.get_students_overview(integer,integer,text,text)')
+      AND procedure.prosecdef
+      AND procedure.proconfig @> ARRAY['search_path=pg_catalog, public']
+  ) THEN
+    RAISE EXCEPTION 'Student overview RPC must use its controlled read-model security boundary';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_roles owner_role ON owner_role.oid = procedure.proowner
+    WHERE procedure.oid = to_regprocedure('public.get_students_overview(integer,integer,text,text)')
+      AND owner_role.rolname IN ('anon', 'authenticated')
+  ) THEN
+    RAISE EXCEPTION 'Student overview RPC has an unsafe owner';
   END IF;
 END;
 $$;

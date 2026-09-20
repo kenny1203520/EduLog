@@ -239,11 +239,21 @@ async function studentsOverview(req: Request, res: Response) {
   const query = pageListQuery.parse(req.query)
   const sort = pageSort(query.sort, ['name', 'created_at', 'updated_at'], 'name')
   await authorizeCollection(req, resources.students, 'teaching.students.list', query)
-  let list = db.from('students').select('id,name,notes,notes_document,external_link,created_at,updated_at', { count: 'exact' })
-  if (query.search) list = list.ilike('name', `%${query.search.replace(/[%_,]/g, '')}%`)
-  const result = await list.order(sort.field, { ascending: sort.ascending }).range(query.offset, query.offset + query.limit - 1)
-  if (result.error) throw mapDatabaseError(result.error)
-  return sendData(req, res, result.data ?? [], { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: sort.value })
+  const result = await db.rpc('get_students_overview', {
+    p_limit: query.limit,
+    p_offset: query.offset,
+    p_search: query.search,
+    p_sort: sort.value,
+  })
+  if (result.error) throwDatabaseError(req, 'students_overview.read', result.error)
+  const page = (result.data ?? {}) as { items?: unknown; total?: unknown }
+  const items = Array.isArray(page.items) ? page.items : []
+  const total = Number(page.total ?? 0)
+  if (!Number.isSafeInteger(total) || total < 0) {
+    req.log.error({ operation: 'students_overview.read', database_error_code: 'INVALID_RESULT', request_id: req.requestId, trace_id: req.traceId }, 'database_operation_failed')
+    throw new ApiError(500, 'DATABASE_ERROR', 'The request could not be completed')
+  }
+  return sendData(req, res, items, { limit: query.limit, offset: query.offset, total, sort: sort.value })
 }
 
 async function studentProfile(req: Request, res: Response) {

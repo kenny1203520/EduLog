@@ -193,6 +193,11 @@ describe('generated API contract', () => {
       expect(operation.responses['401'], path).toBeDefined()
       expect(operation.responses['403'], path).toBeDefined()
     }
+    expect(spec.paths['/api/pages/students/overview']?.get?.parameters?.find((parameter: any) => parameter.name === 'sort')?.schema).toEqual({
+      type: 'string',
+      enum: ['name', '-name', 'created_at', '-created_at', 'updated_at', '-updated_at'],
+      default: 'name',
+    })
     expect(spec.components.schemas.PageStudentProfileData.properties.student_credentials).toBeUndefined()
     expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-permission']).toBe('teaching.students.read_sensitive')
     expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-sensitive-data']).toBe(true)

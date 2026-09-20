@@ -54,11 +54,12 @@ describe('aggregate API contract', () => {
   it('uses scoped permission checks and explicit safe projections for new page read models', () => {
     expect(source).toContain("authorizeCollection(req, resources.courses, 'teaching.courses.list', query)")
     expect(source).toContain("authorizeCollection(req, resources.students, 'teaching.students.list', query)")
+    expect(source).toContain("db.rpc('get_students_overview'")
+    expect(source).toContain("'students_overview.read'")
     expect(source).toContain("authorizeResource(req, resources.students, 'teaching.students.read', studentId)")
     expect(source).toContain("rpc('can_access_sensitive_student', { p_student_id: studentId, p_permission_key: 'teaching.students.read_sensitive' })")
     expect(source).toContain("authorizeResource(req, resources['class-sessions'], 'teaching.class_sessions.read', sessionId)")
     expect(source).toContain("select('id,subject,stage,display_name,description,description_document,created_at,updated_at,lessons(")
-    expect(source).toContain("select('id,name,notes,notes_document,external_link,created_at,updated_at'")
     expect(source).toContain("select('id,user_id,name,bio,bio_document,created_at,updated_at'")
     expect(source).not.toContain('classrooms(id,name,address)')
     expect(source).not.toContain('id,name,color,address,phone')

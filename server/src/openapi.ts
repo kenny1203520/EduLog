@@ -324,7 +324,10 @@ export function buildOpenApi() {
   } }
   paths['/api/pages/students/overview'] = { get: {
     ...pageBase, operationId: 'page_students_overview', summary: 'Read the student management page read model without contact or credential values',
-    'x-permission': 'teaching.students.list', parameters: pageListParameters,
+    'x-permission': 'teaching.students.list', parameters: [
+      ...pageListParameters.slice(0, 3),
+      { name: 'sort', in: 'query', schema: { type: 'string', enum: ['name', '-name', 'created_at', '-created_at', 'updated_at', '-updated_at'], default: 'name' } },
+    ],
     responses: { '200': pageResponse('PageStudentsOverviewData'), ...errorResponses },
   } }
   paths['/api/pages/students/{studentId}/profile'] = { get: {
