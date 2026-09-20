@@ -63,6 +63,16 @@ BEGIN
     RAISE EXCEPTION 'API RBAC forward migration did not create required objects';
   END IF;
 
+  IF NOT has_table_privilege('authenticated', 'public.class_session_teachers', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.class_occurrences', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.occurrence_reports', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.enrollments', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.class_sessions', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.classrooms', 'SELECT')
+     OR NOT has_table_privilege('authenticated', 'public.courses', 'SELECT') THEN
+    RAISE EXCEPTION 'dashboard read model dependencies lack authenticated SELECT grants';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM pg_proc

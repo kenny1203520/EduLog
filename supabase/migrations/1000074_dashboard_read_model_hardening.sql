@@ -44,6 +44,22 @@ CREATE INDEX IF NOT EXISTS enrollments_student_id_idx
 CREATE INDEX IF NOT EXISTS students_user_id_idx
   ON public.students USING btree (user_id);
 
+-- The invoker read model must have the same minimal relation privileges as a
+-- normal authenticated read.  RLS still decides which rows are visible;
+-- these grants only make the non-sensitive relations readable to the caller.
+-- In particular, class_session_teachers is consulted by the canonical
+-- occurrence/report policies and therefore cannot be left at the PostgreSQL
+-- default of no authenticated table privilege.
+GRANT SELECT ON TABLE
+  public.class_session_teachers,
+  public.class_occurrences,
+  public.occurrence_reports,
+  public.enrollments,
+  public.class_sessions,
+  public.classrooms,
+  public.courses
+TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.get_dashboard_page(
   p_start date DEFAULT NULL,
   p_end date DEFAULT NULL
