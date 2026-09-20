@@ -41,6 +41,11 @@ describe('editor reliability contracts', () => {
         expect(editor).toContain('dedupeKey:')
         expect(editor).toContain('collaboration_fallback')
     })
+    it('routes production collaboration through the same-origin API WebSocket', () => {
+        const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
+        expect(collab).toContain("getApiV1Mode() === 'v1' ? undefined : apiDataClient")
+        expect(collab).toContain('ApiModeClient')
+    })
 
     it('does not reintroduce wildcard editor hot-path queries', () => {
         const files = [

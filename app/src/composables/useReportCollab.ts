@@ -8,6 +8,7 @@ import {
     type SupabaseProviderOptions
 } from '@/services/report/SupabaseProvider'
 import { apiDataClient } from '@/services/api/ApiDataClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import * as Y from 'yjs'
 import { useAuthStore } from '@/stores/useAuthStore'
 
@@ -224,5 +225,9 @@ function defaultProviderFactory(
     userId: string,
     options: SupabaseProviderOptions
 ): SupabaseProvider {
-    return new SupabaseProvider(apiDataClient, doc, reportId, reportVersion, userId, options)
+    // In production v1 mode the browser must use the authenticated same-origin
+    // WebSocket proxy. Passing the Supabase client here would expose a direct
+    // Realtime transport and bypass the Express room authorization boundary.
+    const transport = getApiV1Mode() === 'v1' ? undefined : apiDataClient
+    return new SupabaseProvider(transport, doc, reportId, reportVersion, userId, options)
 }
