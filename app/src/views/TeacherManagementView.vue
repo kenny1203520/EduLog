@@ -10,6 +10,8 @@ import {
     type TeacherDTO,
     type TeacherStatisticsDTO
 } from '@/services/teacher/TeacherService'
+import { PageApiService } from '@/services/api/PageApiService'
+import type { TeacherOverviewDTO } from '@/services/api/PageApiService'
 import {
     AuthUserSearchService,
     type AuthUserSearchResultDTO
@@ -23,21 +25,21 @@ import { createTextEditorContent } from '@/components/common/text-editor/content
 import type { TextEditorContent } from '@/components/common/text-editor/types'
 import { isKodingPlatform, KODING_PLATFORM } from '@/utils/koding'
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const toast = useToast()
 
-const teachers = ref<TeacherDTO[]>([])
+const teachers = ref<TeacherOverviewDTO[]>([])
+const statistics = ref<TeacherStatisticsDTO>({ totalTeachers: 0, linkedAccounts: 0, unlinkedAccounts: 0, completeProfiles: 0, teachersWithBirthday: 0, teachersWithGovId: 0 })
 const loading = ref(true)
 const searchQuery = ref('')
-const sortField = ref<'name' | 'email' | 'created_at'>('name')
+const sortField = ref<'name' | 'created_at'>('name')
 const sortDirection = ref<'asc' | 'desc'>('asc')
-const pagination = ref({ page: 1, perPage: 8 })
+const pagination = ref({ page: 1, perPage: 8, total: 0 })
 const selectedTeacherIds = ref<Set<string>>(new Set())
 const pendingDeleteCount = ref(0)
 
 const sortOptions = computed(() => [
     { label: t('teacher.sort_name'), value: 'name' },
-    { label: t('teacher.sort_email'), value: 'email' },
     { label: t('teacher.sort_created_at'), value: 'created_at' }
 ])
 
@@ -100,65 +102,32 @@ const confirmModal = ref({
     action: null as (() => Promise<void>) | null
 })
 
-const filteredTeachers = computed(() => {
-    const query = searchQuery.value.trim().toLowerCase()
-    if (!query) return teachers.value
-
-    return teachers.value.filter((teacher) => {
-        const haystack = [
-            teacher.name,
-            teacher.email,
-            teacher.phone,
-            teacher.gov_id,
-            teacher.address,
-            teacher.bio,
-            teacher.user_id
-        ]
-            .filter(Boolean)
-            .join(' ')
-            .toLowerCase()
-
-        return haystack.includes(query)
-    })
-})
-
-const sortedTeachers = computed(() => {
-    const sorted = [...filteredTeachers.value].sort((left, right) => {
-        const leftValue = String(left[sortField.value] ?? '')
-        const rightValue = String(right[sortField.value] ?? '')
-        const comparison = leftValue.localeCompare(rightValue, locale.value)
-        return sortDirection.value === 'asc' ? comparison : -comparison
-    })
-
-    return sorted
-})
-
-const pagedTeachers = computed(() => {
-    const start = (pagination.value.page - 1) * pagination.value.perPage
-    const end = start + pagination.value.perPage
-    return sortedTeachers.value.slice(start, end)
-})
+const pagedTeachers = computed(() => teachers.value)
 
 const selectedCount = computed(() => selectedTeacherIds.value.size)
-const statistics = computed<TeacherStatisticsDTO>(() => TeacherService.getTeacherStatistics(teachers.value))
-
+let searchTimeout: ReturnType<typeof setTimeout> | undefined
 watch(searchQuery, () => {
+    if (searchTimeout) clearTimeout(searchTimeout)
     pagination.value.page = 1
+    searchTimeout = setTimeout(() => { void loadTeachers() }, 250)
 })
 
-watch(sortedTeachers, () => {
-    const maxPage = Math.max(1, Math.ceil(sortedTeachers.value.length / pagination.value.perPage))
-    if (pagination.value.page > maxPage) {
-        pagination.value.page = maxPage
-    }
-})
+watch(() => [pagination.value.page, pagination.value.perPage], () => { void loadTeachers() })
 
 onMounted(loadTeachers)
 
 async function loadTeachers() {
     try {
         loading.value = true
-        teachers.value = await TeacherService.getAllTeachersWithCredentials()
+        const response = await PageApiService.getTeachersOverview({
+            limit: pagination.value.perPage,
+            offset: (pagination.value.page - 1) * pagination.value.perPage,
+            search: searchQuery.value,
+            sort: `${sortDirection.value === 'desc' ? '-' : ''}${sortField.value}`,
+        })
+        teachers.value = response.data.teachers
+        statistics.value = response.data.statistics
+        pagination.value.total = Number(response.meta?.total ?? teachers.value.length)
         selectedTeacherIds.value = new Set()
     } catch (error) {
         console.error(error)
@@ -192,24 +161,31 @@ function openCreateModal() {
     isModalOpen.value = true
 }
 
-function openEditModal(teacher: TeacherDTO) {
-    editingTeacher.value = teacher
+async function openEditModal(teacher: TeacherOverviewDTO) {
+    try {
+    if (!teacher.id) throw new Error('Teacher id is required')
+    const detail = await TeacherService.getTeacherById(teacher.id)
+    editingTeacher.value = detail
     form.value = {
-        user_id: teacher.user_id ?? '',
-        name: teacher.name ?? '',
-        email: teacher.email ?? '',
-        phone: teacher.phone ?? '',
-        birthday: teacher.birthday ?? '',
-        gov_id: teacher.gov_id ?? '',
-        address: teacher.address ?? '',
-        bio: teacher.bio ?? '',
-        bio_document: teacher.bio_document || createTextEditorContent(teacher.bio || '').richText
+        user_id: detail.user_id ?? '',
+        name: detail.name ?? '',
+        email: detail.email ?? '',
+        phone: detail.phone ?? '',
+        birthday: detail.birthday ?? '',
+        gov_id: detail.gov_id ?? '',
+        address: detail.address ?? '',
+        bio: detail.bio ?? '',
+        bio_document: detail.bio_document || createTextEditorContent(detail.bio || '').richText
     }
-    editingCredentials.value = getTeacherCredentials(teacher).map(toEditableCredential)
+    editingCredentials.value = getTeacherCredentials(detail).map(toEditableCredential)
     newCredential.value = createEmptyCredentialForm()
     isAddCredentialFormOpen.value = false
     resetUserSearchState()
     isModalOpen.value = true
+    } catch (error) {
+        console.error(error)
+        toast.error(t('teacher.load_failed'))
+    }
 }
 
 function closeModal() {
@@ -336,7 +312,7 @@ async function saveTeacher() {
     }
 }
 
-function openDeleteConfirm(teacher: TeacherDTO) {
+function openDeleteConfirm(teacher: TeacherOverviewDTO) {
     pendingDeleteCount.value = 1
     confirmModal.value = {
         isOpen: true,
@@ -409,14 +385,16 @@ function clearSelection() {
     selectedTeacherIds.value = new Set()
 }
 
-function cycleSort(field: 'name' | 'email' | 'created_at') {
+function cycleSort(field: 'name' | 'created_at') {
     if (sortField.value === field) {
         sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
+        void loadTeachers()
         return
     }
 
     sortField.value = field
     sortDirection.value = 'asc'
+    void loadTeachers()
 }
 
 function createEmptyCredentialForm() {
@@ -467,7 +445,9 @@ function validateCredentialInput(platform: string, username: string, password: s
     return true
 }
 
-function updateEditingCredentialsFromTeacher(teacher: TeacherDTO) {
+async function refreshEditingTeacher() {
+    if (!editingTeacher.value?.id) return
+    const teacher = await TeacherService.getTeacherById(editingTeacher.value.id)
     editingTeacher.value = teacher
     editingCredentials.value = getTeacherCredentials(teacher).map(toEditableCredential)
 }
@@ -497,10 +477,7 @@ async function addTeacherCredential() {
         newCredential.value = createEmptyCredentialForm()
         isAddCredentialFormOpen.value = false
         await loadTeachers()
-        const refreshed = teachers.value.find(teacher => teacher.id === editingTeacher.value?.id)
-        if (refreshed) {
-            updateEditingCredentialsFromTeacher(refreshed)
-        }
+        await refreshEditingTeacher()
         toast.success(t('teacher.credentials_add_success'))
     } catch (error: any) {
         console.error(error)
@@ -529,10 +506,7 @@ async function updateTeacherCredential(credential: EditableTeacherCredential) {
             url: credential.url?.trim() || ''
         })
         await loadTeachers()
-        const refreshed = teachers.value.find(teacher => teacher.id === editingTeacher.value?.id)
-        if (refreshed) {
-            updateEditingCredentialsFromTeacher(refreshed)
-        }
+        await refreshEditingTeacher()
         toast.success(t('teacher.credentials_update_success'))
     } catch (error: any) {
         console.error(error)
@@ -803,8 +777,8 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
             </button>
         </div>
 
-        <div v-if="!loading && sortedTeachers.length > 0" class="mt-12 flex justify-center pb-12">
-            <Pagination :modelValue="pagination.page" :perPage="pagination.perPage" :totalItems="sortedTeachers.length"
+        <div v-if="!loading && pagination.total > 0" class="mt-12 flex justify-center pb-12">
+            <Pagination :modelValue="pagination.page" :perPage="pagination.perPage" :totalItems="pagination.total"
                 @update:modelValue="pagination.page = $event"
                 @update:perPage="pagination.perPage = $event; pagination.page = 1" />
         </div>

@@ -4,6 +4,8 @@ import { ApiError, mapDatabaseError } from './errors.js'
 import { sendData } from './response.js'
 import { isIncompleteReport, isTeacherPresent, reportMissingFlags } from './reportSemantics.js'
 import { setAuditContext } from './context.js'
+import { authorizeCollection, authorizeResource } from './authorization.js'
+import { resources } from './resources.js'
 
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
 const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,content,content_document,is_completed,progress_letter,attendance_status,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,version,absence_reason,external_link,updated_at'
@@ -43,13 +45,13 @@ async function preferences(req: Request, res: Response) {
   return sendData(req, res, { preferences: preference.data ?? null, visibility: grouped })
 }
 
-async function studentReports(req: Request, res: Response) {
+async function studentReportsPage(req: Request, res: Response) {
   const db = requireDb(req)
   const enrollmentId = typeof req.params.enrollmentId === 'string' ? req.params.enrollmentId : null
   if (!enrollmentId || !z.string().uuid().safeParse(enrollmentId).success) throw new ApiError(400, 'INVALID_ID', 'Enrollment id is invalid')
   const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), offset: z.coerce.number().int().min(0).max(1000000).default(0), sort: z.enum(['occurrence_date', '-occurrence_date', 'updated_at', '-updated_at']).default('-occurrence_date') }).strict().parse(req.query)
   await requireEnrollmentReportsPermission(req, enrollmentId)
-  const enrollment = await db.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,created_at,updated_at,students(id,name),courses(id,subject,stage,display_name),classrooms(id,name,address)').eq('id', enrollmentId).maybeSingle()
+  const enrollment = await db.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,created_at,updated_at,students(id,name),courses(id,subject,stage,display_name),classrooms(id,name)').eq('id', enrollmentId).maybeSingle()
   let reportsQuery = db.from('occurrence_reports').select(`${reportFields},class_occurrences(id,occurrence_date,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,class_session_id,class_sessions(id,name,classroom_id,classrooms(id,name))),lessons(id,title,sequence)`, { count: 'exact' }).eq('enrollment_id', enrollmentId)
   const descending = query.sort.startsWith('-')
   const sortField = query.sort.replace(/^-/, '')
@@ -62,15 +64,32 @@ async function studentReports(req: Request, res: Response) {
 }
 
 async function classroomManager(req: Request, res: Response) {
-  const db = requireDb(req); const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0), search: z.string().max(200).default(''), visibility: z.enum(['all', 'visible', 'hidden']).default('all') }).strict().parse(req.query)
+  const db = requireDb(req); const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0), search: z.string().max(200).default(''), visibility: z.enum(['all', 'visible', 'hidden']).default('all'), session_limit: z.coerce.number().int().min(1).max(100).default(50), session_offset: z.coerce.number().int().min(0).max(1000000).default(0), classroom_id: z.string().uuid().optional() }).strict().parse(req.query)
   await requirePagePermission(req, 'teaching.classrooms.list', 'classrooms-overview')
-  const all = await db.from('classrooms').select('id,name,color,address,phone,external_link,teaching_id,user_id,created_at,updated_at,classroom_schedules(id,classroom_id,day_of_week,start_time,end_time,user_id,created_at,updated_at)', { count: 'exact' }).ilike('name', `%${query.search.replace(/[%_,]/g, '')}%`).order('name').range(0, 100000)
-  if (all.error) throw mapDatabaseError(all.error)
   const visibility = await db.from('user_entity_visibility_preferences').select('entity_type,entity_id').eq('user_id', req.user!.id).eq('is_hidden', true).in('entity_type', ['classroom', 'class_session'])
   if (visibility.error) throw mapDatabaseError(visibility.error)
   const hiddenClassroomIds = new Set((visibility.data ?? []).filter((row) => row.entity_type === 'classroom').map((row) => row.entity_id)); const hiddenSessionIds = (visibility.data ?? []).filter((row) => row.entity_type === 'class_session').map((row) => row.entity_id)
-  const filtered = (all.data ?? []).filter((row) => query.visibility === 'all' || (query.visibility === 'hidden' ? hiddenClassroomIds.has(row.id) : !hiddenClassroomIds.has(row.id)))
-  return sendData(req, res, { classrooms: filtered.slice(query.offset, query.offset + query.limit), count: filtered.length, hiddenClassroomIds: [...hiddenClassroomIds], hiddenSessionIds }, { limit: query.limit, offset: query.offset, total: filtered.length, sort: 'name' })
+  let classroomQuery = db.from('classrooms').select('id,name,color,external_link,teaching_id,user_id,created_at,updated_at,classroom_schedules(id,classroom_id,day_of_week,start_time,end_time,user_id,created_at,updated_at)', { count: 'exact' }).ilike('name', `%${query.search.replace(/[%_,]/g, '')}%`)
+  if (query.visibility === 'hidden') {
+    if (hiddenClassroomIds.size) classroomQuery = classroomQuery.in('id', [...hiddenClassroomIds])
+    else classroomQuery = classroomQuery.eq('id', '00000000-0000-0000-0000-000000000000')
+  } else if (query.visibility === 'visible' && hiddenClassroomIds.size) {
+    classroomQuery = classroomQuery.not('id', 'in', `(${[...hiddenClassroomIds].join(',')})`)
+  }
+  const classroomResult = await classroomQuery.order('name').range(query.offset, query.offset + query.limit - 1)
+  if (classroomResult.error) throw mapDatabaseError(classroomResult.error)
+  let sessionQuery = db.from('class_sessions').select('id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,time_zone,session_type,schedule_mode,teaching_id,user_id,created_at,updated_at,classrooms(id,name,color),schedule_rules:class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)', { count: 'exact' })
+  if (query.search) sessionQuery = sessionQuery.ilike('name', `%${query.search.replace(/[%_,]/g, '')}%`)
+  if (query.classroom_id) sessionQuery = sessionQuery.eq('classroom_id', query.classroom_id)
+  if (query.visibility === 'hidden') {
+    if (hiddenSessionIds.length) sessionQuery = sessionQuery.in('id', hiddenSessionIds)
+    else sessionQuery = sessionQuery.eq('id', '00000000-0000-0000-0000-000000000000')
+  } else if (query.visibility === 'visible' && hiddenSessionIds.length) {
+    sessionQuery = sessionQuery.not('id', 'in', `(${hiddenSessionIds.join(',')})`)
+  }
+  const sessionResult = await sessionQuery.order('name', { ascending: true }).range(query.session_offset, query.session_offset + query.session_limit - 1)
+  if (sessionResult.error) throw mapDatabaseError(sessionResult.error)
+  return sendData(req, res, { classrooms: classroomResult.data ?? [], count: classroomResult.count ?? 0, hiddenClassroomIds: [...hiddenClassroomIds], hiddenSessionIds, classSessions: sessionResult.data ?? [], sessionCount: sessionResult.count ?? 0 }, { limit: query.limit, offset: query.offset, total: classroomResult.count ?? 0, sort: 'name' })
 }
 
 async function holidays(req: Request, res: Response) {
@@ -120,6 +139,139 @@ async function dashboard(req: Request, res: Response) {
   if (query.start && query.end) { const result = await db.from('class_occurrences').select('id,class_session_id,occurrence_date,status,teacher_ids,teacher_attendance,is_conducted,actual_start_time,actual_end_time,original_start_time,original_end_time,time_zone,class_sessions(name,time_zone,classrooms(name,color))').gte('occurrence_date', query.start).lte('occurrence_date', query.end).order('occurrence_date', { ascending: true }); if (result.error) throw mapDatabaseError(result.error); occurrences = (result.data ?? []).filter((row: any) => row.is_conducted === true && (!teacher.data || isTeacherPresent(teacher.data.id, req.user!.id, row.teacher_ids ?? [], row.teacher_attendance ?? {}))) }
   return sendData(req, res, { pendingReportsScope: 'my_present', stats: { totalStudents: students.count ?? 0, activeCourses: courses.count ?? 0, pendingReportsCount: pendingReports.length, pendingReportsScope: 'my_present' }, pendingReports, occurrences })
 }
+
+const pageListQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  offset: z.coerce.number().int().min(0).max(1000000).default(0),
+  search: z.string().trim().max(200).default(''),
+  sort: z.string().max(80).optional(),
+}).strict()
+
+function pageSort(value: string | undefined, allowed: readonly string[], fallback: string) {
+  const sort = value ?? fallback
+  const descending = sort.startsWith('-')
+  const field = descending ? sort.slice(1) : sort
+  if (!allowed.includes(field)) throw new ApiError(400, 'INVALID_SORT', 'Sort field is not supported')
+  return { field, ascending: !descending, value: sort }
+}
+
+async function coursesOverview(req: Request, res: Response) {
+  const db = requireDb(req)
+  const query = pageListQuery.parse(req.query)
+  const sort = pageSort(query.sort, ['display_name', 'subject', 'stage', 'created_at'], 'display_name')
+  await authorizeCollection(req, resources.courses, 'teaching.courses.list', query)
+  let list = db.from('courses').select('id,subject,stage,display_name,description,description_document,created_at,updated_at,lessons(id,course_id,title,sequence,created_at,updated_at)', { count: 'exact' })
+  if (query.search) list = list.or(`subject.ilike.%${query.search.replace(/[%_,()]/g, '')}%,stage.ilike.%${query.search.replace(/[%_,()]/g, '')}%,display_name.ilike.%${query.search.replace(/[%_,()]/g, '')}%`)
+  const result = await list.order(sort.field, { ascending: sort.ascending }).range(query.offset, query.offset + query.limit - 1)
+  if (result.error) throw mapDatabaseError(result.error)
+  return sendData(req, res, result.data ?? [], { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: sort.value })
+}
+
+async function studentsOverview(req: Request, res: Response) {
+  const db = requireDb(req)
+  const query = pageListQuery.parse(req.query)
+  const sort = pageSort(query.sort, ['name', 'created_at', 'updated_at'], 'name')
+  await authorizeCollection(req, resources.students, 'teaching.students.list', query)
+  let list = db.from('students').select('id,name,notes,notes_document,external_link,created_at,updated_at', { count: 'exact' })
+  if (query.search) list = list.ilike('name', `%${query.search.replace(/[%_,]/g, '')}%`)
+  const result = await list.order(sort.field, { ascending: sort.ascending }).range(query.offset, query.offset + query.limit - 1)
+  if (result.error) throw mapDatabaseError(result.error)
+  return sendData(req, res, result.data ?? [], { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: sort.value })
+}
+
+async function studentProfile(req: Request, res: Response) {
+  const db = requireDb(req)
+  const studentId = typeof req.params.studentId === 'string' ? req.params.studentId : ''
+  if (!z.string().uuid().safeParse(studentId).success) throw new ApiError(400, 'INVALID_ID', 'Student id is invalid')
+  await authorizeResource(req, resources.students, 'teaching.students.read', studentId)
+  const result = await db.from('students').select('id,name,notes,notes_document,external_link,created_at,updated_at,enrollments(id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name),class_sessions(name,day_of_week,start_time,end_time,time_zone,session_type,schedule_mode,class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)))').eq('id', studentId).maybeSingle()
+  if (result.error) throw mapDatabaseError(result.error)
+  if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Student was not found')
+  const [readSensitive, updateSensitive] = await Promise.all([
+    db.rpc('can_access_sensitive_student', { p_student_id: studentId, p_permission_key: 'teaching.students.read_sensitive' }),
+    db.rpc('can_access_sensitive_student', { p_student_id: studentId, p_permission_key: 'teaching.students.update_sensitive' }),
+  ])
+  if (readSensitive.error) throw mapDatabaseError(readSensitive.error)
+  if (updateSensitive.error) throw mapDatabaseError(updateSensitive.error)
+  return sendData(req, res, { ...result.data, capabilities: { read_sensitive: readSensitive.data === true, update_sensitive: updateSensitive.data === true } })
+}
+
+async function studentPrivateDetails(req: Request, res: Response) {
+  const db = requireDb(req)
+  const studentId = typeof req.params.studentId === 'string' ? req.params.studentId : ''
+  if (!z.string().uuid().safeParse(studentId).success) throw new ApiError(400, 'INVALID_ID', 'Student id is invalid')
+  await authorizeResource(req, resources.students, 'teaching.students.read_sensitive', studentId)
+  const result = await db.rpc('get_student_sensitive_details', { p_student_id: studentId })
+  if (result.error) throw mapDatabaseError(result.error)
+  if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Student was not found')
+  return sendData(req, res, result.data)
+}
+
+async function studentReports(req: Request, res: Response) {
+  const db = requireDb(req)
+  const studentId = typeof req.params.studentId === 'string' ? req.params.studentId : ''
+  if (!z.string().uuid().safeParse(studentId).success) throw new ApiError(400, 'INVALID_ID', 'Student id is invalid')
+  const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(50), offset: z.coerce.number().int().min(0).max(1000000).default(0), sort: z.enum(['start_date', '-start_date', 'created_at', '-created_at']).default('-start_date') }).strict().parse(req.query)
+  await authorizeResource(req, resources.students, 'teaching.students.read', studentId)
+  const student = await db.from('students').select('id,name').eq('id', studentId).maybeSingle()
+  if (student.error) throw mapDatabaseError(student.error)
+  if (!student.data) throw new ApiError(404, 'NOT_FOUND', 'Student was not found')
+  const descending = query.sort.startsWith('-')
+  const field = query.sort.replace(/^-/, '')
+  const result = await db.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,created_at,updated_at,courses(subject,stage,display_name),classrooms(name)', { count: 'exact' }).eq('student_id', studentId).order(field, { ascending: !descending }).range(query.offset, query.offset + query.limit - 1)
+  if (result.error) throw mapDatabaseError(result.error)
+  return sendData(req, res, { student: student.data, enrollments: result.data ?? [] }, { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: query.sort })
+}
+
+async function teachersOverview(req: Request, res: Response) {
+  const db = requireDb(req)
+  const query = pageListQuery.parse(req.query)
+  const sort = pageSort(query.sort, ['name', 'created_at'], 'name')
+  await authorizeCollection(req, resources.teachers, 'teaching.teachers.list', query)
+  let list = db.from('teachers').select('id,user_id,name,bio,bio_document,created_at,updated_at', { count: 'exact' })
+  if (query.search) list = list.ilike('name', `%${query.search.replace(/[%_,()]/g, '')}%`)
+  const result = await list.order(sort.field, { ascending: sort.ascending }).range(query.offset, query.offset + query.limit - 1)
+  if (result.error) throw mapDatabaseError(result.error)
+  const [allTeachers, linked, complete] = await Promise.all([
+    db.from('teachers').select('id', { count: 'exact', head: true }),
+    db.from('teachers').select('id', { count: 'exact', head: true }).not('user_id', 'is', null),
+    db.from('teachers').select('id', { count: 'exact', head: true }).not('name', 'is', null).not('bio', 'is', null),
+  ])
+  for (const queryResult of [allTeachers, linked, complete]) if (queryResult.error) throw mapDatabaseError(queryResult.error)
+  const total = result.count ?? 0
+  const allTotal = allTeachers.count ?? 0
+  return sendData(req, res, {
+    teachers: result.data ?? [],
+    statistics: { totalTeachers: allTotal, linkedAccounts: linked.count ?? 0, unlinkedAccounts: Math.max(0, allTotal - (linked.count ?? 0)), completeProfiles: complete.count ?? 0 },
+  }, { limit: query.limit, offset: query.offset, total, sort: sort.value })
+}
+
+async function teacherPrivateDetails(req: Request, res: Response) {
+  const db = requireDb(req)
+  const teacherId = typeof req.params.teacherId === 'string' ? req.params.teacherId : ''
+  if (!z.string().uuid().safeParse(teacherId).success) throw new ApiError(400, 'INVALID_ID', 'Teacher id is invalid')
+  await authorizeResource(req, resources.teachers, 'teaching.teachers.read_sensitive', teacherId)
+  const result = await db.rpc('get_teacher_sensitive_details', { p_teacher_id: teacherId })
+  if (result.error) throw mapDatabaseError(result.error)
+  if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Teacher was not found')
+  return sendData(req, res, result.data)
+}
+
+async function classSessionWorkspace(req: Request, res: Response) {
+  const db = requireDb(req)
+  const sessionId = typeof req.params.sessionId === 'string' ? req.params.sessionId : ''
+  if (!z.string().uuid().safeParse(sessionId).success) throw new ApiError(400, 'INVALID_ID', 'Class session id is invalid')
+  await authorizeResource(req, resources['class-sessions'], 'teaching.class_sessions.read', sessionId)
+  const session = await db.from('class_sessions').select('id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,time_zone,session_type,schedule_mode,created_at,updated_at,classrooms(id,name,color,external_link),schedule_rules:class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time),class_session_teachers(teacher_id,role_id,effective_from,effective_to,roles(id,name,code),teachers(id,user_id,name))').eq('id', sessionId).maybeSingle()
+  if (session.error) throw mapDatabaseError(session.error)
+  if (!session.data) throw new ApiError(404, 'NOT_FOUND', 'Class session was not found')
+  const enrollments = await db.from('enrollments').select('id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name),students(name)', { count: 'exact' }).eq('class_session_id', sessionId).order('created_at', { ascending: true })
+  if (enrollments.error) throw mapDatabaseError(enrollments.error)
+  const teachers = await db.from('teachers').select('id,user_id,name').order('name', { ascending: true }).range(0, 99)
+  if (teachers.error) throw mapDatabaseError(teachers.error)
+  return sendData(req, res, { session: { ...session.data, current_enrollments: (enrollments.data ?? []).filter((enrollment: any) => enrollment.status === 'regular').length }, enrollments: enrollments.data ?? [], teachers: teachers.data ?? [] }, { total: enrollments.count ?? 0 })
+}
+
 export function createAggregateRouter() {
   const router = Router()
   router.get('/pages/me/preferences', wrap(preferences))
@@ -128,5 +280,13 @@ export function createAggregateRouter() {
   router.get('/pages/holidays/overview', wrap(holidays))
   router.get('/pages/reports/incomplete', wrap(incomplete))
   router.get('/pages/dashboard', wrap(dashboard))
+  router.get('/pages/courses/overview', wrap(coursesOverview))
+  router.get('/pages/students/overview', wrap(studentsOverview))
+  router.get('/pages/students/:studentId/profile', wrap(studentProfile))
+  router.get('/pages/students/:studentId/private-details', wrap(studentPrivateDetails))
+  router.get('/pages/students/:studentId/reports', wrap(studentReportsPage))
+  router.get('/pages/teachers/overview', wrap(teachersOverview))
+  router.get('/pages/teachers/:teacherId/private-details', wrap(teacherPrivateDetails))
+  router.get('/pages/class-sessions/:sessionId/workspace', wrap(classSessionWorkspace))
   return router
 }

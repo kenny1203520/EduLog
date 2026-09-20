@@ -7,6 +7,10 @@ import { authorizeCollection, authorizeResource, permissionForResource } from '.
 import { setAuditContext } from './context.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
+const sensitivePatchFields: Record<string, readonly string[]> = {
+  students: ['gov_id', 'email', 'phone', 'residence_address', 'mailing_address', 'birthday'],
+  teachers: ['email', 'phone', 'address', 'birthday', 'gov_id'],
+}
 const bodySchema = z.record(z.string(), z.unknown())
 const memberListQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -208,10 +212,27 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
     if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
   }
-  const result = await req.db!.from(def.table).update(mutationBody ?? {}).eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
-  if (result.error) throw mapDatabaseError(result.error)
-  if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
-  const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); response = res.json(envelope); return response
+  const patch = mutationBody ?? {}
+  const sensitiveFields = new Set(sensitivePatchFields[def.table] ?? [])
+  const sensitivePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => sensitiveFields.has(key)))
+  const safePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => !sensitiveFields.has(key)))
+  if (Object.keys(sensitivePatch).length) {
+    const sensitivePermission = def.table === 'students' ? 'teaching.students.update_sensitive' : 'teaching.teachers.update_sensitive'
+    await authorizeResource(req, def, sensitivePermission, id, existing.data as unknown as Record<string, unknown>)
+    const functionName = def.table === 'students' ? 'update_student_sensitive' : 'update_teacher_sensitive'
+    const parameterName = def.table === 'students' ? 'p_student_id' : 'p_teacher_id'
+    const sensitiveResult = await req.db!.rpc(functionName, { [parameterName]: id, p_patch: sensitivePatch })
+    if (sensitiveResult.error) throw mapDatabaseError(sensitiveResult.error)
+  }
+  if (Object.keys(safePatch).length) {
+    const safeResult = await req.db!.from(def.table).update(safePatch).eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
+    if (safeResult.error) throw mapDatabaseError(safeResult.error)
+    if (!safeResult.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
+  }
+  const updated = await req.db!.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
+  if (updated.error) throw mapDatabaseError(updated.error)
+  if (!updated.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
+  const envelope = { data: updated.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); response = res.json(envelope); return response
 }
 
 export async function collection(req: Request, res: Response, def: ResourceDefinition) {

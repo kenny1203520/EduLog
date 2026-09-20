@@ -6,9 +6,9 @@ describe('student API resource boundaries', () => {
     expect(resources['student-contacts'].table).toBe('student_contacts')
     expect(resources['student-schools'].table).toBe('student_schools')
     expect(resources['student-credentials'].table).toBe('student_credentials')
-    expect(resources['student-contacts'].permission).toBe('teaching.students.list')
-    expect(resources['student-schools'].permission).toBe('teaching.students.list')
-    expect(resources['student-credentials'].permission).toBe('teaching.students.list')
+    expect(resources['student-contacts'].permission).toBe('teaching.students.read_sensitive')
+    expect(resources['student-schools'].permission).toBe('teaching.students.read_sensitive')
+    expect(resources['student-credentials'].permission).toBe('teaching.students.read_sensitive')
   })
 
   it('never includes credential passwords in generic readable fields', () => {
@@ -63,7 +63,7 @@ describe('student API resource boundaries', () => {
     expect(resources.occurrences.fields).toEqual(expect.arrayContaining(['original_start_time', 'original_end_time', 'actual_start_time', 'actual_end_time', 'time_zone']))
     expect(resources.holidays.fields).toEqual(expect.arrayContaining(['kind', 'teacher_ids', 'time_zone']))
     expect(resources.students.listFields).not.toContain('email')
-    expect(resources.students.itemFields).toEqual(expect.arrayContaining(['email', 'phone', 'residence_address', 'mailing_address', 'birthday']))
+    expect(resources.students.itemFields).not.toEqual(expect.arrayContaining(['email', 'phone', 'residence_address', 'mailing_address', 'birthday']))
   })
 
   it('accepts the client role compatibility flag only as a non-persisted false value', () => {
@@ -82,9 +82,12 @@ describe('student API resource boundaries', () => {
 
   it('keeps sensitive profile fields in authorized detail projections only', () => {
     expect(resources.students.listFields).not.toEqual(expect.arrayContaining(['gov_id', 'email', 'student_credentials(id,student_id,platform,username,url,created_at,updated_at)']))
-    expect(resources.students.itemFields).toEqual(expect.arrayContaining(['gov_id', 'student_contacts(id,student_id,name,relation,phone,email,created_at,updated_at)', 'student_schools(id,student_id,name,status,grade,school_student_id,start_date,end_date,time_zone,class,created_at,updated_at)', 'student_credentials(id,student_id,platform,username,url,created_at,updated_at)']))
+    expect(resources.students.itemFields).not.toEqual(expect.arrayContaining(['gov_id', 'email', 'phone', 'residence_address', 'mailing_address', 'birthday']))
+    expect(resources.students.itemFields?.join(',')).not.toContain('student_contacts(')
+    expect(resources.students.itemFields?.join(',')).not.toContain('student_schools(')
+    expect(resources.students.itemFields?.join(',')).not.toContain('student_credentials(')
     expect(resources.teachers.listFields).not.toContain('gov_id')
-    expect(resources.teachers.itemFields).toContain('gov_id')
+    expect(resources.teachers.itemFields).not.toContain('gov_id')
     expect(resources.teachers.itemFields?.join(',')).not.toContain('password')
   })
 })

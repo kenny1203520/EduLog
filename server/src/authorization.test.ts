@@ -95,4 +95,19 @@ describe('resource-aware authorization', () => {
     await authorizeCollection(req, resources['teacher-credentials'], 'teaching.teachers.create', { teacher_id: teacherId })
     expect(rpc).not.toHaveBeenCalled()
   })
+
+  it('uses the sensitive student scope helper instead of the ordinary owner shortcut', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+    await authorizeResource(
+      requestWithRpc(rpc),
+      resources['student-credentials'],
+      'teaching.students.read_sensitive',
+      '00000000-0000-4000-8000-000000000030',
+      { student_id: '00000000-0000-4000-8000-000000000031' },
+    )
+    expect(rpc).toHaveBeenCalledWith('can_access_sensitive_student', {
+      p_student_id: '00000000-0000-4000-8000-000000000031',
+      p_permission_key: 'teaching.students.read_sensitive',
+    })
+  })
 })

@@ -87,4 +87,25 @@ describe('AggregateService', () => {
     expect(vi.mocked(globalThis.fetch).mock.calls[0][1]).toEqual(expect.objectContaining({ cache: 'no-store' }))
     expect(vi.mocked(globalThis.fetch).mock.calls[1][1]).toEqual(expect.objectContaining({ cache: 'no-store' }))
   })
+
+  it('loads every holiday page through the page endpoint instead of silently truncating at 100', async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: Array.from({ length: 100 }, (_, index) => ({ id: `holiday-${index}` })), meta: { total: 101 }, request_id: 'request', trace_id: 'trace' }),
+        text: async () => '',
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: [{ id: 'holiday-100' }], meta: { total: 101 }, request_id: 'request', trace_id: 'trace' }),
+        text: async () => '',
+      } as any)
+
+    const holidays = await AggregateService.getHolidaysAggregate()
+    expect(holidays).toHaveLength(101)
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => url)).toEqual([
+      '/api/pages/holidays/overview?expand=true&limit=100&offset=0',
+      '/api/pages/holidays/overview?expand=true&limit=100&offset=100',
+    ])
+  })
 })

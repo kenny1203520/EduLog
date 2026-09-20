@@ -180,7 +180,7 @@ async function loadRoomSessions(roomId?: string | null) {
         roomSessions.value = []
         return
     }
-    const result = await SessionService.getClassSessions(1, 500, '', roomId, 'all')
+    const result = await AggregateService.getAllClassSessionsOverview('', roomId, 'all')
     roomSessions.value = [...result.data].sort((a, b) => {
         const firstA = a.schedule_rules?.[0]
         const firstB = b.schedule_rules?.[0]
@@ -193,7 +193,7 @@ async function loadRoomSessions(roomId?: string | null) {
 
 async function loadTeachers() {
     try {
-        teachersList.value = await TeacherService.getAllTeachers()
+        teachersList.value = await AggregateService.getAllTeachersOverview()
     } catch (e) {
         console.error('Failed to load teachers:', e)
     }
@@ -267,23 +267,21 @@ async function loadRooms() {
 }
 
 async function loadSessions() {
-    const res = await SessionService.getClassSessions(
+    const res = await AggregateService.getClassSessionsOverview(
         sessionsPagination.value.page,
         sessionsPagination.value.perPage,
         searchQuery.value,
         selectedSessionClassroomFilter.value || null,
         displayMode.value
     )
-    sessions.value = res.data
+    sessions.value = res.data as any[]
     sessionsPagination.value.total = res.count
-
-    const sessionIds = sessions.value.map(session => session.id).filter((id): id is string => Boolean(id))
-    hiddenSessionIds.value = await VisibilityPreferenceService.getHiddenEntityIds('class_session', sessionIds)
+    hiddenSessionIds.value = new Set(res.hiddenSessionIds)
 }
 
 async function loadAllRooms() {
     try {
-        const agg = await AggregateService.getClassroomSessionManagerAggregate(1, 1000, '')
+        const agg = await AggregateService.getAllClassroomsOverview('')
         allClassrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
         return
     } catch (e) {

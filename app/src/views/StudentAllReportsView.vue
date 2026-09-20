@@ -88,16 +88,14 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { CourseService } from '@/services/course/CourseService'
-import { StudentService } from '@/services/student/StudentService'
 import { Enrollment } from '@/models/Enrollment'
-import { Student } from '@/models/Student'
+import { PageApiService } from '@/services/api/PageApiService'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(true)
-const student = ref<Student | null>(null)
+const student = ref<{ id: string; name: string } | null>(null)
 const enrollments = ref<Enrollment[]>([])
 
 onMounted(async () => {
@@ -110,11 +108,9 @@ async function loadData() {
         const studentId = route.params.id as string
         if (!studentId) return
 
-        // Load student details
-        student.value = await StudentService.getById(studentId)
-
-        // Load enrollments for this student
-        enrollments.value = await CourseService.getStudentEnrollments(studentId)
+        const response = await PageApiService.getStudentReports(studentId, { limit: 100, offset: 0, sort: '-start_date' })
+        student.value = response.data.student
+        enrollments.value = response.data.enrollments.map(enrollment => new Enrollment(enrollment))
     } catch (error) {
         console.error('Failed to load student data:', error)
     } finally {

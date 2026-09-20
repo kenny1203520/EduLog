@@ -1,4 +1,4 @@
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import { PageApiService } from '@/services/api/PageApiService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { StudentService } from '@/services/student/StudentService'
 
@@ -39,44 +39,93 @@ export class AggregateService {
 
   static async getUserPreferencesAggregate(): Promise<UserPreferencesAggregate> {
     return this.withCache('user_preferences', this.DEFAULT_TTL_MS, async () =>
-      (await apiV1Client.get<UserPreferencesAggregate>('/pages/me/preferences')).data,
+      (await PageApiService.getUserPreferences()).data as UserPreferencesAggregate,
     )
   }
 
   static async getReportsByEnrollmentAggregate(enrollmentId: string, page: number = 1, perPage: number = 50): Promise<{ enrollment: any, reports: any[], count: number }> {
     return this.withCache(`reports_enrollment:${enrollmentId}:p${page}:s${perPage}`, this.DEFAULT_TTL_MS, async () => {
       const offset = Math.max(0, (page - 1) * perPage)
-      const query = new URLSearchParams({ limit: String(perPage), offset: String(offset), sort: '-updated_at' })
-      const response = await apiV1Client.get<{ enrollment: any, reports: any[], count: number }>(`/pages/enrollments/${encodeURIComponent(enrollmentId)}/reports?${query}`)
+      const response = await PageApiService.getEnrollmentReports(enrollmentId, { limit: perPage, offset, sort: '-updated_at' })
       return { enrollment: response.data?.enrollment ?? null, reports: response.data?.reports ?? [], count: Number(response.meta?.total ?? response.data?.count ?? 0) }
     })
   }
 
   static async getClassroomSessionManagerAggregate(page: number = 1, perPage: number = 100, search: string = '', visibilityMode: string = 'all') {
-    const query = new URLSearchParams({ limit: String(perPage), offset: String(Math.max(0, (page - 1) * perPage)), search, visibility: visibilityMode })
-    return (await apiV1Client.get<any>(`/pages/classrooms/overview?${query}`)).data
+    return (await PageApiService.getClassroomsOverview({ limit: perPage, offset: Math.max(0, (page - 1) * perPage), search, visibility: visibilityMode })).data
+  }
+
+  static async getAllClassroomsOverview(search: string = '', visibilityMode: string = 'all') {
+    const pageSize = 100
+    const first = await PageApiService.getClassroomsOverview({ limit: pageSize, offset: 0, search, visibility: visibilityMode, session_limit: 1 })
+    const classrooms = [...first.data.classrooms]
+    const total = Number(first.meta?.total ?? first.data.count ?? classrooms.length)
+    for (let offset = pageSize; offset < total; offset += pageSize) {
+      const page = await PageApiService.getClassroomsOverview({ limit: pageSize, offset, search, visibility: visibilityMode, session_limit: 1 })
+      classrooms.push(...page.data.classrooms)
+    }
+    return { ...first.data, classrooms, count: total }
+  }
+
+  static async getClassSessionsOverview(page: number = 1, perPage: number = 100, search: string = '', classroomId?: string | null, visibilityMode: string = 'all') {
+    const response = await PageApiService.getClassroomsOverview({
+      limit: 1,
+      offset: 0,
+      visibility: visibilityMode,
+      search,
+      session_limit: perPage,
+      session_offset: Math.max(0, (page - 1) * perPage),
+      classroom_id: classroomId || undefined,
+    })
+    return { data: response.data.classSessions, count: response.data.sessionCount, hiddenSessionIds: response.data.hiddenSessionIds }
+  }
+
+  static async getAllClassSessionsOverview(search: string = '', classroomId?: string | null, visibilityMode: string = 'all') {
+    const pageSize = 100
+    const first = await this.getClassSessionsOverview(1, pageSize, search, classroomId, visibilityMode)
+    const sessions = [...first.data]
+    for (let offset = pageSize; offset < first.count; offset += pageSize) {
+      const page = await this.getClassSessionsOverview(offset / pageSize + 1, pageSize, search, classroomId, visibilityMode)
+      sessions.push(...page.data)
+    }
+    return { data: sessions, count: first.count, hiddenSessionIds: first.hiddenSessionIds }
+  }
+
+  static async getAllTeachersOverview(search: string = '') {
+    const pageSize = 100
+    const first = await PageApiService.getTeachersOverview({ limit: pageSize, offset: 0, search, sort: 'name' })
+    const teachers = [...first.data.teachers]
+    const total = Number(first.meta?.total ?? teachers.length)
+    for (let offset = pageSize; offset < total; offset += pageSize) {
+      const page = await PageApiService.getTeachersOverview({ limit: pageSize, offset, search, sort: 'name' })
+      teachers.push(...page.data.teachers)
+    }
+    return teachers
   }
 
   static async getDashboardHome(start?: string, end?: string, forceRefresh: boolean = false) {
-    const params = new URLSearchParams()
-    if (start) params.set('start', start)
-    if (end) params.set('end', end)
     const key = `dashboard:${start ?? ''}:${end ?? ''}`
     if (forceRefresh) this.clearCache(key)
-    return this.withCache(key, this.DEFAULT_TTL_MS, async () => (await apiV1Client.get<any>('/pages/dashboard?' + params.toString(), forceRefresh ? { cache: 'no-store' } : undefined)).data)
+    return this.withCache(key, this.DEFAULT_TTL_MS, async () => (await PageApiService.getDashboard({ start, end, cache: forceRefresh ? 'no-store' : undefined })).data)
   }
 
   static async getIncompleteReportsAggregate(daysBack: number = 90, scope: 'all' | 'my_present' | 'my_notifications' = 'all') {
     // request.cache = 'no-store'
-    const params = new URLSearchParams({ days_back: String(daysBack), scope, limit: '100', offset: '0' })
-    const fetchReports = async () => (await apiV1Client.get<any>('/pages/reports/incomplete?' + params.toString(), scope === 'my_notifications' ? { cache: 'no-store' } : undefined)).data
+    const fetchReports = async () => (await PageApiService.getIncompleteReports({ days_back: daysBack, scope, limit: 100, offset: 0, cache: scope === 'my_notifications' ? 'no-store' : undefined })).data
     if (scope === 'my_notifications') return fetchReports()
-    const response = await apiV1Client.get<any>('/pages/reports/incomplete?' + params.toString())
-    return response.data
+    return fetchReports()
   }
 
   static async getHolidaysAggregate(expandNames: boolean = true) {
-    return (await apiV1Client.get<any>('/pages/holidays/overview?expand=' + String(expandNames))).data
+    const pageSize = 100
+    const first = await PageApiService.getHolidaysOverview({ expand: expandNames, limit: pageSize, offset: 0 })
+    const holidays = [...first.data]
+    const total = Number(first.meta?.total ?? holidays.length)
+    for (let offset = pageSize; offset < total; offset += pageSize) {
+      const page = await PageApiService.getHolidaysOverview({ expand: expandNames, limit: pageSize, offset })
+      holidays.push(...page.data)
+    }
+    return holidays
   }
 
   static async getCoursesCached(page: number = 1, perPage: number = 100) {

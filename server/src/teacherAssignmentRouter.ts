@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
 
-const assignmentFields = 'id,class_session_id,teacher_id,effective_from,effective_to,role_id,created_at,updated_at,roles(id,name,code),teachers(id,user_id,name,email,phone,address,bio,created_at,updated_at)'
+const assignmentFields = 'id,class_session_id,teacher_id,effective_from,effective_to,role_id,created_at,updated_at,roles(id,name,code),teachers(id,user_id,name,bio,created_at,updated_at)'
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const assignmentFieldsSchema = z.object({
   teacher_id: z.string().uuid(),

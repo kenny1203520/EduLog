@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
 import { CourseService } from '@/services/course/CourseService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
@@ -10,14 +11,15 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
 import { HolidayService } from '@/services/holiday/HolidayService'
-import type { Enrollment } from '@/models/Enrollment'
+import { Enrollment } from '@/models/Enrollment'
 import { countRosterAttendance, getRosterEnrollments } from '@/models/RosterFilter'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 import { TeacherService } from '@/services/teacher/TeacherService'
-import type { SessionTeacherAssignmentDTO, TeacherDTO } from '@/services/teacher/TeacherService'
+import type { SessionTeacherAssignmentDTO } from '@/services/teacher/TeacherService'
+import type { TeacherOverviewDTO } from '@/services/api/PageApiService'
 import {
     ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_ATTENDANCE_TEMPLATE,
@@ -116,8 +118,8 @@ const kodingTargetEnrollment = ref<Enrollment | null>(null)
 const kodingInitialLessonId = ref<string | null>(null)
 
 // Teacher Management State
-const occurrenceTeachers = ref<TeacherDTO[]>([])
-const allTeachersList = ref<TeacherDTO[]>([])
+const occurrenceTeachers = ref<TeacherOverviewDTO[]>([])
+const allTeachersList = ref<TeacherOverviewDTO[]>([])
 const showTeacherEditModal = ref(false)
 const teacherSearchQuery = ref('')
 const selectedTeacherIds = ref<Set<string>>(new Set())
@@ -543,10 +545,7 @@ const filteredTeachers = computed(() => {
     const query = teacherSearchQuery.value.trim().toLowerCase()
     if (!query) return allTeachersList.value
 
-    return allTeachersList.value.filter(t =>
-        t.name.toLowerCase().includes(query) ||
-        t.email.toLowerCase().includes(query)
-    )
+    return allTeachersList.value.filter(t => t.name.toLowerCase().includes(query))
 })
 
 const selectedMakeupEnrollment = computed(() => {
@@ -775,15 +774,24 @@ async function loadData() {
         reportMap.value = new Map()
         studentProgressSummaries.value = {}
 
-        session.value = await SessionService.getSessionDetails(sessionId)
-        const [{ data: allEnrollments }, teachers, allTeachers] = await Promise.all([
-            CourseService.getEnrollmentsBySession(sessionId),
-            TeacherService.getSessionTeachers(sessionId),
-            TeacherService.getTeachers(1, 1000)
-        ])
+        const workspace = (await PageApiService.getClassSessionWorkspace(sessionId)).data
+        const rawSession = workspace.session as any
+        session.value = {
+            ...rawSession,
+            schedule_rules: rawSession.schedule_rules ?? rawSession.class_session_schedule_rules ?? [],
+            classroom_name: rawSession.classrooms?.name ?? 'Unknown',
+            classroom_address: rawSession.classrooms?.address ?? '',
+            classroom_external_link: rawSession.classrooms?.external_link ?? '',
+        }
+        const allEnrollments = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
         enrollments.value = allEnrollments
-        sessionTeachers.value = teachers
-        allTeachersList.value = allTeachers.data
+        sessionTeachers.value = ((rawSession.class_session_teachers ?? []) as any[]).flatMap(assignment => {
+            const assignedTeacher = Array.isArray(assignment.teachers) ? assignment.teachers[0] : assignment.teachers
+            if (!assignedTeacher) return []
+            const role = Array.isArray(assignment.roles) ? assignment.roles[0] : assignment.roles
+            return [{ ...assignedTeacher, effective_from: assignment.effective_from, effective_to: assignment.effective_to, role_id: assignment.role_id, role: role ?? null }]
+        })
+        allTeachersList.value = workspace.teachers
 
         if (allEnrollments[0]?.courseId) courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
 
@@ -1619,7 +1627,7 @@ async function saveOccurrenceTeachers(showToast = true) {
     }
 }
 
-async function addTeacherForToday(teacher: TeacherDTO) {
+async function addTeacherForToday(teacher: TeacherOverviewDTO) {
     if (!todayOccurrence.value || !teacher.id) return
 
     try {

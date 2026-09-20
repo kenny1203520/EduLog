@@ -30,6 +30,10 @@ const qualifiedIdempotency = await readMigration('1000067_idempotency_output_col
 const sessionTableAccess = await readMigration('1000068_class_session_scoped_table_access.sql')
 const reportTemplateBackfill = await readMigration('1000069_report_template_teaching_backfill.sql')
 const sessionReferenceReads = await readMigration('1000070_class_session_rpc_reference_reads.sql')
+const studentRlsLookupIndex = await readMigration('1000071_student_rls_enrollment_lookup_index.sql')
+const sensitiveDataPermissions = await readMigration('1000072_sensitive_data_permissions.sql')
+const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
+const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
 const upgradeFixture = await Deno.readTextFile(new URL('migration_upgrade_fixture.sql', import.meta.url))
 const coreRls = await Deno.readTextFile(new URL('core_rls_security.sql', import.meta.url))
@@ -88,7 +92,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -100,6 +104,8 @@ Deno.test('historical migration versions are preserved', async () => {
   const sessionTableAccessName = '1000068_class_session_scoped_table_access.sql'
   const reportTemplateBackfillName = '1000069_report_template_teaching_backfill.sql'
   const sessionReferenceReadsName = '1000070_class_session_rpc_reference_reads.sql'
+  const studentRlsLookupIndexName = '1000071_student_rls_enrollment_lookup_index.sql'
+  const sensitiveDataPermissionsName = '1000072_sensitive_data_permissions.sql'
   assert(names.includes(compatibilityName))
   assert(names.indexOf(compatibilityName) < names.indexOf(teachingRoleName), 'scope compatibility must run before 1000058')
   assert(names.indexOf(replayRbacName) < names.indexOf(scopeForwardFixName), 'forward scope repair must follow 1000064')
@@ -108,11 +114,14 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(names.indexOf(qualifiedIdempotencyName) < names.indexOf(sessionTableAccessName), 'session table access must follow 1000067')
   assert(names.indexOf(sessionTableAccessName) < names.indexOf(reportTemplateBackfillName), 'report template backfill must follow 1000068')
   assert(names.indexOf(reportTemplateBackfillName) < names.indexOf(sessionReferenceReadsName), 'session RPC reference privileges must follow 1000069')
+  assert(names.indexOf(sessionReferenceReadsName) < names.indexOf(studentRlsLookupIndexName), 'student RLS lookup index must follow 1000070')
+  assert(names.indexOf(studentRlsLookupIndexName) < names.indexOf(sensitiveDataPermissionsName), 'sensitive data boundary must follow the student RLS index')
   assert(!names.includes('1000040_backend_security_reconciliation.sql'))
   assert(!names.includes('1000041_legacy_upgrade_consistency.sql'))
   assert(names.includes('1000041a_has_api_permission_compatibility.sql'))
   assert(names.includes('1000062_report_lifecycle_atomicity.sql'))
   assert(names.includes('1000063_report_mutation_contract_and_delete_replay.sql'))
+  assert(names.includes(studentRlsLookupIndexName))
   assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
   assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
@@ -262,6 +271,47 @@ Deno.test('1000070 grants session RPC reference reads only behind scoped RLS', (
   assertStringIncludes(sessionReferenceReads, 'GRANT SELECT ON TABLE public.classrooms, public.courses TO authenticated, service_role')
   assertStringIncludes(sessionReferenceReads, "has_table_privilege('anon', 'public.courses', 'SELECT')")
   assertStringIncludes(coreRls, 'class-session RPC leaked a cross-teaching course')
+})
+
+Deno.test('1000071 indexes the correlated enrollment lookup used by student RLS', () => {
+  assertStringIncludes(studentRlsLookupIndex, "to_regprocedure('public.can_access_student(uuid,text)')")
+  assertStringIncludes(studentRlsLookupIndex, 'CREATE INDEX IF NOT EXISTS enrollments_student_id_idx')
+  assert(!studentRlsLookupIndex.includes('CONCURRENTLY'), 'the migration must remain compatible with Supabase migration runners')
+  assertStringIncludes(studentRlsLookupIndex, 'ON public.enrollments USING btree (student_id)')
+  assertStringIncludes(studentRlsLookupIndex, 'invalid enrollments_student_id_idx')
+  assertStringIncludes(studentRlsLookupIndex, 'exact student counts')
+  assertStringIncludes(migrationChainIntegration, 'enrollments_student_id_idx')
+})
+
+Deno.test('1000072 isolates sensitive student and teacher data behind owner capabilities', () => {
+  assertStringIncludes(sensitiveDataPermissions, "RAISE EXCEPTION '1000072 prerequisites missing")
+  for (const permission of [
+    'teaching.students.read_sensitive',
+    'teaching.students.update_sensitive',
+    'teaching.teachers.read_sensitive',
+    'teaching.teachers.update_sensitive',
+  ]) assertStringIncludes(sensitiveDataPermissions, permission)
+  assertStringIncludes(sensitiveDataPermissions, "WHERE owner_role.code = 'teaching_owner'")
+  assertStringIncludes(sensitiveDataPermissions, 'CREATE OR REPLACE FUNCTION public.get_student_sensitive_details')
+  assertStringIncludes(sensitiveDataPermissions, 'CREATE OR REPLACE FUNCTION public.get_teacher_sensitive_details')
+  assertStringIncludes(sensitiveDataPermissions, 'CREATE OR REPLACE FUNCTION public.can_access_sensitive_student')
+  assertStringIncludes(sensitiveDataPermissions, "public.can_access_teaching(\n        COALESCE(session.teaching_id, classroom.teaching_id, course.teaching_id),")
+  assertStringIncludes(sensitiveDataPermissions, 'REVOKE ALL ON FUNCTION public.can_access_sensitive_student(uuid, text) FROM PUBLIC')
+  assertStringIncludes(sensitiveDataPermissions, "USING (public.can_access_sensitive_student(student_id, 'teaching.students.read_sensitive'))")
+  assertStringIncludes(sensitiveDataPermissions, 'CREATE OR REPLACE FUNCTION public.update_student_sensitive')
+  assertStringIncludes(sensitiveDataPermissions, 'CREATE OR REPLACE FUNCTION public.update_teacher_sensitive')
+  assertStringIncludes(sensitiveDataPermissions, 'Canonical student contacts read')
+  assertStringIncludes(sensitiveDataPermissions, 'Canonical student credentials read')
+  assertStringIncludes(sensitiveDataPermissions, 'Canonical teacher credentials read')
+  assertStringIncludes(sensitiveDataPermissions, 'REVOKE SELECT, UPDATE ON TABLE public.students, public.teachers FROM PUBLIC, anon, authenticated')
+  assertStringIncludes(sensitiveDataPermissions, 'GRANT SELECT (id, created_at, updated_at, name, notes, notes_document, user_id, external_link)')
+  assertStringIncludes(sensitiveDataPermissions, 'GRANT SELECT (id, created_at, updated_at, name, user_id, bio, bio_document)')
+  assertStringIncludes(sensitiveDataPermissions, 'SENSITIVE_PERMISSION_REQUIRED')
+  assertStringIncludes(sensitiveDataIntegration, 'authenticated role can directly select core sensitive columns')
+  assertStringIncludes(sensitiveDataIntegration, 'authenticated role can directly update core sensitive columns')
+  assertStringIncludes(sensitiveDataIntegration, 'sensitive permissions were implicitly granted to a non-owner role')
+  assertStringIncludes(sensitiveDataIntegration, 'Canonical student credentials read')
+  assertStringIncludes(sensitiveDataIntegration, 'Canonical teacher credentials read')
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

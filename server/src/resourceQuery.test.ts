@@ -16,8 +16,8 @@ describe('resource query filters', () => {
   })
 
   it('validates OR expressions against the resource allowlist', () => {
-    expect(parseOr('name.ilike.%Ada%,email.ilike.%example.test%', resources.teachers))
-      .toBe('name.ilike.%Ada%,email.ilike.%example.test%')
+    expect(parseOr('name.ilike.%Ada%,user_id.eq.00000000-0000-0000-0000-000000000001', resources.teachers))
+      .toBe('name.ilike.%Ada%,user_id.eq.00000000-0000-0000-0000-000000000001')
     expect(() => parseOr('password.eq.secret', resources.teachers)).toThrowError('The or filter is not supported')
     expect(() => parseOr('name.ilike.%Ada%(admin)', resources.teachers)).toThrowError('The or filter is not supported')
   })

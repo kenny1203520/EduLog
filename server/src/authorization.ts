@@ -84,7 +84,9 @@ async function entityPermission(req: Request, kind: 'student' | 'enrollment' | '
     scopeType: kind === 'student' ? 'student' : kind === 'enrollment' ? 'enrollment' : 'occurrence_report',
   })
   if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const functionName = kind === 'student' ? 'can_access_student' : kind === 'enrollment' ? 'can_access_enrollment' : 'can_access_report'
+  const functionName = kind === 'student'
+    ? (permission.endsWith('_sensitive') ? 'can_access_sensitive_student' : 'can_access_student')
+    : kind === 'enrollment' ? 'can_access_enrollment' : 'can_access_report'
   const { data, error } = await req.db.rpc(functionName, { [`p_${kind}_id`]: id, p_permission_key: permission })
   if (error || data !== true) rpcError(error)
 }
@@ -136,7 +138,9 @@ export async function authorizeResource(
   if (scope === 'classroom-child') return apiPermission(req, permission, rowId(row, 'classroom_id'), null)
   if (scope === 'teacher') {
     if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-    if (rowId(row, 'user_id') === req.user.id) return
+    // Sensitive teacher fields must still pass the canonical permission RPC;
+    // the self-owned shortcut is only valid for non-sensitive profile access.
+    if (rowId(row, 'user_id') === req.user.id && !permission.endsWith('_sensitive')) return
     const teacherId = id ?? rowId(row, 'id')
     if (!teacherId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     const assignments = await req.db.from('class_session_teachers').select('class_session_id').eq('teacher_id', teacherId)

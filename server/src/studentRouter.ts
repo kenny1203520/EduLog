@@ -45,8 +45,23 @@ async function remove(req: Request, res: Response) {
   return res.json(body)
 }
 
+async function credentials(req: Request, res: Response) {
+  const id = typeof req.params.id === 'string' ? req.params.id : ''
+  if (!z.string().uuid().safeParse(id).success) throw new ApiError(400, 'INVALID_ID', 'Student id is invalid')
+  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  setAuditContext(req, { domain: 'teaching', resource: 'student-credentials', resourceId: id, action: 'read', permission: 'teaching.students.read_sensitive', scopeId: id, scopeType: 'student' })
+  const permission = await req.db.rpc('can_access_sensitive_student', { p_student_id: id, p_permission_key: 'teaching.students.read_sensitive' })
+  if (permission.error) throw mapDatabaseError(permission.error)
+  if (permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read student credentials')
+  const result = await req.db.from('student_credentials').select('id,student_id,platform,username,password,url,created_at,updated_at').eq('student_id', id).order('created_at', { ascending: true })
+  if (result.error) throw mapDatabaseError(result.error)
+  const body = { data: result.data ?? [], meta: { total: result.data?.length ?? 0 }, request_id: req.requestId, trace_id: req.traceId }
+  return res.json(body)
+}
+
 export function createStudentRouter() {
   const router = Router()
+  router.get('/students/:id/credentials', wrap(credentials))
   router.delete('/students/:id', wrap(remove))
   return router
 }
