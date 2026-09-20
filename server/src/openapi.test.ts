@@ -172,6 +172,58 @@ describe('generated API contract', () => {
     expect(spec.paths['/api/dashboard']).toBeUndefined()
   })
 
+  it('documents the expanded page API operations, permissions, and data schemas', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
+    const operations: Record<string, { permission: string; schema: string }> = {
+      '/api/pages/courses/overview': { permission: 'teaching.courses.list', schema: 'PageCoursesOverviewData' },
+      '/api/pages/students/overview': { permission: 'teaching.students.list', schema: 'PageStudentsOverviewData' },
+      '/api/pages/students/{studentId}/profile': { permission: 'teaching.students.read', schema: 'PageStudentProfileData' },
+      '/api/pages/students/{studentId}/reports': { permission: 'teaching.students.read', schema: 'PageStudentReportsData' },
+      '/api/pages/teachers/overview': { permission: 'teaching.teachers.list', schema: 'PageTeachersOverviewData' },
+      '/api/pages/class-sessions/{sessionId}/workspace': { permission: 'teaching.class_sessions.read', schema: 'PageClassSessionWorkspaceData' },
+    }
+    for (const [path, expected] of Object.entries(operations)) {
+      const operation = spec.paths[path]?.get
+      expect(operation, path).toBeDefined()
+      expect(operation.operationId, path).toMatch(/^page_[a-z0-9_]+$/)
+      expect(operation['x-page-api'], path).toBe(true)
+      expect(operation['x-permission'], path).toBe(expected.permission)
+      expect(operation.security, path).toEqual([{ cookieAuth: [] }])
+      expect(operation.responses['200'].content['application/json'].schema.properties.data.$ref, path).toBe(`#/components/schemas/${expected.schema}`)
+      expect(operation.responses['401'], path).toBeDefined()
+      expect(operation.responses['403'], path).toBeDefined()
+    }
+    expect(spec.components.schemas.PageStudentProfileData.properties.student_credentials).toBeUndefined()
+    expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-permission']).toBe('teaching.students.read_sensitive')
+    expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-sensitive-data']).toBe(true)
+    expect(spec.paths['/api/students/{id}/credentials']?.get?.responses?.['200']?.content?.['application/json']?.schema?.allOf?.[1]?.properties?.data?.$ref).toBe('#/components/schemas/StudentCredentialSensitiveData')
+  })
+
+  it('documents domain commands and scoped occurrence query operations', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    const operations: Array<[string, string, string]> = [
+      ['/api/occurrences', 'get', 'occurrences_list_scoped'],
+      ['/api/occurrences/{id}/preferred', 'get', 'occurrence_preferred'],
+      ['/api/occurrences/{id}/navigation', 'get', 'occurrence_navigation'],
+      ['/api/occurrences/{occurrenceId}/reports', 'post', 'occurrence_reports_provision'],
+      ['/api/reports/{reportId}/versions/{versionId}/restore', 'post', 'report_version_restore'],
+      ['/api/reports/{reportId}/conflicts/resolve', 'post', 'report_conflict_resolve'],
+      ['/api/enrollments/{id}/progress', 'get', 'enrollment_progress_get'],
+      ['/api/enrollments/{id}/progress/recalculate', 'post', 'enrollment_progress_recalculate'],
+      ['/api/enrollments/{id}/transfers/class', 'post', 'enrollment_transfer_class'],
+      ['/api/teachers/bulk-delete', 'post', 'teachers_bulk_delete'],
+      ['/api/copy-templates/{templateType}/{scopeType}/{scopeEntityId}', 'put', 'copy_template_put_scoped'],
+    ]
+    for (const [path, method, operationId] of operations) {
+      const operation = spec.paths[path]?.[method]
+      expect(operation, `${method.toUpperCase()} ${path}`).toBeDefined()
+      expect(operation.operationId, `${method.toUpperCase()} ${path}`).toBe(operationId)
+      expect(operation.security, `${method.toUpperCase()} ${path}`).toEqual([{ cookieAuth: [] }])
+      expect(operation.responses['401'], `${method.toUpperCase()} ${path}`).toBeDefined()
+    }
+    expect(spec.paths['/api/aggregates/dashboard']).toBeUndefined()
+  })
+
   it('keeps RPC exposure, runtime guard, and OpenAPI metadata in sync', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
     expect(spec.paths['/api/rpc/{name}']?.post?.['x-rpc-allowlist']).toEqual([...allowedRpcs])

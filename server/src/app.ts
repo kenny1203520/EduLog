@@ -24,6 +24,7 @@ import { createSuspensionRouter } from './suspensionRouter.js'
 import { createHolidayRouter } from './holidayRouter.js'
 import { createAggregateRouter } from './aggregateRouter.js'
 import { createTeacherAssignmentRouter } from './teacherAssignmentRouter.js'
+import { createDomainRouter } from './domainRouter.js'
 
 const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
 
@@ -75,6 +76,9 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   protectedApi.use(createTeacherAssignmentRouter())
   protectedApi.use(createSessionRouter())
   protectedApi.use(createStudentRouter())
+  // Domain routes must precede the generic registry so page/workflow commands
+  // retain their explicit validation, scope resolution, and idempotency rules.
+  protectedApi.use(createDomainRouter())
   protectedApi.use(createRpcRouter())
   protectedApi.use(createResourceRouter())
   app.use('/api', protectedApi)

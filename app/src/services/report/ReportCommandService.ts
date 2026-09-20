@@ -522,6 +522,10 @@ export class ReportCommandService {
         currentVersion?: number
     ): Promise<OccurrenceReport> {
         if (currentVersion === undefined) throw new Error('expectedVersion is required to restore a report version')
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any>(`/reports/${encodeURIComponent(reportId)}/versions/${encodeURIComponent(versionId)}/restore`, { expected_version: currentVersion })
+            return new OccurrenceReport(response.data)
+        }
         const { data: version, error: versionError } = await apiDataClient
             .from('report_versions')
             .select('id, occurrence_report_id, version, content, edited_by, snapshot, created_at')
@@ -610,6 +614,10 @@ export class ReportCommandService {
         expectedVersion?: number
     ): Promise<OccurrenceReport> {
         if (expectedVersion === undefined) throw new Error('expectedVersion is required to resolve a report conflict')
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any>(`/reports/${encodeURIComponent(reportId)}/conflicts/resolve`, { expected_version: expectedVersion, report: resolvedReport })
+            return new OccurrenceReport(response.data)
+        }
         const { data: current, error: fetchError } = await apiDataClient
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)
@@ -703,6 +711,10 @@ export class ReportCommandService {
     static async createReportsForOccurrence(
         occurrenceId: string
     ): Promise<OccurrenceReport[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any[]>(`/occurrences/${encodeURIComponent(occurrenceId)}/reports`, {})
+            return (response.data || []).map((row) => new OccurrenceReport(row))
+        }
         const enrollmentIds = await OccurrenceRosterService.getEffectiveEnrollmentIds(occurrenceId)
         if (enrollmentIds.length === 0) return ReportQueryService.getReportsByOccurrence(occurrenceId)
 

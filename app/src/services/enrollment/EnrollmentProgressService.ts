@@ -1,5 +1,7 @@
 import { apiDataClient } from '@/services/api/ApiDataClient'
 import { type Lesson } from '@/models/Course'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 /**
  * Service for managing student enrollment progress based on lesson completion
@@ -105,6 +107,10 @@ export class EnrollmentProgressService {
         enrollmentId: string,
         newLessonNumber: number
     ): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.patch(`/enrollments/${encodeURIComponent(enrollmentId)}`, { lesson_number: newLessonNumber })
+            return
+        }
         const { error } = await apiDataClient
             .from('enrollments')
             .update({ lesson_number: newLessonNumber })
@@ -119,6 +125,10 @@ export class EnrollmentProgressService {
      * Recalculates the student's progress by finding the first uncompleted lesson.
      */
     static async recalculateEnrollmentProgress(enrollmentId: string): Promise<number> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<{ lesson_number?: number; id?: string }>(`/enrollments/${encodeURIComponent(enrollmentId)}/progress/recalculate`, {})
+            return Number((response.data as any)?.lesson_number ?? 1)
+        }
         // 1. Get enrollment and its course
         const { data: enrollment, error: enrollError } = await apiDataClient
             .from('enrollments')
@@ -166,6 +176,15 @@ export class EnrollmentProgressService {
         recommendedLesson: Lesson | null
         allLessons: Lesson[]
     }> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/progress`)
+            const data = response.data ?? {}
+            return {
+                currentLessonNumber: Number(data.current_lesson_number ?? 1),
+                recommendedLesson: data.next_lesson ? { id: data.next_lesson.id, courseId, title: data.next_lesson.title, sequence: data.next_lesson.sequence } as Lesson : null,
+                allLessons: [],
+            }
+        }
         // Fetch enrollment to get current progress
         const { data: enrollment, error: enrollError } = await apiDataClient
             .from('enrollments')

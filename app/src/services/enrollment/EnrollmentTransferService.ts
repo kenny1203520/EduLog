@@ -74,6 +74,14 @@ export class EnrollmentTransferService {
         originalLastDate: string,
         transferDate: string
     ): Promise<Enrollment> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.post<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/transfers/class`, {
+                target_class_session_id: newSessionId,
+                original_last_date: originalLastDate,
+                transfer_date: transferDate,
+            })
+            return new Enrollment(response.data)
+        }
         void originalLastDate
 
         const enrollment = await EnrollmentTransferQueryService.getEnrollmentSessionInfo(enrollmentId)

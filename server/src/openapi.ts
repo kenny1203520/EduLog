@@ -87,6 +87,20 @@ export function buildOpenApi() {
     if (methods.has('DELETE')) itemPath.delete = { ...base, operationId: `${name}_delete`, ...(permission('delete') ? { 'x-permission': permission('delete') } : {}), 'x-writable-fields': [], parameters: [{ $ref: '#/components/parameters/ResourceId' }, { $ref: '#/components/parameters/IdempotencyKey' }] }
     paths[item] = itemPath
   }
+  paths['/api/students/{id}/credentials'] = {
+    get: {
+      operationId: 'students_get_sensitive_credentials',
+      summary: 'Read student credentials through the separately authorized sensitive-data route',
+      security: [{ cookieAuth: [] }],
+      'x-permission': 'teaching.students.read_sensitive',
+      'x-sensitive-data': true,
+      parameters: [{ $ref: '#/components/parameters/ResourceId' }],
+      responses: {
+        '200': { description: 'Authorized student credentials; password values are restricted sensitive data', content: { 'application/json': { schema: { allOf: [{ $ref: '#/components/schemas/Envelope' }, { type: 'object', properties: { data: { $ref: '#/components/schemas/StudentCredentialSensitiveData' } } }] } } } },
+        ...errorResponses,
+      },
+    },
+  }
   const addSpecialized = (path: string, method: 'get' | 'post' | 'patch' | 'delete', operationId: string, permission: string | undefined, status: string, params: unknown[] = [], requestBody?: unknown) => {
     const existing = (paths[path] as Record<string, unknown> | undefined) ?? {}
     paths[path] = { ...existing, [method]: { security: [{ cookieAuth: [] }], operationId, ...(permission ? { 'x-permission': permission, 'x-required-permissions': [permission] } : {}), parameters: params, ...(requestBody ? { requestBody } : {}), responses: { [status]: { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
@@ -124,6 +138,25 @@ export function buildOpenApi() {
     addSpecialized(`/api${route}`, method, `${route.slice(1).replaceAll('/', '_').replaceAll('{id}', 'id')}_${action}`, permission, status, action === 'create' ? [mutationParam] : [idParam, mutationParam], action === 'delete' ? undefined : bodyFor(route, action as 'create' | 'update'))
   }
   addSpecialized('/api/occurrences/generate', 'post', 'occurrences_generate', 'teaching.occurrences.create', '200', [mutationParam], refBody('OccurrenceGenerationMutation'))
+  paths['/api/occurrences'] = {
+    get: { operationId: 'occurrences_list_scoped', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.occurrences.list', parameters: [
+      { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' },
+      { name: 'start', in: 'query', schema: { type: 'string', format: 'date' } }, { name: 'end', in: 'query', schema: { type: 'string', format: 'date' } },
+      { name: 'date', in: 'query', schema: { type: 'string', format: 'date' } }, { name: 'class_session_id', in: 'query', schema: { type: 'string', format: 'uuid' } },
+      { name: 'session_ids', in: 'query', schema: { type: 'string' } }, { name: 'ids', in: 'query', schema: { type: 'string' } },
+      { name: 'sort', in: 'query', schema: { type: 'string', enum: ['occurrence_date', '-occurrence_date', 'created_at', '-created_at'] } },
+    ], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/occurrences/{id}/preferred'] = { get: { operationId: 'occurrence_preferred', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.occurrences.read', parameters: [pathParam('id'), { name: 'date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/occurrences/{id}/navigation'] = { get: { operationId: 'occurrence_navigation', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.occurrences.read', parameters: [pathParam('id'), { name: 'date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/occurrences/{occurrenceId}/reports'] = { post: { operationId: 'occurrence_reports_provision', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.create', parameters: [pathParam('occurrenceId'), mutationParam], requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', additionalProperties: false } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/reports/{reportId}/versions/{versionId}/restore'] = { post: { operationId: 'report_version_restore', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.update', parameters: [pathParam('reportId'), pathParam('versionId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['expected_version'], additionalProperties: false, properties: { expected_version: { type: 'integer', minimum: 1 } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/reports/{reportId}/conflicts/resolve'] = { post: { operationId: 'report_conflict_resolve', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.reports.update', parameters: [pathParam('reportId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['expected_version', 'report'], additionalProperties: false, properties: { expected_version: { type: 'integer', minimum: 1 }, report: { $ref: '#/components/schemas/ReportUpdateMutation' } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/enrollments/{id}/progress'] = { get: { operationId: 'enrollment_progress_get', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.enrollments.read', parameters: [pathParam('id')], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/enrollments/{id}/progress/recalculate'] = { post: { operationId: 'enrollment_progress_recalculate', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.enrollments.update', parameters: [pathParam('id'), mutationParam], requestBody: { required: false, content: { 'application/json': { schema: { type: 'object', additionalProperties: false } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/enrollments/{id}/transfers/class'] = { post: { operationId: 'enrollment_transfer_class', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.enrollments.update', parameters: [pathParam('id'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['target_class_session_id', 'transfer_date'], additionalProperties: false, properties: { target_class_session_id: { type: 'string', format: 'uuid' }, original_last_date: { type: 'string', format: 'date' }, transfer_date: { type: 'string', format: 'date' } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/teachers/bulk-delete'] = { post: { operationId: 'teachers_bulk_delete', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.teachers.delete', parameters: [mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['ids'], additionalProperties: false, properties: { ids: { type: 'array', minItems: 1, maxItems: 100, items: { type: 'string', format: 'uuid' } } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
+  paths['/api/copy-templates/{templateType}/{scopeType}/{scopeEntityId}'] = { put: { operationId: 'copy_template_put_scoped', security: [{ cookieAuth: [] }], 'x-permission': 'system.users.update', parameters: [pathParam('scopeEntityId'), { name: 'templateType', in: 'path', required: true, schema: { type: 'string' } }, { name: 'scopeType', in: 'path', required: true, schema: { type: 'string' } }, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', additionalProperties: false, properties: { template_text: { type: 'string', nullable: true }, template_document: { type: 'object', nullable: true } } } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   addSpecialized('/api/reports/{id}/collaboration', 'get', 'report_collaboration_read', 'teaching.reports.read', '200', [idParam])
   addSpecialized('/api/reports/{id}/collaboration', 'post', 'report_collaboration_save', 'teaching.reports.update', '200', [idParam, mutationParam], refBody('ReportCollaborationMutation'))
   const teacherAssignmentDateParameter = { name: 'on_date', in: 'query', required: false, schema: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' } }
@@ -193,6 +226,13 @@ export function buildOpenApi() {
     get: { operationId: 'holiday_check', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.holidays.list', parameters: [{ name: 'date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'classroom_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'class_session_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'teacher_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   const pageBase = { security: [{ cookieAuth: [] }], 'x-page-api': true, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
+  const pageResponse = (schema: string) => ({
+    description: 'Page API response envelope',
+    content: { 'application/json': { schema: {
+      type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'],
+      properties: { data: { $ref: `#/components/schemas/${schema}` }, meta: { type: 'object' }, request_id: { type: 'string' }, trace_id: { type: 'string' } },
+    } } },
+  })
   paths['/api/pages/me/preferences'] = {
     get: {
       ...pageBase,
@@ -270,6 +310,55 @@ export function buildOpenApi() {
       ],
     },
   }
+  const pageListParameters = [
+    { $ref: '#/components/parameters/Limit' },
+    { $ref: '#/components/parameters/Offset' },
+    { $ref: '#/components/parameters/Search' },
+    { name: 'sort', in: 'query', schema: { type: 'string' } },
+  ]
+  paths['/api/pages/courses/overview'] = { get: {
+    ...pageBase, operationId: 'page_courses_overview', summary: 'Read the course management page read model',
+    'x-permission': 'teaching.courses.list', parameters: pageListParameters,
+    responses: { '200': pageResponse('PageCoursesOverviewData'), ...errorResponses },
+  } }
+  paths['/api/pages/students/overview'] = { get: {
+    ...pageBase, operationId: 'page_students_overview', summary: 'Read the student management page read model without contact or credential values',
+    'x-permission': 'teaching.students.list', parameters: pageListParameters,
+    responses: { '200': pageResponse('PageStudentsOverviewData'), ...errorResponses },
+  } }
+  paths['/api/pages/students/{studentId}/profile'] = { get: {
+    ...pageBase, operationId: 'page_student_profile', summary: 'Read one student profile and its required profile relations',
+    'x-permission': 'teaching.students.read', parameters: [{ name: 'studentId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+    responses: { '200': pageResponse('PageStudentProfileData'), ...errorResponses },
+  } }
+  paths['/api/pages/students/{studentId}/private-details'] = { get: {
+    ...pageBase, operationId: 'page_student_private_details', summary: 'Read explicitly authorized student personal details and contacts',
+    'x-permission': 'teaching.students.read_sensitive', parameters: [{ name: 'studentId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+    responses: { '200': pageResponse('PageStudentPrivateDetailsData'), ...errorResponses },
+  } }
+  paths['/api/pages/students/{studentId}/reports'] = { get: {
+    ...pageBase, operationId: 'page_student_reports', summary: 'Read a student and paginated enrollment history for the reports page',
+    'x-permission': 'teaching.students.read', parameters: [
+      { name: 'studentId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' },
+      { name: 'sort', in: 'query', schema: { type: 'string', enum: ['start_date', '-start_date', 'created_at', '-created_at'], default: '-start_date' } },
+    ], responses: { '200': pageResponse('PageStudentReportsData'), ...errorResponses },
+  } }
+  paths['/api/pages/teachers/overview'] = { get: {
+    ...pageBase, operationId: 'page_teachers_overview', summary: 'Read the teacher management list without credential values or profile secrets',
+    'x-permission': 'teaching.teachers.list', parameters: pageListParameters,
+    responses: { '200': pageResponse('PageTeachersOverviewData'), ...errorResponses },
+  } }
+  paths['/api/pages/teachers/{teacherId}/private-details'] = { get: {
+    ...pageBase, operationId: 'page_teacher_private_details', summary: 'Read explicitly authorized teacher personal details and credentials',
+    'x-permission': 'teaching.teachers.read_sensitive', parameters: [{ name: 'teacherId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+    responses: { '200': pageResponse('PageTeacherPrivateDetailsData'), ...errorResponses },
+  } }
+  paths['/api/pages/class-sessions/{sessionId}/workspace'] = { get: {
+    ...pageBase, operationId: 'page_class_session_workspace', summary: 'Read the class session workspace read model',
+    'x-permission': 'teaching.class_sessions.read', parameters: [{ name: 'sessionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+    responses: { '200': pageResponse('PageClassSessionWorkspaceData'), ...errorResponses },
+  } }
   paths['/api/rpc/{name}'] = {
     post: {
       operationId: 'invoke_allowed_rpc',
@@ -338,12 +427,23 @@ export function buildOpenApi() {
       { type: 'object', required: ['user_id', 'permission_key'], additionalProperties: false, properties: { user_id: { type: 'string', format: 'uuid' }, permission_key: { type: 'string', minLength: 1, maxLength: 200 }, teaching_id: { type: 'string', format: 'uuid' }, classroom_id: { type: 'string', format: 'uuid' }, class_session_id: { type: 'string', format: 'uuid' } } },
     ] },
   }
+  const pageResponseSchemas = {
+    PageCoursesOverviewData: { type: 'array', items: { type: 'object', required: ['id', 'subject', 'stage'], properties: { id: { type: 'string', format: 'uuid' }, subject: { type: 'string' }, stage: { type: 'string' }, display_name: { type: ['string', 'null'] }, description: { type: ['string', 'null'] }, description_document: { type: ['object', 'null'] }, lessons: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, course_id: { type: 'string', format: 'uuid' }, title: { type: 'string' }, sequence: { type: 'integer' } } } } } } },
+    PageStudentsOverviewData: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } } },
+    PageStudentProfileData: { type: 'object', required: ['id', 'name', 'capabilities'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' }, notes: { type: ['string', 'null'] }, notes_document: { type: ['object', 'null'] }, external_link: { type: ['string', 'null'] }, enrollments: { type: 'array', items: { type: 'object' } }, capabilities: { type: 'object', required: ['read_sensitive', 'update_sensitive'], properties: { read_sensitive: { type: 'boolean' }, update_sensitive: { type: 'boolean' } } } } },
+    PageStudentPrivateDetailsData: { type: 'object', required: ['student', 'contacts', 'schools'], properties: { student: { type: 'object' }, contacts: { type: 'array', items: { type: 'object' } }, schools: { type: 'array', items: { type: 'object' } } } },
+    StudentCredentialSensitiveData: { type: 'array', items: { type: 'object', required: ['id', 'student_id', 'platform'], properties: { id: { type: 'string', format: 'uuid' }, student_id: { type: 'string', format: 'uuid' }, platform: { type: 'string' }, username: { type: ['string', 'null'] }, password: { type: ['string', 'null'], writeOnly: false }, url: { type: ['string', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } } },
+    PageStudentReportsData: { type: 'object', required: ['student', 'enrollments'], properties: { student: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' } } }, enrollments: { type: 'array', items: { type: 'object' } } } },
+    PageTeachersOverviewData: { type: 'object', required: ['teachers', 'statistics'], properties: { teachers: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', format: 'uuid' }, user_id: { type: ['string', 'null'], format: 'uuid' }, name: { type: 'string' }, bio: { type: ['string', 'null'] }, bio_document: { type: ['object', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } } }, statistics: { type: 'object', required: ['totalTeachers', 'linkedAccounts', 'unlinkedAccounts', 'completeProfiles'], properties: { totalTeachers: { type: 'integer' }, linkedAccounts: { type: 'integer' }, unlinkedAccounts: { type: 'integer' }, completeProfiles: { type: 'integer' } } } } },
+    PageTeacherPrivateDetailsData: { type: 'object', required: ['teacher', 'credentials'], properties: { teacher: { type: 'object' }, credentials: { type: 'array', items: { type: 'object' } } } },
+    PageClassSessionWorkspaceData: { type: 'object', required: ['session', 'enrollments', 'teachers'], properties: { session: { type: 'object' }, enrollments: { type: 'array', items: { type: 'object' } }, teachers: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, user_id: { type: ['string', 'null'], format: 'uuid' }, name: { type: 'string' } } } } } },
+  }
   return {
     openapi: '3.1.0', info: { title: 'EduLog API', version: '1.0.0' }, servers: [{ url: '/' }], paths,
     components: {
       securitySchemes: { cookieAuth: { type: 'apiKey', in: 'cookie', name: 'edulog_access' }, bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' } },
       parameters: { ResourceId: { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, Filters: { name: 'filters', in: 'query', description: 'JSON array of allowlisted field filters', schema: { type: 'string', maxLength: 8000 } }, Or: { name: 'or', in: 'query', description: 'Allowlisted PostgREST OR expression', schema: { type: 'string', maxLength: 2000 } }, Limit: { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 25 } }, Offset: { name: 'offset', in: 'query', schema: { type: 'integer', minimum: 0, default: 0 } }, Sort: { name: 'sort', in: 'query', schema: { type: 'string' } }, Search: { name: 'search', in: 'query', schema: { type: 'string' } }, Status: { name: 'status', in: 'query', schema: { type: 'string' } }, ...Object.fromEntries(['teaching_id', 'course_id', 'classroom_id', 'class_session_id', 'class_occurrence_id', 'lesson_id', 'student_id', 'teacher_id', 'instructor_id', 'user_id', 'enrollment_id', 'occurrence_report_id', 'entity_type', 'entity_id', 'entity_ids', 'template_type', 'scope_type', 'scope_entity_id'].map((field) => [field, { name: field, in: 'query', schema: { type: 'string', ...(field.endsWith('_id') || field === 'entity_id' || field === 'scope_entity_id' ? { format: 'uuid' } : {}), ...(field === 'entity_ids' ? { description: 'Comma-separated UUIDs' } : {}) } }])), IdempotencyKey: { name: 'Idempotency-Key', in: 'header', required: true, schema: { type: 'string', minLength: 8, maxLength: 255 } } },
-      schemas: { ...specializedSchemas, Envelope: { type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'], properties: { data: {}, meta: { type: 'object' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } }, Error: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object' } } } } }, OccurrenceGenerationMutation: runtimeDocument(occurrenceGenerationSchema), ClassSessionMutation: runtimeDocument(sessionSchema), LoginRequest: { type: 'object', required: ['email', 'password'], additionalProperties: false, properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', minLength: 1 } } }, SingleLessonTransferMutation: runtimeDocument(transferBody) },
+      schemas: { ...specializedSchemas, ...pageResponseSchemas, Envelope: { type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'], properties: { data: {}, meta: { type: 'object' }, request_id: { type: 'string' }, trace_id: { type: 'string' } } }, Error: { type: 'object', required: ['error'], properties: { error: { type: 'object', required: ['code', 'message', 'request_id', 'trace_id'], properties: { code: { type: 'string' }, message: { type: 'string' }, request_id: { type: 'string' }, trace_id: { type: 'string' }, fields: { type: 'object' } } } } }, OccurrenceGenerationMutation: runtimeDocument(occurrenceGenerationSchema), ClassSessionMutation: runtimeDocument(sessionSchema), LoginRequest: { type: 'object', required: ['email', 'password'], additionalProperties: false, properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', minLength: 1 } } }, SingleLessonTransferMutation: runtimeDocument(transferBody) },
       responses: {
         Envelope: { description: 'EduLog API response envelope', content: { 'application/json': { schema: { $ref: '#/components/schemas/Envelope' } } } },
         ...Object.fromEntries(Object.entries({ BadRequest: 'Invalid request', Unauthorized: 'Authentication required', Forbidden: 'Permission denied', NotFound: 'Resource not found', Conflict: 'Resource conflict', PayloadTooLarge: 'Payload too large', UnprocessableEntity: 'Validation failed', RateLimited: 'Rate limit exceeded', InternalError: 'Unexpected error' }).map(([name, description]) => [name, { description, content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } }]))

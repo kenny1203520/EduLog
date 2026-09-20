@@ -4,6 +4,7 @@ import { createTextEditorContent } from '@/components/common/text-editor/content
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
+import { PageApiService } from '@/services/api/PageApiService'
 
 export interface TeacherDTO {
     id?: string
@@ -124,7 +125,7 @@ export class TeacherService {
             // the authorized item projection before edit forms can mutate rows.
             return Promise.all(teachers.map(async (teacher) => {
                 if (!teacher.id) return teacher
-                return (await apiResourceClient.get<TeacherDTO>('teachers', teacher.id, 'v1')).data
+                return (await this.getTeacherById(teacher.id))
             }))
         }
         const { data, error } = await apiDataClient
@@ -137,7 +138,15 @@ export class TeacherService {
     }
 
     static async getTeacherById(id: string): Promise<TeacherDTO> {
-        if (getApiV1Mode() === 'v1') return (await apiResourceClient.get<TeacherDTO>('teachers', id, 'v1')).data
+        if (getApiV1Mode() === 'v1') {
+            const base = (await apiResourceClient.get<TeacherDTO>('teachers', id, 'v1')).data
+            const sensitive = await PageApiService.getTeacherPrivateDetails(id)
+            return {
+                ...base,
+                ...sensitive.data.teacher,
+                teacher_credentials: sensitive.data.credentials || []
+            }
+        }
         const { data, error } = await apiDataClient
             .from('teachers')
             .select('*, teacher_credentials(*)')
@@ -225,6 +234,10 @@ export class TeacherService {
 
     static async bulkDeleteTeachers(ids: string[]): Promise<void> {
         if (ids.length === 0) return
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.post('/teachers/bulk-delete', { ids })
+            return
+        }
         const { error } = await apiDataClient
             .from('teachers')
             .delete()

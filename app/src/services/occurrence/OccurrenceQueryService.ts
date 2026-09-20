@@ -9,6 +9,21 @@ export class OccurrenceQueryService {
         return DateUtils.formatLocalDate(date)
     }
 
+    private static fromApi(row: any): ClassOccurrence {
+        const occurrence = new ClassOccurrence(row)
+        const session = Array.isArray(row?.class_sessions) ? row.class_sessions[0] : row?.class_sessions
+        if (session) {
+            occurrence.sessionName = session.name
+            if (!row.time_zone && DateUtils.isValidTimeZone(session.time_zone)) occurrence.timeZone = session.time_zone
+            const classroom = Array.isArray(session.classrooms) ? session.classrooms[0] : session.classrooms
+            if (classroom) {
+                occurrence.classroomName = classroom.name
+                occurrence.classroomColor = classroom.color
+            }
+        }
+        return occurrence
+    }
+
     static async getOccurrencesBySession(
         sessionId: string,
         page: number = 1,
@@ -41,6 +56,12 @@ export class OccurrenceQueryService {
         endDate: Date,
         sessionIds?: string[]
     ): Promise<ClassOccurrence[]> {
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({ start: this.formatDate(startDate), end: this.formatDate(endDate), limit: '100', offset: '0', sort: 'occurrence_date' })
+            if (sessionIds?.length) params.set('session_ids', sessionIds.join(','))
+            const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
+            return (response.data || []).map((row) => this.fromApi(row))
+        }
         let query = apiDataClient
             .from('class_occurrences')
             .select(`
@@ -86,6 +107,10 @@ export class OccurrenceQueryService {
         sessionId: string,
         referenceDate: Date
     ): Promise<ClassOccurrence | null> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any>(`/occurrences/${encodeURIComponent(sessionId)}/preferred?date=${encodeURIComponent(this.formatDate(referenceDate))}`)
+            return response.data ? this.fromApi(response.data) : null
+        }
         const reference = this.formatDate(referenceDate)
         const { data: previous, error: previousError } = await apiDataClient
             .from('class_occurrences')
@@ -114,6 +139,10 @@ export class OccurrenceQueryService {
 
     static async getOccurrencesByIds(occurrenceIds: string[]): Promise<ClassOccurrence[]> {
         if (occurrenceIds.length === 0) return []
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any[]>(`/occurrences?ids=${encodeURIComponent(occurrenceIds.join(','))}&limit=${Math.min(100, occurrenceIds.length)}&offset=0&sort=occurrence_date`)
+            return (response.data || []).map((row) => this.fromApi(row))
+        }
         const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select(`
@@ -149,6 +178,11 @@ export class OccurrenceQueryService {
         occurrenceDate: Date,
         direction: 'previous' | 'next'
     ): Promise<ClassOccurrence | null> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiV1Client.get<any>(`/occurrences/${encodeURIComponent(sessionId)}/navigation?date=${encodeURIComponent(this.formatDate(occurrenceDate))}`)
+            const row = direction === 'previous' ? (response.data as any)?.previous : (response.data as any)?.next
+            return row ? this.fromApi(row) : null
+        }
         const date = this.formatDate(occurrenceDate)
         let query = apiDataClient
             .from('class_occurrences')
@@ -176,7 +210,7 @@ export class OccurrenceQueryService {
     }
 
     static async getOccurrenceById(occurrenceId: string): Promise<ClassOccurrence> {
-        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId)); return new ClassOccurrence(response.data) }
+        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any>('/occurrences/' + encodeURIComponent(occurrenceId)); return this.fromApi(response.data) }
         const { data, error } = await apiDataClient
             .from('class_occurrences')
             .select('*')
