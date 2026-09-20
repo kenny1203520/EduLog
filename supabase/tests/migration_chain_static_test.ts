@@ -37,6 +37,7 @@ const dashboardPageHardening = await readMigration('1000074_dashboard_read_model
 const dashboardQuerySegmentation = await readMigration('1000075_dashboard_query_segmentation.sql')
 const dashboardCountsSetBased = await readMigration('1000076_dashboard_counts_set_based.sql')
 const studentsOverviewSetBased = await readMigration('1000077_students_overview_set_based.sql')
+const pagePerformanceReadModels = await readMigration('1000078_page_api_performance_read_models.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -97,7 +98,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -416,6 +417,35 @@ Deno.test('1000077 replaces row-by-row Student pagination with a safe set-based 
   assertStringIncludes(studentsOverviewSetBased, "NOTIFY pgrst, 'reload schema'")
   assert(!studentsOverviewSetBased.includes('p_user_id'))
   assertStringIncludes(coreRls, 'student overview no longer matches caller-visible RLS rows')
+})
+
+Deno.test('1000078 adds narrow set-based Page API read models', () => {
+  assertStringIncludes(pagePerformanceReadModels, "RAISE EXCEPTION '1000078 prerequisites missing")
+  for (const functionName of ['get_courses_overview', 'get_teachers_overview']) {
+    assertStringIncludes(pagePerformanceReadModels, `CREATE OR REPLACE FUNCTION public.${functionName}(`)
+    assertStringIncludes(pagePerformanceReadModels, 'SECURITY DEFINER')
+    assertStringIncludes(pagePerformanceReadModels, 'SET search_path = pg_catalog, public')
+  }
+  assertStringIncludes(pagePerformanceReadModels, 'CREATE OR REPLACE FUNCTION public.get_classrooms_overview(')
+  assertStringIncludes(pagePerformanceReadModels, 'p_session_limit integer')
+  assertStringIncludes(pagePerformanceReadModels, 'visible_classrooms AS MATERIALIZED')
+  assertStringIncludes(pagePerformanceReadModels, 'visible_sessions AS MATERIALIZED')
+  assertStringIncludes(pagePerformanceReadModels, "REVOKE ALL ON FUNCTION public.get_classrooms_overview(integer, integer, text, text, integer, integer, uuid)")
+  assertStringIncludes(pagePerformanceReadModels, "public.can_teaching_action(teaching.id, 'courses', 'read')")
+  assertStringIncludes(pagePerformanceReadModels, "public.can_teaching_action(teaching.id, 'teachers', 'read')")
+  assertStringIncludes(pagePerformanceReadModels, 'lessons_course_id_sequence_idx')
+  assertStringIncludes(pagePerformanceReadModels, 'REVOKE ALL ON FUNCTION public.get_courses_overview(integer, integer, text, text)')
+  assertStringIncludes(pagePerformanceReadModels, 'REVOKE ALL ON FUNCTION public.get_teachers_overview(integer, integer, text, text)')
+  for (const functionName of ['get_incomplete_reports_page', 'get_holidays_overview', 'get_class_session_workspace']) {
+    assertStringIncludes(pagePerformanceReadModels, `CREATE OR REPLACE FUNCTION public.${functionName}(`)
+    assertStringIncludes(pagePerformanceReadModels, 'SECURITY DEFINER')
+    assertStringIncludes(pagePerformanceReadModels, 'SET search_path = pg_catalog, public')
+  }
+  assertStringIncludes(pagePerformanceReadModels, "REVOKE ALL ON FUNCTION public.get_incomplete_reports_page(integer, text, integer, integer)")
+  assertStringIncludes(pagePerformanceReadModels, "REVOKE ALL ON FUNCTION public.get_holidays_overview(integer, integer, text, text, boolean)")
+  assertStringIncludes(pagePerformanceReadModels, "REVOKE ALL ON FUNCTION public.get_class_session_workspace(uuid)")
+  assertStringIncludes(pagePerformanceReadModels, "NOTIFY pgrst, 'reload schema'")
+  assert(!pagePerformanceReadModels.includes('p_user_id'))
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

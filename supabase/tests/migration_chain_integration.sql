@@ -59,14 +59,38 @@ BEGIN
      OR to_regclass('public.rbac_policy_epoch') IS NULL
      OR to_regprocedure('public.get_dashboard_page(date,date)') IS NULL
      OR to_regprocedure('public.get_dashboard_counts()') IS NULL
+     OR to_regprocedure('public.get_courses_overview(integer,integer,text,text)') IS NULL
+     OR to_regprocedure('public.get_teachers_overview(integer,integer,text,text)') IS NULL
+     OR to_regprocedure('public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)') IS NULL
+     OR to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer)') IS NULL
+     OR to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)') IS NULL
+     OR to_regprocedure('public.get_class_session_workspace(uuid)') IS NULL
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_dashboard_counts()', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_teachers_overview(integer,integer,text,text)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_page(date,date)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_dashboard_counts()', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_teachers_overview(integer,integer,text,text)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_dashboard_counts()', 'EXECUTE')
-     OR has_function_privilege('service_role', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE') THEN
+     OR has_function_privilege('service_role', 'public.get_students_overview(integer,integer,text,text)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_teachers_overview(integer,integer,text,text)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_class_session_workspace(uuid)', 'EXECUTE') THEN
     RAISE EXCEPTION 'API RBAC forward migration did not create required objects';
   END IF;
 
@@ -127,6 +151,39 @@ BEGIN
       AND owner_role.rolname IN ('anon', 'authenticated')
   ) THEN
     RAISE EXCEPTION 'Student overview RPC has an unsafe owner';
+  END IF;
+
+  IF (
+    SELECT count(*) FROM pg_proc procedure
+    WHERE procedure.oid IN (
+      to_regprocedure('public.get_courses_overview(integer,integer,text,text)'),
+      to_regprocedure('public.get_teachers_overview(integer,integer,text,text)'),
+      to_regprocedure('public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)'),
+      to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer)'),
+      to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)'),
+      to_regprocedure('public.get_class_session_workspace(uuid)')
+    )
+      AND procedure.prosecdef
+      AND procedure.proconfig @> ARRAY['search_path=pg_catalog, public']
+  ) <> 6 THEN
+    RAISE EXCEPTION 'Page API RPCs must use controlled read-model security boundaries';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc procedure
+    JOIN pg_roles owner_role ON owner_role.oid = procedure.proowner
+    WHERE procedure.oid IN (
+      to_regprocedure('public.get_courses_overview(integer,integer,text,text)'),
+      to_regprocedure('public.get_teachers_overview(integer,integer,text,text)'),
+      to_regprocedure('public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)'),
+      to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer)'),
+      to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)'),
+      to_regprocedure('public.get_class_session_workspace(uuid)')
+    )
+      AND owner_role.rolname IN ('anon', 'authenticated')
+  ) THEN
+    RAISE EXCEPTION 'Page API read-model RPC has an unsafe owner';
   END IF;
 END;
 $$;
