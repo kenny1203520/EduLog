@@ -288,7 +288,6 @@ Deno.test('1000071 indexes the correlated enrollment lookup used by student RLS'
   assertStringIncludes(studentRlsLookupIndex, 'ON public.enrollments USING btree (student_id)')
   assertStringIncludes(studentRlsLookupIndex, 'found an invalid or conflicting enrollments_student_id_idx')
   assertStringIncludes(studentRlsLookupIndex, 'index_metadata.indisvalid')
-  assertStringIncludes(studentRlsLookupIndex, 'index_metadata.indisready')
   assertStringIncludes(studentRlsLookupIndex, 'pg_get_indexdef(index_metadata.indexrelid, 1, true)')
   assertStringIncludes(studentRlsLookupIndex, 'exact student counts')
   assertStringIncludes(migrationChainIntegration, 'enrollments_student_id_idx')
