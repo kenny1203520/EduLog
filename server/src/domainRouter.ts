@@ -138,7 +138,7 @@ async function restoreVersion(req: Request, res: Response) {
   const version = await req.db!.from('report_versions').select('id,occurrence_report_id,version,snapshot,content').eq('id', versionId).eq('occurrence_report_id', reportId).maybeSingle()
   if (version.error) throw mapDatabaseError(version.error)
   if (!version.data) throw new ApiError(404, 'NOT_FOUND', 'Report version was not found')
-  const snapshot = version.data.snapshot && typeof version.data.snapshot === 'object' ? version.data.snapshot as Record<string, unknown> : { content: version.data.content }
+  const snapshot: Record<string, unknown> = version.data.snapshot && typeof version.data.snapshot === 'object' ? version.data.snapshot as Record<string, unknown> : { content: version.data.content }
   const patch = Object.fromEntries(reportPatchFields.filter((field) => field in snapshot).map((field) => [field, snapshot[field]]))
   return reportMutation(req, reportId, reportPatch.parse(patch), input.expected_version, res)
 }
