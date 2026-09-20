@@ -210,6 +210,21 @@ describe('generated API contract', () => {
     expect(spec.paths['/api/students/{id}/credentials']?.get?.responses?.['200']?.content?.['application/json']?.schema?.allOf?.[1]?.properties?.data?.$ref).toBe('#/components/schemas/StudentCredentialSensitiveData')
   })
 
+  it('documents the canonical incomplete-report page contract', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
+    const operation = spec.paths['/api/pages/reports/incomplete']?.get
+    expect(operation?.operationId).toBe('page_incomplete_reports')
+    expect(operation?.['x-permission']).toBe('teaching.reports.list')
+    expect(operation?.responses?.['200']?.content?.['application/json']?.schema?.properties?.data?.$ref).toBe('#/components/schemas/IncompleteReportsPageData')
+    expect(operation?.parameters?.find((parameter: any) => parameter.name === 'search')).toBeDefined()
+    expect(operation?.parameters?.find((parameter: any) => parameter.name === 'sort')?.schema).toEqual({
+      type: 'string', enum: ['date', '-date', 'updated_at', '-updated_at'], default: '-date',
+    })
+    expect(spec.components.schemas.IncompleteReportPageItem.additionalProperties).toBe(false)
+    expect(spec.components.schemas.IncompleteReportPageItem.properties.isIncomplete.const).toBe(true)
+    expect(spec.components.schemas.IncompleteReportPageItem.properties.isMissing.const).toBe(false)
+  })
+
   it('documents domain commands and scoped occurrence query operations', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
     const operations: Array<[string, string, string]> = [

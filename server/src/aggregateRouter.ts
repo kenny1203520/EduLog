@@ -132,7 +132,14 @@ async function holidays(req: Request, res: Response) {
   return sendData(req, res, data, { limit: query.limit, offset: query.offset, total, sort: query.sort })
 }
 
-const incompleteQuerySchema = z.object({ days_back: z.coerce.number().int().min(1).max(3650).default(90), scope: z.enum(['all', 'my_present', 'my_notifications']).default('all'), limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0) }).strict()
+const incompleteQuerySchema = z.object({
+  days_back: z.coerce.number().int().min(1).max(3650).default(90),
+  scope: z.enum(['all', 'my_present', 'my_notifications']).default('all'),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+  offset: z.coerce.number().int().min(0).max(1000000).default(0),
+  search: z.string().trim().max(200).default(''),
+  sort: z.enum(['date', '-date', 'updated_at', '-updated_at']).default('-date'),
+}).strict()
 type TeacherScope = { id: string; user_id: string } | null
 
 async function loadCurrentTeacher(req: Request, operation: string): Promise<TeacherScope> {
@@ -150,6 +157,8 @@ async function loadIncompleteReports(req: Request, query: z.infer<typeof incompl
     p_scope: query.scope,
     p_limit: query.limit,
     p_offset: query.offset,
+    p_search: query.search,
+    p_sort: query.sort,
   }))
   if (result.error) throwDatabaseError(req, operation, result.error)
   const page = (result.data ?? {}) as { items?: unknown; total?: unknown }
@@ -163,7 +172,7 @@ async function incomplete(req: Request, res: Response) {
   const query = incompleteQuerySchema.parse(req.query)
   await requirePagePermission(req, 'teaching.reports.list', 'incomplete-reports')
   const result = await loadIncompleteReports(req, query, null, 'incomplete_reports.read')
-  return sendData(req, res, result.rows, { limit: query.limit, offset: query.offset, total: result.total, sort: '-updated_at' })
+  return sendData(req, res, result.rows, { limit: query.limit, offset: query.offset, total: result.total, sort: query.sort })
 }
 
 async function loadDashboardCounts(req: Request) {
@@ -204,7 +213,7 @@ async function dashboard(req: Request, res: Response) {
   }).parse(req.query)
   await requirePagePermission(req, 'teaching.reports.list', 'dashboard', null, 'dashboard.permission')
   const teacher = await loadCurrentTeacher(req, 'dashboard.teacher_scope')
-  const pendingQuery = { days_back: 90, scope: 'my_present' as const, limit: 100, offset: 0 }
+  const pendingQuery = { days_back: 90, scope: 'my_present' as const, limit: 3, offset: 0, search: '', sort: '-date' as const }
   const [counts, pendingReports, occurrences] = await Promise.all([
     loadDashboardCounts(req),
     loadIncompleteReports(req, pendingQuery, teacher, 'dashboard.pending_reports'),
