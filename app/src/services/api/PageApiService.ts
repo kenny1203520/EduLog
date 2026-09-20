@@ -45,7 +45,43 @@ export interface UserPreferencesPageDTO {
 }
 export interface EnrollmentReportsPageDTO { enrollment: Record<string, unknown> | null; reports: Array<Record<string, unknown>>; count: number }
 export interface DashboardPageDTO { pendingReportsScope: string; stats: { totalStudents: number; activeCourses: number; pendingReportsCount: number; pendingReportsScope: string }; pendingReports: Array<Record<string, unknown>>; occurrences: Array<Record<string, unknown>> }
-export interface IncompleteReportsPageDTO { id: string; reportId: string; enrollmentId: string; occurrenceId: string; [key: string]: unknown }
+export interface IncompleteReportPageDTO {
+  id: string
+  reportId: string
+  enrollmentId: string
+  occurrenceId: string
+  sessionId: string
+  classroomId: string | null
+  studentName: string
+  courseId: string | null
+  className: string
+  classroomName: string
+  date: string
+  timeZone: string | null
+  startTime?: string | null
+  endTime?: string | null
+  content: string
+  contentDocument?: Record<string, unknown> | null
+  lessonId: string | null
+  missingContent: boolean
+  missingLesson: boolean
+  missingProgress: boolean
+  missingParticipation: boolean
+  missingBehavior: boolean
+  isIncomplete: true
+  isMissing: false
+  isCompleted: boolean | null
+  progressLetter: string | null
+  attendanceStatus: string
+  absenceReason: string | null
+  classParticipation: number | null
+  classroomBehavior: number | null
+  contactNotes: string | null
+  classNotes: string | null
+  externalLink: string | null
+  version: number | null
+  updatedAt: string | null
+}
 export interface HolidayOverviewPageDTO { id: string; start_date: string; end_date: string; [key: string]: unknown }
 export interface ClassroomOverviewPageDTO {
   classrooms: Array<Record<string, unknown>>
@@ -130,9 +166,16 @@ export class PageApiService {
     return apiV1Client.get<DashboardPageDTO>(`/pages/dashboard?${params}`, query.cache ? { cache: query.cache } : undefined)
   }
 
-  static getIncompleteReports(query: { days_back: number; scope: 'all' | 'my_present' | 'my_notifications'; limit?: number; offset?: number; cache?: RequestCache }) {
-    const params = new URLSearchParams({ days_back: String(query.days_back), scope: query.scope, limit: String(query.limit ?? 100), offset: String(query.offset ?? 0) })
-    return apiV1Client.get<IncompleteReportsPageDTO[]>(`/pages/reports/incomplete?${params}`, query.cache ? { cache: query.cache } : undefined)
+  static getIncompleteReports(query: { days_back: number; scope: 'all' | 'my_present' | 'my_notifications'; limit?: number; offset?: number; search?: string; sort?: 'date' | '-date' | 'updated_at' | '-updated_at'; cache?: RequestCache }) {
+    const params = new URLSearchParams({
+      days_back: String(query.days_back),
+      scope: query.scope,
+      limit: String(query.limit ?? 25),
+      offset: String(query.offset ?? 0),
+      sort: query.sort ?? '-date',
+    })
+    if (query.search) params.set('search', query.search)
+    return apiV1Client.get<IncompleteReportPageDTO[]>(`/pages/reports/incomplete?${params}`, query.cache ? { cache: query.cache } : undefined)
   }
 
   static getHolidaysOverview(query: { expand?: boolean; limit?: number; offset?: number; search?: string; sort?: string } = {}) {

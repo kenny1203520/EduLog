@@ -22,8 +22,8 @@
                     <div
                         class="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-xl border border-gray-100 shadow-inner">
                         <div class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></div>
-                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">{{
-                            incompleteReports.length }} {{ t('common.items') }}</span>
+                        <span class="text-xs font-black text-gray-500 uppercase tracking-widest">
+                            {{ totalReports }} {{ t('common.items') }}</span>
                     </div>
 
                     <div class="h-8 w-px bg-gray-100 mx-2 hidden sm:block"></div>
@@ -209,6 +209,19 @@
                             </div>
                         </div>
                     </div>
+
+                    <div v-if="totalReports > pageSize"
+                        class="sticky bottom-0 flex items-center justify-between gap-3 px-2 py-3 bg-white/95 backdrop-blur border-t border-gray-100">
+                        <button type="button" :disabled="pageOffset === 0 || loading" @click="goToPage(-1)"
+                            class="px-3 py-2 rounded-xl border border-gray-100 text-xs font-black text-gray-500 disabled:opacity-40">
+                            {{ t('common.previous') }}
+                        </button>
+                        <span class="text-xs font-bold text-gray-400">{{ pageNumber }} / {{ totalPages }}</span>
+                        <button type="button" :disabled="pageOffset + pageSize >= totalReports || loading" @click="goToPage(1)"
+                            class="px-3 py-2 rounded-xl border border-gray-100 text-xs font-black text-gray-500 disabled:opacity-40">
+                            {{ t('common.next') }}
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -376,8 +389,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
+import { ref, onMounted, computed, watch, onBeforeUnmount } from 'vue'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 import ReportEditor from '@/components/ReportEditor.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import BasePageHeader from '@/components/common/BasePageHeader.vue'
@@ -401,18 +414,19 @@ const selectedReport = ref<any>(null)
 const editorLoading = ref(false)
 const activeLessons = ref<any[]>([])
 const searchQuery = ref('')
+const pageSize = 25
+const pageOffset = ref(0)
+const totalReports = ref(0)
+const reportSort = ref<'date' | '-date' | 'updated_at' | '-updated_at'>('-date')
+const pageRequestId = ref(0)
+let searchTimer: ReturnType<typeof setTimeout> | undefined
 
-const filteredReports = computed(() => {
-    if (!searchQuery.value) return incompleteReports.value
-    const q = searchQuery.value.toLowerCase()
-    return incompleteReports.value.filter(r =>
-        r.studentName.toLowerCase().includes(q) ||
-        r.className.toLowerCase().includes(q) ||
-        (r.classroomName && r.classroomName.toLowerCase().includes(q))
-    )
-})
+const filteredReports = computed(() => incompleteReports.value)
+const pageNumber = computed(() => Math.floor(pageOffset.value / pageSize) + 1)
+const totalPages = computed(() => Math.max(1, Math.ceil(totalReports.value / pageSize)))
 
 async function loadReports(refreshEditor = true) {
+    const requestId = ++pageRequestId.value
     loading.value = true
     if (refreshEditor) {
         isRefreshing.value = true
@@ -420,8 +434,14 @@ async function loadReports(refreshEditor = true) {
     }
 
     try {
-        const raw = await OccurrenceReportService.getGlobalIncompleteReports('my_notifications')
-        const normalized = (raw || []).map((r: any) => {
+        const response = await ReportQueryService.getGlobalIncompleteReportsPage('my_notifications', {
+            limit: pageSize,
+            offset: pageOffset.value,
+            search: searchQuery.value.trim(),
+            sort: reportSort.value,
+        })
+        if (requestId !== pageRequestId.value) return
+        const normalized = (response.data || []).map((r: any) => {
             const progress = r.progressLetter || r.progress_letter || ''
             let start = ''
             let end = ''
@@ -445,11 +465,13 @@ async function loadReports(refreshEditor = true) {
                 endTime: r.endTime || r.effectiveEndTime,
                 content: r.content || '',
                 lessonId: r.lessonId || r.lesson_id || null,
-                missingContent: typeof r.missingContent === 'boolean' ? r.missingContent : !(r.content && r.content.trim().length > 0),
-                missingLesson: typeof r.missingLesson === 'boolean' ? r.missingLesson : !r.lessonId,
+                missingContent: r.missingContent,
+                missingLesson: r.missingLesson,
                 missingProgress: r.missingProgress,
                 missingParticipation: r.missingParticipation,
                 missingBehavior: r.missingBehavior,
+                isIncomplete: true,
+                isMissing: false,
                 version: r.version,
                 attendanceStatus: r.attendanceStatus || r.attendance_status,
                 absenceReason: r.absenceReason || r.absence_reason,
@@ -467,7 +489,15 @@ async function loadReports(refreshEditor = true) {
             }
         })
 
+        const total = Number(response.meta?.total ?? 0)
+        if (!Number.isSafeInteger(total) || total < 0) throw new Error('Invalid incomplete report total')
+        if (pageOffset.value >= total && total > 0) {
+            pageOffset.value = Math.floor((total - 1) / pageSize) * pageSize
+            return loadReports(refreshEditor)
+        }
+
         incompleteReports.value = normalized
+        totalReports.value = total
 
         if (!selectedReport.value && normalized.length > 0) {
             selectReport(normalized[0])
@@ -496,6 +526,24 @@ async function loadReports(refreshEditor = true) {
         isRefreshing.value = false
     }
 }
+
+function goToPage(delta: number) {
+    const nextOffset = pageOffset.value + delta * pageSize
+    if (nextOffset < 0 || nextOffset >= totalReports.value) return
+    pageOffset.value = nextOffset
+    void loadReports(false)
+}
+
+watch(searchQuery, () => {
+    pageOffset.value = 0
+    if (searchTimer) clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => { void loadReports(false) }, 300)
+})
+
+onBeforeUnmount(() => {
+    if (searchTimer) clearTimeout(searchTimer)
+    pageRequestId.value++
+})
 
 function requestRefresh() {
     showRefreshConfirm.value = true
@@ -531,43 +579,8 @@ watch(selectedReport, async (newVal) => {
 })
 
 
-async function handleSaveSuccess(updatedReport: any) {
-    const idx = incompleteReports.value.findIndex(r => r.id === updatedReport.id)
-    if (idx !== -1) {
-        const item = incompleteReports.value[idx]
-        item.content = updatedReport.content
-        item.lessonId = updatedReport.lesson_id
-        item.version = updatedReport.version
-        item.isCompleted = updatedReport.is_completed ?? false
-        item.attendanceStatus = updatedReport.attendance_status
-        item.absenceReason = updatedReport.absence_reason
-        item.classParticipation = updatedReport.class_participation
-        item.classroomBehavior = updatedReport.classroom_behavior
-        item.contactNotes = updatedReport.contact_notes
-        item.classNotes = updatedReport.class_notes
-        item.externalLink = updatedReport.external_link
-        item.progressLetter = updatedReport.progress_letter || ''
-        item.progressStart = item.progressLetter.split('-')[0] || ''
-        item.progressEnd = item.progressLetter.includes('-') ? (item.progressLetter.split('-')[1] || '') : ''
-        item.missingContent = !updatedReport.content || updatedReport.content.trim().length === 0
-        item.missingLesson = !updatedReport.lesson_id
-        item.missingProgress = !updatedReport.progress_letter
-        item.missingParticipation = !updatedReport.class_participation
-        item.missingBehavior = !updatedReport.classroom_behavior
-        item.updatedAt = updatedReport.updated_at || new Date().toISOString()
-
-        if (!item.missingContent && !item.missingLesson) {
-            incompleteReports.value.splice(idx, 1)
-            selectedReport.value = null
-            if (incompleteReports.value.length > 0) {
-                selectReport(incompleteReports.value[0])
-            }
-        }
-
-        if (selectedReport.value?.id === updatedReport.id) {
-            selectedReport.value = { ...selectedReport.value, ...item }
-        }
-    }
+async function handleSaveSuccess() {
+    await loadReports(false)
 }
 
 function handleReportRestored() {

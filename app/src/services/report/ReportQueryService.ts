@@ -333,7 +333,7 @@ export class ReportQueryService {
 
     static async getGlobalIncompleteReports(scope: 'all' | 'my_present' | 'my_notifications' = 'all'): Promise<any[]> {
         if (getApiV1Mode() === 'v1') {
-            const response = await PageApiService.getIncompleteReports({ days_back: 90, scope, limit: 100, offset: 0 })
+            const response = await PageApiService.getIncompleteReports({ days_back: 90, scope, limit: 25, offset: 0, sort: '-date' })
             return response.data || []
         }
         // Try aggregate endpoint first
@@ -351,6 +351,17 @@ export class ReportQueryService {
 
 
         return this.fetchIncompleteReportsInternal(90, scope)
+    }
+
+    static async getGlobalIncompleteReportsPage(
+        scope: 'all' | 'my_present' | 'my_notifications' = 'all',
+        query: { limit?: number; offset?: number; search?: string; sort?: 'date' | '-date' | 'updated_at' | '-updated_at' } = {},
+    ) {
+        if (getApiV1Mode() === 'v1') {
+            return PageApiService.getIncompleteReports({ days_back: 90, scope, ...query, cache: 'no-store' })
+        }
+        const data = await this.getGlobalIncompleteReports(scope)
+        return { data, meta: { limit: query.limit ?? data.length, offset: query.offset ?? 0, total: data.length, sort: query.sort ?? '-date' }, request_id: '', trace_id: '' }
     }
 
     private static async getCurrentTeacherIdentity(): Promise<{ id: string, userId: string | null } | null> {

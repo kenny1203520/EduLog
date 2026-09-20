@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import GlobalIncompleteReportsView from '@/views/GlobalIncompleteReportsView.vue'
-import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
+import { ReportQueryService } from '@/services/report/ReportQueryService'
 
 vi.mock('vue-i18n', () => ({
     createI18n: () => ({
@@ -38,9 +38,9 @@ vi.mock('@/services/api/ApiDataClient', () => ({
     }
 }))
 
-vi.mock('@/services/occurrence/OccurrenceReportService', () => ({
-    OccurrenceReportService: {
-        getGlobalIncompleteReports: vi.fn()
+vi.mock('@/services/report/ReportQueryService', () => ({
+    ReportQueryService: {
+        getGlobalIncompleteReportsPage: vi.fn()
     }
 }))
 
@@ -61,28 +61,28 @@ const globalOptions = {
 describe('GlobalIncompleteReportsView notification scope', () => {
     beforeEach(() => {
         vi.clearAllMocks()
-        vi.mocked(OccurrenceReportService.getGlobalIncompleteReports).mockResolvedValue([])
+        vi.mocked(ReportQueryService.getGlobalIncompleteReportsPage).mockResolvedValue({ data: [], meta: { total: 0 }, request_id: 'r', trace_id: 't' })
     })
     it('always loads the policy-aware notification scope and renders no scope checkbox', async () => {
         const wrapper = mount(GlobalIncompleteReportsView, { global: globalOptions })
         await flushPromises()
 
-        expect(OccurrenceReportService.getGlobalIncompleteReports).toHaveBeenCalledWith('my_notifications')
+        expect(ReportQueryService.getGlobalIncompleteReportsPage).toHaveBeenCalledWith('my_notifications', expect.objectContaining({ limit: 25, offset: 0, sort: '-date' }))
         expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false)
-        expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('all')
-        expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('my_present')
+        expect(ReportQueryService.getGlobalIncompleteReportsPage).not.toHaveBeenCalledWith('all', expect.anything())
+        expect(ReportQueryService.getGlobalIncompleteReportsPage).not.toHaveBeenCalledWith('my_present', expect.anything())
     })
 
     it('keeps every view load path fixed to my_notifications', () => {
         const source = readFileSync(resolve(process.cwd(), 'src/views/GlobalIncompleteReportsView.vue'), 'utf8')
-        expect(source).toContain("getGlobalIncompleteReports('my_notifications')")
+        expect(source).toContain("getGlobalIncompleteReportsPage('my_notifications'")
         expect(source).not.toContain('onlyMyPresentStudents')
-        expect(source).not.toContain("getGlobalIncompleteReports('all')")
+        expect(source).not.toContain("getGlobalIncompleteReportsPage('all'")
     })
 
     it('clears notification data when the policy-aware endpoint fails', async () => {
-        vi.mocked(OccurrenceReportService.getGlobalIncompleteReports)
-            .mockResolvedValueOnce([{ id: 'report-1', studentName: 'Student', className: 'Class' }])
+        vi.mocked(ReportQueryService.getGlobalIncompleteReportsPage)
+            .mockResolvedValueOnce({ data: [{ id: 'report-1', studentName: 'Student', className: 'Class' }], meta: { total: 1 }, request_id: 'r', trace_id: 't' })
             .mockRejectedValueOnce(new Error('policy endpoint unavailable'))
 
         const wrapper = mount(GlobalIncompleteReportsView, { global: globalOptions })
@@ -93,7 +93,7 @@ describe('GlobalIncompleteReportsView notification scope', () => {
         await flushPromises()
 
         expect(wrapper.text()).not.toContain('Student')
-        expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('my_present')
-        expect(OccurrenceReportService.getGlobalIncompleteReports).not.toHaveBeenCalledWith('all')
+        expect(ReportQueryService.getGlobalIncompleteReportsPage).not.toHaveBeenCalledWith('my_present', expect.anything())
+        expect(ReportQueryService.getGlobalIncompleteReportsPage).not.toHaveBeenCalledWith('all', expect.anything())
     })
 })
