@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 function vueFiles(directory: string): string[] {
     return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+        if (/_Conflict\./i.test(entry.name)) return []
         const path = join(directory, entry.name)
         if (entry.isDirectory()) return vueFiles(path)
         return extname(path) === '.vue' ? [path] : []

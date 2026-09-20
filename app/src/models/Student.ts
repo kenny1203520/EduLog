@@ -56,6 +56,8 @@ export interface StudentDTO {
   student_schools?: StudentSchoolDTO[]
   student_credentials?: StudentCredentialDTO[]
   enrollments?: EnrollmentDTO[]
+  contact_count?: number
+  credential_count?: number
 }
 
 export class Student {
@@ -78,6 +80,8 @@ export class Student {
   public schools: StudentSchoolDTO[]
   public credentials: StudentCredentialDTO[]
   public enrollments: Enrollment[]
+  public contactCount: number
+  public credentialCount: number
 
   constructor(dto: StudentDTO) {
     this.id = dto.id
@@ -106,6 +110,8 @@ export class Student {
     })
     this.credentials = dto.student_credentials || []
     this.enrollments = (dto.enrollments || []).map(e => new Enrollment(e))
+    this.contactCount = dto.contact_count ?? this.contacts.length
+    this.credentialCount = dto.credential_count ?? this.credentials.length
   }
 
   /**
