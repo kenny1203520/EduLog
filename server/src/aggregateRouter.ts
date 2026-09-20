@@ -281,16 +281,10 @@ async function studentProfile(req: Request, res: Response) {
   const studentId = typeof req.params.studentId === 'string' ? req.params.studentId : ''
   if (!z.string().uuid().safeParse(studentId).success) throw new ApiError(400, 'INVALID_ID', 'Student id is invalid')
   await authorizeResource(req, resources.students, 'teaching.students.read', studentId)
-  const result = await db.from('students').select('id,name,notes,notes_document,external_link,created_at,updated_at,enrollments(id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name),class_sessions(name,day_of_week,start_time,end_time,time_zone,session_type,schedule_mode,class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)))').eq('id', studentId).maybeSingle()
-  if (result.error) throw mapDatabaseError(result.error)
+  const result = await db.rpc('get_student_profile_page', { p_student_id: studentId })
+  if (result.error) throwDatabaseError(req, 'student_profile.read', result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Student was not found')
-  const [readSensitive, updateSensitive] = await Promise.all([
-    db.rpc('can_access_sensitive_student', { p_student_id: studentId, p_permission_key: 'teaching.students.read_sensitive' }),
-    db.rpc('can_access_sensitive_student', { p_student_id: studentId, p_permission_key: 'teaching.students.update_sensitive' }),
-  ])
-  if (readSensitive.error) throw mapDatabaseError(readSensitive.error)
-  if (updateSensitive.error) throw mapDatabaseError(updateSensitive.error)
-  return sendData(req, res, { ...result.data, capabilities: { read_sensitive: readSensitive.data === true, update_sensitive: updateSensitive.data === true } })
+  return sendData(req, res, result.data)
 }
 
 async function studentPrivateDetails(req: Request, res: Response) {

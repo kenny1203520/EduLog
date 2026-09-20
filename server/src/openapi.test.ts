@@ -201,6 +201,10 @@ describe('generated API contract', () => {
       default: 'name',
     })
     expect(spec.components.schemas.PageStudentProfileData.properties.student_credentials).toBeUndefined()
+    expect(spec.components.schemas.StudentSchoolSummary.properties.school_student_id).toBeUndefined()
+    expect(spec.components.schemas.PageStudentsOverviewData.items.properties.current_school.anyOf[0].$ref).toBe('#/components/schemas/StudentSchoolSummary')
+    expect(spec.components.schemas.PageStudentProfileData.properties.current_school.anyOf[0].$ref).toBe('#/components/schemas/StudentSchoolSummary')
+    expect(spec.components.schemas.StudentSchoolSensitiveData.properties.school_student_id).toBeDefined()
     expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-permission']).toBe('teaching.students.read_sensitive')
     expect(spec.paths['/api/students/{id}/credentials']?.get?.['x-sensitive-data']).toBe(true)
     expect(spec.paths['/api/students/{id}/credentials']?.get?.responses?.['200']?.content?.['application/json']?.schema?.allOf?.[1]?.properties?.data?.$ref).toBe('#/components/schemas/StudentCredentialSensitiveData')
