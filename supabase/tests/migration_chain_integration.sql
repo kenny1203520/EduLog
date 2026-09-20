@@ -62,7 +62,7 @@ BEGIN
      OR to_regprocedure('public.get_courses_overview(integer,integer,text,text)') IS NULL
      OR to_regprocedure('public.get_teachers_overview(integer,integer,text,text)') IS NULL
      OR to_regprocedure('public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)') IS NULL
-     OR to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer)') IS NULL
+     OR to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer,text,text)') IS NULL
      OR to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)') IS NULL
      OR to_regprocedure('public.get_class_session_workspace(uuid)') IS NULL
      OR to_regprocedure('public.get_student_profile_page(uuid)') IS NULL
@@ -72,7 +72,7 @@ BEGIN
      OR NOT has_function_privilege('authenticated', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_teachers_overview(integer,integer,text,text)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)', 'EXECUTE')
-     OR NOT has_function_privilege('authenticated', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
+     OR NOT has_function_privilege('authenticated', 'public.get_incomplete_reports_page(integer,text,integer,integer,text,text)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
      OR NOT has_function_privilege('authenticated', 'public.get_student_profile_page(uuid)', 'EXECUTE')
@@ -82,7 +82,7 @@ BEGIN
      OR has_function_privilege('anon', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_teachers_overview(integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)', 'EXECUTE')
-     OR has_function_privilege('anon', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
+     OR has_function_privilege('anon', 'public.get_incomplete_reports_page(integer,text,integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
      OR has_function_privilege('anon', 'public.get_student_profile_page(uuid)', 'EXECUTE')
@@ -91,7 +91,7 @@ BEGIN
      OR has_function_privilege('service_role', 'public.get_courses_overview(integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_teachers_overview(integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)', 'EXECUTE')
-     OR has_function_privilege('service_role', 'public.get_incomplete_reports_page(integer,text,integer,integer)', 'EXECUTE')
+     OR has_function_privilege('service_role', 'public.get_incomplete_reports_page(integer,text,integer,integer,text,text)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_holidays_overview(integer,integer,text,text,boolean)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_class_session_workspace(uuid)', 'EXECUTE')
      OR has_function_privilege('service_role', 'public.get_student_profile_page(uuid)', 'EXECUTE') THEN
@@ -183,7 +183,7 @@ BEGIN
       to_regprocedure('public.get_courses_overview(integer,integer,text,text)'),
       to_regprocedure('public.get_teachers_overview(integer,integer,text,text)'),
       to_regprocedure('public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)'),
-      to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer)'),
+      to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer,text,text)'),
       to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)'),
       to_regprocedure('public.get_class_session_workspace(uuid)')
     )
@@ -201,7 +201,7 @@ BEGIN
       to_regprocedure('public.get_courses_overview(integer,integer,text,text)'),
       to_regprocedure('public.get_teachers_overview(integer,integer,text,text)'),
       to_regprocedure('public.get_classrooms_overview(integer,integer,text,text,integer,integer,uuid)'),
-      to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer)'),
+      to_regprocedure('public.get_incomplete_reports_page(integer,text,integer,integer,text,text)'),
       to_regprocedure('public.get_holidays_overview(integer,integer,text,text,boolean)'),
       to_regprocedure('public.get_class_session_workspace(uuid)')
     )

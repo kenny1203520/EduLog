@@ -39,6 +39,7 @@ const dashboardCountsSetBased = await readMigration('1000076_dashboard_counts_se
 const studentsOverviewSetBased = await readMigration('1000077_students_overview_set_based.sql')
 const pagePerformanceReadModels = await readMigration('1000078_page_api_performance_read_models.sql')
 const studentProfileSchoolSummary = await readMigration('1000079_student_profile_school_summary.sql')
+const incompleteReportCalculation = await readMigration('1000080_incomplete_report_calculation.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -99,7 +100,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -145,6 +146,7 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(names.includes(dashboardCountsSetBasedName))
   assert(names.includes(studentsOverviewSetBasedName))
   assert(names.some((name) => name.startsWith('1000079_student_profile_school_summary.sql')))
+  assert(names.some((name) => name.startsWith('1000080_incomplete_report_calculation.sql')))
   assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
   assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
@@ -464,6 +466,31 @@ Deno.test('1000079 adds a safe current-school summary without widening sensitive
   assertStringIncludes(studentProfileSchoolSummary, 'GRANT EXECUTE ON FUNCTION public.get_student_profile_page(uuid) TO authenticated')
   assertStringIncludes(studentProfileSchoolSummary, "NOTIFY pgrst, 'reload schema'")
   assert(!studentProfileSchoolSummary.includes('p_user_id'))
+})
+
+Deno.test('1000080 canonicalizes incomplete report calculation and pagination', () => {
+  assertStringIncludes(incompleteReportCalculation, "RAISE EXCEPTION '1000080 prerequisites missing")
+  assertStringIncludes(incompleteReportCalculation, 'DROP FUNCTION IF EXISTS public.get_incomplete_reports_page(integer, text, integer, integer)')
+  assertStringIncludes(incompleteReportCalculation, 'CREATE OR REPLACE FUNCTION public.get_incomplete_reports_page(')
+  assertStringIncludes(incompleteReportCalculation, 'p_search text DEFAULT')
+  assertStringIncludes(incompleteReportCalculation, "p_sort text DEFAULT '-date'")
+  assertStringIncludes(incompleteReportCalculation, 'CURRENT_TIMESTAMP AT TIME ZONE v_time_zone')
+  assertStringIncludes(incompleteReportCalculation, 'v_end_date - (p_days_back - 1)')
+  assertStringIncludes(incompleteReportCalculation, "report.attendance_status = 'present'")
+  assertStringIncludes(incompleteReportCalculation, 'occurrence.status NOT IN (\'cancelled\', \'rescheduled\')')
+  assertStringIncludes(incompleteReportCalculation, 'missing_content')
+  assertStringIncludes(incompleteReportCalculation, 'missing_lesson')
+  assertStringIncludes(incompleteReportCalculation, 'missing_progress')
+  assertStringIncludes(incompleteReportCalculation, 'missing_participation')
+  assertStringIncludes(incompleteReportCalculation, 'missing_behavior')
+  assertStringIncludes(incompleteReportCalculation, 'notification_scopes AS MATERIALIZED')
+  assertStringIncludes(incompleteReportCalculation, 'resolve_incomplete_report_notification_permission')
+  assertStringIncludes(incompleteReportCalculation, "'isMissing', false")
+  assertStringIncludes(incompleteReportCalculation, "'isIncomplete', true")
+  assertStringIncludes(incompleteReportCalculation, 'REVOKE ALL ON FUNCTION public.get_incomplete_reports_page(integer, text, integer, integer, text, text)')
+  assertStringIncludes(incompleteReportCalculation, 'GRANT EXECUTE ON FUNCTION public.get_incomplete_reports_page(integer, text, integer, integer, text, text)')
+  assertStringIncludes(incompleteReportCalculation, "NOTIFY pgrst, 'reload schema'")
+  assert(!incompleteReportCalculation.includes('p_user_id'))
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {
