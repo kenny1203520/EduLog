@@ -607,14 +607,15 @@ WHERE role.code = 'rls_scoped_manager'
   AND permission.key = 'teaching.members.manage'
 ON CONFLICT DO NOTHING;
 
--- The same role is a member of Teaching A, but this permission is initially
--- configured only for Teaching B. The B policy must not leak into A merely
--- because the role itself is assigned in A.
+-- A built-in teaching template may have policies instantiated per teaching.
+-- Keep the fixture-only custom role bound to Teaching A; the B policy below
+-- uses the built-in template so the strict cross-teaching role guard is not
+-- bypassed while still testing that B policy state cannot leak into A.
 INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
 SELECT role.id, permission.id, 'teaching', 'b1000000-0000-4000-8000-000000000002', 'allow'
 FROM public.roles role
 CROSS JOIN public.permissions permission
-WHERE role.code = 'rls_scoped_manager'
+WHERE role.code = 'teaching_manager'
   AND permission.key = 'teaching.students.read'
 ON CONFLICT DO NOTHING;
 
