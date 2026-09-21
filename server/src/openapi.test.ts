@@ -24,6 +24,16 @@ describe('generated API contract', () => {
     expect(fullSpec.paths['/api/permissions/{permissionId}/policies']?.get?.deprecated).toBe(true)
   })
 
+  it('documents the typed role permission matrix and user display sorting', () => {
+    const spec = buildOpenApi() as { components: { schemas: Record<string, any> }; paths: Record<string, Record<string, any> | undefined> }
+    expect(spec.components.schemas.RolePermissionMatrixRow.required).toEqual(expect.arrayContaining([
+      'permission_id', 'permission_key', 'resource', 'action', 'local_effect', 'inherited_effect', 'effective_effect', 'denied', 'epoch',
+    ]))
+    expect(spec.paths['/api/roles/{id}/permissions']?.get?.responses?.['200']?.content?.['application/json']?.schema?.$ref).toBe('#/components/schemas/RolePermissionMatrixEnvelope')
+    const userSort = spec.paths['/api/users']?.get?.parameters?.find((parameter: any) => parameter.name === 'sort')
+    expect(userSort?.schema?.enum).toEqual(expect.arrayContaining(['display_name', '-display_name']))
+  })
+
   it('documents compatibility-safe role input and status filtering', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { parameters: Record<string, any>; schemas: Record<string, any> } }
     const roleSchema = spec.components.schemas.RoleCreateMutation

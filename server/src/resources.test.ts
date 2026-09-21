@@ -58,6 +58,11 @@ describe('student API resource boundaries', () => {
     expect(resources['audit-events'].permissions).toMatchObject({ list: 'system.audit.list', read: 'system.audit.list' })
   })
 
+  it('allows the system user list sort requested by the settings UI', () => {
+    expect(resources.users.sortable).toEqual(expect.arrayContaining(['display_name', 'email']))
+    expect(resources.users.sortable).not.toContain('password')
+  })
+
   it('keeps the frontend collection projections complete without exposing student profile details', () => {
     expect(resources['class-sessions'].fields).toEqual(expect.arrayContaining(['time_zone', 'session_type', 'schedule_mode']))
     expect(resources.occurrences.fields).toEqual(expect.arrayContaining(['original_start_time', 'original_end_time', 'actual_start_time', 'actual_end_time', 'time_zone']))
