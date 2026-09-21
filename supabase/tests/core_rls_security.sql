@@ -473,8 +473,8 @@ SET classroom_ids = EXCLUDED.classroom_ids,
 INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-000000000007', 'rls-system-admin@example.test')
 ON CONFLICT (id) DO NOTHING;
-INSERT INTO public.roles(code, name, description, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
-VALUES ('rls_system_admin', 'RLS system admin', 'Fixture-only system role', true, 999, 'system', NULL, false, false)
+INSERT INTO public.roles(id, code, name, description, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
+VALUES ('d1000000-0000-4000-8000-000000000002', 'rls_system_admin', 'RLS system admin', 'Fixture-only system role', true, 999, 'system', NULL, false, false)
 ON CONFLICT DO NOTHING;
 INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id)
 SELECT '00000000-0000-0000-0000-000000000007', role.id, 'system', NULL
@@ -787,7 +787,7 @@ DO $$
 DECLARE
   admin_role uuid;
 BEGIN
-  SELECT id INTO admin_role FROM public.roles WHERE code = 'rls_system_admin';
+  admin_role := 'd1000000-0000-4000-8000-000000000002';
   PERFORM public.replace_role_permission_policies(
     'system.roles.manage', 'system', NULL,
     jsonb_build_array(jsonb_build_object('role_id', admin_role, 'effect', 'allow'))
