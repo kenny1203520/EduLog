@@ -48,12 +48,12 @@ describe('student API resource boundaries', () => {
 
   it('declares explicit system permissions instead of deriving them from list', () => {
     expect(resources.roles.permissions).toMatchObject({
-      list: 'system.roles.manage', read: 'system.roles.manage', create: 'system.roles.manage',
+      list: 'system.roles.read', read: 'system.roles.read', create: 'system.roles.manage',
       update: 'system.roles.manage', delete: 'system.roles.manage', manage: 'system.roles.manage',
     })
     expect(resources.permissions.genericMethods).toEqual(['GET'])
     expect(resources['audit-events'].genericMethods).toEqual(['GET'])
-    expect(resources.users.permissions).toMatchObject({ list: 'system.users.list', read: 'system.users.list' })
+    expect(resources.users.permissions).toMatchObject({ list: 'system.users.list', read: 'system.users.read' })
     expect(resources.permissions.permissions).toMatchObject({ list: 'system.permissions.read', read: 'system.permissions.read' })
     expect(resources['audit-events'].permissions).toMatchObject({ list: 'system.audit.list', read: 'system.audit.list' })
   })

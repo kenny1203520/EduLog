@@ -40,6 +40,9 @@ const studentsOverviewSetBased = await readMigration('1000077_students_overview_
 const pagePerformanceReadModels = await readMigration('1000078_page_api_performance_read_models.sql')
 const studentProfileSchoolSummary = await readMigration('1000079_student_profile_school_summary.sql')
 const incompleteReportCalculation = await readMigration('1000080_incomplete_report_calculation.sql')
+const rbacDomainRebuild = await readMigration('1000081_rbac_domain_rebuild.sql')
+const rbacManagementFunctions = await readMigration('1000082_rbac_management_functions.sql')
+const systemUserStatus = await readMigration('1000083_system_user_status.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -100,7 +103,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -147,6 +150,9 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(names.includes(studentsOverviewSetBasedName))
   assert(names.some((name) => name.startsWith('1000079_student_profile_school_summary.sql')))
   assert(names.some((name) => name.startsWith('1000080_incomplete_report_calculation.sql')))
+  assert(names.some((name) => name.startsWith('1000081_rbac_domain_rebuild.sql')))
+  assert(names.some((name) => name.startsWith('1000082_rbac_management_functions.sql')))
+  assert(names.some((name) => name.startsWith('1000083_system_user_status.sql')))
   assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
   assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
@@ -491,6 +497,32 @@ Deno.test('1000080 canonicalizes incomplete report calculation and pagination', 
   assertStringIncludes(incompleteReportCalculation, 'GRANT EXECUTE ON FUNCTION public.get_incomplete_reports_page(integer, text, integer, integer, text, text)')
   assertStringIncludes(incompleteReportCalculation, "NOTIFY pgrst, 'reload schema'")
   assert(!incompleteReportCalculation.includes('p_user_id'))
+})
+
+Deno.test('1000081-1000083 rebuild RBAC domains through controlled boundaries', () => {
+  assertStringIncludes(rbacDomainRebuild, 'ADD COLUMN IF NOT EXISTS domain text')
+  assertStringIncludes(rbacDomainRebuild, "CHECK (domain IN ('system', 'teaching'))")
+  assertStringIncludes(rbacDomainRebuild, 'roles_domain_code_unique')
+  assertStringIncludes(rbacDomainRebuild, 'teaching_member_role_domain_guard')
+  assertStringIncludes(rbacDomainRebuild, 'role_permission_policy_domain_guard')
+  assertStringIncludes(rbacDomainRebuild, 'ON CONFLICT DO NOTHING')
+  assertStringIncludes(rbacDomainRebuild, "NOTIFY pgrst, 'reload schema'")
+  assertStringIncludes(rbacManagementFunctions, 'CREATE OR REPLACE FUNCTION public.rbac_create_role(')
+  assertStringIncludes(rbacManagementFunctions, 'p_expected_epoch bigint')
+  assertStringIncludes(rbacManagementFunctions, "'public.rbac_update_role(uuid,text,text,text,bigint)'")
+  assertStringIncludes(rbacManagementFunctions, "'public.rbac_delete_role(uuid,bigint)'")
+  assertStringIncludes(rbacManagementFunctions, "'public.rbac_upsert_system_assignment(uuid,uuid,uuid,date,date,bigint)'")
+  assertStringIncludes(rbacManagementFunctions, 'CREATE OR REPLACE FUNCTION public.rbac_replace_role_permissions(')
+  assertStringIncludes(rbacManagementFunctions, 'rbac_assert_epoch')
+  assertStringIncludes(rbacManagementFunctions, 'RBAC_VERSION_CONFLICT')
+  assertStringIncludes(rbacManagementFunctions, 'REVOKE INSERT, UPDATE, DELETE ON public.roles')
+  assertStringIncludes(rbacManagementFunctions, 'GRANT EXECUTE ON FUNCTION public.rbac_create_role')
+  assertStringIncludes(systemUserStatus, 'account_status text NOT NULL DEFAULT')
+  assertStringIncludes(systemUserStatus, 'set_system_user_status(uuid,text,text,bigint)')
+  assertStringIncludes(systemUserStatus, 'LAST_SYSTEM_OWNER')
+  assertStringIncludes(systemUserStatus, 'CREATE OR REPLACE FUNCTION public.bootstrap_system_owner')
+  assertStringIncludes(systemUserStatus, "GRANT EXECUTE ON FUNCTION public.bootstrap_system_owner(uuid) TO service_role")
+  assertStringIncludes(systemUserStatus, "NOTIFY pgrst, 'reload schema'")
 })
 
 Deno.test('1000050 preserves scoped authorization and derives session teaching', () => {

@@ -14,14 +14,19 @@ describe('generated API contract', () => {
 
   it('uses explicit role action permissions and idempotency metadata', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string; parameters?: unknown[] } | undefined>> }
-    expect(spec.paths['/api/roles'].post?.['x-permission']).toBe('system.roles.manage')
-    expect(spec.paths['/api/roles/{id}'].patch?.['x-permission']).toBe('system.roles.manage')
+    expect(spec.paths['/api/roles'].post?.['x-permission']).toContain('system.roles.manage')
+    expect(spec.paths['/api/roles/{id}'].patch?.['x-permission']).toContain('teaching.roles.manage')
     expect(spec.paths['/api/roles/{id}'].delete?.parameters).toBeDefined()
+    const fullSpec = buildOpenApi() as { components: { schemas: Record<string, any> }; paths: Record<string, Record<string, any> | undefined> }
+    expect(fullSpec.components.schemas.RoleCreateMutation.required).toEqual(expect.arrayContaining(['expected_epoch']))
+    expect(fullSpec.components.schemas.RoleUpdateMutation.required).toEqual(expect.arrayContaining(['expected_epoch']))
+    expect(fullSpec.components.schemas.RoleDeleteMutation.required).toEqual(['expected_epoch'])
+    expect(fullSpec.paths['/api/permissions/{permissionId}/policies']?.get?.deprecated).toBe(true)
   })
 
   it('documents compatibility-safe role input and status filtering', () => {
-    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { parameters: Record<string, any> } }
-    const roleSchema = spec.paths['/api/roles']?.post?.requestBody?.content?.['application/json']?.schema
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { parameters: Record<string, any>; schemas: Record<string, any> } }
+    const roleSchema = spec.components.schemas.RoleCreateMutation
     expect(roleSchema.properties.is_system).toMatchObject({ type: 'boolean', const: false })
     expect(spec.components.parameters.Status).toBeDefined()
     const enrollmentParameters = spec.paths['/api/enrollments']?.get?.parameters as Array<{ $ref?: string }>
@@ -50,6 +55,7 @@ describe('generated API contract', () => {
       ['holidays:post', 'teaching.holidays.create'], ['holidays:patch', 'teaching.holidays.update'], ['holidays:delete', 'teaching.holidays.delete'],
     ])
     for (const def of Object.values(resources)) {
+      if (def.route === 'roles') continue
       const methods = new Set(def.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
       const collection = spec.paths[`/api/${def.route}`]
       const item = spec.paths[`/api/${def.route}/{id}`]

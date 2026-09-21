@@ -25,7 +25,7 @@ describe('PermissionPolicyService RBAC boundary', () => {
         await expect(PermissionPolicyService.canManageRbac()).resolves.toBe(true)
         expect(rpcMock).toHaveBeenCalledWith('resolve_user_permission', expect.objectContaining({
             p_user_id: 'user-1',
-            p_permission_key: 'rbac.manage'
+            p_permission_key: 'system.roles.manage'
         }))
     })
 
