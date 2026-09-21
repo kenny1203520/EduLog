@@ -9,6 +9,7 @@ import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue
 
 type SystemUser = { id: string; email?: string | null; display_name?: string | null; account_status?: 'active' | 'disabled' | null }
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
+type AuditEvent = { id: string; action?: string | null; outcome?: string | null; route?: string | null; status?: number | null; created_at?: string | null }
 
 const { reportError } = useFeedback()
 const { t } = useI18n()
@@ -20,7 +21,10 @@ const selectedRoleId = ref('')
 const selectedStatus = ref<'active' | 'disabled'>('active')
 const statusReason = ref('')
 const epoch = ref(1)
-const activeSection = ref<'permissions' | 'assignments' | 'users'>('permissions')
+const activeSection = ref<'permissions' | 'assignments' | 'users' | 'audit'>('permissions')
+const auditEvents = ref<AuditEvent[]>([])
+const auditLoaded = ref(false)
+const auditLoading = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 
@@ -80,6 +84,16 @@ async function removeAssignment(assignment: Assignment) {
     } catch (error) { reportError(error) } finally { saving.value = false }
 }
 
+async function selectSection(section: typeof activeSection.value) {
+    activeSection.value = section
+    if (section !== 'audit' || auditLoaded.value || auditLoading.value) return
+    auditLoading.value = true
+    try {
+        auditEvents.value = (await apiV1Client.get<AuditEvent[]>('/audit-events?limit=50&offset=0&sort=-created_at')).data ?? []
+        auditLoaded.value = true
+    } catch (error) { reportError(error) } finally { auditLoading.value = false }
+}
+
 onMounted(load)
 </script>
 
@@ -89,7 +103,7 @@ onMounted(load)
             <h2 class="text-xl font-black text-gray-900">{{ t('rbac.system_title', 'System administration') }}</h2>
             <p class="mt-1 text-sm font-bold text-gray-400">{{ t('rbac.system_subtitle', 'Manage system roles, assignments and account status with version checks and audit.') }}</p>
             <nav class="mt-5 flex flex-wrap gap-2" :aria-label="t('rbac.system_sections.label', 'System settings sections')">
-                <button v-for="section in ['permissions', 'assignments', 'users'] as const" :key="section" type="button" class="rounded-xl px-4 py-2 text-sm font-black" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="activeSection = section">
+                <button v-for="section in ['permissions', 'assignments', 'users', 'audit'] as const" :key="section" type="button" class="rounded-xl px-4 py-2 text-sm font-black" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
                     {{ t(`rbac.system_sections.${section}`, section) }}
                 </button>
             </nav>
@@ -133,6 +147,18 @@ onMounted(load)
 
         <div v-if="activeSection === 'permissions'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
             <RolePermissionEditor domain="system" :title="$t('rbac.system_permissions', 'System role permissions')" />
+        </div>
+
+        <div v-if="activeSection === 'audit'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+            <h3 class="mb-4 font-black">{{ t('rbac.audit_title', 'Audit log') }}</h3>
+            <p v-if="auditLoading" class="text-sm text-gray-400">{{ t('common.loading', 'Loading…') }}</p>
+            <div v-else class="overflow-auto">
+                <table class="min-w-full text-left text-sm">
+                    <thead><tr class="border-b text-xs uppercase text-gray-400"><th class="px-3 py-2">{{ t('rbac.audit_action', 'Action') }}</th><th class="px-3 py-2">{{ t('rbac.audit_outcome', 'Outcome') }}</th><th class="px-3 py-2">{{ t('rbac.audit_route', 'Route') }}</th><th class="px-3 py-2">{{ t('rbac.audit_time', 'Time') }}</th></tr></thead>
+                    <tbody><tr v-for="event in auditEvents" :key="event.id" class="border-b border-gray-50"><td class="px-3 py-2 font-bold">{{ event.action || '—' }}</td><td class="px-3 py-2">{{ event.outcome || event.status || '—' }}</td><td class="px-3 py-2">{{ event.route || '—' }}</td><td class="px-3 py-2 text-gray-500">{{ event.created_at || '—' }}</td></tr></tbody>
+                </table>
+                <p v-if="!auditEvents.length" class="py-6 text-center text-sm text-gray-400">{{ t('rbac.audit_empty', 'No audit events') }}</p>
+            </div>
         </div>
     </section>
 </template>
