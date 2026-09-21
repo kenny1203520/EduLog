@@ -1,14 +1,16 @@
 # EduLog migration chain
 
-The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000079` remain unchanged. `1000057a_rbac_scope_constraint_compatibility.sql` is a new clean/upgrade compatibility step before `1000058`; `1000065_rbac_scope_constraint_reconciliation.sql` is the forward-only repair for databases that have already applied `1000058`, `1000066_atomic_scoped_rbac_policy_replacement.sql` repairs the authorized policy replacement RPC without weakening direct-table RLS, `1000067_idempotency_output_column_qualification.sql` fixes the ambiguous replay lookup, `1000068_class_session_scoped_table_access.sql` restores session RPC table privileges behind canonical teaching-scoped RLS, `1000069_report_template_teaching_backfill.sql` repairs missing owner-based teaching scopes for legacy report templates, `1000070_class_session_rpc_reference_reads.sql` grants the invoker session RPC reference reads while canonical classroom/course RLS keeps the rows scoped, `1000071_student_rls_enrollment_lookup_index.sql` adds an index needed by the correlated student RLS enrollment lookup, `1000072_sensitive_data_permissions.sql` adds owner-scoped sensitive-data permissions and guarded RPCs, `1000073_dashboard_page_read_model.sql` adds the RLS-scoped Dashboard read model and query indexes, `1000074_dashboard_read_model_hardening.sql` repairs Dashboard count compatibility with the sensitive-column boundary, `1000075_dashboard_query_segmentation.sql` adds the segmented exact-count invoker RPC used by the API, `1000076_dashboard_counts_set_based.sql` replaces its row-by-row count path with a tightly scoped set-based aggregate, `1000077_students_overview_set_based.sql` provides exact set-based Student overview pagination, `1000078_page_api_performance_read_models.sql` adds controlled Course and Teacher Page API aggregates, `1000079_student_profile_school_summary.sql` adds a safe current-school summary without exposing full student school history, and `1000080_incomplete_report_calculation.sql` canonicalizes report completeness, notification scope, date windows, filtering, sorting, and pagination. `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
+The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000080` remain unchanged. The current forward migrations add strict system/teaching RBAC domains (`1000081`), atomic RBAC management functions (`1000082`), and system-managed account status (`1000083`). `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
 
-This directory contains the append-only database history for EduLog. Existing migrations through `1000079` must not be edited. The current chain adds the pre-`1000058` compatibility step and `1000065`–`1000080` forward-only repairs without rewriting applied migration files.
+This directory contains the append-only database history for EduLog. Existing migrations through 1000080 must not be edited. The current chain includes the pre-1000058 compatibility step and the forward-only repairs from 1000065 through 1000080, without rewriting applied migration files.
 
 The `1000078` read-model migration covers courses, classrooms, teachers, incomplete reports, holidays, and class-session workspaces with authenticated-only, explicit projections.
 
 The `1000079` read-model migration exposes only a student's current school name, grade, class, and status to the ordinary student read boundary; complete school history and school identifiers remain sensitive data.
 
 The `1000080` read-model migration is the canonical source for incomplete-report calculation. It only considers existing present reports, applies the five-field completion rule, resolves notification policy once per classroom/session/date, and returns exact filtered totals with server-side pagination.
+
+The `1000081` migration rebuilds the role catalogue into separate system and teaching domains while preserving business data and remapping memberships. `1000082` exposes the only authenticated RBAC mutation boundary through atomic, epoch-checked RPCs. `1000083` adds active/disabled account status, audit events, last-system-owner protection, and a service-role-only bootstrap function.
 
 The former consolidated migration names are intentionally absent. `1000041a_has_api_permission_compatibility.sql` is an intentional compatibility migration and sorts between `1000041` and `1000042`.
 
@@ -99,12 +101,15 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000078 | `1000078_page_api_performance_read_models.sql` | Controlled set-based Course, Classroom, and Teacher Page API read models |
 | 1000079 | `1000079_student_profile_school_summary.sql` | Safe current-school summary for Student overview and profile Page APIs |
 | 1000080 | `1000080_incomplete_report_calculation.sql` | Canonical incomplete-report calculation, notification scope, filtering and pagination |
+| 1000081 | `1000081_rbac_domain_rebuild.sql` | Strict system/teaching role domains, built-in templates, remapping and domain guards |
+| 1000082 | `1000082_rbac_management_functions.sql` | Epoch-checked atomic role, inheritance, policy and system assignment management RPCs |
+| 1000083 | `1000083_system_user_status.sql` | Active/disabled account status, status audit and protected system-owner bootstrap |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
 ## Current canonical chain
 
-The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062_report_lifecycle_atomicity.sql` through `1000080_incomplete_report_calculation.sql` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
+The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062_report_lifecycle_atomicity.sql` through `1000083_system_user_status.sql` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
 
 ## Clean install
 
@@ -112,7 +117,7 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a database at `1000039`, apply the individual `1000040`–`1000061` files in lexical order, including `1000057a` before `1000058`, then apply `1000062`–`1000080` in order. A database that has already recorded `1000058` must not apply `1000057a` out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, sensitive-data, Dashboard read-model, and core RLS assertions. Do not edit historical migrations.
+Back up the database first. Apply only migrations not recorded in the migration history. For a database at 1000039, apply the individual 1000040-1000061 files in lexical order, including 1000057a before 1000058, then apply 1000062-1000083 in order. A database that has already recorded 1000058 must not apply 1000057a out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, sensitive-data, Dashboard read-model, core RLS, and RBAC domain assertions. Do not edit historical migrations.
 
 ## Rerun and rollback
 
