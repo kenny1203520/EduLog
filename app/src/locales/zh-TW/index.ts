@@ -16,6 +16,7 @@ import timezones from './timezones.json'
 import settings from './settings.json'
 import editor from './editor.json'
 import errors from './errors.json'
+import rbac from './rbac.json'
 
 export default {
   nav,
@@ -35,5 +36,6 @@ export default {
   timezones,
   settings,
   editor,
-  errors
+  errors,
+  rbac
 }

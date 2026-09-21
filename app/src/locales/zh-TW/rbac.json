@@ -1,0 +1,36 @@
+{
+  "builtin": "內建",
+  "protected_read_only": "受保護角色・僅供檢視",
+"system_permissions": "系統角色權限",
+"system_title": "系統管理",
+"system_subtitle": "管理系統角色、指派與帳號狀態，所有變更都會經過版本檢查與稽核。",
+"system_sections": { "label": "系統設定分區", "permissions": "角色與權限", "assignments": "角色指派", "users": "使用者狀態" },
+  "new_role": "新增角色",
+  "role_name": "角色名稱",
+"role_description": "角色描述",
+"inherited": "繼承",
+"effective": "有效結果",
+  "denied": "拒絕",
+  "version_conflict": "權限設定已變更。已保留目前草稿，請重新載入後再儲存。",
+  "save_permissions": "儲存權限",
+  "permissions": {
+    "title": "角色權限",
+    "subtitle": "設定本地政策並檢視繼承後的存取結果。"
+  },
+  "permission": {
+    "inherit": "繼承",
+    "allow": "允許",
+    "deny": "拒絕"
+  },
+  "roles": {
+    "system_owner": { "name": "系統擁有者", "description": "EduLog 系統的受保護擁有者" },
+    "system_admin": { "name": "系統管理員", "description": "管理系統設定，但不能轉移擁有權" },
+    "user_manager": { "name": "使用者管理員", "description": "管理使用者與系統角色指派" },
+    "auditor": { "name": "稽核員", "description": "讀取稽核事件與系統中繼資料" },
+    "teaching_owner": { "name": "教學擁有者", "description": "教學工作區的受保護擁有者" },
+    "teaching_manager": { "name": "教學管理員", "description": "管理教學工作區、成員與資源" },
+    "teacher": { "name": "教師", "description": "建立與維護教學紀錄" },
+    "assistant": { "name": "助教", "description": "以有限寫入權限支援教學作業" },
+    "viewer": { "name": "檢視者", "description": "只能讀取教學工作區" }
+  }
+}

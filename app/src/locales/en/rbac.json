@@ -1,0 +1,36 @@
+{
+  "builtin": "Built-in",
+  "protected_read_only": "Protected role · read only",
+"system_permissions": "System role permissions",
+"system_title": "System administration",
+"system_subtitle": "Manage system roles, assignments and account status with version checks and audit.",
+"system_sections": { "label": "System settings sections", "permissions": "Roles & permissions", "assignments": "Role assignments", "users": "User status" },
+  "new_role": "New role",
+  "role_name": "Role name",
+"role_description": "Role description",
+"inherited": "inherited",
+"effective": "effective",
+  "denied": "Denied",
+  "version_conflict": "The permission configuration changed. Your draft is preserved; reload before saving again.",
+  "save_permissions": "Save permissions",
+  "permissions": {
+    "title": "Role permissions",
+    "subtitle": "Configure local policy and review inherited access."
+  },
+  "permission": {
+    "inherit": "Inherit",
+    "allow": "Allow",
+    "deny": "Deny"
+  },
+  "roles": {
+    "system_owner": { "name": "System Owner", "description": "Protected owner of the EduLog system" },
+    "system_admin": { "name": "System Administrator", "description": "Manages system configuration without ownership transfer" },
+    "user_manager": { "name": "User Manager", "description": "Manages users and system role assignments" },
+    "auditor": { "name": "Auditor", "description": "Reads audit events and system metadata" },
+    "teaching_owner": { "name": "Teaching Owner", "description": "Protected owner of a teaching workspace" },
+    "teaching_manager": { "name": "Teaching Manager", "description": "Manages a teaching workspace, members and resources" },
+    "teacher": { "name": "Teacher", "description": "Creates and maintains teaching records" },
+    "assistant": { "name": "Assistant", "description": "Supports teaching operations with limited write access" },
+    "viewer": { "name": "Viewer", "description": "Read-only teaching workspace access" }
+  }
+}
