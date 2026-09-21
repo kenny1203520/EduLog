@@ -508,6 +508,7 @@ Deno.test('1000081-1000083 rebuild RBAC domains through controlled boundaries', 
   assertStringIncludes(rbacDomainRebuild, 'CREATE TEMP TABLE IF NOT EXISTS rbac_legacy_system_managers')
   assertStringIncludes(rbacDomainRebuild, 'ON COMMIT PRESERVE ROWS')
   assert(!rbacDomainRebuild.includes('rbac_legacy_system_managers(user_id uuid PRIMARY KEY) ON COMMIT DROP'))
+  assertStringIncludes(rbacDomainRebuild, 'DROP POLICY IF EXISTS "RBAC roles are visible in authorized domains" ON public.roles')
   assertStringIncludes(rbacDomainRebuild, 'ON CONFLICT DO NOTHING')
   assertStringIncludes(rbacDomainRebuild, "NOTIFY pgrst, 'reload schema'")
   assertStringIncludes(migrationChainIntegration, 'roles(id, code, name, is_system, domain, teaching_id)')

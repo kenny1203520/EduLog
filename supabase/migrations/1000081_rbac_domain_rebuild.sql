@@ -365,6 +365,7 @@ DROP POLICY IF EXISTS "Authenticated users can delete custom roles" ON public.ro
 DROP POLICY IF EXISTS "RBAC administrators can create custom roles" ON public.roles;
 DROP POLICY IF EXISTS "RBAC administrators can update custom roles" ON public.roles;
 DROP POLICY IF EXISTS "RBAC administrators can delete custom roles" ON public.roles;
+DROP POLICY IF EXISTS "RBAC roles are visible in authorized domains" ON public.roles;
 CREATE POLICY "RBAC roles are visible in authorized domains" ON public.roles FOR SELECT TO authenticated
 USING (
   is_builtin
