@@ -587,8 +587,8 @@ RESET ROLE;
 -- teaching owner may replace policies in its own teaching/classroom/session,
 -- but cannot mutate another teaching's policy rows. A system role may manage
 -- the system scope.
-INSERT INTO public.roles(code, name, description, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
-VALUES ('rls_scoped_manager', 'RLS scoped manager', 'Fixture-only teaching manager', false, 998, 'teaching', 'a1000000-0000-4000-8000-000000000001', false, false)
+INSERT INTO public.roles(id, code, name, description, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
+VALUES ('d1000000-0000-4000-8000-000000000001', 'rls_scoped_manager', 'RLS scoped manager', 'Fixture-only teaching manager', false, 998, 'teaching', 'a1000000-0000-4000-8000-000000000001', false, false)
 ON CONFLICT DO NOTHING;
 INSERT INTO public.teaching_members(teaching_id, user_id, role_id)
 SELECT 'a1000000-0000-4000-8000-000000000001',
@@ -641,7 +641,7 @@ DECLARE
   manager_role uuid;
   student_read_permission uuid;
 BEGIN
-  SELECT id INTO manager_role FROM public.roles WHERE code = 'rls_scoped_manager';
+  manager_role := 'd1000000-0000-4000-8000-000000000001';
   SELECT id INTO student_read_permission FROM public.permissions WHERE key = 'teaching.students.read';
   BEGIN
     INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
@@ -745,12 +745,9 @@ DECLARE
   scoped_role uuid;
 BEGIN
   -- The strict roles policy intentionally hides roles unless the caller has
-  -- role-list authority. The membership row is still visible to its owner,
-  -- so use its role_id as the canonical fixture reference.
-  SELECT role_id INTO scoped_role
-  FROM public.teaching_members
-  WHERE teaching_id = 'a1000000-0000-4000-8000-000000000001'
-    AND user_id = '00000000-0000-0000-0000-000000000005';
+  -- role-list authority. Use the fixture's stable role identity instead of
+  -- weakening the teaching_members table privilege just for this assertion.
+  scoped_role := 'd1000000-0000-4000-8000-000000000001';
   BEGIN
     PERFORM public.replace_role_permission_policies(
       'teaching.students.read', 'teaching',
