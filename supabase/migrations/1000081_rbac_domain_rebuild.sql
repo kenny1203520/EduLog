@@ -91,8 +91,10 @@ FROM (VALUES
 ) AS manifest(code, name, description, sort_order, domain, is_protected)
 WHERE role.code = manifest.code;
 
--- Capture effective legacy system managers before the one-time reset.
-CREATE TEMP TABLE IF NOT EXISTS rbac_legacy_system_managers(user_id uuid PRIMARY KEY) ON COMMIT DROP;
+-- Capture effective legacy system managers before the one-time reset. The CI
+-- migration chain runs each file with psql autocommit, so preserve this
+-- session-local snapshot until the reset block has consumed it.
+CREATE TEMP TABLE IF NOT EXISTS rbac_legacy_system_managers(user_id uuid PRIMARY KEY) ON COMMIT PRESERVE ROWS;
 TRUNCATE rbac_legacy_system_managers;
 INSERT INTO rbac_legacy_system_managers(user_id)
 WITH RECURSIVE assigned AS (
