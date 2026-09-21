@@ -331,7 +331,8 @@ SELECT role.id, permission.id, 'teaching', teaching.id, 'allow'
 FROM public.roles role CROSS JOIN public.permissions permission CROSS JOIN public.teachings teaching
 WHERE role.domain = 'teaching' AND role.is_builtin AND permission.domain = 'teaching'
   AND (
-    role.code IN ('teaching_owner', 'teaching_manager')
+    role.code = 'teaching_owner'
+    OR (role.code = 'teaching_manager' AND permission.action NOT IN ('read_sensitive', 'update_sensitive'))
     OR (role.code = 'teacher' AND permission.resource IN ('teachings','courses','lessons','classrooms','class_sessions','students','teachers','enrollments','occurrences','reports','templates','holidays') AND permission.action IN ('list','read','create','update'))
     OR (role.code = 'assistant' AND permission.resource IN ('teachings','courses','lessons','classrooms','class_sessions','students','teachers','enrollments','occurrences','reports','holidays') AND permission.action IN ('list','read','update'))
     OR (role.code = 'viewer' AND permission.action IN ('list','read'))
@@ -346,7 +347,8 @@ BEGIN
   FROM public.roles role CROSS JOIN public.permissions permission
   WHERE role.domain = 'teaching' AND role.is_builtin AND permission.domain = 'teaching'
     AND (
-      role.code IN ('teaching_owner','teaching_manager')
+      role.code = 'teaching_owner'
+      OR (role.code = 'teaching_manager' AND permission.action NOT IN ('read_sensitive', 'update_sensitive'))
       OR (role.code = 'teacher' AND permission.resource IN ('teachings','courses','lessons','classrooms','class_sessions','students','teachers','enrollments','occurrences','reports','templates','holidays') AND permission.action IN ('list','read','create','update'))
       OR (role.code = 'assistant' AND permission.resource IN ('teachings','courses','lessons','classrooms','class_sessions','students','teachers','enrollments','occurrences','reports','holidays') AND permission.action IN ('list','read','update'))
       OR (role.code = 'viewer' AND permission.action IN ('list','read'))
