@@ -32,6 +32,7 @@ const selectedTeachingId = ref(props.teachingId ?? props.teachings?.[0]?.id ?? '
 const selectedRole = computed(() => roles.value.find(role => role.id === selectedRoleId.value) ?? null)
 const canEdit = computed(() => props.canManage && capabilityCanManage.value !== false)
 const readOnly = computed(() => !canEdit.value || Boolean(selectedRole.value?.is_protected))
+const roleDetailsReadOnly = computed(() => readOnly.value || Boolean(selectedRole.value?.is_builtin))
 const groupedRows = computed(() => {
     const groups = new Map<string, RolePermissionMatrixRow[]>()
     for (const row of rows.value) {
@@ -49,6 +50,22 @@ function roleName(role: RoleDTO) {
 function roleDescription(role: RoleDTO | null) {
     if (!role) return ''
     return role.code ? t(`rbac.roles.${role.code}.description`, role.description ?? '') : (role.description ?? '')
+}
+
+function resourceName(resource: string) {
+    return t(`rbac.resources.${resource}.name`, resource.replaceAll('_', ' '))
+}
+
+function resourceDescription(resource: string) {
+    return t(`rbac.resources.${resource}.description`, resource.replaceAll('_', ' '))
+}
+
+function actionName(action: string) {
+    return t(`rbac.actions.${action}.name`, action.replaceAll('_', ' '))
+}
+
+function actionDescription(action: string) {
+    return t(`rbac.actions.${action}.description`, action.replaceAll('_', ' '))
 }
 
 function effectLabel(effect: string | null) {
@@ -171,15 +188,20 @@ onMounted(loadRoles)
 
             <div class="rounded-2xl border border-gray-100 bg-white p-5">
                 <div v-if="selectedRole" class="mb-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-                    <input v-model="draftName" :disabled="readOnly" class="rounded-lg border px-3 py-2 text-sm" :aria-label="t('rbac.role_name', 'Role name')" />
-                    <input v-model="draftDescription" :disabled="readOnly" class="rounded-lg border px-3 py-2 text-sm" :placeholder="roleDescription(selectedRole)" :aria-label="t('rbac.role_description', 'Role description')" />
-                    <button :disabled="readOnly || saving" class="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700 disabled:opacity-40" @click="saveRoleDetails">{{ t('common.save', 'Save') }}</button>
+                    <input :value="selectedRole.is_builtin ? roleName(selectedRole) : draftName" :disabled="roleDetailsReadOnly" class="rounded-lg border px-3 py-2 text-sm" :aria-label="t('rbac.role_name', 'Role name')" @input="draftName = ($event.target as HTMLInputElement).value" />
+                    <input :value="selectedRole.is_builtin ? roleDescription(selectedRole) : draftDescription" :disabled="roleDetailsReadOnly" class="rounded-lg border px-3 py-2 text-sm" :placeholder="roleDescription(selectedRole)" :aria-label="t('rbac.role_description', 'Role description')" @input="draftDescription = ($event.target as HTMLInputElement).value" />
+                    <button :disabled="roleDetailsReadOnly || saving" class="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700 disabled:opacity-40" @click="saveRoleDetails">{{ t('common.save', 'Save') }}</button>
                 </div>
                 <div v-for="[resource, resourceRows] in groupedRows" :key="resource" class="mb-5">
-                    <h4 class="mb-2 border-b border-gray-100 pb-2 text-xs font-black uppercase tracking-widest text-gray-500">{{ resource }}</h4>
+                    <h4 class="mb-2 border-b border-gray-100 pb-2 text-gray-700">
+                        <span class="font-black">{{ resourceName(resource) }}</span>
+                        <code class="ml-2 text-[10px] font-normal uppercase tracking-widest text-gray-400">{{ resource }}</code>
+                        <span class="mt-1 block text-xs font-normal text-gray-400">{{ resourceDescription(resource) }}</span>
+                    </h4>
                     <div v-for="row in resourceRows" :key="row.permission_id" class="grid grid-cols-[1fr_auto_auto] items-center gap-3 border-b border-gray-50 py-2 text-sm">
                         <div>
-                            <p class="font-bold text-gray-800">{{ row.permission_key }}</p>
+                            <p class="font-bold text-gray-800">{{ actionName(row.action) }} <code class="ml-1 text-[10px] font-normal text-gray-400">{{ row.action }}</code></p>
+                            <p class="text-[11px] text-gray-400">{{ actionDescription(row.action) }} · <code>{{ row.permission_key }}</code></p>
                             <p class="text-xs text-gray-400">
                                 {{ row.action }} · {{ t('rbac.inherited', 'inherited') }}: {{ effectLabel(row.inherited_effect) }} ·
                                 {{ t('rbac.effective', 'effective') }}: {{ effectLabel(row.effective_effect) }}
