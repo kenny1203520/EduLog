@@ -34,6 +34,20 @@ export interface RolePermissionPolicyDTO {
     effect: PolicyEffect
 }
 
+/** Row returned by the canonical role-permission read model. */
+export interface RolePermissionMatrixRow {
+    permission_id: string
+    permission_key: string
+    resource: string
+    action: string
+    local_effect: PolicyEffect | null
+    inherited_effect: PolicyEffect | null
+    inherited_from_role_id?: string | null
+    effective_effect: PolicyEffect | null
+    denied: boolean
+    epoch?: number
+}
+
 export interface EffectivePermissionResult {
     effect: PolicyEffect | null
     source: PolicyScope | null

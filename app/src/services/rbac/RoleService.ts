@@ -1,4 +1,4 @@
-import type { PermissionDTO, RoleDTO, RolePermissionPolicyDTO, RbacDomain } from '@/models/Rbac'
+import type { PermissionDTO, RoleDTO, RolePermissionMatrixRow, RbacDomain } from '@/models/Rbac'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
@@ -36,10 +36,10 @@ export class RoleService {
         const expected_epoch = input.expected_epoch ?? await this.epoch(role.data.teaching_id ?? undefined)
         return (await apiV1Client.patch<RoleDTO>(`/roles/${id}`, { ...input, expected_epoch })).data
     }
-    static async getRolePermissions(id: string, scopeType: RbacDomain, scopeId?: string | null): Promise<{ rows: RolePermissionPolicyDTO[]; epoch: number | null }> {
+    static async getRolePermissions(id: string, scopeType: RbacDomain, scopeId?: string | null): Promise<{ rows: RolePermissionMatrixRow[]; epoch: number | null }> {
         const params = new URLSearchParams({ scope_type: scopeType })
         if (scopeId) params.set('scope_id', scopeId)
-        const result = await apiV1Client.get<RolePermissionPolicyDTO[]>(`/roles/${id}/permissions?${params}`)
+        const result = await apiV1Client.get<RolePermissionMatrixRow[]>(`/roles/${id}/permissions?${params}`)
         return { rows: result.data ?? [], epoch: typeof result.meta?.epoch === 'number' ? result.meta.epoch : null }
     }
     static async replaceRolePermissions(id: string, input: { scope_type: RbacDomain; scope_id?: string | null; expected_epoch: number; policies: Array<{ permission_id: string; effect: 'allow' | 'deny' }> }) {

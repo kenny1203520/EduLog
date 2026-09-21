@@ -77,7 +77,7 @@ export function buildOpenApi() {
     const collectionPath: Record<string, unknown> = {}
     const permission = (action: 'create' | 'read' | 'update' | 'delete' | 'list') => def.selfAuthorization ? undefined : permissionForResource(def, action)
     const filterableFields = def.filterable ?? []
-    const queryParameters = [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }, { $ref: '#/components/parameters/Or' }, ...(filterableFields.includes('status') ? [{ $ref: '#/components/parameters/Status' }] : []), ...['teaching_id', 'course_id', 'classroom_id', 'class_session_id', 'class_occurrence_id', 'lesson_id', 'student_id', 'teacher_id', 'instructor_id', 'user_id', 'enrollment_id', 'occurrence_report_id', 'entity_type', 'entity_id', 'entity_ids', 'template_type', 'scope_type', 'scope_entity_id'].filter((field) => filterableFields.includes(field)).map((field) => ({ $ref: `#/components/parameters/${field}` }))]
+    const queryParameters = [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { name: 'sort', in: 'query', schema: { type: 'string', enum: def.sortable.flatMap((field) => [field, `-${field}`]), default: def.sortable[0] } }, { $ref: '#/components/parameters/Search' }, { $ref: '#/components/parameters/Filters' }, { $ref: '#/components/parameters/Or' }, ...(filterableFields.includes('status') ? [{ $ref: '#/components/parameters/Status' }] : []), ...['teaching_id', 'course_id', 'classroom_id', 'class_session_id', 'class_occurrence_id', 'lesson_id', 'student_id', 'teacher_id', 'instructor_id', 'user_id', 'enrollment_id', 'occurrence_report_id', 'entity_type', 'entity_id', 'entity_ids', 'template_type', 'scope_type', 'scope_entity_id'].filter((field) => filterableFields.includes(field)).map((field) => ({ $ref: `#/components/parameters/${field}` }))]
     if (methods.has('GET')) collectionPath.get = { ...base, operationId: `${name}_list`, ...(permission('list') ? { 'x-permission': permission('list') } : {}), 'x-readable-fields': def.listFields ?? def.fields, 'x-sortable-fields': def.sortable, 'x-searchable-fields': def.searchable, parameters: queryParameters }
     if (methods.has('POST')) collectionPath.post = { ...base, operationId: `${name}_create`, ...(permission('create') ? { 'x-permission': permission('create') } : {}), 'x-writable-fields': def.writable, 'x-compatibility-fields': def.compatibilityFields ?? [], 'x-request-schema-source': 'resource-registry', parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: mutationSchema(def, 'create') } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
     paths[collection] = collectionPath
@@ -266,7 +266,7 @@ export function buildOpenApi() {
         { $ref: '#/components/parameters/Limit' },
         { $ref: '#/components/parameters/Offset' },
         { $ref: '#/components/parameters/Search' },
-        { name: 'visibility', in: 'query', schema: { type: 'string', enum: ['all', 'visible', 'hidden'], default: 'all' } },
+        { name: 'visibility', in: 'query', schema: { type: 'string', enum: ['all', 'visible', 'hidden'], default: 'visible' } },
       ],
       responses: { '200': pageResponse('PageClassroomsOverviewData'), ...errorResponses },
     },
@@ -432,7 +432,7 @@ export function buildOpenApi() {
     put: { ...pageBase, operationId: 'role_parent_replace', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RoleParentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/roles/{id}/permissions'] = {
-    get: { ...pageBase, operationId: 'role_permissions_get', 'x-permission': 'system.roles.read | teaching.roles.read', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'teaching'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: { ...pageBase, operationId: 'role_permissions_get', 'x-permission': 'system.roles.read | teaching.roles.read', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'teaching'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Permission matrix rows', content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionMatrixEnvelope' } } } }, ...errorResponses } },
     put: { ...pageBase, operationId: 'role_permissions_replace', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionSetMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/rbac/effective-permissions'] = {
@@ -491,6 +491,20 @@ export function buildOpenApi() {
     RoleParentMutation: {
       type: 'object', additionalProperties: false, required: ['expected_epoch'],
       properties: { parent_role_id: { type: ['string', 'null'], format: 'uuid' }, expected_epoch: { type: 'integer', minimum: 1 } },
+    },
+    RolePermissionMatrixRow: {
+      type: 'object', additionalProperties: false,
+      required: ['permission_id', 'permission_key', 'resource', 'action', 'local_effect', 'inherited_effect', 'effective_effect', 'denied', 'epoch'],
+      properties: {
+        permission_id: { type: 'string', format: 'uuid' }, permission_key: { type: 'string' }, resource: { type: 'string' }, action: { type: 'string' },
+        local_effect: { type: ['string', 'null'], enum: ['allow', 'deny', null] }, inherited_effect: { type: ['string', 'null'], enum: ['allow', 'deny', null] },
+        inherited_from_role_id: { type: ['string', 'null'], format: 'uuid' }, effective_effect: { type: ['string', 'null'], enum: ['allow', 'deny', null] },
+        denied: { type: 'boolean' }, epoch: { type: 'integer', minimum: 1 },
+      },
+    },
+    RolePermissionMatrixEnvelope: {
+      type: 'object', required: ['data', 'meta', 'request_id', 'trace_id'],
+      properties: { data: { type: 'array', items: { $ref: '#/components/schemas/RolePermissionMatrixRow' } }, meta: { type: 'object', properties: { total: { type: 'integer' }, epoch: { type: 'integer' } } }, request_id: { type: 'string' }, trace_id: { type: 'string' } },
     },
     RolePermissionSetMutation: {
       type: 'object', additionalProperties: false, required: ['scope_type', 'expected_epoch', 'policies'],
