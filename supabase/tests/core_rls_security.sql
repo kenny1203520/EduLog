@@ -473,9 +473,9 @@ SET classroom_ids = EXCLUDED.classroom_ids,
 INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-000000000007', 'rls-system-admin@example.test')
 ON CONFLICT (id) DO NOTHING;
-INSERT INTO public.roles(code, name, description, is_system, sort_order)
-VALUES ('rls_system_admin', 'RLS system admin', 'Fixture-only system role', true, 999)
-ON CONFLICT (code) WHERE code IS NOT NULL DO NOTHING;
+INSERT INTO public.roles(code, name, description, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
+VALUES ('rls_system_admin', 'RLS system admin', 'Fixture-only system role', true, 999, 'system', NULL, false, false)
+ON CONFLICT (domain, code) DO NOTHING;
 INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id)
 SELECT '00000000-0000-0000-0000-000000000007', role.id, 'system', NULL
 FROM public.roles role
@@ -587,9 +587,9 @@ RESET ROLE;
 -- teaching owner may replace policies in its own teaching/classroom/session,
 -- but cannot mutate another teaching's policy rows. A system role may manage
 -- the system scope.
-INSERT INTO public.roles(code, name, description, is_system, sort_order)
-VALUES ('rls_scoped_manager', 'RLS scoped manager', 'Fixture-only teaching manager', false, 998)
-ON CONFLICT (code) WHERE code IS NOT NULL DO NOTHING;
+INSERT INTO public.roles(code, name, description, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
+VALUES ('rls_scoped_manager', 'RLS scoped manager', 'Fixture-only teaching manager', false, 998, 'teaching', 'a1000000-0000-4000-8000-000000000001', false, false)
+ON CONFLICT (domain, code) DO NOTHING;
 INSERT INTO public.teaching_members(teaching_id, user_id, role_id)
 SELECT 'a1000000-0000-4000-8000-000000000001',
        '00000000-0000-0000-0000-000000000005',
