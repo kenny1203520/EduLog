@@ -28,6 +28,37 @@
     "allow": "Allow",
     "deny": "Deny"
   },
+  "resources": {
+    "users": { "name": "Users", "description": "System user accounts and status" },
+    "roles": { "name": "Roles", "description": "Role definitions and inheritance" },
+    "role_assignments": { "name": "Role assignments", "description": "Roles assigned to users or teaching members" },
+    "permissions": { "name": "Permission catalog", "description": "System-managed permission definitions" },
+    "settings": { "name": "System settings", "description": "Global EduLog configuration" },
+    "audit": { "name": "Audit events", "description": "Security and administrative activity" },
+    "teachings": { "name": "Teachings", "description": "Teaching workspaces" },
+    "members": { "name": "Members", "description": "Teaching membership and roles" },
+    "courses": { "name": "Courses", "description": "Courses and learning content" },
+    "lessons": { "name": "Lessons", "description": "Lessons within courses" },
+    "classrooms": { "name": "Classrooms", "description": "Classroom spaces" },
+    "class_sessions": { "name": "Class sessions", "description": "Scheduled teaching sessions" },
+    "students": { "name": "Students", "description": "Student records and sensitive details" },
+    "teachers": { "name": "Teachers", "description": "Teacher identities and assignments" },
+    "enrollments": { "name": "Enrollments", "description": "Student course enrollments" },
+    "occurrences": { "name": "Occurrences", "description": "Scheduled class occurrences" },
+    "reports": { "name": "Reports", "description": "Student learning reports" },
+    "templates": { "name": "Templates", "description": "Report and teaching templates" },
+    "holidays": { "name": "Holidays", "description": "Teaching calendar holidays" }
+  },
+  "actions": {
+    "list": { "name": "List", "description": "View a collection of records" },
+    "read": { "name": "Read", "description": "View a record" },
+    "create": { "name": "Create", "description": "Create a new record" },
+    "update": { "name": "Update", "description": "Edit an existing record" },
+    "delete": { "name": "Delete", "description": "Remove a record" },
+    "manage": { "name": "Manage", "description": "Perform administrative actions" },
+    "read_sensitive": { "name": "Read sensitive", "description": "View protected personal data" },
+    "update_sensitive": { "name": "Update sensitive", "description": "Edit protected personal data" }
+  },
   "roles": {
     "system_owner": { "name": "System Owner", "description": "Protected owner of the EduLog system" },
     "system_admin": { "name": "System Administrator", "description": "Manages system configuration without ownership transfer" },
