@@ -744,7 +744,13 @@ DO $$
 DECLARE
   scoped_role uuid;
 BEGIN
-  SELECT id INTO scoped_role FROM public.roles WHERE code = 'rls_scoped_manager';
+  -- The strict roles policy intentionally hides roles unless the caller has
+  -- role-list authority. The membership row is still visible to its owner,
+  -- so use its role_id as the canonical fixture reference.
+  SELECT role_id INTO scoped_role
+  FROM public.teaching_members
+  WHERE teaching_id = 'a1000000-0000-4000-8000-000000000001'
+    AND user_id = '00000000-0000-0000-0000-000000000005';
   BEGIN
     PERFORM public.replace_role_permission_policies(
       'teaching.students.read', 'teaching',
