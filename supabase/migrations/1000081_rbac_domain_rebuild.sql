@@ -241,7 +241,7 @@ INSERT INTO public.permissions(key, name, description, domain, resource, action)
 SELECT format('system.%s.%s', resource_name, action_name),
        initcap(replace(resource_name, '_', ' ')) || ' ' || action_name,
        'Canonical system-domain permission', 'system', resource_name, action_name
-FROM unnest(ARRAY['users','roles','role_assignments','permissions','settings','audit']) resource_name
+FROM unnest(ARRAY['users','roles','role_assignments','permissions','settings','audit','holidays']) resource_name
 CROSS JOIN unnest(ARRAY['list','read','create','update','delete','manage']) action_name
 ON CONFLICT (key) DO UPDATE SET domain = EXCLUDED.domain, resource = EXCLUDED.resource,
   action = EXCLUDED.action, name = EXCLUDED.name, description = EXCLUDED.description;
@@ -261,6 +261,69 @@ ON CONFLICT (key) DO UPDATE SET domain = EXCLUDED.domain, resource = EXCLUDED.re
 UPDATE public.permissions
 SET domain = 'teaching', resource = 'reports', action = 'receive_notifications'
 WHERE key = 'reports.incomplete.receive';
+
+-- Empty-scope holidays are system resources. Keep teaching.holidays.* for
+-- classroom/session-scoped rows, but route global holiday checks through the
+-- system-domain permission namespace so the strict domain guard is meaningful.
+CREATE OR REPLACE FUNCTION public.has_api_permission(
+  p_user_id uuid,
+  p_permission_key text,
+  p_classroom_id uuid DEFAULT NULL,
+  p_class_session_id uuid DEFAULT NULL
+) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT CASE
+    WHEN auth.role() = 'service_role' THEN true
+    WHEN auth.uid() IS NULL OR auth.uid() <> p_user_id THEN false
+    WHEN p_classroom_id IS NOT NULL AND p_class_session_id IS NOT NULL THEN EXISTS (
+      SELECT 1
+      FROM public.classrooms classroom
+      JOIN public.class_sessions session
+        ON session.id = p_class_session_id
+       AND session.teaching_id = classroom.teaching_id
+      WHERE classroom.id = p_classroom_id
+        AND public.has_teaching_permission(
+          p_user_id, p_permission_key, classroom.teaching_id,
+          p_classroom_id, p_class_session_id
+        )
+    )
+    WHEN p_classroom_id IS NOT NULL THEN EXISTS (
+      SELECT 1
+      FROM public.classrooms classroom
+      WHERE classroom.id = p_classroom_id
+        AND public.has_teaching_permission(
+          p_user_id, p_permission_key, classroom.teaching_id,
+          p_classroom_id, NULL
+        )
+    )
+    WHEN p_class_session_id IS NOT NULL THEN EXISTS (
+      SELECT 1
+      FROM public.class_sessions session
+      WHERE session.id = p_class_session_id
+        AND public.has_teaching_permission(
+          p_user_id, p_permission_key, session.teaching_id,
+          NULL, p_class_session_id
+        )
+    )
+    WHEN p_permission_key LIKE 'system.%' THEN public.has_system_permission(p_user_id, p_permission_key)
+    WHEN p_permission_key IN ('teaching.holidays.read', 'teaching.holidays.list')
+      THEN public.has_system_permission(p_user_id, 'system.holidays.' || split_part(p_permission_key, '.', 3))
+    WHEN p_permission_key IN ('teaching.holidays.create', 'teaching.holidays.update', 'teaching.holidays.delete')
+      THEN public.has_system_permission(p_user_id, 'system.holidays.' || split_part(p_permission_key, '.', 3))
+    WHEN p_permission_key = 'teaching.teachings.create' THEN true
+    ELSE EXISTS (
+      SELECT 1
+      FROM public.teaching_members member
+      WHERE member.user_id = p_user_id
+        AND member.status = 'active'
+        AND member.effective_from <= CURRENT_DATE
+        AND (member.effective_to IS NULL OR member.effective_to >= CURRENT_DATE)
+        AND public.has_teaching_permission(
+          p_user_id, p_permission_key, member.teaching_id, NULL, NULL
+        )
+    )
+  END;
+$$;
 
 -- Drop legacy policies before installing strict domain validation.
 DELETE FROM public.role_permission_policies policy

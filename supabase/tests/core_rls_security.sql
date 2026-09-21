@@ -488,8 +488,8 @@ CROSS JOIN public.permissions permission
 WHERE role.code = 'rls_system_admin'
   AND permission.key IN (
     'system.roles.manage',
-    'teaching.holidays.read', 'teaching.holidays.create',
-    'teaching.holidays.update', 'teaching.holidays.delete'
+    'system.holidays.read', 'system.holidays.create',
+    'system.holidays.update', 'system.holidays.delete'
   )
 ON CONFLICT DO NOTHING;
 
@@ -508,8 +508,8 @@ BEGIN
   )) THEN
     RAISE EXCEPTION 'cross-teaching or mixed holiday leak detected';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.holidays WHERE id = 'd7000000-0000-4000-8000-000000000004') THEN
-    RAISE EXCEPTION 'global holiday compatibility visibility failed';
+  IF EXISTS (SELECT 1 FROM public.holidays WHERE id = 'd7000000-0000-4000-8000-000000000004') THEN
+    RAISE EXCEPTION 'teaching-only owner can see system global holiday';
   END IF;
 END;
 $$;
