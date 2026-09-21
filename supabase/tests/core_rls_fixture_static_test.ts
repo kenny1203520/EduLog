@@ -20,13 +20,13 @@ Deno.test('cross-teaching fixture stays outside PL/pgSQL blocks', () => {
 
 Deno.test('RBAC fixture uses domain-scoped role identities', () => {
   assertStringIncludes(source, 'domain, teaching_id, is_builtin, is_protected')
-  assertStringIncludes(source, "ON CONFLICT (domain, code) DO NOTHING")
+  assertStringIncludes(source, "ON CONFLICT (domain, code) WHERE code IS NOT NULL DO NOTHING")
   assertStringIncludes(source, "'rls_system_admin', 'RLS system admin'")
   assertStringIncludes(source, "'rls_scoped_manager', 'RLS scoped manager'")
 })
 
 Deno.test('role fixtures target the domain-scoped uniqueness index', () => {
-  const roleCodeTargets = source.match(/ON CONFLICT \(domain, code\) DO NOTHING;/g) ?? []
+  const roleCodeTargets = source.match(/ON CONFLICT \(domain, code\) WHERE code IS NOT NULL DO NOTHING;/g) ?? []
   assert(roleCodeTargets.length >= 2)
   assert(!/ON CONFLICT \(code\) DO NOTHING;/.test(source))
 })
