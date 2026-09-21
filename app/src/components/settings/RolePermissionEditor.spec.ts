@@ -18,9 +18,16 @@ describe('role permission editor contract', () => {
         expect(source).not.toContain('CASL')
     })
 
-    it('keeps protected roles read-only and preserves epoch conflicts', () => {
-        expect(source).toContain('selectedRole?.is_protected')
-        expect(source).toContain('RBAC_VERSION_CONFLICT')
-        expect(source).toContain('conflict.value = true')
-    })
+it('keeps protected roles read-only and preserves epoch conflicts', () => {
+expect(source).toContain('selectedRole?.is_protected')
+expect(source).toContain('RBAC_VERSION_CONFLICT')
+expect(source).toContain('conflict.value = true')
+})
+
+it('localizes the inspector and keeps technical identifiers visible', () => {
+expect(source).toContain('roleDetailsReadOnly')
+expect(source).toContain('rbac.resources.${resource}.name')
+expect(source).toContain('rbac.actions.${action}.description')
+expect(source).toContain('row.permission_key')
+})
 })
