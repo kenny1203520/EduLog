@@ -11,8 +11,8 @@ const roomCardStart = source.indexOf('<div v-for="room in classrooms"')
 const roomCardEnd = source.indexOf('<!-- Card Body -->', roomCardStart)
 const roomCard = source.slice(roomCardStart, roomCardEnd)
 describe('ClassroomManagement session card responsive contract', () => {
-    it('starts with all accessible classrooms so hidden preferences do not hide a populated page', () => {
-        expect(source).toContain("const displayMode = ref<DisplayMode>('all')")
+    it('starts with visible classrooms and sessions by default', () => {
+        expect(source).toContain("const displayMode = ref<DisplayMode>('visible')")
         expect(source).toContain('classroomOverviewCounts')
         expect(source).toContain("displayMode = 'all'")
     })

@@ -78,7 +78,7 @@ async function studentReportsPage(req: Request, res: Response) {
 }
 
 async function classroomManager(req: Request, res: Response) {
-  const db = requireDb(req); const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1000000).default(0), search: z.string().max(200).default(''), visibility: z.enum(['all', 'visible', 'hidden']).default('all'), session_limit: z.coerce.number().int().min(1).max(100).default(50), session_offset: z.coerce.number().int().min(0).max(1000000).default(0), classroom_id: z.string().uuid().optional() }).strict().parse(req.query)
+  const db = requireDb(req); const query = z.object({ limit: z.coerce.number().int().min(1).max(100), offset: z.coerce.number().int().min(0).max(1000000), search: z.string().max(200), visibility: z.enum(['all', 'visible', 'hidden']).default('visible'), session_limit: z.coerce.number().int().min(1).max(100), session_offset: z.coerce.number().int().min(0).max(1000000), classroom_id: z.string().uuid().optional() }).strict().parse({ limit: req.query.limit ?? 100, offset: req.query.offset ?? 0, search: req.query.search ?? '', visibility: req.query.visibility, session_limit: req.query.session_limit ?? 50, session_offset: req.query.session_offset ?? 0, classroom_id: req.query.classroom_id })
   await requirePagePermission(req, 'teaching.classrooms.list', 'classrooms-overview')
   const result = await database(req, () => db.rpc('get_classrooms_overview', {
     p_limit: query.limit,

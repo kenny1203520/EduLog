@@ -41,9 +41,9 @@ const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 type DisplayMode = 'visible' | 'all' | 'hidden'
 
-// Page API returns total and hidden counts separately. Start with all accessible
-// records so hidden preferences do not make a populated page look empty.
-const displayMode = ref<DisplayMode>('all')
+// Hidden records remain available through the explicit display controls, but
+// the management page starts with the user's visible working set.
+const displayMode = ref<DisplayMode>('visible')
 const selectedSessionClassroomFilter = ref('')
 
 const classroomOptions = computed(() => [
