@@ -2,7 +2,7 @@ import crypto from 'node:crypto'
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
 import { ApiError, sendError } from './errors.js'
-import { clearAccessTokenValidation, createUserClient, refresh, safeUser, signIn, validateAccessToken, type SupabaseClients } from './supabase.js'
+import { assertUserActive, clearAccessTokenValidation, createUserClient, refresh, safeUser, signIn, validateAccessToken, type SupabaseClients } from './supabase.js'
 import type { ApiConfig } from './config.js'
 import { measureRequestPhase } from './context.js'
 
@@ -28,6 +28,7 @@ export function requireAuth(clients: SupabaseClients, config: ApiConfig) {
       const token = req.cookies?.[accessCookie] ?? req.header('authorization')?.replace(/^Bearer\s+/i, '').trim()
       if (!token) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       const user = await measureRequestPhase(req, 'auth', () => validateAccessToken(clients.adminClient, token, config))
+      await measureRequestPhase(req, 'account_status', () => assertUserActive(clients.adminClient, user.id))
       req.user = user
       req.log = req.log.child({ actor_user_id: user.id })
       req.accessToken = token
@@ -35,7 +36,11 @@ export function requireAuth(clients: SupabaseClients, config: ApiConfig) {
       req.adminDb = clients.adminClient
       next()
     } catch (error) {
-      sendError(req, _res, error instanceof ApiError ? error : new ApiError(401, 'AUTH_INVALID', 'Authentication is invalid'))
+      const mapped = error instanceof ApiError ? error
+        : error instanceof Error && error.message === 'AUTH_DISABLED'
+          ? new ApiError(403, 'ACCOUNT_DISABLED', 'This account is disabled')
+          : new ApiError(401, 'AUTH_INVALID', 'Authentication is invalid')
+      sendError(req, _res, mapped)
     }
   }
 }

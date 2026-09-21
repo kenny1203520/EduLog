@@ -51,8 +51,8 @@ export const idSchema = z.object({ id }).strict()
 export const resources: Record<string, ResourceDefinition> = {
   'user-preferences': { route: 'user-preferences', table: 'user_preferences', idColumn: 'user_id', fields: ['user_id', 'time_zone', 'editor_settings', 'created_at', 'updated_at'], writable: ['time_zone', 'editor_settings'], sortable: ['updated_at', 'created_at'], searchable: [], permission: 'system.users.read', scope: 'self', selfAuthorization: true },
   'visibility-preferences': { route: 'visibility-preferences', table: 'user_entity_visibility_preferences', idColumn: 'id', fields: ['id', 'user_id', 'entity_type', 'entity_id', 'is_hidden', 'created_at', 'updated_at'], writable: ['entity_type', 'entity_id', 'is_hidden'], sortable: ['created_at', 'updated_at'], searchable: ['entity_type', 'entity_id'], permission: 'system.users.read', scope: 'self', selfAuthorization: true },
-  users: { route: 'users', table: 'profiles', idColumn: 'id', fields: ['id', 'email', 'display_name', 'avatar_url', 'created_at', 'updated_at'], writable: [], sortable: commonSort, searchable: ['display_name', 'email'], permission: 'system.users.list', permissions: { list: 'system.users.list', read: 'system.users.list' }, scope: 'system', genericMethods: ['GET'] },
-  roles: { route: 'roles', table: 'roles', idColumn: 'id', fields: ['id', 'code', 'name', 'description', 'is_system', 'sort_order', 'created_at', 'updated_at'], writable: ['code', 'name', 'description'], compatibilityFields: ['is_system'], sortable: ['code', 'name', 'sort_order', 'created_at', 'updated_at'], searchable: ['code', 'name'], permission: 'system.roles.manage', permissions: { list: 'system.roles.manage', read: 'system.roles.manage', create: 'system.roles.manage', update: 'system.roles.manage', delete: 'system.roles.manage', manage: 'system.roles.manage' }, scope: 'system' },
+  users: { route: 'users', table: 'profiles', idColumn: 'id', fields: ['id', 'email', 'display_name', 'avatar_url', 'account_status', 'disabled_at', 'disabled_by', 'disabled_reason', 'created_at', 'updated_at'], writable: [], sortable: [...commonSort, 'account_status'], searchable: ['display_name', 'email'], permission: 'system.users.list', permissions: { list: 'system.users.list', read: 'system.users.read' }, scope: 'system', genericMethods: ['GET'] },
+  roles: { route: 'roles', table: 'roles', idColumn: 'id', fields: ['id', 'code', 'name', 'description', 'domain', 'teaching_id', 'is_builtin', 'is_protected', 'is_system', 'sort_order', 'created_at', 'updated_at'], writable: ['code', 'name', 'description', 'domain', 'teaching_id'], compatibilityFields: ['is_system'], sortable: ['code', 'name', 'sort_order', 'created_at', 'updated_at'], searchable: ['code', 'name'], permission: 'system.roles.manage', permissions: { list: 'system.roles.read', read: 'system.roles.read', create: 'system.roles.manage', update: 'system.roles.manage', delete: 'system.roles.manage', manage: 'system.roles.manage' }, scope: 'system' },
   permissions: { route: 'permissions', table: 'permissions', idColumn: 'id', fields: ['id', 'key', 'name', 'description', 'domain', 'resource', 'action', 'conditions', 'created_at', 'updated_at'], writable: [], sortable: ['key', 'domain', 'resource', 'action', 'created_at'], searchable: ['key', 'name'], permission: 'system.permissions.read', permissions: { list: 'system.permissions.read', read: 'system.permissions.read' }, scope: 'system', genericMethods: ['GET'] },
   'audit-events': { route: 'audit-events', table: 'audit_events', idColumn: 'id', fields: ['id', 'actor_user_id', 'action', 'domain', 'resource', 'resource_id', 'scope_id', 'request_id', 'outcome', 'metadata', 'created_at'], writable: [], sortable: ['created_at', 'action', 'domain', 'resource', 'outcome'], searchable: ['resource', 'action', 'outcome'], permission: 'system.audit.list', permissions: { list: 'system.audit.list', read: 'system.audit.list' }, scope: 'system', genericMethods: ['GET'] },
   teachings: { route: 'teachings', table: 'teachings', idColumn: 'id', fields: ['id', 'name', 'owner_user_id', 'is_quarantine', 'created_at', 'updated_at'], writable: ['name'], sortable: commonSort, searchable: ['name'], permission: 'teaching.teachings.list', scope: 'teaching' },
@@ -94,8 +94,8 @@ export const resourceKeys = Object.keys(resources)
 const filterableFieldsByResource: Record<string, readonly string[]> = {
   'user-preferences': ['user_id'],
   'visibility-preferences': ['id', 'user_id', 'entity_type', 'entity_id', 'is_hidden'],
-  users: ['id', 'display_name', 'email'],
-  roles: ['id', 'code', 'name', 'is_system'],
+  users: ['id', 'display_name', 'email', 'account_status'],
+  roles: ['id', 'code', 'name', 'domain', 'teaching_id', 'is_builtin', 'is_protected', 'is_system'],
   permissions: ['id', 'key', 'domain', 'resource', 'action'],
   'audit-events': ['id', 'actor_user_id', 'action', 'domain', 'resource', 'resource_id', 'scope_id', 'outcome'],
   teachings: ['id', 'owner_user_id', 'is_quarantine'],
@@ -166,8 +166,10 @@ export const resourceSchemas: Record<string, { createSchema?: z.ZodType<Record<s
     updateSchema: z.object({ name: z.string().trim().min(1).max(200).optional(), email: z.string().email().optional(), phone: optionalText, address: optionalText, birthday: optionalDate, bio: optionalText, bio_document: z.record(z.string(), z.unknown()).nullable().optional(), gov_id: optionalText, user_id: z.string().uuid().nullable().optional() }).strict(),
   },
   roles: {
-    createSchema: z.object({ code: z.string().trim().min(1).max(120).optional(), name: z.string().trim().min(1).max(200), description: optionalText }).strict(),
-    updateSchema: z.object({ code: z.string().trim().min(1).max(120).optional(), name: z.string().trim().min(1).max(200).optional(), description: optionalText }).strict(),
+    // The generic registry remains a read/compatibility description. The
+    // canonical role mutation is validated by rbacRouter and its RPCs.
+    createSchema: z.object({ domain: z.enum(['system', 'teaching']).optional(), teaching_id: z.string().uuid().nullable().optional(), code: z.string().trim().min(1).max(80).optional(), name: z.string().trim().min(1).max(120), description: optionalText, is_system: z.literal(false).optional() }).strict(),
+    updateSchema: z.object({ code: z.string().trim().min(1).max(80).optional(), name: z.string().trim().min(1).max(120).optional(), description: optionalText }).strict(),
   },
   'report-templates': {
     createSchema: z.object({ name: z.string().trim().min(1).max(200), content: optionalText, contact_notes: optionalText, class_notes: optionalText, content_document: z.record(z.string(), z.unknown()).nullable().optional(), contact_notes_document: z.record(z.string(), z.unknown()).nullable().optional(), class_notes_document: z.record(z.string(), z.unknown()).nullable().optional(), instructor_id: z.string().uuid().nullable().optional(), teaching_id: z.string().uuid().optional() }).strict(),
@@ -218,8 +220,8 @@ export const resourceSchemas: Record<string, { createSchema?: z.ZodType<Record<s
     updateSchema: z.object({ name: z.string().trim().min(1).max(200).optional() }).strict(),
   },
 }
-export const teachingMemberCreateSchema = z.object({ user_id: z.string().uuid(), role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict()
-export const teachingMemberUpdateSchema = z.object({ role_id: z.string().uuid().nullable().optional(), status: z.string().min(1).max(32).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict()
+export const teachingMemberCreateSchema = z.object({ user_id: z.string().uuid(), role_id: z.string().uuid(), status: z.enum(['active', 'suspended', 'removed']).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict()
+export const teachingMemberUpdateSchema = z.object({ role_id: z.string().uuid().optional(), status: z.enum(['active', 'suspended', 'removed']).optional(), effective_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effective_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional() }).strict()
 for (const [route, schema] of Object.entries(resourceSchemas)) Object.assign(resources[route], schema)
 
 // Keep query fields explicit even for resources that use the default registry

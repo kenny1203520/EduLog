@@ -10,6 +10,7 @@ export type SupabaseClients = {
 
 type ValidationCacheEntry = { user: User; expiresAt: number; pending?: Promise<User> }
 const validationCache = new Map<string, ValidationCacheEntry>()
+const accountStatusCache = new Map<string, { active: boolean; expiresAt: number }>()
 const VALIDATION_CACHE_TTL_MS = 30_000
 const VALIDATION_CACHE_MAX_ENTRIES = 512
 
@@ -30,6 +31,27 @@ function tokenExpiry(token: string) {
 
 export function clearAccessTokenValidation(accessToken: string | undefined) {
   if (accessToken) validationCache.delete(tokenCacheKey(accessToken))
+}
+
+export function clearUserValidation(userId: string) {
+  accountStatusCache.delete(userId)
+  for (const [key, entry] of validationCache) {
+    if (entry.user?.id === userId) validationCache.delete(key)
+  }
+}
+
+export async function assertUserActive(adminClient: SupabaseClient, userId: string) {
+  const now = Date.now()
+  const cached = accountStatusCache.get(userId)
+  if (cached && cached.expiresAt > now) {
+    if (!cached.active) throw new Error('AUTH_DISABLED')
+    return
+  }
+  const { data, error } = await adminClient.from('profiles').select('account_status').eq('id', userId).maybeSingle()
+  if (error || !data) throw new Error('AUTH_INVALID')
+  const active = data.account_status !== 'disabled'
+  accountStatusCache.set(userId, { active, expiresAt: now + VALIDATION_CACHE_TTL_MS })
+  if (!active) throw new Error('AUTH_DISABLED')
 }
 
 export function createSupabaseClients(config: ApiConfig): SupabaseClients {

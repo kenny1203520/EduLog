@@ -277,6 +277,21 @@ async function teachingAllowed(req: Request, permission: string, teachingId: str
   if (error || data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
 }
 
+async function assertTeachingRole(req: Request, teachingId: string, roleId: string | null | undefined) {
+  if (!roleId) throw new ApiError(422, 'ROLE_REQUIRED', 'A teaching role is required')
+  const result = await req.db!.from('roles').select('id,domain,teaching_id,is_builtin').eq('id', roleId).maybeSingle()
+  if (result.error) throw mapDatabaseError(result.error)
+  if (!result.data || result.data.domain !== 'teaching' || (!result.data.is_builtin && result.data.teaching_id !== teachingId)) {
+    throw new ApiError(422, 'INVALID_TEACHING_ROLE', 'The role is not available in this teaching')
+  }
+}
+
+async function assertTeachingOwnerIsPreserved(req: Request, teachingId: string, userId: string) {
+  const result = await req.db!.from('teachings').select('owner_user_id').eq('id', teachingId).maybeSingle()
+  if (result.error) throw mapDatabaseError(result.error)
+  if (result.data?.owner_user_id === userId) throw new ApiError(409, 'PROTECTED_TEACHING_OWNER', 'The teaching owner membership cannot be removed or reassigned')
+}
+
 async function members(req: Request, res: Response) {
   const teachingId = typeof req.params.teachingId === 'string' ? req.params.teachingId : undefined
   const userId = typeof req.params.userId === 'string' ? req.params.userId : undefined
@@ -311,6 +326,7 @@ async function members(req: Request, res: Response) {
   }
   if (req.method === 'POST') {
     const body = teachingMemberCreateSchema.parse(req.body)
+    await assertTeachingRole(req, teachingId, body.role_id)
     const allowedFields = ['user_id', 'role_id', 'status', 'effective_from', 'effective_to']
     const unknown = Object.keys(body).filter((key) => !allowedFields.includes(key))
     if (unknown.length) throw new ApiError(422, 'UNKNOWN_FIELD', 'The request contains a non-writable field')
@@ -325,6 +341,8 @@ async function members(req: Request, res: Response) {
     ? teachingMemberUpdateSchema.parse(req.body)
     : null
   if (req.method === 'PATCH' && !Object.keys(updateBody ?? {}).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one member field is required')
+  if (req.method === 'PATCH' && updateBody?.role_id) await assertTeachingRole(req, teachingId, updateBody.role_id)
+  if (req.method === 'DELETE' || (req.method === 'PATCH' && (updateBody?.role_id || updateBody?.status === 'removed'))) await assertTeachingOwnerIsPreserved(req, teachingId, userId)
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const result = req.method === 'DELETE'
