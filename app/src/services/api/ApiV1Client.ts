@@ -38,6 +38,6 @@ export class ApiV1Client {
   post<T>(path: string, body: unknown, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'POST', body }) }
   put<T>(path: string, body: unknown, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'PUT', body }) }
   patch<T>(path: string, body: unknown, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'PATCH', body }) }
-  delete<T>(path: string, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'DELETE', body: {} }) }
+  delete<T>(path: string, body: unknown = {}, options?: Omit<ApiRequestOptions, 'method' | 'body'> & { idempotencyKey?: string }) { return this.request<T>(path, { ...options, method: 'DELETE', body }) }
 }
 export const apiV1Client = new ApiV1Client(getRuntimeConfigValue('VITE_API_V1_MODE') === 'legacy' ? legacyBaseUrl() : '/api')

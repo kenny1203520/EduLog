@@ -1,5 +1,6 @@
 export type PolicyEffect = 'allow' | 'deny'
-export type PolicyScope = 'system' | 'classroom' | 'class_session'
+export type RbacDomain = 'system' | 'teaching'
+export type PolicyScope = 'system' | 'teaching' | 'classroom' | 'class_session'
 
 export interface RoleDTO {
     id: string
@@ -8,6 +9,13 @@ export interface RoleDTO {
     description?: string | null
     is_system: boolean
     sort_order: number
+    domain?: RbacDomain
+    teaching_id?: string | null
+    is_builtin?: boolean
+    is_protected?: boolean
+    parent_role_id?: string | null
+    created_at?: string
+    updated_at?: string | null
 }
 
 export interface PermissionDTO {
@@ -30,6 +38,20 @@ export interface EffectivePermissionResult {
     effect: PolicyEffect | null
     source: PolicyScope | null
     policy?: RolePermissionPolicyDTO
+}
+
+export interface RbacCapabilities {
+    system?: Record<string, boolean>
+    teaching?: Record<string, boolean>
+    [key: string]: unknown
+}
+
+export interface SettingsOverview {
+    preferences: { time_zone?: string | null; editor_settings?: Record<string, unknown> | null } | null
+    teachings: Array<{ id: string; name: string; owner_user_id?: string | null }>
+    capabilities: RbacCapabilities
+    tabs: { personal: boolean; teaching: boolean; system: boolean }
+    sections: Record<string, Record<string, boolean>>
 }
 
 export interface PolicyContext {
