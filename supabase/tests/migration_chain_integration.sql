@@ -276,9 +276,9 @@ DECLARE alpha uuid := gen_random_uuid();
 DECLARE beta uuid := gen_random_uuid();
 BEGIN
   SELECT epoch INTO before_epoch FROM public.rbac_policy_epoch WHERE singleton;
-  INSERT INTO public.roles(id, code, name, is_system) VALUES
-    (alpha, 'integration_alpha_' || left(alpha::text, 8), 'Integration alpha', false),
-    (beta, 'integration_beta_' || left(beta::text, 8), 'Integration beta', false);
+  INSERT INTO public.roles(id, code, name, is_system, domain, teaching_id) VALUES
+    (alpha, 'integration_alpha_' || left(alpha::text, 8), 'Integration alpha', false, 'teaching', '10000000-0000-0000-0000-000000000001'),
+    (beta, 'integration_beta_' || left(beta::text, 8), 'Integration beta', false, 'teaching', '10000000-0000-0000-0000-000000000001');
   INSERT INTO public.role_inheritance(role_id, parent_role_id) VALUES (alpha, beta);
   BEGIN
     INSERT INTO public.role_inheritance(role_id, parent_role_id) VALUES (beta, alpha);

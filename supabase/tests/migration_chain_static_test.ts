@@ -510,6 +510,8 @@ Deno.test('1000081-1000083 rebuild RBAC domains through controlled boundaries', 
   assert(!rbacDomainRebuild.includes('rbac_legacy_system_managers(user_id uuid PRIMARY KEY) ON COMMIT DROP'))
   assertStringIncludes(rbacDomainRebuild, 'ON CONFLICT DO NOTHING')
   assertStringIncludes(rbacDomainRebuild, "NOTIFY pgrst, 'reload schema'")
+  assertStringIncludes(migrationChainIntegration, 'roles(id, code, name, is_system, domain, teaching_id)')
+  assertStringIncludes(migrationChainIntegration, "'teaching', '10000000-0000-0000-0000-000000000001'")
   assertStringIncludes(rbacManagementFunctions, 'CREATE OR REPLACE FUNCTION public.rbac_create_role(')
   assertStringIncludes(rbacManagementFunctions, 'p_expected_epoch bigint')
   assertStringIncludes(rbacManagementFunctions, "'public.rbac_update_role(uuid,text,text,text,bigint)'")
