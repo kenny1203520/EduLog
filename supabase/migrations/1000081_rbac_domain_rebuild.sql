@@ -133,12 +133,11 @@ BEGIN
     UPDATE public.teaching_members member
     SET role_id = CASE
       WHEN teaching.owner_user_id = member.user_id THEN (SELECT id FROM public.roles WHERE code = 'teaching_owner' AND domain = 'teaching' AND is_builtin)
-      WHEN legacy.code IN ('instructor', 'learning_coach') THEN (SELECT id FROM public.roles WHERE code = 'teaching_manager' AND domain = 'teaching' AND is_builtin)
-      WHEN legacy.code IN ('assistant_instructor', 'coach', 'trainee_assistant', 'trainee_tutor') THEN (SELECT id FROM public.roles WHERE code = 'assistant' AND domain = 'teaching' AND is_builtin)
+      WHEN (SELECT legacy.code FROM public.roles legacy WHERE legacy.id = member.role_id) IN ('instructor', 'learning_coach') THEN (SELECT id FROM public.roles WHERE code = 'teaching_manager' AND domain = 'teaching' AND is_builtin)
+      WHEN (SELECT legacy.code FROM public.roles legacy WHERE legacy.id = member.role_id) IN ('assistant_instructor', 'coach', 'trainee_assistant', 'trainee_tutor') THEN (SELECT id FROM public.roles WHERE code = 'assistant' AND domain = 'teaching' AND is_builtin)
       ELSE (SELECT id FROM public.roles WHERE code = 'teacher' AND domain = 'teaching' AND is_builtin)
     END
     FROM public.teachings teaching
-    LEFT JOIN public.roles legacy ON legacy.id = member.role_id
     WHERE teaching.id = member.teaching_id;
 
     UPDATE public.class_session_teachers
