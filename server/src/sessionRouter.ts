@@ -7,6 +7,10 @@ import { setAuditContext } from './context.js'
 const sessionFields = 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,time_zone,session_type,schedule_mode,teaching_id,user_id,created_at,updated_at,class_session_schedule_rules(id,class_session_id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)'
 
 const scheduleRuleSchema = z.object({
+  // Existing rules are returned with their persisted id. It is accepted for
+  // round-trip compatibility only; save_class_session_with_schedule replaces
+  // the rule set atomically and intentionally does not trust this id.
+  id: z.string().uuid().optional(),
   schedule_kind: z.enum(['weekly', 'monthly', 'specific_dates']),
   day_of_week: z.number().int().min(0).max(6).nullable().optional(),
   day_of_month: z.number().int().min(1).max(31).nullable().optional(),

@@ -25,6 +25,15 @@ export class SessionService {
         }
     }
 
+    private static toScheduleRuleInput(rule: ClassSessionScheduleRuleDTO): Omit<ClassSessionScheduleRuleDTO, 'id' | 'class_session_id' | 'created_at' | 'updated_at'> {
+        const input = { ...rule }
+        delete input.id
+        delete input.class_session_id
+        delete input.created_at
+        delete input.updated_at
+        return input
+    }
+
     private static scheduleSelect = '*, class_session_schedule_rules(*)'
 
     static async getClassSessions(
@@ -134,7 +143,8 @@ export class SessionService {
 
     static async saveClassSession(session: Partial<ClassSessionDTO>, id?: string): Promise<ClassSessionDTO> {
         if (getApiV1Mode() === 'v1') {
-            const payload = { name: session.name || '', classroom_id: session.classroom_id || null, course_ids: session.course_ids || [], capacity: session.capacity ?? 10, lesson_number: session.lesson_number ?? null, external_link: session.external_link || null, start_date: session.start_date || null, end_date: session.end_date || null, time_zone: session.time_zone || 'Asia/Taipei', session_type: session.session_type || 'regular', schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly'), schedule_rules: (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[] }
+            const rules = (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[]
+            const payload = { name: session.name || '', classroom_id: session.classroom_id || null, course_ids: session.course_ids || [], capacity: session.capacity ?? 10, lesson_number: session.lesson_number ?? null, external_link: session.external_link || null, start_date: session.start_date || null, end_date: session.end_date || null, time_zone: session.time_zone || 'Asia/Taipei', session_type: session.session_type || 'regular', schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly'), schedule_rules: rules.map(this.toScheduleRuleInput) }
             const response = id ? await apiResourceClient.update<any>('class-sessions', id, payload, 'v1') : await apiResourceClient.create<any>('class-sessions', payload, 'v1')
             return this.hydrateSession(response.data)
         }
@@ -163,7 +173,7 @@ export class SessionService {
 
         const { data: savedId, error } = await apiDataClient.rpc('save_class_session_with_schedule', {
             p_session: payload,
-            p_rules: rules.map(rule => ({
+            p_rules: rules.map(rule => this.toScheduleRuleInput(rule)).map(rule => ({
                 schedule_kind: rule.schedule_kind,
                 day_of_week: rule.day_of_week ?? null,
                 day_of_month: rule.day_of_month ?? null,
