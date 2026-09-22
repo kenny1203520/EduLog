@@ -69,6 +69,8 @@ describe('aggregate API contract', () => {
     expect(source).toContain('limit: 3')
     expect(source).toContain("db.rpc('get_holidays_overview'")
     expect(source).toContain("db.rpc('get_class_session_workspace'")
+    expect(source).toContain('p_occurrence_date: query.occurrence_date ?? null')
+    expect(source).toContain('roster_date: rosterDate')
     expect(source).toContain("'courses_overview.read'")
     expect(source).toContain("'teachers_overview.read'")
     expect(source).not.toContain('classrooms(id,name,address)')

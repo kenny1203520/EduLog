@@ -356,14 +356,27 @@ async function classSessionWorkspace(req: Request, res: Response) {
   const db = requireDb(req)
   const sessionId = typeof req.params.sessionId === 'string' ? req.params.sessionId : ''
   if (!z.string().uuid().safeParse(sessionId).success) throw new ApiError(400, 'INVALID_ID', 'Class session id is invalid')
+  const query = z.object({
+    occurrence_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  }).strict().superRefine((value, context) => {
+    if (!value.occurrence_date) return
+    const parsed = Date.parse(`${value.occurrence_date}T00:00:00.000Z`)
+    if (!Number.isFinite(parsed) || new Date(parsed).toISOString().slice(0, 10) !== value.occurrence_date) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['occurrence_date'], message: 'occurrence_date must be a valid calendar date' })
+    }
+  }).parse(req.query)
   await authorizeResource(req, resources['class-sessions'], 'teaching.class_sessions.read', sessionId)
-  const result = await database(req, () => db.rpc('get_class_session_workspace', { p_session_id: sessionId }))
+  const result = await database(req, () => db.rpc('get_class_session_workspace', {
+    p_session_id: sessionId,
+    p_occurrence_date: query.occurrence_date ?? null,
+  }))
   if (result.error) throwDatabaseError(req, 'class_session_workspace.read', result.error)
   const page = (result.data ?? {}) as { session?: Record<string, unknown> | null; enrollments?: unknown; teachers?: unknown }
   if (!page.session) throw new ApiError(404, 'NOT_FOUND', 'Class session was not found')
   const enrollments = Array.isArray(page.enrollments) ? page.enrollments as Array<Record<string, unknown>> : []
   const teachers = Array.isArray(page.teachers) ? page.teachers : []
-  return sendData(req, res, { session: { ...page.session, current_enrollments: enrollments.filter((enrollment) => enrollment.status === 'regular').length }, enrollments, teachers }, { total: enrollments.length })
+  const rosterDate = typeof page.session.roster_date === 'string' ? page.session.roster_date : (query.occurrence_date ?? null)
+  return sendData(req, res, { session: { ...page.session, current_enrollments: enrollments.filter((enrollment) => enrollment.status === 'regular').length }, enrollments, teachers }, { total: enrollments.length, roster_date: rosterDate })
 }
 
 export function createAggregateRouter() {

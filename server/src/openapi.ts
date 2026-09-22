@@ -379,7 +379,10 @@ export function buildOpenApi() {
   } }
   paths['/api/pages/class-sessions/{sessionId}/workspace'] = { get: {
     ...pageBase, operationId: 'page_class_session_workspace', summary: 'Read the class session workspace read model',
-    'x-permission': 'teaching.class_sessions.read', parameters: [{ name: 'sessionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+    'x-permission': 'teaching.class_sessions.read', parameters: [
+      { name: 'sessionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } },
+      { name: 'occurrence_date', in: 'query', required: false, description: 'Roster date. If omitted, the server uses the current calendar date.', schema: { type: 'string', format: 'date' } },
+    ],
     responses: { '200': pageResponse('PageClassSessionWorkspaceData'), ...errorResponses },
   } }
   paths['/api/rpc/{name}'] = {
@@ -643,7 +646,7 @@ export function buildOpenApi() {
     IncompleteReportsPageData: { type: 'array', items: { $ref: '#/components/schemas/IncompleteReportPageItem' } },
     PageTeachersOverviewData: { type: 'object', required: ['teachers', 'statistics'], properties: { teachers: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', format: 'uuid' }, user_id: { type: ['string', 'null'], format: 'uuid' }, name: { type: 'string' }, bio: { type: ['string', 'null'] }, bio_document: { type: ['object', 'null'] }, created_at: { type: 'string', format: 'date-time' }, updated_at: { type: ['string', 'null'], format: 'date-time' } } } }, statistics: { type: 'object', required: ['totalTeachers', 'linkedAccounts', 'unlinkedAccounts', 'completeProfiles'], properties: { totalTeachers: { type: 'integer' }, linkedAccounts: { type: 'integer' }, unlinkedAccounts: { type: 'integer' }, completeProfiles: { type: 'integer' } } } } },
     PageTeacherPrivateDetailsData: { type: 'object', required: ['teacher', 'credentials'], properties: { teacher: { type: 'object' }, credentials: { type: 'array', items: { type: 'object' } } } },
-    PageClassSessionWorkspaceData: { type: 'object', required: ['session', 'enrollments', 'teachers'], properties: { session: { type: 'object' }, enrollments: { type: 'array', items: { type: 'object' } }, teachers: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, user_id: { type: ['string', 'null'], format: 'uuid' }, name: { type: 'string' } } } } } },
+    PageClassSessionWorkspaceData: { type: 'object', required: ['session', 'enrollments', 'teachers'], properties: { session: { type: 'object', description: 'Session details including roster_date and current_enrollments' }, enrollments: { type: 'array', items: { type: 'object' }, description: 'Enrollments active on the requested roster date' }, teachers: { type: 'array', items: { type: 'object', properties: { id: { type: 'string', format: 'uuid' }, user_id: { type: ['string', 'null'], format: 'uuid' }, name: { type: 'string' } } } } } },
   }
   return {
     openapi: '3.1.0', info: { title: 'EduLog API', version: '1.0.0' }, servers: [{ url: '/' }], paths,
