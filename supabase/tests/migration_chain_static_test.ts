@@ -44,6 +44,7 @@ const rbacDomainRebuild = await readMigration('1000081_rbac_domain_rebuild.sql')
 const rbacManagementFunctions = await readMigration('1000082_rbac_management_functions.sql')
 const systemUserStatus = await readMigration('1000083_system_user_status.sql')
 const suspensionAttendanceCapacity = await readMigration('1000084_suspension_attendance_and_capacity.sql')
+const reportProvisioningStatusGuard = await readMigration('1000085_report_provisioning_status_guard.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -104,7 +105,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -181,6 +182,18 @@ Deno.test('1000084 centralizes suspension attendance and occupancy semantics', (
   assertStringIncludes(suspensionAttendanceCapacity, 'FROM PUBLIC, anon, service_role')
 })
 
+Deno.test('1000085 limits report provisioning to regular enrollments', () => {
+  assertStringIncludes(reportProvisioningStatusGuard, "RAISE EXCEPTION '1000085 prerequisites missing")
+  assertStringIncludes(reportProvisioningStatusGuard, 'CREATE OR REPLACE FUNCTION public.get_provisionable_occurrence_enrollment_ids(')
+  assertStringIncludes(reportProvisioningStatusGuard, 'CREATE OR REPLACE FUNCTION public.provision_occurrence_reports(')
+  assertStringIncludes(reportProvisioningStatusGuard, "WHERE enrollment.status = 'regular'")
+  assertStringIncludes(reportProvisioningStatusGuard, 'ON CONFLICT (enrollment_id, class_occurrence_id) DO NOTHING')
+  assertStringIncludes(reportProvisioningStatusGuard, 'SECURITY INVOKER')
+  assertStringIncludes(reportProvisioningStatusGuard, 'REVOKE ALL ON FUNCTION public.get_provisionable_occurrence_enrollment_ids(uuid)')
+  assertStringIncludes(reportProvisioningStatusGuard, 'GRANT EXECUTE ON FUNCTION public.provision_occurrence_reports(uuid)')
+  assertStringIncludes(reportProvisioningStatusGuard, "NOTIFY pgrst, 'reload schema'")
+})
+
 Deno.test('restored historical security migrations are standalone', async () => {
   const historical40 = await readMigration('1000040_editor_report_owner_rls_fix.sql')
   const historical41 = await readMigration('1000041_editor_rbac_rpc_guard.sql')
@@ -226,6 +239,9 @@ Deno.test('report lifecycle integration is executable and authenticated', () => 
   assertStringIncludes(lifecycleIntegration, 'get_occurrence_report_mutation_context')
   assertStringIncludes(lifecycleIntegration, 'Lifecycle Closed Session')
   assertStringIncludes(lifecycleIntegration, 'closed session provisioned an out-of-range report')
+  assertStringIncludes(lifecycleIntegration, 'completed enrollment report was provisioned')
+  assertStringIncludes(lifecycleIntegration, 'regular enrollment report was not provisioned')
+  assertStringIncludes(lifecycleIntegration, 'report provisioning was not idempotent')
   assertStringIncludes(lifecycleIntegration, "DATE '2026-01-05', DATE '2026-01-05'")
 })
 

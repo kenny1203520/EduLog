@@ -70,6 +70,20 @@ INSERT INTO public.occurrence_reports(id, enrollment_id, class_occurrence_id, le
 VALUES ('9b000000-0000-4000-8000-000000000002', '99000000-0000-4000-8000-000000000002', '9a000000-0000-4000-8000-000000000002', '95000000-0000-4000-8000-000000000001', 'closed-at-first-occurrence', 1, false, 'pending')
 ON CONFLICT (id) DO NOTHING;
 
+-- A completed enrollment remains in the business data but must not receive a
+-- new placeholder when a class occurrence is opened.  The same occurrence
+-- also has the regular enrollment from the primary fixture, so this verifies
+-- both sides of the provisioning scope in one call.
+INSERT INTO public.students(id, name, user_id)
+VALUES ('98000000-0000-4000-8000-000000000003', 'Lifecycle Completed Student', '91000000-0000-4000-8000-000000000001')
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.enrollments(id, student_id, course_id, classroom_id, class_session_id, status, user_id, start_date, lesson_number)
+VALUES ('99000000-0000-4000-8000-000000000003', '98000000-0000-4000-8000-000000000003', '94000000-0000-4000-8000-000000000001', '93000000-0000-4000-8000-000000000001', '96000000-0000-4000-8000-000000000001', 'completed', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', 2)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.class_occurrences(id, class_session_id, occurrence_date, status, is_conducted)
+VALUES ('9a000000-0000-4000-8000-000000000003', '96000000-0000-4000-8000-000000000001', DATE '2026-01-12', 'scheduled', false)
+ON CONFLICT (id) DO NOTHING;
+
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.occurrence_reports, public.enrollments, public.class_occurrences TO authenticated;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
@@ -167,6 +181,23 @@ BEGIN
   END IF;
   IF (SELECT count(*) FROM public.occurrence_reports WHERE enrollment_id = '99000000-0000-4000-8000-000000000002') <> 1 THEN
     RAISE EXCEPTION 'closed session provisioned an out-of-range report';
+  END IF;
+
+  PERFORM public.provision_occurrence_reports('9a000000-0000-4000-8000-000000000003');
+  IF (SELECT count(*) FROM public.occurrence_reports
+      WHERE enrollment_id = '99000000-0000-4000-8000-000000000003'
+        AND class_occurrence_id = '9a000000-0000-4000-8000-000000000003') <> 0 THEN
+    RAISE EXCEPTION 'completed enrollment report was provisioned';
+  END IF;
+  IF (SELECT count(*) FROM public.occurrence_reports
+      WHERE enrollment_id = '99000000-0000-4000-8000-000000000001'
+        AND class_occurrence_id = '9a000000-0000-4000-8000-000000000003') <> 1 THEN
+    RAISE EXCEPTION 'regular enrollment report was not provisioned';
+  END IF;
+  PERFORM public.provision_occurrence_reports('9a000000-0000-4000-8000-000000000003');
+  IF (SELECT count(*) FROM public.occurrence_reports
+      WHERE class_occurrence_id = '9a000000-0000-4000-8000-000000000003') <> 1 THEN
+    RAISE EXCEPTION 'report provisioning was not idempotent';
   END IF;
 
   PERFORM set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000002', true);
