@@ -21,6 +21,14 @@ describe('PageApiService', () => {
     )
   })
 
+  it('normalizes page and nested session sizes to the server maximum', async () => {
+    await PageApiService.getClassroomsOverview({ limit: 1000, offset: -3, visibility: 'all', session_limit: 500, session_offset: -4 })
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/pages/classrooms/overview?limit=100&offset=0&visibility=all&session_limit=100&session_offset=0',
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
   it('encodes page resource identifiers and keeps profile and workspace reads on page routes', async () => {
     await PageApiService.getStudentProfile('student/id')
     await PageApiService.getClassSessionWorkspace('session/id')

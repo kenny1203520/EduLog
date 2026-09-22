@@ -37,8 +37,7 @@ describe('AggregateService', () => {
 
     await AggregateService.getUserPreferencesAggregate()
     await AggregateService.getUserPreferencesAggregate()
-    
-    // fetch should only be called once due to cache
+
     expect(globalThis.fetch).toHaveBeenCalledTimes(1)
   })
 
@@ -107,5 +106,59 @@ describe('AggregateService', () => {
       '/api/pages/holidays/overview?expand=true&limit=100&offset=0',
       '/api/pages/holidays/overview?expand=true&limit=100&offset=100',
     ])
+  })
+
+  it('loads every classroom page without repeating an offset', async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { classrooms: [{ id: 'classroom-0' }], count: 101 }, meta: { total: 101 }, request_id: 'request', trace_id: 'trace' }),
+        text: async () => '',
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { classrooms: [{ id: 'classroom-100' }], count: 101 }, meta: { total: 101 }, request_id: 'request', trace_id: 'trace' }),
+        text: async () => '',
+      } as any)
+
+    const result = await AggregateService.getAllClassroomsOverview()
+
+    expect(vi.mocked(globalThis.fetch).mock.calls.map(([url]) => url)).toEqual([
+      '/api/pages/classrooms/overview?limit=100&offset=0&visibility=all&session_limit=1',
+      '/api/pages/classrooms/overview?limit=100&offset=100&visibility=all&session_limit=1',
+    ])
+    expect(result.classrooms.map((classroom) => classroom.id)).toEqual(['classroom-0', 'classroom-100'])
+    expect(result.count).toBe(101)
+  })
+
+  it('fails instead of returning a partial classroom collection', async () => {
+    vi.mocked(globalThis.fetch)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { classrooms: [{ id: 'classroom-0' }], count: 101 }, meta: { total: 101 }, request_id: 'request', trace_id: 'trace' }),
+        text: async () => '',
+      } as any)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Temporary failure', request_id: 'request', trace_id: 'trace' } }),
+        text: async () => '',
+      } as any)
+
+    await expect(AggregateService.getAllClassroomsOverview()).rejects.toMatchObject({ status: 503, code: 'SERVICE_UNAVAILABLE' })
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not request another classroom page for an empty result', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: { classrooms: [], count: 0 }, meta: { total: 0 }, request_id: 'request', trace_id: 'trace' }),
+      text: async () => '',
+    } as any)
+
+    const result = await AggregateService.getAllClassroomsOverview()
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+    expect(result.classrooms).toEqual([])
   })
 })

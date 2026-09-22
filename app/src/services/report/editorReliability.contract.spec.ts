@@ -23,7 +23,7 @@ describe('editor reliability contracts', () => {
         expect(optionsBlock).not.toContain('lessons')
         expect(optionsBlock).not.toContain('schedule_rules')
         expect(referencePanel).toContain('CourseCatalogService.getCourseOptions')
-        expect(referencePanel).toContain('SessionService.getClassSessionOptions')
+        expect(referencePanel).toContain('SessionService.getAllClassSessionOptions')
     })
 
     it('counts the local session plus remote peers only when collaboration is ready', () => {
