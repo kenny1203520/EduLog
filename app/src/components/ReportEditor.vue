@@ -191,16 +191,19 @@
             <div data-collab-field="attendance" class="flex items-center gap-4 mb-3">
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="pending" v-model="attendanceStatus"
+                        :disabled="disabled || isSystemManagedAbsence"
                         class="w-4 h-4 text-gray-400 border-gray-300 focus:ring-gray-400" />
                     <span class="text-sm font-medium text-gray-700">{{ $t('attendance.pending') }}</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="present" v-model="attendanceStatus"
+                        :disabled="disabled || isSystemManagedAbsence"
                         class="w-4 h-4 text-emerald-600 border-gray-300 focus:ring-emerald-500" />
                     <span class="text-sm font-medium text-gray-700">{{ $t('attendance.present') }}</span>
                 </label>
                 <label class="flex items-center gap-2 cursor-pointer">
                     <input type="radio" value="absent" v-model="attendanceStatus"
+                        :disabled="disabled || isSystemManagedAbsence"
                         class="w-4 h-4 text-red-600 border-gray-300 focus:ring-red-500" />
                     <span class="text-sm font-medium text-gray-700">{{ $t('attendance.absent') }}</span>
                 </label>
@@ -1693,8 +1696,9 @@ function setEditorContentSilently(editorRef: { value: TextEditorHandle | null },
 }
 
 function writeReportMeta(metaMap: any) {
-    metaMap.set('attendanceStatus', attendanceStatus.value)
-    metaMap.set('absenceReason', absenceReason.value)
+    const managedReason = canonicalSystemManagedReason()
+    metaMap.set('attendanceStatus', managedReason ? canonicalSystemManagedStatus() : attendanceStatus.value)
+    metaMap.set('absenceReason', managedReason || absenceReason.value)
     metaMap.set('classParticipation', classParticipation.value)
     metaMap.set('classroomBehavior', classroomBehavior.value)
     metaMap.set('isCompleted', isCompleted.value)
@@ -1716,11 +1720,21 @@ watch(ready, (isReady) => {
 
         // Initialize local fields from map if they exist, otherwise seed them from local state
         withCollabGuard(() => {
-            if (metaMap.has('attendanceStatus')) attendanceStatus.value = metaMap.get('attendanceStatus') as any
-            else metaMap.set('attendanceStatus', attendanceStatus.value)
+            const managedReason = canonicalSystemManagedReason()
+            if (managedReason) {
+                // The API/props are canonical for system-managed attendance;
+                // never hydrate these two fields from a stale Yjs document.
+                attendanceStatus.value = canonicalSystemManagedStatus()
+                absenceReason.value = managedReason
+                metaMap.set('attendanceStatus', attendanceStatus.value)
+                metaMap.set('absenceReason', absenceReason.value)
+            } else {
+                if (metaMap.has('attendanceStatus')) attendanceStatus.value = metaMap.get('attendanceStatus') as any
+                else metaMap.set('attendanceStatus', attendanceStatus.value)
 
-            if (metaMap.has('absenceReason')) absenceReason.value = metaMap.get('absenceReason') as any
-            else metaMap.set('absenceReason', absenceReason.value)
+                if (metaMap.has('absenceReason')) absenceReason.value = metaMap.get('absenceReason') as any
+                else metaMap.set('absenceReason', absenceReason.value)
+            }
 
             if (metaMap.has('classParticipation')) classParticipation.value = Number(metaMap.get('classParticipation') ?? 0)
             else metaMap.set('classParticipation', classParticipation.value)
@@ -1758,8 +1772,28 @@ watch(ready, (isReady) => {
             withCollabGuard(() => {
                 event.changes.keys.forEach((_: unknown, key: string) => {
                     const newVal = metaMap.get(key)
-                    if (key === 'attendanceStatus' && newVal !== attendanceStatus.value) attendanceStatus.value = newVal as any
-                    if (key === 'absenceReason' && newVal !== absenceReason.value) absenceReason.value = newVal as any
+                    if (key === 'attendanceStatus' || key === 'absenceReason') {
+                        const managedReason = canonicalSystemManagedReason()
+                        if (managedReason) {
+                            if (key === 'attendanceStatus') {
+                                const canonicalValue = canonicalSystemManagedStatus()
+                                if (newVal !== canonicalValue) metaMap.set(key, canonicalValue)
+                                if (attendanceStatus.value !== canonicalValue) attendanceStatus.value = canonicalValue
+                            } else {
+                                const canonicalValue = managedReason
+                                if (newVal !== canonicalValue) metaMap.set(key, canonicalValue)
+                                if (absenceReason.value !== canonicalValue) absenceReason.value = canonicalValue
+                            }
+                        } else if (key === 'attendanceStatus' && newVal !== attendanceStatus.value) {
+                            attendanceStatus.value = newVal as any
+                        } else if (key === 'absenceReason' && newVal !== absenceReason.value) {
+                            // A stale collaboration document may contain a
+                            // holiday/suspension marker for a report that the
+                            // canonical API says is user-managed. Ignore it.
+                            if (!normalizeSystemManagedReason(newVal)) absenceReason.value = newVal as any
+                            else if (metaMap.get('absenceReason') !== (props.initialAbsenceReason || '')) metaMap.set('absenceReason', props.initialAbsenceReason || '')
+                        }
+                    }
                     if (key === 'classParticipation' && Number(newVal ?? 0) !== classParticipation.value) classParticipation.value = Number(newVal ?? 0)
                     if (key === 'classroomBehavior' && Number(newVal ?? 0) !== classroomBehavior.value) classroomBehavior.value = Number(newVal ?? 0)
                     if (key === 'isCompleted' && Boolean(newVal) !== isCompleted.value) isCompleted.value = Boolean(newVal)
@@ -1801,6 +1835,17 @@ watch(ready, (isReady) => {
         const setupMapSync = (refVar: any, mapKey: string) => {
             const stop = watch(refVar, (val) => {
                 if (isApplyingRemoteCollab || isInitializing.value) return
+                if (mapKey === 'attendanceStatus' || mapKey === 'absenceReason') {
+                    const managedReason = canonicalSystemManagedReason()
+                    if (managedReason) {
+                        const canonicalValue = mapKey === 'attendanceStatus'
+                            ? canonicalSystemManagedStatus()
+                            : managedReason
+                        if (metaMap.get(mapKey) !== canonicalValue) metaMap.set(mapKey, canonicalValue)
+                        if (val !== canonicalValue) refVar.value = canonicalValue
+                        return
+                    }
+                }
                 if (metaMap.get(mapKey) !== val) {
                     metaMap.set(mapKey, val)
                     handleInput()
@@ -1905,6 +1950,12 @@ const progressStart = ref(props.initialProgressStart || '')
 const progressEnd = ref(props.initialProgressEnd || '')
 const attendanceStatus = ref<'present' | 'absent' | 'pending'>(props.initialAttendanceStatus)
 const absenceReason = ref(props.initialAbsenceReason || '')
+// These refs are populated only from canonical API/props data. Collaboration
+// metadata must never be allowed to promote a normal report into a managed one.
+const managedAttendanceReason = ref<'holiday' | 'suspension' | null>(normalizeSystemManagedReason(props.initialAbsenceReason))
+const managedAttendanceStatus = ref<'present' | 'absent' | 'pending' | null>(
+    managedAttendanceReason.value ? (props.initialAttendanceStatus || 'absent') : null
+)
 const classParticipation = ref(props.initialClassParticipation ?? 0)
 const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
 const contactNotes = ref(initialContactContent.plainText)
@@ -1949,20 +2000,37 @@ function normalizeString(value: string | null | undefined): string {
     return value || ''
 }
 
+function normalizeSystemManagedReason(value: unknown): 'holiday' | 'suspension' | null {
+    const reason = String(value ?? '').trim().toLowerCase()
+    return reason === 'holiday' || reason === 'suspension' ? reason : null
+}
+
+function canonicalSystemManagedReason(): 'holiday' | 'suspension' | null {
+    // The initial API value is authoritative. A collaboration document may
+    // contain stale metadata from before the report became system-managed.
+    return managedAttendanceReason.value
+}
+
+function canonicalSystemManagedStatus(): AttendanceStatus {
+    return managedAttendanceStatus.value || props.initialAttendanceStatus || 'absent'
+}
+
 function normalizeAbsenceReason(status: AttendanceStatus, reason: string | null | undefined): string | null {
     return status === 'absent' ? normalizeString(reason) : null
 }
 
 function buildCurrentSnapshot(overrides: Partial<ReportDraftSnapshot> = {}): ReportDraftSnapshot {
-    const normalizedReason = attendanceStatus.value === 'absent'
-        ? (normalizeString(absenceReason.value) || t('report.editor.absence_reasons.reason_not_provided'))
+    const managedReason = canonicalSystemManagedReason()
+    const snapshotAttendanceStatus = managedReason ? canonicalSystemManagedStatus() : attendanceStatus.value
+    const normalizedReason = snapshotAttendanceStatus === 'absent'
+        ? (managedReason || normalizeString(absenceReason.value) || t('report.editor.absence_reasons.reason_not_provided'))
         : null
 
     return {
         lessonId: selectedLessonId.value || '',
         isCompleted: isCompleted.value,
         progressLetter: progressLetter.value || '',
-        attendanceStatus: attendanceStatus.value,
+        attendanceStatus: snapshotAttendanceStatus,
         absenceReason: normalizedReason,
         classParticipation: classParticipation.value,
         classroomBehavior: classroomBehavior.value,
@@ -1979,6 +2047,7 @@ function buildCurrentSnapshot(overrides: Partial<ReportDraftSnapshot> = {}): Rep
 
 function buildSnapshotFromProps(): ReportDraftSnapshot {
     const initialStatus = props.initialAttendanceStatus || 'pending'
+    const managedReason = normalizeSystemManagedReason(props.initialAbsenceReason)
     const initialProgress = props.initialProgressStart && props.initialProgressEnd
         ? `${props.initialProgressStart}-${props.initialProgressEnd}`
         : (props.initialProgressStart || props.initialProgressEnd || '')
@@ -1991,7 +2060,9 @@ function buildSnapshotFromProps(): ReportDraftSnapshot {
         isCompleted: props.initialIsCompleted ?? false,
         progressLetter: initialProgress,
         attendanceStatus: initialStatus,
-        absenceReason: normalizeAbsenceReason(initialStatus, props.initialAbsenceReason),
+        absenceReason: initialStatus === 'absent'
+            ? (managedReason || normalizeAbsenceReason(initialStatus, props.initialAbsenceReason))
+            : null,
         classParticipation: props.initialClassParticipation ?? 0,
         classroomBehavior: props.initialClassroomBehavior ?? 0,
         contactNotes: contact.plainText,
@@ -2013,7 +2084,8 @@ function buildSnapshotFromDto(report: OccurrenceReportDTO): ReportDraftSnapshot 
         isCompleted: report.is_completed ?? false,
         progressLetter: report.progress_letter || '',
         attendanceStatus: report.attendance_status || 'pending',
-        absenceReason: normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason),
+        absenceReason: normalizeSystemManagedReason(report.absence_reason)
+            || normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason),
         classParticipation: report.class_participation ?? 0,
         classroomBehavior: report.classroom_behavior ?? 0,
         contactNotes: contact.plainText,
@@ -2050,12 +2122,17 @@ function buildDirtyPayload(current: ReportDraftSnapshot): { keys: Array<keyof Re
     addIfChanged('progressLetter', () => {
         payload.progressLetter = current.progressLetter || null
     })
-    addIfChanged('attendanceStatus', () => {
-        payload.attendanceStatus = current.attendanceStatus
-    })
-    addIfChanged('absenceReason', () => {
-        payload.absenceReason = current.absenceReason
-    })
+    // System-managed attendance is authoritative in the database. Never turn
+    // stale collaboration metadata or a translated fallback reason into a
+    // mutation, and let other editable fields continue to save normally.
+    if (!isSystemManagedAbsence.value) {
+        addIfChanged('attendanceStatus', () => {
+            payload.attendanceStatus = current.attendanceStatus
+        })
+        addIfChanged('absenceReason', () => {
+            payload.absenceReason = current.absenceReason
+        })
+    }
     addIfChanged('classParticipation', () => {
         payload.classParticipation = current.classParticipation
     })
@@ -2107,12 +2184,11 @@ const progressLetter = computed(() => {
 
 // Check if absence reason is system-managed (holiday or suspension)
 const isSystemManagedAbsence = computed(() => {
-    const reason = absenceReason.value?.toLowerCase() || ''
-    return reason === 'holiday' || reason === 'suspension'
+    return canonicalSystemManagedReason() !== null
 })
 
 const getSystemManagedAbsenceLabel = () => {
-    const reason = absenceReason.value?.toLowerCase() || ''
+    const reason = canonicalSystemManagedReason()
     if (reason === 'holiday') {
         return `${t('report.editor.absence_reasons.holiday')} (${t('common.system_managed')})`
     } else if (reason === 'suspension') {
@@ -2261,6 +2337,14 @@ const {
         const newVersion = updatedReport?.version ?? result.newVersion ?? version.value
         version.value = newVersion
         remoteVersionDrift.value = false
+        const canonicalManagedReason = normalizeSystemManagedReason(updatedReport?.absence_reason)
+        if (canonicalManagedReason) {
+            managedAttendanceReason.value = canonicalManagedReason
+            managedAttendanceStatus.value = updatedReport?.attendance_status || 'absent'
+            attendanceStatus.value = managedAttendanceStatus.value
+            absenceReason.value = canonicalManagedReason
+            if (collabMetaMap) writeReportMeta(collabMetaMap)
+        }
         savedReportSnapshot.value = updatedReport ? buildSnapshotFromDto(updatedReport) : snapshot
         setBaseReportVersion(newVersion)
 
@@ -2285,7 +2369,8 @@ const {
             || (errorCode === 'request_timeout' ? 'errors.request_timeout'
                 : errorCode === 'save_outcome_unknown' ? 'errors.save_outcome_unknown'
                     : errorCode === 'permission_denied' ? 'errors.permission_denied'
-                        : errorCode === 'validation_error' ? 'errors.validation_failed'
+                : errorCode === 'validation_error' ? 'errors.validation_failed'
+                            : errorCode === 'system_managed' ? 'report.editor.system_managed_absence_notice'
                             : errorCode === 'conflict' ? 'errors.conflict'
                                 : 'errors.unknown')
         const translated = t(messageKey)
@@ -2354,10 +2439,26 @@ watch(() => props.initialProgressEnd, (newVal) => {
 })
 
 watch(() => props.initialAttendanceStatus, (newVal) => {
+    if (normalizeSystemManagedReason(props.initialAbsenceReason)) {
+        managedAttendanceStatus.value = newVal || 'absent'
+        attendanceStatus.value = newVal || 'absent'
+        return
+    }
     if (!hasUnsavedChanges.value) attendanceStatus.value = newVal
 })
 
 watch(() => props.initialAbsenceReason, (newVal) => {
+    const managedReason = normalizeSystemManagedReason(newVal)
+    if (managedReason) {
+        managedAttendanceReason.value = managedReason
+        managedAttendanceStatus.value = props.initialAttendanceStatus || 'absent'
+        attendanceStatus.value = props.initialAttendanceStatus || 'absent'
+        absenceReason.value = managedReason
+        if (collabMetaMap) writeReportMeta(collabMetaMap)
+        return
+    }
+    managedAttendanceReason.value = null
+    managedAttendanceStatus.value = null
     if (!hasUnsavedChanges.value) absenceReason.value = newVal || ''
 })
 
@@ -2432,6 +2533,10 @@ const isInitializing = ref(false)
 // Reset auto-save state when switching reports
 watch(() => props.reportId, () => {
     isInitializing.value = true
+    managedAttendanceReason.value = normalizeSystemManagedReason(props.initialAbsenceReason)
+    managedAttendanceStatus.value = managedAttendanceReason.value
+        ? (props.initialAttendanceStatus || 'absent')
+        : null
     savedReportSnapshot.value = buildSnapshotFromProps()
     reset()
     // 給予極短時間讓 props 傳遞到 local state
