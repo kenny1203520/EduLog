@@ -41,6 +41,20 @@ describe('editor reliability contracts', () => {
         expect(editor).toContain('dedupeKey:')
         expect(editor).toContain('collaboration_fallback')
     })
+
+    it('keeps system-managed attendance read-only and out of dirty mutations', () => {
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        const commandService = readFileSync(resolve(repoRoot, 'app/src/services/report/ReportCommandService.ts'), 'utf8')
+
+        expect(editor).toContain(':disabled="disabled || isSystemManagedAbsence"')
+        expect(editor).toContain('normalizeSystemManagedReason')
+        expect(editor).toContain('if (!isSystemManagedAbsence.value)')
+        expect(editor).toContain('metaMap.set(\'attendanceStatus\', attendanceStatus.value)')
+        expect(editor).toContain('never hydrate these two fields from a stale Yjs document')
+        expect(commandService).toContain("error.code === 'SYSTEM_MANAGED_REPORT'")
+        expect(commandService).toContain('reconcileV1SystemManagedSave')
+        expect(commandService).toContain('delete nonAttendanceData.attendanceStatus')
+    })
     it('routes production collaboration through the same-origin API WebSocket', () => {
         const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
         expect(collab).toContain("getApiV1Mode() === 'v1' ? undefined : apiDataClient")
