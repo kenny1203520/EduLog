@@ -172,6 +172,7 @@ async function readEnrollmentPeak(req: Request, res: Response) {
   await authorize(req, 'read', id)
   await Promise.all([
     authorizeRelatedRead(req, 'teaching.occurrences.list', id),
+    authorizeRelatedRead(req, 'teaching.enrollments.list', id),
     authorizeRelatedRead(req, 'teaching.reports.list', id),
   ])
 

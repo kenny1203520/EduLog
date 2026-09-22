@@ -104,7 +104,7 @@ describe('generated API contract', () => {
   it('documents all permissions needed by derived session reads', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permissions'?: string[]; parameters?: Array<{ name?: string }> } | undefined>> }
     expect(spec.paths['/api/class-sessions/{id}/details'].get?.['x-permissions']).toEqual(['teaching.class_sessions.read', 'teaching.enrollments.list'])
-    expect(spec.paths['/api/class-sessions/{id}/enrollment-peak'].get?.['x-permissions']).toEqual(['teaching.class_sessions.read', 'teaching.occurrences.list', 'teaching.reports.list'])
+    expect(spec.paths['/api/class-sessions/{id}/enrollment-peak'].get?.['x-permissions']).toEqual(['teaching.class_sessions.read', 'teaching.enrollments.list', 'teaching.occurrences.list', 'teaching.reports.list'])
   })
 
   it('documents the class session collection classroom filter', () => {

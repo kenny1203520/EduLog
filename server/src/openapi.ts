@@ -187,7 +187,7 @@ export function buildOpenApi() {
   paths['/api/class-sessions/{id}/enrollment-peak'] = {
     get: {
       operationId: 'class_sessions_enrollment_peak', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.read',
-      'x-permissions': ['teaching.class_sessions.read', 'teaching.occurrences.list', 'teaching.reports.list'],
+      'x-permissions': ['teaching.class_sessions.read', 'teaching.enrollments.list', 'teaching.occurrences.list', 'teaching.reports.list'],
       'x-response-fields': ['roster_count', 'occupied_count', 'absent_count', 'available_capacity', 'max_occupancy', 'max_roster', 'max_absent', 'max_enrollment', 'capacity', 'occurrences'],
       parameters: [pathParam('id'), { name: 'start_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'end_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }],
       responses: {

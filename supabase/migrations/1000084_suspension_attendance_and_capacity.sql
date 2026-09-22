@@ -257,6 +257,9 @@ BEGIN
   IF NOT public.has_api_permission(auth.uid(), 'teaching.class_sessions.read', NULL, p_class_session_id) THEN
     RAISE EXCEPTION 'PERMISSION_DENIED';
   END IF;
+  IF NOT public.has_api_permission(auth.uid(), 'teaching.enrollments.list', NULL, p_class_session_id) THEN
+    RAISE EXCEPTION 'PERMISSION_DENIED';
+  END IF;
 
   WITH occurrence_roster AS (
     SELECT occurrence.id AS occurrence_id, occurrence.occurrence_date,
