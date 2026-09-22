@@ -83,6 +83,7 @@ const occurrenceLoadError = ref<string | null>(null)
 const previousOccurrence = ref<ClassOccurrence | null>(null)
 const nextOccurrence = ref<ClassOccurrence | null>(null)
 let occurrenceLoadToken = 0
+let workspaceRosterDate: string | null = null
 const showAttendanceTemplateModal = ref(false)
 let attendanceTemplateRequestGeneration = 0
 const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
@@ -586,6 +587,12 @@ async function loadReportsForCurrentOccurrence() {
         const addedGuests: Enrollment[] = []
         guests.forEach(guest => {
             if (!guest) return
+            // The workspace API is the canonical date-scoped roster.  A report
+            // lookup may contain historical or stale rows for an enrollment
+            // that is no longer active in this session; never re-add those
+            // rows to the visible roster.  Regular guest transfers remain
+            // supported.
+            if (guest.status !== 'regular') return
             ;(guest as any).isGuest = true
             if (!enrollments.value.find(e => e.id === guest.id)) {
                 enrollments.value.push(guest)
@@ -600,6 +607,20 @@ async function loadReportsForCurrentOccurrence() {
     for (const enrollment of enrollments.value) {
         if (enrollment.id && !reportMap.value.has(enrollment.id)) reportMap.value.set(enrollment.id, null)
     }
+}
+
+async function loadWorkspaceRoster(occurrenceDate: Date): Promise<void> {
+    const date = DateUtils.formatLocalDate(occurrenceDate)
+    if (workspaceRosterDate === date) return
+
+    const workspace = (await PageApiService.getClassSessionWorkspace(sessionId, date)).data
+    if (!workspace.session) throw new Error('Class session workspace is unavailable')
+    if (workspace.session.roster_date && workspace.session.roster_date !== date) {
+        throw new Error('Class session workspace returned an unexpected roster date')
+    }
+
+    enrollments.value = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
+    workspaceRosterDate = date
 }
 
 async function loadOccurrenceTeachers() {
@@ -641,6 +662,8 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
     try {
         if (!occurrence?.occurrenceDate) {
             reportMap.value = new Map()
+            enrollments.value = []
+            workspaceRosterDate = null
             previousOccurrence.value = null
             nextOccurrence.value = null
             return
@@ -648,7 +671,8 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
 
         weekAnchorDate.value = new Date(occurrence.occurrenceDate)
         const occurrenceDateStr = DateUtils.formatLocalDate(occurrence.occurrenceDate)
-        const [holiday, navigation] = await Promise.all([
+        const [, holiday, navigation] = await Promise.all([
+            loadWorkspaceRoster(occurrence.occurrenceDate),
             HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId).catch(error => {
                 console.error('Failed to check holiday status:', error)
                 return false
@@ -786,6 +810,7 @@ async function loadData() {
         }
         const allEnrollments = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
         enrollments.value = allEnrollments
+        workspaceRosterDate = typeof rawSession.roster_date === 'string' ? rawSession.roster_date : null
         sessionTeachers.value = ((rawSession.class_session_teachers ?? []) as any[]).flatMap(assignment => {
             const assignedTeacher = Array.isArray(assignment.teachers) ? assignment.teachers[0] : assignment.teachers
             if (!assignedTeacher) return []

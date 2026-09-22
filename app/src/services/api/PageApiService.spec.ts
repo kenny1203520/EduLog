@@ -39,6 +39,14 @@ describe('PageApiService', () => {
     ])
   })
 
+  it('passes the selected occurrence date to the class-session workspace page API', async () => {
+    await PageApiService.getClassSessionWorkspace('session/id', '2026-09-22')
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      '/api/pages/class-sessions/session%2Fid/workspace?occurrence_date=2026-09-22',
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
   it('loads sensitive credentials through their separately authorized REST route', async () => {
     await StudentCredentialsQueryService.getForStudent('student-1')
     expect(globalThis.fetch).toHaveBeenCalledWith(

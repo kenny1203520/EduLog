@@ -46,7 +46,7 @@ export type TeacherOverviewDTO = Pick<TeacherDTO, 'id' | 'user_id' | 'name' | 'b
 export type TeachersOverviewDTO = { teachers: TeacherOverviewDTO[]; statistics: import('@/services/teacher/TeacherService').TeacherStatisticsDTO }
 export type ClassSessionOverviewDTO = ClassSessionDTO & { teaching_id?: string; classrooms?: { id: string; name: string; color?: string | null } | null }
 export interface ClassSessionWorkspaceDTO {
-  session: Record<string, unknown>
+  session: Record<string, unknown> & { roster_date?: string | null; current_enrollments?: number }
   enrollments: EnrollmentDTO[]
   teachers: Array<Pick<TeacherDTO, 'id' | 'user_id' | 'name'>>
 }
@@ -148,8 +148,11 @@ export class PageApiService {
     return apiV1Client.get<{ teacher: TeacherDTO; credentials: TeacherDTO['teacher_credentials'] }>(`/pages/teachers/${encodeURIComponent(teacherId)}/private-details`)
   }
 
-  static getClassSessionWorkspace(sessionId: string) {
-    return apiV1Client.get<ClassSessionWorkspaceDTO>(`/pages/class-sessions/${encodeURIComponent(sessionId)}/workspace`)
+  static getClassSessionWorkspace(sessionId: string, occurrenceDate?: string) {
+    const params = new URLSearchParams()
+    if (occurrenceDate) params.set('occurrence_date', occurrenceDate)
+    const query = params.toString()
+    return apiV1Client.get<ClassSessionWorkspaceDTO>(`/pages/class-sessions/${encodeURIComponent(sessionId)}/workspace${query ? `?${query}` : ''}`)
   }
 
   static getUserPreferences() {
