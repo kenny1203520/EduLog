@@ -49,6 +49,7 @@ const reportAttendanceTableGrants = await readMigration('1000086_report_attendan
 const reportProvisioningRlsAlignment = await readMigration('1000087_report_provisioning_rls_alignment.sql')
 const reportProvisioningPermissionParity = await readMigration('1000088_report_provisioning_permission_parity.sql')
 const staleReportInsertPolicy = await readMigration('1000089_remove_stale_report_insert_policy.sql')
+const narrowReportProvisioningCommand = await readMigration('1000090_narrow_report_provisioning_command.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -109,7 +110,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -223,6 +224,21 @@ Deno.test('1000088 keeps report provisioning permissions in parity', () => {
 Deno.test('1000089 removes the stale all-operation report policy', () => {
   assertStringIncludes(staleReportInsertPolicy, 'DROP POLICY IF EXISTS "Report editor access is scoped"')
   assertStringIncludes(staleReportInsertPolicy, "NOTIFY pgrst, 'reload schema'")
+})
+
+Deno.test('1000090 isolates guarded report placeholder provisioning', () => {
+  assertStringIncludes(narrowReportProvisioningCommand, 'CREATE SCHEMA IF NOT EXISTS private')
+  assertStringIncludes(narrowReportProvisioningCommand, 'CREATE OR REPLACE FUNCTION private.insert_provisioned_occurrence_report(')
+  assertStringIncludes(narrowReportProvisioningCommand, 'SECURITY DEFINER')
+  assertStringIncludes(narrowReportProvisioningCommand, 'SET search_path = \'\'')
+  assertStringIncludes(narrowReportProvisioningCommand, "enrollment_row.status <> 'regular'")
+  assertStringIncludes(narrowReportProvisioningCommand, 'get_effective_occurrence_enrollment_ids')
+  assertStringIncludes(narrowReportProvisioningCommand, "'teaching.reports.create'")
+  assertStringIncludes(narrowReportProvisioningCommand, "'teaching.enrollments.create'")
+  assertStringIncludes(narrowReportProvisioningCommand, "'teaching.enrollments.update'")
+  assertStringIncludes(narrowReportProvisioningCommand, 'GRANT EXECUTE ON FUNCTION private.insert_provisioned_occurrence_report(uuid, uuid)')
+  assertStringIncludes(narrowReportProvisioningCommand, 'REVOKE ALL ON SCHEMA private FROM PUBLIC, anon, service_role')
+  assertStringIncludes(narrowReportProvisioningCommand, "NOTIFY pgrst, 'reload schema'")
 })
 
 Deno.test('restored historical security migrations are standalone', async () => {
