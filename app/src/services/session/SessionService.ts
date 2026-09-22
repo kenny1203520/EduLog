@@ -324,8 +324,8 @@ export class SessionService {
     static async getMaxEnrollmentInDateRange(sessionId: string, startDate: string, endDate: string): Promise<number> {
         if (getApiV1Mode() === 'v1') {
             const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
-            const response = await apiV1Client.get<{ max_enrollment: number }>('/class-sessions/' + encodeURIComponent(sessionId) + '/enrollment-peak?' + params.toString())
-            return Number(response.data?.max_enrollment ?? 0)
+            const response = await apiV1Client.get<{ max_occupancy?: number; max_enrollment?: number }>('/class-sessions/' + encodeURIComponent(sessionId) + '/enrollment-peak?' + params.toString())
+            return Number(response.data?.max_occupancy ?? response.data?.max_enrollment ?? 0)
         }
         const { data: occurrences, error } = await apiDataClient
             .from('class_occurrences')

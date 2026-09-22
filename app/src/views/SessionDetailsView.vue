@@ -766,6 +766,7 @@ watch(filteredEnrollments, filtered => {
 })
 
 const attendanceCounts = computed(() => countRosterAttendance(allRosterEnrollments.value, reportMap.value))
+const occupiedRosterCount = computed(() => attendanceCounts.value.present + attendanceCounts.value.pending)
 
 async function loadData() {
     try {
@@ -878,6 +879,10 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
     const progress = getStudentProgressSummary(enrollment.id)
     const today = getTodayCourseSummary(enrollment)
     const attendanceStatus = (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus
+    const absenceReason = reportMap.value.get(enrollment.id!)?.absenceReason || null
+    const absenceReasonLabel = absenceReason
+        ? t(`report.editor.absence_reasons.${absenceReason}`, absenceReason)
+        : null
     return {
         id: enrollment.id!,
         studentId: enrollment.studentId || '',
@@ -893,6 +898,8 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         isGuest: Boolean((enrollment as any).isGuest),
         attendanceStatus,
         attendanceLabel: t('attendance.' + attendanceStatus),
+        absenceReason,
+        absenceReasonLabel,
         isSavingAttendance: savingMap.value.get(enrollment.id!) === true,
         todayTitle: today.title,
         todayProgress: today.chapterProgress,
@@ -2007,14 +2014,14 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     $t('classroom.capacity_utilization') }}</h4>
                                 <div class="flex items-end gap-3">
                                     <p class="text-4xl font-black text-gray-900 tracking-tighter">{{
-                                        Math.round((allRosterEnrollments.length / (session?.capacity || 1)) * 100) }}%</p>
+                                        Math.round((occupiedRosterCount / (session?.capacity || 1)) * 100) }}%</p>
                                     <p class="text-xs font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
                                         $t('classroom.capacity') }}</p>
                                 </div>
                             </div>
                             <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                 <div class="h-full bg-emerald-500 rounded-full transition-all duration-1000"
-                                    :style="{ width: `${(allRosterEnrollments.length / (session?.capacity || 1)) * 100}%` }">
+                                    :style="{ width: `${Math.min((occupiedRosterCount / (session?.capacity || 1)) * 100, 100)}%` }">
                                 </div>
                             </div>
                         </div>

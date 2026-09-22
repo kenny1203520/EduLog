@@ -18,6 +18,8 @@ export interface StudentRosterItem {
     isGuest: boolean
     attendanceStatus: QuickAttendanceStatus
     attendanceLabel: string
+    absenceReason?: string | null
+    absenceReasonLabel?: string | null
     isSavingAttendance: boolean
     todayTitle: string
     todayProgress: string
@@ -153,6 +155,10 @@ function requestAttendance(item: StudentRosterItem) {
                             {{ item.isSavingAttendance ? t('common.saving') : item.attendanceLabel }}
                         </span>
                     </button>
+                    <span v-if="item.attendanceStatus === 'absent' && item.absenceReasonLabel"
+                        class="mt-2 inline-flex rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-700">
+                        {{ item.absenceReasonLabel }}
+                    </span>
                 </div>
 
                 <div class="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5">
@@ -244,11 +250,16 @@ function requestAttendance(item: StudentRosterItem) {
                                 </div>
                             </div>
                         </td>
-                        <td class="px-4 py-5">
+                            <td class="px-4 py-5">
                             <button v-if="hasOccurrence" type="button" class="rounded-xl border px-3 py-2 text-xs font-black transition disabled:opacity-50"
-                                :class="attendanceToneClasses(item.attendanceStatus)" :disabled="attendanceDisabled || item.isSavingAttendance" @click="requestAttendance(item)">
+                                :class="attendanceToneClasses(item.attendanceStatus)" :disabled="attendanceDisabled || item.isSavingAttendance || item.reportAvailable === false"
+                                :title="item.reportAvailable === false ? t('classroom.trial_report_unavailable') : undefined" @click="requestAttendance(item)">
                                 {{ item.isSavingAttendance ? t('common.saving') : item.attendanceLabel }}
                             </button>
+                            <span v-if="item.attendanceStatus === 'absent' && item.absenceReasonLabel"
+                                class="mt-2 inline-flex rounded-full border border-red-100 bg-red-50 px-2 py-0.5 text-[10px] font-black text-red-700">
+                                {{ item.absenceReasonLabel }}
+                            </span>
                             <p class="mt-2 text-[10px] font-bold text-slate-400">{{ item.isGuest ? t('common.rescheduled') : item.enrollmentStatus }}</p>
                         </td>
                         <td class="px-4 py-5">

@@ -108,6 +108,13 @@ describe('StudentRosterPanel', () => {
         expect(wrapper.emitted('quick-edit')).toBeUndefined()
     })
 
+    it('keeps suspended students in the roster and shows the absence reason', () => {
+        const wrapper = mountPanel({ items: [{ ...item, attendanceStatus: 'absent', absenceReason: 'suspension', absenceReasonLabel: 'report.editor.absence_reasons.suspension' }] })
+        const card = wrapper.get('.roster-cards [data-enrollment-id="enrollment-1"]')
+        expect(card.text()).toContain('report.editor.absence_reasons.suspension')
+        expect(card.find('[aria-label]').exists()).toBe(true)
+    })
+
     it('does not create an empty profile link when no student account is available', () => {
         const wrapper = mountPanel({ items: [{ ...item, studentId: '', profileHref: null }] })
         const card = wrapper.find('.roster-cards [data-enrollment-id="enrollment-1"]')

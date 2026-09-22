@@ -50,4 +50,10 @@ describe('SessionDetails responsive and loading contract', () => {
         expect(source).not.toContain('classViewScrollY')
         expect(source).not.toContain('window.scrollTo(')
     })
+
+    it('uses occupied attendance for capacity while keeping roster totals separate', () => {
+        expect(source).toContain('const occupiedRosterCount = computed(() => attendanceCounts.value.present + attendanceCounts.value.pending)')
+        expect(source).toContain('(occupiedRosterCount / (session?.capacity || 1))')
+        expect(source).toContain('{{ allRosterEnrollments.length }}')
+    })
 })
