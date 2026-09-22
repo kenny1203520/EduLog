@@ -47,6 +47,12 @@ function runtimeSchema(def: typeof resources[keyof typeof resources], action: 'c
 function mutationSchema(def: typeof resources[keyof typeof resources], action: 'create' | 'update') {
   const document = runtimeSchema(def, action) as { properties?: Record<string, unknown>; additionalProperties?: unknown }
   const properties = { ...(document.properties ?? {}) }
+  if (properties.external_link && typeof properties.external_link === 'object') {
+    properties.external_link = {
+      ...(properties.external_link as Record<string, unknown>),
+      description: 'Valid URI or null. An empty string is normalized to null to clear the link.',
+    }
+  }
   if (def.compatibilityFields?.includes('is_system')) {
     properties.is_system = { type: 'boolean', const: false, description: 'Compatibility input only; system roles cannot be created or modified' }
   }

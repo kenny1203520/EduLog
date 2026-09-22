@@ -135,7 +135,10 @@ for (const [route, fields] of Object.entries(filterableFieldsByResource)) {
 
 const optionalText = z.string().max(10000).nullable().optional()
 const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional()
-const optionalUrl = z.url().max(2048).nullable().optional()
+const optionalUrl = z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? null : value,
+  z.url().max(2048).nullable().optional(),
+)
 const optionalTime = z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional()
 const optionalDocument = z.record(z.string(), z.unknown()).nullable().optional()
 /**

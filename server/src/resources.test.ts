@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resources } from './resources.js'
+import { resources, resourceSchemas } from './resources.js'
 
 describe('student API resource boundaries', () => {
   it('registers explicit student child resources with the student permission scope', () => {
@@ -61,6 +61,20 @@ describe('student API resource boundaries', () => {
   it('allows the system user list sort requested by the settings UI', () => {
     expect(resources.users.sortable).toEqual(expect.arrayContaining(['display_name', 'email']))
     expect(resources.users.sortable).not.toContain('password')
+  })
+
+  it('normalizes blank classroom external links while rejecting invalid URLs', () => {
+    const createSchema = resourceSchemas.classrooms.createSchema!
+    const updateSchema = resourceSchemas.classrooms.updateSchema!
+    for (const schema of [createSchema, updateSchema]) {
+      for (const value of ['', '   ']) {
+        const parsed = schema.safeParse({ ...(schema === createSchema ? { name: 'Room' } : {}), external_link: value })
+        expect(parsed.success).toBe(true)
+        if (parsed.success) expect(parsed.data.external_link).toBeNull()
+      }
+      expect(schema.safeParse({ ...(schema === createSchema ? { name: 'Room' } : {}), external_link: 'https://example.com/room' }).success).toBe(true)
+      expect(schema.safeParse({ ...(schema === createSchema ? { name: 'Room' } : {}), external_link: 'not-a-url' }).success).toBe(false)
+    }
   })
 
   it('allows report queries to sort by creation time in either direction', () => {

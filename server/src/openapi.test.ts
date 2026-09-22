@@ -61,6 +61,14 @@ describe('generated API contract', () => {
     expect(spec.paths['/api/roles']?.post?.['x-request-schema-source']).toBe('resource-registry')
   })
 
+  it('documents blank classroom external links as a nullable clear operation', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    const classroomUpdate = spec.paths['/api/classrooms/{id}']?.patch?.requestBody?.content?.['application/json']?.schema
+    expect(classroomUpdate.properties.external_link).toEqual(expect.objectContaining({
+      description: 'Valid URI or null. An empty string is normalized to null to clear the link.',
+    }))
+  })
+
   it('keeps generated generic methods and permissions aligned with the registry', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string } | undefined>> }
     const specialized = new Map([
