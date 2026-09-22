@@ -118,13 +118,29 @@ export class SessionService {
         }
     }
 
-    static async getClassSessionOptions(page: number = 1, perPage: number = 1000): Promise<{ data: ClassSessionOption[]; count: number }> {
+    static async getAllClassSessions(search?: string, classroomId?: string | null, visibilityMode: SessionVisibilityFilterMode = 'all'): Promise<{ data: ClassSessionDTO[], count: number }> {
+        const pageSize = 100
+        const sessions: ClassSessionDTO[] = []
+        let page = 1
+        let total = 0
+        do {
+            const result = await this.getClassSessions(page, pageSize, search, classroomId, visibilityMode)
+            sessions.push(...result.data)
+            total = result.count
+            page += 1
+            if (result.data.length === 0) break
+        } while (sessions.length < total)
+        return { data: sessions, count: total }
+    }
+
+    static async getClassSessionOptions(page: number = 1, perPage: number = 100): Promise<{ data: ClassSessionOption[]; count: number }> {
+        const pageSize = Math.min(Math.max(1, Math.trunc(perPage)), 100)
         if (getApiV1Mode() === 'v1') {
-            const response = await apiResourceClient.list<ClassSessionOption>('class-sessions', { page, perPage: Math.min(perPage, 100), sort: 'name', mode: 'v1' })
+            const response = await apiResourceClient.list<ClassSessionOption>('class-sessions', { page, perPage: pageSize, sort: 'name', mode: 'v1' })
             return { data: response.data || [], count: Number(response.meta?.total ?? response.data?.length ?? 0) }
         }
-        const from = (page - 1) * perPage
-        const to = from + perPage - 1
+        const from = (page - 1) * pageSize
+        const to = from + pageSize - 1
         const { data, error, count } = await apiDataClient
             .from('class_sessions')
             .select('id, name, classroom_id, course_ids', { count: 'exact' })
@@ -132,6 +148,21 @@ export class SessionService {
             .range(from, to)
         if (error) throw new Error(error.message)
         return { data: (data || []) as ClassSessionOption[], count: count || 0 }
+    }
+
+    static async getAllClassSessionOptions(): Promise<{ data: ClassSessionOption[], count: number }> {
+        const pageSize = 100
+        const sessions: ClassSessionOption[] = []
+        let page = 1
+        let total = 0
+        do {
+            const result = await this.getClassSessionOptions(page, pageSize)
+            sessions.push(...result.data)
+            total = result.count
+            page += 1
+            if (result.data.length === 0) break
+        } while (sessions.length < total)
+        return { data: sessions, count: total }
     }
     static async createClassSession(session: Partial<ClassSessionDTO>): Promise<ClassSessionDTO> {
         return this.saveClassSession(session)

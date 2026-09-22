@@ -22,6 +22,21 @@ export class ClassroomService {
         return { data: classrooms, count: result.meta?.total ?? classrooms.length }
     }
 
+    static async getAllClassrooms(search?: string, visibilityMode: ClassroomVisibilityFilterMode = 'all'): Promise<{ data: Classroom[], count: number }> {
+        const pageSize = 100
+        const classrooms: Classroom[] = []
+        let page = 1
+        let total = 0
+        do {
+            const result = await this.getClassrooms(page, pageSize, search, visibilityMode)
+            classrooms.push(...result.data)
+            total = result.count
+            page += 1
+            if (result.data.length === 0) break
+        } while (classrooms.length < total)
+        return { data: classrooms, count: total }
+    }
+
     static async createClassroom(classroom: Partial<ClassroomDTO>): Promise<Classroom> {
         return new Classroom((await apiResourceClient.create<ClassroomDTO>('classrooms', classroom)).data)
     }

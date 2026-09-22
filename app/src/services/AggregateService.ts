@@ -1,4 +1,4 @@
-import { PageApiService } from '@/services/api/PageApiService'
+import { MAX_PAGE_SIZE, normalizePageSize, PageApiService } from '@/services/api/PageApiService'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { StudentService } from '@/services/student/StudentService'
 
@@ -62,14 +62,16 @@ export class AggregateService {
   }
 
   static async getClassroomSessionManagerAggregate(page: number = 1, perPage: number = 100, search: string = '', visibilityMode: string = 'all') {
-    const key = `classrooms:p${page}:s${perPage}:q${search}:v${visibilityMode}`
+    const pageSize = normalizePageSize(perPage)
+    const pageNumber = Math.max(1, Math.trunc(page))
+    const key = `classrooms:p${pageNumber}:s${pageSize}:q${search}:v${visibilityMode}`
     return this.withCache(key, this.DEFAULT_TTL_MS, async () =>
-      (await PageApiService.getClassroomsOverview({ limit: perPage, offset: Math.max(0, (page - 1) * perPage), search, visibility: visibilityMode })).data,
+      (await PageApiService.getClassroomsOverview({ limit: pageSize, offset: (pageNumber - 1) * pageSize, search, visibility: visibilityMode })).data,
     )
   }
 
   static async getAllClassroomsOverview(search: string = '', visibilityMode: string = 'all') {
-    const pageSize = 100
+    const pageSize = MAX_PAGE_SIZE
     const first = await PageApiService.getClassroomsOverview({ limit: pageSize, offset: 0, search, visibility: visibilityMode, session_limit: 1 })
     const classrooms = [...first.data.classrooms]
     const total = Number(first.meta?.total ?? first.data.count ?? classrooms.length)
@@ -97,7 +99,7 @@ export class AggregateService {
   }
 
   static async getAllClassSessionsOverview(search: string = '', classroomId?: string | null, visibilityMode: string = 'all') {
-    const pageSize = 100
+    const pageSize = MAX_PAGE_SIZE
     const first = await this.getClassSessionsOverview(1, pageSize, search, classroomId, visibilityMode)
     const sessions = [...first.data]
     for (let offset = pageSize; offset < first.count; offset += pageSize) {

@@ -57,8 +57,8 @@ async function load() {
         const [roleData, permissionData, classroomResult, sessionResult] = await Promise.all([
             RoleService.getRoles(),
             PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION),
-            ClassroomService.getClassrooms(1, 500),
-            SessionService.getClassSessions(1, 500)
+            ClassroomService.getAllClassrooms(),
+            SessionService.getAllClassSessions()
         ])
         roles.value = roleData
         permission.value = permissionData

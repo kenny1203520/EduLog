@@ -82,8 +82,8 @@ async function fetchOptions() {
     try {
         const [{ data: catalogs }, { data: classSessions }, { data: classroomRows }] = await Promise.all([
             AggregateService.getCoursesCached(),
-            SessionService.getClassSessions(1, 1000),
-            ClassroomService.getClassrooms(1, 1000)
+            SessionService.getAllClassSessions(),
+            ClassroomService.getAllClassrooms()
         ])
         fullCourses.value = catalogs
         catalogOptions.value = catalogs.map(c => ({

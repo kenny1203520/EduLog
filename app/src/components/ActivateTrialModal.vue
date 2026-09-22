@@ -89,7 +89,7 @@ async function fetchCurrentEnrollment() {
 async function fetchClassrooms() {
     try {
         isLoadingClassrooms.value = true
-        const { data } = await ClassroomService.getClassrooms(1, 500)
+        const { data } = await ClassroomService.getAllClassrooms()
         classrooms.value = data
     } catch (e) {
         console.error(e)
@@ -100,7 +100,7 @@ async function fetchClassrooms() {
 
 async function fetchSessions() {
     try {
-        const { data } = await SessionService.getClassSessions(1, 500)
+        const { data } = await SessionService.getAllClassSessions()
         sessions.value = data
     } catch (e) {
         console.error(e)

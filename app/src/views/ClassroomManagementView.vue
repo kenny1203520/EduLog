@@ -299,7 +299,7 @@ async function loadAllRooms() {
         allClassrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
         return
     } catch (e) {
-        const res = await ClassroomService.getClassrooms(1, 1000)
+        const res = await ClassroomService.getAllClassrooms()
         allClassrooms.value = res.data
     }
 }

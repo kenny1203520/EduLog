@@ -504,16 +504,16 @@ function switchTab(tab: 'peer' | 'history') {
 async function loadFilterOptions() {
     try {
         const crsP = CourseCatalogService.getCourseOptions(1, 1000)
-        const sessionsP = SessionService.getClassSessionOptions(1, 1000)
+        const sessionsP = SessionService.getAllClassSessionOptions()
 
         // Try aggregate for classrooms first
         try {
-            const [crs, agg, sessions] = await Promise.all([crsP, AggregateService.getClassroomSessionManagerAggregate(1, 1000, ''), sessionsP])
+            const [crs, agg, sessions] = await Promise.all([crsP, AggregateService.getAllClassroomsOverview(''), sessionsP])
             courses.value = crs.data
             classrooms.value = (agg.classrooms || []).map((d: any) => d)
             allSessions.value = sessions.data
         } catch (e) {
-            const [crs, cls, sessions] = await Promise.all([crsP, ClassroomService.getClassrooms(1, 1000), sessionsP])
+            const [crs, cls, sessions] = await Promise.all([crsP, ClassroomService.getAllClassrooms(), sessionsP])
             courses.value = crs.data
             classrooms.value = cls.data
             allSessions.value = sessions.data

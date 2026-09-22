@@ -196,16 +196,16 @@ async function loadAuxData() {
     try {
         try {
             const [roomsRes, sessionsRes] = await Promise.all([
-                AggregateService.getClassroomSessionManagerAggregate(1, 1000, ''),
-                SessionService.getClassSessions(1, 1000)
+                AggregateService.getAllClassroomsOverview(''),
+                SessionService.getAllClassSessions()
             ])
             classrooms.value = (roomsRes.classrooms || []).map((d: any) => d)
             sessions.value = sessionsRes.data
             teachers.value = await TeacherService.getAllTeachers()
         } catch (e) {
             const [roomsRes, sessionsRes, teachersRes] = await Promise.all([
-                ClassroomService.getClassrooms(1, 1000),
-                SessionService.getClassSessions(1, 1000),
+                ClassroomService.getAllClassrooms(),
+                SessionService.getAllClassSessions(),
                 TeacherService.getAllTeachers()
             ])
             classrooms.value = roomsRes.data

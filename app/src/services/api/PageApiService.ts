@@ -19,6 +19,17 @@ export interface PageListQuery {
   sort?: string
 }
 
+export const MAX_PAGE_SIZE = 100
+
+export function normalizePageSize(value: number | undefined, fallback = MAX_PAGE_SIZE) {
+  const candidate = Number.isFinite(value) ? Math.trunc(value as number) : fallback
+  return Math.min(MAX_PAGE_SIZE, Math.max(1, candidate))
+}
+
+function normalizeOffset(value: number | undefined) {
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value as number)) : 0
+}
+
 export type CourseOverviewDTO = CourseDTO & { lessons?: LessonDTO[] }
 export type StudentOverviewDTO = Pick<StudentDTO, 'id' | 'name' | 'notes' | 'notes_document' | 'external_link' | 'created_at' | 'updated_at'> & {
   current_school?: StudentSchoolSummaryDTO | null
@@ -100,8 +111,8 @@ export interface ClassroomOverviewPageDTO {
 
 function queryString(query: PageListQuery = {}) {
   const params = new URLSearchParams()
-  if (query.limit !== undefined) params.set('limit', String(query.limit))
-  if (query.offset !== undefined) params.set('offset', String(query.offset))
+  if (query.limit !== undefined) params.set('limit', String(normalizePageSize(query.limit)))
+  if (query.offset !== undefined) params.set('offset', String(normalizeOffset(query.offset)))
   if (query.search) params.set('search', query.search)
   if (query.sort) params.set('sort', query.sort)
   const serialized = params.toString()
@@ -146,15 +157,15 @@ export class PageApiService {
   }
 
   static getEnrollmentReports(enrollmentId: string, query: { limit: number; offset: number; sort: string }) {
-    const params = new URLSearchParams({ limit: String(query.limit), offset: String(query.offset), sort: query.sort })
+    const params = new URLSearchParams({ limit: String(normalizePageSize(query.limit)), offset: String(normalizeOffset(query.offset)), sort: query.sort })
     return apiV1Client.get<EnrollmentReportsPageDTO>(`/pages/enrollments/${encodeURIComponent(enrollmentId)}/reports?${params}`)
   }
 
   static getClassroomsOverview(query: PageListQuery & { visibility?: string; session_limit?: number; session_offset?: number; classroom_id?: string }) {
     const params = new URLSearchParams(queryString(query).replace(/^\?/, ''))
     if (query.visibility) params.set('visibility', query.visibility)
-    if (query.session_limit !== undefined) params.set('session_limit', String(query.session_limit))
-    if (query.session_offset !== undefined) params.set('session_offset', String(query.session_offset))
+    if (query.session_limit !== undefined) params.set('session_limit', String(normalizePageSize(query.session_limit)))
+    if (query.session_offset !== undefined) params.set('session_offset', String(normalizeOffset(query.session_offset)))
     if (query.classroom_id) params.set('classroom_id', query.classroom_id)
     return apiV1Client.get<ClassroomOverviewPageDTO>(`/pages/classrooms/overview?${params}`)
   }
@@ -170,8 +181,8 @@ export class PageApiService {
     const params = new URLSearchParams({
       days_back: String(query.days_back),
       scope: query.scope,
-      limit: String(query.limit ?? 25),
-      offset: String(query.offset ?? 0),
+      limit: String(normalizePageSize(query.limit, 25)),
+      offset: String(normalizeOffset(query.offset)),
       sort: query.sort ?? '-date',
     })
     if (query.search) params.set('search', query.search)
@@ -179,7 +190,7 @@ export class PageApiService {
   }
 
   static getHolidaysOverview(query: { expand?: boolean; limit?: number; offset?: number; search?: string; sort?: string } = {}) {
-    const params = new URLSearchParams({ expand: String(query.expand ?? true), limit: String(query.limit ?? 100), offset: String(query.offset ?? 0) })
+    const params = new URLSearchParams({ expand: String(query.expand ?? true), limit: String(normalizePageSize(query.limit)), offset: String(normalizeOffset(query.offset)) })
     if (query.search) params.set('search', query.search)
     if (query.sort) params.set('sort', query.sort)
     return apiV1Client.get<HolidayOverviewPageDTO[]>(`/pages/holidays/overview?${params}`)

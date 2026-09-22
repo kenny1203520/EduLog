@@ -35,13 +35,13 @@ vi.mock('@/stores/usePreferencesStore', () => ({
 vi.mock('@/services/AggregateService', () => ({
   AggregateService: {
     getHolidaysAggregate: vi.fn(),
-    getClassroomSessionManagerAggregate: vi.fn()
+    getAllClassroomsOverview: vi.fn()
   }
 }))
 
 vi.mock('@/services/session/SessionService', () => ({
   SessionService: {
-    getClassSessions: vi.fn()
+    getAllClassSessions: vi.fn()
   }
 }))
 
@@ -62,7 +62,7 @@ vi.mock('@/services/holiday/HolidayService', () => ({
 
 vi.mock('@/services/classroom/ClassroomService', () => ({
   ClassroomService: {
-    getClassrooms: vi.fn()
+    getAllClassrooms: vi.fn()
   }
 }))
 
@@ -145,11 +145,11 @@ describe('HolidayManagementView tabs', () => {
     vi.clearAllMocks()
     vi.mocked(AggregateService.getHolidaysAggregate).mockResolvedValue(holidays)
     vi.mocked(HolidayService.listHolidays).mockResolvedValue(holidays.map(holiday => new Holiday(holiday as any)))
-    vi.mocked(AggregateService.getClassroomSessionManagerAggregate).mockResolvedValue({
+    vi.mocked(AggregateService.getAllClassroomsOverview).mockResolvedValue({
       classrooms: rooms,
       count: rooms.length
     })
-    vi.mocked(SessionService.getClassSessions).mockResolvedValue({
+    vi.mocked(SessionService.getAllClassSessions).mockResolvedValue({
       data: sessions,
       count: sessions.length
     } as any)
