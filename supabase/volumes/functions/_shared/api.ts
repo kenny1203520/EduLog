@@ -26,14 +26,17 @@ export function requestId(req: Request) {
 export function response(value: unknown, status: number, id: string, headers: HeadersInit = {}) {
   const resultHeaders = new Headers(headers)
   const trace = resultHeaders.get('X-Trace-Id')
+  const statusHasNoBody = status === 204 || status === 304
   const isEnvelope = value !== null && typeof value === 'object' && !Array.isArray(value) && ('data' in value || 'error' in value || 'request_id' in value)
   let body: unknown = trace && isEnvelope && !('trace_id' in value) ? { ...value, trace_id: trace } : value
   if (isEnvelope && body !== null && typeof body === 'object' && !('error' in body) && !('meta' in body)) body = { ...body, meta: null }
-  return new Response(JSON.stringify(body), { status, headers: new Headers({
+  const responseHeaders = new Headers({
     'Content-Type': 'application/json', 'X-Request-Id': id, 'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer',
     'Content-Security-Policy': "default-src 'none'", ...headers,
-  }) })
+  })
+  if (statusHasNoBody) responseHeaders.delete('Content-Type')
+  return new Response(statusHasNoBody ? null : JSON.stringify(body), { status, headers: responseHeaders })
 }
 
 export function corsHeaders(req: Request): HeadersInit {

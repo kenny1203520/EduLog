@@ -14,6 +14,25 @@ Deno.test('response envelope carries request and W3C trace identifiers', async (
   assertEquals(result.headers.get('x-request-id'), id)
 })
 
+Deno.test('204 and 304 responses have no body or JSON content type', async () => {
+  const headers = {
+    'Access-Control-Allow-Origin': 'https://app.example.test',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+    'X-Trace-Id': 'trace-test',
+  }
+
+  for (const status of [204, 304]) {
+    const result = response(null, status, 'request-test', headers)
+    assertEquals(result.status, status)
+    assertEquals(await result.text(), '')
+    assertEquals(result.headers.get('content-type'), null)
+    assertEquals(result.headers.get('access-control-allow-origin'), 'https://app.example.test')
+    assertEquals(result.headers.get('access-control-allow-methods'), 'GET,POST,OPTIONS')
+    assertEquals(result.headers.get('x-request-id'), 'request-test')
+    assertEquals(result.headers.get('x-trace-id'), 'trace-test')
+  }
+})
+
 Deno.test('known and unknown errors use the production-safe contract', async () => {
   const known = handleError(new ApiError(422, 'VALIDATION_ERROR', 'Invalid input', { name: ['required'] }), 'r', 't')
   assertEquals(known.status, 422)
