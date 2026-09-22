@@ -1,40 +1,49 @@
-import { supabase } from '@/lib/supabase'
 import type { PermissionDTO, PolicyEffect, PolicyScope, RolePermissionPolicyDTO } from '@/models/Rbac'
+import { AuthorizationError } from '@/services/errors/AppError'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { apiDataClient } from '@/services/api/ApiDataClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { apiV1Client } from '@/services/api/ApiV1Client'
 
 export const INCOMPLETE_REPORT_PERMISSION = 'reports.incomplete.receive'
-
-export interface PolicyScopeTarget {
-    type: PolicyScope
-    id?: string | null
-}
+export interface PolicyScopeTarget { type: PolicyScope; id?: string | null }
 
 export class PermissionPolicyService {
+    static async canManageRbac(teachingId?: string): Promise<boolean> {
+        if (getApiV1Mode() === 'mock') {
+            const user = await apiDataClient.auth.getUser()
+            if (user.error || !user.data.user) return false
+            const result = await apiDataClient.rpc('resolve_user_permission', { p_user_id: user.data.user.id, p_permission_key: teachingId ? 'teaching.roles.manage' : 'system.roles.manage', p_teaching_id: teachingId })
+            const row = Array.isArray(result.data) ? result.data[0] : result.data
+            return !result.error && row?.is_allowed === true && row?.is_denied !== true
+        }
+        try {
+            const permission = teachingId ? 'teaching.roles.manage' : 'system.roles.manage'
+            const path = teachingId ? `/rbac/capability?permission=${encodeURIComponent(permission)}&teaching_id=${encodeURIComponent(teachingId)}` : `/rbac/capability?permission=${encodeURIComponent(permission)}`
+            return (await apiV1Client.get<{ allowed: boolean }>(path)).data?.allowed === true
+        } catch { return false }
+    }
     static async getPermission(key: string): Promise<PermissionDTO> {
-        const { data, error } = await supabase.from('permissions').select('*').eq('key', key).single()
-        if (error) throw new Error(error.message)
-        return data as PermissionDTO
+        const result = await apiResourceClient.list<PermissionDTO>('permissions', { search: key, perPage: 100 })
+        const permission = result.data?.find((item) => item.key === key)
+        if (!permission) throw new Error('Permission was not found')
+        return permission
     }
-
     static async getPolicies(permissionId: string): Promise<RolePermissionPolicyDTO[]> {
-        const { data, error } = await supabase
-            .from('role_permission_policies')
-            .select('*')
-            .eq('permission_id', permissionId)
-        if (error) throw new Error(error.message)
-        return (data as RolePermissionPolicyDTO[]) || []
+        return (await apiV1Client.get<RolePermissionPolicyDTO[]>(`/permissions/${encodeURIComponent(permissionId)}/policies`)).data || []
     }
-
-    static async replacePolicies(
-        permissionKey: string,
-        scope: PolicyScopeTarget,
-        policies: Array<{ role_id: string; effect: PolicyEffect }>
-    ): Promise<void> {
-        const { error } = await supabase.rpc('replace_role_permission_policies', {
-            p_permission_key: permissionKey,
-            p_scope_type: scope.type,
-            p_scope_id: scope.type === 'system' ? null : scope.id,
-            p_policies: policies
-        })
-        if (error) throw new Error(error.message)
+    static async replacePolicies(permissionKey: string, scope: PolicyScopeTarget, policies: Array<{ role_id: string; effect: PolicyEffect }>): Promise<void> {
+        try {
+            if (getApiV1Mode() === 'mock') {
+                const result = await apiDataClient.rpc('replace_role_permission_policies', { p_permission_key: permissionKey, p_scope_type: scope.type, p_scope_id: scope.type === 'system' ? null : scope.id, p_policies: policies })
+                if (result.error) throw result.error
+                return
+            }
+            const permission = await this.getPermission(permissionKey)
+            await apiV1Client.patch(`/permissions/${encodeURIComponent(permission.id)}/policies`, { scope, policies })
+        } catch (error) {
+            if ((error as any)?.status === 401 || (error as any)?.status === 403 || (error as any)?.code === '42501') throw new AuthorizationError({ message: 'RBAC policy management was denied', cause: error })
+            throw error
+        }
     }
 }

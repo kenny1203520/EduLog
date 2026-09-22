@@ -7,7 +7,7 @@ import { SessionService } from '../session/SessionService'
 
 const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }))
 
-vi.mock('@/lib/supabase', () => ({ supabase: { from: vi.fn(), rpc: rpcMock } }))
+vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: vi.fn(), rpc: rpcMock } }))
 vi.mock('./EnrollmentTransferQueryService', () => ({
     EnrollmentTransferQueryService: {
         getEnrollmentSessionInfo: vi.fn(),

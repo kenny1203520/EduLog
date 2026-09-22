@@ -38,11 +38,11 @@ vi.mock('@/services/AggregateService', () => ({
 }))
 
 vi.mock('@/services/session/SessionService', () => ({
-    SessionService: { getClassSessions: vi.fn() }
+    SessionService: { getAllClassSessions: vi.fn() }
 }))
 
 vi.mock('@/services/classroom/ClassroomService', () => ({
-    ClassroomService: { getClassrooms: vi.fn() }
+    ClassroomService: { getAllClassrooms: vi.fn() }
 }))
 
 const SearchableSelectStub = defineComponent({
@@ -65,8 +65,8 @@ describe('EnrollStudentModal cascading selections', () => {
             { id: 'course-a', displayName: 'Course A', lessons: [] },
             { id: 'course-b', displayName: 'Course B', lessons: [] }
         ] } as any)
-        vi.mocked(SessionService.getClassSessions).mockResolvedValue({ data: sessions, count: sessions.length } as any)
-        vi.mocked(ClassroomService.getClassrooms).mockResolvedValue({ data: [
+        vi.mocked(SessionService.getAllClassSessions).mockResolvedValue({ data: sessions, count: sessions.length } as any)
+        vi.mocked(ClassroomService.getAllClassrooms).mockResolvedValue({ data: [
             { id: 'room-1', name: 'Room 1' },
             { id: 'room-2', name: 'Room 2' },
             { id: 'room-3', name: 'Room 3' }

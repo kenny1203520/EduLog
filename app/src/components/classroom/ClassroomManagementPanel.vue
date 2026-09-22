@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
@@ -44,6 +44,7 @@ const expandedSessionId = ref<string | null>(null)
 const sessionSelections = ref<RolePolicySelections>({})
 const sessionBaseline = ref('')
 const savingSessionPolicy = ref(false)
+const canManageRbac = ref(false)
 const pendingAction = ref<null | (() => void)>(null)
 const showUnsavedDialog = ref(false)
 
@@ -114,7 +115,7 @@ function resetSessionPolicy() {
 }
 
 async function saveSessionPolicy(continuePending = false) {
-    if (!expandedSessionId.value) return
+    if (!expandedSessionId.value || !canManageRbac.value) return
     savingSessionPolicy.value = true
     try {
         const overrides = props.roles.flatMap(role => {
@@ -156,6 +157,10 @@ function timeSummary(session: ClassSessionDTO) {
     return rules.map(rule => `${rule.start_time || ''}–${rule.end_time || ''}`).join(' · ')
 }
 
+onMounted(async () => {
+    if (typeof PermissionPolicyService.canManageRbac !== 'function') return
+    canManageRbac.value = await PermissionPolicyService.canManageRbac()
+})
 watch(() => props.roomId, () => {
     activeTab.value = props.initialTab || 'details'
     expandedSessionId.value = null
@@ -203,7 +208,7 @@ watch(() => props.roomId, () => {
                     </label>
                     <label class="min-w-0 space-y-2 md:col-span-2">
                         <span class="text-sm font-bold text-gray-700">{{ $t('classroom.external_link') }}</span>
-                        <input v-model="roomModel.external_link" :placeholder="$t('classroom.external_link_placeholder')" class="w-full min-w-0 rounded-xl border-gray-300">
+                        <input v-model="roomModel.external_link" type="url" :placeholder="$t('classroom.external_link_placeholder')" class="w-full min-w-0 rounded-xl border-gray-300">
                     </label>
                     <label class="space-y-2 md:col-span-2">
                         <span class="text-sm font-bold text-gray-700">{{ $t('classroom.color_label') }}</span>
@@ -213,8 +218,9 @@ watch(() => props.roomId, () => {
 
                 <div v-else-if="activeTab === 'notifications'" class="mx-auto max-w-4xl space-y-4">
                     <p class="text-sm font-bold leading-6 text-gray-500">{{ $t('classroom.room_notification_hint') }}</p>
+                    <p v-if="!canManageRbac" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">{{ $t('errors.permission_required_for_settings') }}</p>
                     <ScopedRolePolicyEditor v-model="roomPolicyModel" :roles="roles" :policies="policies"
-                        scope-type="classroom" :scope-id="roomId" :classroom-id="roomId" :disabled="saving" />
+                        scope-type="classroom" :scope-id="roomId" :classroom-id="roomId" :disabled="saving || !canManageRbac" />
                 </div>
 
                 <div v-else class="mx-auto max-w-4xl space-y-4">
@@ -237,11 +243,11 @@ watch(() => props.roomId, () => {
                         <div v-if="expandedSessionId === session.id" class="space-y-4 border-t border-gray-100 bg-gray-50/60 p-4">
                             <ScopedRolePolicyEditor v-model="sessionSelections" :roles="roles" :policies="policies"
                                 scope-type="class_session" :scope-id="session.id" :classroom-id="roomId"
-                                :class-session-id="session.id" compact :disabled="savingSessionPolicy" />
+                                :class-session-id="session.id" compact :disabled="savingSessionPolicy || !canManageRbac" />
                             <div class="flex flex-wrap justify-end gap-2">
                                 <button type="button" class="rounded-xl px-4 py-2 text-sm font-black text-gray-600 hover:bg-white" @click="resetSessionPolicy">{{ $t('common.reset') }}</button>
                                 <button type="button" class="rounded-xl px-4 py-2 text-sm font-black text-emerald-700 hover:bg-white" @click="requestFullEdit(session)">{{ $t('classroom.full_edit_session') }}</button>
-                                <button type="button" :disabled="savingSessionPolicy || !sessionPolicyDirty" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40" @click="saveSessionPolicy()">{{ $t('classroom.save_notification_settings') }}</button>
+                                <button v-if="canManageRbac" type="button" :disabled="savingSessionPolicy || !sessionPolicyDirty" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40" @click="saveSessionPolicy()">{{ $t('classroom.save_notification_settings') }}</button>
                             </div>
                         </div>
                     </article>
@@ -264,7 +270,7 @@ watch(() => props.roomId, () => {
                 <div class="mt-6 flex flex-wrap justify-end gap-2">
                     <button type="button" class="rounded-xl px-4 py-2 font-bold text-gray-500" @click="showUnsavedDialog = false; pendingAction = null">{{ $t('common.cancel') }}</button>
                     <button type="button" class="rounded-xl px-4 py-2 font-bold text-red-600 hover:bg-red-50" @click="discardAndContinue">{{ $t('common.discard') }}</button>
-                    <button type="button" :disabled="savingSessionPolicy" class="rounded-xl bg-emerald-600 px-4 py-2 font-black text-white disabled:opacity-40" @click="saveSessionPolicy(true)">{{ $t('common.save') }}</button>
+                    <button v-if="canManageRbac" type="button" :disabled="savingSessionPolicy" class="rounded-xl bg-emerald-600 px-4 py-2 font-black text-white disabled:opacity-40" @click="saveSessionPolicy(true)">{{ $t('common.save') }}</button>
                 </div>
             </div>
         </div>

@@ -3,7 +3,7 @@ import { ReportQueryService } from './ReportQueryService'
 
 const { fromMock } = vi.hoisted(() => ({ fromMock: vi.fn() }))
 
-vi.mock('@/lib/supabase', () => ({ supabase: { from: fromMock } }))
+vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: fromMock } }))
 
 beforeEach(() => {
     vi.clearAllMocks()

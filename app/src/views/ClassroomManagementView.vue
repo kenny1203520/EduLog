@@ -41,6 +41,8 @@ const preferences = usePreferencesStore()
 const activeTab = ref<'rooms' | 'sessions'>('rooms')
 type DisplayMode = 'visible' | 'all' | 'hidden'
 
+// Hidden records remain available through the explicit display controls, but
+// the management page starts with the user's visible working set.
 const displayMode = ref<DisplayMode>('visible')
 const selectedSessionClassroomFilter = ref('')
 
@@ -101,6 +103,8 @@ const searchQuery = ref('')
 const allClassrooms = ref<Classroom[]>([]) // For Dropdown
 const hiddenClassroomIds = ref<Set<string>>(new Set())
 const hiddenSessionIds = ref<Set<string>>(new Set())
+const classroomOverviewCounts = ref({ total: 0, visible: 0, hidden: 0 })
+const sessionOverviewCounts = ref({ total: 0, visible: 0, hidden: 0 })
 const teachersList = ref<any[]>([])
 const roles = ref<RoleDTO[]>([])
 const notificationPermission = ref<PermissionDTO | null>(null)
@@ -180,7 +184,7 @@ async function loadRoomSessions(roomId?: string | null) {
         roomSessions.value = []
         return
     }
-    const result = await SessionService.getClassSessions(1, 500, '', roomId, 'all')
+    const result = await AggregateService.getAllClassSessionsOverview('', roomId, 'all')
     roomSessions.value = [...result.data].sort((a, b) => {
         const firstA = a.schedule_rules?.[0]
         const firstB = b.schedule_rules?.[0]
@@ -193,7 +197,7 @@ async function loadRoomSessions(roomId?: string | null) {
 
 async function loadTeachers() {
     try {
-        teachersList.value = await TeacherService.getAllTeachers()
+        teachersList.value = await AggregateService.getAllTeachersOverview()
     } catch (e) {
         console.error('Failed to load teachers:', e)
     }
@@ -221,15 +225,10 @@ onMounted(async () => {
 async function loadData() {
     try {
         loading.value = true
-        await Promise.all([
-            loadRooms(),
-            loadSessions(),
-            loadAllRooms(),
-            loadTeachers(),
-            RoleService.getRoles().then(data => { roles.value = data }),
-            loadNotificationPolicies(),
-            CourseCatalogService.getCourses().then(res => { courses.value = res.data })
-        ])
+        // The room list is the visible initial tab.  Editor dependencies and
+        // session data are loaded only when the user opens that UI, rather
+        // than turning one page render into seven unrelated requests.
+        await loadRooms()
     } catch (e) {
         console.error(e)
     } finally {
@@ -246,48 +245,61 @@ async function loadRooms() {
             displayMode.value
         )
         classrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
+        allClassrooms.value = classrooms.value
         roomsPagination.value.total = agg.count || 0
         hiddenClassroomIds.value = new Set((agg.hiddenClassroomIds as string[] | undefined) || [])
         hiddenSessionIds.value = new Set((agg.hiddenSessionIds as string[] | undefined) || [])
+        classroomOverviewCounts.value = {
+            total: Number(agg.classroomTotal ?? agg.count ?? 0),
+            visible: Number(agg.visibleClassroomCount ?? Math.max(0, Number(agg.count ?? 0) - hiddenClassroomIds.value.size)),
+            hidden: Number(agg.hiddenClassroomCount ?? hiddenClassroomIds.value.size),
+        }
+        sessionOverviewCounts.value = {
+            total: Number(agg.sessionTotal ?? agg.sessionCount ?? 0),
+            visible: Number(agg.visibleSessionCount ?? Math.max(0, Number(agg.sessionCount ?? 0) - hiddenSessionIds.value.size)),
+            hidden: Number(agg.hiddenSessionCount ?? hiddenSessionIds.value.size),
+        }
         return
     } catch (e) {
-        // fallback to existing client-side approach
-        const res = await ClassroomService.getClassrooms(
-            roomsPagination.value.page,
-            roomsPagination.value.perPage,
-            searchQuery.value,
-            displayMode.value
-        )
-        classrooms.value = res.data
-        roomsPagination.value.total = res.count
-
-        const roomIds = classrooms.value.map(room => room.id).filter((id): id is string => Boolean(id))
-        hiddenClassroomIds.value = await VisibilityPreferenceService.getHiddenEntityIds('classroom', roomIds)
+        reportError(e)
     }
 }
 
+async function ensureEditorDependencies() {
+    if (roles.value.length === 0) roles.value = await RoleService.getRoles()
+    if (courses.value.length === 0) {
+        const result = await CourseCatalogService.getCourses()
+        courses.value = result.data
+    }
+    if (teachersList.value.length === 0) await loadTeachers()
+    if (!notificationPermission.value) await loadNotificationPolicies()
+}
+
 async function loadSessions() {
-    const res = await SessionService.getClassSessions(
+    const res = await AggregateService.getClassSessionsOverview(
         sessionsPagination.value.page,
         sessionsPagination.value.perPage,
         searchQuery.value,
         selectedSessionClassroomFilter.value || null,
         displayMode.value
     )
-    sessions.value = res.data
+    sessions.value = res.data as any[]
     sessionsPagination.value.total = res.count
-
-    const sessionIds = sessions.value.map(session => session.id).filter((id): id is string => Boolean(id))
-    hiddenSessionIds.value = await VisibilityPreferenceService.getHiddenEntityIds('class_session', sessionIds)
+    hiddenSessionIds.value = new Set(res.hiddenSessionIds)
+    sessionOverviewCounts.value = {
+        total: Number((res as any).sessionTotal ?? res.count ?? 0),
+        visible: Number((res as any).visibleSessionCount ?? Math.max(0, Number(res.count ?? 0) - hiddenSessionIds.value.size)),
+        hidden: Number((res as any).hiddenSessionCount ?? hiddenSessionIds.value.size),
+    }
 }
 
 async function loadAllRooms() {
     try {
-        const agg = await AggregateService.getClassroomSessionManagerAggregate(1, 1000, '')
+        const agg = await AggregateService.getAllClassroomsOverview('')
         allClassrooms.value = (agg.classrooms || []).map((d: any) => new Classroom(d))
         return
     } catch (e) {
-        const res = await ClassroomService.getClassrooms(1, 1000)
+        const res = await ClassroomService.getAllClassrooms()
         allClassrooms.value = res.data
     }
 }
@@ -306,7 +318,7 @@ watch(activeTab, () => {
         return
     }
 
-    loadSessions()
+    void Promise.all([loadSessions(), loadAllRooms()])
 })
 watch(displayMode, () => {
     if (activeTab.value === 'rooms') {
@@ -448,6 +460,7 @@ async function saveClassroom() {
             { type: 'classroom', id: saved.id },
             policyOverrides(roomPolicySelections.value)
         )
+        AggregateService.clearCache()
         await Promise.all([loadRooms(), loadAllRooms(), refreshNotificationPolicies()])
         closeRoomModal()
         toast.success(t('classroom.room_save_success') || 'Room saved successfully')
@@ -459,6 +472,7 @@ async function saveClassroom() {
 }
 
 async function openEditRoom(room: Classroom) {
+    await ensureEditorDependencies()
     roomPanelInitialTab.value = 'details'
     editingClassroom.value = room
     newClassroom.value = {
@@ -473,7 +487,8 @@ async function openEditRoom(room: Classroom) {
     isCreateRoomModalOpen.value = true
 }
 
-function openCreateRoomModal() {
+async function openCreateRoomModal() {
+    await ensureEditorDependencies()
     roomPanelInitialTab.value = 'details'
     editingClassroom.value = null
     newClassroom.value = { name: '', address: '', phone: '', color: '#10b981', external_link: '' }
@@ -501,6 +516,7 @@ async function deleteClassroom(id: string) {
     openConfirm(t('classroom.confirm_delete_room'), async () => {
         try {
             await ClassroomService.deleteClassroom(id)
+            AggregateService.clearCache()
             await Promise.all([loadRooms(), loadAllRooms()])
             toast.success(t('classroom.room_delete_success') || 'Room deleted successfully')
         } catch (e) {
@@ -518,6 +534,7 @@ function isSessionHidden(id?: string) {
 }
 
 async function refreshActiveList() {
+    AggregateService.clearCache()
     if (activeTab.value === 'rooms') {
         await loadRooms()
         return
@@ -588,6 +605,7 @@ async function saveSession() {
         )
         const reconciliation = await OccurrenceService.syncSessionOccurrences(sessionId)
 
+        AggregateService.clearCache()
         await Promise.all([loadSessions(), refreshNotificationPolicies()])
         if (returnToRoomAfterSession.value && saved.classroom_id) await loadRoomSessions(saved.classroom_id)
         closeSessionModal()
@@ -601,6 +619,7 @@ async function saveSession() {
 }
 
 async function openEditSession(session: ClassSessionDTO) {
+    await ensureEditorDependencies()
     editingSession.value = session
     sessionPolicySelections.value = policySelectionsFor('class_session', session.id)
     newSession.value = {
@@ -625,7 +644,8 @@ async function openEditSession(session: ClassSessionDTO) {
     isCreateSessionModalOpen.value = true
 }
 
-function openCreateSessionModal() {
+async function openCreateSessionModal() {
+    await ensureEditorDependencies()
     returnToRoomAfterSession.value = false
     clearTeacherSelection()
     editingSession.value = null
@@ -682,6 +702,7 @@ async function deleteSession(id: string) {
     openConfirm(t('classroom.confirm_delete_session'), async () => {
         try {
             await SessionService.deleteClassSession(id)
+            AggregateService.clearCache()
             await loadSessions()
             toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
         } catch (e) {
@@ -964,6 +985,13 @@ function clearTeacherSelection() {
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
                     }}"</span>
+                    <template v-if="displayMode === 'visible' && classroomOverviewCounts.hidden > 0">
+                        <p class="mt-2">{{ $t('classroom.all_rooms_hidden', 'All matching classrooms are hidden.') }}</p>
+                        <button class="mt-3 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700"
+                            @click="displayMode = 'all'">
+                            {{ $t('classroom.show_all_rooms', 'Show all classrooms') }}
+                        </button>
+                    </template>
                 </div>
             </div>
 
@@ -1090,6 +1118,13 @@ function clearTeacherSelection() {
                 <div v-if="sortedSessions.length === 0"
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_sessions') }}
+                    <template v-if="displayMode === 'visible' && sessionOverviewCounts.hidden > 0">
+                        <p class="mt-2">{{ $t('classroom.all_sessions_hidden', 'All matching sessions are hidden.') }}</p>
+                        <button class="mt-3 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700"
+                            @click="displayMode = 'all'">
+                            {{ $t('classroom.show_all_sessions', 'Show all sessions') }}
+                        </button>
+                    </template>
                 </div>
             </div>
 

@@ -1,6 +1,10 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import type { RichTextDocumentV1 } from '@/components/common/text-editor/types'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
+import { apiV1Client } from '@/services/api/ApiV1Client'
+import { PageApiService } from '@/services/api/PageApiService'
 
 export interface TeacherDTO {
     id?: string
@@ -72,10 +76,14 @@ export class TeacherService {
         perPage: number = 100,
         search?: string
     ): Promise<{ data: TeacherDTO[]; count: number }> {
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<TeacherDTO>('teachers', { page, perPage, search, sort: 'name', mode: 'v1' })
+            return { data: result.data || [], count: result.meta?.total ?? result.data?.length ?? 0 }
+        }
         const from = (page - 1) * perPage
         const to = from + perPage - 1
 
-        let query = supabase
+        let query = apiDataClient
             .from('teachers')
             .select('*', { count: 'exact' })
 
@@ -96,7 +104,11 @@ export class TeacherService {
     }
 
     static async getAllTeachers(): Promise<TeacherDTO[]> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<TeacherDTO>('teachers', { perPage: 100, sort: 'name', mode: 'v1' })
+            return result.data || []
+        }
+        const { data, error } = await apiDataClient
             .from('teachers')
             .select('*')
             .order('name', { ascending: true })
@@ -106,7 +118,17 @@ export class TeacherService {
     }
 
     static async getAllTeachersWithCredentials(): Promise<TeacherDTO[]> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<TeacherDTO>('teachers', { perPage: 100, sort: 'name', mode: 'v1' })
+            const teachers = result.data || []
+            // Collections intentionally omit sensitive profile fields. Hydrate
+            // the authorized item projection before edit forms can mutate rows.
+            return Promise.all(teachers.map(async (teacher) => {
+                if (!teacher.id) return teacher
+                return (await this.getTeacherById(teacher.id))
+            }))
+        }
+        const { data, error } = await apiDataClient
             .from('teachers')
             .select('*, teacher_credentials(*)')
             .order('name', { ascending: true })
@@ -116,7 +138,16 @@ export class TeacherService {
     }
 
     static async getTeacherById(id: string): Promise<TeacherDTO> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const base = (await apiResourceClient.get<TeacherDTO>('teachers', id, 'v1')).data
+            const sensitive = await PageApiService.getTeacherPrivateDetails(id)
+            return {
+                ...base,
+                ...sensitive.data.teacher,
+                teacher_credentials: sensitive.data.credentials || []
+            }
+        }
+        const { data, error } = await apiDataClient
             .from('teachers')
             .select('*, teacher_credentials(*)')
             .eq('id', id)
@@ -129,7 +160,11 @@ export class TeacherService {
     static async getTeacherByUserId(userId: string | null | undefined): Promise<TeacherDTO | null> {
         if (!userId) return null
 
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const result = await apiResourceClient.list<TeacherDTO>('teachers', { userId, perPage: 1, mode: 'v1' })
+            return result.data?.[0] || null
+        }
+        const { data, error } = await apiDataClient
             .from('teachers')
             .select('*')
             .eq('user_id', userId)
@@ -142,7 +177,8 @@ export class TeacherService {
     }
 
     static async createTeacher(teacher: TeacherUpsertDTO): Promise<TeacherDTO> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<TeacherDTO>('teachers', normalizeTeacherPayload(teacher), 'v1')).data
+        const { data, error } = await apiDataClient
             .from('teachers')
             .insert([normalizeTeacherPayload(teacher)])
             .select()
@@ -156,7 +192,8 @@ export class TeacherService {
         id: string,
         updates: Partial<Omit<TeacherDTO, 'id' | 'created_at' | 'updated_at'>>
     ): Promise<TeacherDTO> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<TeacherDTO>('teachers', id, normalizeTeacherPayload(updates), 'v1')).data
+        const { data, error } = await apiDataClient
             .from('teachers')
             .update(normalizeTeacherPayload(updates))
             .eq('id', id)
@@ -168,7 +205,8 @@ export class TeacherService {
     }
 
     static async deleteTeacher(id: string): Promise<void> {
-        const { error } = await supabase
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('teachers', id, 'v1'); return }
+        const { error } = await apiDataClient
             .from('teachers')
             .delete()
             .eq('id', id)
@@ -196,7 +234,11 @@ export class TeacherService {
 
     static async bulkDeleteTeachers(ids: string[]): Promise<void> {
         if (ids.length === 0) return
-        const { error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.post('/teachers/bulk-delete', { ids })
+            return
+        }
+        const { error } = await apiDataClient
             .from('teachers')
             .delete()
             .in('id', ids)
@@ -205,12 +247,13 @@ export class TeacherService {
     }
 
     static async addCredential(credential: TeacherCredentialDTO): Promise<TeacherCredentialDTO> {
-        const { data: { user } } = await supabase.auth.getUser()
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.create<TeacherCredentialDTO>('teacher-credentials', credential, 'v1')).data
+        const { data: { user } } = await apiDataClient.auth.getUser()
         if (!user) throw new Error('User not authenticated')
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('teacher_credentials')
-            .insert({ ...credential, user_id: user.id })
+            .insert(credential)
             .select()
             .single()
 
@@ -219,7 +262,8 @@ export class TeacherService {
     }
 
     static async updateCredential(id: string, credential: Partial<TeacherCredentialDTO>): Promise<TeacherCredentialDTO> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') return (await apiResourceClient.update<TeacherCredentialDTO>('teacher-credentials', id, credential, 'v1')).data
+        const { data, error } = await apiDataClient
             .from('teacher_credentials')
             .update(credential)
             .eq('id', id)
@@ -231,7 +275,8 @@ export class TeacherService {
     }
 
     static async deleteCredential(id: string): Promise<void> {
-        const { error } = await supabase
+        if (getApiV1Mode() === 'v1') { await apiResourceClient.remove('teacher-credentials', id, 'v1'); return }
+        const { error } = await apiDataClient
             .from('teacher_credentials')
             .delete()
             .eq('id', id)
@@ -241,7 +286,12 @@ export class TeacherService {
 
     // Session-teacher relationships
     static async getSessionTeachers(sessionId: string, onDate?: string): Promise<SessionTeacherAssignmentDTO[]> {
-        let query = supabase
+        if (getApiV1Mode() === 'v1') {
+            const query = onDate ? '?on_date=' + encodeURIComponent(onDate) : ''
+            const result = await apiV1Client.get<SessionTeacherAssignmentDTO[]>('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers' + query)
+            return result.data || []
+        }
+        let query = apiDataClient
             .from('class_session_teachers')
             .select(`
                 teacher_id,
@@ -314,6 +364,11 @@ export class TeacherService {
     ): Promise<void> {
         if (teachers.length === 0) return
 
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.post('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers', { teachers })
+            return
+        }
+
         const records = teachers.map(t => ({
             class_session_id: sessionId,
             teacher_id: t.teacher_id,
@@ -321,7 +376,7 @@ export class TeacherService {
             effective_from: t.effective_from,
             effective_to: t.effective_to || null
         }))
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('class_session_teachers')
             .insert(records)
 
@@ -329,7 +384,11 @@ export class TeacherService {
     }
 
     static async assignTeacherForDate(sessionId: string, teacherId: string, date: string): Promise<void> {
-        const { error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.post('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers', { teachers: [{ teacher_id: teacherId, effective_from: date, effective_to: date }] })
+            return
+        }
+        const { error } = await apiDataClient
             .from('class_session_teachers')
             .upsert({
                 class_session_id: sessionId,
@@ -342,7 +401,11 @@ export class TeacherService {
     }
 
     static async removeTeacherAssignment(sessionId: string, teacherId: string, effectiveFrom: string): Promise<void> {
-        const { error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.delete('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers?teacher_id=' + encodeURIComponent(teacherId) + '&effective_from=' + encodeURIComponent(effectiveFrom))
+            return
+        }
+        const { error } = await apiDataClient
             .from('class_session_teachers')
             .delete()
             .eq('class_session_id', sessionId)
@@ -353,7 +416,11 @@ export class TeacherService {
     }
 
     static async clearSessionTeachers(sessionId: string): Promise<void> {
-        const { error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.delete('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers')
+            return
+        }
+        const { error } = await apiDataClient
             .from('class_session_teachers')
             .delete()
             .eq('class_session_id', sessionId)
@@ -362,7 +429,11 @@ export class TeacherService {
     }
 
     static async removeTeacherFromSession(sessionId: string, teacherId: string): Promise<void> {
-        const { error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.delete('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers/' + encodeURIComponent(teacherId))
+            return
+        }
+        const { error } = await apiDataClient
             .from('class_session_teachers')
             .delete()
             .eq('class_session_id', sessionId)

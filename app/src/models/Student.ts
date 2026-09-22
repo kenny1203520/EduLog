@@ -26,6 +26,19 @@ export interface StudentSchoolDTO {
   updated_at?: string
 }
 
+/** Safe current-school projection returned by the student Page APIs. */
+export interface StudentSchoolSummaryDTO {
+  name: string
+  status: 'enrolled'
+  grade?: string | null
+  class?: string | null
+}
+
+export interface StudentCapabilitiesDTO {
+  read_sensitive: boolean
+  update_sensitive: boolean
+}
+
 export interface StudentCredentialDTO {
   id?: string
   platform: 'Koding School (Orange Apple)' | 'Roblox' | 'Minecraft' | 'Anydesk' | 'Quiz Platform' | string
@@ -56,6 +69,10 @@ export interface StudentDTO {
   student_schools?: StudentSchoolDTO[]
   student_credentials?: StudentCredentialDTO[]
   enrollments?: EnrollmentDTO[]
+  contact_count?: number
+  credential_count?: number
+  current_school?: StudentSchoolSummaryDTO | null
+  capabilities?: StudentCapabilitiesDTO
 }
 
 export class Student {
@@ -78,6 +95,10 @@ export class Student {
   public schools: StudentSchoolDTO[]
   public credentials: StudentCredentialDTO[]
   public enrollments: Enrollment[]
+  public contactCount: number
+  public credentialCount: number
+  public currentSchoolSummary?: StudentSchoolSummaryDTO
+  public capabilities: StudentCapabilitiesDTO
 
   constructor(dto: StudentDTO) {
     this.id = dto.id
@@ -106,6 +127,10 @@ export class Student {
     })
     this.credentials = dto.student_credentials || []
     this.enrollments = (dto.enrollments || []).map(e => new Enrollment(e))
+    this.contactCount = dto.contact_count ?? this.contacts.length
+    this.credentialCount = dto.credential_count ?? this.credentials.length
+    this.currentSchoolSummary = dto.current_school ?? undefined
+    this.capabilities = dto.capabilities ?? { read_sensitive: false, update_sensitive: false }
   }
 
   /**
@@ -132,13 +157,13 @@ export class Student {
   }
 
   get displayGrade(): string {
-    const s = this.currentSchool
+    const s = this.currentSchool ?? this.currentSchoolSummary
     if (!s) return ''
-    return s.class ? `${s.grade} - ${s.class}` : (s.grade || '')
+    return s.class ? `${s.grade || ''} - ${s.class}`.trim() : (s.grade || '')
   }
 
   get displaySchoolName(): string {
-    return this.currentSchool?.name || ''
+    return this.currentSchool?.name || this.currentSchoolSummary?.name || ''
   }
 
   get displaySchoolId(): string {

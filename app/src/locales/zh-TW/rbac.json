@@ -1,0 +1,73 @@
+{
+  "builtin": "內建",
+  "protected_read_only": "受保護角色・僅供檢視",
+"system_permissions": "系統角色權限",
+"system_title": "系統管理",
+"system_subtitle": "管理系統角色、指派與帳號狀態，所有變更都會經過版本檢查與稽核。",
+"system_sections": { "label": "系統設定分區", "permissions": "角色與權限", "assignments": "角色指派", "users": "使用者狀態", "audit": "稽核紀錄" },
+"audit_title": "稽核紀錄",
+"audit_action": "動作",
+"audit_outcome": "結果",
+"audit_route": "路由",
+"audit_time": "時間",
+"audit_empty": "目前沒有稽核事件",
+  "new_role": "新增角色",
+  "role_name": "角色名稱",
+"role_description": "角色描述",
+"inherited": "繼承",
+"effective": "有效結果",
+  "denied": "拒絕",
+  "version_conflict": "權限設定已變更。已保留目前草稿，請重新載入後再儲存。",
+  "save_permissions": "儲存權限",
+  "permissions": {
+    "title": "角色權限",
+    "subtitle": "設定本地政策並檢視繼承後的存取結果。"
+  },
+  "permission": {
+    "inherit": "繼承",
+    "allow": "允許",
+    "deny": "拒絕"
+  },
+  "resources": {
+    "users": { "name": "使用者", "description": "系統使用者帳號與狀態" },
+    "roles": { "name": "角色", "description": "角色定義與繼承關係" },
+    "role_assignments": { "name": "角色指派", "description": "指派給使用者或教學成員的角色" },
+    "permissions": { "name": "權限目錄", "description": "由系統管理的權限定義" },
+    "settings": { "name": "系統設定", "description": "EduLog 全域設定" },
+    "audit": { "name": "稽核事件", "description": "安全與管理操作紀錄" },
+    "teachings": { "name": "教學", "description": "教學工作區" },
+    "members": { "name": "成員", "description": "教學成員與角色" },
+    "courses": { "name": "課程", "description": "課程與學習內容" },
+    "lessons": { "name": "課次", "description": "課程中的課次" },
+    "classrooms": { "name": "教室", "description": "教室空間" },
+    "class_sessions": { "name": "班級時段", "description": "排程中的教學時段" },
+    "students": { "name": "學生", "description": "學生資料與敏感資訊" },
+    "teachers": { "name": "教師", "description": "教師身分與指派" },
+    "enrollments": { "name": "課程註冊", "description": "學生的課程註冊資料" },
+    "occurrences": { "name": "課堂", "description": "排程產生的實際課堂" },
+    "reports": { "name": "報告", "description": "學生學習報告" },
+    "templates": { "name": "範本", "description": "報告與教學範本" },
+    "holidays": { "name": "假日", "description": "教學行事曆假日" }
+  },
+  "actions": {
+    "list": { "name": "列表", "description": "查看資料集合" },
+    "read": { "name": "讀取", "description": "查看單筆資料" },
+    "create": { "name": "建立", "description": "建立新資料" },
+    "update": { "name": "更新", "description": "編輯既有資料" },
+    "delete": { "name": "刪除", "description": "移除資料" },
+    "manage": { "name": "管理", "description": "執行管理操作" },
+    "read_sensitive": { "name": "讀取敏感資料", "description": "查看受保護的個人資料" },
+    "update_sensitive": { "name": "更新敏感資料", "description": "編輯受保護的個人資料" }
+  },
+  "roles": {
+    "system_owner": { "name": "系統擁有者", "description": "EduLog 系統的受保護擁有者" },
+    "system_admin": { "name": "系統管理員", "description": "管理系統設定，但不能轉移擁有權" },
+    "user_manager": { "name": "使用者管理員", "description": "管理使用者與系統角色指派" },
+    "auditor": { "name": "稽核員", "description": "讀取稽核事件與系統中繼資料" },
+    "teaching_owner": { "name": "教學擁有者", "description": "教學工作區的受保護擁有者" },
+    "teaching_manager": { "name": "教學管理員", "description": "管理教學工作區、成員與資源" },
+    "teacher": { "name": "教師", "description": "建立與維護教學紀錄" },
+    "assistant": { "name": "助教", "description": "以有限寫入權限支援教學作業" },
+    "viewer": { "name": "檢視者", "description": "只能讀取教學工作區" }
+  }
+}

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import {
     USER_DEFAULT_SCOPE_ENTITY_ID,
     SYSTEM_ATTENDANCE_TEMPLATE,
@@ -6,6 +6,8 @@ import {
 } from '@/utils/copyTemplate'
 import type { CopyTemplateDTO, CopyTemplateScopeType, EffectiveTemplateResult, CopyTemplateLoadOption, CopyTemplateEditorBundle } from './CopyTemplateService'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { apiResourceClient } from '@/services/api/ApiResourceClient'
+import { getApiV1Mode } from '@/services/api/ApiModeClient'
 
 const COPY_TEMPLATE_COLUMNS = 'id, user_id, template_type, scope_type, scope_entity_id, template_text, template_document, created_at, updated_at'
 
@@ -17,7 +19,7 @@ export class CopyTemplateQueryService {
     private static async getCurrentUserId(): Promise<string | null> {
         const {
             data: { user }
-        } = await supabase.auth.getUser()
+        } = await apiDataClient.auth.getUser()
 
         return user?.id || null
     }
@@ -28,7 +30,11 @@ export class CopyTemplateQueryService {
         scopeType: CopyTemplateScopeType,
         scopeEntityId: string
     ): Promise<CopyTemplateDTO | null> {
-        const { data, error } = await supabase
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<CopyTemplateDTO>('copy-templates', { templateType, scopeType, scopeEntityId, perPage: 1, sort: '-updated_at', mode: 'v1' })
+            return response.data?.[0] || null
+        }
+        const { data, error } = await apiDataClient
             .from('copy_templates')
             .select(COPY_TEMPLATE_COLUMNS)
             .eq('user_id', userId)
@@ -46,6 +52,12 @@ export class CopyTemplateQueryService {
         scopeType: CopyTemplateScopeType,
         classSessionId?: string
     ): Promise<string | null> {
+        if (getApiV1Mode() === 'v1') {
+            const scopeEntityId = scopeType === 'class_session' ? (classSessionId || '') : USER_DEFAULT_SCOPE_ENTITY_ID
+            if (!scopeEntityId) return null
+            const row = await this.getTemplateForScope('', 'attendance_copy', scopeType, scopeEntityId)
+            return row?.template_text || null
+        }
         const userId = await this.getCurrentUserId()
         if (!userId) return null
 
@@ -62,6 +74,10 @@ export class CopyTemplateQueryService {
     }
 
     static async getCourseUserDefaultTemplate(): Promise<string | null> {
+        if (getApiV1Mode() === 'v1') {
+            const row = await this.getTemplateForScope('', 'course_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID)
+            return row?.template_text || null
+        }
         const userId = await this.getCurrentUserId()
         if (!userId) return null
 
@@ -76,6 +92,12 @@ export class CopyTemplateQueryService {
     }
 
     static async getEffectiveAttendanceTemplate(classSessionId: string): Promise<EffectiveTemplateResult> {
+        if (getApiV1Mode() === 'v1') {
+            const classRow = await this.getTemplateForScope('', 'attendance_copy', 'class_session', classSessionId)
+            const row = classRow?.template_text ? classRow : await this.getTemplateForScope('', 'attendance_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID)
+            if (row?.template_text) return { templateText: row.template_text, templateDocument: createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText, source: row === classRow ? 'class_session' : 'user_default' }
+            return { templateText: SYSTEM_ATTENDANCE_TEMPLATE, source: 'system_default' }
+        }
         const userId = await this.getCurrentUserId()
         if (userId) {
             const classRow = await this.getTemplateForScope(userId, 'attendance_copy', 'class_session', classSessionId)
@@ -103,6 +125,11 @@ export class CopyTemplateQueryService {
     }
 
     static async getEffectiveCourseTemplate(): Promise<EffectiveTemplateResult> {
+        if (getApiV1Mode() === 'v1') {
+            const row = await this.getTemplateForScope('', 'course_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID)
+            if (row?.template_text) return { templateText: row.template_text, templateDocument: createTextEditorContent(row.template_document || row.template_text, { templateVariables: true }).richText, source: 'user_default' }
+            return { templateText: SYSTEM_COURSE_TEMPLATE, source: 'system_default' }
+        }
         const userId = await this.getCurrentUserId()
         if (userId) {
             const row = await this.getTemplateForScope(userId, 'course_copy', 'user_default', USER_DEFAULT_SCOPE_ENTITY_ID)
@@ -124,10 +151,14 @@ export class CopyTemplateQueryService {
     private static async listUserTemplatesByType(
         templateType: 'attendance_copy' | 'course_copy'
     ): Promise<CopyTemplateDTO[]> {
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<CopyTemplateDTO>('copy-templates', { templateType, perPage: 100, sort: '-updated_at', mode: 'v1' })
+            return response.data || []
+        }
         const userId = await this.getCurrentUserId()
         if (!userId) return []
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('copy_templates')
             .select(COPY_TEMPLATE_COLUMNS)
             .eq('user_id', userId)
@@ -153,11 +184,15 @@ export class CopyTemplateQueryService {
 
     private static async getClassSessionNameMap(sessionIds: string[]): Promise<Record<string, string>> {
         const validIds = [...new Set(sessionIds.filter(Boolean))]
+        if (getApiV1Mode() === 'v1') {
+            const response = await apiResourceClient.list<{ id: string; name: string }>('class-sessions', { perPage: 100, mode: 'v1' })
+            return Object.fromEntries((response.data || []).filter((row) => validIds.includes(row.id)).map((row) => [row.id, row.name]))
+        }
         if (validIds.length === 0) {
             return {}
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await apiDataClient
             .from('class_sessions')
             .select('id, name')
             .in('id', validIds)

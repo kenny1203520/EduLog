@@ -15,7 +15,7 @@ EduLog 是一套為家教/補教場景設計的學習報告系統，提供比傳
 
 - Frontend: Vue 3, TypeScript, Vite, Vue Router, Pinia, Vue I18n
 - UI / Styling: Tailwind CSS 4
-- Backend/Data: Self-hosted Supabase (PostgreSQL + Auth + Realtime + Storage)
+- Backend: Express.js Auth BFF/API (Node.js 26 LTS)`n- Data: Self-hosted Supabase (PostgreSQL + Auth + Realtime + Storage)
 - Infra: Docker Compose
 
 ## 專案結構
@@ -35,42 +35,34 @@ EduLog/
 
 ## 快速開始
 
-### 1. 啟動 Supabase 服務
+### 1. 啟動服務
 
 ```bash
-cd supabase
 cp .env.example .env
-docker compose up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
-預設 API Gateway 位址為 `http://localhost:8000`。
+正式流量只由 Nginx frontend container 對外提供；`/api/*` 由 Nginx 轉送到 Express，Express 再使用 user JWT client 或受限的 server-side service-role client 存取 Supabase。Production Compose 不公開 Kong、Auth、Realtime、Storage 或 Postgres port。
 
-### 2. 建立前端環境變數
+本機若需要直接操作 Supabase Studio/資料庫，請使用 development profile 或另行建立 local-only override，不要把這些 port 暴露在 production 部署。
 
-```bash
-cd ../app
-cp .env.example .env
-```
+### 2. 前端環境變數
 
-請將 `app/.env` 的 `VITE_SUPABASE_ANON_KEY` 改為 `supabase/.env` 內的 `ANON_KEY` 值。
-
-`app/.env` 範例：
+前端不設定 `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 或 Functions URL。`app/.env` 只需：
 
 ```env
-VITE_SUPABASE_URL=http://localhost:8000
-VITE_SUPABASE_ANON_KEY=<來自 supabase/.env 的 ANON_KEY>
+VITE_API_V1_MODE=mock
+VITE_LEGACY_API_BASE_URL=/api
 ```
 
-### 3. 安裝前端依賴並啟動
+Production 由 Nginx runtime config 設定 `VITE_API_V1_MODE=v1`，瀏覽器透過同源 `/api/*` 與 HttpOnly session cookie 呼叫 Express。
+
+### 3. 安裝與啟動前端/後端
 
 ```bash
-cd app
-npm install
-npm run dev
+cd app && npm install && npm run dev
+cd ../server && npm install && npm run dev
 ```
-
-Vite 開發伺服器啟動後，依終端機顯示網址開啟（通常為 `http://localhost:5173`）。
-
 ## 建置
 
 ```bash
@@ -79,7 +71,7 @@ npm run build
 npm run preview
 ```
 
-正式 Docker image 會以 Nginx 服務前端靜態檔，並在容器啟動時由環境變數產生 runtime config。修改 `SUPABASE_PUBLIC_URL`、`ANON_KEY` 或 `EDULOG_SUPABASE_FUNCTIONS_BASE_URL` 後，重啟前端容器即可生效，不需要重新 build 前端 image。
+正式 Docker image 以 Nginx 服務 Vue 靜態檔；Express API image 獨立建置並只在 server container 讀取 Supabase secrets。Nginx 啟動時僅產生 API mode runtime config，不會把 Supabase key 注入瀏覽器。
 
 ## 資料庫 Migration
 
@@ -110,7 +102,7 @@ EduLog 自定義 migration 位於 `supabase/migrations/`，請依序執行：
 
 ## 安全注意事項
 
-- `supabase/.env.example` 僅供本機開發，正式環境務必重新產生所有密鑰。
+- `supabase/.env.example` 僅供本機開發，正式環境務必重新產生所有密鑰。`n- Supabase URL、anon key、service-role key 只注入 Express container；禁止出現在 Vue source、runtime config 或 frontend artifact。`n- Express 的一般資料操作必須使用帶 user JWT 的 client，RLS 是 API 之外的最後防線。
 - 請勿將真實金鑰、帳密與敏感資料提交到版本控制。
 - 前端 image 內建 Nginx CSP/HSTS 與 HTTP/HTTPS 雙模式；若啟用原生 HTTPS，請掛載憑證並設定 `EDULOG_HTTPS_ENABLED=true`。
 

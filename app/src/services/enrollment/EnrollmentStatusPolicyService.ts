@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { OccurrenceService } from '../occurrence/OccurrenceService'
 import { SessionService } from '../session/SessionService'
 
@@ -14,7 +14,7 @@ export class EnrollmentStatusPolicyService {
             return
         }
 
-        const { count: existingReportCount } = await supabase
+        const { count: existingReportCount } = await apiDataClient
             .from('occurrence_reports')
             .select('*', { count: 'exact', head: true })
             .eq('enrollment_id', enrollmentId)
@@ -41,7 +41,7 @@ export class EnrollmentStatusPolicyService {
     }
 
     static async deleteDroppedPendingEmptyReports(enrollmentId: string): Promise<void> {
-        const { data: reports, error } = await supabase
+        const { data: reports, error } = await apiDataClient
             .from('occurrence_reports')
             .select('id, is_completed, attendance_status, content, class_notes, contact_notes, progress_letter, lesson_id')
             .eq('enrollment_id', enrollmentId)
@@ -53,18 +53,18 @@ export class EnrollmentStatusPolicyService {
         }
 
         const deletableIds = (reports || [])
-            .filter(report => this.isBlankText(report.content))
-            .filter(report => this.isBlankText(report.class_notes))
-            .filter(report => this.isBlankText(report.contact_notes))
-            .filter(report => this.isBlankText(report.progress_letter))
-            .filter(report => report.lesson_id === null || report.lesson_id === undefined)
-            .map(report => report.id)
+            .filter((report: any) => this.isBlankText(report.content))
+            .filter((report: any) => this.isBlankText(report.class_notes))
+            .filter((report: any) => this.isBlankText(report.contact_notes))
+            .filter((report: any) => this.isBlankText(report.progress_letter))
+            .filter((report: any) => report.lesson_id === null || report.lesson_id === undefined)
+            .map((report: any) => report.id)
 
         if (deletableIds.length === 0) {
             return
         }
 
-        const { error: deleteError } = await supabase
+        const { error: deleteError } = await apiDataClient
             .from('occurrence_reports')
             .delete()
             .in('id', deletableIds)
@@ -84,7 +84,7 @@ export class EnrollmentStatusPolicyService {
             skipExisting?: boolean
         } = {}
     ): Promise<void> {
-        const { data: lessons } = await supabase
+        const { data: lessons } = await apiDataClient
             .from('lessons')
             .select('id')
             .eq('course_id', courseId)
@@ -102,7 +102,7 @@ export class EnrollmentStatusPolicyService {
         })
 
         const fetchLimit = options.skipExisting ? lessonCount * 4 : lessonCount
-        const { data: occurrences } = await supabase
+        const { data: occurrences } = await apiDataClient
             .from('class_occurrences')
             .select('id')
             .eq('class_session_id', sessionId)
@@ -115,19 +115,19 @@ export class EnrollmentStatusPolicyService {
 
             if (options.skipExisting) {
                 const occurrenceIds = occurrences
-                    .map(occ => occ.id)
-                    .filter((id): id is string => Boolean(id))
+                    .map((occ: any) => occ.id)
+                    .filter((id: any): id is string => Boolean(id))
 
                 if (occurrenceIds.length > 0) {
-                    const { data: existingReports } = await supabase
+                    const { data: existingReports } = await apiDataClient
                         .from('occurrence_reports')
                         .select('class_occurrence_id')
                         .eq('enrollment_id', enrollmentId)
                         .in('class_occurrence_id', occurrenceIds)
 
-                    const existingOccurrenceIds = new Set((existingReports || []).map(r => r.class_occurrence_id))
+                    const existingOccurrenceIds = new Set((existingReports || []).map((r: any) => r.class_occurrence_id))
                     targetOccurrences = occurrences
-                        .filter(occ => !existingOccurrenceIds.has(occ.id))
+                        .filter((occ: any) => !existingOccurrenceIds.has(occ.id))
                         .slice(0, lessonCount)
                 }
             }
@@ -136,7 +136,7 @@ export class EnrollmentStatusPolicyService {
                 return
             }
 
-            const reports = targetOccurrences.map(occ => ({
+            const reports = targetOccurrences.map((occ: any) => ({
                 enrollment_id: enrollmentId,
                 class_occurrence_id: occ.id,
                 content: '',
@@ -145,7 +145,7 @@ export class EnrollmentStatusPolicyService {
                 attendance_status: 'pending'
             }))
 
-            await supabase
+            await apiDataClient
                 .from('occurrence_reports')
                 .insert(reports)
         }

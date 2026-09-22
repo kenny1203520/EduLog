@@ -67,6 +67,7 @@ vi.mock('@/services/student/StudentService', () => ({
 vi.mock('@/services/teacher/TeacherService', () => ({
   TeacherService: {
     getAllTeachersWithCredentials: vi.fn(),
+    getTeacherById: vi.fn(() => Promise.resolve({ id: 'teacher-1', name: 'Kenny', email: 'kenny@example.com', teacher_credentials: [] })),
     getTeacherStatistics: vi.fn(() => ({
       total: 1,
       linkedAccounts: 0,
@@ -86,6 +87,12 @@ vi.mock('@/services/teacher/TeacherService', () => ({
 vi.mock('@/services/auth/AuthUserSearchService', () => ({
   AuthUserSearchService: {
     searchUsersByEmail: vi.fn(() => Promise.resolve([]))
+  }
+}))
+
+vi.mock('@/services/api/PageApiService', () => ({
+  PageApiService: {
+    getTeachersOverview: vi.fn(() => Promise.resolve({ data: { teachers: [{ id: 'teacher-1', name: 'Kenny', email: 'kenny@example.com', teacher_credentials: [] }], statistics: { totalTeachers: 1, linkedAccounts: 0, unlinkedAccounts: 1, completeProfiles: 1, teachersWithBirthday: 0, teachersWithGovId: 0 } }, meta: { total: 1 } }))
   }
 }))
 

@@ -1,69 +1,31 @@
-import { supabase } from '@/lib/supabase'
 import { Course, type CourseDTO, Lesson, type LessonDTO } from '@/models/Course'
 import { createTextEditorContent } from '@/components/common/text-editor/content'
+import { apiResourceClient } from '../api/ApiResourceClient'
 
-export interface LessonReportDTO {
-    id?: string
-    enrollment_id: string
-    lesson_id: string
-    content: string
-    version: number
-    updated_at?: string
+function toCourse(dto: CourseDTO & { lessons?: LessonDTO[] }) {
+    const course = new Course(dto)
+    for (const lesson of [...(dto.lessons ?? [])].sort((a, b) => a.sequence - b.sequence)) course.addLesson(new Lesson(lesson))
+    return course
 }
 
 export class CourseCatalogService {
     static async getCourses(page: number = 1, perPage: number = 100): Promise<{ data: Course[], count: number }> {
-        const from = (page - 1) * perPage
-        const to = from + perPage - 1
-
-        const { data, error, count } = await supabase
-            .from('courses')
-            .select(`
-        *,
-        lessons (*)
-      `, { count: 'exact' })
-            .order('display_name', { ascending: true, nullsFirst: false })
-            .order('subject', { ascending: true })
-            .order('stage', { ascending: true })
-            .range(from, to)
-
-        if (error) throw new Error(error.message)
-
-        const courses = (data || []).map((d: any) => {
-            const course = new Course(d)
-            if (d.lessons) {
-                const sortedLessons = d.lessons.sort((a: LessonDTO, b: LessonDTO) => a.sequence - b.sequence)
-                sortedLessons.forEach((l: LessonDTO) => course.addLesson(new Lesson(l)))
-            }
-            return course
-        })
-        return { data: courses, count: count || 0 }
+        const result = await apiResourceClient.list<CourseDTO & { lessons?: LessonDTO[] }>('courses', { page, perPage, sort: 'display_name' })
+        const courses = (result.data || []).map(toCourse)
+        return { data: courses, count: result.meta?.total ?? courses.length }
     }
 
     static async getCourseOptions(page: number = 1, perPage: number = 1000): Promise<{ data: Array<Pick<CourseDTO, 'id' | 'subject' | 'stage' | 'display_name'>>; count: number }> {
-        const from = (page - 1) * perPage
-        const to = from + perPage - 1
-        const { data, error, count } = await supabase
-            .from('courses')
-            .select('id, subject, stage, display_name', { count: 'exact' })
-            .order('display_name', { ascending: true, nullsFirst: false })
-            .order('subject', { ascending: true })
-            .order('stage', { ascending: true })
-            .range(from, to)
-        if (error) throw new Error(error.message)
-        return { data: (data || []) as Array<Pick<CourseDTO, 'id' | 'subject' | 'stage' | 'display_name'>>, count: count || 0 }
+        const result = await apiResourceClient.list<CourseDTO>('courses', { page, perPage, sort: 'display_name' })
+        return { data: (result.data || []).map(({ id, subject, stage, display_name }) => ({ id, subject, stage, display_name })), count: result.meta?.total ?? result.data?.length ?? 0 }
     }
 
     static async createCourse(course: Partial<CourseDTO>): Promise<Course> {
-        const { data, error } = await supabase.from('courses').insert(this.normalizeCourse(course)).select().single()
-        if (error) throw new Error(error.message)
-        return new Course(data)
+        return new Course((await apiResourceClient.create<CourseDTO>('courses', this.normalizeCourse(course))).data)
     }
 
     static async updateCourse(id: string, updates: Partial<CourseDTO>): Promise<Course> {
-        const { data, error } = await supabase.from('courses').update(this.normalizeCourse(updates)).eq('id', id).select().single()
-        if (error) throw new Error(error.message)
-        return new Course(data)
+        return new Course((await apiResourceClient.update<CourseDTO>('courses', id, this.normalizeCourse(updates))).data)
     }
 
     private static normalizeCourse(course: Partial<CourseDTO>): Partial<CourseDTO> {
@@ -75,58 +37,24 @@ export class CourseCatalogService {
     }
 
     static async deleteCourse(id: string): Promise<void> {
-        const { error } = await supabase.from('courses').delete().eq('id', id)
-        if (error) throw new Error(error.message)
+        await apiResourceClient.remove('courses', id)
     }
 
     static async getLessonsByCourse(courseId: string): Promise<Lesson[]> {
-        const { data, error } = await supabase
-            .from('lessons')
-            .select('id, course_id, title, sequence')
-            .eq('course_id', courseId)
-            .order('sequence', { ascending: true })
-
-        if (error) throw new Error(error.message)
-        return (data || []).map((d: any) => new Lesson(d))
+        const result = await apiResourceClient.list<LessonDTO>('lessons', { perPage: 100, sort: 'sequence', courseId })
+        return (result.data || []).filter((lesson) => lesson.course_id === courseId).map((dto: any) => new Lesson(dto))
     }
 
     static async createLesson(lesson: Partial<LessonDTO>): Promise<Lesson> {
-        const { data, error } = await supabase.from('lessons').insert(lesson).select().single()
-        if (error) throw new Error(error.message)
-        return new Lesson(data)
+        return new Lesson((await apiResourceClient.create<LessonDTO>('lessons', lesson)).data)
     }
 
     static async updateLesson(id: string, updates: Partial<LessonDTO>): Promise<Lesson> {
-        const { data, error } = await supabase.from('lessons').update(updates).eq('id', id).select().single()
-        if (error) throw new Error(error.message)
-        return new Lesson(data)
+        return new Lesson((await apiResourceClient.update<LessonDTO>('lessons', id, updates)).data)
     }
 
     static async deleteLesson(id: string): Promise<void> {
-        const { error } = await supabase.from('lessons').delete().eq('id', id)
-        if (error) throw new Error(error.message)
+        await apiResourceClient.remove('lessons', id)
     }
 
-    static async getLessonReport(enrollmentId: string, lessonId: string): Promise<LessonReportDTO | null> {
-        const { data, error } = await supabase
-            .from('lesson_reports')
-            .select('*')
-            .eq('enrollment_id', enrollmentId)
-            .eq('lesson_id', lessonId)
-            .maybeSingle()
-
-        if (error) throw new Error(error.message)
-        return data
-    }
-
-    static async upsertLessonReport(report: Partial<LessonReportDTO>): Promise<LessonReportDTO> {
-        const { data, error } = await supabase
-            .from('lesson_reports')
-            .upsert(report, { onConflict: 'enrollment_id, lesson_id' })
-            .select()
-            .single()
-
-        if (error) throw new Error(error.message)
-        return data
-    }
 }

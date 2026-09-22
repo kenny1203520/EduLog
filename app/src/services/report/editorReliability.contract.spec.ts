@@ -17,13 +17,13 @@ describe('editor reliability contracts', () => {
         const courseService = readFileSync(resolve(repoRoot, 'app/src/services/course/CourseCatalogService.ts'), 'utf8')
         const sessionService = readFileSync(resolve(repoRoot, 'app/src/services/session/SessionService.ts'), 'utf8')
         const referencePanel = readFileSync(resolve(repoRoot, 'app/src/components/ReportReferencePanel.vue'), 'utf8')
-        expect(courseService).toMatch(/getCourseOptions[\s\S]*?select\('id, subject, stage, display_name'/)
+        expect(courseService).toContain("apiResourceClient.list<CourseDTO>")
         expect(sessionService).toMatch(/getClassSessionOptions[\s\S]*?select\('id, name, classroom_id, course_ids'/)
         const optionsBlock = sessionService.slice(sessionService.indexOf('getClassSessionOptions'), sessionService.indexOf('createClassSession', sessionService.indexOf('getClassSessionOptions')))
         expect(optionsBlock).not.toContain('lessons')
         expect(optionsBlock).not.toContain('schedule_rules')
         expect(referencePanel).toContain('CourseCatalogService.getCourseOptions')
-        expect(referencePanel).toContain('SessionService.getClassSessionOptions')
+        expect(referencePanel).toContain('SessionService.getAllClassSessionOptions')
     })
 
     it('counts the local session plus remote peers only when collaboration is ready', () => {
@@ -42,6 +42,25 @@ describe('editor reliability contracts', () => {
         expect(editor).toContain('collaboration_fallback')
     })
 
+    it('keeps system-managed attendance read-only and out of dirty mutations', () => {
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        const commandService = readFileSync(resolve(repoRoot, 'app/src/services/report/ReportCommandService.ts'), 'utf8')
+
+        expect(editor).toContain(':disabled="disabled || isSystemManagedAbsence"')
+        expect(editor).toContain('normalizeSystemManagedReason')
+        expect(editor).toContain('if (!isSystemManagedAbsence.value)')
+        expect(editor).toContain('metaMap.set(\'attendanceStatus\', attendanceStatus.value)')
+        expect(editor).toContain('never hydrate these two fields from a stale Yjs document')
+        expect(commandService).toContain("error.code === 'SYSTEM_MANAGED_REPORT'")
+        expect(commandService).toContain('reconcileV1SystemManagedSave')
+        expect(commandService).toContain('delete nonAttendanceData.attendanceStatus')
+    })
+    it('routes production collaboration through the same-origin API WebSocket', () => {
+        const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
+        expect(collab).toContain("getApiV1Mode() === 'v1' ? undefined : apiDataClient")
+        expect(collab).toContain('ApiModeClient')
+    })
+
     it('does not reintroduce wildcard editor hot-path queries', () => {
         const files = [
             'app/src/services/report/ReportQueryService.ts',
@@ -55,7 +74,7 @@ describe('editor reliability contracts', () => {
         expect(sources[1]).not.toMatch(/\.select\(\)\s*\.single\(\)/)
         expect(sources[2]).not.toMatch(/\.select\(['\"]\*['\"]\)/)
         expect(sources[3]).not.toMatch(/\.select\(['\"]\*['\"]\)/)
-        expect(sources[4]).toContain('id, course_id, title, sequence')
+        expect(sources[4]).toContain("'lessons'")
         expect(sources[3]).toContain('COPY_TEMPLATE_COLUMNS')
     })
 })

@@ -5,16 +5,16 @@ import { describe, expect, it } from 'vitest'
 const read = (file: string) => readFileSync(resolve(process.cwd(), file), 'utf8')
 
 describe('v1.7 report visibility and hierarchical policy workflow', () => {
-    it('uses notification eligibility for every user-facing incomplete-report surface', () => {
+    it('uses notification eligibility for the incomplete-report page and reuses the Dashboard read model', () => {
         const home = read('src/views/HomeView.vue')
         const globalIncompleteReports = read('src/views/GlobalIncompleteReportsView.vue')
 
-        expect(home).toContain("getGlobalIncompleteReports('my_notifications')")
-        expect(home).not.toContain("getGlobalIncompleteReports('my_present')")
-        expect(home).not.toContain("getGlobalIncompleteReports('all')")
-        expect(globalIncompleteReports).toContain("getGlobalIncompleteReports('my_notifications')")
-        expect(globalIncompleteReports).not.toContain("getGlobalIncompleteReports('my_present')")
-        expect(globalIncompleteReports).not.toContain("getGlobalIncompleteReports('all')")
+        expect(home).toContain('agg.pendingReports')
+        expect(home).toContain('pendingReportsCount')
+        expect(home).not.toContain('getGlobalIncompleteReports(')
+        expect(globalIncompleteReports).toContain("getGlobalIncompleteReportsPage('my_notifications'")
+        expect(globalIncompleteReports).not.toContain("getGlobalIncompleteReportsPage('my_present'")
+        expect(globalIncompleteReports).not.toContain("getGlobalIncompleteReportsPage('all'")
         expect(globalIncompleteReports).toContain('incompleteReports.value = []')
         expect(globalIncompleteReports).toContain('selectedReport.value = null')
         expect(read('src/services/report/ReportQueryService.ts')).toContain("if (scope === 'my_notifications') throw error")

@@ -1,15 +1,15 @@
-import { supabase } from '@/lib/supabase'
+import { apiDataClient } from '@/services/api/ApiDataClient'
 import { Suspension, type SuspensionDTO } from '@/models/Suspension'
 
 export class SuspensionPolicyService {
     static async validateNoOverlap(enrollmentId: string, startDate: string, endDate: string | null): Promise<void> {
-        const { data: existingSuspensions } = await supabase
+        const { data: existingSuspensions } = await apiDataClient
             .from('student_suspensions')
             .select('*')
             .eq('enrollment_id', enrollmentId)
 
         const suspensions = (existingSuspensions || []) as Suspension[]
-        const hasOverlap = suspensions.some(s => {
+        const hasOverlap = suspensions.some((s: any) => {
             const startA = startDate
             const endA = endDate
             const startB = s.startDate
@@ -27,7 +27,7 @@ export class SuspensionPolicyService {
     }
 
     static async syncReportsForSuspension(suspension: Suspension): Promise<void> {
-        let dateFilter = supabase
+        let dateFilter = apiDataClient
             .from('class_occurrences')
             .select('id')
             .gte('occurrence_date', suspension.startDate)
@@ -39,9 +39,9 @@ export class SuspensionPolicyService {
         const { data: occurrences } = await dateFilter
         if (!occurrences || occurrences.length === 0) return
 
-        const ids = occurrences.map(o => o.id)
+        const ids = occurrences.map((o: any) => o.id)
 
-        await supabase
+        await apiDataClient
             .from('occurrence_reports')
             .update({
                 attendance_status: 'absent',
@@ -53,7 +53,7 @@ export class SuspensionPolicyService {
     }
 
     static async ensureReportsForRange(enrollmentId: string, startDate: string, endDate: string | null): Promise<void> {
-        let query = supabase
+        let query = apiDataClient
             .from('class_occurrences')
             .select('id, occurrence_date, class_session_id')
             .gte('occurrence_date', startDate)
@@ -63,7 +63,7 @@ export class SuspensionPolicyService {
             query = query.lte('occurrence_date', endDate)
         }
 
-        const { data: enrollment } = await supabase
+        const { data: enrollment } = await apiDataClient
             .from('enrollments')
             .select('class_session_id')
             .eq('id', enrollmentId)
@@ -76,18 +76,18 @@ export class SuspensionPolicyService {
         const { data: occurrences } = await query
         if (!occurrences || occurrences.length === 0) return
 
-        const { data: existingReports } = await supabase
+        const { data: existingReports } = await apiDataClient
             .from('occurrence_reports')
             .select('class_occurrence_id')
             .eq('enrollment_id', enrollmentId)
-            .in('class_occurrence_id', occurrences.map(o => o.id))
+            .in('class_occurrence_id', occurrences.map((o: any) => o.id))
 
-        const existingIds = new Set(existingReports?.map(r => r.class_occurrence_id) || [])
-        const missingOccurrences = occurrences.filter(o => !existingIds.has(o.id))
+        const existingIds = new Set(existingReports?.map((r: any) => r.class_occurrence_id) || [])
+        const missingOccurrences = occurrences.filter((o: any) => !existingIds.has(o.id))
 
         if (missingOccurrences.length === 0) return
 
-        const newReports = missingOccurrences.map(o => ({
+        const newReports = missingOccurrences.map((o: any) => ({
             enrollment_id: enrollmentId,
             class_occurrence_id: o.id,
             version: 1,
@@ -96,7 +96,7 @@ export class SuspensionPolicyService {
             attendance_status: 'pending'
         }))
 
-        const { error } = await supabase
+        const { error } = await apiDataClient
             .from('occurrence_reports')
             .insert(newReports)
 
@@ -104,7 +104,7 @@ export class SuspensionPolicyService {
     }
 
     static async revertReports(suspension: SuspensionDTO): Promise<void> {
-        let dateFilter = supabase
+        let dateFilter = apiDataClient
             .from('class_occurrences')
             .select('id')
             .gte('occurrence_date', suspension.start_date)
@@ -116,9 +116,9 @@ export class SuspensionPolicyService {
         const { data: occurrences } = await dateFilter
         if (!occurrences || occurrences.length === 0) return
 
-        const ids = occurrences.map(o => o.id)
+        const ids = occurrences.map((o: any) => o.id)
 
-        await supabase
+        await apiDataClient
             .from('occurrence_reports')
             .update({
                 attendance_status: 'pending',

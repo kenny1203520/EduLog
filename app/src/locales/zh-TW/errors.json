@@ -8,6 +8,7 @@
     "unique_violation": "該值已被使用。",
     "foreign_key_violation": "因為仍有相關資料參照此項目，無法完成此操作。",
     "permission_denied": "您沒有執行此操作的權限。",
+    "permission_required_for_settings": "只有具備系統管理權限的使用者可以修改通知設定。",
     "session_expired": "登入已逾期，請重新登入。",
     "validation_failed": "請檢查標示的欄位後再試一次。",
     "domain": {

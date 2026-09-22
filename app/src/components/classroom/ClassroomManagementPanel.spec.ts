@@ -8,7 +8,7 @@ vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
 vi.mock('vue-toastification', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/services/rbac/PermissionPolicyService', () => ({
     INCOMPLETE_REPORT_PERMISSION: 'reports.incomplete.receive',
-    PermissionPolicyService: { replacePolicies: vi.fn() }
+    PermissionPolicyService: { replacePolicies: vi.fn(), canManageRbac: vi.fn().mockResolvedValue(true) }
 }))
 
 const roles: RoleDTO[] = [{ id: 'teacher', name: 'Teacher', is_system: true, sort_order: 1 }]
@@ -65,4 +65,14 @@ describe('ClassroomManagementPanel', () => {
         expect(wrapper.emitted('close')).toHaveLength(1)
         wrapper.unmount()
     })
-})
+    it('does not send policy mutations for a non-admin user', async () => {
+        vi.mocked(PermissionPolicyService.canManageRbac).mockResolvedValue(false)
+        const wrapper = createWrapper()
+        await flushPromises()
+        await wrapper.findAll('article > button')[0].trigger('click')
+        const policyButtons = wrapper.findAll('[role="group"] button')
+        expect(policyButtons.every(button => button.attributes('disabled') !== undefined)).toBe(true)
+        expect(wrapper.findAll('button').some(button => button.text().includes('classroom.save_notification_settings'))).toBe(false)
+        expect(PermissionPolicyService.replacePolicies).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })})

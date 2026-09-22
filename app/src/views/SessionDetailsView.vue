@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
+import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
 import { CourseService } from '@/services/course/CourseService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
@@ -10,14 +11,15 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
 import { HolidayService } from '@/services/holiday/HolidayService'
-import type { Enrollment } from '@/models/Enrollment'
+import { Enrollment } from '@/models/Enrollment'
 import { countRosterAttendance, getRosterEnrollments } from '@/models/RosterFilter'
 import type { Lesson } from '@/models/Course'
 import type { ClassOccurrence } from '@/models/ClassOccurrence'
 import { OccurrenceReport } from '@/models/OccurrenceReport'
 import { DateUtils } from '@/utils/DateUtils'
 import { TeacherService } from '@/services/teacher/TeacherService'
-import type { SessionTeacherAssignmentDTO, TeacherDTO } from '@/services/teacher/TeacherService'
+import type { SessionTeacherAssignmentDTO } from '@/services/teacher/TeacherService'
+import type { TeacherOverviewDTO } from '@/services/api/PageApiService'
 import {
     ATTENDANCE_TEMPLATE_VARIABLE_DEFINITIONS,
     SYSTEM_ATTENDANCE_TEMPLATE,
@@ -81,6 +83,7 @@ const occurrenceLoadError = ref<string | null>(null)
 const previousOccurrence = ref<ClassOccurrence | null>(null)
 const nextOccurrence = ref<ClassOccurrence | null>(null)
 let occurrenceLoadToken = 0
+let workspaceRosterDate: string | null = null
 const showAttendanceTemplateModal = ref(false)
 let attendanceTemplateRequestGeneration = 0
 const attendanceTemplateText = ref(SYSTEM_ATTENDANCE_TEMPLATE)
@@ -116,8 +119,8 @@ const kodingTargetEnrollment = ref<Enrollment | null>(null)
 const kodingInitialLessonId = ref<string | null>(null)
 
 // Teacher Management State
-const occurrenceTeachers = ref<TeacherDTO[]>([])
-const allTeachersList = ref<TeacherDTO[]>([])
+const occurrenceTeachers = ref<TeacherOverviewDTO[]>([])
+const allTeachersList = ref<TeacherOverviewDTO[]>([])
 const showTeacherEditModal = ref(false)
 const teacherSearchQuery = ref('')
 const selectedTeacherIds = ref<Set<string>>(new Set())
@@ -543,10 +546,7 @@ const filteredTeachers = computed(() => {
     const query = teacherSearchQuery.value.trim().toLowerCase()
     if (!query) return allTeachersList.value
 
-    return allTeachersList.value.filter(t =>
-        t.name.toLowerCase().includes(query) ||
-        t.email.toLowerCase().includes(query)
-    )
+    return allTeachersList.value.filter(t => t.name.toLowerCase().includes(query))
 })
 
 const selectedMakeupEnrollment = computed(() => {
@@ -587,6 +587,12 @@ async function loadReportsForCurrentOccurrence() {
         const addedGuests: Enrollment[] = []
         guests.forEach(guest => {
             if (!guest) return
+            // The workspace API is the canonical date-scoped roster.  A report
+            // lookup may contain historical or stale rows for an enrollment
+            // that is no longer active in this session; never re-add those
+            // rows to the visible roster.  Regular guest transfers remain
+            // supported.
+            if (guest.status !== 'regular') return
             ;(guest as any).isGuest = true
             if (!enrollments.value.find(e => e.id === guest.id)) {
                 enrollments.value.push(guest)
@@ -601,6 +607,20 @@ async function loadReportsForCurrentOccurrence() {
     for (const enrollment of enrollments.value) {
         if (enrollment.id && !reportMap.value.has(enrollment.id)) reportMap.value.set(enrollment.id, null)
     }
+}
+
+async function loadWorkspaceRoster(occurrenceDate: Date): Promise<void> {
+    const date = DateUtils.formatLocalDate(occurrenceDate)
+    if (workspaceRosterDate === date) return
+
+    const workspace = (await PageApiService.getClassSessionWorkspace(sessionId, date)).data
+    if (!workspace.session) throw new Error('Class session workspace is unavailable')
+    if (workspace.session.roster_date && workspace.session.roster_date !== date) {
+        throw new Error('Class session workspace returned an unexpected roster date')
+    }
+
+    enrollments.value = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
+    workspaceRosterDate = date
 }
 
 async function loadOccurrenceTeachers() {
@@ -642,6 +662,8 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
     try {
         if (!occurrence?.occurrenceDate) {
             reportMap.value = new Map()
+            enrollments.value = []
+            workspaceRosterDate = null
             previousOccurrence.value = null
             nextOccurrence.value = null
             return
@@ -649,7 +671,8 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
 
         weekAnchorDate.value = new Date(occurrence.occurrenceDate)
         const occurrenceDateStr = DateUtils.formatLocalDate(occurrence.occurrenceDate)
-        const [holiday, navigation] = await Promise.all([
+        const [, holiday, navigation] = await Promise.all([
+            loadWorkspaceRoster(occurrence.occurrenceDate),
             HolidayService.isHoliday(occurrenceDateStr, undefined, occurrence.classSessionId).catch(error => {
                 console.error('Failed to check holiday status:', error)
                 return false
@@ -767,6 +790,7 @@ watch(filteredEnrollments, filtered => {
 })
 
 const attendanceCounts = computed(() => countRosterAttendance(allRosterEnrollments.value, reportMap.value))
+const occupiedRosterCount = computed(() => attendanceCounts.value.present + attendanceCounts.value.pending)
 
 async function loadData() {
     try {
@@ -775,15 +799,25 @@ async function loadData() {
         reportMap.value = new Map()
         studentProgressSummaries.value = {}
 
-        session.value = await SessionService.getSessionDetails(sessionId)
-        const [{ data: allEnrollments }, teachers, allTeachers] = await Promise.all([
-            CourseService.getEnrollmentsBySession(sessionId),
-            TeacherService.getSessionTeachers(sessionId),
-            TeacherService.getTeachers(1, 1000)
-        ])
+        const workspace = (await PageApiService.getClassSessionWorkspace(sessionId)).data
+        const rawSession = workspace.session as any
+        session.value = {
+            ...rawSession,
+            schedule_rules: rawSession.schedule_rules ?? rawSession.class_session_schedule_rules ?? [],
+            classroom_name: rawSession.classrooms?.name ?? 'Unknown',
+            classroom_address: rawSession.classrooms?.address ?? '',
+            classroom_external_link: rawSession.classrooms?.external_link ?? '',
+        }
+        const allEnrollments = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
         enrollments.value = allEnrollments
-        sessionTeachers.value = teachers
-        allTeachersList.value = allTeachers.data
+        workspaceRosterDate = typeof rawSession.roster_date === 'string' ? rawSession.roster_date : null
+        sessionTeachers.value = ((rawSession.class_session_teachers ?? []) as any[]).flatMap(assignment => {
+            const assignedTeacher = Array.isArray(assignment.teachers) ? assignment.teachers[0] : assignment.teachers
+            if (!assignedTeacher) return []
+            const role = Array.isArray(assignment.roles) ? assignment.roles[0] : assignment.roles
+            return [{ ...assignedTeacher, effective_from: assignment.effective_from, effective_to: assignment.effective_to, role_id: assignment.role_id, role: role ?? null }]
+        })
+        allTeachersList.value = workspace.teachers
 
         if (allEnrollments[0]?.courseId) courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
 
@@ -870,6 +904,10 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
     const progress = getStudentProgressSummary(enrollment.id)
     const today = getTodayCourseSummary(enrollment)
     const attendanceStatus = (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus
+    const absenceReason = reportMap.value.get(enrollment.id!)?.absenceReason || null
+    const absenceReasonLabel = absenceReason
+        ? t(`report.editor.absence_reasons.${absenceReason}`, absenceReason)
+        : null
     return {
         id: enrollment.id!,
         studentId: enrollment.studentId || '',
@@ -885,6 +923,8 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         isGuest: Boolean((enrollment as any).isGuest),
         attendanceStatus,
         attendanceLabel: t('attendance.' + attendanceStatus),
+        absenceReason,
+        absenceReasonLabel,
         isSavingAttendance: savingMap.value.get(enrollment.id!) === true,
         todayTitle: today.title,
         todayProgress: today.chapterProgress,
@@ -1619,7 +1659,7 @@ async function saveOccurrenceTeachers(showToast = true) {
     }
 }
 
-async function addTeacherForToday(teacher: TeacherDTO) {
+async function addTeacherForToday(teacher: TeacherOverviewDTO) {
     if (!todayOccurrence.value || !teacher.id) return
 
     try {
@@ -1999,14 +2039,14 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     $t('classroom.capacity_utilization') }}</h4>
                                 <div class="flex items-end gap-3">
                                     <p class="text-4xl font-black text-gray-900 tracking-tighter">{{
-                                        Math.round((allRosterEnrollments.length / (session?.capacity || 1)) * 100) }}%</p>
+                                        Math.round((occupiedRosterCount / (session?.capacity || 1)) * 100) }}%</p>
                                     <p class="text-xs font-bold text-gray-400 pb-1">/ {{ session?.capacity }} {{
                                         $t('classroom.capacity') }}</p>
                                 </div>
                             </div>
                             <div class="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
                                 <div class="h-full bg-emerald-500 rounded-full transition-all duration-1000"
-                                    :style="{ width: `${(allRosterEnrollments.length / (session?.capacity || 1)) * 100}%` }">
+                                    :style="{ width: `${Math.min((occupiedRosterCount / (session?.capacity || 1)) * 100, 100)}%` }">
                                 </div>
                             </div>
                         </div>

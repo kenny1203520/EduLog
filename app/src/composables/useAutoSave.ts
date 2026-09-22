@@ -13,7 +13,7 @@ export interface AutoSaveResult {
     message?: string
     /** i18n key the UI should translate and show instead of `message`. */
     messageKey?: string
-    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error'
+    errorCode?: 'request_timeout' | 'save_outcome_unknown' | 'conflict' | 'permission_denied' | 'validation_error' | 'system_managed'
     conflictFields?: string[]
 }
 

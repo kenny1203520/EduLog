@@ -6,7 +6,7 @@ export interface ClassroomDTO {
     color?: string
     created_at?: string
     updated_at?: string
-    external_link?: string
+    external_link?: string | null
 }
 
 export type {
