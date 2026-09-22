@@ -60,6 +60,91 @@ function toApiReportData(data?: ReportSaveData): Record<string, unknown> {
     if (data.externalLink !== undefined) result.external_link = safeExternalHref(data.externalLink) || null
     return result
 }
+
+function isSystemManagedReason(value: unknown): boolean {
+    const reason = String(value ?? '').trim().toLowerCase()
+    return reason === 'holiday' || reason === 'suspension'
+}
+
+function isSystemManagedApiError(error: unknown): error is ApiV1Error {
+    return error instanceof ApiV1Error && error.code === 'SYSTEM_MANAGED_REPORT'
+}
+
+function systemManagedFailure(message = 'Attendance is managed by the system'): SaveReportResult {
+    return {
+        success: false,
+        conflict: false,
+        errorCode: 'system_managed',
+        message,
+        messageKey: 'report.editor.system_managed_absence_notice'
+    }
+}
+
+async function loadCanonicalReportV1(reportId: string): Promise<OccurrenceReportDTO> {
+    const response = await apiV1Client.get<OccurrenceReportDTO>('/reports/' + encodeURIComponent(reportId))
+    return response.data
+}
+
+/**
+ * A report can become system-managed while an editor is open. Re-read the
+ * canonical row, discard only attendance fields, and retry other edits once
+ * against the current version. If attendance was the only edit, treating the
+ * server value as the successful result is the safe close behavior.
+ */
+async function reconcileV1SystemManagedSave(
+    reportId: string,
+    detailedData: ReportSaveData | undefined,
+    message: string
+): Promise<SaveReportResult> {
+    try {
+        const canonical = await loadCanonicalReportV1(reportId)
+        if (!isSystemManagedReason(canonical.absence_reason)) return systemManagedFailure(message)
+
+        const nonAttendanceData = { ...(detailedData || {}) }
+        delete nonAttendanceData.attendanceStatus
+        delete nonAttendanceData.absenceReason
+        const retryData = toApiReportData(nonAttendanceData)
+
+        if (Object.keys(retryData).length === 0) {
+            return { success: true, conflict: false, newVersion: canonical.version, updatedReport: canonical }
+        }
+
+        try {
+            const response = await apiV1Client.patch<OccurrenceReportDTO>(
+                '/reports/' + encodeURIComponent(reportId),
+                { ...retryData, expected_version: canonical.version }
+            )
+            return { success: true, conflict: false, newVersion: response.data.version, updatedReport: response.data }
+        } catch (retryError) {
+            if (retryError instanceof ApiV1Error && retryError.status === 409) {
+                return {
+                    success: false,
+                    conflict: true,
+                    errorCode: 'conflict',
+                    serverVersion: canonical.version,
+                    serverReport: canonical,
+                    message: retryError.message,
+                    messageKey: 'errors.conflict'
+                }
+            }
+            if (isSystemManagedApiError(retryError)) return systemManagedFailure(retryError.message)
+            return { success: false, conflict: false, message: retryError instanceof Error ? retryError.message : message, messageKey: 'errors.unknown' }
+        }
+    } catch (reloadError) {
+        return systemManagedFailure(reloadError instanceof Error ? reloadError.message : message)
+    }
+}
+
+async function reconcileV1SystemManagedAttendance(reportId: string, message: string): Promise<SaveReportResult> {
+    try {
+        const canonical = await loadCanonicalReportV1(reportId)
+        return isSystemManagedReason(canonical.absence_reason)
+            ? { success: true, conflict: false, newVersion: canonical.version, updatedReport: canonical }
+            : systemManagedFailure(message)
+    } catch (reloadError) {
+        return systemManagedFailure(reloadError instanceof Error ? reloadError.message : message)
+    }
+}
 type AttendanceOnlyData = {
     attendanceStatus: 'present' | 'absent' | 'pending'
     absenceReason?: string | null
@@ -122,6 +207,7 @@ function unknownOutcomeResult(): SaveReportResult {
 function classifiedSaveError(error: any, fallback: string): SaveReportResult {
     const code = error?.code
     const status = error?.status || error?.statusCode
+    if (code === 'SYSTEM_MANAGED_REPORT') return systemManagedFailure(error?.message || fallback)
     if (code === '42501' || status === 401 || status === 403) {
         return { success: false, conflict: false, errorCode: 'permission_denied', message: fallback, messageKey: 'errors.permission_denied' }
     }
@@ -263,6 +349,7 @@ export class ReportCommandService {
                 return { success: true, conflict: false, newVersion: response.data.version, updatedReport: response.data }
             } catch (error) {
                 if (error instanceof ApiV1Error && error.status === 409) return { success: false, conflict: true, errorCode: 'conflict', message: error.message, messageKey: 'errors.conflict' }
+                if (isSystemManagedApiError(error)) return reconcileV1SystemManagedSave(reportId, detailedData, error.message)
                 return { success: false, conflict: false, message: error instanceof Error ? error.message : 'Failed to save report', messageKey: 'errors.unknown' }
             }
         }
@@ -310,6 +397,7 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: false,
+                    errorCode: 'system_managed',
                     message: `Cannot modify attendance status: This report is managed by the system (${serverReport.absence_reason}).`,
                     messageKey: 'report.editor.system_managed_absence_notice'
                 }
@@ -318,6 +406,7 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: false,
+                    errorCode: 'system_managed',
                     message: `Cannot modify absence reason: This report is managed by the system (${serverReport.absence_reason}).`,
                     messageKey: 'report.editor.system_managed_absence_notice'
                 }
@@ -421,6 +510,7 @@ export class ReportCommandService {
                 return { success: true, conflict: false, newVersion: response.data.version, updatedReport: response.data }
             } catch (error) {
                 if (error instanceof ApiV1Error && error.status === 409) return { success: false, conflict: true, errorCode: 'conflict', message: error.message, messageKey: 'errors.conflict' }
+                if (isSystemManagedApiError(error)) return reconcileV1SystemManagedAttendance(reportId, error.message)
                 return { success: false, conflict: false, message: error instanceof Error ? error.message : 'Failed to save attendance', messageKey: 'errors.unknown' }
             }
         }
@@ -461,6 +551,7 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: false,
+                    errorCode: 'system_managed',
                     message: `Cannot modify attendance status: This report is managed by the system (${serverReport.absence_reason}).`,
                     messageKey: 'report.editor.system_managed_absence_notice'
                 }
@@ -470,6 +561,7 @@ export class ReportCommandService {
                 return {
                     success: false,
                     conflict: false,
+                    errorCode: 'system_managed',
                     message: `Cannot modify absence reason: This report is managed by the system (${serverReport.absence_reason}).`,
                     messageKey: 'report.editor.system_managed_absence_notice'
                 }
