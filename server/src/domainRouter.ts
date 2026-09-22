@@ -157,7 +157,7 @@ async function provisionReports(req: Request, res: Response) {
   await permission(req, 'teaching.reports.create', occurrence.data.class_session_id)
   const replay = await idempotency(req, 201, null)
   if (replay) return res.status(replay.status).json(replay.body)
-  const roster = await req.db!.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
+  const roster = await req.db!.rpc('get_provisionable_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
   if (roster.error) throw mapDatabaseError(roster.error)
   const enrollmentIds = ((roster.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id)
   if (!enrollmentIds.length) { const body = envelope(req, []); await complete(req, 201, body); return res.status(201).json(body) }

@@ -718,18 +718,35 @@ export class ReportCommandService {
         const enrollmentIds = await OccurrenceRosterService.getEffectiveEnrollmentIds(occurrenceId)
         if (enrollmentIds.length === 0) return ReportQueryService.getReportsByOccurrence(occurrenceId)
 
+        // Legacy/mock adapters may resolve the display roster through an older
+        // RPC.  Report provisioning has a narrower scope: only active regular
+        // enrollments may receive a new placeholder report.  Keep this guard
+        // here as a compatibility boundary; production v1 enforces the same
+        // rule in get_provisionable_occurrence_enrollment_ids().
+        const { data: provisionableEnrollments, error: enrollmentError } = await apiDataClient
+            .from('enrollments')
+            .select('id')
+            .in('id', enrollmentIds)
+            .eq('status', 'regular')
+
+        if (enrollmentError) throw new Error(enrollmentError.message)
+        const provisionableIds = (provisionableEnrollments || [])
+            .map((enrollment: { id?: string }) => enrollment.id)
+            .filter((id: string | undefined): id is string => Boolean(id))
+        if (provisionableIds.length === 0) return ReportQueryService.getReportsByOccurrence(occurrenceId)
+
         const { data: existing, error: existingError } = await apiDataClient
             .from('occurrence_reports')
             .select('enrollment_id')
             .eq('class_occurrence_id', occurrenceId)
-            .in('enrollment_id', enrollmentIds)
+            .in('enrollment_id', provisionableIds)
 
         if (existingError) throw new Error(existingError.message)
         const existingIds = new Set((existing || []).map((report: any) => report.enrollment_id))
-        const missingIds = enrollmentIds.filter((id: any) => !existingIds.has(id))
+        const missingIds = provisionableIds.filter((id: string) => !existingIds.has(id))
 
         if (missingIds.length > 0) {
-            const payloads = await Promise.all(missingIds.map(enrollmentId =>
+            const payloads = await Promise.all(missingIds.map((enrollmentId: string) =>
                 ReportLifecyclePolicy.buildInitialReportPayload(enrollmentId, occurrenceId)
             ))
             const { error: insertError } = await apiDataClient
