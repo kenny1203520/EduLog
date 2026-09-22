@@ -43,6 +43,7 @@ const incompleteReportCalculation = await readMigration('1000080_incomplete_repo
 const rbacDomainRebuild = await readMigration('1000081_rbac_domain_rebuild.sql')
 const rbacManagementFunctions = await readMigration('1000082_rbac_management_functions.sql')
 const systemUserStatus = await readMigration('1000083_system_user_status.sql')
+const suspensionAttendanceCapacity = await readMigration('1000084_suspension_attendance_and_capacity.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -103,7 +104,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -153,11 +154,30 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(names.some((name) => name.startsWith('1000081_rbac_domain_rebuild.sql')))
   assert(names.some((name) => name.startsWith('1000082_rbac_management_functions.sql')))
   assert(names.some((name) => name.startsWith('1000083_system_user_status.sql')))
+  assert(names.some((name) => name.startsWith('1000084_suspension_attendance_and_capacity.sql')))
   assertStringIncludes(compatibility, 'public.has_api_permission(uuid,text,uuid,uuid)')
   assertStringIncludes(compatibility, 'SELECT false;')
   assert(!names.some((name) => name.startsWith('1000010')))
   assert(!names.some((name) => name.startsWith('1000015')))
   assert(!names.some((name) => name.startsWith('1000016')))
+})
+
+Deno.test('1000084 centralizes suspension attendance and occupancy semantics', () => {
+  assertStringIncludes(suspensionAttendanceCapacity, "RAISE EXCEPTION '1000084 prerequisites missing")
+  assertStringIncludes(suspensionAttendanceCapacity, 'CREATE OR REPLACE FUNCTION public.get_effective_attendance(')
+  assertStringIncludes(suspensionAttendanceCapacity, 'CREATE OR REPLACE FUNCTION public.apply_student_suspension(')
+  assertStringIncludes(suspensionAttendanceCapacity, 'CREATE OR REPLACE FUNCTION public.get_class_session_occupancy(')
+  assertStringIncludes(suspensionAttendanceCapacity, 'CREATE OR REPLACE FUNCTION public.provision_occurrence_reports(')
+  assertStringIncludes(suspensionAttendanceCapacity, "'absence_reason', 'suspension'")
+  assertStringIncludes(suspensionAttendanceCapacity, "COUNT(*) FILTER (WHERE attendance_status <> 'absent')")
+  assertStringIncludes(suspensionAttendanceCapacity, "'max_occupancy'")
+  assertStringIncludes(suspensionAttendanceCapacity, "item.id <> p_suspension_id")
+  assertStringIncludes(suspensionAttendanceCapacity, "p_end_date_set THEN p_end_date ELSE current_row.end_date")
+  assertStringIncludes(suspensionAttendanceCapacity, 'occurrence.occurrence_date >= p_start_date')
+  assert(!/occurrence\.is_conducted\s*=\s*true/.test(suspensionAttendanceCapacity))
+  assertStringIncludes(suspensionAttendanceCapacity, 'REVOKE ALL ON FUNCTION public.get_class_session_occupancy')
+  assertStringIncludes(suspensionAttendanceCapacity, "NOTIFY pgrst, 'reload schema'")
+  assertStringIncludes(suspensionAttendanceCapacity, 'FROM PUBLIC, anon, service_role')
 })
 
 Deno.test('restored historical security migrations are standalone', async () => {
