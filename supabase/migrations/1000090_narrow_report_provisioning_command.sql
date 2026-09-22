@@ -14,8 +14,6 @@ BEGIN
      OR to_regclass('public.class_occurrences') IS NULL
      OR to_regclass('public.class_sessions') IS NULL
      OR to_regclass('public.enrollments') IS NULL
-     OR to_regprocedure('public.get_effective_occurrence_enrollment_ids(uuid)') IS NULL
-     OR to_regprocedure('public.get_effective_attendance(uuid,uuid,boolean)') IS NULL
      OR to_regprocedure('public.has_api_permission(uuid,text,uuid,uuid)') IS NULL THEN
     RAISE EXCEPTION '1000090 prerequisites missing; apply migrations through 1000089 first';
   END IF;
