@@ -164,14 +164,12 @@ async function provisionReports(req: Request, res: Response) {
   const existing = await req.db!.from('occurrence_reports').select('enrollment_id').eq('class_occurrence_id', occurrenceId).in('enrollment_id', enrollmentIds)
   if (existing.error) throw mapDatabaseError(existing.error)
   const existingIds = new Set((existing.data ?? []).map((row) => row.enrollment_id))
-  const missing = enrollmentIds.filter((id) => !existingIds.has(id)).map((enrollment_id) => ({ enrollment_id, class_occurrence_id: occurrenceId, content: '', version: 1, is_completed: false, attendance_status: 'pending' }))
-  if (missing.length) {
-    const inserted = await req.db!.from('occurrence_reports').insert(missing).select(reportFields)
-    if (inserted.error) throw mapDatabaseError(inserted.error)
-  }
+  const missingCount = enrollmentIds.filter((enrollmentId) => !existingIds.has(enrollmentId)).length
+  const provision = await req.db!.rpc('provision_occurrence_reports', { p_occurrence_id: occurrenceId })
+  if (provision.error) throw mapDatabaseError(provision.error)
   const reports = await req.db!.from('occurrence_reports').select(reportFields).eq('class_occurrence_id', occurrenceId).in('enrollment_id', enrollmentIds)
   if (reports.error) throw mapDatabaseError(reports.error)
-  const body = envelope(req, reports.data ?? [], { provisioned: missing.length, total: reports.data?.length ?? 0 })
+  const body = envelope(req, reports.data ?? [], { provisioned: missingCount, total: reports.data?.length ?? 0 })
   await complete(req, 201, body)
   return res.status(201).json(body)
 }

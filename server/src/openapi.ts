@@ -185,7 +185,16 @@ export function buildOpenApi() {
     get: { operationId: 'class_sessions_details', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.read', 'x-permissions': ['teaching.class_sessions.read', 'teaching.enrollments.list'], parameters: [pathParam('id')], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/class-sessions/{id}/enrollment-peak'] = {
-    get: { operationId: 'class_sessions_enrollment_peak', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.read', 'x-permissions': ['teaching.class_sessions.read', 'teaching.occurrences.list', 'teaching.reports.list'], parameters: [pathParam('id'), { name: 'start_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'end_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: {
+      operationId: 'class_sessions_enrollment_peak', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.class_sessions.read',
+      'x-permissions': ['teaching.class_sessions.read', 'teaching.occurrences.list', 'teaching.reports.list'],
+      'x-response-fields': ['roster_count', 'occupied_count', 'absent_count', 'available_capacity', 'max_occupancy', 'max_roster', 'max_absent', 'max_enrollment', 'capacity', 'occurrences'],
+      parameters: [pathParam('id'), { name: 'start_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }, { name: 'end_date', in: 'query', required: true, schema: { type: 'string', format: 'date' } }],
+      responses: {
+        '200': { description: 'Roster and occupancy counts. Absence remains in the roster but is excluded from occupied capacity.', content: { 'application/json': { schema: { allOf: [{ $ref: '#/components/schemas/Envelope' }, { type: 'object', properties: { data: { $ref: '#/components/schemas/EnrollmentPeak' } } }] } } } },
+        ...errorResponses,
+      },
+    },
   }
   paths['/api/teachings/{teachingId}/members'] = {
     get: { operationId: 'teaching_members_list', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.members.list', parameters: [pathParam('teachingId'), { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Filters' }, { name: 'user_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } }, { name: 'status', in: 'query', required: false, schema: { type: 'string', minLength: 1, maxLength: 32 } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
@@ -453,7 +462,7 @@ export function buildOpenApi() {
     get: {
       operationId: 'realtime_websocket',
       summary: 'Authenticated report collaboration WebSocket upgrade',
-      description: 'Upgrade to a WebSocket after the HttpOnly session is authenticated and the user can read the requested report room. The room query parameter is a report UUID; the upstream Realtime access token is never exposed to the browser.',
+      description: 'Upgrade to a WebSocket after the HttpOnly session cookie, Origin allowlist, and teaching.reports.read permission are validated. The room query parameter is one report UUID and is locked for the lifetime of the socket. The server injects the upstream JWT; it is never exposed to the browser. Only Phoenix heartbeat, join/leave, broadcast, and presence events are forwarded. Snapshot REST fallback remains available when the upstream is unavailable.',
       security: [{ cookieAuth: [] }],
       'x-websocket': true,
       'x-permission': 'teaching.reports.read',
@@ -550,6 +559,22 @@ export function buildOpenApi() {
     },
     TransferRepairMutation: runtimeDocument(repairBody),
     TransferCancelMutation: runtimeDocument(cancelBody),
+    EnrollmentPeak: {
+      type: 'object', additionalProperties: false,
+      required: ['max_occupancy', 'max_enrollment', 'roster_count', 'occupied_count', 'absent_count', 'available_capacity', 'capacity', 'occurrences'],
+      properties: {
+        max_occupancy: { type: 'integer', minimum: 0 },
+        max_enrollment: { type: 'integer', minimum: 0, description: 'Deprecated compatibility alias for max_occupancy' },
+        max_roster: { type: 'integer', minimum: 0 },
+        max_absent: { type: 'integer', minimum: 0 },
+        roster_count: { type: 'integer', minimum: 0, description: 'Roster count for the selected occurrence; absent students remain included' },
+        occupied_count: { type: 'integer', minimum: 0, description: 'Students not determined absent for the selected occurrence' },
+        absent_count: { type: 'integer', minimum: 0 },
+        available_capacity: { type: 'integer', minimum: 0 },
+        capacity: { type: 'integer', minimum: 0 },
+        occurrences: { type: 'array', items: { type: 'object' } },
+      },
+    },
     RpcInvocation: { oneOf: [
       { type: 'object', required: ['class_occurrence_id'], additionalProperties: false, properties: { class_occurrence_id: { type: 'string', format: 'uuid' } } },
       { type: 'object', required: ['enrollment_id'], additionalProperties: false, properties: { enrollment_id: { type: 'string', format: 'uuid' } } },

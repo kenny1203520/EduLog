@@ -127,25 +127,17 @@ async function ensureNextOccurrenceReport(req: Request, enrollmentId: string, re
 }
 
 async function resolveInitialAttendance(req: Request, enrollmentId: string, occurrenceId: string) {
-  const [occurrence, suspensions] = await Promise.all([
-    req.db!.from('class_occurrences').select('id,occurrence_date,class_session_id,class_sessions(classroom_id)').eq('id', occurrenceId).maybeSingle(),
-    req.db!.from('student_suspensions').select('id,start_date,end_date').eq('enrollment_id', enrollmentId),
-  ])
-  if (occurrence.error) throw mapDatabaseError(occurrence.error)
-  if (suspensions.error) throw mapDatabaseError(suspensions.error)
-  if (!occurrence.data?.occurrence_date) return initialReportAttendance({})
-  const date = occurrence.data.occurrence_date
-  const suspended = (suspensions.data ?? []).some((row) => row.start_date <= date && (!row.end_date || row.end_date >= date))
-  const session = Array.isArray(occurrence.data.class_sessions) ? occurrence.data.class_sessions[0] : occurrence.data.class_sessions
-  const classroomId = session?.classroom_id ?? null
-  const holidays = await req.db!.from('holidays').select('id,kind,classroom_ids,class_session_ids').eq('kind', 'closure').lte('start_date', date).gte('end_date', date)
-  if (holidays.error) throw mapDatabaseError(holidays.error)
-  const holiday = (holidays.data ?? []).some((row) => {
-    const classroomIds = Array.isArray(row.classroom_ids) ? row.classroom_ids : []
-    const sessionIds = Array.isArray(row.class_session_ids) ? row.class_session_ids : []
-    return sessionIds.includes(occurrence.data!.class_session_id) || (classroomId && classroomIds.includes(classroomId)) || (!sessionIds.length && !classroomIds.length)
-  })
-  return initialReportAttendance({ holiday, suspended })
+  const result = await req.db!.rpc('get_effective_attendance', {
+    p_enrollment_id: enrollmentId,
+    p_occurrence_id: occurrenceId,
+  }).maybeSingle()
+  if (result.error) throw mapDatabaseError(result.error)
+  if (!result.data) return initialReportAttendance({})
+  const attendance = result.data as { attendance_status?: 'present' | 'absent' | 'pending'; absence_reason?: string | null }
+  return {
+    attendance_status: attendance.attendance_status ?? 'pending',
+    absence_reason: attendance.absence_reason ?? null,
+  }
 }
 async function create(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')

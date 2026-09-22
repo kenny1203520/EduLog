@@ -272,6 +272,15 @@ describe('generated API contract', () => {
     expect(spec.paths['/api/aggregates/dashboard']).toBeUndefined()
   })
 
+  it('documents roster-preserving occupancy separately from legacy enrollment peak', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
+    const operation = spec.paths['/api/class-sessions/{id}/enrollment-peak']?.get
+    expect(operation?.['x-response-fields']).toContain('max_occupancy')
+    expect(operation?.['x-response-fields']).toContain('roster_count')
+    expect(operation?.responses?.['200']?.content?.['application/json']?.schema?.allOf?.[1]?.properties?.data?.$ref).toBe('#/components/schemas/EnrollmentPeak')
+    expect(spec.components.schemas.EnrollmentPeak.properties.max_enrollment.description).toContain('compatibility')
+  })
+
   it('keeps RPC exposure, runtime guard, and OpenAPI metadata in sync', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
     expect(spec.paths['/api/rpc/{name}']?.post?.['x-rpc-allowlist']).toEqual([...allowedRpcs])

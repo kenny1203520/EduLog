@@ -91,11 +91,10 @@ async function provisionExistingReports(req: Request, enrollmentId: string, targ
   const occurrences = await req.db!.from('class_occurrences').select('id').eq('class_session_id', enrollment.data.class_session_id).gte('occurrence_date', startDate).order('occurrence_date', { ascending: true }).limit(targetCount)
   if (occurrences.error || !occurrences.data?.length) return
   const ids = occurrences.data.map((row) => row.id)
-  const existing = await req.db!.from('occurrence_reports').select('class_occurrence_id').eq('enrollment_id', enrollmentId).in('class_occurrence_id', ids)
-  if (existing.error) throw mapDatabaseError(existing.error)
-  const known = new Set((existing.data ?? []).map((row) => row.class_occurrence_id))
-  const missing = occurrences.data.filter((row) => !known.has(row.id)).map((row) => ({ enrollment_id: enrollmentId, class_occurrence_id: row.id, content: '', version: 1, is_completed: false, attendance_status: 'pending' }))
-  if (missing.length) { const inserted = await req.db!.from('occurrence_reports').insert(missing); if (inserted.error) throw mapDatabaseError(inserted.error) }
+  for (const occurrence of occurrences.data) {
+    const provision = await req.db!.rpc('provision_occurrence_reports', { p_occurrence_id: occurrence.id })
+    if (provision.error) throw mapDatabaseError(provision.error)
+  }
 }
 async function create(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')

@@ -175,17 +175,19 @@ async function readEnrollmentPeak(req: Request, res: Response) {
     authorizeRelatedRead(req, 'teaching.reports.list', id),
   ])
 
-  const occurrences = await req.db!.from('class_occurrences').select('id').eq('class_session_id', id).gte('occurrence_date', query.start_date).lte('occurrence_date', query.end_date)
-  if (occurrences.error) throw mapDatabaseError(occurrences.error)
-  const occurrenceIds = (occurrences.data ?? []).map((row) => row.id).filter((value): value is string => typeof value === 'string')
-  if (!occurrenceIds.length) return sendDetails(req, res, { max_enrollment: 0 })
-
-  const reports = await req.db!.from('occurrence_reports').select('class_occurrence_id').in('class_occurrence_id', occurrenceIds)
-  if (reports.error) throw mapDatabaseError(reports.error)
-  const counts = new Map<string, number>()
-  for (const report of reports.data ?? []) counts.set(report.class_occurrence_id, (counts.get(report.class_occurrence_id) ?? 0) + 1)
-  const maxEnrollment = Math.max(0, ...counts.values())
-  return sendDetails(req, res, { max_enrollment: maxEnrollment })
+  const result = await req.db!.rpc('get_class_session_occupancy', {
+    p_class_session_id: id,
+    p_start_date: query.start_date,
+    p_end_date: query.end_date,
+  })
+  if (result.error) throw mapDatabaseError(result.error)
+  const occupancy = result.data && typeof result.data === 'object' ? result.data as Record<string, unknown> : {}
+  const maxOccupancy = Number(occupancy.max_occupancy ?? 0)
+  return sendDetails(req, res, {
+    ...occupancy,
+    max_occupancy: maxOccupancy,
+    max_enrollment: maxOccupancy,
+  })
 }
 
 function sendDetails(req: Request, res: Response, data: unknown) {

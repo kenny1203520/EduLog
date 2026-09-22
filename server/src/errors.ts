@@ -35,7 +35,7 @@ export function mapDatabaseError(error: { code?: string; message?: string } | nu
       [/VERSION_CONFLICT/i, 409, 'VERSION_CONFLICT', 'The resource version is stale'],
       [/PROTECTED_ROLE|LAST_SYSTEM_OWNER|ROLE_IN_USE/i, 409, 'RBAC_PROTECTED_RESOURCE', 'The protected RBAC resource cannot be changed'],
       [/SYSTEM_MANAGED_REPORT/i, 422, 'SYSTEM_MANAGED_REPORT', 'Attendance is managed by the system'],
-      [/ALREADY_EXISTS|REPORT_ALREADY_EXISTS|CONFLICT|STALE/i, 409, 'BUSINESS_CONFLICT', 'The request conflicts with the current resource state'],
+      [/ALREADY_EXISTS|REPORT_ALREADY_EXISTS|SUSPENSION_OVERLAP|OVERLAP|CONFLICT|STALE/i, 409, 'BUSINESS_CONFLICT', 'The request conflicts with the current resource state'],
       [/INVALID_POLICY_SCOPE|INVALID_|MISMATCH|REQUIRED|SOURCE_AND_TARGET|DATE_NOT/i, 422, 'BUSINESS_VALIDATION_FAILED', 'The request violates a business rule'],
     ]
     const match = known.find(([pattern]) => pattern.test(message))

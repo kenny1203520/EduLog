@@ -64,7 +64,9 @@ describe('class session API contract', () => {
     expect(source).toContain("router.get('/class-sessions/:id/details'")
     expect(source).toContain("router.get('/class-sessions/:id/enrollment-peak'")
     expect(source).toContain("select('id', { count: 'exact', head: true })")
-    expect(source).toContain("from('occurrence_reports').select('class_occurrence_id')")
+    expect(source).toContain("rpc('get_class_session_occupancy'")
+    expect(source).toContain('max_occupancy')
+    expect(source).toContain('max_enrollment')
     expect(source).not.toContain("from('occurrence_reports').select('*')")
   })
 
