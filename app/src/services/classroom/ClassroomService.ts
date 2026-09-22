@@ -10,6 +10,14 @@ function toClassroom(dto: ClassroomDTO & { classroom_schedules?: ClassroomSchedu
     return classroom
 }
 
+export function normalizeClassroomMutation(updates: Partial<ClassroomDTO>): Partial<ClassroomDTO> {
+    if (!Object.prototype.hasOwnProperty.call(updates, 'external_link')) return updates
+    return {
+        ...updates,
+        external_link: updates.external_link?.trim() || null,
+    }
+}
+
 export class ClassroomService {
     static async getClassrooms(page: number = 1, perPage: number = 100, search?: string, visibilityMode: ClassroomVisibilityFilterMode = 'all'): Promise<{ data: Classroom[], count: number }> {
         const result = await apiResourceClient.list<ClassroomDTO & { classroom_schedules?: ClassroomScheduleDTO[] }>('classrooms', { page, perPage, search, sort: 'name' })
@@ -38,11 +46,11 @@ export class ClassroomService {
     }
 
     static async createClassroom(classroom: Partial<ClassroomDTO>): Promise<Classroom> {
-        return new Classroom((await apiResourceClient.create<ClassroomDTO>('classrooms', classroom)).data)
+        return new Classroom((await apiResourceClient.create<ClassroomDTO>('classrooms', normalizeClassroomMutation(classroom))).data)
     }
 
     static async updateClassroom(id: string, updates: Partial<ClassroomDTO>): Promise<Classroom> {
-        return new Classroom((await apiResourceClient.update<ClassroomDTO>('classrooms', id, updates)).data)
+        return new Classroom((await apiResourceClient.update<ClassroomDTO>('classrooms', id, normalizeClassroomMutation(updates))).data)
     }
 
     static async deleteClassroom(id: string): Promise<void> {

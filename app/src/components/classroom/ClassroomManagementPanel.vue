@@ -208,7 +208,7 @@ watch(() => props.roomId, () => {
                     </label>
                     <label class="min-w-0 space-y-2 md:col-span-2">
                         <span class="text-sm font-bold text-gray-700">{{ $t('classroom.external_link') }}</span>
-                        <input v-model="roomModel.external_link" :placeholder="$t('classroom.external_link_placeholder')" class="w-full min-w-0 rounded-xl border-gray-300">
+                        <input v-model="roomModel.external_link" type="url" :placeholder="$t('classroom.external_link_placeholder')" class="w-full min-w-0 rounded-xl border-gray-300">
                     </label>
                     <label class="space-y-2 md:col-span-2">
                         <span class="text-sm font-bold text-gray-700">{{ $t('classroom.color_label') }}</span>
