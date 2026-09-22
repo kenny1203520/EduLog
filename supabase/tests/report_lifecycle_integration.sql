@@ -183,6 +183,20 @@ BEGIN
     RAISE EXCEPTION 'closed session provisioned an out-of-range report';
   END IF;
 
+  IF NOT (
+    public.has_api_permission(auth.uid(), 'teaching.reports.create', NULL, '96000000-0000-4000-8000-000000000001')
+    OR public.has_api_permission(auth.uid(), 'teaching.enrollments.create', NULL, '96000000-0000-4000-8000-000000000001')
+    OR public.has_api_permission(auth.uid(), 'teaching.enrollments.update', NULL, '96000000-0000-4000-8000-000000000001')
+  ) THEN
+    RAISE EXCEPTION 'provisioning permission parity denied owner';
+  END IF;
+  IF NOT public.can_create_occurrence_report(
+    '99000000-0000-4000-8000-000000000001',
+    '9a000000-0000-4000-8000-000000000003'
+  ) THEN
+    RAISE EXCEPTION 'legacy report insert predicate denied regular enrollment';
+  END IF;
+
   PERFORM public.provision_occurrence_reports('9a000000-0000-4000-8000-000000000003');
   IF (SELECT count(*) FROM public.occurrence_reports
       WHERE enrollment_id = '99000000-0000-4000-8000-000000000003'
