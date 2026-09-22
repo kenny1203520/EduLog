@@ -699,7 +699,7 @@ services:
       # Server-only token verification material. Never pass this to the Vue
       # container or expose it through an API response.
       SUPABASE_JWT_SECRET: ${JWT_SECRET}
-      SUPABASE_REALTIME_URL: ${EDULOG_SUPABASE_REALTIME_URL:-ws://realtime:4000}
+      SUPABASE_REALTIME_URL: ${EDULOG_SUPABASE_REALTIME_URL:-ws://kong:8000/realtime/v1/websocket}
       COOKIE_SECRET: ${EDULOG_COOKIE_SECRET}
       COOKIE_SECURE: ${EDULOG_COOKIE_SECURE:-true}
       RATE_LIMIT_STORE: ${RATE_LIMIT_STORE:-supabase}
