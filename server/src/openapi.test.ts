@@ -34,6 +34,12 @@ describe('generated API contract', () => {
     expect(userSort?.schema?.enum).toEqual(expect.arrayContaining(['display_name', '-display_name']))
   })
 
+  it('documents report creation-time sorting in the generated contract', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    const reportSort = spec.paths['/api/reports']?.get?.parameters?.find((parameter: any) => parameter.name === 'sort')
+    expect(reportSort?.schema?.enum).toEqual(expect.arrayContaining(['created_at', '-created_at']))
+  })
+
   it('documents compatibility-safe role input and status filtering', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { parameters: Record<string, any>; schemas: Record<string, any> } }
     const roleSchema = spec.components.schemas.RoleCreateMutation

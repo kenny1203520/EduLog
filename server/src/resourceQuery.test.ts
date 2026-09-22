@@ -23,6 +23,8 @@ describe('resource query filters', () => {
   })
 
   it('accepts only allowlisted relation sorts used by report queries', () => {
+    expect(listQuerySchema.parse({ sort: 'created_at' }).sort).toBe('created_at')
+    expect(listQuerySchema.parse({ sort: '-created_at' }).sort).toBe('-created_at')
     expect(listQuerySchema.parse({ sort: 'class_occurrences(occurrence_date)' }).sort)
       .toBe('class_occurrences(occurrence_date)')
     expect(resources.reports.sortable).toContain('class_occurrences(occurrence_date)')

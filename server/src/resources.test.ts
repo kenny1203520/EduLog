@@ -63,6 +63,10 @@ describe('student API resource boundaries', () => {
     expect(resources.users.sortable).not.toContain('password')
   })
 
+  it('allows report queries to sort by creation time in either direction', () => {
+    expect(resources.reports.sortable).toEqual(expect.arrayContaining(['created_at', 'updated_at']))
+  })
+
   it('keeps the frontend collection projections complete without exposing student profile details', () => {
     expect(resources['class-sessions'].fields).toEqual(expect.arrayContaining(['time_zone', 'session_type', 'schedule_mode']))
     expect(resources.occurrences.fields).toEqual(expect.arrayContaining(['original_start_time', 'original_end_time', 'actual_start_time', 'actual_end_time', 'time_zone']))
