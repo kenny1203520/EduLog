@@ -10,6 +10,65 @@ export class ApiRealtimeChannel {
   private readonly state: PresenceState = {}
   private ref = 0
   private subscribedCallback: ((status: string) => void) | null = null
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private reconnectAttempt = 0
+  private closedByUser = false
+  private failureHandled = false
+
+  private clearTimers() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
+    this.heartbeatTimer = null
+    this.reconnectTimer = null
+  }
+
+  private startHeartbeat() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    this.heartbeatTimer = setInterval(() => {
+      if (this.socket?.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(++this.ref) }))
+      }
+    }, 25_000)
+  }
+
+  private scheduleReconnect() {
+    if (this.closedByUser || this.reconnectTimer) return
+    if (this.reconnectAttempt >= 3) {
+      this.subscribedCallback?.('CHANNEL_ERROR')
+      return
+    }
+    const delay = Math.min(4000, 500 * (2 ** this.reconnectAttempt++))
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
+      this.connectSocket()
+    }, delay)
+  }
+
+  private connectSocket() {
+    if (this.closedByUser) return
+    this.failureHandled = false
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const room = this.topic.slice('realtime:room:'.length)
+    const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime?room=${encodeURIComponent(room)}`)
+    this.socket = socket
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({ topic: this.topic, event: 'phx_join', payload: { config: { broadcast: { ack: false }, presence: { key: this.presenceKey }, private: true }, access_token: '' }, ref: String(++this.ref) }))
+    })
+    socket.addEventListener('message', (event) => this.handleMessage(event.data))
+    socket.addEventListener('close', () => {
+      if (this.socket !== socket || this.closedByUser || this.failureHandled) return
+      this.failureHandled = true
+      this.subscribedCallback?.('CLOSED')
+      this.scheduleReconnect()
+    })
+    socket.addEventListener('error', () => {
+      if (this.socket !== socket || this.closedByUser || this.failureHandled) return
+      this.failureHandled = true
+      this.subscribedCallback?.('CLOSED')
+      this.scheduleReconnect()
+    })
+  }
 
   constructor(roomId: string, presenceKey: string) {
     this.topic = `realtime:room:${roomId}`
@@ -23,15 +82,9 @@ export class ApiRealtimeChannel {
 
   subscribe(callback: (status: string) => void) {
     this.subscribedCallback = callback
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const room = this.topic.slice('realtime:room:'.length)
-    this.socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime?room=${encodeURIComponent(room)}`)
-    this.socket.addEventListener('open', () => {
-      this.socket?.send(JSON.stringify({ topic: this.topic, event: 'phx_join', payload: { config: { broadcast: { ack: false }, presence: { key: this.presenceKey }, private: true }, access_token: '' }, ref: String(++this.ref) }))
-    })
-    this.socket.addEventListener('message', (event) => this.handleMessage(event.data))
-    this.socket.addEventListener('close', () => { if (this.subscribedCallback) this.subscribedCallback('CLOSED') })
-    this.socket.addEventListener('error', () => { if (this.subscribedCallback) this.subscribedCallback('CHANNEL_ERROR') })
+    this.closedByUser = false
+    this.reconnectAttempt = 0
+    this.connectSocket()
     return this
   }
 
@@ -39,7 +92,12 @@ export class ApiRealtimeChannel {
     let message: any
     try { message = JSON.parse(String(raw)) } catch { return }
     if (message.topic !== this.topic) return
-    if (message.event === 'phx_reply' && message.payload?.status === 'ok') { this.subscribedCallback?.('SUBSCRIBED'); return }
+    if (message.event === 'phx_reply' && message.payload?.status === 'ok') {
+      this.reconnectAttempt = 0
+      this.startHeartbeat()
+      this.subscribedCallback?.('SUBSCRIBED')
+      return
+    }
     if (message.event === 'broadcast') {
       const payload = message.payload?.payload ?? message.payload
       const event = message.payload?.event
@@ -73,5 +131,11 @@ export class ApiRealtimeChannel {
 
   track(payload: unknown) { return this.send({ type: 'presence', event: 'track', payload }) }
   untrack() { return this.send({ type: 'presence', event: 'untrack', payload: {} }) }
-  unsubscribe() { this.socket?.close(); this.socket = null; return Promise.resolve('ok') }
+  unsubscribe() {
+    this.closedByUser = true
+    this.clearTimers()
+    this.socket?.close()
+    this.socket = null
+    return Promise.resolve('ok')
+  }
 }
