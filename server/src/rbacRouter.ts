@@ -5,6 +5,7 @@ import { sendData } from './response.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
 import { clearUserValidation } from './supabase.js'
+import { hasOverlappingSystemRoleAssignment } from './systemRoleAssignmentPolicy.js'
 
 const uuid = z.string().uuid()
 const nullableUuid = uuid.nullable().optional()
@@ -301,7 +302,22 @@ export function createRbacRouter() {
     requireRequest(req); const input = assignmentMutation.parse(req.body); const assignmentId = req.params.id ? uuid.parse(req.params.id) : null
     setAuditContext(req, { domain: 'system', resource: 'role-assignments', resourceId: assignmentId, action: assignmentId ? 'update' : 'create', permission: 'system.role_assignments.manage' })
     const replay = await idempotency(req, assignmentId ? 200 : 201, null); if (replay) return res.status(replay.status).json(replay.body)
-    const result = await req.db!.rpc('rbac_upsert_system_assignment', { p_assignment_id: assignmentId, p_user_id: input.user_id, p_role_id: input.role_id, p_effective_from: input.effective_from ?? null, p_effective_to: input.effective_to ?? null, p_expected_epoch: input.expected_epoch })
+    let previous: { effective_from: string; effective_to: string | null } | null = null
+    if (assignmentId) {
+      const current = await req.db!.from('user_role_assignments').select('effective_from,effective_to').eq('id', assignmentId).eq('scope_type', 'system').maybeSingle()
+      if (current.error) throw mapDatabaseError(current.error)
+      previous = current.data
+    }
+    const effectiveFrom = input.effective_from ?? previous?.effective_from ?? new Date().toISOString().slice(0, 10)
+    const effectiveTo = input.effective_to === undefined ? previous?.effective_to ?? null : input.effective_to
+    if (effectiveTo && effectiveTo < effectiveFrom) throw new ApiError(422, 'INVALID_DATE_RANGE', 'The end date must not be before the start date')
+    const existingResult = await req.db!.from('user_role_assignments')
+      .select('id,user_id,role_id,effective_from,effective_to')
+      .eq('scope_type', 'system').eq('user_id', input.user_id).eq('role_id', input.role_id)
+    if (existingResult.error) throw mapDatabaseError(existingResult.error)
+    const overlaps = hasOverlappingSystemRoleAssignment(existingResult.data ?? [], input.user_id, input.role_id, effectiveFrom, effectiveTo, assignmentId)
+    if (overlaps) throw new ApiError(409, 'SYSTEM_ROLE_ASSIGNMENT_OVERLAP', 'The user already has this system role during an overlapping date range')
+    const result = await req.db!.rpc('rbac_upsert_system_assignment', { p_assignment_id: assignmentId, p_user_id: input.user_id, p_role_id: input.role_id, p_effective_from: effectiveFrom, p_effective_to: effectiveTo, p_expected_epoch: input.expected_epoch })
     if (result.error) throw mapDatabaseError(result.error)
     const status = assignmentId ? 200 : 201; const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, status, body); return res.status(status).json(body)
   }

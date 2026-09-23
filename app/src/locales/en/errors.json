@@ -5,6 +5,7 @@
     "save_outcome_unknown": "The save result could not be confirmed. Your changes are still pending; please retry.",
     "unexpected": "An unexpected error occurred. If this keeps happening, please contact support.",
     "conflict": "This was changed by someone else. Please reload before continuing.",
+    "system_role_assignment_overlap": "This user already has this system role during an overlapping date range.",
     "unique_violation": "That value is already in use.",
     "foreign_key_violation": "This can't be completed because related data still references it.",
     "permission_denied": "You don't have permission to do that.",

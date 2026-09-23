@@ -6,6 +6,7 @@ const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/10
 const correction = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000028_rbac_security_performance_and_enrollment_completion.sql'), 'utf8')
 const strictNotificationEligibility = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000029_strict_incomplete_report_notification_eligibility.sql'), 'utf8')
 const scopedTeachingMatrix = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000092_scoped_teaching_role_permission_matrix.sql'), 'utf8')
+const systemRoleOverlap = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000093_system_role_assignment_overlap_guard.sql'), 'utf8')
 const edgeFunction = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'), 'utf8')
 const notificationPolicy = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/policy.ts'), 'utf8')
 
@@ -74,5 +75,14 @@ describe('RBAC migration contract', () => {
         expect(scopedTeachingMatrix).toContain('CREATE OR REPLACE FUNCTION public.can_access_report')
         expect(scopedTeachingMatrix).toContain('session.classroom_id, session.id')
         expect(scopedTeachingMatrix).toContain('public.can_access_enrollment_scope')
+    })
+
+    it('merges historical system-role overlaps and serializes future writes', () => {
+        expect(systemRoleOverlap).toContain('effective_from <= COALESCE(b.effective_to, \'infinity\'::date)')
+        expect(systemRoleOverlap).toContain('effective_to = CASE')
+        expect(systemRoleOverlap).toContain('PERFORM pg_advisory_xact_lock')
+        expect(systemRoleOverlap).toContain('SYSTEM_ROLE_ASSIGNMENT_OVERLAP')
+        expect(systemRoleOverlap).toContain("NEW.scope_type <> 'system'")
+        expect(systemRoleOverlap).toContain('CREATE TRIGGER system_role_assignment_no_overlap')
     })
 })

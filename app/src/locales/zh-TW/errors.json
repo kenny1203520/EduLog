@@ -5,6 +5,7 @@
     "save_outcome_unknown": "\u7121\u6cd5\u78ba\u8a8d\u5132\u5b58\u7d50\u679c\uff0c\u8b8a\u66f4\u4ecd\u5f85\u5132\u5b58\uff0c\u8acb\u91cd\u8a66\u3002",
     "unexpected": "發生未預期的錯誤。如果持續發生，請聯絡支援人員。",
     "conflict": "此資料已被其他人變更，請重新載入後再繼續。",
+    "system_role_assignment_overlap": "此使用者在重疊期間已具有相同的系統角色。",
     "unique_violation": "該值已被使用。",
     "foreign_key_violation": "因為仍有相關資料參照此項目，無法完成此操作。",
     "permission_denied": "您沒有執行此操作的權限。",

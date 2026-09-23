@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { RoleService } from '@/services/rbac/RoleService'
@@ -7,12 +7,13 @@ import type { RoleDTO } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
 import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue'
 import TeachingRolePermissionsPanel from '@/components/settings/TeachingRolePermissionsPanel.vue'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 type SystemUser = { id: string; email?: string | null; display_name?: string | null; account_status?: 'active' | 'disabled' | null }
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
 type AuditEvent = { id: string; action?: string | null; outcome?: string | null; route?: string | null; status?: number | null; created_at?: string | null }
 
-const { reportError } = useFeedback()
+const { errorKey, reportError } = useFeedback()
 const { t } = useI18n()
 const roles = ref<RoleDTO[]>([])
 const users = ref<SystemUser[]>([])
@@ -28,10 +29,64 @@ const auditLoaded = ref(false)
 const auditLoading = ref(false)
 const loading = ref(false)
 const saving = ref(false)
+const effectiveFrom = ref(todayLocal())
+const effectiveTo = ref('')
+
+function todayLocal() {
+    const now = new Date()
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+}
 
 function roleLabel(role?: { code?: string | null; name?: string | null } | null) {
     if (!role) return ''
     return role.code ? t(`rbac.roles.${role.code}.name`, role.name ?? role.code) : (role.name ?? '')
+}
+
+const userOptions = computed(() => users.value.map(user => ({
+    value: user.id,
+    label: user.display_name?.trim() || user.email || user.id,
+    description: user.email || '',
+    searchText: `${user.display_name ?? ''} ${user.email ?? ''}`,
+})))
+const roleOptions = computed(() => roles.value.map(role => ({
+    value: role.id,
+    label: roleLabel(role),
+    description: role.description || '',
+    searchText: `${role.name} ${role.code ?? ''} ${role.description ?? ''}`,
+})))
+const assignmentConflict = computed(() => {
+    if (!selectedUserId.value || !selectedRoleId.value || !effectiveFrom.value) return false
+    const end = effectiveTo.value || '9999-12-31'
+    return assignments.value.some(assignment => assignment.user_id === selectedUserId.value
+        && assignment.role_id === selectedRoleId.value
+        && Boolean(assignment.effective_from)
+        && (assignment.effective_from as string) <= end
+        && (assignment.effective_to ?? '9999-12-31') >= effectiveFrom.value)
+})
+
+function userName(userId: string) {
+    const user = users.value.find(user => user.id === userId)
+    return user?.display_name?.trim() || user?.email || t('rbac.system_ui.unknown_user')
+}
+
+function userEmail(userId: string) {
+    return users.value.find(user => user.id === userId)?.email || ''
+}
+
+async function loadAllPages<T>(resource: string) {
+    const limit = 100
+    const rows: T[] = []
+    let offset = 0
+    let total = Number.POSITIVE_INFINITY
+    while (offset < total) {
+        const result = await apiV1Client.get<T[]>(`/${resource}?limit=${limit}&offset=${offset}&sort=${resource === 'users' ? 'display_name' : '-created_at'}`)
+        const page = result.data ?? []
+        rows.push(...page)
+        total = Number(result.meta?.total ?? rows.length)
+        if (page.length === 0) break
+        offset += page.length
+    }
+    return rows
 }
 
 async function refreshEpoch() {
@@ -41,14 +96,14 @@ async function refreshEpoch() {
 async function load() {
     loading.value = true
     try {
-        const [roleResult, userResult, assignmentResult] = await Promise.all([
+        const [roleResult, allUsers, allAssignments] = await Promise.all([
             RoleService.getRoles({ domain: 'system' }),
-            apiV1Client.get<SystemUser[]>('/users?limit=100&offset=0&sort=display_name'),
-            apiV1Client.get<Assignment[]>('/system-role-assignments?limit=100&offset=0&sort=-created_at'),
+            loadAllPages<SystemUser>('users'),
+            loadAllPages<Assignment>('system-role-assignments'),
         ])
         roles.value = roleResult
-        users.value = userResult.data ?? []
-        assignments.value = assignmentResult.data ?? []
+        users.value = allUsers
+        assignments.value = allAssignments
         selectedRoleId.value ||= roles.value.find(role => role.code === 'auditor')?.id ?? roles.value[0]?.id ?? ''
         selectedUserId.value ||= users.value[0]?.id ?? ''
         if (selectedUserId.value) selectedStatus.value = users.value.find(user => user.id === selectedUserId.value)?.account_status === 'disabled' ? 'disabled' : 'active'
@@ -60,9 +115,18 @@ async function assignRole() {
     if (!selectedUserId.value || !selectedRoleId.value) return
     saving.value = true
     try {
-        await apiV1Client.post('/system-role-assignments', { user_id: selectedUserId.value, role_id: selectedRoleId.value, expected_epoch: epoch.value })
+        await apiV1Client.post('/system-role-assignments', {
+            user_id: selectedUserId.value,
+            role_id: selectedRoleId.value,
+            effective_from: effectiveFrom.value,
+            effective_to: effectiveTo.value || null,
+            expected_epoch: epoch.value,
+        })
         await load()
-    } catch (error) { reportError(error) } finally { saving.value = false }
+    } catch (error) {
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'SYSTEM_ROLE_ASSIGNMENT_OVERLAP') errorKey('errors.system_role_assignment_overlap')
+        else reportError(error)
+    } finally { saving.value = false }
 }
 
 async function updateStatus() {
@@ -114,29 +178,25 @@ onMounted(load)
             <div v-if="activeSection === 'assignments'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                 <h3 class="mb-4 font-black">{{ t('rbac.system_ui.role_assignments') }}</h3>
                 <div class="grid gap-3">
-                    <select v-model="selectedUserId" class="rounded-xl border border-gray-200 px-3 py-2" :aria-label="t('rbac.system_ui.user')">
-                        <option value="">{{ t('rbac.system_ui.select_user') }}</option>
-                        <option v-for="user in users" :key="user.id" :value="user.id">{{ user.display_name || user.email || user.id }}</option>
-                    </select>
-                    <select v-model="selectedRoleId" class="rounded-xl border border-gray-200 px-3 py-2" :aria-label="t('rbac.system_ui.system_role')">
-                        <option value="">{{ t('rbac.system_ui.select_system_role') }}</option>
-                        <option v-for="role in roles" :key="role.id" :value="role.id">{{ roleLabel(role) }}{{ role.is_protected ? `（${t('rbac.protected_read_only')}）` : '' }}</option>
-                    </select>
-                    <button :disabled="saving || !selectedUserId || !selectedRoleId" class="rounded-xl bg-emerald-600 px-4 py-2 font-black text-white disabled:opacity-40" @click="assignRole">{{ t('rbac.system_ui.assign_role') }}</button>
+                    <SearchableSelect v-model="selectedUserId" :options="userOptions" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.user_search')" />
+                    <SearchableSelect v-model="selectedRoleId" :options="roleOptions" :placeholder="t('rbac.system_ui.select_system_role')" :aria-label="t('rbac.system_ui.system_role_search')" />
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <label class="space-y-1 text-xs font-bold text-gray-500"><span>{{ t('rbac.system_ui.effective_from') }}</span><input v-model="effectiveFrom" type="date" required class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800" /></label>
+                        <label class="space-y-1 text-xs font-bold text-gray-500"><span>{{ t('rbac.system_ui.effective_to') }}</span><input v-model="effectiveTo" type="date" :min="effectiveFrom" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800" /></label>
+                    </div>
+                    <p v-if="assignmentConflict" role="alert" class="rounded-xl bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">{{ t('rbac.system_ui.assignment_overlap') }}</p>
+                    <button :disabled="saving || !selectedUserId || !selectedRoleId || !effectiveFrom || assignmentConflict || Boolean(effectiveTo && effectiveTo < effectiveFrom)" class="rounded-xl bg-emerald-600 px-4 py-2 font-black text-white disabled:opacity-40" @click="assignRole">{{ t('rbac.system_ui.assign_role') }}</button>
                 </div>
                 <p v-if="loading" class="mt-4 text-sm text-gray-400">{{ t('common.loading') }}</p>
                 <div v-for="assignment in assignments" :key="assignment.id" class="mt-4 flex items-center justify-between gap-3 border-t border-gray-50 pt-3">
-                    <div><p class="font-bold">{{ roleLabel(assignment.roles) || assignment.role_id }}</p><p class="text-xs text-gray-400">{{ assignment.user_id }}</p></div>
+                    <div class="min-w-0"><p class="truncate font-bold">{{ userName(assignment.user_id) }}</p><p v-if="userEmail(assignment.user_id)" class="truncate text-xs text-gray-500">{{ userEmail(assignment.user_id) }}</p><p class="mt-1 text-xs font-semibold text-gray-700">{{ roleLabel(assignment.roles) || t('rbac.system_ui.system_role') }}</p><p class="text-xs text-gray-400">{{ assignment.effective_from }} - {{ assignment.effective_to || t('rbac.system_ui.no_end_date') }}</p></div>
                     <button class="text-sm font-bold text-red-600" :disabled="saving" @click="removeAssignment(assignment)">{{ t('common.delete') }}</button>
                 </div>
             </div>
 
             <div v-if="activeSection === 'users'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                 <h3 class="mb-4 font-black">{{ t('rbac.system_ui.account_status') }}</h3>
-                <select v-model="selectedUserId" class="w-full rounded-xl border border-gray-200 px-3 py-2" :aria-label="t('rbac.system_ui.status_user')">
-                    <option value="">{{ t('rbac.system_ui.select_user') }}</option>
-                    <option v-for="user in users" :key="user.id" :value="user.id">{{ user.display_name || user.email || user.id }}</option>
-                </select>
+                <SearchableSelect v-model="selectedUserId" :options="userOptions" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.status_user')" />
                 <div class="mt-4 flex gap-3">
                     <select v-model="selectedStatus" class="rounded-xl border border-gray-200 px-3 py-2" :aria-label="t('rbac.system_ui.account_status')"><option value="active">{{ t('rbac.system_ui.active') }}</option><option value="disabled">{{ t('rbac.system_ui.disabled') }}</option></select>
                     <input v-if="selectedStatus === 'disabled'" v-model="statusReason" class="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2" :placeholder="t('rbac.system_ui.disable_reason')" />

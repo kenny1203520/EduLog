@@ -17,8 +17,12 @@ describe('database error taxonomy', () => {
       code: 'BUSINESS_VALIDATION_FAILED',
     })
     expect(mapDatabaseError({ code: 'P0001', message: 'RBAC_MANAGE_REQUIRED' })).toMatchObject({
-      status: 403,
-      code: 'PERMISSION_DENIED',
+        status: 403,
+        code: 'PERMISSION_DENIED',
+    })
+    expect(mapDatabaseError({ code: 'P0001', message: 'SYSTEM_ROLE_ASSIGNMENT_OVERLAP' })).toMatchObject({
+      status: 409,
+      code: 'SYSTEM_ROLE_ASSIGNMENT_OVERLAP',
     })
     expect(mapDatabaseError({ code: 'P0001', message: 'internal SQL details' }).message).toBe('The request violates a business rule')
   })
