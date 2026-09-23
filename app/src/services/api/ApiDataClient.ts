@@ -106,7 +106,14 @@ async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>
   if (name === 'resolve_user_permission') {
     const permission = stringArg(args, 'p_permission_key')
     if (!permission) throw new Error('API permission check requires p_permission_key')
-    const response = await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?permission=${encodeURIComponent(permission)}`)
+    const query = new URLSearchParams({ permission })
+    const classroomId = stringArg(args, 'p_classroom_id')
+    const classSessionId = stringArg(args, 'p_class_session_id')
+    const teachingId = stringArg(args, 'p_teaching_id')
+    if (classroomId) query.set('classroom_id', classroomId)
+    if (classSessionId) query.set('class_session_id', classSessionId)
+    if (teachingId) query.set('teaching_id', teachingId)
+    const response = await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?${query.toString()}`)
     return { data: { is_allowed: response.data.allowed, is_denied: !response.data.allowed } as T, error: null }
   }
   if (name === 'replace_role_permission_policies') {

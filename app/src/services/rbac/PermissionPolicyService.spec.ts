@@ -37,6 +37,15 @@ describe('PermissionPolicyService RBAC boundary', () => {
         await expect(PermissionPolicyService.canManageRbac()).resolves.toBe(false)
     })
 
+    it('checks occurrence update capability at the requested class-session scope', async () => {
+        rpcMock.mockResolvedValue({ data: [{ is_allowed: true, is_denied: false }], error: null })
+        await expect(PermissionPolicyService.canUpdateOccurrence('session-1')).resolves.toBe(true)
+        expect(rpcMock).toHaveBeenCalledWith('resolve_user_permission', expect.objectContaining({
+            p_permission_key: 'teaching.occurrences.update',
+            p_class_session_id: 'session-1'
+        }))
+    })
+
     it('maps policy RPC RLS rejection to a public AuthorizationError', async () => {
         rpcMock.mockResolvedValue({ error: { code: '42501', message: 'new row violates row-level security policy' } })
         await expect(PermissionPolicyService.replacePolicies('reports.incomplete.receive', { type: 'system' }, []))

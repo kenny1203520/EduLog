@@ -86,7 +86,7 @@ export class OccurrenceCommandService {
             // Merge with existing attendance if it exists
             const existingOccurrence = existingOccurrenceMap[dateStr]
             const existingAttendance = existingOccurrence?.teacher_attendance || {}
-            const updatedAttendance: any = {}
+            const updatedAttendance: Record<string, boolean> = { ...existingAttendance }
 
             teacherIds.forEach((id: string) => {
                 if (existingAttendance.hasOwnProperty(id)) {

@@ -397,7 +397,12 @@ export function buildOpenApi() {
     },
   }
   paths['/api/rbac/capability'] = {
-    get: { operationId: 'rbac_capability', security: [{ cookieAuth: [] }], parameters: [{ name: 'permission', in: 'query', required: true, schema: { type: 'string' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: { operationId: 'rbac_capability', security: [{ cookieAuth: [] }], parameters: [
+      { name: 'permission', in: 'query', required: true, schema: { type: 'string' } },
+      { name: 'teaching_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+      { name: 'classroom_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+      { name: 'class_session_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+    ], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/pages/settings/overview'] = {
     get: {

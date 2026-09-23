@@ -1504,7 +1504,7 @@ async function applyTemplateDraftToReport() {
         try {
             const serverReport = await OccurrenceReportService.getReportById(props.reportId)
             if (serverReport.version !== version.value) {
-                toast.error(t('report.editor.restore_conflict_error', '版本衝突：已有其他使用者修改了此報告。請先重新載入取得最新版本。'))
+                toast.error(t('report.editor.restore_conflict_error'))
                 return
             }
         } catch (e) {

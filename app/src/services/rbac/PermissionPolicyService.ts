@@ -9,6 +9,29 @@ export const INCOMPLETE_REPORT_PERMISSION = 'reports.incomplete.receive'
 export interface PolicyScopeTarget { type: PolicyScope; id?: string | null }
 
 export class PermissionPolicyService {
+    static async canUpdateOccurrence(classSessionId: string): Promise<boolean> {
+        try {
+            if (getApiV1Mode() === 'mock') {
+                const user = await apiDataClient.auth.getUser()
+                if (user.error || !user.data.user) return false
+                const result = await apiDataClient.rpc('resolve_user_permission', {
+                    p_user_id: user.data.user.id,
+                    p_permission_key: 'teaching.occurrences.update',
+                    p_class_session_id: classSessionId
+                })
+                const row = Array.isArray(result.data) ? result.data[0] : result.data
+                return !result.error && row?.is_allowed === true && row?.is_denied !== true
+            }
+            const query = new URLSearchParams({
+                permission: 'teaching.occurrences.update',
+                class_session_id: classSessionId
+            })
+            return (await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?${query.toString()}`)).data?.allowed === true
+        } catch {
+            return false
+        }
+    }
+
     static async canManageRbac(teachingId?: string): Promise<boolean> {
         if (getApiV1Mode() === 'mock') {
             const user = await apiDataClient.auth.getUser()

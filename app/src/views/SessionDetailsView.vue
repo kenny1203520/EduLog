@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
 import { HolidayService } from '@/services/holiday/HolidayService'
+import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
 import { Enrollment } from '@/models/Enrollment'
 import { countRosterAttendance, getRosterEnrollments } from '@/models/RosterFilter'
 import type { Lesson } from '@/models/Course'
@@ -46,6 +47,8 @@ import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
+import { roleDisplayName } from '@/utils/roleDisplay'
+import { getEffectiveTeacherAssignments } from '@/utils/effectiveTeacherAssignments'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -74,6 +77,8 @@ const sessionTeachers = ref<SessionTeacherAssignmentDTO[]>([])
 const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
 const isCalendarExpanded = ref(false)
 const isOccurrenceInHoliday = ref(false)
+const teacherLeaveById = ref<Record<string, boolean>>({})
+const canManageTeacherAttendance = ref(false)
 const reportMap = ref<Map<string, any>>(new Map()) // enrollmentId -> report
 const savingMap = ref<Map<string, boolean>>(new Map()) // enrollmentId -> isSaving
 const selectedEnrollmentIds = ref<Set<string>>(new Set())
@@ -119,7 +124,7 @@ const kodingTargetEnrollment = ref<Enrollment | null>(null)
 const kodingInitialLessonId = ref<string | null>(null)
 
 // Teacher Management State
-const occurrenceTeachers = ref<TeacherOverviewDTO[]>([])
+const occurrenceTeachers = ref<Array<TeacherOverviewDTO & { role?: SessionTeacherAssignmentDTO['role'] }>>([])
 const allTeachersList = ref<TeacherOverviewDTO[]>([])
 const showTeacherEditModal = ref(false)
 const teacherSearchQuery = ref('')
@@ -626,31 +631,35 @@ async function loadWorkspaceRoster(occurrenceDate: Date): Promise<void> {
 async function loadOccurrenceTeachers() {
     if (!todayOccurrence.value) {
         occurrenceTeachers.value = []
+        teacherLeaveById.value = {}
         selectedTeacherIds.value = new Set()
         return
     }
+    teacherLeaveById.value = {}
 
-    // sessionTeachers is session-level (not occurrence-specific) data: loadData()
-    // fetches it once for the session, and the assignment-mutation flows
-    // (addTeacherForToday, removeAssignment) explicitly re-fetch it themselves
-    // right before calling this function again. Re-fetching it here too made
-    // every single date navigation re-request the same session's assignment
-    // plan for no reason -- see setCurrentOccurrence's call to this function.
+    // Attendance roster is always derived from the effective teaching assignments.
+    // Keep the attendance status map on the occurrence, but never persist a second roster.
     const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
-    const activeAssignments = sessionTeachers.value.filter(st => dateStr >= st.effective_from && (!st.effective_to || dateStr <= st.effective_to))
-    const planTeacherIds = [...new Set(activeAssignments.map(a => a.id).filter(Boolean))] as string[]
-    const currentTeacherIds = todayOccurrence.value.teacherIds || []
-    selectedTeacherIds.value = new Set(currentTeacherIds)
-
-    if (currentTeacherIds.length === 0 && planTeacherIds.length > 0) {
-        selectedTeacherIds.value = new Set(planTeacherIds)
-        await saveOccurrenceTeachers(false)
-    }
-    if (allTeachersList.value.length === 0) {
-        const { data } = await TeacherService.getTeachers(1, 1000)
-        allTeachersList.value = data
-    }
-    occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
+    const assignmentsByTeacher = getEffectiveTeacherAssignments(sessionTeachers.value, dateStr)
+    selectedTeacherIds.value = new Set(assignmentsByTeacher.map(assignment => assignment.id).filter((id): id is string => Boolean(id)))
+    occurrenceTeachers.value = assignmentsByTeacher.map(assignment => ({
+        ...assignment,
+        role: assignment.role
+    }))
+    const occurrence = todayOccurrence.value
+    const leaveEntries = await Promise.all(assignmentsByTeacher
+        .filter(assignment => assignment.id)
+        .map(async assignment => [assignment.id!, await HolidayService.isTeacherOnLeave(
+            dateStr,
+            assignment.id!,
+            session.value?.classroom_id,
+            sessionId
+        ).catch(error => {
+            console.error('Failed to check teacher leave:', error)
+            return false
+        })] as const))
+    if (todayOccurrence.value?.id !== occurrence.id) return
+    teacherLeaveById.value = Object.fromEntries(leaveEntries)
 }
 
 async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
@@ -791,6 +800,25 @@ watch(filteredEnrollments, filtered => {
 
 const attendanceCounts = computed(() => countRosterAttendance(allRosterEnrollments.value, reportMap.value))
 const occupiedRosterCount = computed(() => attendanceCounts.value.present + attendanceCounts.value.pending)
+const teacherAttendanceCounts = computed(() => {
+    let present = 0
+    let absent = 0
+    let onLeave = 0
+    for (const teacher of occurrenceTeachers.value) {
+        if (teacher.id && teacherLeaveById.value[teacher.id]) onLeave++
+        else if (isTeacherPresent(teacher.id, teacher.user_id)) present++
+        else absent++
+    }
+    return { present, absent, onLeave }
+})
+
+function isTeacherOnLeave(teacherId?: string): boolean {
+    return Boolean(teacherId && teacherLeaveById.value[teacherId])
+}
+
+function canEditTeacherAttendance(teacher: TeacherOverviewDTO): boolean {
+    return auth.user?.id === teacher.user_id || canManageTeacherAttendance.value
+}
 
 async function loadData() {
     try {
@@ -811,12 +839,12 @@ async function loadData() {
         const allEnrollments = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
         enrollments.value = allEnrollments
         workspaceRosterDate = typeof rawSession.roster_date === 'string' ? rawSession.roster_date : null
-        sessionTeachers.value = ((rawSession.class_session_teachers ?? []) as any[]).flatMap(assignment => {
-            const assignedTeacher = Array.isArray(assignment.teachers) ? assignment.teachers[0] : assignment.teachers
-            if (!assignedTeacher) return []
-            const role = Array.isArray(assignment.roles) ? assignment.roles[0] : assignment.roles
-            return [{ ...assignedTeacher, effective_from: assignment.effective_from, effective_to: assignment.effective_to, role_id: assignment.role_id, role: role ?? null }]
-        })
+        const [teacherAssignments, canManageAttendance] = await Promise.all([
+            TeacherService.getSessionTeachers(sessionId),
+            PermissionPolicyService.canUpdateOccurrence(sessionId)
+        ])
+        sessionTeachers.value = teacherAssignments
+        canManageTeacherAttendance.value = canManageAttendance
         allTeachersList.value = workspace.teachers
 
         if (allEnrollments[0]?.courseId) courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
@@ -843,7 +871,7 @@ onMounted(() => {
 // Attendance & Rating Handlers
 async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
-        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
+        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
         return
     }
     const report = reportMap.value.get(enrId)
@@ -866,7 +894,7 @@ async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
 
 async function batchSetAttendance(status: QuickAttendanceStatus) {
     if (isOccurrenceInHoliday.value) {
-        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify attendance during a holiday period.'))
+        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
         return
     }
     const visibleIds = new Set(filteredEnrollments.value.map(enrollment => enrollment.id))
@@ -1337,7 +1365,7 @@ async function toggleIsConducted(event: any) {
     // Guard: check if occurrence is in a holiday period
     if (isOccurrenceInHoliday.value && isHeld) {
         event.target.checked = false
-        toast.error(t('report.error.cannot_set_conducted_during_holiday', 'Cannot mark class as conducted during a holiday period.'))
+        toast.error(t('report.error.cannot_set_conducted_during_holiday'))
         return
     }
 
@@ -1364,7 +1392,7 @@ function isTeacherPresent(teacherId: string | undefined, userId: string | null |
     return isTeacherPresentForScope({
         teacherId,
         teacherUserId: userId,
-        occurrenceTeacherIds: todayOccurrence.value.teacherIds,
+        occurrenceTeacherIds: occurrenceTeachers.value.map(teacher => teacher.id).filter((id): id is string => Boolean(id)),
         teacherAttendance: todayOccurrence.value.teacherAttendance
     })
 }
@@ -1376,7 +1404,7 @@ async function toggleTeacherAttendance(teacherId: string | undefined, event: any
     // Guard: check if occurrence is in a holiday period
     if (isOccurrenceInHoliday.value && isPresent) {
         event.target.checked = false
-        toast.error(t('report.error.cannot_set_teacher_present_during_holiday', 'Cannot mark teacher as present during a holiday period.'))
+        toast.error(t('report.error.cannot_set_teacher_present_during_holiday'))
         return
     }
 
@@ -1617,47 +1645,14 @@ async function resolveConflict(resolvedReport: OccurrenceReportDTO) {
 function openTeacherEditModal() {
     if (!todayOccurrence.value) return
     teacherSearchQuery.value = ''
-    selectedTeacherIds.value = new Set(todayOccurrence.value.teacherIds || [])
+    const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
+    selectedTeacherIds.value = new Set(getEffectiveTeacherAssignments(sessionTeachers.value, dateStr)
+        .map(assignment => assignment.id)
+        .filter((id): id is string => Boolean(id)))
     showTeacherEditModal.value = true
 }
 
 
-
-async function saveOccurrenceTeachers(showToast = true) {
-    if (!todayOccurrence.value) return
-
-    try {
-        isSavingTeachers.value = true
-        const newTeacherIds = Array.from(selectedTeacherIds.value)
-
-        // Sync teacher attendance JSON
-        const existingAttendance = todayOccurrence.value.teacherAttendance || {}
-        const newAttendance: Record<string, boolean> = {}
-
-        newTeacherIds.forEach(id => {
-            newAttendance[id] = existingAttendance[id] !== undefined ? existingAttendance[id] : true
-        })
-
-        const updated = await OccurrenceService.updateOccurrence(todayOccurrence.value.id, {
-            teacher_ids: newTeacherIds,
-            teacher_attendance: newAttendance
-        })
-
-        todayOccurrence.value.teacherIds = updated.teacherIds
-        todayOccurrence.value.teacherAttendance = updated.teacherAttendance
-
-        // No need to reload all session teachers here, just update occurrenceTeachers
-        occurrenceTeachers.value = allTeachersList.value.filter(t => t.id && selectedTeacherIds.value.has(t.id))
-
-        showTeacherEditModal.value = false
-        if (showToast) toast.success(t('common.save_success'))
-    } catch (e: any) {
-        console.error('Failed to save teachers:', e)
-        if (showToast) toast.error(t('common.save_error'))
-    } finally {
-        isSavingTeachers.value = false
-    }
-}
 
 async function addTeacherForToday(teacher: TeacherOverviewDTO) {
     if (!todayOccurrence.value || !teacher.id) return
@@ -1666,15 +1661,10 @@ async function addTeacherForToday(teacher: TeacherOverviewDTO) {
         isSavingTeachers.value = true
         const dateStr = DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate)
 
-        // 1. Add to Plan (class_session_teachers)
+        // Update the source-of-truth assignment only; attendance roster is derived from this plan.
         await TeacherService.assignTeacherForDate(sessionId, teacher.id, dateStr)
-
-        // 2. Add to Reality (teacher_ids)
-        selectedTeacherIds.value.add(teacher.id)
-        await saveOccurrenceTeachers(false)
-
-        // 3. Refresh Plan View
         sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
+        await loadOccurrenceTeachers()
 
         toast.success(t('common.save_success'))
     } catch (e) {
@@ -1690,17 +1680,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
     try {
         isSavingTeachers.value = true
-        // 1. Remove from Plan
         await TeacherService.removeTeacherAssignment(sessionId, teacherId, effectiveFrom)
-
-        // 2. Remove from Reality for this occurrence if it matches
-        const dateStr = todayOccurrence.value ? DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) : ''
-        if (effectiveFrom === dateStr) {
-            selectedTeacherIds.value.delete(teacherId)
-            await saveOccurrenceTeachers(false)
-        }
-
-        // 3. Refresh
         sessionTeachers.value = await TeacherService.getSessionTeachers(sessionId)
         await loadOccurrenceTeachers()
 
@@ -1909,7 +1889,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             </button>
 
                             <label class="relative inline-flex items-center cursor-pointer"
-                                :title="isOccurrenceInHoliday ? ($t('report.error.cannot_set_conducted_during_holiday', 'Cannot modify during holiday') || 'Holiday Period') : ($t('classroom.class_held') || 'Class Held')"
+                                :title="isOccurrenceInHoliday ? $t('report.error.cannot_set_conducted_during_holiday') : $t('classroom.class_held')"
                                 :class="{ 'opacity-50 cursor-not-allowed': isOccurrenceInHoliday }">
                                 <input type="checkbox" :checked="todayOccurrence && todayOccurrence.isConducted"
                                     :disabled="isOccurrenceInHoliday" @change="toggleIsConducted($event)"
@@ -1924,12 +1904,18 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                     <!-- Teacher Attendance Section -->
                     <div class="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4"
                         v-if="todayOccurrence">
-                        <div class="flex items-center justify-between">
-                            <div>
+                        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                            <div class="min-w-0">
                                 <h3 class="font-black text-gray-900">{{ $t('classroom.teacher_attendance_title') }}</h3>
                                 <p class="text-xs font-bold text-gray-400">
                                     {{ $t('classroom.teacher_attendance_subtitle') }}
+                                    <span v-if="canManageTeacherAttendance"> · {{ $t('classroom.teacher_attendance_manager_edit') }}</span>
                                 </p>
+                                <div class="mt-3 flex flex-wrap gap-2 text-[11px] font-bold">
+                                    <span class="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">{{ $t('classroom.teacher_attendance_present_count', { count: teacherAttendanceCounts.present }) }}</span>
+                                    <span class="rounded-full bg-rose-50 px-3 py-1 text-rose-700">{{ $t('classroom.teacher_attendance_absent_count', { count: teacherAttendanceCounts.absent }) }}</span>
+                                    <span v-if="teacherAttendanceCounts.onLeave" class="rounded-full bg-amber-50 px-3 py-1 text-amber-700">{{ $t('classroom.teacher_attendance_leave_count', { count: teacherAttendanceCounts.onLeave }) }}</span>
+                                </div>
                             </div>
 
                             <button @click="openTeacherEditModal"
@@ -1943,31 +1929,32 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             </button>
                         </div>
 
-                        <div v-if="occurrenceTeachers.length > 0" class="flex flex-wrap gap-4 mt-2">
+                        <div v-if="occurrenceTeachers.length > 0" class="mt-2 divide-y divide-gray-100 rounded-2xl border border-gray-100 bg-gray-50/70">
                             <div v-for="teacher in occurrenceTeachers" :key="teacher.id"
-                                class="flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-100 transition-colors"
-                                :class="{ 'border-emerald-200 bg-emerald-50/50': isTeacherPresent(teacher.id, teacher.user_id) }">
-
-                                <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold"
-                                    :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500'">
+                                class="flex min-w-0 items-center gap-3 px-4 py-3 transition-colors"
+                                :class="isTeacherOnLeave(teacher.id) ? 'bg-amber-50/70' : (isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-50/50' : '')">
+                                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold"
+                                    :class="isTeacherOnLeave(teacher.id) ? 'bg-amber-100 text-amber-700' : (isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-500')">
                                     {{ teacher.name.charAt(0) }}
                                 </div>
-                                <div class="flex-1 pr-2">
-                                    <div class="font-bold text-gray-900">{{ teacher.name }}</div>
-                                    <div class="text-[10px] uppercase font-black tracking-widest"
-                                        :class="isTeacherPresent(teacher.id, teacher.user_id) ? 'text-emerald-600' : 'text-gray-400'">
-                                        {{ isTeacherPresent(teacher.id, teacher.user_id) ? $t('attendance.present') : $t('attendance.absent') }}
+                                <div class="min-w-0 flex-1 pr-2">
+                                    <div class="truncate font-bold text-gray-900">{{ teacher.name }}</div>
+                                    <div v-if="teacher.role" class="mt-0.5 text-[10px] font-black tracking-wide text-gray-500">
+                                        {{ roleDisplayName(teacher.role, t) }}
                                     </div>
                                 </div>
-
-                                <label class="relative inline-flex items-center cursor-pointer ml-2"
-                                    :class="{ 'opacity-50 cursor-not-allowed': auth.user?.id !== teacher.user_id || isOccurrenceInHoliday }"
-                                    :title="isOccurrenceInHoliday ? $t('report.error.cannot_set_teacher_present_during_holiday') : (auth.user?.id !== teacher.user_id ? $t('classroom.teacher_attendance_only_self') : '')">
+                                <span class="shrink-0 rounded-full px-3 py-1 text-[10px] font-black"
+                                    :class="isTeacherOnLeave(teacher.id) ? 'bg-amber-100 text-amber-800' : (isTeacherPresent(teacher.id, teacher.user_id) ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600')">
+                                    {{ isTeacherOnLeave(teacher.id) ? $t('classroom.teacher_on_leave') : (isTeacherPresent(teacher.id, teacher.user_id) ? $t('attendance.present') : $t('attendance.absent')) }}
+                                </span>
+                                <label class="relative inline-flex shrink-0 items-center cursor-pointer"
+                                    :class="{ 'opacity-50 cursor-not-allowed': !canEditTeacherAttendance(teacher) || isOccurrenceInHoliday || isTeacherOnLeave(teacher.id) }"
+                                    :title="isTeacherOnLeave(teacher.id) ? $t('classroom.teacher_attendance_on_leave') : (isOccurrenceInHoliday ? $t('report.error.cannot_set_teacher_present_during_holiday') : (!canEditTeacherAttendance(teacher) ? $t('classroom.teacher_attendance_only_self') : ''))">
                                     <input type="checkbox" :checked="isTeacherPresent(teacher.id, teacher.user_id)"
-                                        :disabled="auth.user?.id !== teacher.user_id || isOccurrenceInHoliday"
+                                        :disabled="!canEditTeacherAttendance(teacher) || isOccurrenceInHoliday || isTeacherOnLeave(teacher.id)"
                                         @change="toggleTeacherAttendance(teacher.id, $event)" class="sr-only peer">
                                     <div :class="isOccurrenceInHoliday ? 'bg-red-100' : 'bg-gray-200'"
-                                        class="w-11 h-6 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500">
+                                        class="relative h-6 w-11 rounded-full transition-colors after:absolute after:left-[2px] after:top-0.5 after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all peer-checked:bg-emerald-500 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none">
                                     </div>
                                 </label>
                             </div>
@@ -2381,7 +2368,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                     </div>
                                     <div>
                                         <div class="text-sm font-black text-gray-900">{{ st.name }}</div>
-                                        <div v-if="st.role?.name" class="mt-0.5 text-[10px] font-black uppercase tracking-widest text-emerald-600">{{ st.role.name }}</div>
+                                        <div v-if="st.role?.name" class="mt-0.5 text-[10px] font-black tracking-wide text-emerald-600">{{ roleDisplayName(st.role, t) }}</div>
                                         <div class="text-[10px] font-bold text-gray-400">
                                             {{ st.effective_to ? `${st.effective_from} ~ ${st.effective_to}` :
                                                 `${st.effective_from} ~ ${$t('classroom.default_teacher')}` }}

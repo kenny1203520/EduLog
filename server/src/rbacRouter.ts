@@ -27,7 +27,9 @@ const roleUpdate = z.object({
   name: z.string().trim().min(1).max(120), description: z.string().trim().max(500).nullable().optional(), expected_epoch: z.coerce.number().int().positive(),
 }).strict()
 const roleDelete = z.object({ expected_epoch: z.coerce.number().int().positive() }).strict()
-const capabilityQuery = z.object({ permission: z.string().trim().min(1).max(200), teaching_id: uuid.optional() }).strict()
+const capabilityQuery = z.object({
+  permission: z.string().trim().min(1).max(200), teaching_id: uuid.optional(), classroom_id: uuid.optional(), class_session_id: uuid.optional(),
+}).strict().refine((query) => Number(Boolean(query.teaching_id)) + Number(Boolean(query.classroom_id)) + Number(Boolean(query.class_session_id)) <= 1)
 const capabilitiesQuery = z.object({ teaching_id: uuid.optional() }).strict()
 const roleScopeQuery = z.object({ scope_type: z.enum(['system', 'teaching']), scope_id: nullableUuid }).strict()
 const roleParentUpdate = z.object({ parent_role_id: nullableUuid, expected_epoch: z.coerce.number().int().positive() }).strict()
@@ -136,7 +138,7 @@ export function createRbacRouter() {
     const query = capabilityQuery.parse(req.query); requireRequest(req)
     const result = query.teaching_id
       ? await req.db!.rpc('has_teaching_permission', { p_user_id: req.user!.id, p_permission_key: query.permission, p_teaching_id: query.teaching_id, p_classroom_id: null, p_class_session_id: null })
-      : await req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: query.permission, p_classroom_id: null, p_class_session_id: null })
+      : await req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: query.permission, p_classroom_id: query.classroom_id ?? null, p_class_session_id: query.class_session_id ?? null })
     if (result.error) throw mapDatabaseError(result.error)
     return sendData(req, res, { allowed: result.data === true })
   }))

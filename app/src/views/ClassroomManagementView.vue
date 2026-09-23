@@ -11,6 +11,7 @@ import { RoleService } from '@/services/rbac/RoleService'
 import { INCOMPLETE_REPORT_PERMISSION, PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
 import type { PermissionDTO, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
 import type { RolePolicySelections } from '@/components/settings/ScopedRolePolicyEditor.vue'
+import { roleDisplayName } from '@/utils/roleDisplay'
 import ScopedRolePolicyEditor from '@/components/settings/ScopedRolePolicyEditor.vue'
 import ClassroomManagementPanel from '@/components/classroom/ClassroomManagementPanel.vue'
 import { Classroom, type ClassroomDTO, type ClassSessionDTO } from '@/models/Classroom'
@@ -27,6 +28,7 @@ import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
+import { paginateTeacherAssignments, partitionTeacherAssignments } from '@/utils/teacherAssignmentHistory'
 import { buildSessionScheduleDisplayItems } from '@/utils/sessionScheduleDisplay'
 
 import ConfirmModal from '../components/common/ConfirmModal.vue'
@@ -122,6 +124,19 @@ interface SessionTeacherConfig {
     effective_to?: string | null
 }
 const selectedTeacherConfigs = ref<SessionTeacherConfig[]>([])
+const teacherAssignmentsPerPage = 10
+const currentUpcomingAssignmentsPage = ref(1)
+const pastAssignmentsPage = ref(1)
+const showPastAssignments = ref(false)
+const teacherAssignmentPartitions = computed(() => partitionTeacherAssignments(
+    selectedTeacherConfigs.value,
+    DateUtils.todayString(newSession.value.time_zone || preferences.timeZone)
+))
+const currentUpcomingTeacherAssignments = computed(() => teacherAssignmentPartitions.value.currentAndUpcoming)
+const pastTeacherAssignments = computed(() => teacherAssignmentPartitions.value.past)
+const currentUpcomingAssignmentsView = computed(() => paginateTeacherAssignments(currentUpcomingTeacherAssignments.value, currentUpcomingAssignmentsPage.value, teacherAssignmentsPerPage))
+const pastAssignmentsView = computed(() => paginateTeacherAssignments(pastTeacherAssignments.value, pastAssignmentsPage.value, teacherAssignmentsPerPage))
+const visibleTeacherAssignments = computed(() => showPastAssignments.value ? pastAssignmentsView.value : currentUpcomingAssignmentsView.value)
 
 const roomsPagination = ref({ page: 1, perPage: 10, total: 0 })
 const sessionsPagination = ref({ page: 1, perPage: 10, total: 0 })
@@ -435,7 +450,7 @@ const teacherOptions = computed(() => teachersList.value.map(t => ({
 })))
 
 const roleOptions = computed(() => roles.value.map(role => ({
-    label: role.name,
+    label: roleDisplayName(role, t),
     value: role.id
 })))
 
@@ -621,6 +636,9 @@ async function saveSession() {
 async function openEditSession(session: ClassSessionDTO) {
     await ensureEditorDependencies()
     editingSession.value = session
+    currentUpcomingAssignmentsPage.value = 1
+    pastAssignmentsPage.value = 1
+    showPastAssignments.value = false
     sessionPolicySelections.value = policySelectionsFor('class_session', session.id)
     newSession.value = {
         ...session,
@@ -647,6 +665,9 @@ async function openEditSession(session: ClassSessionDTO) {
 async function openCreateSessionModal() {
     await ensureEditorDependencies()
     returnToRoomAfterSession.value = false
+    currentUpcomingAssignmentsPage.value = 1
+    pastAssignmentsPage.value = 1
+    showPastAssignments.value = false
     clearTeacherSelection()
     editingSession.value = null
     sessionPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
@@ -704,7 +725,7 @@ async function deleteSession(id: string) {
             await SessionService.deleteClassSession(id)
             AggregateService.clearCache()
             await loadSessions()
-            toast.success(t('classroom.session_delete_success') || 'Session deleted successfully')
+            toast.success(t('classroom.copy.session_delete_success'))
         } catch (e) {
             reportError(e)
         }
@@ -717,7 +738,7 @@ function getDayLabel(day: number) {
 }
 
 function getRoomName(id?: string) {
-    return allClassrooms.value.find(c => c.id === id)?.name || t('common.unknown_room', 'Unknown Room')
+    return allClassrooms.value.find(c => c.id === id)?.name || t('classroom.copy.unknown_room')
 }
 
 function toggleCourseSelection(courseId: string) {
@@ -730,6 +751,8 @@ function toggleCourseSelection(courseId: string) {
 }
 
 function addTeacherAssignment() {
+    showPastAssignments.value = false
+    currentUpcomingAssignmentsPage.value = Math.max(1, Math.ceil((currentUpcomingTeacherAssignments.value.length + 1) / teacherAssignmentsPerPage))
     selectedTeacherConfigs.value.push({
         teacher_id: '',
         role_id: roles.value.find(role => role.code === 'teacher')?.id || roles.value[0]?.id || '',
@@ -740,6 +763,8 @@ function addTeacherAssignment() {
 
 function removeTeacherAssignment(index: number) {
     selectedTeacherConfigs.value.splice(index, 1)
+    currentUpcomingAssignmentsPage.value = currentUpcomingAssignmentsView.value.page
+    pastAssignmentsPage.value = pastAssignmentsView.value.page
 }
 
 function clearTeacherSelection() {
@@ -774,7 +799,7 @@ function clearTeacherSelection() {
                                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                             </svg>
                         </div>
-                        <input v-model="searchQuery" type="text" :placeholder="t('common.search', 'Search...')"
+                        <input v-model="searchQuery" type="text" :placeholder="t('common.search')"
                             class="flex-1 bg-transparent border-none outline-none text-sm font-bold text-gray-700 placeholder:text-gray-300 py-2 min-w-0" />
                         <button v-if="searchQuery" @click="searchQuery = ''"
                             class="p-2 text-gray-300 hover:text-gray-500 transition-colors">
@@ -986,10 +1011,10 @@ function clearTeacherSelection() {
                     {{ $t('classroom.no_rooms') }} <span v-if="searchQuery">{{ $t('common.matching') }} "{{ searchQuery
                     }}"</span>
                     <template v-if="displayMode === 'visible' && classroomOverviewCounts.hidden > 0">
-                        <p class="mt-2">{{ $t('classroom.all_rooms_hidden', 'All matching classrooms are hidden.') }}</p>
+                        <p class="mt-2">{{ $t('classroom.all_rooms_hidden') }}</p>
                         <button class="mt-3 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700"
                             @click="displayMode = 'all'">
-                            {{ $t('classroom.show_all_rooms', 'Show all classrooms') }}
+                            {{ $t('classroom.show_all_rooms') }}
                         </button>
                     </template>
                 </div>
@@ -1105,7 +1130,7 @@ function clearTeacherSelection() {
                             class="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-black text-white shadow-md transition-all active:scale-95"
                             :style="{ backgroundColor: getDayColor(primaryScheduleDay(session)) }">
                             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-                            {{ $t('classroom.view_students', 'Students') }}
+                            {{ $t('classroom.view_students') }}
                         </router-link>
                     </div>
 
@@ -1119,10 +1144,10 @@ function clearTeacherSelection() {
                     class="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
                     {{ $t('classroom.no_sessions') }}
                     <template v-if="displayMode === 'visible' && sessionOverviewCounts.hidden > 0">
-                        <p class="mt-2">{{ $t('classroom.all_sessions_hidden', 'All matching sessions are hidden.') }}</p>
+                        <p class="mt-2">{{ $t('classroom.all_sessions_hidden') }}</p>
                         <button class="mt-3 rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700"
                             @click="displayMode = 'all'">
-                            {{ $t('classroom.show_all_sessions', 'Show all sessions') }}
+                            {{ $t('classroom.show_all_sessions') }}
                         </button>
                     </template>
                 </div>
@@ -1205,7 +1230,7 @@ function clearTeacherSelection() {
                             <label class="block text-sm font-semibold text-gray-700">{{ $t('common.end_date') }}</label>
                             <button v-if="newSession.end_date" @click="newSession.end_date = null"
                                 class="text-[10px] text-gray-400 hover:text-red-500 font-medium uppercase tracking-wider transition-colors">
-                                {{ $t('common.clear', 'Clear') }}
+                                {{ $t('common.clear') }}
                             </button>
                         </div>
                         <input type="date" v-model="newSession.end_date"
@@ -1306,25 +1331,38 @@ function clearTeacherSelection() {
 
                     <div class="md:col-span-2">
                         <label class="block text-sm font-semibold text-gray-700 mb-2">{{
-                            $t('classroom.teaching_schedule') || 'Teaching Schedule' }}</label>
+                            $t('classroom.copy.teaching_schedule') }}</label>
+                        <div class="mb-3 flex flex-wrap gap-2 rounded-xl bg-gray-100 p-1">
+                            <button type="button" @click="showPastAssignments = false; currentUpcomingAssignmentsPage = 1"
+                                class="rounded-lg px-3 py-2 text-xs font-bold transition-colors"
+                                :class="!showPastAssignments ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-800'">
+                                {{ $t('classroom.teacher_assignments_current_upcoming') }} ({{ currentUpcomingTeacherAssignments.length }})
+                            </button>
+                            <button v-if="pastTeacherAssignments.length" type="button"
+                                @click="showPastAssignments = true; pastAssignmentsPage = 1"
+                                class="rounded-lg px-3 py-2 text-xs font-bold transition-colors"
+                                :class="showPastAssignments ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-800'">
+                                {{ $t('classroom.teacher_assignments_history') }} ({{ pastTeacherAssignments.length }})
+                            </button>
+                        </div>
                         <div class="space-y-3">
-                            <div v-for="(config, index) in selectedTeacherConfigs" :key="index"
+                            <div v-for="entry in visibleTeacherAssignments.items" :key="`${entry.config.teacher_id}:${entry.config.effective_from}:${entry.index}`"
                                 class="p-3 border border-gray-200 rounded-xl bg-gray-50/50 space-y-3">
                                 <div class="flex items-start justify-between gap-3">
                                     <div class="flex-1">
                                         <label
                                             class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
                                                 $t('classroom.teacher') }}</label>
-                                        <SearchableSelect v-model="config.teacher_id" :options="teacherOptions"
+                                        <SearchableSelect v-model="entry.config.teacher_id" :options="teacherOptions"
                                             :placeholder="$t('classroom.teacher_search_placeholder')" />
                                     </div>
                                     <div class="flex-1">
                                         <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
                                             {{ $t('classroom.teacher_role') }}</label>
-                                        <SearchableSelect v-model="config.role_id" :options="roleOptions"
+                                        <SearchableSelect v-model="entry.config.role_id" :options="roleOptions"
                                             :placeholder="$t('classroom.teacher_role_placeholder')" />
                                     </div>
-                                    <button @click="removeTeacherAssignment(index)"
+                                    <button @click="removeTeacherAssignment(entry.index)"
                                         class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -1337,7 +1375,7 @@ function clearTeacherSelection() {
                                         <label
                                             class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">{{
                                                 $t('common.start_date') }}</label>
-                                        <input type="date" v-model="config.effective_from"
+                                        <input type="date" v-model="entry.config.effective_from"
                                             class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
                                     </div>
                                     <div>
@@ -1345,19 +1383,37 @@ function clearTeacherSelection() {
                                             <label
                                                 class="block text-[10px] font-bold uppercase tracking-wider text-gray-500">
                                                 {{ $t('common.end_date') }}
-                                                <span v-if="!config.effective_to"
+                                                <span v-if="!entry.config.effective_to"
                                                     class="ml-1 text-[9px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{{
                                                         $t('classroom.default_teacher') }}</span>
                                             </label>
-                                            <button v-if="config.effective_to" @click="config.effective_to = null"
+                                            <button v-if="entry.config.effective_to" @click="entry.config.effective_to = null"
                                                 class="text-[9px] text-gray-400 hover:text-red-500 font-bold uppercase transition-colors">
                                                 {{ $t('common.clear') }}
                                             </button>
                                         </div>
-                                        <input type="date" v-model="config.effective_to"
+                                        <input type="date" v-model="entry.config.effective_to"
                                             class="w-full text-sm border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500" />
                                     </div>
                                 </div>
+                            </div>
+                            <div v-if="visibleTeacherAssignments.items.length === 0"
+                                class="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-xs font-bold text-gray-400">
+                                {{ $t('classroom.no_teachers_assigned') }}
+                            </div>
+                            <div v-if="visibleTeacherAssignments.pageCount > 1"
+                                class="flex items-center justify-between border-t border-gray-100 pt-3 text-xs font-bold text-gray-500">
+                                <button type="button" class="rounded-lg px-3 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    :disabled="visibleTeacherAssignments.page <= 1"
+                                    @click="showPastAssignments ? pastAssignmentsPage-- : currentUpcomingAssignmentsPage--">
+                                    {{ $t('classroom.teacher_assignments_previous_page') }}
+                                </button>
+                                <span>{{ $t('classroom.teacher_assignments_page', { page: visibleTeacherAssignments.page, pages: visibleTeacherAssignments.pageCount }) }}</span>
+                                <button type="button" class="rounded-lg px-3 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                    :disabled="visibleTeacherAssignments.page >= visibleTeacherAssignments.pageCount"
+                                    @click="showPastAssignments ? pastAssignmentsPage++ : currentUpcomingAssignmentsPage++">
+                                    {{ $t('classroom.teacher_assignments_next_page') }}
+                                </button>
                             </div>
                             <button @click="addTeacherAssignment"
                                 class="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-xl text-sm font-bold text-gray-500 hover:border-emerald-500 hover:text-emerald-600 hover:bg-emerald-50/30 transition-all flex items-center justify-center gap-2">
@@ -1365,7 +1421,7 @@ function clearTeacherSelection() {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M12 4v16m8-8H4" />
                                 </svg>
-                                {{ $t('classroom.add_teacher_assignment') || 'Add Teacher Assignment' }}
+                                {{ $t('classroom.copy.add_teacher_assignment') }}
                             </button>
                         </div>
                     </div>
