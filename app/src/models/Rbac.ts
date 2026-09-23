@@ -43,6 +43,7 @@ export interface RolePermissionMatrixRow {
     local_effect: PolicyEffect | null
     inherited_effect: PolicyEffect | null
     inherited_from_role_id?: string | null
+    inherited_from_scope_type?: PolicyScope | null
     effective_effect: PolicyEffect | null
     denied: boolean
     epoch?: number

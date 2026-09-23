@@ -54,7 +54,7 @@
     },
     "teaching_role_permissions": {
         "title": "Teaching Role Permissions",
-        "description": "Manage scoped incomplete-report notification policies for teaching roles. System administration permissions are managed separately."
+        "description": "Manage teaching role access to student, teacher, classroom, class-session, attendance, report, holiday and enrollment operations at teaching and classroom scopes. System administration permissions are managed separately."
     },
     "incomplete_notifications": {
         "title": "Incomplete Report Notifications",

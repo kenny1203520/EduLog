@@ -6,7 +6,7 @@ import { RoleService } from '@/services/rbac/RoleService'
 import type { RoleDTO } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
 import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue'
-import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
+import TeachingRolePermissionsPanel from '@/components/settings/TeachingRolePermissionsPanel.vue'
 
 type SystemUser = { id: string; email?: string | null; display_name?: string | null; account_status?: 'active' | 'disabled' | null }
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
@@ -150,9 +150,7 @@ onMounted(load)
             <RolePermissionEditor domain="system" :title="$t('rbac.system_permissions')" />
         </div>
 
-        <IncompleteReportNotificationSettings v-else-if="activeSection === 'teaching_permissions'"
-            title-key="settings.teaching_role_permissions.title"
-            description-key="settings.teaching_role_permissions.description" />
+        <TeachingRolePermissionsPanel v-else-if="activeSection === 'teaching_permissions'" />
 
         <div v-if="activeSection === 'audit'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
             <h3 class="mb-4 font-black">{{ t('rbac.audit_title') }}</h3>

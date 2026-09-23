@@ -12,9 +12,10 @@ describe('role permission editor contract', () => {
         expect(source).toContain('RoleService.replaceRolePermissions')
     })
 
-    it('supports both system and teaching scopes without a second evaluator', () => {
+    it('supports system, teaching, classroom and class-session policy scopes without a second evaluator', () => {
         expect(source).toContain("domain: RbacDomain")
-        expect(source).toContain("scope_type: props.domain === 'system' ? 'system' : 'teaching'")
+        expect(source).toContain('targetScopeType.value')
+        expect(source).toContain('policyScopeType?: PolicyScope')
         expect(source).not.toContain('CASL')
     })
 

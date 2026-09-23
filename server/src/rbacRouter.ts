@@ -11,6 +11,7 @@ const nullableUuid = uuid.nullable().optional()
 const roleDomain = z.enum(['system', 'teaching'])
 const roleListQuery = z.object({
   domain: roleDomain.default('teaching'), teaching_id: uuid.optional(),
+  scope_type: z.enum(['system', 'teaching', 'classroom', 'class_session']).optional(), scope_id: nullableUuid,
   limit: z.coerce.number().int().min(1).max(100).default(25),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
   search: z.string().trim().max(200).optional(),
@@ -31,10 +32,10 @@ const capabilityQuery = z.object({
   permission: z.string().trim().min(1).max(200), teaching_id: uuid.optional(), classroom_id: uuid.optional(), class_session_id: uuid.optional(),
 }).strict().refine((query) => Number(Boolean(query.teaching_id)) + Number(Boolean(query.classroom_id)) + Number(Boolean(query.class_session_id)) <= 1)
 const capabilitiesQuery = z.object({ teaching_id: uuid.optional() }).strict()
-const roleScopeQuery = z.object({ scope_type: z.enum(['system', 'teaching']), scope_id: nullableUuid }).strict()
+const roleScopeQuery = z.object({ scope_type: z.enum(['system', 'teaching', 'classroom', 'class_session']), scope_id: nullableUuid }).strict()
 const roleParentUpdate = z.object({ parent_role_id: nullableUuid, expected_epoch: z.coerce.number().int().positive() }).strict()
 const rolePolicyUpdate = z.object({
-  scope_type: z.enum(['system', 'teaching']), scope_id: nullableUuid,
+  scope_type: z.enum(['system', 'teaching', 'classroom', 'class_session']), scope_id: nullableUuid,
   expected_epoch: z.coerce.number().int().positive(),
   policies: z.array(z.object({ permission_id: uuid, effect: z.enum(['allow', 'deny']) }).strict()).max(1000),
 }).strict()
@@ -82,6 +83,29 @@ async function authorizeRoleDomain(req: Request, domain: 'system' | 'teaching', 
   }
   const allowed = await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: `teaching.roles.${action}`, p_classroom_id: null, p_class_session_id: null })
   if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read teaching roles')
+}
+
+async function authorizeRoleScope(req: Request, domain: 'system' | 'teaching', scope: { type: 'system' | 'teaching' | 'classroom' | 'class_session'; id?: string | null }, action: 'read' | 'manage') {
+  if (domain === 'system') return authorizeRoleDomain(req, domain, null, action)
+  if (scope.type === 'system') throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'System policies are reserved for system roles')
+  if (scope.type === 'teaching' && !scope.id) {
+    const allowed = await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: 'system.roles.manage' })
+    if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'Global teaching role policies require system role management permission')
+    return
+  }
+  if (!scope.id) throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'A scoped policy requires a scope id')
+  if (scope.type === 'teaching') return authorizeRoleDomain(req, 'teaching', scope.id, action)
+  const allowed = await rpcBoolean(req, 'has_api_permission', {
+    p_user_id: req.user!.id,
+    p_permission_key: `teaching.roles.${action}`,
+    p_classroom_id: scope.type === 'classroom' ? scope.id : null,
+    p_class_session_id: scope.type === 'class_session' ? scope.id : null,
+  }) || (action === 'read' && await rpcBoolean(req, 'has_api_permission', {
+    p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage',
+    p_classroom_id: scope.type === 'classroom' ? scope.id : null,
+    p_class_session_id: scope.type === 'class_session' ? scope.id : null,
+  }))
+  if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read or manage teaching roles in this scope')
 }
 
 async function roleById(req: Request, id: string) {
@@ -143,6 +167,19 @@ export function createRbacRouter() {
     return sendData(req, res, { allowed: result.data === true })
   }))
 
+  router.get('/rbac/scoped-capability', wrap(async (req, res) => {
+    const query = roleScopeQuery.parse(req.query); requireRequest(req)
+    if (query.scope_type === 'system' || (query.scope_type === 'teaching' && !query.scope_id)) {
+      const allowed = await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: 'system.roles.manage' })
+      return sendData(req, res, { allowed })
+    }
+    if (!query.scope_id) throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'A scoped policy requires a scope id')
+    const allowed = query.scope_type === 'teaching'
+      ? await rpcBoolean(req, 'has_teaching_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_teaching_id: query.scope_id, p_classroom_id: null, p_class_session_id: null })
+      : await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: query.scope_type === 'classroom' ? query.scope_id : null, p_class_session_id: query.scope_type === 'class_session' ? query.scope_id : null })
+    return sendData(req, res, { allowed })
+  }))
+
   router.get('/rbac/capabilities', wrap(async (req, res) => {
     const query = capabilitiesQuery.parse(req.query); requireRequest(req)
     const result = await req.db!.rpc('get_rbac_capabilities', { p_teaching_id: query.teaching_id ?? null })
@@ -152,10 +189,12 @@ export function createRbacRouter() {
 
   router.get('/roles', wrap(async (req, res) => {
     const query = roleListQuery.parse(req.query)
-    await authorizeRoleDomain(req, query.domain, query.teaching_id, 'read')
+    if (query.domain === 'teaching' && query.scope_type) await authorizeRoleScope(req, query.domain, { type: query.scope_type, id: query.scope_id }, 'read')
+    else await authorizeRoleDomain(req, query.domain, query.teaching_id, 'read')
     const sort = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
     let builder = req.db!.from('roles').select('id,code,name,description,domain,teaching_id,is_builtin,is_protected,is_system,sort_order,created_at,updated_at', { count: 'exact' }).eq('domain', query.domain)
     if (query.domain === 'teaching' && query.teaching_id) builder = builder.or(`is_builtin.eq.true,teaching_id.eq.${query.teaching_id}`)
+    else if (query.domain === 'teaching' && query.scope_type === 'teaching' && !query.scope_id) builder = builder.is('teaching_id', null)
     if (query.search) {
       const search = query.search.replace(/[%_,()]/g, '')
       builder = builder.or(`name.ilike.%${search}%,code.ilike.%${search}%`)
@@ -220,7 +259,7 @@ export function createRbacRouter() {
 
   router.get('/roles/:id/permissions', wrap(async (req, res) => {
     const id = uuid.parse(req.params.id); const query = roleScopeQuery.parse(req.query); const role = await roleById(req, id)
-    await authorizeRoleDomain(req, role.domain as 'system' | 'teaching', query.scope_id ?? role.teaching_id as string | null, 'read')
+    await authorizeRoleScope(req, role.domain as 'system' | 'teaching', { type: query.scope_type, id: query.scope_id }, 'read')
     const result = await req.db!.rpc('rbac_get_role_permissions', { p_role_id: id, p_scope_type: query.scope_type, p_scope_id: query.scope_id ?? null })
     if (result.error) throw mapDatabaseError(result.error)
     const rows = result.data ?? []
@@ -229,8 +268,8 @@ export function createRbacRouter() {
 
   router.put('/roles/:id/permissions', wrap(async (req, res) => {
     const id = uuid.parse(req.params.id); const input = rolePolicyUpdate.parse(req.body); const role = await roleById(req, id)
-    await authorizeRoleDomain(req, role.domain as 'system' | 'teaching', input.scope_id ?? role.teaching_id as string | null, 'manage')
-    setAuditContext(req, { domain: role.domain as string, resource: 'role-permissions', resourceId: id, action: 'replace', teachingId: input.scope_id ?? null, scopeId: input.scope_id ?? null, scopeType: input.scope_type, permission: `${role.domain}.roles.manage` })
+    await authorizeRoleScope(req, role.domain as 'system' | 'teaching', { type: input.scope_type, id: input.scope_id }, 'manage')
+    setAuditContext(req, { domain: role.domain as string, resource: 'role-permissions', resourceId: id, action: 'replace', teachingId: input.scope_type === 'teaching' ? input.scope_id ?? null : null, scopeId: input.scope_id ?? null, scopeType: input.scope_type, permission: `${role.domain}.roles.manage` })
     const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
     const result = await req.db!.rpc('rbac_replace_role_permissions', { p_role_id: id, p_scope_type: input.scope_type, p_scope_id: input.scope_id ?? null, p_expected_epoch: input.expected_epoch, p_policies: input.policies })
     if (result.error) throw mapDatabaseError(result.error)

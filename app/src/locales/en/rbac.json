@@ -16,10 +16,13 @@
   "role_name": "Role name",
 "role_description": "Role description",
 "inherited": "inherited",
+"inherited_from": "Inherited from",
 "effective": "effective",
   "denied": "Denied",
   "version_conflict": "The permission configuration changed. Your draft is preserved; reload before saving again.",
-  "save_permissions": "Save permissions",
+"save_permissions": "Save permissions",
+"scope": { "label": "Policy scope", "global_teaching": "All teachings", "teaching": "Teaching", "teaching_context": "Teaching context", "classroom": "Classroom", "class_session": "Class session", "select_context": "Select a scope to review teaching role permissions." },
+"sensitive_student_data_hint": "Sensitive student permissions control access to personal details, contact information, school records and credentials. Reports use the classroom or class-session scope of the related class.",
   "permissions": {
     "title": "Role permissions",
     "subtitle": "Configure local policy and review inherited access."
@@ -57,6 +60,7 @@
     "update": { "name": "Update", "description": "Edit an existing record" },
     "delete": { "name": "Delete", "description": "Remove a record" },
     "manage": { "name": "Manage", "description": "Perform administrative actions" },
+    "receive_notifications": { "name": "Receive notifications", "description": "Receive system-generated teaching notifications" },
     "read_sensitive": { "name": "Read sensitive", "description": "View protected personal data" },
     "update_sensitive": { "name": "Update sensitive", "description": "Edit protected personal data" }
   },

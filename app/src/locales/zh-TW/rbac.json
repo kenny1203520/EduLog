@@ -16,10 +16,13 @@
   "role_name": "角色名稱",
 "role_description": "角色描述",
 "inherited": "繼承",
+"inherited_from": "繼承來源",
 "effective": "有效結果",
   "denied": "拒絕",
   "version_conflict": "權限設定已變更。已保留目前草稿，請重新載入後再儲存。",
-  "save_permissions": "儲存權限",
+"save_permissions": "儲存權限",
+"scope": { "label": "政策範圍", "global_teaching": "所有教學空間", "teaching": "教學空間", "teaching_context": "教學空間", "classroom": "教室", "class_session": "課堂", "select_context": "請選擇範圍以檢視教學角色權限。" },
+"sensitive_student_data_hint": "學生敏感資料權限控制個人資料、聯絡方式、學校資料及憑證的存取。報告依所屬課堂套用教室或課堂範圍。",
   "permissions": {
     "title": "角色權限",
     "subtitle": "設定本地政策並檢視繼承後的存取結果。"
@@ -57,6 +60,7 @@
     "update": { "name": "更新", "description": "編輯既有資料" },
     "delete": { "name": "刪除", "description": "移除資料" },
     "manage": { "name": "管理", "description": "執行管理操作" },
+    "receive_notifications": { "name": "接收通知", "description": "接收系統產生的教學通知" },
     "read_sensitive": { "name": "讀取敏感資料", "description": "查看受保護的個人資料" },
     "update_sensitive": { "name": "更新敏感資料", "description": "編輯受保護的個人資料" }
   },

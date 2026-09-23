@@ -54,7 +54,7 @@
     },
     "teaching_role_permissions": {
         "title": "教學角色權限",
-        "description": "管理教學角色在不同範圍的未完成報告通知政策。系統管理權限於另一區管理。"
+        "description": "設定教學角色在教學空間、教室與課堂中對學生、教師、出席、報告、假期及招生資料的操作權限。系統管理權限另於一區管理。"
     },
     "incomplete_notifications": {
         "title": "未完成報告通知",

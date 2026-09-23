@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RoleService } from '@/services/rbac/RoleService'
-import type { RbacDomain, RoleDTO, RolePermissionMatrixRow } from '@/models/Rbac'
+import type { PolicyScope, RbacDomain, RoleDTO, RolePermissionMatrixRow } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
 
 const props = withDefaults(defineProps<{
@@ -11,7 +11,10 @@ const props = withDefaults(defineProps<{
     teachingId?: string
     title?: string
     canManage?: boolean
-}>(), { canManage: true })
+    policyScopeType?: PolicyScope
+    policyScopeId?: string | null
+    canManageRoleDefinitions?: boolean
+}>(), { canManage: true, canManageRoleDefinitions: true })
 
 const { t } = useI18n()
 const { reportError } = useFeedback()
@@ -28,11 +31,15 @@ const dirty = ref(false)
 const conflict = ref(false)
 const capabilityCanManage = ref<boolean | null>(null)
 const selectedTeachingId = ref(props.teachingId ?? props.teachings?.[0]?.id ?? '')
+const targetScopeType = computed<PolicyScope>(() => props.policyScopeType ?? props.domain)
+const targetScopeId = computed<string | null>(() => props.policyScopeType
+    ? props.policyScopeId ?? null
+    : props.domain === 'teaching' ? selectedTeachingId.value || null : null)
 
 const selectedRole = computed(() => roles.value.find(role => role.id === selectedRoleId.value) ?? null)
 const canEdit = computed(() => props.canManage && capabilityCanManage.value !== false)
 const readOnly = computed(() => !canEdit.value || Boolean(selectedRole.value?.is_protected))
-const roleDetailsReadOnly = computed(() => readOnly.value || Boolean(selectedRole.value?.is_builtin))
+const roleDetailsReadOnly = computed(() => readOnly.value || !props.canManageRoleDefinitions || Boolean(selectedRole.value?.is_builtin))
 const groupedRows = computed(() => {
     const groups = new Map<string, RolePermissionMatrixRow[]>()
     for (const row of rows.value) {
@@ -73,23 +80,37 @@ function effectLabel(effect: string | null) {
     return effect === 'allow' ? t('rbac.permission.allow', 'Allow') : t('rbac.permission.deny', 'Deny')
 }
 
+function inheritedSource(row: RolePermissionMatrixRow) {
+    const inheritedRole = roles.value.find(role => role.id === row.inherited_from_role_id)
+    const scope = row.inherited_from_scope_type
+        ? t(`rbac.scope.${row.inherited_from_scope_type}`, row.inherited_from_scope_type)
+        : ''
+    const role = inheritedRole ? roleName(inheritedRole) : ''
+    return [role, scope].filter(Boolean).join(' · ')
+}
+
 async function loadRoles() {
-    if (props.domain === 'teaching' && !selectedTeachingId.value) return
+    if (props.domain === 'teaching' && !selectedTeachingId.value && !props.policyScopeType) return
     loading.value = true
     try {
         const capabilities = await RoleService.getCapabilities(props.domain === 'teaching' ? selectedTeachingId.value : undefined)
         epoch.value = capabilities.epoch
         const domainCapabilities = props.domain === 'system' ? capabilities.system : capabilities.teaching
-        capabilityCanManage.value = typeof domainCapabilities?.roles_manage === 'boolean' ? domainCapabilities.roles_manage : null
-        roles.value = await RoleService.getRoles({ domain: props.domain, teachingId: selectedTeachingId.value })
+        capabilityCanManage.value = props.policyScopeType
+            ? await RoleService.canManageRoleScope(targetScopeType.value, targetScopeId.value)
+            : typeof domainCapabilities?.roles_manage === 'boolean' ? domainCapabilities.roles_manage : null
+        roles.value = props.policyScopeType
+            ? await RoleService.getRolesForScope({ domain: props.domain, teachingId: selectedTeachingId.value || undefined, scopeType: targetScopeType.value, scopeId: targetScopeId.value })
+            : await RoleService.getRoles({ domain: props.domain, teachingId: selectedTeachingId.value })
         if (!roles.value.some(role => role.id === selectedRoleId.value)) selectedRoleId.value = roles.value[0]?.id ?? ''
+        await loadPermissions()
     } catch (error) { reportError(error) } finally { loading.value = false }
 }
 
 async function loadPermissions() {
     if (!selectedRoleId.value) { rows.value = []; return }
     try {
-        const result = await RoleService.getRolePermissions(selectedRoleId.value, props.domain, props.domain === 'teaching' ? selectedTeachingId.value : null)
+        const result = await RoleService.getRolePermissions(selectedRoleId.value, targetScopeType.value, targetScopeId.value)
         rows.value = result.rows
         epoch.value = result.epoch ?? epoch.value
         dirty.value = false
@@ -111,8 +132,8 @@ async function save() {
     conflict.value = false
     try {
         await RoleService.replaceRolePermissions(selectedRole.value.id, {
-            scope_type: props.domain === 'system' ? 'system' : 'teaching',
-            scope_id: props.domain === 'teaching' ? selectedTeachingId.value : null,
+            scope_type: targetScopeType.value,
+            scope_id: targetScopeId.value,
             expected_epoch: epoch.value,
             policies: rows.value.filter(row => row.local_effect).map(row => ({ permission_id: row.permission_id, effect: row.local_effect as 'allow' | 'deny' })),
         })
@@ -148,7 +169,7 @@ async function deleteRole() {
     try { await RoleService.deleteRole(selectedRole.value.id, epoch.value); await loadRoles() } catch (error) { reportError(error) }
 }
 
-watch(() => [props.domain, props.teachingId], () => { selectedTeachingId.value = props.teachingId ?? props.teachings?.[0]?.id ?? ''; void loadRoles() })
+watch(() => [props.domain, props.teachingId, props.policyScopeType, props.policyScopeId], () => { selectedTeachingId.value = props.teachingId ?? props.teachings?.[0]?.id ?? ''; void loadRoles() })
 watch(selectedTeachingId, () => { if (props.domain === 'teaching') void loadRoles() })
 watch(selectedRoleId, loadPermissions)
 onMounted(loadRoles)
@@ -175,22 +196,22 @@ onMounted(loadRoles)
 
         <div class="grid gap-5 lg:grid-cols-[18rem_1fr]">
             <div class="rounded-2xl border border-gray-100 bg-white p-4">
-                <div v-if="canEdit" class="mb-3 flex gap-2">
+                <div v-if="canEdit && canManageRoleDefinitions" class="mb-3 flex gap-2">
                     <input v-model="newRoleName" class="min-w-0 flex-1 rounded-lg border px-2 py-2 text-sm" :placeholder="t('rbac.new_role', 'New role')" />
                     <button class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold text-white" @click="createRole">{{ t('common.add', 'Add') }}</button>
                 </div>
                 <p v-if="loading" class="py-4 text-sm text-gray-400">{{ t('common.loading', 'Loading…') }}</p>
-                <button v-for="role in roles" :key="role.id" class="mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold" :class="selectedRoleId === role.id ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-gray-50'" @click="selectedRoleId = role.id">
+                <button v-for="role in roles" :key="role.id" type="button" :aria-pressed="selectedRoleId === role.id" class="mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="selectedRoleId === role.id ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-gray-50'" @click="selectedRoleId = role.id">
                     <span>{{ roleName(role) }}</span><span v-if="role.is_builtin" class="text-[10px] text-gray-400">{{ t('rbac.builtin', 'Built-in') }}</span>
                 </button>
-                <button v-if="selectedRole && !selectedRole.is_builtin && !selectedRole.is_protected && canEdit" class="mt-3 text-sm font-bold text-red-600" @click="deleteRole">{{ t('common.delete', 'Delete') }}</button>
+                <button v-if="selectedRole && !selectedRole.is_builtin && !selectedRole.is_protected && canEdit && canManageRoleDefinitions" class="mt-3 text-sm font-bold text-red-600" @click="deleteRole">{{ t('common.delete', 'Delete') }}</button>
             </div>
 
             <div class="rounded-2xl border border-gray-100 bg-white p-5">
                 <div v-if="selectedRole" class="mb-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
                     <input :value="selectedRole.is_builtin ? roleName(selectedRole) : draftName" :disabled="roleDetailsReadOnly" class="rounded-lg border px-3 py-2 text-sm" :aria-label="t('rbac.role_name', 'Role name')" @input="draftName = ($event.target as HTMLInputElement).value" />
                     <input :value="selectedRole.is_builtin ? roleDescription(selectedRole) : draftDescription" :disabled="roleDetailsReadOnly" class="rounded-lg border px-3 py-2 text-sm" :placeholder="roleDescription(selectedRole)" :aria-label="t('rbac.role_description', 'Role description')" @input="draftDescription = ($event.target as HTMLInputElement).value" />
-                    <button :disabled="roleDetailsReadOnly || saving" class="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700 disabled:opacity-40" @click="saveRoleDetails">{{ t('common.save', 'Save') }}</button>
+                    <button :disabled="roleDetailsReadOnly || !canManageRoleDefinitions || saving" class="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-bold text-emerald-700 disabled:opacity-40" @click="saveRoleDetails">{{ t('common.save', 'Save') }}</button>
                 </div>
                 <div v-for="[resource, resourceRows] in groupedRows" :key="resource" class="mb-5">
                     <h4 class="mb-2 border-b border-gray-100 pb-2 text-gray-700">
@@ -206,9 +227,10 @@ onMounted(loadRoles)
                                 {{ row.action }} · {{ t('rbac.inherited', 'inherited') }}: {{ effectLabel(row.inherited_effect) }} ·
                                 {{ t('rbac.effective', 'effective') }}: {{ effectLabel(row.effective_effect) }}
                             </p>
+                            <p v-if="row.inherited_effect" class="text-[11px] text-gray-400">{{ t('rbac.inherited_from', 'Inherited from') }}: {{ inheritedSource(row) }}</p>
                         </div>
                         <span v-if="row.denied" class="text-xs font-bold text-red-600">{{ t('rbac.denied', 'Denied') }}</span>
-                        <select :value="row.local_effect ?? 'inherit'" :disabled="readOnly" class="rounded-lg border px-2 py-1.5 text-sm" :class="row.denied ? 'border-red-300 text-red-700' : ''" @change="setLocalEffect(row, ($event.target as HTMLSelectElement).value)">
+                        <select :value="row.local_effect ?? 'inherit'" :disabled="readOnly" :aria-label="`${resourceName(resource)}: ${actionName(row.action)}`" class="rounded-lg border px-2 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="row.denied ? 'border-red-300 text-red-700' : ''" @change="setLocalEffect(row, ($event.target as HTMLSelectElement).value)">
                             <option value="inherit">{{ t('rbac.permission.inherit', 'Inherit') }}</option><option value="allow">{{ t('rbac.permission.allow', 'Allow') }}</option><option value="deny">{{ t('rbac.permission.deny', 'Deny') }}</option>
                         </select>
                     </div>

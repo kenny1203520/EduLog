@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 const migration = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000027_rbac_foundation_and_scoped_permissions.sql'), 'utf8')
 const correction = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000028_rbac_security_performance_and_enrollment_completion.sql'), 'utf8')
 const strictNotificationEligibility = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000029_strict_incomplete_report_notification_eligibility.sql'), 'utf8')
+const scopedTeachingMatrix = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000092_scoped_teaching_role_permission_matrix.sql'), 'utf8')
 const edgeFunction = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'), 'utf8')
 const notificationPolicy = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/policy.ts'), 'utf8')
 
@@ -60,5 +61,18 @@ describe('RBAC migration contract', () => {
         expect(correction).toContain('DROP INDEX IF EXISTS public.teacher_role_types_code_unique')
         expect(correction).toContain('DROP INDEX IF EXISTS public.teacher_role_types_name_unique')
         expect(correction).toContain('SECURITY INVOKER')
+    })
+
+    it('supports scoped teaching-role matrices and keeps teaching authorization deny-first', () => {
+        expect(scopedTeachingMatrix).toContain("p_scope_type NOT IN ('teaching', 'classroom', 'class_session')")
+        expect(scopedTeachingMatrix).toContain('public.rbac_scope_teaching_id(p_scope_type, p_scope_id)')
+        expect(scopedTeachingMatrix).toContain("policy.scope_id IS NULL OR policy.scope_id = p_teaching_id")
+        expect(scopedTeachingMatrix).toContain("COALESCE(bool_or(matched.effect = 'deny'), false)")
+        expect(scopedTeachingMatrix).toContain("WHEN 'class_session' THEN public.has_api_permission")
+        expect(scopedTeachingMatrix).toContain("scope_type = 'teaching' AND scope_id IS NULL")
+        expect(scopedTeachingMatrix).toContain("v_role.domain <> v_permission.domain")
+        expect(scopedTeachingMatrix).toContain('CREATE OR REPLACE FUNCTION public.can_access_report')
+        expect(scopedTeachingMatrix).toContain('session.classroom_id, session.id')
+        expect(scopedTeachingMatrix).toContain('public.can_access_enrollment_scope')
     })
 })
