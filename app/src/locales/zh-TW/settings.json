@@ -15,6 +15,25 @@
         "language": "介面語言"
     },
     "teacher_roles": {
+        "names": {
+            "owner": "教學負責人",
+            "teaching_owner": "教學負責人",
+            "manager": "教學管理員",
+            "teaching_manager": "教學管理員",
+            "assistant": "助理",
+            "viewer": "檢視者",
+            "instructor": "講師",
+            "assistant_instructor": "助理講師",
+            "trainee_instructor": "實習講師",
+            "trainee_assistant": "實習助教",
+            "teacher": "教師",
+            "learning_coach": "學習顧問",
+            "coach": "顧問",
+            "trainee_teacher": "實習教師",
+            "trainee_tutor": "實習家教",
+            "trainee_learning_coach": "實習學習顧問",
+            "trainee_coach": "實習顧問"
+        },
         "title": "教師職務種類",
         "description": "管理班級教師可使用的職務；系統預設職務不可刪除。",
         "placeholder": "新增自訂職務名稱",
@@ -22,6 +41,10 @@
         "custom": "自訂職務",
         "saved": "職務已新增",
         "deleted": "職務已刪除"
+    },
+    "teaching_role_permissions": {
+        "title": "教學角色權限",
+        "description": "管理教學角色在不同範圍的未完成報告通知政策。系統管理權限於另一區管理。"
     },
     "incomplete_notifications": {
         "title": "未完成報告通知",

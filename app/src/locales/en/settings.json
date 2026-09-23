@@ -17,11 +17,34 @@
     "teacher_roles": {
         "title": "Teacher Role Types",
         "description": "Manage roles available for class assignments. Built-in roles cannot be removed.",
+        "names": {
+            "owner": "Teaching Owner",
+            "teaching_owner": "Teaching Owner",
+            "manager": "Teaching Manager",
+            "teaching_manager": "Teaching Manager",
+            "assistant": "Assistant",
+            "viewer": "Viewer",
+            "instructor": "Instructor",
+            "assistant_instructor": "Assistant Instructor",
+            "trainee_instructor": "Instructor Trainee",
+            "trainee_assistant": "Assistant Trainee",
+            "teacher": "Teacher",
+            "learning_coach": "Learning Coach",
+            "coach": "Coach",
+            "trainee_teacher": "Teacher Trainee",
+            "trainee_tutor": "Tutor Trainee",
+            "trainee_learning_coach": "Learning Coach Trainee",
+            "trainee_coach": "Coach Trainee"
+        },
         "placeholder": "New custom role name",
         "system": "System role",
         "custom": "Custom role",
         "saved": "Role added",
         "deleted": "Role deleted"
+    },
+    "teaching_role_permissions": {
+        "title": "Teaching Role Permissions",
+        "description": "Manage scoped incomplete-report notification policies for teaching roles. System administration permissions are managed separately."
     },
     "incomplete_notifications": {
         "title": "Incomplete Report Notifications",

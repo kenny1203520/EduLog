@@ -14,6 +14,10 @@ import type { PermissionDTO, PolicyScope, RoleDTO, RolePermissionPolicyDTO } fro
 import ScopedRolePolicyEditor, { type PolicySelection } from '@/components/settings/ScopedRolePolicyEditor.vue'
 
 const { t } = useI18n()
+const props = withDefaults(defineProps<{ titleKey?: string; descriptionKey?: string }>(), {
+    titleKey: 'settings.incomplete_notifications.title',
+    descriptionKey: 'settings.incomplete_notifications.description'
+})
 const toast = useToast()
 const { reportError } = useFeedback()
 const scopeType = ref<PolicyScope>('system')
@@ -114,8 +118,8 @@ onMounted(load)
 <template>
     <section id="incomplete-notifications" class="overflow-hidden rounded-[2.5rem] border border-gray-100 bg-white shadow-sm">
         <div class="border-b border-gray-50 p-6 sm:p-8">
-            <h3 class="text-2xl font-black tracking-tight text-gray-900">{{ $t('settings.incomplete_notifications.title') }}</h3>
-            <p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.incomplete_notifications.description') }}</p>
+            <h3 class="text-2xl font-black tracking-tight text-gray-900">{{ $t(props.titleKey) }}</h3>
+            <p class="mt-1 text-sm font-bold text-gray-400">{{ $t(props.descriptionKey) }}</p>
         </div>
         <div class="space-y-6 p-6 sm:p-8">
             <div class="grid grid-cols-1 gap-4 md:grid-cols-3">

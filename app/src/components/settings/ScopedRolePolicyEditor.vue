@@ -8,6 +8,7 @@ import {
     type RoleDTO,
     type RolePermissionPolicyDTO
 } from '@/models/Rbac'
+import { roleDisplayName } from '@/utils/roleDisplay'
 
 export type PolicySelection = PolicyEffect | 'inherit'
 export type RolePolicySelections = Record<string, PolicySelection>
@@ -85,7 +86,7 @@ function update(roleId: string, effect: PolicySelection) {
             class="grid min-w-0 gap-3 rounded-2xl border border-gray-100 bg-gray-50"
             :class="compact ? 'p-3 md:grid-cols-[minmax(8rem,1fr)_auto]' : 'p-4 lg:grid-cols-[minmax(10rem,1fr)_auto_minmax(12rem,1fr)] lg:items-center'">
             <div class="min-w-0">
-                <p class="truncate font-black text-gray-800" :title="role.name">{{ role.name }}</p>
+                <p class="truncate font-black text-gray-800" :title="roleDisplayName(role, t)">{{ roleDisplayName(role, t) }}</p>
                 <p class="mt-1 text-xs font-bold text-gray-400">
                     {{ $t('settings.incomplete_notifications.effective') }}:
                     <span :class="effectiveFor(role.id).effect === 'deny' ? 'text-red-600' : effectiveFor(role.id).effect === 'allow' ? 'text-emerald-600' : 'text-gray-500'">
@@ -95,7 +96,7 @@ function update(roleId: string, effect: PolicySelection) {
                 </p>
             </div>
             <div class="inline-flex w-full rounded-xl bg-white p-1 shadow-sm sm:w-auto" role="group"
-                :aria-label="role.name">
+                :aria-label="roleDisplayName(role, t)">
                 <button v-for="effect in choices" :key="effect" type="button"
                     class="min-w-0 flex-1 rounded-lg px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
                     :class="modelValue[role.id] === effect
