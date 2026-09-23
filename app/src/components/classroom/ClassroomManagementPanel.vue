@@ -12,6 +12,7 @@ import {
     INCOMPLETE_REPORT_PERMISSION,
     PermissionPolicyService
 } from '@/services/rbac/PermissionPolicyService'
+import { DateUtils } from '@/utils/DateUtils'
 
 type PanelTab = 'details' | 'notifications' | 'sessions'
 
@@ -236,7 +237,7 @@ watch(() => props.roomId, () => {
                                     <h4 class="min-w-0 break-words font-black text-gray-900">{{ session.name }}</h4>
                                     <span class="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700">{{ sessionTypeLabel(session) }}</span>
                                 </div>
-                                <p class="mt-1 break-words text-xs font-bold text-gray-400">{{ timeSummary(session) }} · {{ session.time_zone }}</p>
+                                <p class="mt-1 break-words text-xs font-bold text-gray-400">{{ timeSummary(session) }} · {{ DateUtils.formatTimeZoneLabel(session.time_zone || '') }}</p>
                             </div>
                             <span class="text-sm font-black text-emerald-600">{{ expandedSessionId === session.id ? '−' : '+' }}</span>
                         </button>

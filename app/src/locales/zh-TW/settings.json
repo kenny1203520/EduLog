@@ -1,6 +1,13 @@
 {
     "subtitle": "管理您的個人偏好與系統設定",
+    "page_subtitle": "依權限管理個人、教學與系統設定。",
+    "tabs_aria": "設定分區",
+    "tab_personal": "個人設定",
+    "tab_teaching": "教學管理",
+    "tab_system": "系統管理",
+    "personal_title": "個人設定",
     "timezone": {
+        "nav_label": "時區與顯示",
         "title": "時區設定",
         "description": "設定系統顯示時間所使用的時區。這會影響您的課堂顯示、報告時間以及所有時間相關的功能。",
         "current": "目前設定的時區",
@@ -9,6 +16,9 @@
     },
     "appearance": {
         "title": "外觀與個人化",
+        "nav_label": "外觀與語言",
+        "decrease_font": "縮小字體",
+        "increase_font": "放大字體",
         "description": "自訂您的介面顯示方式，提供更舒適的使用體驗。",
         "font_scale": "全域字體大小",
         "font_scale_hint": "調整後會立即套用到所有頁面。",

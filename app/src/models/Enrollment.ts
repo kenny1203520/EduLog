@@ -79,7 +79,7 @@ export class Enrollment {
         this.classSessionId = data.class_session_id
         this.status = data.status || 'regular'
         this.startDate = data.start_date
-        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : 'Asia/Taipei'
+        this.timeZone = DateUtils.isValidTimeZone(data.time_zone) ? data.time_zone : DateUtils.getDefaultTimeZone()
         this.lessonNumber = data.lesson_number
         this.externalLink = data.external_link
         this.kodingAdmissionId = data.koding_admission_id
@@ -98,7 +98,7 @@ export class Enrollment {
             this.classSessionDayOfWeek = data.class_sessions.day_of_week
             this.classSessionStartTime = data.class_sessions.start_time
             this.classSessionEndTime = data.class_sessions.end_time
-            this.classSessionTimeZone = data.class_sessions.time_zone || 'Asia/Taipei'
+            this.classSessionTimeZone = DateUtils.isValidTimeZone(data.class_sessions.time_zone) ? data.class_sessions.time_zone : DateUtils.getDefaultTimeZone()
             this.classSessionType = data.class_sessions.session_type || 'regular'
             this.classSessionScheduleMode = data.class_sessions.schedule_mode || 'weekly'
             this.classSessionScheduleRules = data.class_sessions.class_session_schedule_rules || []

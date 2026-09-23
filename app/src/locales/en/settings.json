@@ -1,6 +1,13 @@
 {
     "subtitle": "Manage your personal preferences and system settings",
+    "page_subtitle": "Manage personal, teaching, and system settings based on your permissions.",
+    "tabs_aria": "Settings sections",
+    "tab_personal": "Personal settings",
+    "tab_teaching": "Teaching management",
+    "tab_system": "System management",
+    "personal_title": "Personal settings",
     "timezone": {
+        "nav_label": "Time zone and display",
         "title": "Time Zone Settings",
         "description": "Configure the time zone used for displaying times. This affects your class schedule, report times, and all time-related features.",
         "current": "Current Time Zone",
@@ -9,6 +16,9 @@
     },
     "appearance": {
         "title": "Appearance & Personalization",
+        "nav_label": "Appearance and language",
+        "decrease_font": "Decrease font size",
+        "increase_font": "Increase font size",
         "description": "Customize how the interface looks for a more comfortable experience.",
         "font_scale": "Global Font Size",
         "font_scale_hint": "Changes will be applied immediately to all pages.",

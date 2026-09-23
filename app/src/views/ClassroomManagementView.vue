@@ -1102,7 +1102,7 @@ function clearTeacherSelection() {
                             </div>
                             <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
                                 <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 0c2.5 2.7 3.8 6 3.8 10S14.5 19.3 12 22M2 12h20M12 2c-2.5 2.7-3.8 6-3.8 10s1.3 7.3 3.8 10" /></svg>
-                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('classroom.session_time_zone') }}</p><p class="break-words text-sm font-bold text-gray-700">{{ session.time_zone || 'Asia/Taipei' }}</p></div>
+                                <div class="min-w-0"><p class="text-[10px] font-black text-gray-400">{{ $t('classroom.session_time_zone') }}</p><p class="break-words text-sm font-bold text-gray-700">{{ DateUtils.formatTimeZoneLabel(session.time_zone || preferences.timeZone, preferences.locale) }}</p></div>
                             </div>
                             <div class="flex min-w-0 items-start gap-2.5 rounded-xl bg-gray-50 p-3 text-gray-500">
                                 <svg class="mt-0.5 h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2c0-1.18.68-2.2 1.67-2.69M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>

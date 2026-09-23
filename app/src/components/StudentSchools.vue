@@ -242,7 +242,7 @@ function formatSchoolDate(date: string | undefined, timeZone?: string) {
                                         d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5" />
                                 </svg>
                                 {{ formatSchoolDate(s.start_date, s.time_zone) }} - {{ s.end_date ? formatSchoolDate(s.end_date, s.time_zone) : $t('student.schools.present') }}
-                                <span class="text-[12px] text-gray-400 font-medium">({{ s.time_zone || 'Asia/Taipei' }})</span>
+                                <span class="text-[12px] text-gray-400 font-medium">({{ DateUtils.formatTimeZoneLabel(s.time_zone || preferences.timeZone, preferences.locale) }})</span>
                             </span>
                         </div>
                     </div>

@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import i18n, { type SupportedLocale } from '@/i18n'
 import { DateUtils } from '@/utils/DateUtils'
+import { TimeZoneService } from '@/services/TimeZoneService'
 import { UserPreferenceService } from '@/services/UserPreferenceService'
 import { AggregateService } from '@/services/AggregateService'
 import { DEFAULT_EDITOR_USER_SETTINGS, normalizeEditorUserSettings } from '@/components/common/text-editor/settings'
@@ -33,28 +34,7 @@ export const usePreferencesStore = defineStore('preferences', () => {
     const MIN_SCALE = 70
     const MAX_SCALE = 200
     const STEP = 10
-    const preferredTimeZones = [
-        'Asia/Taipei',
-        'Asia/Hong_Kong',
-        'Asia/Tokyo',
-        'Asia/Seoul',
-        'Asia/Singapore',
-        'Europe/London',
-        'Europe/Paris',
-        'America/New_York',
-        'America/Chicago',
-        'America/Denver',
-        'America/Los_Angeles',
-        'UTC'
-    ]
-
-    const timeZoneOptions = computed(() => {
-        const supported = DateUtils.getSupportedTimeZones()
-        const merged = [...preferredTimeZones, ...supported]
-        return Array.from(new Set(merged))
-            .filter(DateUtils.isValidTimeZone)
-            .map(zone => ({ value: zone, label: DateUtils.formatTimeZoneLabel(zone, locale.value) }))
-    })
+    const timeZoneOptions = computed(() => TimeZoneService.getOptions(locale.value))
 
     const timeZoneLabel = computed(() => DateUtils.formatTimeZoneLabel(timeZone.value, locale.value))
 

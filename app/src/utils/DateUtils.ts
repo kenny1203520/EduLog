@@ -4,82 +4,31 @@
  * interpreted with the user's preferred IANA time zone.
  */
 import i18n from '@/i18n'
+import { TimeZoneService } from '@/services/TimeZoneService'
 
 export class DateUtils {
-    private static readonly FALLBACK_TIME_ZONE = 'Asia/Taipei'
-
     static getBrowserTimeZone(): string {
-        return Intl.DateTimeFormat().resolvedOptions().timeZone || this.FALLBACK_TIME_ZONE
+        return TimeZoneService.getBrowserTimeZone()
     }
 
     static getDefaultTimeZone(): string {
-        const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('timeZone') : null
-        if (saved && this.isValidTimeZone(saved)) return saved
-        const browserTimeZone = this.getBrowserTimeZone()
-        return this.isValidTimeZone(browserTimeZone) ? browserTimeZone : this.FALLBACK_TIME_ZONE
+        return TimeZoneService.getDefaultTimeZone()
     }
 
     static isValidTimeZone(timeZone: string | undefined): timeZone is string {
-        if (!timeZone) return false
-        try {
-            new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date())
-            return true
-        } catch {
-            return false
-        }
+        return TimeZoneService.isValid(timeZone)
     }
 
     static getSupportedTimeZones(): string[] {
-        const intlWithValues = Intl as typeof Intl & { supportedValuesOf?: (key: string) => string[] }
-        const supported = intlWithValues.supportedValuesOf?.('timeZone')
-        if (supported?.length) return supported
-        return [
-            'Asia/Taipei',
-            'Asia/Hong_Kong',
-            'Asia/Tokyo',
-            'Asia/Seoul',
-            'Asia/Singapore',
-            'Europe/London',
-            'Europe/Paris',
-            'America/New_York',
-            'America/Chicago',
-            'America/Denver',
-            'America/Los_Angeles',
-            'UTC'
-        ]
+        return TimeZoneService.getSupportedTimeZones()
     }
 
     static formatTimeZoneLabel(timeZone: string, locale?: string): string {
-        const offset = this.getTimeZoneOffsetLabel(timeZone, locale)
-        let display = timeZone
-        try {
-            const key = `timezones.${timeZone}`
-            // prefer locale-specific translation if present
-            if (i18n?.global?.te && i18n.global.te(key, locale as any)) {
-                // t accepts a locale as second argument in some setups; fall back to global locale if unsupported
-                // use a try/catch to avoid breaking when t signature differs
-                try {
-                    const translated = i18n.global.t(key, locale as any)
-                    if (translated && translated !== key) display = String(translated)
-                } catch {
-                    const translated = i18n.global.t(key)
-                    if (translated && translated !== key) display = String(translated)
-                }
-            }
-        } catch {
-            // ignore and fallback to zone identifier
-        }
-        return offset ? `${display} (${offset})` : display
+        return TimeZoneService.formatLabel(timeZone, locale || i18n.global.locale.value)
     }
 
     static getTimeZoneOffsetLabel(timeZone: string, locale?: string): string {
-        if (!this.isValidTimeZone(timeZone)) return ''
-        const formatter = new Intl.DateTimeFormat(locale || 'en-US', {
-            timeZone,
-            timeZoneName: 'shortOffset'
-        })
-        const part = formatter.formatToParts(new Date()).find(p => p.type === 'timeZoneName')
-        return part?.value || ''
+        return TimeZoneService.getOffsetLabel(timeZone, locale || i18n.global.locale.value)
     }
 
     /**
@@ -191,7 +140,7 @@ export class DateUtils {
     }
 
     static getTimeZoneOffsetMinutes(date: Date, timeZone: string): number {
-        if (!this.isValidTimeZone(timeZone)) timeZone = this.FALLBACK_TIME_ZONE
+        if (!this.isValidTimeZone(timeZone)) timeZone = TimeZoneService.getDefaultTimeZone()
         const parts = this.getZonedParts(date, timeZone)
         const zonedAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second)
         return Math.round((zonedAsUtc - date.getTime()) / 60000)

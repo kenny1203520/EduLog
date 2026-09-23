@@ -175,7 +175,7 @@ export class SessionService {
     static async saveClassSession(session: Partial<ClassSessionDTO>, id?: string): Promise<ClassSessionDTO> {
         if (getApiV1Mode() === 'v1') {
             const rules = (session.schedule_rules || session.class_session_schedule_rules || []) as ClassSessionScheduleRuleDTO[]
-            const payload = { name: session.name || '', classroom_id: session.classroom_id || null, course_ids: session.course_ids || [], capacity: session.capacity ?? 10, lesson_number: session.lesson_number ?? null, external_link: session.external_link || null, start_date: session.start_date || null, end_date: session.end_date || null, time_zone: session.time_zone || 'Asia/Taipei', session_type: session.session_type || 'regular', schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly'), schedule_rules: rules.map(this.toScheduleRuleInput) }
+            const payload = { name: session.name || '', classroom_id: session.classroom_id || null, course_ids: session.course_ids || [], capacity: session.capacity ?? 10, lesson_number: session.lesson_number ?? null, external_link: session.external_link || null, start_date: session.start_date || null, end_date: session.end_date || null, time_zone: DateUtils.isValidTimeZone(session.time_zone) ? session.time_zone : DateUtils.getDefaultTimeZone(), session_type: session.session_type || 'regular', schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly'), schedule_rules: rules.map(this.toScheduleRuleInput) }
             const response = id ? await apiResourceClient.update<any>('class-sessions', id, payload, 'v1') : await apiResourceClient.create<any>('class-sessions', payload, 'v1')
             return this.hydrateSession(response.data)
         }
@@ -189,7 +189,7 @@ export class SessionService {
             external_link: session.external_link || null,
             start_date: session.start_date || null,
             end_date: session.end_date || null,
-            time_zone: session.time_zone || 'Asia/Taipei',
+            time_zone: DateUtils.isValidTimeZone(session.time_zone) ? session.time_zone : DateUtils.getDefaultTimeZone(),
             session_type: session.session_type || 'regular',
             schedule_mode: session.schedule_mode || (session.session_type === 'camp' ? 'specific_dates' : 'weekly')
         }

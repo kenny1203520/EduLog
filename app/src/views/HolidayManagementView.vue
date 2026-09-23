@@ -1002,7 +1002,7 @@ function closeModal() {
                                     </div>
                                     <span
                                         class="text-[10px] font-bold text-gray-400 uppercase tracking-wider break-words mt-1">
-                                        {{ getRoomName(s.classroom_id) }} · {{ s.time_zone || preferences.timeZone }}
+                                        {{ getRoomName(s.classroom_id) }} · {{ DateUtils.formatTimeZoneLabel(s.time_zone || preferences.timeZone, preferences.locale) }}
                                     </span>
                                 </div>
                             </label>

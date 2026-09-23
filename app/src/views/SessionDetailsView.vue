@@ -1734,7 +1734,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                             </span>
                             <span class="inline-grid max-w-full min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-1.5 rounded-xl bg-white px-3 py-2 shadow-sm ring-1 ring-gray-100">
                                 <span class="whitespace-nowrap text-[10px] font-black uppercase tracking-wide text-gray-400">{{ $t('classroom.session_time_zone') }}</span>
-                                <span class="min-w-0 [overflow-wrap:anywhere]">{{ session.time_zone || 'Asia/Taipei' }}</span>
+                                <span class="min-w-0 [overflow-wrap:anywhere]">{{ DateUtils.formatTimeZoneLabel(session.time_zone || preferences.timeZone, preferences.locale) }}</span>
                             </span>
                             <a v-if="session.external_link" :href="session.external_link" target="_blank"
                                 rel="noopener noreferrer" :title="session.external_link"
