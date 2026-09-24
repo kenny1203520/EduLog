@@ -113,6 +113,8 @@
     "has_rich_content": "Rich text content exists",
     "fields": {
       "display_name": "Name",
+      "full_name": "Full name",
+      "nickname": "Nickname",
       "contact_email": "Contact email",
       "phone": "Phone",
       "government_id": "Government ID",

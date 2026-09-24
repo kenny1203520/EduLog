@@ -370,9 +370,9 @@ export function createRbacRouter() {
     let data = assignments.data ?? []
     if (canListUsers && data.length) {
       const userIds = [...new Set(data.map((row: any) => row.user_id))]
-      const profiles = await req.adminDb!.from('profiles').select('auth_user_id,display_name,email').in('auth_user_id', userIds)
+      const profiles = await req.adminDb!.from('user_accounts').select('id,email,display_name').in('id', userIds)
       if (profiles.error) throw mapDatabaseError(profiles.error)
-      const profileById = new Map((profiles.data ?? []).map((profile: any) => [profile.auth_user_id, profile]))
+      const profileById = new Map((profiles.data ?? []).map((profile: any) => [profile.id, { id: profile.id, email: profile.email, display_name: profile.display_name }]))
       data = data.map((row: any) => ({ ...row, user: profileById.get(row.user_id) ?? null }))
     } else {
       data = data.map((row: any) => ({ ...row, user: null }))

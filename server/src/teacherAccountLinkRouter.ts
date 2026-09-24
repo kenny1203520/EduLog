@@ -6,8 +6,8 @@ import { complete, idempotency } from './resourceRouter.js'
 import { resources } from './resources.js'
 import { authorizeCollection } from './authorization.js'
 
-const profileFields = 'id,auth_user_id,profile_version,display_name,contact_email,phone,government_id,address,mailing_address,birthday,bio,bio_document'
-const fieldKeys = ['display_name', 'contact_email', 'phone', 'government_id', 'address', 'mailing_address', 'birthday', 'bio', 'bio_document'] as const
+const profileFields = 'id,auth_user_id,profile_version,full_name,nickname,contact_email,phone,government_id,address,mailing_address,birthday,bio,bio_document'
+const fieldKeys = ['full_name', 'nickname', 'contact_email', 'phone', 'government_id', 'address', 'mailing_address', 'birthday', 'bio', 'bio_document'] as const
 const ownership = z.enum(['account', 'teacher', 'target'])
 const choicesSchema = z.object(Object.fromEntries(fieldKeys.map((field) => [field, ownership]))).strict()
 const linkChangeSchema = z.object({

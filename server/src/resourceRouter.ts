@@ -203,8 +203,8 @@ export async function attachTeacherProfile(req: Request, value: unknown, include
   const profileIds = [...new Set(rows.map((row) => row.profile_id).filter((id): id is string => typeof id === 'string'))]
   if (!profileIds.length) return value
   const projection = includeSensitive
-    ? 'id,auth_user_id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document'
-    : 'id,auth_user_id,display_name,bio,bio_document'
+    ? 'id,auth_user_id,full_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document'
+    : 'id,auth_user_id,full_name,bio,bio_document'
   const result = await req.adminDb.from('profiles').select(projection).in('id', profileIds)
   if (result.error) throw mapDatabaseError(result.error)
   const profileRows = (result.data ?? []) as unknown as Array<Record<string, unknown> & { id: string }>
@@ -217,7 +217,7 @@ export async function attachTeacherProfile(req: Request, value: unknown, include
       ...safeRow,
       profile_id: profile.id,
       user_id: profile.auth_user_id,
-      name: profile.display_name,
+      name: profile.full_name,
       ...(includeSensitive ? {
         email: profile.contact_email,
         phone: profile.phone,

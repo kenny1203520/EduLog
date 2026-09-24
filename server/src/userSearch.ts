@@ -14,15 +14,16 @@ export function createUserSearchRouter() {
       if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to search users')
       const escapedQuery = input.query.replace(/[\\%_]/g, (character) => `\\${character}`)
       const pattern = `%${escapedQuery}%`
-      const [emailMatches, nameMatches] = await Promise.all([
-        req.adminDb.from('profiles').select('id,auth_user_id,email,display_name,created_at').not('auth_user_id', 'is', null).ilike('email', pattern).limit(20),
-        req.adminDb.from('profiles').select('id,auth_user_id,email,display_name,created_at').not('auth_user_id', 'is', null).ilike('display_name', pattern).limit(20),
+      const [emailMatches, fullNameMatches, nicknameMatches] = await Promise.all([
+        req.adminDb.from('user_accounts').select('id,email,display_name,created_at').ilike('email', pattern).limit(20),
+        req.adminDb.from('user_accounts').select('id,email,display_name,created_at').ilike('full_name', pattern).limit(20),
+        req.adminDb.from('user_accounts').select('id,email,display_name,created_at').ilike('nickname', pattern).limit(20),
       ])
-      if (emailMatches.error || nameMatches.error) throw new ApiError(502, 'USER_DIRECTORY_ERROR', 'The user directory is unavailable')
+      if (emailMatches.error || fullNameMatches.error || nicknameMatches.error) throw new ApiError(502, 'USER_DIRECTORY_ERROR', 'The user directory is unavailable')
       const byId = new Map<string, { id: string; email: string; display_name: string | null; created_at: string; last_sign_in_at: null }>()
-      for (const profile of [...(emailMatches.data ?? []), ...(nameMatches.data ?? [])]) {
-        if (!profile.auth_user_id || !profile.email || byId.has(profile.auth_user_id)) continue
-        byId.set(profile.auth_user_id, { id: profile.auth_user_id, email: profile.email, display_name: profile.display_name, created_at: profile.created_at, last_sign_in_at: null })
+      for (const profile of [...(emailMatches.data ?? []), ...(fullNameMatches.data ?? []), ...(nicknameMatches.data ?? [])]) {
+        if (!profile.id || !profile.email || byId.has(profile.id)) continue
+        byId.set(profile.id, { id: profile.id, email: profile.email, display_name: profile.display_name, created_at: profile.created_at, last_sign_in_at: null })
       }
       let users = [...byId.values()].slice(0, 20)
       if (input.only_unlinked) {

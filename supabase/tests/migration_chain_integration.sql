@@ -231,6 +231,33 @@ END;
 $$;
 
 DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles'
+      AND column_name IN ('display_name', 'email')
+  ) THEN
+    RAISE EXCEPTION 'legacy profile display_name or duplicated login email remains';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'full_name'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'nickname'
+  ) THEN
+    RAISE EXCEPTION 'separate full_name and nickname profile fields are missing';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_accounts' AND column_name = 'email'
+  ) THEN
+    RAISE EXCEPTION 'user account directory no longer reads the Auth email';
+  END IF;
+END;
+$$;
+
+DO $$
 DECLARE attribute_name text;
 BEGIN
   IF to_regclass('public.person_profiles') IS NOT NULL THEN

@@ -113,6 +113,8 @@
     "has_rich_content": "含有格式化文字",
     "fields": {
       "display_name": "姓名",
+      "full_name": "姓名",
+      "nickname": "暱稱",
       "contact_email": "聯絡 Email",
       "phone": "電話",
       "government_id": "身分證字號",

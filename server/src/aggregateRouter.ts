@@ -61,6 +61,8 @@ async function preferences(req: Request, res: Response) {
 }
 
 const personalProfilePatch = z.object({
+  full_name: z.string().trim().min(1).max(200).nullable().optional(),
+  nickname: z.string().trim().max(100).nullable().optional(),
   display_name: z.string().trim().min(1).max(200).nullable().optional(),
   contact_email: z.string().email().nullable().optional(),
   phone: z.string().max(1000).nullable().optional(),
@@ -83,23 +85,25 @@ async function myPersonProfile(req: Request, res: Response) {
 
   if (req.method === 'GET') {
     const result = await database(req, () => req.adminDb!.from('profiles')
-      .select('id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document,created_at,updated_at')
+      .select('id,full_name,nickname,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document,created_at,updated_at')
       .eq('id', personId).maybeSingle())
     if (result.error) throw mapDatabaseError(result.error)
-    return sendData(req, res, result.data)
+    return sendData(req, res, result.data ? { ...result.data, display_name: result.data.nickname?.trim() || result.data.full_name } : null)
   }
 
   const patch = personalProfilePatch.parse(req.body)
   if (!Object.keys(patch).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one profile field is required')
+  const { display_name: legacyDisplayName, ...profilePatch } = patch
+  if (profilePatch.full_name === undefined && legacyDisplayName !== undefined) profilePatch.full_name = legacyDisplayName
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
-  const result = await database(req, () => req.adminDb!.from('profiles').update({ ...patch, updated_at: new Date().toISOString() })
+  const result = await database(req, () => req.adminDb!.from('profiles').update({ ...profilePatch, updated_at: new Date().toISOString() })
     .eq('id', personId)
-    .select('id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document,created_at,updated_at')
+    .select('id,full_name,nickname,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document,created_at,updated_at')
     .maybeSingle())
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'The personal profile was not found')
-  const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+  const envelope = { data: { ...result.data, display_name: result.data.nickname?.trim() || result.data.full_name }, meta: {}, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 200, envelope)
   return res.json(envelope)
 }

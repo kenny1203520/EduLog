@@ -4,9 +4,9 @@ import { useI18n } from 'vue-i18n'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
-type Profile = { id: string; auth_user_id: string | null; profile_version: number; display_name: string | null; contact_email: string | null; phone: string | null; government_id: string | null; address: string | null; mailing_address: string | null; birthday: string | null; bio: string | null; bio_document: unknown }
+type Profile = { id: string; auth_user_id: string | null; profile_version: number; full_name: string | null; nickname: string | null; contact_email: string | null; phone: string | null; government_id: string | null; address: string | null; mailing_address: string | null; birthday: string | null; bio: string | null; bio_document: unknown }
 type Account = { id: string; email: string; display_name: string | null }
-type Field = keyof Pick<Profile, 'display_name' | 'contact_email' | 'phone' | 'government_id' | 'address' | 'mailing_address' | 'birthday' | 'bio' | 'bio_document'>
+type Field = keyof Pick<Profile, 'full_name' | 'nickname' | 'contact_email' | 'phone' | 'government_id' | 'address' | 'mailing_address' | 'birthday' | 'bio' | 'bio_document'>
 const props = defineProps<{ teacherId: string }>()
 const emit = defineEmits<{ close: []; saved: [] }>()
 const { t } = useI18n()
@@ -16,7 +16,7 @@ const query = ref('')
 const accounts = ref<Account[]>([])
 const selectedAccountId = ref<string | null>(null)
 const ownership = ref<Record<Field, 'account' | 'teacher' | 'target' | null>>({
-  display_name: null, contact_email: null, phone: null, government_id: null,
+  full_name: null, nickname: null, contact_email: null, phone: null, government_id: null,
   address: null, mailing_address: null, birthday: null, bio: null, bio_document: null,
 })
 const loading = ref(false)
@@ -25,7 +25,7 @@ const error = ref('')
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
 const fieldList: { key: Field; label: string }[] = [
-  { key: 'display_name', label: 'display_name' }, { key: 'contact_email', label: 'contact_email' },
+  { key: 'full_name', label: 'full_name' }, { key: 'nickname', label: 'nickname' }, { key: 'contact_email', label: 'contact_email' },
   { key: 'phone', label: 'phone' }, { key: 'government_id', label: 'government_id' },
   { key: 'address', label: 'address' }, { key: 'mailing_address', label: 'mailing_address' },
   { key: 'birthday', label: 'birthday' }, { key: 'bio', label: 'bio' }, { key: 'bio_document', label: 'bio_document' },
