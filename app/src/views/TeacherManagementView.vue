@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
+import TeacherAccountLinkDialog from '@/components/teacher/TeacherAccountLinkDialog.vue'
 import {
     TeacherService,
     type TeacherCredentialDTO,
@@ -47,6 +48,7 @@ const isModalOpen = ref(false)
 const isSaving = ref(false)
 const isCredentialSaving = ref(false)
 const editingTeacher = ref<TeacherDTO | null>(null)
+const linkingTeacher = ref<TeacherDTO | null>(null)
 const userSearchQuery = ref('')
 const userSearchResults = ref<AuthUserSearchResultDTO[]>([])
 const isSearchingUsers = ref(false)
@@ -188,6 +190,10 @@ async function openEditModal(teacher: TeacherOverviewDTO) {
     }
 }
 
+function openAccountLinkDialog() {
+    if (editingTeacher.value?.id) linkingTeacher.value = editingTeacher.value
+}
+
 function closeModal() {
     isModalOpen.value = false
     editingTeacher.value = null
@@ -250,7 +256,7 @@ function preparePayload(): Partial<TeacherDTO> {
         ...form.value,
         user_id: form.value.user_id?.trim() || null,
         name: form.value.name?.trim(),
-        email: form.value.email?.trim(),
+        email: form.value.email?.trim() || null,
         phone: form.value.phone?.trim() || null,
         birthday: form.value.birthday?.toString().trim() || null,
         gov_id: form.value.gov_id?.trim() || null,
@@ -265,12 +271,12 @@ function preparePayload(): Partial<TeacherDTO> {
 async function saveTeacher() {
     const payload = preparePayload()
 
-    if (!payload.name || !payload.email) {
+    if (!payload.name) {
         toast.error(t('teacher.validation_required'))
         return
     }
 
-    if (!isValidEmail(payload.email)) {
+    if (payload.email && !isValidEmail(payload.email)) {
         toast.error(t('teacher.validation_email'))
         return
     }
@@ -876,7 +882,12 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                             </label>
                             <input v-model="form.user_id" type="text" :placeholder="t('teacher.user_id_placeholder')" :disabled="!!editingTeacher"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
-                            <p v-if="editingTeacher" class="mt-1 text-xs font-medium text-amber-700">{{ t('teacher.account_link_locked') }}</p>
+                            <div v-if="editingTeacher?.id" class="mt-2 flex flex-wrap items-center gap-2">
+                                <p class="text-xs font-medium text-amber-700">{{ t('teacher.account_link_locked') }}</p>
+                                <button type="button" class="rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50" @click="openAccountLinkDialog">
+                                    {{ t('teacher.manage_account_link') }}
+                                </button>
+                            </div>
                         </div>
 
                         <div>
@@ -1091,6 +1102,13 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                 </div>
             </div>
         </div>
+
+        <TeacherAccountLinkDialog
+            v-if="linkingTeacher?.id"
+            :teacher-id="linkingTeacher.id"
+            @close="linkingTeacher = null"
+            @saved="loadTeachers"
+        />
 
         <ConfirmModal :is-open="confirmModal.isOpen" :title="confirmModal.title" :message="confirmModal.message"
             :confirm-text="confirmModal.confirmText" :is-dangerous="confirmModal.isDangerous"

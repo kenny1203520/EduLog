@@ -10,7 +10,7 @@ export interface TeacherDTO {
     id?: string
     user_id?: string | null
     name: string
-    email: string
+    email?: string | null
     phone?: string | null
     birthday?: string | null
     gov_id?: string | null
