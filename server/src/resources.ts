@@ -97,7 +97,7 @@ const filterableFieldsByResource: Record<string, readonly string[]> = {
   users: ['id', 'display_name', 'email', 'account_status'],
   roles: ['id', 'code', 'name', 'domain', 'teaching_id', 'is_builtin', 'is_protected', 'is_system'],
   permissions: ['id', 'key', 'domain', 'resource', 'action'],
-  'audit-events': ['id', 'actor_user_id', 'action', 'domain', 'resource', 'resource_id', 'scope_id', 'outcome'],
+  'audit-events': ['id', 'actor_user_id', 'action', 'domain', 'resource', 'resource_id', 'scope_id', 'outcome', 'created_at'],
   teachings: ['id', 'owner_user_id', 'is_quarantine'],
   courses: ['id', 'teaching_id', 'user_id', 'subject', 'stage', 'display_name'],
   lessons: ['id', 'course_id', 'user_id', 'sequence', 'title'],

@@ -7,11 +7,11 @@ import type { RoleDTO } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
 import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue'
 import TeachingRolePermissionsPanel from '@/components/settings/TeachingRolePermissionsPanel.vue'
+import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 type SystemUser = { id: string; email?: string | null; display_name?: string | null; account_status?: 'active' | 'disabled' | null }
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
-type AuditEvent = { id: string; action?: string | null; outcome?: string | null; route?: string | null; status?: number | null; created_at?: string | null }
 
 const { errorKey, reportError } = useFeedback()
 const { t } = useI18n()
@@ -24,9 +24,6 @@ const selectedStatus = ref<'active' | 'disabled'>('active')
 const statusReason = ref('')
 const epoch = ref(1)
 const activeSection = ref<'permissions' | 'teaching_permissions' | 'assignments' | 'users' | 'audit'>('permissions')
-const auditEvents = ref<AuditEvent[]>([])
-const auditLoaded = ref(false)
-const auditLoading = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const effectiveFrom = ref(todayLocal())
@@ -149,14 +146,8 @@ async function removeAssignment(assignment: Assignment) {
     } catch (error) { reportError(error) } finally { saving.value = false }
 }
 
-async function selectSection(section: typeof activeSection.value) {
+function selectSection(section: typeof activeSection.value) {
     activeSection.value = section
-    if (section !== 'audit' || auditLoaded.value || auditLoading.value) return
-    auditLoading.value = true
-    try {
-        auditEvents.value = (await apiV1Client.get<AuditEvent[]>('/audit-events?limit=50&offset=0&sort=-created_at')).data ?? []
-        auditLoaded.value = true
-    } catch (error) { reportError(error) } finally { auditLoading.value = false }
 }
 
 onMounted(load)
@@ -212,16 +203,6 @@ onMounted(load)
 
         <TeachingRolePermissionsPanel v-else-if="activeSection === 'teaching_permissions'" />
 
-        <div v-if="activeSection === 'audit'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
-            <h3 class="mb-4 font-black">{{ t('rbac.audit_title') }}</h3>
-            <p v-if="auditLoading" class="text-sm text-gray-400">{{ t('common.loading') }}</p>
-            <div v-else class="overflow-auto">
-                <table class="min-w-full text-left text-sm">
-                    <thead><tr class="border-b text-xs uppercase text-gray-400"><th class="px-3 py-2">{{ t('rbac.audit_action') }}</th><th class="px-3 py-2">{{ t('rbac.audit_outcome') }}</th><th class="px-3 py-2">{{ t('rbac.audit_route') }}</th><th class="px-3 py-2">{{ t('rbac.audit_time') }}</th></tr></thead>
-                    <tbody><tr v-for="event in auditEvents" :key="event.id" class="border-b border-gray-50"><td class="px-3 py-2 font-bold">{{ event.action || '—' }}</td><td class="px-3 py-2">{{ event.outcome || event.status || '—' }}</td><td class="px-3 py-2">{{ event.route || '—' }}</td><td class="px-3 py-2 text-gray-500">{{ event.created_at || '—' }}</td></tr></tbody>
-                </table>
-                <p v-if="!auditEvents.length" class="py-6 text-center text-sm text-gray-400">{{ t('rbac.audit_empty') }}</p>
-            </div>
-        </div>
+        <AuditLogPanel v-if="activeSection === 'audit'" />
     </section>
 </template>

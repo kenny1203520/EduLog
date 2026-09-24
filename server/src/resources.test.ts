@@ -58,6 +58,17 @@ describe('student API resource boundaries', () => {
     expect(resources['audit-events'].permissions).toMatchObject({ list: 'system.audit.list', read: 'system.audit.list' })
   })
 
+  it('allows audit filters, text search, and newest-first timestamp sorting', () => {
+    expect(resources['audit-events'].fields).toEqual(expect.arrayContaining([
+      'actor_user_id', 'action', 'domain', 'resource', 'resource_id', 'scope_id', 'request_id', 'outcome', 'metadata', 'created_at',
+    ]))
+    expect(resources['audit-events'].filterable).toEqual(expect.arrayContaining([
+      'actor_user_id', 'action', 'domain', 'resource', 'resource_id', 'scope_id', 'outcome', 'created_at',
+    ]))
+    expect(resources['audit-events'].searchable).toEqual(expect.arrayContaining(['action', 'resource', 'outcome']))
+    expect(resources['audit-events'].sortable).toContain('created_at')
+  })
+
   it('allows the system user list sort requested by the settings UI', () => {
     expect(resources.users.sortable).toEqual(expect.arrayContaining(['display_name', 'email']))
     expect(resources.users.sortable).not.toContain('password')

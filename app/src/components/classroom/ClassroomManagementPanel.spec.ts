@@ -4,7 +4,10 @@ import ClassroomManagementPanel from './ClassroomManagementPanel.vue'
 import { PermissionPolicyService } from '@/services/rbac/PermissionPolicyService'
 import type { RoleDTO } from '@/models/Rbac'
 
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (key: string) => key }) }))
+vi.mock('vue-i18n', async importOriginal => ({
+    ...await importOriginal<typeof import('vue-i18n')>(),
+    useI18n: () => ({ t: (key: string) => key }),
+}))
 vi.mock('vue-toastification', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/services/rbac/PermissionPolicyService', () => ({
     INCOMPLETE_REPORT_PERMISSION: 'reports.incomplete.receive',
