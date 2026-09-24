@@ -45,6 +45,7 @@
   "user_id_label": "系統帳號 ID",
   "user_id_placeholder": "可留空，若有系統帳號可輸入 UUID",
   "user_id_hint": "此欄位可選。若不知道 UUID，可以先用 email 搜尋帳號再帶入。",
+  "account_link_locked": "此處無法變更帳號連結。請使用個資拆分流程，讓個人資料保留在正確的人員資料中。",
   "user_search_label": "搜尋系統帳號",
   "user_search_placeholder": "輸入使用者 email",
   "user_search_button": "搜尋",

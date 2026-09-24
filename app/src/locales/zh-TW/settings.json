@@ -6,6 +6,19 @@
     "tab_teaching": "教學管理",
     "tab_system": "系統管理",
     "personal_title": "個人設定",
+    "profile": {
+        "nav_label": "個人資料",
+        "title": "個人資料",
+        "description": "這些聯絡資料屬於您的個人資料；登入 Email 會獨立保存。",
+        "display_name": "姓名",
+        "contact_email": "聯絡 Email",
+        "phone": "電話",
+        "birthday": "生日",
+        "address": "地址",
+        "mailing_address": "通訊地址",
+        "government_id": "身分證字號",
+        "bio": "個人簡介"
+    },
     "timezone": {
         "nav_label": "時區與顯示",
         "title": "時區設定",

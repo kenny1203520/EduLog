@@ -6,6 +6,19 @@
     "tab_teaching": "Teaching management",
     "tab_system": "System management",
     "personal_title": "Personal settings",
+    "profile": {
+        "nav_label": "Personal profile",
+        "title": "Personal profile",
+        "description": "These contact details belong to your personal profile. Your sign-in email stays separate.",
+        "display_name": "Name",
+        "contact_email": "Contact email",
+        "phone": "Phone",
+        "birthday": "Birthday",
+        "address": "Address",
+        "mailing_address": "Mailing address",
+        "government_id": "Government ID",
+        "bio": "Personal bio"
+    },
     "timezone": {
         "nav_label": "Time zone and display",
         "title": "Time Zone Settings",

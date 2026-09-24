@@ -45,6 +45,7 @@
   "user_id_label": "System Account ID",
   "user_id_placeholder": "Optional. Enter a UUID if the teacher is linked to an account.",
   "user_id_hint": "Optional. If you do not know the UUID, search the account by email first.",
+  "account_link_locked": "Account links cannot be changed here. Use the profile split workflow to keep personal data with the correct person.",
   "user_search_label": "Search system account",
   "user_search_placeholder": "Enter the user's email",
   "user_search_button": "Search",

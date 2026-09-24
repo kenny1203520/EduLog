@@ -289,7 +289,8 @@ async function saveTeacher() {
         isSaving.value = true
 
         if (editingTeacher.value?.id) {
-            await TeacherService.updateTeacher(editingTeacher.value.id, payload)
+            const { user_id: _unchangedAccountLink, ...profileUpdates } = payload
+            await TeacherService.updateTeacher(editingTeacher.value.id, profileUpdates)
             toast.success(t('teacher.update_success'))
         } else {
             await TeacherService.createTeacher(payload as Omit<TeacherDTO, 'id' | 'created_at' | 'updated_at'>)
@@ -873,8 +874,9 @@ async function deleteTeacherCredential(credential: TeacherCredentialDTO) {
                             <label class="mb-2 block text-sm font-semibold text-slate-700">
                                 {{ t('teacher.user_id_label') }}
                             </label>
-                            <input v-model="form.user_id" type="text" :placeholder="t('teacher.user_id_placeholder')"
+                            <input v-model="form.user_id" type="text" :placeholder="t('teacher.user_id_placeholder')" :disabled="!!editingTeacher"
                                 class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100" />
+                            <p v-if="editingTeacher" class="mt-1 text-xs font-medium text-amber-700">{{ t('teacher.account_link_locked') }}</p>
                         </div>
 
                         <div>
