@@ -230,6 +230,53 @@ BEGIN
 END;
 $$;
 
+DO $$
+DECLARE attribute_name text;
+BEGIN
+  IF to_regclass('public.person_profiles') IS NOT NULL THEN
+    RAISE EXCEPTION 'person_profiles table remains after the person-master migration';
+  END IF;
+  IF to_regclass('public.teacher_records') IS NULL OR to_regclass('public.teachers') IS NULL THEN
+    RAISE EXCEPTION 'canonical teacher records or compatibility view are missing';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles'
+      AND column_name = 'auth_user_id' AND is_nullable <> 'YES'
+  ) THEN
+    RAISE EXCEPTION 'profiles.auth_user_id must be nullable for teachers without accounts';
+  END IF;
+  FOREACH attribute_name IN ARRAY ARRAY['name','email','phone','gov_id','address','birthday','bio','bio_document','user_id','person_profile_id'] LOOP
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'teacher_records'
+        AND column_name = attribute_name
+    ) THEN
+      RAISE EXCEPTION 'duplicate teacher profile column remains: %', attribute_name;
+    END IF;
+  END LOOP;
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'contact_email'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'government_id'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'profiles_auth_user_id_unique'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = 'teacher_records_profile_id_unique'
+  ) THEN
+    RAISE EXCEPTION 'person profile attributes or unique account/teacher links are missing';
+  END IF;
+  IF has_table_privilege('authenticated', 'public.profiles', 'SELECT') THEN
+    RAISE EXCEPTION 'authenticated users can directly read sensitive profiles';
+  END IF;
+  IF NOT has_table_privilege('authenticated', 'public.teachers', 'SELECT') THEN
+    RAISE EXCEPTION 'permission-filtered teacher compatibility view is not readable';
+  END IF;
+END;
+$$;
+
 INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-000000000001', 'owner-a@example.test'),
   ('00000000-0000-0000-0000-000000000002', 'owner-b@example.test')
