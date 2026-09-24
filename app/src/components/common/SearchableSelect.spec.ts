@@ -45,6 +45,27 @@ describe('SearchableSelect', () => {
         expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
     })
 
+    it('emits remote search text and announces an empty result state', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: { modelValue: '', options: [], remoteSearch: true, noResultsText: 'Try another email' },
+            global: { mocks: { $t: (key: string) => key } }
+        })
+        await wrapper.find('[role="button"]').trigger('click')
+        await wrapper.find('input').setValue('alex@example.com')
+        expect(wrapper.emitted('search')?.at(-1)).toEqual(['alex@example.com'])
+        expect(wrapper.find('[role="listbox"]').attributes('aria-multiselectable')).toBe('false')
+        expect(wrapper.find('[role="status"]').text()).toBe('Try another email')
+    })
+
+    it('keeps the chosen label when remote search options are replaced', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: { modelValue: 'account-1', options: [{ value: 'account-1', label: 'Alex · alex@example.com' }], remoteSearch: true },
+            global: { mocks: { $t: (key: string) => key } }
+        })
+        await wrapper.setProps({ options: [] })
+        expect(wrapper.find('button').text()).toContain('Alex · alex@example.com')
+    })
+
     it('returns focus to the trigger when Escape closes the menu', async () => {
         const wrapper = mount(SearchableSelect, {
             props: { modelValue: '', options },

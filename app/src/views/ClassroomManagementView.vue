@@ -115,7 +115,7 @@ const roomPolicySelections = ref<RolePolicySelections>({})
 const sessionPolicySelections = ref<RolePolicySelections>({})
 const roomSessions = ref<ClassSessionDTO[]>([])
 const returnToRoomAfterSession = ref(false)
-const roomPanelInitialTab = ref<'details' | 'notifications' | 'sessions'>('details')
+const roomPanelInitialTab = ref<'details' | 'notifications' | 'sessions' | 'role_assignments'>('details')
 
 interface SessionTeacherConfig {
     teacher_id: string
@@ -1161,6 +1161,7 @@ function clearTeacherSelection() {
         <!-- Responsive Room Management Panel -->
         <ClassroomManagementPanel v-if="isCreateRoomModalOpen" v-model:room="newClassroom"
             v-model:room-selections="roomPolicySelections" :room-id="editingClassroom?.id"
+            :teaching-id="editingClassroom?.teaching_id"
             :sessions="roomSessions" :roles="roles" :policies="notificationPolicies" :saving="isSavingRoom"
             :initial-tab="roomPanelInitialTab"
             @close="closeRoomModal" @save="saveClassroom" @edit-session="editSessionFromRoomPanel"

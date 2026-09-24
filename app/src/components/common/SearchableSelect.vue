@@ -16,16 +16,25 @@ const props = withDefaults(defineProps<{
     multiple?: boolean
     disabled?: boolean
     ariaLabel?: string
+    remoteSearch?: boolean
+    loading?: boolean
+    noResultsText?: string
+    loadingText?: string
 }>(), {
     placeholder: '',
     fontSizeClass: 'text-sm',
     multiple: false,
     disabled: false,
-    ariaLabel: ''
+    ariaLabel: '',
+    remoteSearch: false,
+    loading: false,
+    noResultsText: '',
+    loadingText: ''
 })
 
 const emit = defineEmits<{
     (e: 'update:modelValue', value: any): void
+    (e: 'search', query: string): void
 }>()
 
 const isOpen = ref(false)
@@ -34,6 +43,7 @@ const containerRef = ref<HTMLElement | null>(null)
 const triggerRef = ref<HTMLButtonElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
 const activeIndex = ref(0)
+const selectedOptionCache = ref<Option | null>(null)
 const listId = `searchable-select-${Math.random().toString(36).slice(2)}`
 
 const selectedLabel = computed(() => {
@@ -42,11 +52,13 @@ const selectedLabel = computed(() => {
         return props.modelValue.map((val: any) => props.options.find(o => o.value === val)?.label).filter(Boolean).join(', ')
     } else {
         const opt = props.options.find(o => o.value === props.modelValue)
+            ?? (selectedOptionCache.value?.value === props.modelValue ? selectedOptionCache.value : null)
         return opt ? opt.label : ''
     }
 })
 
 const filteredOptions = computed(() => {
+    if (props.remoteSearch) return props.options
     if (!searchQuery.value) return props.options
     const q = searchQuery.value.toLowerCase()
     return props.options.filter(o => `${o.label} ${o.searchText ?? ''}`.toLowerCase().includes(q))
@@ -57,6 +69,13 @@ const activeOptionId = computed(() => filteredOptions.value[activeIndex.value]
     : undefined)
 
 watch(filteredOptions, () => { activeIndex.value = Math.min(activeIndex.value, Math.max(filteredOptions.value.length - 1, 0)) })
+watch(searchQuery, query => {
+    if (props.remoteSearch) emit('search', query)
+})
+watch(() => props.options, options => {
+    const selected = options.find(option => option.value === props.modelValue)
+    if (selected) selectedOptionCache.value = selected
+}, { immediate: true, deep: true })
 
 function isSelected(opt: Option) {
     if (props.multiple) {
@@ -77,6 +96,7 @@ function selectOption(option: Option) {
         }
         emit('update:modelValue', current)
     } else {
+        selectedOptionCache.value = option
         emit('update:modelValue', option.value)
         isOpen.value = false
         searchQuery.value = ''
@@ -143,8 +163,8 @@ onUnmounted(() => {
 <template>
     <div ref="containerRef" class="relative">
         <!-- Trigger/Input -->
-        <button ref="triggerRef" type="button" :disabled="disabled" @click="openDropdown" @keydown="onTriggerKeydown"
-            role="button" :aria-disabled="disabled" :aria-haspopup="'listbox'" :aria-expanded="isOpen" :aria-label="ariaLabel || undefined"
+        <button ref="triggerRef" type="button" role="button" :disabled="disabled" @click="openDropdown" @keydown="onTriggerKeydown"
+            :aria-disabled="disabled" :aria-haspopup="'listbox'" :aria-expanded="isOpen" :aria-label="ariaLabel || undefined"
             class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus-within:ring-2 focus-within:ring-emerald-500 cursor-pointer flex items-center justify-between"
             :class="[fontSizeClass, disabled ? 'cursor-not-allowed bg-gray-100 opacity-60' : '']">
             <span class="truncate w-full text-left" :class="!selectedLabel ? 'text-gray-400' : 'text-gray-700'">{{ selectedLabel || (placeholder || $t('common.select_placeholder')) }}</span>
@@ -161,7 +181,7 @@ onUnmounted(() => {
             <input v-model="searchQuery" ref="searchInput" role="combobox" aria-autocomplete="list" :aria-expanded="true" :aria-controls="listId" :aria-activedescendant="activeOptionId"
                 class="w-full border-b border-gray-100 px-3 py-2 outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500"
                 :placeholder="placeholder || $t('common.select_placeholder')" :aria-label="ariaLabel || placeholder || $t('common.select_placeholder')" @keydown="onSearchKeydown" />
-            <ul v-if="filteredOptions.length > 0" :id="listId" role="listbox" :aria-multiselectable="multiple" class="max-h-60 overflow-y-auto py-1">
+            <ul :id="listId" role="listbox" :aria-multiselectable="multiple" class="max-h-60 overflow-y-auto py-1">
                 <li v-for="(opt, index) in filteredOptions" :id="`${listId}-option-${index}`" :key="opt.value" role="option" :aria-selected="isSelected(opt)" @mouseenter="activeIndex = index" @click.stop="selectOption(opt)"
                     class="flex cursor-pointer items-center justify-between px-3 py-2 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
                     :class="[isSelected(opt) || activeIndex === index ? 'bg-emerald-50 text-emerald-700' : '', fontSizeClass]">
@@ -170,10 +190,10 @@ onUnmounted(() => {
                         <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                     </svg>
                 </li>
+                <li v-if="!filteredOptions.length" role="presentation" class="px-3 py-2 text-sm text-gray-500">
+                    <span role="status" aria-live="polite">{{ loading ? (loadingText || $t('common.loading')) : (noResultsText || $t('common.no_results')) }}</span>
+                </li>
             </ul>
-            <div v-else class="px-3 py-2 text-sm text-gray-400 italic">
-                {{ $t('common.no_results') }}
-            </div>
         </div>
     </div>
 </template>

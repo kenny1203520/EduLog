@@ -8,17 +8,19 @@ import type { RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
 import ScopedRolePolicyEditor, {
     type RolePolicySelections
 } from '@/components/settings/ScopedRolePolicyEditor.vue'
+import ClassroomRoleAssignmentsPanel from '@/components/classroom/ClassroomRoleAssignmentsPanel.vue'
 import {
     INCOMPLETE_REPORT_PERMISSION,
     PermissionPolicyService
 } from '@/services/rbac/PermissionPolicyService'
 import { DateUtils } from '@/utils/DateUtils'
 
-type PanelTab = 'details' | 'notifications' | 'sessions'
+type PanelTab = 'details' | 'notifications' | 'sessions' | 'role_assignments'
 
 const props = defineProps<{
     room: Partial<ClassroomDTO>
     roomId?: string | null
+    teachingId?: string | null
     sessions: ClassSessionDTO[]
     roles: RoleDTO[]
     policies: RolePermissionPolicyDTO[]
@@ -185,7 +187,7 @@ watch(() => props.roomId, () => {
             </header>
 
             <nav class="flex shrink-0 gap-1 overflow-x-auto border-b border-gray-100 px-4 py-2 sm:px-6" aria-label="Room editor sections">
-                <button v-for="tab in (roomId ? ['details', 'notifications', 'sessions'] : ['details', 'notifications'])" :key="tab"
+                <button v-for="tab in (roomId ? ['details', 'notifications', 'sessions', 'role_assignments'] : ['details', 'notifications', 'role_assignments'])" :key="tab"
                     type="button" class="shrink-0 rounded-xl px-4 py-2 text-sm font-black transition"
                     :class="activeTab === tab ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-100'"
                     @click="selectTab(tab as PanelTab)">
@@ -223,6 +225,8 @@ watch(() => props.roomId, () => {
                     <ScopedRolePolicyEditor v-model="roomPolicyModel" :roles="roles" :policies="policies"
                         scope-type="classroom" :scope-id="roomId" :classroom-id="roomId" :disabled="saving || !canManageRbac" />
                 </div>
+
+                <ClassroomRoleAssignmentsPanel v-else-if="activeTab === 'role_assignments'" :classroom-id="roomId" :teaching-id="teachingId" />
 
                 <div v-else class="mx-auto max-w-4xl space-y-4">
                     <div class="sticky top-0 z-10 bg-white pb-2">

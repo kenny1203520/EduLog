@@ -39,7 +39,7 @@ describe('v1.7 report visibility and hierarchical policy workflow', () => {
     it('provides responsive room tabs, child search and unsaved save/discard actions', () => {
         const source = read('src/components/classroom/ClassroomManagementPanel.vue')
         expect(source).toContain('sm:max-w-5xl')
-        expect(source).toContain("['details', 'notifications', 'sessions']")
+        expect(source).toContain("['details', 'notifications', 'sessions', 'role_assignments']")
         expect(source).toContain('search_child_sessions')
         expect(source).toContain('saveSessionPolicy(true)')
         expect(source).toContain('discardAndContinue')
