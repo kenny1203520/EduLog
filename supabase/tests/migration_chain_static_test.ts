@@ -866,6 +866,7 @@ Deno.test('core RLS fixture executes holiday cross-teaching and global compatibi
 
 Deno.test('1000097 makes profiles the only person record and keeps account links explicit', () => {
   assertStringIncludes(profilesAsPersonMaster, 'ALTER TABLE public.profiles RENAME COLUMN id TO auth_user_id')
+  assertStringIncludes(profilesAsPersonMaster, 'id, auth_user_id, email, display_name, person_profile_id, contact_email')
   assertStringIncludes(profilesAsPersonMaster, 'FOREIGN KEY (auth_user_id) REFERENCES auth.users(id) ON DELETE SET NULL')
   assertStringIncludes(profilesAsPersonMaster, 'CREATE UNIQUE INDEX profiles_auth_user_id_unique')
   assertStringIncludes(profilesAsPersonMaster, 'ALTER TABLE public.teachers RENAME TO teacher_records')

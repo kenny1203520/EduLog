@@ -59,10 +59,10 @@ WHERE account.person_profile_id = person.id;
 -- Teachers without accounts keep their canonical person-profile ID and become
 -- profiles rows with a NULL auth_user_id. No name/email matching is used.
 INSERT INTO public.profiles(
-  id, auth_user_id, email, display_name, contact_email, phone, government_id,
+  id, auth_user_id, email, display_name, person_profile_id, contact_email, phone, government_id,
   address, mailing_address, birthday, bio, bio_document, created_at, updated_at
 )
-SELECT person.id, NULL, NULL, person.display_name, person.contact_email,
+SELECT person.id, NULL, NULL, person.display_name, person.id, person.contact_email,
        person.phone, person.government_id, person.address, person.mailing_address,
        person.birthday, person.bio, person.bio_document, person.created_at, person.updated_at
 FROM public.person_profiles person
