@@ -12,16 +12,19 @@ export function createUserSearchRouter() {
       const input = searchSchema.parse(req.query)
       const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'system.users.list', p_classroom_id: null, p_class_session_id: null })
       if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to search users')
-      const query = input.query.toLowerCase()
-      const matched: Array<{ id: string; email: string; created_at: string; last_sign_in_at: string | null }> = []
-      for (let page = 1; page <= 20 && matched.length < 20; page += 1) {
-        const result = await req.adminDb.auth.admin.listUsers({ page, perPage: 100 })
-        if (result.error) throw new ApiError(502, 'AUTH_PROVIDER_ERROR', 'The authentication provider is unavailable')
-        const pageUsers = result.data.users
-        matched.push(...pageUsers.filter((user) => Boolean(user.email && user.email.toLowerCase().includes(query))).map((user) => ({ id: user.id, email: user.email!, created_at: user.created_at, last_sign_in_at: user.last_sign_in_at ?? null })))
-        if (pageUsers.length < 100) break
+      const escapedQuery = input.query.replace(/[\\%_]/g, (character) => `\\${character}`)
+      const pattern = `%${escapedQuery}%`
+      const [emailMatches, nameMatches] = await Promise.all([
+        req.adminDb.from('profiles').select('id,email,display_name,created_at').ilike('email', pattern).limit(20),
+        req.adminDb.from('profiles').select('id,email,display_name,created_at').ilike('display_name', pattern).limit(20),
+      ])
+      if (emailMatches.error || nameMatches.error) throw new ApiError(502, 'USER_DIRECTORY_ERROR', 'The user directory is unavailable')
+      const byId = new Map<string, { id: string; email: string; display_name: string | null; created_at: string; last_sign_in_at: null }>()
+      for (const profile of [...(emailMatches.data ?? []), ...(nameMatches.data ?? [])]) {
+        if (!profile.email || byId.has(profile.id)) continue
+        byId.set(profile.id, { id: profile.id, email: profile.email, display_name: profile.display_name, created_at: profile.created_at, last_sign_in_at: null })
       }
-      let users = matched.slice(0, 20)
+      let users = [...byId.values()].slice(0, 20)
       if (input.only_unlinked) {
         const linked = await req.adminDb.from('teachers').select('user_id')
         if (linked.error) throw new ApiError(502, 'AUTH_PROVIDER_ERROR', 'The authentication provider is unavailable')

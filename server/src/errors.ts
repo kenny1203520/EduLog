@@ -34,6 +34,7 @@ export function mapDatabaseError(error: { code?: string; message?: string } | nu
       [/RBAC_VERSION_CONFLICT/i, 409, 'RBAC_VERSION_CONFLICT', 'The permission configuration changed; reload before saving'],
       [/VERSION_CONFLICT/i, 409, 'VERSION_CONFLICT', 'The resource version is stale'],
       [/SYSTEM_ROLE_ASSIGNMENT_OVERLAP/i, 409, 'SYSTEM_ROLE_ASSIGNMENT_OVERLAP', 'The user already has this system role during an overlapping date range'],
+      [/CLASSROOM_ROLE_ASSIGNMENT_OVERLAP/i, 409, 'CLASSROOM_ROLE_ASSIGNMENT_OVERLAP', 'The user already has this teaching role in this classroom during an overlapping date range'],
       [/PROTECTED_ROLE|LAST_SYSTEM_OWNER|ROLE_IN_USE/i, 409, 'RBAC_PROTECTED_RESOURCE', 'The protected RBAC resource cannot be changed'],
       [/SYSTEM_MANAGED_REPORT/i, 422, 'SYSTEM_MANAGED_REPORT', 'Attendance is managed by the system'],
       [/ALREADY_EXISTS|REPORT_ALREADY_EXISTS|SUSPENSION_OVERLAP|OVERLAP|CONFLICT|STALE/i, 409, 'BUSINESS_CONFLICT', 'The request conflicts with the current resource state'],

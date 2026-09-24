@@ -472,6 +472,14 @@ export function buildOpenApi() {
     patch: { ...pageBase, operationId: 'system_role_assignment_update', 'x-permission': 'system.role_assignments.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/SystemRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'system_role_assignment_delete', 'x-permission': 'system.role_assignments.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
+  paths['/api/classrooms/{classroomId}/role-assignments'] = {
+    get: { ...pageBase, operationId: 'classroom_role_assignments_list', 'x-permission': 'teaching.roles.read | teaching.roles.manage', parameters: [pathParam('classroomId'), { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    post: { ...pageBase, operationId: 'classroom_role_assignment_create', 'x-permission': 'teaching.roles.manage', parameters: [pathParam('classroomId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ClassroomRoleAssignmentMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/classrooms/{classroomId}/role-assignments/{assignmentId}'] = {
+    patch: { ...pageBase, operationId: 'classroom_role_assignment_update', 'x-permission': 'teaching.roles.manage', parameters: [pathParam('classroomId'), pathParam('assignmentId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ClassroomRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    delete: { ...pageBase, operationId: 'classroom_role_assignment_delete', 'x-permission': 'teaching.roles.manage', parameters: [pathParam('classroomId'), pathParam('assignmentId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
   paths['/api/users/{id}/status'] = {
     patch: { ...pageBase, operationId: 'user_status_update', 'x-permission': 'system.users.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UserStatusMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
@@ -541,6 +549,10 @@ export function buildOpenApi() {
     },
     SystemRoleAssignmentMutation: {
       type: 'object', additionalProperties: false, required: ['user_id', 'role_id', 'expected_epoch'],
+      properties: { user_id: { type: 'string', format: 'uuid' }, role_id: { type: 'string', format: 'uuid' }, effective_from: { type: 'string', format: 'date' }, effective_to: { type: ['string', 'null'], format: 'date' }, expected_epoch: { type: 'integer', minimum: 1 } },
+    },
+    ClassroomRoleAssignmentMutation: {
+      type: 'object', additionalProperties: false, required: ['user_id', 'role_id', 'effective_from', 'expected_epoch'],
       properties: { user_id: { type: 'string', format: 'uuid' }, role_id: { type: 'string', format: 'uuid' }, effective_from: { type: 'string', format: 'date' }, effective_to: { type: ['string', 'null'], format: 'date' }, expected_epoch: { type: 'integer', minimum: 1 } },
     },
     AssignmentDeleteMutation: {

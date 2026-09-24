@@ -24,6 +24,10 @@ describe('database error taxonomy', () => {
       status: 409,
       code: 'SYSTEM_ROLE_ASSIGNMENT_OVERLAP',
     })
+    expect(mapDatabaseError({ code: 'P0001', message: 'CLASSROOM_ROLE_ASSIGNMENT_OVERLAP' })).toMatchObject({
+      status: 409,
+      code: 'CLASSROOM_ROLE_ASSIGNMENT_OVERLAP',
+    })
     expect(mapDatabaseError({ code: 'P0001', message: 'internal SQL details' }).message).toBe('The request violates a business rule')
   })
 
