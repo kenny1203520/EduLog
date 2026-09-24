@@ -6,6 +6,7 @@ import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 import TimeZoneSelect from '@/components/common/TimeZoneSelect.vue'
 import { DateUtils } from '@/utils/DateUtils'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
+import { useAuthStore } from '@/stores/useAuthStore'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import type { SettingsOverview } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
@@ -15,8 +16,11 @@ const SystemSettingsPanel = defineAsyncComponent(() => import('@/components/sett
 const route = useRoute()
 const router = useRouter()
 const preferences = usePreferencesStore()
+const auth = useAuthStore()
 const { reportError } = useFeedback()
 type PersonProfileForm = {
+    full_name?: string | null
+    nickname?: string | null
     display_name?: string | null
     contact_email?: string | null
     phone?: string | null
@@ -33,6 +37,12 @@ const dirty = ref(false)
 const profileLoading = ref(false)
 const profileSaving = ref(false)
 const personProfile = ref<PersonProfileForm>({})
+const securityBusy = ref<'email' | 'password' | null>(null)
+const securityError = ref('')
+const securityNotice = ref('')
+const emailChange = ref({ current_password: '', email: '' })
+const passwordChange = ref({ current_password: '', new_password: '', confirm_password: '' })
+const currentEmail = computed(() => auth.user?.email ?? '')
 const requestedTab = computed(() => { const value = typeof route.query.tab === 'string' ? route.query.tab : 'personal'; return ['personal', 'teaching', 'system'].includes(value) ? value as 'personal' | 'teaching' | 'system' : 'personal' })
 const activeTab = ref<'personal' | 'teaching' | 'system'>('personal')
 const canTeaching = computed(() => overview.value?.tabs.teaching === true)
@@ -51,7 +61,10 @@ async function syncTab(tab: 'personal' | 'teaching' | 'system') {
 
 async function loadOverview() { loading.value = true; try { overview.value = (await apiV1Client.get<SettingsOverview>('/pages/settings/overview')).data } catch (error) { reportError(error) } finally { loading.value = false } }
 async function loadPersonProfile() { profileLoading.value = true; try { personProfile.value = (await apiV1Client.get<PersonProfileForm>('/pages/me/person-profile')).data ?? {} } catch (error) { reportError(error) } finally { profileLoading.value = false } }
-async function savePersonProfile() { profileSaving.value = true; try { const fields = ['display_name', 'contact_email', 'phone', 'address', 'mailing_address', 'birthday', 'government_id', 'bio', 'bio_document'] as const; const values = personProfile.value as Record<string, unknown>; const patch = Object.fromEntries(fields.map((field) => [field, values[field] === '' ? null : values[field]])); personProfile.value = (await apiV1Client.patch<PersonProfileForm>('/pages/me/person-profile', patch)).data ?? personProfile.value } catch (error) { reportError(error) } finally { profileSaving.value = false } }
+async function savePersonProfile() { profileSaving.value = true; try { const fields = ['full_name', 'nickname', 'contact_email', 'phone', 'address', 'mailing_address', 'birthday', 'government_id', 'bio', 'bio_document'] as const; const values = personProfile.value as Record<string, unknown>; const patch = Object.fromEntries(fields.map((field) => [field, values[field] === '' ? null : values[field]])); personProfile.value = (await apiV1Client.patch<PersonProfileForm>('/pages/me/person-profile', patch)).data ?? personProfile.value; if (auth.user) auth.user = { ...auth.user, full_name: personProfile.value.full_name ?? null, nickname: personProfile.value.nickname ?? null, display_name: personProfile.value.nickname?.trim() || personProfile.value.full_name || null } } catch (error) { reportError(error) } finally { profileSaving.value = false } }
+function securityErrorKey(error: unknown) { const code = (error as { code?: string })?.code; return code === 'CURRENT_PASSWORD_INVALID' ? 'settings.security.current_password_invalid' : code === 'RATE_LIMITED' ? 'settings.security.rate_limited' : 'settings.security.request_failed' }
+async function requestEmailChange() { securityBusy.value = 'email'; securityError.value = ''; securityNotice.value = ''; try { await apiV1Client.post('/auth/me/email', emailChange.value); emailChange.value = { current_password: '', email: '' }; securityNotice.value = 'settings.security.email_confirmation_sent' } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
+async function changePassword() { securityError.value = ''; securityNotice.value = ''; if (passwordChange.value.new_password !== passwordChange.value.confirm_password) { securityError.value = 'settings.security.password_mismatch'; return } securityBusy.value = 'password'; try { await apiV1Client.post('/auth/me/password', passwordChange.value); passwordChange.value = { current_password: '', new_password: '', confirm_password: '' }; securityNotice.value = 'settings.security.password_changed' } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
 async function selectTab(tab: 'personal' | 'teaching' | 'system') { if (dirty.value && !window.confirm('目前有尚未儲存的修改，確定要切換分頁嗎？')) return; if (tab === 'teaching' && !canTeaching.value) return router.replace({ query: { ...route.query, tab: 'personal' } }); if (tab === 'system' && !canSystem.value) return router.replace({ query: { ...route.query, tab: 'personal' } }); dirty.value = false; await router.replace({ query: { ...route.query, tab } }) }
 function useBrowserTimeZone() { preferences.timeZone = DateUtils.getBrowserTimeZone() }
 watch([requestedTab, canTeaching, canSystem], ([value]) => { void syncTab(value) })
@@ -70,13 +83,14 @@ onMounted(async () => { await Promise.all([loadOverview(), loadPersonProfile()])
                 <button v-if="canSystem" class="rounded-2xl px-5 py-3 text-sm font-black transition" :class="activeTab === 'system' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-50'" @click="selectTab('system')">{{ $t('settings.tab_system') }}</button>
             </nav>
             <div v-if="activeTab === 'personal'" class="grid gap-6 lg:grid-cols-[18rem_1fr]">
-                <aside class="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm"><p class="mb-3 text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('settings.personal_title') }}</p><a href="#profile" class="block rounded-xl bg-emerald-50 px-4 py-3 font-bold text-emerald-700">{{ $t('settings.profile.nav_label') }}</a><a href="#timezone" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.timezone.nav_label') }}</a><a href="#appearance" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.appearance.nav_label') }}</a></aside>
+                <aside class="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm"><p class="mb-3 text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('settings.personal_title') }}</p><a href="#profile" class="block rounded-xl bg-emerald-50 px-4 py-3 font-bold text-emerald-700">{{ $t('settings.profile.nav_label') }}</a><a href="#security" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.security.nav_label') }}</a><a href="#timezone" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.timezone.nav_label') }}</a><a href="#appearance" class="mt-2 block rounded-xl px-4 py-3 font-bold text-gray-500 hover:bg-gray-50">{{ $t('settings.appearance.nav_label') }}</a></aside>
                 <div class="space-y-6">
                     <section id="profile" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                         <div class="flex flex-wrap items-start justify-between gap-4"><div><h2 class="text-xl font-black">{{ $t('settings.profile.title') }}</h2><p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.profile.description') }}</p></div><button class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50" :disabled="profileLoading || profileSaving" @click="savePersonProfile">{{ profileSaving ? $t('common.saving') : $t('common.save') }}</button></div>
                         <p v-if="profileLoading" class="mt-5 text-sm font-bold text-gray-400">{{ $t('common.loading') }}</p>
                         <div v-else class="mt-5 grid gap-4 sm:grid-cols-2">
-                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.display_name') }}<input v-model="personProfile.display_name" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" maxlength="200" /></label>
+                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.full_name') }}<input v-model="personProfile.full_name" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" maxlength="200" /></label>
+                            <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.nickname') }}<input v-model="personProfile.nickname" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" maxlength="100" /></label>
                             <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.contact_email') }}<input v-model="personProfile.contact_email" type="email" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
                             <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.phone') }}<input v-model="personProfile.phone" type="tel" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
                             <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.birthday') }}<input v-model="personProfile.birthday" type="date" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
@@ -84,6 +98,27 @@ onMounted(async () => { await Promise.all([loadOverview(), loadPersonProfile()])
                             <label class="text-sm font-bold text-gray-600 sm:col-span-2">{{ $t('settings.profile.mailing_address') }}<input v-model="personProfile.mailing_address" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
                             <label class="text-sm font-bold text-gray-600">{{ $t('settings.profile.government_id') }}<input v-model="personProfile.government_id" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
                             <label class="text-sm font-bold text-gray-600 sm:col-span-2">{{ $t('settings.profile.bio') }}<textarea v-model="personProfile.bio" rows="4" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" maxlength="10000" /></label>
+                        </div>
+                    </section>
+                    <section id="security" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
+                        <div><h2 class="text-xl font-black">{{ $t('settings.security.title') }}</h2><p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.security.description') }}</p></div>
+                        <p v-if="securityError" role="alert" class="mt-4 rounded-xl bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{{ $t(securityError) }}</p>
+                        <p v-if="securityNotice" role="status" class="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">{{ $t(securityNotice) }}</p>
+                        <div class="mt-5 grid gap-6 lg:grid-cols-2">
+                            <form class="space-y-4 rounded-2xl border border-gray-100 p-5" @submit.prevent="requestEmailChange">
+                                <div><h3 class="font-black">{{ $t('settings.security.change_email') }}</h3><p class="mt-1 text-sm text-gray-500">{{ $t('settings.security.current_email') }}: {{ currentEmail || '—' }}</p></div>
+                                <label class="block text-sm font-bold text-gray-600">{{ $t('settings.security.current_password') }}<input v-model="emailChange.current_password" type="password" autocomplete="current-password" required maxlength="1024" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                                <label class="block text-sm font-bold text-gray-600">{{ $t('settings.security.new_email') }}<input v-model="emailChange.email" type="email" autocomplete="email" required maxlength="320" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                                <p class="text-xs text-gray-500">{{ $t('settings.security.email_confirmation_hint') }}</p>
+                                <button type="submit" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50" :disabled="securityBusy !== null">{{ securityBusy === 'email' ? $t('common.saving') : $t('settings.security.submit_email') }}</button>
+                            </form>
+                            <form class="space-y-4 rounded-2xl border border-gray-100 p-5" @submit.prevent="changePassword">
+                                <div><h3 class="font-black">{{ $t('settings.security.change_password') }}</h3><p class="mt-1 text-sm text-gray-500">{{ $t('settings.security.password_hint') }}</p></div>
+                                <label class="block text-sm font-bold text-gray-600">{{ $t('settings.security.current_password') }}<input v-model="passwordChange.current_password" type="password" autocomplete="current-password" required maxlength="1024" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                                <label class="block text-sm font-bold text-gray-600">{{ $t('settings.security.new_password') }}<input v-model="passwordChange.new_password" type="password" autocomplete="new-password" required minlength="8" maxlength="1024" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                                <label class="block text-sm font-bold text-gray-600">{{ $t('settings.security.confirm_password') }}<input v-model="passwordChange.confirm_password" type="password" autocomplete="new-password" required minlength="8" maxlength="1024" class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-gray-900" /></label>
+                                <button type="submit" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50" :disabled="securityBusy !== null">{{ securityBusy === 'password' ? $t('common.saving') : $t('settings.security.submit_password') }}</button>
+                            </form>
                         </div>
                     </section>
                     <section id="timezone" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"><div class="flex flex-wrap items-center justify-between gap-4"><div><h2 class="text-xl font-black">{{ $t('settings.timezone.title') }}</h2><p class="mt-1 text-sm font-bold text-gray-400">{{ $t('settings.timezone.description') }}</p></div><button class="rounded-xl border border-emerald-200 px-4 py-2 text-sm font-black text-emerald-700" @click="useBrowserTimeZone">{{ $t('settings.timezone.use_browser') }}</button></div><div class="mt-5 rounded-2xl bg-emerald-50 p-5"><p class="text-xs font-black uppercase tracking-widest text-emerald-600">{{ $t('settings.timezone.current') }}</p><p class="mt-1 text-xl font-black text-gray-900">{{ preferences.timeZoneLabel }}</p><p class="text-sm font-bold text-gray-500">{{ preferences.timeZone }}</p></div><div class="mt-5"><TimeZoneSelect :label="$t('common.time_zone')" dense /></div></section>

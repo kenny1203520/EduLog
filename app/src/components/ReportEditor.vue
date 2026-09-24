@@ -1574,7 +1574,7 @@ onMounted(() => {
 })
 
 // Collab logic
-const collaborationUser = computed(() => ({ name: authStore.user?.user_metadata?.full_name || 'Teacher', color: '#60A5FA' }))
+const collaborationUser = computed(() => ({ name: authStore.user?.display_name || authStore.user?.nickname || authStore.user?.full_name || 'Teacher', color: '#60A5FA' }))
 
 const reportIdRef = computed(() => props.reportId || '')
 const initialReportVersionRef = computed(() => props.initialVersion)

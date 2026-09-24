@@ -1,6 +1,6 @@
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
-export type BffUser = { id: string; email?: string; user_metadata?: { full_name?: string; [key: string]: unknown }; [key: string]: unknown }
+export type BffUser = { id: string; email?: string | null; full_name?: string | null; nickname?: string | null; display_name?: string | null; user_metadata?: { full_name?: string; [key: string]: unknown }; [key: string]: unknown }
 export type BffSession = { user: BffUser }
 type AuthResult = { user: BffUser | null; session: BffSession | null; error: Error | null }
 type AuthSubscription = { data: { subscription: { unsubscribe: () => void } } }
