@@ -25,6 +25,7 @@
     "nav_label": "Security",
     "title": "Account security",
     "description": "Change your sign-in email or password. Your current password is required to verify your identity.",
+    "change_email": "Change sign-in email",
     "current_email": "Current sign-in email",
     "current_password": "Current password",
     "new_email": "New email",

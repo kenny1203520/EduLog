@@ -1,5 +1,6 @@
 type Translate = (key: string) => string
 type RoleDisplayInput = { code?: string | null; name: string; is_system?: boolean }
+type RoleDescriptionInput = { code?: string | null; description?: string | null; is_builtin?: boolean }
 
 const BUILT_IN_ROLE_CODES = new Set([
     'owner', 'teaching_owner', 'manager', 'teaching_manager', 'assistant', 'viewer',
@@ -23,4 +24,15 @@ export function roleDisplayName(role: RoleDisplayInput, translate: Translate): s
     }
 
     return role.name
+}
+
+/** Localizes built-in role descriptions while preserving user-authored custom descriptions. */
+export function roleDisplayDescription(role: RoleDescriptionInput, translate: Translate): string {
+    if (role.is_builtin && role.code) {
+        const key = `rbac.roles.${role.code}.description`
+        const localizedDescription = translate(key)
+        if (localizedDescription !== key) return localizedDescription
+    }
+
+    return role.description ?? ''
 }

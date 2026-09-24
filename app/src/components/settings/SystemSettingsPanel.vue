@@ -9,6 +9,7 @@ import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue
 import TeachingRolePermissionsPanel from '@/components/settings/TeachingRolePermissionsPanel.vue'
 import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import { roleDisplayDescription } from '@/utils/roleDisplay'
 
 type SystemUser = { id: string; email?: string | null; display_name?: string | null; account_status?: 'active' | 'disabled' | null }
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
@@ -48,8 +49,8 @@ const userOptions = computed(() => users.value.map(user => ({
 const roleOptions = computed(() => roles.value.map(role => ({
     value: role.id,
     label: roleLabel(role),
-    description: role.description || '',
-    searchText: `${role.name} ${role.code ?? ''} ${role.description ?? ''}`,
+    description: roleDisplayDescription(role, t),
+    searchText: `${role.name} ${role.code ?? ''} ${role.description ?? ''} ${roleLabel(role)} ${roleDisplayDescription(role, t)}`,
 })))
 const assignmentConflict = computed(() => {
     if (!selectedUserId.value || !selectedRoleId.value || !effectiveFrom.value) return false

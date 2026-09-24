@@ -25,6 +25,7 @@
         "nav_label": "安全性",
         "title": "帳號安全性",
         "description": "修改登入 Email 或密碼前，需要先驗證目前密碼以確認身分。",
+        "change_email": "變更登入 Email",
         "current_email": "目前登入 Email",
         "current_password": "目前密碼",
         "new_email": "新 Email",
