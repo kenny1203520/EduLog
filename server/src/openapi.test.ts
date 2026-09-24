@@ -6,6 +6,14 @@ import { allowedRpcs } from './rpcContract.js'
 import { isAllowedRpc as routerAllowsRpc } from './rpcRouter.js'
 
 describe('generated API contract', () => {
+  it('documents self-service credential changes with mandatory identity verification', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
+    expect(spec.paths['/api/auth/me/email']?.post?.security).toEqual([{ cookieAuth: [] }])
+    expect(spec.paths['/api/auth/me/password']?.post?.security).toEqual([{ cookieAuth: [] }])
+    expect(spec.components.schemas.EmailChangeRequest.required).toEqual(expect.arrayContaining(['current_password', 'email']))
+    expect(spec.components.schemas.PasswordChangeRequest.required).toEqual(expect.arrayContaining(['current_password', 'new_password', 'confirm_password']))
+  })
+
   it('does not advertise unsupported system mutations', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, { 'x-permission'?: string } | undefined>> }
     expect(spec.paths['/api/permissions'].post).toBeUndefined()

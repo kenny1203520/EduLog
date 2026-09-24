@@ -69,6 +69,24 @@ export function createUserClient(config: ApiConfig, accessToken: string): Supaba
   })
 }
 
+export async function createAuthenticatedUserClient(config: ApiConfig, accessToken: string, refreshToken: string): Promise<SupabaseClient> {
+  const client = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  })
+  const { error } = await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+  if (error) throw new Error('AUTH_INVALID')
+  return client
+}
+
+export async function verifyCurrentPassword(config: ApiConfig, email: string, password: string): Promise<Session | null> {
+  const client = createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+  })
+  const { data, error } = await client.auth.signInWithPassword({ email, password })
+  if (error || !data.user || !data.session) return null
+  return data.session
+}
+
 async function verifyAccessTokenLocally(accessToken: string, config?: Pick<ApiConfig, 'SUPABASE_JWT_SECRET' | 'SUPABASE_JWT_ISSUER'>) {
   if (!config?.SUPABASE_JWT_SECRET) return undefined
   try {
