@@ -15,20 +15,23 @@ export function createUserSearchRouter() {
       const escapedQuery = input.query.replace(/[\\%_]/g, (character) => `\\${character}`)
       const pattern = `%${escapedQuery}%`
       const [emailMatches, nameMatches] = await Promise.all([
-        req.adminDb.from('profiles').select('id,email,display_name,created_at').ilike('email', pattern).limit(20),
-        req.adminDb.from('profiles').select('id,email,display_name,created_at').ilike('display_name', pattern).limit(20),
+        req.adminDb.from('profiles').select('id,auth_user_id,email,display_name,created_at').not('auth_user_id', 'is', null).ilike('email', pattern).limit(20),
+        req.adminDb.from('profiles').select('id,auth_user_id,email,display_name,created_at').not('auth_user_id', 'is', null).ilike('display_name', pattern).limit(20),
       ])
       if (emailMatches.error || nameMatches.error) throw new ApiError(502, 'USER_DIRECTORY_ERROR', 'The user directory is unavailable')
       const byId = new Map<string, { id: string; email: string; display_name: string | null; created_at: string; last_sign_in_at: null }>()
       for (const profile of [...(emailMatches.data ?? []), ...(nameMatches.data ?? [])]) {
-        if (!profile.email || byId.has(profile.id)) continue
-        byId.set(profile.id, { id: profile.id, email: profile.email, display_name: profile.display_name, created_at: profile.created_at, last_sign_in_at: null })
+        if (!profile.auth_user_id || !profile.email || byId.has(profile.auth_user_id)) continue
+        byId.set(profile.auth_user_id, { id: profile.auth_user_id, email: profile.email, display_name: profile.display_name, created_at: profile.created_at, last_sign_in_at: null })
       }
       let users = [...byId.values()].slice(0, 20)
       if (input.only_unlinked) {
-        const linked = await req.adminDb.from('teachers').select('user_id')
+        const linked = await req.adminDb.from('teacher_records').select('profile_id')
         if (linked.error) throw new ApiError(502, 'AUTH_PROVIDER_ERROR', 'The authentication provider is unavailable')
-        const linkedIds = new Set((linked.data ?? []).map((row) => row.user_id).filter(Boolean))
+        const linkedProfileIds = (linked.data ?? []).map((row) => row.profile_id).filter((id): id is string => typeof id === 'string')
+        const linkedProfiles = linkedProfileIds.length ? await req.adminDb.from('profiles').select('auth_user_id').in('id', linkedProfileIds) : { data: [], error: null }
+        if (linkedProfiles.error) throw new ApiError(502, 'AUTH_PROVIDER_ERROR', 'The authentication provider is unavailable')
+        const linkedIds = new Set((linkedProfiles.data ?? []).map((row) => row.auth_user_id).filter(Boolean))
         users = users.filter((user) => !linkedIds.has(user.id))
       }
       res.json({ data: users, meta: { limit: users.length, offset: 0, total: users.length, sort: 'email' }, request_id: req.requestId, trace_id: req.traceId })

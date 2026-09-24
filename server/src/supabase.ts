@@ -47,7 +47,7 @@ export async function assertUserActive(adminClient: SupabaseClient, userId: stri
     if (!cached.active) throw new Error('AUTH_DISABLED')
     return
   }
-  const { data, error } = await adminClient.from('profiles').select('account_status').eq('id', userId).maybeSingle()
+  const { data, error } = await adminClient.from('profiles').select('account_status').eq('auth_user_id', userId).maybeSingle()
   if (error || !data) throw new Error('AUTH_INVALID')
   const active = data.account_status !== 'disabled'
   accountStatusCache.set(userId, { active, expiresAt: now + VALIDATION_CACHE_TTL_MS })

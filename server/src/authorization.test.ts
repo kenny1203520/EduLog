@@ -92,12 +92,12 @@ describe('resource-aware authorization', () => {
     const db = {
       rpc,
       from: vi.fn((table: string) => {
-        if (table === 'teachers') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: teacherId, person_profile_id: '00000000-0000-4000-8000-000000000021' }, error: null }) }) }) }
-        if (table === 'profiles') return { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: userId }, error: null }) }) }) }) }
+        if (table === 'teacher_records') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: teacherId, profile_id: '00000000-0000-4000-8000-000000000021' }, error: null }) }) }) }
+        if (table === 'profiles') return { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: '00000000-0000-4000-8000-000000000021' }, error: null }) }) }) }) }
         return { select: () => ({ eq: async () => ({ data: [], error: null }) }) }
       }),
     }
-    const req = { user: { id: userId }, db } as unknown as Request
+    const req = { user: { id: userId }, db, adminDb: db } as unknown as Request
     await authorizeCollection(req, resources['teacher-credentials'], 'teaching.teachers.create', { teacher_id: teacherId })
     expect(rpc).not.toHaveBeenCalled()
   })

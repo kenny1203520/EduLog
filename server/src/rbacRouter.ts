@@ -370,9 +370,9 @@ export function createRbacRouter() {
     let data = assignments.data ?? []
     if (canListUsers && data.length) {
       const userIds = [...new Set(data.map((row: any) => row.user_id))]
-      const profiles = await req.adminDb!.from('profiles').select('id,display_name,email').in('id', userIds)
+      const profiles = await req.adminDb!.from('profiles').select('auth_user_id,display_name,email').in('auth_user_id', userIds)
       if (profiles.error) throw mapDatabaseError(profiles.error)
-      const profileById = new Map((profiles.data ?? []).map((profile: any) => [profile.id, profile]))
+      const profileById = new Map((profiles.data ?? []).map((profile: any) => [profile.auth_user_id, profile]))
       data = data.map((row: any) => ({ ...row, user: profileById.get(row.user_id) ?? null }))
     } else {
       data = data.map((row: any) => ({ ...row, user: null }))
@@ -454,7 +454,7 @@ export function createRbacRouter() {
     const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
     // The profile read remains on the caller's JWT/RLS client. The
     // service-role client is used only for the Auth ban/unban operation.
-    const previous = await req.db!.from('profiles').select('account_status').eq('id', userId).maybeSingle()
+    const previous = await req.adminDb!.from('profiles').select('account_status').eq('auth_user_id', userId).maybeSingle()
     if (previous.error) throw mapDatabaseError(previous.error); if (!previous.data) throw new ApiError(404, 'NOT_FOUND', 'User was not found')
     const authResult = await req.adminDb!.auth.admin.updateUserById(userId, { ban_duration: input.status === 'disabled' ? '876000h' : 'none' })
     if (authResult.error) throw new ApiError(503, 'AUTH_ADMIN_UNAVAILABLE', 'The account status could not be updated')

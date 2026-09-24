@@ -9,7 +9,7 @@ import { setAuditContext } from './context.js'
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
 const sensitivePatchFields: Record<string, readonly string[]> = {
   students: ['gov_id', 'email', 'phone', 'residence_address', 'mailing_address', 'birthday'],
-  teachers: ['email', 'phone', 'address', 'birthday', 'gov_id'],
+  teachers: ['email', 'phone', 'address', 'mailing_address', 'birthday', 'gov_id'],
 }
 const bodySchema = z.record(z.string(), z.unknown())
 const memberListQuery = z.object({
@@ -132,7 +132,9 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   if (!def.sortable.includes(sortName)) throw new ApiError(400, 'INVALID_SORT', 'The sort field is not supported')
   const descending = query.sort.startsWith('-')
   const listFields = def.listFields ?? def.fields
-  let builder = req.db!.from(def.table).select(listFields.join(', '), { count: 'exact' })
+  const queryDb = def.route === 'teachers' ? req.adminDb : req.db
+  if (!queryDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The requested resource is unavailable')
+  let builder = queryDb.from(def.table).select(listFields.join(', '), { count: 'exact' })
   if (def.table === 'user_preferences' || def.table === 'user_entity_visibility_preferences' || def.table === 'copy_templates') builder = builder.eq('user_id', req.user!.id)
   if (query.search && def.searchable.length) {
     const clauses = def.searchable.map((field) => `${field}.ilike.%${query.search!.replace(/[%_,()]/g, '')}%`).join(',')
@@ -180,7 +182,7 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   const { data, error, count } = await ordered.range(query.offset, query.offset + query.limit - 1)
   if (error) throw mapDatabaseError(error)
   let includeSensitive = false
-  if (def.table === 'teachers') {
+  if (def.route === 'teachers') {
     try {
       await authorizeCollection(req, def, 'teaching.teachers.read_sensitive', req.query as Record<string, unknown>)
       includeSensitive = true
@@ -188,38 +190,33 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
       if (!(error instanceof ApiError) || error.status !== 403) throw error
     }
   }
-  const rows = def.table === 'teachers' ? await attachTeacherProfile(req, data ?? [], includeSensitive) : data ?? []
+  const rows = def.route === 'teachers' ? await attachTeacherProfile(req, data ?? [], includeSensitive) : data ?? []
   return sendData(req, res, rows, { limit: query.limit, offset: query.offset, total: count ?? 0, sort: query.sort })
 }
 
 export async function attachTeacherProfile(req: Request, value: unknown, includeSensitive = false) {
   const rows = (Array.isArray(value) ? value : [value]).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
   if (!req.adminDb) {
-    const safeRows = rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'person_profile_id')))
+    const safeRows = rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'profile_id')))
     return Array.isArray(value) ? safeRows : safeRows[0]
   }
-  const teacherIds = rows.map((row) => row.id).filter((id): id is string => typeof id === 'string')
-  const links = rows.some((row) => typeof row.person_profile_id !== 'string')
-    ? await req.adminDb.from('teachers').select('id,person_profile_id').in('id', teacherIds)
-    : null
-  if (links?.error) throw mapDatabaseError(links.error)
-  const linkedRows = (links?.data ?? []) as unknown as Array<{ id: string; person_profile_id: string | null }>
-  const profileByTeacher = new Map(linkedRows.map((item) => [item.id, item.person_profile_id]))
-  const profileIds = [...new Set(rows.map((row) => typeof row.person_profile_id === 'string' ? row.person_profile_id : profileByTeacher.get(row.id as string)).filter((id): id is string => typeof id === 'string'))]
+  const profileIds = [...new Set(rows.map((row) => row.profile_id).filter((id): id is string => typeof id === 'string'))]
   if (!profileIds.length) return value
   const projection = includeSensitive
-    ? 'id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document'
-    : 'id,display_name,bio,bio_document'
-  const result = await req.adminDb.from('person_profiles').select(projection).in('id', profileIds)
+    ? 'id,auth_user_id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document'
+    : 'id,auth_user_id,display_name,bio,bio_document'
+  const result = await req.adminDb.from('profiles').select(projection).in('id', profileIds)
   if (result.error) throw mapDatabaseError(result.error)
   const profileRows = (result.data ?? []) as unknown as Array<Record<string, unknown> & { id: string }>
   const profiles = new Map(profileRows.map((profile) => [profile.id, profile]))
   const enriched = rows.map((row) => {
-    const profile = profiles.get(row.person_profile_id as string)
-    const safeRow = Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'person_profile_id'))
+    const profile = profiles.get(row.profile_id as string)
+    const safeRow = Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'profile_id'))
     if (!profile) return safeRow
     return {
       ...safeRow,
+      profile_id: profile.id,
+      user_id: profile.auth_user_id,
       name: profile.display_name,
       ...(includeSensitive ? {
         email: profile.contact_email,
@@ -248,13 +245,15 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
   if (req.method === 'PATCH' && !Object.keys(mutationBody ?? {}).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
   setAuditContext(req, { resource: def.route, resourceId: id, action: req.method.toLowerCase() })
   const itemFields = def.itemFields ?? def.fields
-  const existing = await req.db!.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
+  const queryDb = def.route === 'teachers' ? req.adminDb : req.db
+  if (!queryDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The requested resource is unavailable')
+  const existing = await queryDb.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
   if (existing.error) throw mapDatabaseError(existing.error as unknown as { code?: string; message?: string })
   if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   if (req.method === 'GET') {
     await authorizeResource(req, def, permissionForResource(def, 'read'), id, existing.data as unknown as Record<string, unknown>)
     let includeSensitive = false
-    if (def.table === 'teachers') {
+  if (def.route === 'teachers') {
       try {
         await authorizeResource(req, def, 'teaching.teachers.read_sensitive', id, existing.data as unknown as Record<string, unknown>)
         includeSensitive = true
@@ -262,7 +261,7 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
         if (!(error instanceof ApiError) || error.status !== 403) throw error
       }
     }
-    return sendData(req, res, def.table === 'teachers' ? await attachTeacherProfile(req, existing.data, includeSensitive) : existing.data)
+    return sendData(req, res, def.route === 'teachers' ? await attachTeacherProfile(req, existing.data, includeSensitive) : existing.data)
   }
   const action = req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
   await authorizeResource(req, def, permissionForResource(def, action), id, existing.data as unknown as Record<string, unknown>)
@@ -282,7 +281,9 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
   }
   let response: Response
   if (req.method === 'DELETE') {
-    const result = await req.db!.from(def.table).delete().eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
+    const result = def.route === 'teachers'
+      ? await req.adminDb!.from('teacher_records').delete().eq(def.idColumn, id).select('id,profile_id,created_at,updated_at').maybeSingle()
+      : await req.db!.from(def.table).delete().eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
     if (result.error) throw mapDatabaseError(result.error)
     if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, body); return res.json(body)
@@ -292,24 +293,24 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
   const sensitivePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => sensitiveFields.has(key)))
   const safePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => !sensitiveFields.has(key)))
   if (Object.keys(sensitivePatch).length) {
-    const sensitivePermission = def.table === 'students' ? 'teaching.students.update_sensitive' : 'teaching.teachers.update_sensitive'
+    const sensitivePermission = def.route === 'students' ? 'teaching.students.update_sensitive' : 'teaching.teachers.update_sensitive'
     await authorizeResource(req, def, sensitivePermission, id, existing.data as unknown as Record<string, unknown>)
-    const functionName = def.table === 'students' ? 'update_student_sensitive' : 'update_teacher_sensitive'
-    const parameterName = def.table === 'students' ? 'p_student_id' : 'p_teacher_id'
+    const functionName = def.route === 'students' ? 'update_student_sensitive' : 'update_teacher_sensitive'
+    const parameterName = def.route === 'students' ? 'p_student_id' : 'p_teacher_id'
     const sensitiveResult = await req.db!.rpc(functionName, { [parameterName]: id, p_patch: sensitivePatch })
     if (sensitiveResult.error) throw mapDatabaseError(sensitiveResult.error)
   }
   if (Object.keys(safePatch).length) {
-    const safeResult = def.table === 'teachers'
+    const safeResult = def.route === 'teachers'
       ? await req.db!.rpc('update_teacher_profile', { p_teacher_id: id, p_patch: safePatch })
       : await req.db!.from(def.table).update(safePatch).eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
     if (safeResult.error) throw mapDatabaseError(safeResult.error)
     if (!safeResult.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   }
-  const updated = await req.db!.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
+  const updated = await queryDb.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
   if (updated.error) throw mapDatabaseError(updated.error)
   if (!updated.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
-  const envelope = { data: def.table === 'teachers' ? await attachTeacherProfile(req, updated.data, Object.keys(sensitivePatch).length > 0) : updated.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); response = res.json(envelope); return response
+  const envelope = { data: def.route === 'teachers' ? await attachTeacherProfile(req, updated.data, Object.keys(sensitivePatch).length > 0) : updated.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); response = res.json(envelope); return response
 }
 
 export async function collection(req: Request, res: Response, def: ResourceDefinition) {
@@ -332,6 +333,26 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
   await authorizeCollection(req, def, permissionForResource(def, action), {}, body)
   const replay = await idempotency(req, req.method === 'POST' ? 201 : 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
+  if (def.route === 'teachers') {
+    const privateKeys = ['email', 'phone', 'address', 'mailing_address', 'birthday', 'gov_id']
+    if (privateKeys.some((key) => body[key] !== undefined && body[key] !== null && body[key] !== '')) {
+      await authorizeCollection(req, def, 'teaching.teachers.update_sensitive', {}, body)
+    }
+    if (!req.adminDb) throw new ApiError(503, 'PROFILE_SERVICE_UNAVAILABLE', 'The teacher profile service is unavailable')
+    const { user_id, ...profilePatch } = parsedBody
+    const created = await req.adminDb.rpc('create_teacher_with_profile', {
+      p_account_user_id: typeof user_id === 'string' ? user_id : null,
+      p_patch: profilePatch,
+    })
+    if (created.error) throw mapDatabaseError(created.error)
+    const row = created.data as Record<string, unknown> | null
+    if (!row || typeof row.id !== 'string') throw new ApiError(500, 'DATABASE_ERROR', 'The teacher could not be created')
+    setAuditContext(req, { resourceId: row.id })
+    const data = await attachTeacherProfile(req, row, privateKeys.some((key) => body[key] !== undefined))
+    const envelope = { data, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+    await complete(req, 201, envelope)
+    return res.status(201).json(envelope)
+  }
   const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
    let insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
    // Teaching objects are global records. The server assigns their single

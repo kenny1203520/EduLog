@@ -77,9 +77,9 @@ async function globalTeachingPermission(req: Request, permission: string) {
   return teachingPermission(req, permission, await globalTeachingId(req))
 }
 
-async function isAccountPersonProfile(req: Request, personProfileId: string | null) {
-  if (!req.db || !req.user || !personProfileId) return false
-  const result = await req.db.from('profiles').select('id').eq('id', req.user.id).eq('person_profile_id', personProfileId).maybeSingle()
+async function isAccountPersonProfile(req: Request, profileId: string | null) {
+  if (!req.adminDb || !req.user || !profileId) return false
+  const result = await req.adminDb.from('profiles').select('id').eq('auth_user_id', req.user.id).eq('id', profileId).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   return Boolean(result.data)
 }
@@ -160,7 +160,8 @@ export async function authorizeResource(
     if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
     // The teacher may manage their own canonical person profile, including
     // sensitive fields. Other callers continue through scoped RBAC checks.
-    if (await isAccountPersonProfile(req, rowId(row, 'person_profile_id'))) return
+    if (['teaching.teachers.read', 'teaching.teachers.read_sensitive', 'teaching.teachers.create', 'teaching.teachers.update', 'teaching.teachers.update_sensitive'].includes(permission)
+      && await isAccountPersonProfile(req, rowId(row, 'profile_id'))) return
     const teacherId = id ?? rowId(row, 'id')
     if (!teacherId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     try {
@@ -182,10 +183,10 @@ export async function authorizeResource(
     throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   }
   if (scope === 'teacher-child') {
-    if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+    if (!req.db || !req.adminDb) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
     const teacherId = rowId(row, 'teacher_id')
     if (!teacherId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
-    const teacher = await req.db.from('teachers').select('id,person_profile_id').eq('id', teacherId).maybeSingle()
+    const teacher = await req.adminDb!.from('teacher_records').select('id,profile_id').eq('id', teacherId).maybeSingle()
     if (teacher.error) throw mapDatabaseError(teacher.error)
     if (!teacher.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     return authorizeResource(req, { ...def, scope: 'teacher' }, permission, teacherId, teacher.data as Record<string, unknown>)
@@ -263,8 +264,8 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
   if (def.scope === 'teacher-child') {
     const teacherId = value('teacher_id')
     if (!teacherId) return globalTeachingPermission(req, permission)
-    if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-    const teacher = await req.db.from('teachers').select('id,person_profile_id').eq('id', teacherId).maybeSingle()
+    if (!req.db || !req.adminDb) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+    const teacher = await req.adminDb!.from('teacher_records').select('id,profile_id').eq('id', teacherId).maybeSingle()
     if (teacher.error) throw mapDatabaseError(teacher.error)
     if (!teacher.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     return authorizeResource(req, { ...def, scope: 'teacher' }, permission, teacherId, teacher.data as Record<string, unknown>)

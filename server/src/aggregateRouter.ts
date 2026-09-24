@@ -73,15 +73,16 @@ const personalProfilePatch = z.object({
 }).strict()
 
 async function myPersonProfile(req: Request, res: Response) {
-  const db = requireDb(req)
-  const account = await database(req, () => db.from('profiles').select('person_profile_id').eq('id', req.user!.id).maybeSingle())
+  requireDb(req)
+  if (!req.adminDb) throw new ApiError(503, 'PERSON_PROFILE_MISSING', 'The personal profile is not available')
+  const account = await database(req, () => req.adminDb!.from('profiles').select('id').eq('auth_user_id', req.user!.id).maybeSingle())
   if (account.error) throw mapDatabaseError(account.error)
-  const personId = typeof account.data?.person_profile_id === 'string' ? account.data.person_profile_id : null
-  if (!personId || !req.adminDb) throw new ApiError(503, 'PERSON_PROFILE_MISSING', 'The personal profile is not available')
+  const personId = typeof account.data?.id === 'string' ? account.data.id : null
+  if (!personId) throw new ApiError(503, 'PERSON_PROFILE_MISSING', 'The personal profile is not available')
   setAuditContext(req, { domain: 'system', resource: 'person-profile', resourceId: personId, action: req.method.toLowerCase() })
 
   if (req.method === 'GET') {
-    const result = await database(req, () => req.adminDb!.from('person_profiles')
+    const result = await database(req, () => req.adminDb!.from('profiles')
       .select('id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document,created_at,updated_at')
       .eq('id', personId).maybeSingle())
     if (result.error) throw mapDatabaseError(result.error)
@@ -92,7 +93,7 @@ async function myPersonProfile(req: Request, res: Response) {
   if (!Object.keys(patch).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one profile field is required')
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
-  const result = await database(req, () => req.adminDb!.from('person_profiles').update({ ...patch, updated_at: new Date().toISOString() })
+  const result = await database(req, () => req.adminDb!.from('profiles').update({ ...patch, updated_at: new Date().toISOString() })
     .eq('id', personId)
     .select('id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document,created_at,updated_at')
     .maybeSingle())
