@@ -24,6 +24,7 @@ describe('class session API contract', () => {
   it('accepts persisted schedule rule ids for round-trip updates but keeps them out of the write payload', () => {
     const parsed = sessionSchema.parse({
       name: 'Session',
+      classroom_id: '10000000-0000-4000-8000-000000000002',
       schedule_mode: 'weekly',
       session_type: 'regular',
       schedule_rules: [{
@@ -47,6 +48,7 @@ describe('class session API contract', () => {
     expect(writeRule).not.toHaveProperty('id')
     expect(() => sessionSchema.parse({
       name: 'Session',
+      classroom_id: '10000000-0000-4000-8000-000000000002',
       schedule_mode: 'weekly',
       session_type: 'regular',
       schedule_rules: [{

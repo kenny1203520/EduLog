@@ -66,6 +66,14 @@ function validateBody(def: ResourceDefinition, body: Record<string, unknown>, ac
 
 function queryValue(req: Request, key: string) { const value = req.query[key]; return typeof value === 'string' ? value : undefined }
 
+async function globalTeachingId(req: Request) {
+  if (!req.adminDb) throw new ApiError(503, 'GLOBAL_TEACHING_SCOPE_MISSING', 'The global teaching scope is not configured')
+  const result = await req.adminDb.from('teachings').select('id').eq('is_global', true).maybeSingle()
+  if (result.error) throw mapDatabaseError(result.error)
+  if (typeof result.data?.id !== 'string') throw new ApiError(503, 'GLOBAL_TEACHING_SCOPE_MISSING', 'The global teaching scope is not configured')
+  return result.data.id
+}
+
 type FilterOperator = 'eq' | 'neq' | 'in' | 'gte' | 'lte' | 'gt' | 'lt' | 'ilike' | 'contains' | 'is'
 
 function filterableFields(def: ResourceDefinition) {
@@ -171,7 +179,61 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
     : builder.order(sortName, { ascending: !descending })
   const { data, error, count } = await ordered.range(query.offset, query.offset + query.limit - 1)
   if (error) throw mapDatabaseError(error)
-  return sendData(req, res, data ?? [], { limit: query.limit, offset: query.offset, total: count ?? 0, sort: query.sort })
+  let includeSensitive = false
+  if (def.table === 'teachers') {
+    try {
+      await authorizeCollection(req, def, 'teaching.teachers.read_sensitive', req.query as Record<string, unknown>)
+      includeSensitive = true
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 403) throw error
+    }
+  }
+  const rows = def.table === 'teachers' ? await attachTeacherProfile(req, data ?? [], includeSensitive) : data ?? []
+  return sendData(req, res, rows, { limit: query.limit, offset: query.offset, total: count ?? 0, sort: query.sort })
+}
+
+export async function attachTeacherProfile(req: Request, value: unknown, includeSensitive = false) {
+  const rows = (Array.isArray(value) ? value : [value]).filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+  if (!req.adminDb) {
+    const safeRows = rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'person_profile_id')))
+    return Array.isArray(value) ? safeRows : safeRows[0]
+  }
+  const teacherIds = rows.map((row) => row.id).filter((id): id is string => typeof id === 'string')
+  const links = rows.some((row) => typeof row.person_profile_id !== 'string')
+    ? await req.adminDb.from('teachers').select('id,person_profile_id').in('id', teacherIds)
+    : null
+  if (links?.error) throw mapDatabaseError(links.error)
+  const linkedRows = (links?.data ?? []) as unknown as Array<{ id: string; person_profile_id: string | null }>
+  const profileByTeacher = new Map(linkedRows.map((item) => [item.id, item.person_profile_id]))
+  const profileIds = [...new Set(rows.map((row) => typeof row.person_profile_id === 'string' ? row.person_profile_id : profileByTeacher.get(row.id as string)).filter((id): id is string => typeof id === 'string'))]
+  if (!profileIds.length) return value
+  const projection = includeSensitive
+    ? 'id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document'
+    : 'id,display_name,bio,bio_document'
+  const result = await req.adminDb.from('person_profiles').select(projection).in('id', profileIds)
+  if (result.error) throw mapDatabaseError(result.error)
+  const profileRows = (result.data ?? []) as unknown as Array<Record<string, unknown> & { id: string }>
+  const profiles = new Map(profileRows.map((profile) => [profile.id, profile]))
+  const enriched = rows.map((row) => {
+    const profile = profiles.get(row.person_profile_id as string)
+    const safeRow = Object.fromEntries(Object.entries(row).filter(([key]) => key !== 'person_profile_id'))
+    if (!profile) return safeRow
+    return {
+      ...safeRow,
+      name: profile.display_name,
+      ...(includeSensitive ? {
+        email: profile.contact_email,
+        phone: profile.phone,
+        address: profile.address,
+        mailing_address: profile.mailing_address,
+        birthday: profile.birthday,
+        gov_id: profile.government_id,
+      } : {}),
+      bio: profile.bio,
+      bio_document: profile.bio_document,
+    }
+  })
+  return Array.isArray(value) ? enriched : enriched[0]
 }
 
 export async function item(req: Request, res: Response, def: ResourceDefinition) {
@@ -191,7 +253,16 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
   if (!existing.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   if (req.method === 'GET') {
     await authorizeResource(req, def, permissionForResource(def, 'read'), id, existing.data as unknown as Record<string, unknown>)
-    return sendData(req, res, existing.data)
+    let includeSensitive = false
+    if (def.table === 'teachers') {
+      try {
+        await authorizeResource(req, def, 'teaching.teachers.read_sensitive', id, existing.data as unknown as Record<string, unknown>)
+        includeSensitive = true
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.status !== 403) throw error
+      }
+    }
+    return sendData(req, res, def.table === 'teachers' ? await attachTeacherProfile(req, existing.data, includeSensitive) : existing.data)
   }
   const action = req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
   await authorizeResource(req, def, permissionForResource(def, action), id, existing.data as unknown as Record<string, unknown>)
@@ -229,14 +300,16 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
     if (sensitiveResult.error) throw mapDatabaseError(sensitiveResult.error)
   }
   if (Object.keys(safePatch).length) {
-    const safeResult = await req.db!.from(def.table).update(safePatch).eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
+    const safeResult = def.table === 'teachers'
+      ? await req.db!.rpc('update_teacher_profile', { p_teacher_id: id, p_patch: safePatch })
+      : await req.db!.from(def.table).update(safePatch).eq(def.idColumn, id).select(itemFields.join(', ')).maybeSingle()
     if (safeResult.error) throw mapDatabaseError(safeResult.error)
     if (!safeResult.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
   }
   const updated = await req.db!.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
   if (updated.error) throw mapDatabaseError(updated.error)
   if (!updated.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
-  const envelope = { data: updated.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); response = res.json(envelope); return response
+  const envelope = { data: def.table === 'teachers' ? await attachTeacherProfile(req, updated.data, Object.keys(sensitivePatch).length > 0) : updated.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); response = res.json(envelope); return response
 }
 
 export async function collection(req: Request, res: Response, def: ResourceDefinition) {
@@ -260,7 +333,12 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
   const replay = await idempotency(req, req.method === 'POST' ? 201 : 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
-  const insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
+   let insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
+   // Teaching objects are global records. The server assigns their single
+   // canonical teaching scope so callers cannot create account-owned islands.
+   if (['courses', 'classrooms', 'class_sessions', 'report_templates'].includes(def.table)) {
+     insertBody = { ...insertBody, teaching_id: await globalTeachingId(req) }
+   }
   const itemFields = def.itemFields ?? def.fields
   const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single() : await req.db!.from(def.table).update(body).select(itemFields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)

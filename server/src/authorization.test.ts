@@ -34,12 +34,17 @@ describe('resource-aware authorization', () => {
     })
   })
 
-  it('does not require a fabricated teaching id for broad teaching collections', async () => {
+  it('resolves broad teaching collections through the configured global scope', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
-    await authorizeCollection(requestWithRpc(rpc), resources.courses, 'teaching.courses.list')
-    expect(rpc).toHaveBeenCalledWith('has_api_permission', {
+    const req = {
+      ...requestWithRpc(rpc),
+      adminDb: { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: '00000000-0000-4000-8000-000000000040' }, error: null }) }) }) }) },
+    } as unknown as Request
+    await authorizeCollection(req, resources.courses, 'teaching.courses.list')
+    expect(rpc).toHaveBeenCalledWith('has_teaching_permission', {
       p_user_id: '00000000-0000-4000-8000-000000000001',
       p_permission_key: 'teaching.courses.list',
+      p_teaching_id: '00000000-0000-4000-8000-000000000040',
       p_classroom_id: null,
       p_class_session_id: null,
     })
@@ -80,14 +85,15 @@ describe('resource-aware authorization', () => {
     }))
   })
 
-  it('allows an owner to create teacher credentials without a session assignment', async () => {
+  it('allows a teacher to manage their own profile-linked credential without a session assignment', async () => {
     const teacherId = '00000000-0000-4000-8000-000000000020'
     const userId = '00000000-0000-4000-8000-000000000001'
     const rpc = vi.fn().mockResolvedValue({ data: false, error: null })
     const db = {
       rpc,
       from: vi.fn((table: string) => {
-        if (table === 'teachers') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: teacherId, user_id: userId }, error: null }) }) }) }
+        if (table === 'teachers') return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: teacherId, person_profile_id: '00000000-0000-4000-8000-000000000021' }, error: null }) }) }) }
+        if (table === 'profiles') return { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: userId }, error: null }) }) }) }) }
         return { select: () => ({ eq: async () => ({ data: [], error: null }) }) }
       }),
     }

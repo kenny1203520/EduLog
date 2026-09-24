@@ -55,7 +55,7 @@ describe('resource mutation validation boundary', () => {
 
   it('rejects invalid typed payloads before authorization or idempotency', async () => {
     const { req, from, rpc, adminRpc } = request({ name: 123 })
-    await expect(collection(req, {} as never, resources.teachings)).rejects.toBeInstanceOf(ZodError)
+    await expect(collection(req, {} as never, resources.classrooms)).rejects.toBeInstanceOf(ZodError)
     expect(from).not.toHaveBeenCalled()
     expect(rpc).not.toHaveBeenCalled()
     expect(adminRpc).not.toHaveBeenCalled()

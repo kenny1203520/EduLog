@@ -64,6 +64,26 @@ async function selfPermission(req: Request, row?: Record<string, unknown>) {
   if (row && row.user_id !== req.user.id) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
 }
 
+async function globalTeachingId(req: Request) {
+  if (!req.adminDb) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const result = await req.adminDb.from('teachings').select('id').eq('is_global', true).maybeSingle()
+  if (result.error) throw mapDatabaseError(result.error)
+  const id = result.data && typeof result.data.id === 'string' ? result.data.id : null
+  if (!id) throw new ApiError(503, 'GLOBAL_TEACHING_SCOPE_MISSING', 'The global teaching scope is not configured')
+  return id
+}
+
+async function globalTeachingPermission(req: Request, permission: string) {
+  return teachingPermission(req, permission, await globalTeachingId(req))
+}
+
+async function isAccountPersonProfile(req: Request, personProfileId: string | null) {
+  if (!req.db || !req.user || !personProfileId) return false
+  const result = await req.db.from('profiles').select('id').eq('id', req.user.id).eq('person_profile_id', personProfileId).maybeSingle()
+  if (result.error) throw mapDatabaseError(result.error)
+  return Boolean(result.data)
+}
+
 async function holidayPermission(req: Request, permission: string, row?: Record<string, unknown>) {
   const classroomIds = uuidList(row, 'classroom_ids')
   const sessionIds = uuidList(row, 'class_session_ids')
@@ -138,11 +158,17 @@ export async function authorizeResource(
   if (scope === 'classroom-child') return apiPermission(req, permission, rowId(row, 'classroom_id'), null)
   if (scope === 'teacher') {
     if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-    // Sensitive teacher fields must still pass the canonical permission RPC;
-    // the self-owned shortcut is only valid for non-sensitive profile access.
-    if (rowId(row, 'user_id') === req.user.id && !permission.endsWith('_sensitive')) return
+    // The teacher may manage their own canonical person profile, including
+    // sensitive fields. Other callers continue through scoped RBAC checks.
+    if (await isAccountPersonProfile(req, rowId(row, 'person_profile_id'))) return
     const teacherId = id ?? rowId(row, 'id')
     if (!teacherId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
+    try {
+      await apiPermission(req, permission, null, null)
+      return
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 403) throw error
+    }
     const assignments = await req.db.from('class_session_teachers').select('class_session_id').eq('teacher_id', teacherId)
     if (assignments.error) throw mapDatabaseError(assignments.error)
     for (const assignment of assignments.data ?? []) {
@@ -159,7 +185,7 @@ export async function authorizeResource(
     if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
     const teacherId = rowId(row, 'teacher_id')
     if (!teacherId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
-    const teacher = await req.db.from('teachers').select('id,user_id').eq('id', teacherId).maybeSingle()
+    const teacher = await req.db.from('teachers').select('id,person_profile_id').eq('id', teacherId).maybeSingle()
     if (teacher.error) throw mapDatabaseError(teacher.error)
     if (!teacher.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     return authorizeResource(req, { ...def, scope: 'teacher' }, permission, teacherId, teacher.data as Record<string, unknown>)
@@ -196,11 +222,11 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
     const courseId = value('course_id')
     if (courseId) return coursePermission(req, permission, courseId)
     const teachingId = value('teaching_id')
-    return teachingId ? teachingPermission(req, permission, teachingId) : apiPermission(req, permission, null, null)
+    return teachingId ? teachingPermission(req, permission, teachingId) : globalTeachingPermission(req, permission)
   }
   if (def.scope === 'teaching') {
     const teachingId = value('teaching_id')
-    return teachingId ? teachingPermission(req, permission, teachingId) : apiPermission(req, permission, null, null)
+    return teachingId ? teachingPermission(req, permission, teachingId) : globalTeachingPermission(req, permission)
   }
   if (def.scope === 'self') {
     if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
@@ -209,10 +235,12 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
     return
   }
   if (def.scope === 'classroom' || def.scope === 'classroom-child') {
-    return apiPermission(req, permission, value('classroom_id'), null)
+    const classroomId = value('classroom_id')
+    return classroomId ? apiPermission(req, permission, classroomId, null) : globalTeachingPermission(req, permission)
   }
   if (def.scope === 'session' || def.scope === 'occurrence') {
-    return apiPermission(req, permission, null, value('class_session_id'))
+    const classSessionId = value('class_session_id')
+    return classSessionId ? apiPermission(req, permission, null, classSessionId) : globalTeachingPermission(req, permission)
   }
   if (def.scope === 'holiday') {
     const classroomIds = body?.classroom_ids ?? query.classroom_ids
@@ -222,7 +250,7 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
   }
   if (def.scope === 'student-child' || def.scope === 'student') {
     const studentId = value('student_id')
-    return studentId ? entityPermission(req, 'student', permission, studentId) : apiPermission(req, permission, null, null)
+    return studentId ? entityPermission(req, 'student', permission, studentId) : globalTeachingPermission(req, permission)
   }
   if (def.scope === 'enrollment-child' || def.scope === 'enrollment') {
     const enrollmentId = value('enrollment_id')
@@ -234,12 +262,13 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
   }
   if (def.scope === 'teacher-child') {
     const teacherId = value('teacher_id')
-    if (!teacherId) return apiPermission(req, permission, null, null)
+    if (!teacherId) return globalTeachingPermission(req, permission)
     if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-    const teacher = await req.db.from('teachers').select('id,user_id').eq('id', teacherId).maybeSingle()
+    const teacher = await req.db.from('teachers').select('id,person_profile_id').eq('id', teacherId).maybeSingle()
     if (teacher.error) throw mapDatabaseError(teacher.error)
     if (!teacher.data) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
     return authorizeResource(req, { ...def, scope: 'teacher' }, permission, teacherId, teacher.data as Record<string, unknown>)
   }
+  if (def.scope === 'teacher') return globalTeachingPermission(req, permission)
   return apiPermission(req, permission, null, null)
 }

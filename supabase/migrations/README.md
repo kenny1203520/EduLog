@@ -1,8 +1,10 @@
 # EduLog migration chain
 
-The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000080` remain unchanged. The current forward migrations add strict system/teaching RBAC domains (`1000081`), atomic RBAC management functions (`1000082`), system-managed account status (`1000083`), canonical suspension attendance/occupancy semantics (`1000084`), regular-enrollment-only report provisioning (`1000085`), the missing invoker table grants required by attendance evaluation (`1000086`), aligned report INSERT RLS (`1000087`), permission parity for roster provisioning (`1000088`), removal of the stale report INSERT policy (`1000089`), a narrow authenticated provisioning command that isolates placeholder insertion from interactive report CRUD (`1000090`), an occurrence-date-scoped class-session roster read model (`1000091`), scoped teaching-role permission policies (`1000092`), overlapping system-role assignment protection (`1000093`), the audit-event date index (`1000094`), and classroom-scoped teaching-role assignments (`1000095`). `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
+Before `1000096_global_teaching_scope_and_person_profiles.sql`, run the read-only `supabase/preflight/global_teaching_scope_report.sql` against the target database, review/export the counts and ID-only conflicts, and take a restorable backup. The migration introduces the global teaching scope and canonical person profiles, preserves proven account/teacher links, and writes a PII-free ID/field conflict report to `global_scope_migration_report`. It also changes authorization to RBAC-only, moves sessions without a classroom into the virtual classroom, and clears former ownership values. Do not apply the cutover until its preflight counts and permissions have been reviewed. The stored report is service-role only; do not grant general user access to it.
 
-This directory contains the append-only database history for EduLog. Existing migrations through 1000080 must not be edited. The current chain includes the pre-1000058 compatibility step and the forward-only repairs from 1000065 through 1000095, without rewriting applied migration files.
+The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000080` remain unchanged. The current forward migrations add strict system/teaching RBAC domains (`1000081`), atomic RBAC management functions (`1000082`), system-managed account status (`1000083`), canonical suspension attendance/occupancy semantics (`1000084`), regular-enrollment-only report provisioning (`1000085`), the missing invoker table grants required by attendance evaluation (`1000086`), aligned report INSERT RLS (`1000087`), permission parity for roster provisioning (`1000088`), removal of the stale report INSERT policy (`1000089`), a narrow authenticated provisioning command that isolates placeholder insertion from interactive report CRUD (`1000090`), an occurrence-date-scoped class-session roster read model (`1000091`), scoped teaching-role permission policies (`1000092`), overlapping system-role assignment protection (`1000093`), the audit-event date index (`1000094`), classroom-scoped teaching-role assignments (`1000095`), and the initial global teaching scope and canonical person profile transition (`1000096`). `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
+
+This directory contains the append-only database history for EduLog. Existing migrations through 1000080 must not be edited. The current chain includes the pre-1000058 compatibility step and the forward-only repairs from 1000065 through 1000096, without rewriting applied migration files.
 
 The `1000078` read-model migration covers courses, classrooms, teachers, incomplete reports, holidays, and class-session workspaces with authenticated-only, explicit projections.
 
@@ -116,12 +118,13 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000093 | `1000093_system_role_assignment_overlap_guard.sql` | Merge and prevent overlapping effective intervals for the same system role assignment |
 | 1000094 | `1000094_audit_events_created_at_index.sql` | Support newest-first audit pagination and date-range queries |
 | 1000095 | `1000095_classroom_teaching_role_assignments.sql` | Support authorized classroom-scoped teaching-role assignments with overlap protection |
+| 1000096 | `1000096_global_teaching_scope_and_person_profiles.sql` | Establish global teaching scope, canonical account/teacher person profiles, and an ID-only cutover report |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
 ## Current canonical chain
 
-The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062_report_lifecycle_atomicity.sql` through `1000095_classroom_teaching_role_assignments.sql` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
+The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062_report_lifecycle_atomicity.sql` through `1000096_global_teaching_scope_and_person_profiles.sql` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
 
 ## Clean install
 
@@ -129,7 +132,7 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a database at 1000039, apply the individual 1000040-1000061 files in lexical order, including 1000057a before 1000058, then apply 1000062-1000095 in order. A database that has already recorded 1000058 must not apply 1000057a out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, sensitive-data, Dashboard read-model, core RLS, RBAC domain, suspension/occupancy, report-provisioning, attendance privilege, report RLS, stale-policy, narrow-command, occurrence-roster and audit-index assertions. Do not edit historical migrations.
+Back up the database first. Apply only migrations not recorded in the migration history. For a database at 1000039, apply the individual 1000040-1000061 files in lexical order, including 1000057a before 1000058, then apply 1000062-1000096 in order. A database that has already recorded 1000058 must not apply 1000057a out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, sensitive-data, Dashboard read-model, core RLS, RBAC domain, suspension/occupancy, report-provisioning, attendance privilege, report RLS, stale-policy, narrow-command, occurrence-roster and audit-index assertions. Do not edit historical migrations.
 
 ## Rerun and rollback
 
@@ -137,7 +140,7 @@ The individual migrations are written to be rerunnable where PostgreSQL permits 
 
 ## Verification
 
-The CI database gate runs clean install, historical upgrade, `1000062`–`1000095` rerun, RBAC scope constraint checks, report lifecycle and replay assertions, rate-limit, sensitive-data and Dashboard read-model checks, upgrade fixture and assertions, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
+The CI database gate runs clean install, historical upgrade, `1000062`–`1000096` rerun, RBAC scope constraint checks, report lifecycle and replay assertions, rate-limit, sensitive-data and Dashboard read-model checks, upgrade fixture and assertions, and the executable cross-teaching RLS fixture. The backend security gate runs Deno static tests. The frontend gate runs `npm ci`, `npm run test -- --run`, and `npm run build` in `app`.
 
 ## Append-only history boundary
 

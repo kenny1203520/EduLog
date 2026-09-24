@@ -6,6 +6,7 @@ import { isTeacherPresent } from './reportSemantics.js'
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from './context.js'
 import { authorizeCollection, authorizeResource } from './authorization.js'
 import { resources } from './resources.js'
+import { attachTeacherProfile, complete, idempotency } from './resourceRouter.js'
 
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
 const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,content,content_document,is_completed,progress_letter,attendance_status,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,version,absence_reason,external_link,updated_at'
@@ -57,6 +58,49 @@ async function preferences(req: Request, res: Response) {
   const grouped: Record<string, string[]> = { classroom: [], class_session: [] }
   for (const row of visibility.data ?? []) (grouped[row.entity_type] ??= []).push(row.entity_id)
   return sendData(req, res, { preferences: preference.data ?? null, visibility: grouped })
+}
+
+const personalProfilePatch = z.object({
+  display_name: z.string().trim().min(1).max(200).nullable().optional(),
+  contact_email: z.string().email().nullable().optional(),
+  phone: z.string().max(1000).nullable().optional(),
+  address: z.string().max(4000).nullable().optional(),
+  mailing_address: z.string().max(4000).nullable().optional(),
+  birthday: z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/).nullable().optional(),
+  government_id: z.string().max(1000).nullable().optional(),
+  bio: z.string().max(10000).nullable().optional(),
+  bio_document: z.record(z.string(), z.unknown()).nullable().optional(),
+}).strict()
+
+async function myPersonProfile(req: Request, res: Response) {
+  const db = requireDb(req)
+  const account = await database(req, () => db.from('profiles').select('person_profile_id').eq('id', req.user!.id).maybeSingle())
+  if (account.error) throw mapDatabaseError(account.error)
+  const personId = typeof account.data?.person_profile_id === 'string' ? account.data.person_profile_id : null
+  if (!personId || !req.adminDb) throw new ApiError(503, 'PERSON_PROFILE_MISSING', 'The personal profile is not available')
+  setAuditContext(req, { domain: 'system', resource: 'person-profile', resourceId: personId, action: req.method.toLowerCase() })
+
+  if (req.method === 'GET') {
+    const result = await database(req, () => req.adminDb!.from('person_profiles')
+      .select('id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document,created_at,updated_at')
+      .eq('id', personId).maybeSingle())
+    if (result.error) throw mapDatabaseError(result.error)
+    return sendData(req, res, result.data)
+  }
+
+  const patch = personalProfilePatch.parse(req.body)
+  if (!Object.keys(patch).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one profile field is required')
+  const replay = await idempotency(req, 200, null)
+  if (replay) return res.status(replay.status).json(replay.body)
+  const result = await database(req, () => req.adminDb!.from('person_profiles').update({ ...patch, updated_at: new Date().toISOString() })
+    .eq('id', personId)
+    .select('id,display_name,contact_email,phone,address,mailing_address,birthday,government_id,bio,bio_document,created_at,updated_at')
+    .maybeSingle())
+  if (result.error) throw mapDatabaseError(result.error)
+  if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'The personal profile was not found')
+  const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+  await complete(req, 200, envelope)
+  return res.json(envelope)
 }
 
 async function studentReportsPage(req: Request, res: Response) {
@@ -333,7 +377,7 @@ async function teachersOverview(req: Request, res: Response) {
   }))
   if (result.error) throwDatabaseError(req, 'teachers_overview.read', result.error)
   const page = (result.data ?? {}) as { items?: unknown; total?: unknown; statistics?: unknown }
-  const teachers = Array.isArray(page.items) ? page.items : []
+  const teachers = Array.isArray(page.items) ? await attachTeacherProfile(req, page.items) as unknown[] : []
   const total = Number(page.total ?? 0)
   if (!Number.isSafeInteger(total) || total < 0 || !page.statistics || typeof page.statistics !== 'object') {
     throw new ApiError(500, 'DATABASE_ERROR', 'The request could not be completed')
@@ -374,7 +418,7 @@ async function classSessionWorkspace(req: Request, res: Response) {
   const page = (result.data ?? {}) as { session?: Record<string, unknown> | null; enrollments?: unknown; teachers?: unknown }
   if (!page.session) throw new ApiError(404, 'NOT_FOUND', 'Class session was not found')
   const enrollments = Array.isArray(page.enrollments) ? page.enrollments as Array<Record<string, unknown>> : []
-  const teachers = Array.isArray(page.teachers) ? page.teachers : []
+  const teachers = Array.isArray(page.teachers) ? await attachTeacherProfile(req, page.teachers) as unknown[] : []
   const rosterDate = typeof page.session.roster_date === 'string' ? page.session.roster_date : (query.occurrence_date ?? null)
   return sendData(req, res, { session: { ...page.session, current_enrollments: enrollments.filter((enrollment) => enrollment.status === 'regular').length }, enrollments, teachers }, { total: enrollments.length, roster_date: rosterDate })
 }
@@ -382,6 +426,8 @@ async function classSessionWorkspace(req: Request, res: Response) {
 export function createAggregateRouter() {
   const router = Router()
   router.get('/pages/me/preferences', wrap(preferences))
+  router.get('/pages/me/person-profile', wrap(myPersonProfile))
+  router.patch('/pages/me/person-profile', wrap(myPersonProfile))
   router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReports))
   router.get('/pages/classrooms/overview', wrap(classroomManager))
   router.get('/pages/holidays/overview', wrap(holidays))

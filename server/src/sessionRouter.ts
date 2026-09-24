@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
 
-const sessionFields = 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,time_zone,session_type,schedule_mode,teaching_id,user_id,created_at,updated_at,class_session_schedule_rules(id,class_session_id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)'
+const sessionFields = 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,time_zone,session_type,schedule_mode,teaching_id,created_at,updated_at,class_session_schedule_rules(id,class_session_id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)'
 
 const scheduleRuleSchema = z.object({
   // Existing rules are returned with their persisted id. It is accepted for
@@ -21,7 +21,7 @@ const scheduleRuleSchema = z.object({
 
 export const sessionSchema = z.object({
   name: z.string().trim().min(1).max(255),
-  classroom_id: z.string().uuid().nullable().optional(),
+  classroom_id: z.string().uuid(),
   course_ids: z.array(z.string().uuid()).max(100).default([]),
   capacity: z.number().int().min(0).max(100000).default(10),
   lesson_number: z.number().int().min(0).nullable().optional(),
@@ -75,7 +75,7 @@ export async function authorizeRelatedRead(req: Request, permission: string, ses
 
 async function authorizeSaveScope(req: Request, action: 'create' | 'update', id: string | null, input: z.infer<typeof sessionSchema>) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const classroomId = input.classroom_id ?? null
+  const classroomId = input.classroom_id
   const teachingIds = new Set<string>()
   let existingTeachingId: string | null = null
   if (id) {
@@ -204,7 +204,7 @@ async function save(req: Request, res: Response) {
   const result = await req.db!.rpc('save_class_session_with_schedule', {
     p_session: {
       name: input.name,
-      classroom_id: input.classroom_id ?? null,
+      classroom_id: input.classroom_id,
       course_ids: input.course_ids,
       capacity: input.capacity,
       lesson_number: input.lesson_number ?? null,
