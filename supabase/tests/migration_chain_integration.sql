@@ -337,16 +337,34 @@ FROM (VALUES
 CROSS JOIN LATERAL (SELECT id FROM public.teachings WHERE is_global LIMIT 1) teaching
 ON CONFLICT (id) DO NOTHING;
 
+-- These standalone students model records whose former owner was cleared by
+-- the global-scope migrations and which have no enrollment to reveal them.
+INSERT INTO public.students(id, name, user_id, teaching_id) VALUES
+  ('20000000-0000-0000-0000-000000000101', 'Migration Visibility A', NULL, (SELECT id FROM public.teachings WHERE is_global LIMIT 1)),
+  ('20000000-0000-0000-0000-000000000102', 'Migration Visibility B', NULL, (SELECT id FROM public.teachings WHERE is_global LIMIT 1))
+ON CONFLICT (id) DO NOTHING;
+
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 DO $$
+DECLARE student_page jsonb;
+DECLARE student_second_page jsonb;
 BEGIN
   IF (SELECT count(*) FROM public.classrooms WHERE NOT is_virtual) <> 2 THEN
     RAISE EXCEPTION 'platform teaching role did not grant access to the shared classroom directory';
   END IF;
   IF public.has_system_permission(auth.uid(), 'system.audit.list') THEN
     RAISE EXCEPTION 'teaching role granted a system-administration permission';
+  END IF;
+  student_page := public.get_students_overview(1, 0, 'Migration Visibility', 'name');
+  student_second_page := public.get_students_overview(1, 1, 'Migration Visibility', 'name');
+  IF (student_page->>'total')::integer <> 2
+     OR jsonb_array_length(student_page->'items') <> 1
+     OR jsonb_array_length(student_second_page->'items') <> 1
+     OR student_page->'items'->0->>'name' <> 'Migration Visibility A'
+     OR student_second_page->'items'->0->>'name' <> 'Migration Visibility B' THEN
+    RAISE EXCEPTION 'platform-level student access omitted standalone students or broke pagination: %, %', student_page, student_second_page;
   END IF;
 END;
 $$;
@@ -356,9 +374,56 @@ SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 DO $$
+DECLARE student_page jsonb;
 BEGIN
   IF (SELECT count(*) FROM public.classrooms WHERE NOT is_virtual) <> 0 THEN
     RAISE EXCEPTION 'teaching role membership was required for classroom access';
+  END IF;
+  student_page := public.get_students_overview(10, 0, 'Migration Visibility', 'name');
+  IF (student_page->>'total')::integer <> 0 OR jsonb_array_length(student_page->'items') <> 0 THEN
+    RAISE EXCEPTION 'unassigned account can see platform students: %', student_page;
+  END IF;
+END;
+$$;
+RESET ROLE;
+
+-- A classroom-scoped role should see its enrolled students but not standalone
+-- platform records or students from another classroom.
+DO $$
+DECLARE classroom_role_id uuid := gen_random_uuid();
+DECLARE platform_teaching_id uuid;
+DECLARE classroom_id uuid := '30000000-0000-0000-0000-000000000001';
+DECLARE course_id uuid := '50000000-0000-0000-0000-000000000101';
+DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
+BEGIN
+  SELECT id INTO platform_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
+  INSERT INTO public.roles(id, code, name, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
+  VALUES (classroom_role_id, 'integration_classroom_student_reader', 'Integration Classroom Student Reader', false, 900, 'teaching', NULL, false, false);
+  INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
+  SELECT classroom_role_id, permission.id, 'classroom', classroom_id, 'allow'
+  FROM public.permissions permission
+  WHERE permission.key IN ('teaching.students.list', 'teaching.students.read');
+  INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)
+  VALUES ('00000000-0000-0000-0000-000000000003', classroom_role_id, 'classroom', classroom_id, CURRENT_DATE, 'active');
+  INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
+  VALUES (course_id, 'Scoped roster test', 'primary', NULL, platform_teaching_id);
+  INSERT INTO public.students(id, name, user_id, teaching_id)
+  VALUES (student_id, 'Migration Visibility Classroom', NULL, platform_teaching_id);
+  INSERT INTO public.enrollments(student_id, course_id, classroom_id, user_id, status, start_date, teaching_id)
+  VALUES (student_id, course_id, classroom_id, NULL, 'regular', CURRENT_DATE, platform_teaching_id);
+END;
+$$;
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
+DO $$
+DECLARE student_page jsonb;
+BEGIN
+  student_page := public.get_students_overview(10, 0, 'Migration Visibility', 'name');
+  IF (student_page->>'total')::integer <> 1
+     OR student_page->'items'->0->>'name' <> 'Migration Visibility Classroom' THEN
+    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %', student_page;
   END IF;
 END;
 $$;

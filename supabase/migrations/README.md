@@ -123,12 +123,16 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000096 | `1000096_global_teaching_scope_and_person_profiles.sql` | Establish global teaching scope, canonical account/teacher person profiles, and an ID-only cutover report |
 | 1000097 | `1000097_profiles_as_person_master.sql` | Make `profiles` the only person table and move teacher data to it |
 | 1000098 | `1000098_profile_names_and_auth_email.sql` | Separate formal name and nickname; keep login email in Supabase Auth |
+| 1000099 | `1000099_platform_teaching_role_hierarchy.sql` | Promote teaching roles to the platform root with classroom/session exclusions |
+| 1000100 | `1000100_platform_teaching_roles_without_workspace.sql` | Remove teaching workspaces from runtime role and policy scopes |
+| 1000101 | `1000101_private_invoker_views_and_lint_remediation.sql` | Restrict private user/teacher views and address reported RLS/index lints |
+| 1000102 | `1000102_student_overview_global_visibility.sql` | Include standalone students for platform-level readers while retaining scoped enrollment access |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
 ## Current canonical chain
 
-The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062_report_lifecycle_atomicity.sql` through `1000098_profile_names_and_auth_email.sql` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
+The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062` through `1000102` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
 
 ## Clean install
 
@@ -136,7 +140,7 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a database at 1000039, apply the individual 1000040-1000061 files in lexical order, including 1000057a before 1000058, then apply 1000062-1000098 in order. Run both 1000096 and 1000097 preflight reports against the relevant pre-migration schemas, and do not apply 1000097 before its report has been reviewed. A database that has already recorded 1000058 must not apply 1000057a out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, sensitive-data, Dashboard read-model, core RLS, RBAC domain, suspension/occupancy, report-provisioning, attendance privilege, report RLS, stale-policy, narrow-command, occurrence-roster, audit-index and profiles-person assertions. Do not edit historical migrations.
+Back up the database first. Apply only migrations not recorded in the migration history. For a database at 1000039, apply the individual 1000040-1000061 files in lexical order, including 1000057a before 1000058, then apply 1000062-1000102 in order. Run both 1000096 and 1000097 preflight reports against the relevant pre-migration schemas, and do not apply 1000097 before its report has been reviewed. A database that has already recorded 1000058 must not apply 1000057a out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, sensitive-data, Dashboard read-model, core RLS, RBAC domain, suspension/occupancy, report-provisioning, attendance privilege, report RLS, stale-policy, narrow-command, occurrence-roster, audit-index, profiles-person and student-overview assertions. Do not edit historical migrations.
 
 ## Rerun and rollback
 

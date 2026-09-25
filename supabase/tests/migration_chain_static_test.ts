@@ -55,6 +55,7 @@ const profilesAsPersonMaster = await readMigration('1000097_profiles_as_person_m
 const profileNamesAndAuthEmail = await readMigration('1000098_profile_names_and_auth_email.sql')
 const platformTeachingHierarchy = await readMigration('1000099_platform_teaching_role_hierarchy.sql')
 const platformTeachingRolesWithoutWorkspace = await readMigration('1000100_platform_teaching_roles_without_workspace.sql')
+const studentOverviewGlobalVisibility = await readMigration('1000102_student_overview_global_visibility.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -115,7 +116,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -171,6 +172,16 @@ Deno.test('historical migration versions are preserved', async () => {
   assert(!names.some((name) => name.startsWith('1000010')))
   assert(!names.some((name) => name.startsWith('1000015')))
   assert(!names.some((name) => name.startsWith('1000016')))
+})
+
+Deno.test('1000102 includes global students without broadening scoped access', () => {
+  assertStringIncludes(studentOverviewGlobalVisibility, "has_api_permission(v_user_id, 'teaching.students.read', NULL, NULL)")
+  assertStringIncludes(studentOverviewGlobalVisibility, 'WHERE access.can_read_all')
+  assertStringIncludes(studentOverviewGlobalVisibility, "'teaching.students.read',\n      enrollment.classroom_id,\n      enrollment.class_session_id")
+  assertStringIncludes(studentOverviewGlobalVisibility, 'JOIN visible_student_ids visible ON visible.id = student.id')
+  assertStringIncludes(studentOverviewGlobalVisibility, "GRANT EXECUTE ON FUNCTION public.get_students_overview(integer,integer,text,text) TO authenticated")
+  assertStringIncludes(studentOverviewGlobalVisibility, "NOTIFY pgrst, 'reload schema'")
+  assert(!studentOverviewGlobalVisibility.includes('GRANT EXECUTE ON FUNCTION public.get_students_overview(integer,integer,text,text) TO anon'))
 })
 
 Deno.test('1000084 centralizes suspension attendance and occupancy semantics', () => {
