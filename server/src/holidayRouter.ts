@@ -46,7 +46,7 @@ export async function permission(req: Request, action: 'create' | 'update' | 'de
   const classroomIds = array(scope.classroom_ids)
   const sessionIds = array(scope.class_session_ids)
   setAuditContext(req, {
-    domain: action === 'list' ? 'teaching' : classroomIds.length || sessionIds.length ? 'teaching' : 'system',
+    domain: 'teaching',
     resource: 'holidays',
     action,
     permission: `teaching.holidays.${action}`,
@@ -54,9 +54,12 @@ export async function permission(req: Request, action: 'create' | 'update' | 'de
     scopeType: classroomIds.length ? 'classroom' : sessionIds.length ? 'class_session' : null,
   })
   if (!classroomIds.length && !sessionIds.length) {
-    const rpcName = action === 'list' ? 'has_api_permission' : 'has_system_permission'
-    const args = { p_user_id: req.user.id, p_permission_key: `teaching.holidays.${action}`, ...(action === 'list' ? { p_classroom_id: null, p_class_session_id: null } : {}) }
-    const result = await req.db.rpc(rpcName, args)
+    const result = await req.db.rpc('has_api_permission', {
+      p_user_id: req.user.id,
+      p_permission_key: `teaching.holidays.${action}`,
+      p_classroom_id: null,
+      p_class_session_id: null,
+    })
     if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage holidays')
     return
   }

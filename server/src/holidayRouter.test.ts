@@ -33,23 +33,33 @@ describe('holiday API contract', () => {
     expect(rpc).toHaveBeenCalledTimes(2)
   })
 
-  it('uses a global permission for empty-scope holidays', async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+  it('checks empty-scope holiday actions against platform teaching permissions', async () => {
+    const userId = '00000000-0000-4000-8000-000000000010'
+    for (const action of ['create', 'update', 'delete', 'list'] as const) {
+      const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+      const req = { user: { id: userId }, db: { rpc } } as unknown as Request
+
+      await permission(req, action, {})
+
+      expect(rpc).toHaveBeenCalledWith('has_api_permission', {
+        p_user_id: userId,
+        p_permission_key: `teaching.holidays.${action}`,
+        p_classroom_id: null,
+        p_class_session_id: null,
+      })
+      expect(req.auditContext?.domain).toBe('teaching')
+    }
+  })
+
+  it('denies global teaching holidays when the teaching permission is absent', async () => {
+    const rpc = vi.fn().mockResolvedValue({ data: false, error: null })
     const req = { user: { id: '00000000-0000-4000-8000-000000000010' }, db: { rpc } } as unknown as Request
-    await permission(req, 'list', {})
+
+    await expect(permission(req, 'create', {})).rejects.toMatchObject({ status: 403, code: 'PERMISSION_DENIED' })
     expect(rpc).toHaveBeenCalledWith('has_api_permission', expect.objectContaining({
+      p_permission_key: 'teaching.holidays.create',
       p_classroom_id: null,
       p_class_session_id: null,
     }))
-  })
-
-  it('requires a system permission for global holiday mutations', async () => {
-    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
-    const req = { user: { id: '00000000-0000-4000-8000-000000000010' }, db: { rpc } } as unknown as Request
-    await permission(req, 'create', {})
-    expect(rpc).toHaveBeenCalledWith('has_system_permission', {
-      p_user_id: '00000000-0000-4000-8000-000000000010',
-      p_permission_key: 'teaching.holidays.create',
-    })
   })
 })
