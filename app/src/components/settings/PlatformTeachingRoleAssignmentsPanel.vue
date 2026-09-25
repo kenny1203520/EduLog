@@ -186,6 +186,7 @@ async function removeAssignment(assignment: TeachingRoleAssignment, target: 'roo
         else if (target === 'local') await apiV1Client.delete(`/teaching-role-assignments/scoped/${assignment.id}?scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}`, body)
         else await apiV1Client.delete(`/teaching-role-exclusions/${assignment.id}?scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}`, body)
         await load()
+        toast.success(t('common.deleted'))
     } catch { toast.error(t('rbac.platform_teaching_assignments.remove_failed')) }
     finally { saving.value = false }
 }
@@ -217,7 +218,7 @@ onMounted(load)
                 <div v-if="rootCanManage" class="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto]">
                     <SearchableSelect v-model="userId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" :no-results-text="userQuery.length < 2 ? t('classroom.role_assignments.user_search_hint') : userError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" />
                     <SearchableSelect v-model="roleId" :options="roleOptions" :placeholder="t('classroom.role_assignments.select_role')" :aria-label="t('classroom.role_assignments.role')" />
-                    <button type="button" class="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40" :disabled="saving || !userId || !roleId || !canListUsers" @click="mutateAssignment('root')">{{ t('rbac.platform_teaching_assignments.grant_root') }}</button>
+                    <button type="button" class="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40" :disabled="saving || !userId || !roleId || !canListUsers" @click="mutateAssignment('root')">{{ saving ? t('common.saving') : t('rbac.platform_teaching_assignments.grant_root') }}</button>
                     <label class="space-y-1 text-xs font-bold text-gray-500"><span>{{ t('classroom.role_assignments.effective_from') }}</span><input v-model="effectiveFrom" type="date" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800" /></label>
                     <label class="space-y-1 text-xs font-bold text-gray-500"><span>{{ t('classroom.role_assignments.effective_to') }}</span><input v-model="effectiveTo" type="date" :min="effectiveFrom" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800" /></label>
                 </div>
@@ -245,7 +246,7 @@ onMounted(load)
                 <div v-if="scopeReady && localCanManage" class="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto]">
                     <SearchableSelect v-model="userId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" :no-results-text="userQuery.length < 2 ? t('classroom.role_assignments.user_search_hint') : userError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" />
                     <SearchableSelect v-model="roleId" :options="roleOptions" :placeholder="t('classroom.role_assignments.select_role')" :aria-label="t('classroom.role_assignments.role')" />
-                    <div class="flex gap-2"><button type="button" class="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40" :disabled="saving || !userId || !roleId || !canListUsers" @click="mutateAssignment('local')">{{ t('rbac.platform_teaching_assignments.regrant') }}</button><button type="button" class="rounded-xl border border-amber-300 px-3 py-2 text-xs font-black text-amber-800 disabled:opacity-40" :disabled="saving || !userId || !roleId || !canListUsers" @click="excludeRole">{{ t('rbac.platform_teaching_assignments.exclude') }}</button></div>
+                    <div class="flex flex-wrap gap-2"><button type="button" class="min-h-11 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40" :disabled="saving || !userId || !roleId || !canListUsers" @click="mutateAssignment('local')">{{ saving ? t('common.saving') : t('rbac.platform_teaching_assignments.regrant') }}</button><button type="button" class="min-h-11 rounded-xl border border-amber-300 px-3 py-2 text-xs font-black text-amber-800 disabled:opacity-40" :disabled="saving || !userId || !roleId || !canListUsers" @click="excludeRole">{{ saving ? t('common.saving') : t('rbac.platform_teaching_assignments.exclude') }}</button></div>
                 </div>
                 <p v-if="scopeReady && localCanManage && !canListUsers" class="mt-2 text-xs text-amber-700">{{ t('rbac.platform_teaching_assignments.directory_required') }}</p>
                 <div class="mt-5 grid gap-4 xl:grid-cols-2">

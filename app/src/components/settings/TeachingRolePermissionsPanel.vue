@@ -5,7 +5,6 @@ import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { SessionService } from '@/services/session/SessionService'
 import type { PolicyScope } from '@/models/Rbac'
 import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue'
-import PlatformTeachingRoleAssignmentsPanel from '@/components/settings/PlatformTeachingRoleAssignmentsPanel.vue'
 import { useFeedback } from '@/composables/useFeedback'
 
 type ClassroomOption = { id: string; name: string; teaching_id?: string }
@@ -86,6 +85,5 @@ onMounted(load)
                 :can-manage-role-definitions="false" />
             <p v-else class="rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">{{ t('rbac.scope.select_context') }}</p>
         </div>
-        <PlatformTeachingRoleAssignmentsPanel />
     </section>
 </template>
