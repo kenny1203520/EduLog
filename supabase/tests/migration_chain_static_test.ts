@@ -757,7 +757,7 @@ Deno.test('1000061 binds RBAC scopes and serializes idempotency reservations', (
   assertStringIncludes(concurrencyScope, "'teaching.holidays.read', 'teaching.holidays.list'")
 })
 
-Deno.test('RBAC scope constraint migrations preserve and extend teaching scopes', () => {
+Deno.test('historical RBAC scope migrations preserve their compatibility fixtures', () => {
   for (const migration of [scopeCompatibility, scopeForwardFix]) {
     assertStringIncludes(migration, "scope_type IN ('system', 'teaching', 'classroom', 'class_session')")
     assertStringIncludes(migration, 'role_permission_policies_scope_type_check')
@@ -770,10 +770,10 @@ Deno.test('RBAC scope constraint migrations preserve and extend teaching scopes'
     assertStringIncludes(migration, 'review data before migration')
   }
   assertStringIncludes(scopeForwardFix, 'apply migrations through 1000064 first')
-  assertStringIncludes(rbacScopeIntegration, 'role_permission_policies does not allow teaching scope')
-  assertStringIncludes(rbacScopeIntegration, 'user_role_assignments does not allow teaching scope')
-  assertStringIncludes(rbacScopeIntegration, 'invalid role policy scope was accepted')
-  assertStringIncludes(rbacScopeIntegration, 'invalid role assignment scope was accepted')
+  assertStringIncludes(rbacScopeIntegration, 'role_permission_policies has invalid scope types')
+  assertStringIncludes(rbacScopeIntegration, 'user_role_assignments has invalid scope types')
+  assertStringIncludes(rbacScopeIntegration, 'legacy teaching policy scope was accepted')
+  assertStringIncludes(rbacScopeIntegration, 'legacy teaching assignment scope was accepted')
   assertStringIncludes(rbacScopeLegacyFixture, "CHECK (scope_type IN ('system', 'classroom', 'class_session')) NOT VALID")
   assertStringIncludes(rbacScopeLegacyFixture, 'role_permission_policy_scope_shape')
 })
@@ -908,4 +908,6 @@ Deno.test('1000100 keeps platform teaching roles in their own RBAC domain', () =
   assertStringIncludes(platformTeachingRolesWithoutWorkspace, "domain IN ('system', 'teaching') AND teaching_id IS NULL")
   assertStringIncludes(platformTeachingRolesWithoutWorkspace, 'DROP CONSTRAINT IF EXISTS roles_domain_teaching_shape')
   assertStringIncludes(platformTeachingRolesWithoutWorkspace, 'ADD CONSTRAINT roles_domain_teaching_shape')
+  assertStringIncludes(platformTeachingRolesWithoutWorkspace, "CHECK (scope_type IN ('system', 'classroom', 'class_session'))")
+  assertStringIncludes(platformTeachingRolesWithoutWorkspace, 'DROP CONSTRAINT IF EXISTS user_role_assignments_scope_type_check')
 })

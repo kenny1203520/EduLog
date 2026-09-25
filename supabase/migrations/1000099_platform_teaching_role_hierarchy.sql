@@ -278,6 +278,9 @@ ALTER TABLE public.role_permission_policies ADD CONSTRAINT role_permission_polic
   (scope_type = 'system' AND scope_id IS NULL)
   OR (scope_type IN ('classroom', 'class_session') AND scope_id IS NOT NULL)
 );
+ALTER TABLE public.role_permission_policies DROP CONSTRAINT IF EXISTS role_permission_policies_scope_type_check;
+ALTER TABLE public.role_permission_policies ADD CONSTRAINT role_permission_policies_scope_type_check
+  CHECK (scope_type IN ('system', 'classroom', 'class_session'));
 ALTER TABLE public.user_role_assignments DROP CONSTRAINT IF EXISTS user_role_assignment_scope_shape;
 ALTER TABLE public.user_role_assignments DROP CONSTRAINT IF EXISTS user_role_assignments_scope_shape;
 ALTER TABLE public.user_role_assignments ADD CONSTRAINT user_role_assignment_scope_shape CHECK (
