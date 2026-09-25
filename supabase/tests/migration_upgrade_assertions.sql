@@ -14,9 +14,11 @@ BEGIN
   SELECT teaching_id INTO course_teaching
   FROM public.courses
   WHERE id = '50000000-0000-0000-0000-0000000000bb';
+  -- After platform promotion there is one teaching-domain root; quarantined
+  -- workspace rows are archival history and no longer own runtime records.
   SELECT id INTO quarantine_teaching
   FROM public.teachings
-  WHERE is_quarantine = true;
+  WHERE is_global = true;
   SELECT teaching_id INTO classroom_session_teaching
   FROM public.class_sessions
   WHERE id = '60000000-0000-0000-0000-0000000000aa';
@@ -28,7 +30,7 @@ BEGIN
   WHERE id = '60000000-0000-0000-0000-0000000000ac';
 
   IF classroom_teaching IS NULL OR course_teaching IS NULL OR quarantine_teaching IS NULL THEN
-    RAISE EXCEPTION 'owner/course/quarantine teaching backfill failed';
+    RAISE EXCEPTION 'platform teaching root backfill failed';
   END IF;
   IF classroom_session_teaching IS DISTINCT FROM classroom_teaching THEN
     RAISE EXCEPTION 'classroom teaching must take precedence over course teaching';
@@ -36,8 +38,14 @@ BEGIN
   IF course_session_teaching IS DISTINCT FROM course_teaching THEN
     RAISE EXCEPTION 'course teaching fallback failed';
   END IF;
+  IF classroom_teaching IS DISTINCT FROM quarantine_teaching
+     OR course_teaching IS DISTINCT FROM quarantine_teaching
+     OR classroom_session_teaching IS DISTINCT FROM quarantine_teaching
+     OR course_session_teaching IS DISTINCT FROM quarantine_teaching THEN
+    RAISE EXCEPTION 'teaching data was not assigned to the platform root';
+  END IF;
   IF quarantine_session_teaching IS DISTINCT FROM quarantine_teaching THEN
-    RAISE EXCEPTION 'quarantine teaching fallback failed';
+    RAISE EXCEPTION 'session was not promoted to platform teaching root';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.teaching_members
