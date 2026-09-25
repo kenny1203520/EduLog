@@ -48,12 +48,15 @@ BEGIN
     RAISE EXCEPTION 'session was not promoted to platform teaching root';
   END IF;
   IF NOT EXISTS (
-    SELECT 1 FROM public.teaching_members
-    WHERE teaching_id = classroom_teaching
-      AND user_id = '00000000-0000-0000-0000-0000000000aa'
-      AND status = 'active'
+    SELECT 1
+    FROM public.user_role_assignments assignment
+    JOIN public.roles role ON role.id = assignment.role_id
+    WHERE assignment.scope_type = 'system' AND assignment.scope_id IS NULL
+      AND assignment.user_id = '00000000-0000-0000-0000-0000000000aa'
+      AND assignment.status = 'active' AND role.domain = 'teaching'
+      AND role.code = 'teaching_owner'
   ) THEN
-    RAISE EXCEPTION 'owner membership backfill failed';
+    RAISE EXCEPTION 'platform teaching owner assignment backfill failed';
   END IF;
 END;
 $$;
@@ -61,15 +64,15 @@ DO $$
 DECLARE teacher_membership_count integer;
 BEGIN
   SELECT count(*) INTO teacher_membership_count
-  FROM public.teaching_members
-  WHERE teaching_id = (
-    SELECT teaching_id FROM public.classrooms
-    WHERE id = '30000000-0000-0000-0000-0000000000aa'
-  )
-  AND user_id = '00000000-0000-0000-0000-0000000000bb';
+  FROM public.user_role_assignments assignment
+  JOIN public.roles role ON role.id = assignment.role_id
+  WHERE assignment.scope_type = 'system' AND assignment.scope_id IS NULL
+    AND assignment.status = 'active' AND role.domain = 'teaching'
+    AND role.code = 'teacher'
+    AND assignment.user_id = '00000000-0000-0000-0000-0000000000bb';
 
   IF teacher_membership_count <> 1 THEN
-    RAISE EXCEPTION 'teacher membership backfill was not deduplicated: %', teacher_membership_count;
+    RAISE EXCEPTION 'platform teacher assignment backfill was not deduplicated: %', teacher_membership_count;
   END IF;
 END;
 $$;
@@ -81,10 +84,9 @@ BEGIN
     FROM public.report_templates template
     JOIN public.teachings teaching ON teaching.id = template.teaching_id
     WHERE template.id = '51000000-0000-0000-0000-0000000000aa'
-      AND teaching.owner_user_id = '00000000-0000-0000-0000-0000000000aa'
-      AND teaching.is_quarantine = false
+      AND teaching.is_global = true
   ) THEN
-    RAISE EXCEPTION 'legacy report template teaching bridge failed';
+    RAISE EXCEPTION 'report template was not promoted to platform teaching root';
   END IF;
 
   IF NOT EXISTS (
