@@ -30,7 +30,7 @@
 
                     <!-- Sidebar Toggle (Desktop) -->
                     <button @click="isSidebarCollapsed = !isSidebarCollapsed"
-                        class="hidden md:flex p-2.5 rounded-xl bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-emerald-600 hover:border-emerald-100 transition-all active:scale-95"
+                        class="hidden xl:flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-white border border-gray-100 shadow-sm text-gray-400 hover:text-emerald-600 hover:border-emerald-100 transition-all active:scale-95"
                         :title="isSidebarCollapsed ? t('nav.expand') : t('nav.collapse')">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform duration-500"
                             :class="{ 'rotate-180': isSidebarCollapsed }" fill="none" viewBox="0 0 24 24"
@@ -64,10 +64,10 @@
 
         <div class="flex-1 min-h-0 flex relative overflow-hidden">
             <!-- Left Pane: Report List -->
-            <div class="w-full md:w-1/3 md:min-w-[400px] md:max-w-md bg-white flex flex-col h-full z-10 transition-all duration-500 border-r border-gray-100 min-h-0"
+            <div class="w-full xl:w-1/3 xl:min-w-[400px] xl:max-w-md bg-white flex flex-col h-full z-10 transition-all duration-500 border-r border-gray-100 min-h-0"
                 :class="{
-                    'hidden md:flex': selectedReport,
-                    'md:!w-0 md:!min-w-0 md:!max-w-0 md:opacity-0 md:pointer-events-none md:-translate-x-full': isSidebarCollapsed
+                    'hidden xl:flex': selectedReport,
+                    'xl:!w-0 xl:!min-w-0 xl:!max-w-0 xl:opacity-0 xl:pointer-events-none xl:-translate-x-full': isSidebarCollapsed
                 }">
 
                 <!-- Search/Filter Bar for List -->
@@ -226,8 +226,8 @@
             </div>
 
             <!-- Right Pane: Editor -->
-            <div class="flex-1 bg-gray-50 p-3 sm:p-3 flex flex-col relative w-full md:w-auto h-full min-h-0 overflow-hidden"
-                :class="{ 'hidden md:flex': !selectedReport }">
+            <div class="min-w-0 flex-1 bg-gray-50 p-3 sm:p-3 flex flex-col relative w-full xl:w-auto h-full min-h-0 overflow-hidden"
+                :class="{ 'hidden xl:flex': !selectedReport }">
 
                 <div v-if="selectedReport" class="flex-1 flex flex-col max-w-7xl mx-auto w-full h-full min-h-0">
                     <!-- Context Banner -->
@@ -243,7 +243,7 @@
                             <div class="flex items-center gap-3">
                                 <!-- Back Button (Mobile) -->
                                 <button @click="selectedReport = null"
-                                    class="lg:hidden p-3 -ml-2 text-gray-400 hover:text-emerald-600 bg-gray-50 hover:bg-white rounded-2xl active:scale-95 transition-all shadow-sm"
+                                    class="xl:hidden p-3 -ml-2 text-gray-400 hover:text-emerald-600 bg-gray-50 hover:bg-white rounded-2xl active:scale-95 transition-all shadow-sm"
                                     :aria-label="t('common.back') || 'Back to list'"
                                     :title="t('common.back') || 'Back to list'">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
