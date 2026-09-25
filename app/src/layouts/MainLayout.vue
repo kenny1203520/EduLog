@@ -1,28 +1,69 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
+import { useFeedback } from '@/composables/useFeedback'
 
 const auth = useAuthStore()
 const router = useRouter()
 const preferences = usePreferencesStore()
+const { info, reportError } = useFeedback()
 const isSidebarOpen = ref(false)
 const isDesktopSidebarOpen = ref(true)
+const accountMenuOpen = ref(false)
+const logoutBusy = ref(false)
+const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine)
+const pendingRequests = ref(0)
+const accountDisplayName = computed(() => auth.user?.nickname?.trim() || auth.user?.display_name?.trim() || auth.user?.full_name?.trim() || auth.user?.email || '')
+const accountInitial = computed(() => accountDisplayName.value.charAt(0).toLocaleUpperCase())
+
+function onOnline() { isOnline.value = true }
+function onOffline() { isOnline.value = false }
+function onRequestStart() { pendingRequests.value += 1 }
+function onRequestEnd() { pendingRequests.value = Math.max(0, pendingRequests.value - 1) }
+function onOfflineReady() { info('common.offline_ready') }
+function onAccountKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') accountMenuOpen.value = false
+}
 
 onMounted(() => {
     preferences.loadUserPreferences()
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    window.addEventListener('edulog:api-request-start', onRequestStart)
+    window.addEventListener('edulog:api-request-end', onRequestEnd)
+    window.addEventListener('edulog:pwa-offline-ready', onOfflineReady)
+    window.addEventListener('keydown', onAccountKeydown)
+})
+
+onUnmounted(() => {
+    window.removeEventListener('online', onOnline)
+    window.removeEventListener('offline', onOffline)
+    window.removeEventListener('edulog:api-request-start', onRequestStart)
+    window.removeEventListener('edulog:api-request-end', onRequestEnd)
+    window.removeEventListener('edulog:pwa-offline-ready', onOfflineReady)
+    window.removeEventListener('keydown', onAccountKeydown)
 })
 
 async function handleLogout() {
-    await auth.signOut()
-    router.push('/login')
+    if (logoutBusy.value) return
+    logoutBusy.value = true
+    try {
+        await auth.signOut()
+        router.push('/login')
+    } catch (error) {
+        reportError(error)
+    } finally {
+        logoutBusy.value = false
+        accountMenuOpen.value = false
+    }
 }
 </script>
 
 <template>
-    <div class="flex h-screen bg-gray-50 overflow-hidden">
+    <div class="flex h-dvh min-h-dvh overflow-hidden bg-gray-50">
         <!-- Mobile Header -->
         <div
             class="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-100 z-30 flex items-center px-4 justify-between shadow-sm">
@@ -39,22 +80,21 @@ async function handleLogout() {
                 <div class="font-bold text-emerald-600 text-lg">EduLog</div>
             </div>
 
-            <div
-                class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs">
-                {{ auth.user?.email?.charAt(0).toUpperCase() }}
-            </div>
+            <button type="button" class="flex min-h-11 min-w-11 items-center justify-center rounded-full bg-emerald-100 text-sm font-bold text-emerald-700" :aria-label="$t('nav.account_menu')" :aria-expanded="isSidebarOpen" @click="isSidebarOpen = true; accountMenuOpen = true">
+                {{ accountInitial }}
+            </button>
         </div>
 
         <!-- Sidebar Overlay (Mobile) -->
-        <div v-if="isSidebarOpen" @click="isSidebarOpen = false"
+        <div v-if="isSidebarOpen" @click="isSidebarOpen = false; accountMenuOpen = false"
             class="lg:hidden fixed inset-0 bg-black/50 z-40 transition-opacity"></div>
 
         <!-- Sidebar -->
         <aside
-            class="fixed lg:static inset-y-0 left-0 z-50 bg-white border-r border-gray-100 flex flex-col transition-all duration-300 transform lg:transform-none"
+            class="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col transform border-r border-gray-100 bg-white transition-all duration-300 lg:static lg:max-w-none lg:transform-none"
             :class="[
                 isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-                isDesktopSidebarOpen ? 'lg:w-64' : 'lg:w-0 lg:overflow-hidden'
+                    isDesktopSidebarOpen ? 'lg:w-64' : 'lg:w-0 lg:overflow-hidden'
             ]">
             <div class="p-6 flex justify-between items-center" :class="{ 'lg:hidden': !isDesktopSidebarOpen }">
                 <div class="whitespace-nowrap overflow-hidden">
@@ -230,34 +270,37 @@ async function handleLogout() {
             <!-- Subtle Divider -->
             <div class="mx-6 h-px bg-gray-100/60"></div>
 
-            <div class="p-4">
-                <div class="flex items-center mb-4 px-2">
-                    <div
-                        class="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold">
-                        {{ auth.user?.email?.charAt(0).toUpperCase() }}
-                    </div>
-                    <div class="ml-3 overflow-hidden">
-                        <p class="text-sm font-medium text-gray-700 truncate">{{ auth.user?.email }}</p>
-                    </div>
-                </div>
-                <button @click="handleLogout"
-                    class="w-full px-4 py-2 text-sm text-red-600 border border-red-200 rounded hover:bg-red-50 transition cursor-pointer flex items-center justify-center gap-2">
+            <div class="relative p-3">
+                <button type="button" class="flex min-h-14 w-full min-w-0 items-center gap-3 rounded-xl px-2 text-left hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :aria-label="$t('nav.account_menu')" :aria-expanded="accountMenuOpen" aria-haspopup="menu" @click="accountMenuOpen = !accountMenuOpen">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 font-bold text-emerald-700">{{ accountInitial }}</span>
+                    <span class="min-w-0 flex-1"><span class="block truncate text-sm font-bold text-gray-800">{{ accountDisplayName }}</span><span class="block truncate text-xs text-gray-500">{{ auth.user?.email }}</span></span>
+                    <svg class="h-4 w-4 shrink-0 text-gray-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.22 7.47a.75.75 0 011.06 0L10 11.19l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 8.53a.75.75 0 010-1.06z" clip-rule="evenodd" /></svg>
+                </button>
+                <div v-if="accountMenuOpen" class="absolute bottom-full left-3 right-3 z-50 mb-2 rounded-2xl border border-gray-200 bg-white p-2 shadow-xl" role="group" :aria-label="$t('nav.account_menu')">
+                    <router-link to="/dashboard/settings?tab=personal" class="block min-h-11 rounded-xl px-3 py-3 text-sm font-bold text-gray-700 hover:bg-emerald-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" @click="accountMenuOpen = false; isSidebarOpen = false">{{ $t('nav.account_settings') }}</router-link>
+                    <button type="button" @click="handleLogout" :disabled="logoutBusy" class="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-3 text-sm font-bold text-red-600 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-600 disabled:opacity-50">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
-                    {{ $t('nav.logout') }}
-                </button>
+                    {{ logoutBusy ? $t('common.processing') : $t('nav.logout') }}
+                    </button>
+                </div>
             </div>
         </aside>
 
         <!-- Main Content -->
-        <main class="flex-1 overflow-auto bg-gray-50 pt-16 lg:pt-0 relative transition-all duration-300">
+        <main class="relative min-w-0 flex-1 overflow-auto bg-gray-50 pt-16 transition-all duration-300 lg:pt-0">
+            <div v-if="!isOnline" class="sticky top-0 z-40 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm font-bold text-amber-900" role="status" aria-live="polite">{{ $t('common.offline_notice') }}</div>
+            <div v-else-if="pendingRequests > 0" class="fixed left-0 right-0 top-0 z-[70] h-1 bg-emerald-100 lg:left-64" role="status" aria-live="polite">
+                <div class="h-full w-1/3 motion-safe:animate-pulse rounded-full bg-emerald-600" aria-hidden="true"></div>
+                <span class="sr-only">{{ $t('common.processing') }}</span>
+            </div>
             <!-- Desktop Toggle Bar (Sticky) -->
             <div class="hidden lg:flex sticky top-0 z-20 px-8 py-4 bg-gray-50/90 backdrop-blur-sm items-center gap-2">
                 <button @click="isDesktopSidebarOpen = !isDesktopSidebarOpen"
-                    class="p-2 -ml-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-2 group"
+                    class="min-h-11 min-w-11 p-2 -ml-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all flex items-center gap-2 group focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600"
                     :title="isDesktopSidebarOpen ? $t('nav.collapse') : $t('nav.expand')">
                     <div
                         class="p-1 rounded-md border border-gray-200 bg-white group-hover:border-emerald-200 transition-colors shadow-sm">
@@ -276,7 +319,7 @@ async function handleLogout() {
                 </button>
             </div>
 
-            <div class="px-3 pb-4 lg:px-6 lg:pb-6">
+            <div class="min-w-0 px-3 pb-4 lg:px-6 lg:pb-6">
                 <router-view />
             </div>
         </main>

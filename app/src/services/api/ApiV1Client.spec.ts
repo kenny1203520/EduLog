@@ -24,6 +24,31 @@ describe('ApiV1Client', () => {
     expect(headers.get('idempotency-key')).toBe('repeatable-key')
   })
 
+  it('announces pending API activity and ends it after the response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: [], request_id: 'r', trace_id: 't' }), { status: 200 }))
+    const started = vi.fn()
+    const ended = vi.fn()
+    window.addEventListener('edulog:api-request-start', started)
+    window.addEventListener('edulog:api-request-end', ended)
+
+    await new ApiV1Client('/api').get('/students')
+
+    expect(started).toHaveBeenCalledTimes(1)
+    expect(ended).toHaveBeenCalledTimes(1)
+    window.removeEventListener('edulog:api-request-start', started)
+    window.removeEventListener('edulog:api-request-end', ended)
+  })
+
+  it('blocks mutation requests when the browser is offline', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false)
+
+    await expect(new ApiV1Client('/api').post('/students', { name: 'Learner' })).rejects.toThrow('Network offline')
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    online.mockRestore()
+  })
+
   it('maps the standard error envelope', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ error: { code: 'PERMISSION_DENIED', message: 'Denied', request_id: 'r', trace_id: 't', fields: { role: ['required'] } } }), { status: 403 }))
     await expect(new ApiV1Client('/api').get('/roles')).rejects.toMatchObject<ApiV1Error>({ status: 403, code: 'PERMISSION_DENIED', requestId: 'r', traceId: 't', fields: { role: ['required'] } })

@@ -8,6 +8,6 @@ const updateSW = registerSW({
     useAppUpdatePrompt().open(() => updateSW(true))
   },
   onOfflineReady() {
-    console.log('App ready to work offline')
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('edulog:pwa-offline-ready'))
   },
 })
