@@ -33,6 +33,16 @@ INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time
 SELECT '96000000-0000-4000-8000-000000000001', 'Lifecycle Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '09:00', '10:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', DATE '2026-03-31', teaching.id
 FROM public.teachings teaching WHERE teaching.is_global LIMIT 1
 ON CONFLICT (id) DO NOTHING;
+-- Legacy session ownership is cleared by the global-data migration. Model the
+-- report actor through the supported teacher-account link and assignment.
+INSERT INTO public.teacher_records(id, profile_id)
+SELECT '9c000000-0000-4000-8000-000000000001', profile.id
+FROM public.profiles profile
+WHERE profile.auth_user_id = '91000000-0000-4000-8000-000000000001'
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.class_session_teachers(class_session_id, teacher_id, effective_from, effective_to)
+VALUES ('96000000-0000-4000-8000-000000000001', '9c000000-0000-4000-8000-000000000001', DATE '2020-01-01', NULL)
+ON CONFLICT (class_session_id, teacher_id, effective_from) DO NOTHING;
 INSERT INTO public.class_session_schedule_rules(id, class_session_id, schedule_kind, day_of_week, start_time, end_time)
 VALUES ('97000000-0000-4000-8000-000000000001', '96000000-0000-4000-8000-000000000001', 'weekly', 1, '09:00', '10:00')
 ON CONFLICT (id) DO NOTHING;
