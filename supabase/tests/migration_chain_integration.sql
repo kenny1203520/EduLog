@@ -306,24 +306,32 @@ $$;
 
 INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-000000000001', 'owner-a@example.test'),
-  ('00000000-0000-0000-0000-000000000002', 'owner-b@example.test')
+  ('00000000-0000-0000-0000-000000000002', 'owner-b@example.test'),
+  ('00000000-0000-0000-0000-000000000003', 'unassigned@example.test')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.teachings(id, name, owner_user_id) VALUES
-  ('10000000-0000-0000-0000-000000000001', 'Teaching A', '00000000-0000-0000-0000-000000000001'),
-  ('20000000-0000-0000-0000-000000000002', 'Teaching B', '00000000-0000-0000-0000-000000000002')
-ON CONFLICT (id) DO NOTHING;
+-- Teaching roles are assigned at the platform root and stay separate from
+-- system-administration roles. Either root teaching assignment covers the
+-- shared classroom directory; an unassigned account gets no such access.
+INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, effective_to, status)
+SELECT account.id, role.id, 'system', NULL, CURRENT_DATE, NULL, 'active'
+FROM auth.users account
+CROSS JOIN public.roles role
+WHERE account.id IN (
+    '00000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000002'
+  )
+  AND role.code = 'teaching_owner'
+  AND role.domain = 'teaching'
+ON CONFLICT DO NOTHING;
 
-INSERT INTO public.teaching_members(teaching_id, user_id, role_id)
-SELECT teaching.id, teaching.owner_user_id, role.id
-FROM public.teachings teaching
-JOIN public.roles role ON role.code = 'teaching_owner'
-WHERE teaching.id IN ('10000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000002')
-ON CONFLICT (teaching_id, user_id) DO NOTHING;
-
-INSERT INTO public.classrooms(id, name, user_id, teaching_id) VALUES
-  ('30000000-0000-0000-0000-000000000001', 'A classroom', '00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001'),
-  ('40000000-0000-0000-0000-000000000002', 'B classroom', '00000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000002')
+INSERT INTO public.classrooms(id, name, user_id, teaching_id)
+SELECT classroom.id, classroom.name, NULL, teaching.id
+FROM (VALUES
+  ('30000000-0000-0000-0000-000000000001'::uuid, 'A classroom'),
+  ('40000000-0000-0000-0000-000000000002'::uuid, 'B classroom')
+) AS classroom(id, name)
+CROSS JOIN LATERAL (SELECT id FROM public.teachings WHERE is_global LIMIT 1) teaching
 ON CONFLICT (id) DO NOTHING;
 
 SET ROLE authenticated;
@@ -331,8 +339,23 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM public.classrooms) <> 1 THEN
-    RAISE EXCEPTION 'cross-teaching RLS isolation failed';
+  IF (SELECT count(*) FROM public.classrooms WHERE NOT is_virtual) <> 2 THEN
+    RAISE EXCEPTION 'platform teaching role did not grant access to the shared classroom directory';
+  END IF;
+  IF public.has_system_permission(auth.uid(), 'system.audit.list') THEN
+    RAISE EXCEPTION 'teaching role granted a system-administration permission';
+  END IF;
+END;
+$$;
+RESET ROLE;
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
+DO $$
+BEGIN
+  IF (SELECT count(*) FROM public.classrooms WHERE NOT is_virtual) <> 0 THEN
+    RAISE EXCEPTION 'teaching role membership was required for classroom access';
   END IF;
 END;
 $$;
@@ -369,8 +392,8 @@ DECLARE beta uuid := gen_random_uuid();
 BEGIN
   SELECT epoch INTO before_epoch FROM public.rbac_policy_epoch WHERE singleton;
   INSERT INTO public.roles(id, code, name, is_system, domain, teaching_id) VALUES
-    (alpha, 'integration_alpha_' || left(alpha::text, 8), 'Integration alpha', false, 'teaching', '10000000-0000-0000-0000-000000000001'),
-    (beta, 'integration_beta_' || left(beta::text, 8), 'Integration beta', false, 'teaching', '10000000-0000-0000-0000-000000000001');
+    (alpha, 'integration_alpha_' || left(alpha::text, 8), 'Integration alpha', false, 'teaching', NULL),
+    (beta, 'integration_beta_' || left(beta::text, 8), 'Integration beta', false, 'teaching', NULL);
   INSERT INTO public.role_inheritance(role_id, parent_role_id) VALUES (alpha, beta);
   BEGIN
     INSERT INTO public.role_inheritance(role_id, parent_role_id) VALUES (beta, alpha);
