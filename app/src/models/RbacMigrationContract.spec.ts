@@ -97,6 +97,7 @@ describe('RBAC migration contract', () => {
         expect(platformTeachingHierarchy).toContain("CASE WHEN bool_or(policy.effect = 'deny') THEN 'deny' ELSE 'allow' END")
         expect(platformTeachingHierarchy).not.toContain("scope_type = 'teaching' AND scope_id IS NULL")
         expect(platformTeachingHierarchy).toContain('SELECT DISTINCT member.user_id, member.role_id')
+        expect(platformTeachingHierarchy).toContain("'system'::text, NULL::uuid")
         expect(platformTeachingHierarchy).toContain('member.effective_from, member.effective_to, member.status')
         expect(platformTeachingHierarchy).toContain('a.effective_from <= COALESCE(b.effective_to, \'infinity\'::date)')
         expect(platformTeachingHierarchy).toContain('b.effective_from <= COALESCE(a.effective_to, \'infinity\'::date)')

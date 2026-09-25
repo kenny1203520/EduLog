@@ -105,7 +105,7 @@ WHERE assignment.role_id = role.id
   AND assignment.scope_type = 'teaching';
 
 INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, effective_to, status)
-SELECT DISTINCT member.user_id, member.role_id, 'system', NULL,
+SELECT DISTINCT member.user_id, member.role_id, 'system'::text, NULL::uuid,
        member.effective_from, member.effective_to, member.status
 FROM public.teaching_members member
 JOIN public.roles role ON role.id = member.role_id AND role.domain = 'teaching'
