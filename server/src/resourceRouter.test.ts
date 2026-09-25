@@ -69,19 +69,10 @@ describe('resource mutation validation boundary', () => {
     expect(adminRpc).not.toHaveBeenCalled()
   })
 
-  it('keeps teaching member status and user filtering on the server route', () => {
+  it('does not expose teaching workspace membership as a runtime resource', () => {
     const source = readFileSync(new URL('./resourceRouter.ts', import.meta.url), 'utf8')
-    expect(source).toContain("status: z.string().trim().min(1).max(32).optional()")
-    expect(source).toContain("user_id: z.string().uuid().optional()")
-    expect(source).toContain("builder = builder.eq('status', query.status)")
-    expect(source).toContain("builder = builder.eq('user_id', query.user_id)")
-    expect(source).toContain("Member search must be a user UUID")
-    expect(source).not.toContain("builder.ilike('user_id'")
-  })
-
-  it('registers the single teaching member route advertised by the contract', () => {
-    const source = readFileSync(new URL('./resourceRouter.ts', import.meta.url), 'utf8')
-    expect(source).toContain("router.get('/teachings/:teachingId/members/:userId'")
+    expect(source).not.toContain("router.get('/teachings/:teachingId/members")
+    expect(resources).not.toHaveProperty('teachings')
   })
 
   it('rejects item-only sensitive fields as collection filters', () => {

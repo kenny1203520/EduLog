@@ -2,7 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { sendData } from './response.js'
-import { listQuerySchema, resources, type ResourceDefinition, teachingMemberCreateSchema, teachingMemberUpdateSchema } from './resources.js'
+import { listQuerySchema, resources, type ResourceDefinition } from './resources.js'
 import { authorizeCollection, authorizeResource, permissionForResource } from './authorization.js'
 import { setAuditContext } from './context.js'
 
@@ -12,15 +12,6 @@ const sensitivePatchFields: Record<string, readonly string[]> = {
   teachers: ['email', 'phone', 'address', 'mailing_address', 'birthday', 'gov_id'],
 }
 const bodySchema = z.record(z.string(), z.unknown())
-const memberListQuery = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(25),
-  offset: z.coerce.number().int().min(0).max(1000000).default(0),
-  sort: z.enum(['created_at', '-created_at', 'effective_from', '-effective_from', 'status', '-status', 'user_id', '-user_id']).default('created_at'),
-  search: z.string().trim().max(200).optional(),
-  status: z.string().trim().min(1).max(32).optional(),
-  user_id: z.string().uuid().optional(),
-}).strict()
-
 export async function idempotency(req: Request, status: number, body: unknown) {
   const key = req.header('idempotency-key')?.trim()
   if (!mutationMethods.includes(req.method)) return false
@@ -65,14 +56,6 @@ function validateBody(def: ResourceDefinition, body: Record<string, unknown>, ac
 }
 
 function queryValue(req: Request, key: string) { const value = req.query[key]; return typeof value === 'string' ? value : undefined }
-
-async function globalTeachingId(req: Request) {
-  if (!req.adminDb) throw new ApiError(503, 'GLOBAL_TEACHING_SCOPE_MISSING', 'The global teaching scope is not configured')
-  const result = await req.adminDb.from('teachings').select('id').eq('is_global', true).maybeSingle()
-  if (result.error) throw mapDatabaseError(result.error)
-  if (typeof result.data?.id !== 'string') throw new ApiError(503, 'GLOBAL_TEACHING_SCOPE_MISSING', 'The global teaching scope is not configured')
-  return result.data.id
-}
 
 type FilterOperator = 'eq' | 'neq' | 'in' | 'gte' | 'lte' | 'gt' | 'lt' | 'ilike' | 'contains' | 'is'
 
@@ -355,11 +338,8 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
   }
   const userOwnedTables = new Set(['user_preferences', 'user_entity_visibility_preferences', 'copy_templates'])
    let insertBody = userOwnedTables.has(def.table) ? { ...body, user_id: req.user!.id } : body
-   // Teaching objects are global records. The server assigns their single
-   // canonical teaching scope so callers cannot create account-owned islands.
-   if (['courses', 'classrooms', 'class_sessions', 'report_templates'].includes(def.table)) {
-     insertBody = { ...insertBody, teaching_id: await globalTeachingId(req) }
-   }
+   // Legacy teaching_id markers on teaching records are normalized by the
+   // database compatibility trigger; the API no longer reads teaching spaces.
   const itemFields = def.itemFields ?? def.fields
   const result = req.method === 'POST' ? await req.db!.from(def.table).insert(insertBody).select(itemFields.join(', ')).single() : await req.db!.from(def.table).update(body).select(itemFields.join(', ')).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
@@ -370,94 +350,8 @@ export async function collection(req: Request, res: Response, def: ResourceDefin
   return res.status(status).json(envelope)
 }
 
-async function teachingAllowed(req: Request, permission: string, teachingId: string) {
-  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const { data, error } = await req.db.rpc('has_teaching_permission', { p_user_id: req.user.id, p_permission_key: permission, p_teaching_id: teachingId, p_classroom_id: null, p_class_session_id: null })
-  if (error || data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
-}
-
-async function assertTeachingRole(req: Request, teachingId: string, roleId: string | null | undefined) {
-  if (!roleId) throw new ApiError(422, 'ROLE_REQUIRED', 'A teaching role is required')
-  const result = await req.db!.from('roles').select('id,domain,teaching_id,is_builtin').eq('id', roleId).maybeSingle()
-  if (result.error) throw mapDatabaseError(result.error)
-  if (!result.data || result.data.domain !== 'teaching' || (!result.data.is_builtin && result.data.teaching_id !== teachingId)) {
-    throw new ApiError(422, 'INVALID_TEACHING_ROLE', 'The role is not available in this teaching')
-  }
-}
-
-async function assertTeachingOwnerIsPreserved(req: Request, teachingId: string, userId: string) {
-  const result = await req.db!.from('teachings').select('owner_user_id').eq('id', teachingId).maybeSingle()
-  if (result.error) throw mapDatabaseError(result.error)
-  if (result.data?.owner_user_id === userId) throw new ApiError(409, 'PROTECTED_TEACHING_OWNER', 'The teaching owner membership cannot be removed or reassigned')
-}
-
-async function members(req: Request, res: Response) {
-  const teachingId = typeof req.params.teachingId === 'string' ? req.params.teachingId : undefined
-  const userId = typeof req.params.userId === 'string' ? req.params.userId : undefined
-  if (!teachingId) throw new ApiError(400, 'INVALID_TEACHING_ID', 'Teaching id is required')
-  if (!z.string().uuid().safeParse(teachingId).success) throw new ApiError(400, 'INVALID_TEACHING_ID', 'Teaching id is invalid')
-  if (userId && !z.string().uuid().safeParse(userId).success) throw new ApiError(400, 'INVALID_USER_ID', 'Member user id is invalid')
-  const action = req.method === 'GET' ? (userId ? 'read' : 'list') : req.method === 'POST' ? 'create' : req.method === 'PATCH' ? 'update' : 'delete'
-  setAuditContext(req, { domain: 'teaching', resource: 'members', action, resourceId: userId ?? null, teachingId: teachingId ?? null, scopeId: teachingId ?? null, scopeType: 'teaching', permission: `teaching.members.${action}` })
-  await teachingAllowed(req, `teaching.members.${action}`, teachingId)
-  if (req.method === 'GET') {
-    const query = memberListQuery.parse(req.query)
-    let builder = req.db!.from('teaching_members').select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at', { count: 'exact' }).eq('teaching_id', teachingId)
-    if (userId) builder = builder.eq('user_id', userId)
-    else if (query.user_id) builder = builder.eq('user_id', query.user_id)
-    if (query.search) {
-      // user_id is a UUID column.  PostgreSQL cannot apply ILIKE to UUID,
-      // and coercing arbitrary text would turn search into a runtime 500.
-      // Keep the compatibility query parameter but make it an exact UUID
-      // lookup, matching the explicit user_id filter semantics.
-      if (!z.string().uuid().safeParse(query.search).success) throw new ApiError(400, 'INVALID_SEARCH', 'Member search must be a user UUID')
-      builder = builder.eq('user_id', query.search)
-    }
-    if (query.status) builder = builder.eq('status', query.status)
-    const sortName = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
-    const result = await builder.order(sortName, { ascending: !query.sort.startsWith('-') }).range(query.offset, query.offset + query.limit - 1)
-    if (result.error) throw mapDatabaseError(result.error)
-    if (userId) {
-      if (!result.data?.[0]) throw new ApiError(404, 'NOT_FOUND', 'Teaching member was not found')
-      return sendData(req, res, result.data[0])
-    }
-    return sendData(req, res, result.data ?? [], { limit: query.limit, offset: query.offset, total: result.count ?? 0, sort: query.sort })
-  }
-  if (req.method === 'POST') {
-    const body = teachingMemberCreateSchema.parse(req.body)
-    await assertTeachingRole(req, teachingId, body.role_id)
-    const allowedFields = ['user_id', 'role_id', 'status', 'effective_from', 'effective_to']
-    const unknown = Object.keys(body).filter((key) => !allowedFields.includes(key))
-    if (unknown.length) throw new ApiError(422, 'UNKNOWN_FIELD', 'The request contains a non-writable field')
-    const replay = await idempotency(req, 201, null)
-    if (replay) return res.status(replay.status).json(replay.body)
-    const result = await req.db!.from('teaching_members').insert({ ...body, teaching_id: teachingId }).select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').single()
-    if (result.error) throw mapDatabaseError(result.error)
-    const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, envelope); return res.status(201).json(envelope)
-  }
-  if (!userId) throw new ApiError(400, 'INVALID_USER_ID', 'Member user id is required')
-  const updateBody = req.method === 'PATCH'
-    ? teachingMemberUpdateSchema.parse(req.body)
-    : null
-  if (req.method === 'PATCH' && !Object.keys(updateBody ?? {}).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one member field is required')
-  if (req.method === 'PATCH' && updateBody?.role_id) await assertTeachingRole(req, teachingId, updateBody.role_id)
-  if (req.method === 'DELETE' || (req.method === 'PATCH' && (updateBody?.role_id || updateBody?.status === 'removed'))) await assertTeachingOwnerIsPreserved(req, teachingId, userId)
-  const replay = await idempotency(req, 200, null)
-  if (replay) return res.status(replay.status).json(replay.body)
-  const result = req.method === 'DELETE'
-    ? await req.db!.from('teaching_members').delete().eq('teaching_id', teachingId).eq('user_id', userId).select('teaching_id,user_id,role_id,status,effective_from,effective_to').maybeSingle()
-    : await req.db!.from('teaching_members').update(updateBody ?? {}).eq('teaching_id', teachingId).eq('user_id', userId).select('teaching_id,user_id,role_id,status,effective_from,effective_to,created_at,updated_at').maybeSingle()
-  if (result.error) throw mapDatabaseError(result.error)
-  if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Teaching member was not found')
-  const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
-}
 export function createResourceRouter() {
   const router = Router()
-  router.get('/teachings/:teachingId/members', wrap((req, res) => members(req, res)))
-  router.post('/teachings/:teachingId/members', wrap((req, res) => members(req, res)))
-  router.get('/teachings/:teachingId/members/:userId', wrap((req, res) => members(req, res)))
-  router.patch('/teachings/:teachingId/members/:userId', wrap((req, res) => members(req, res)))
-  router.delete('/teachings/:teachingId/members/:userId', wrap((req, res) => members(req, res)))
   for (const [route, def] of Object.entries(resources)) {
     const methods = new Set(def.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
     if (methods.has('GET')) router.get(`/${route}`, wrap((req, res) => collection(req, res, def)))

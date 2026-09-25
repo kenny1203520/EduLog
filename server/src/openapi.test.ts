@@ -112,8 +112,12 @@ describe('generated API contract', () => {
     expect(spec.paths['/api/class-sessions/{sessionId}/teachers'].get?.parameters?.some((parameter) => parameter.name === 'sessionId')).toBe(true)
     expect(spec.paths['/api/class-sessions/{sessionId}/teachers/{assignmentId}'].patch?.['x-permission']).toBe('teaching.class_sessions.update')
     expect(spec.paths['/api/class-sessions/{sessionId}/teachers/{assignmentId}'].patch?.parameters?.some((parameter) => parameter.name === 'assignmentId')).toBe(true)
-    expect(spec.paths['/api/teachings/{teachingId}/members'].get?.parameters?.some((parameter) => parameter.name === 'teachingId')).toBe(true)
-    expect(spec.paths['/api/teachings/{teachingId}/members/{userId}'].get?.['x-permission']).toBe('teaching.members.read')
+    expect(spec.paths).not.toHaveProperty('/api/teachings/{teachingId}/members')
+    expect(spec.paths['/api/teaching-role-assignments'].post?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-assignments/scoped'].get?.parameters?.some((parameter) => parameter.name === 'scope_type')).toBe(true)
+    expect(spec.paths['/api/teaching-role-assignments/scoped/{id}'].patch?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-exclusions'].post?.['x-permission']).toBe('teaching.roles.manage')
+    expect(spec.paths['/api/teaching-role-exclusions/{id}'].patch?.['x-permission']).toBe('teaching.roles.manage')
     expect(spec.paths['/api/class-sessions/{id}'].delete?.parameters?.some((parameter) => parameter.name === 'id')).toBe(true)
   })
 
@@ -343,7 +347,6 @@ describe('generated API contract', () => {
     const progressSchemas = progressLetter.anyOf ?? [progressLetter]
     expect(progressSchemas).toEqual(expect.arrayContaining([expect.objectContaining({ pattern: '^[A-Z](-[A-Z])?$' })]))
     expect(spec.components.schemas.ReportCreateMutation.additionalProperties).toBe(false)
-    expect(spec.components.schemas.TeachingMemberUpdateMutation.additionalProperties).toBe(false)
   })
 
   it('keeps specialized mutation schemas sourced from runtime validators', () => {

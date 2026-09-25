@@ -84,9 +84,9 @@ export function requestContext(logger: pino.Logger) {
     req.auditContext = {
       resource: req.path.split('/').filter(Boolean)[1] ?? 'unknown',
       resourceId: typeof params.id === 'string' ? params.id : typeof params.userId === 'string' ? params.userId : null,
-      teachingId: typeof params.teachingId === 'string' ? params.teachingId : null,
-        scopeId: typeof params.teachingId === 'string' ? params.teachingId : null,
-        scopeType: typeof params.teachingId === 'string' ? 'teaching' : null,
+      teachingId: null,
+      scopeId: null,
+      scopeType: null,
     }
     req.log = logger.child({ request_id: req.requestId, trace_id: req.traceId, route: req.path, method: req.method })
     res.setHeader('X-Request-Id', req.requestId)

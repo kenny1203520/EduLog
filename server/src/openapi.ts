@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { resources, resourceSchemas, teachingMemberCreateSchema, teachingMemberUpdateSchema } from './resources.js'
+import { resources, resourceSchemas } from './resources.js'
 import { enrollmentBodySchema, enrollmentCreateSchema } from './enrollmentRouter.js'
 import { occurrenceBodySchema, occurrenceGenerationSchema } from './occurrenceRouter.js'
 import { reportCreateSchema, reportUpdateSchema, reportCollaborationSchema } from './reportRouter.js'
@@ -203,15 +203,6 @@ export function buildOpenApi() {
         ...errorResponses,
       },
     },
-  }
-  paths['/api/teachings/{teachingId}/members'] = {
-    get: { operationId: 'teaching_members_list', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.members.list', parameters: [pathParam('teachingId'), { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { $ref: '#/components/parameters/Sort' }, { $ref: '#/components/parameters/Filters' }, { name: 'user_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } }, { name: 'status', in: 'query', required: false, schema: { type: 'string', minLength: 1, maxLength: 32 } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-    post: { operationId: 'teaching_members_create', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.members.create', parameters: [pathParam('teachingId'), { $ref: '#/components/parameters/IdempotencyKey' }], requestBody: refBody('TeachingMemberCreateMutation'), responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-  }
-  paths['/api/teachings/{teachingId}/members/{userId}'] = {
-    get: { operationId: 'teaching_members_get', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.members.read', parameters: [pathParam('teachingId'), pathParam('userId')], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-    patch: { operationId: 'teaching_members_update', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.members.update', parameters: [pathParam('teachingId'), pathParam('userId'), { $ref: '#/components/parameters/IdempotencyKey' }], requestBody: refBody('TeachingMemberUpdateMutation'), responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-    delete: { operationId: 'teaching_members_delete', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.members.delete', parameters: [pathParam('teachingId'), pathParam('userId'), { $ref: '#/components/parameters/IdempotencyKey' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/occurrences/generate'] = {
     post: { operationId: 'occurrences_generate', security: [{ cookieAuth: [] }], 'x-permission': 'teaching.occurrences.create', parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/OccurrenceGenerationMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
@@ -457,14 +448,14 @@ export function buildOpenApi() {
     put: { ...pageBase, operationId: 'role_parent_replace', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RoleParentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/roles/{id}/permissions'] = {
-    get: { ...pageBase, operationId: 'role_permissions_get', 'x-permission': 'system.roles.read | teaching.roles.read', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'teaching', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Permission matrix rows', content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionMatrixEnvelope' } } } }, ...errorResponses } },
+    get: { ...pageBase, operationId: 'role_permissions_get', 'x-permission': 'system.roles.read | teaching.roles.read', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { description: 'Permission matrix rows', content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionMatrixEnvelope' } } } }, ...errorResponses } },
     put: { ...pageBase, operationId: 'role_permissions_replace', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionSetMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/rbac/effective-permissions'] = {
-    get: { ...pageBase, operationId: 'rbac_effective_permissions', summary: 'Preview local, inherited and effective permissions for a role', parameters: [{ name: 'role_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'teaching', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: { ...pageBase, operationId: 'rbac_effective_permissions', summary: 'Preview local, inherited and effective permissions for a role', parameters: [{ name: 'role_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/rbac/scoped-capability'] = {
-    get: { ...pageBase, operationId: 'rbac_scoped_capability', summary: 'Check whether the current user can manage a role policy at a scope', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'teaching', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', description: 'Required for classroom and class_session; omit for system-wide teaching policy', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: { ...pageBase, operationId: 'rbac_scoped_capability', summary: 'Check whether the current user can manage a role policy at a scope', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', description: 'Required for classroom and class_session; omit for platform-wide teaching policy', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/system-role-assignments'] = {
     get: { ...pageBase, operationId: 'system_role_assignments_list', 'x-permission': 'system.role_assignments.read', parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { name: 'user_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'role_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'sort', in: 'query', schema: { type: 'string', enum: ['created_at', '-created_at', 'effective_from', '-effective_from'], default: '-created_at' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
@@ -481,6 +472,30 @@ export function buildOpenApi() {
   paths['/api/classrooms/{classroomId}/role-assignments/{assignmentId}'] = {
     patch: { ...pageBase, operationId: 'classroom_role_assignment_update', 'x-permission': 'teaching.roles.manage', parameters: [pathParam('classroomId'), pathParam('assignmentId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ClassroomRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'classroom_role_assignment_delete', 'x-permission': 'teaching.roles.manage', parameters: [pathParam('classroomId'), pathParam('assignmentId'), mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/teaching-role-assignments'] = {
+    get: { ...pageBase, operationId: 'platform_teaching_role_assignments_list', 'x-permission': 'teaching.roles.read | teaching.roles.manage', parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { name: 'user_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'role_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    post: { ...pageBase, operationId: 'platform_teaching_role_assignment_create', 'x-permission': 'teaching.roles.manage', parameters: [mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TeachingRoleAssignmentMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/teaching-role-assignments/{id}'] = {
+    patch: { ...pageBase, operationId: 'platform_teaching_role_assignment_update', 'x-permission': 'teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TeachingRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    delete: { ...pageBase, operationId: 'platform_teaching_role_assignment_delete', 'x-permission': 'teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/teaching-role-assignments/scoped'] = {
+    get: { ...pageBase, operationId: 'scoped_teaching_role_assignments_list', 'x-permission': 'teaching.roles.read | teaching.roles.manage', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    post: { ...pageBase, operationId: 'scoped_teaching_role_assignment_create', 'x-permission': 'teaching.roles.manage', parameters: [mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ScopedTeachingRoleAssignmentMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/teaching-role-assignments/scoped/{id}'] = {
+    patch: { ...pageBase, operationId: 'scoped_teaching_role_assignment_update', 'x-permission': 'teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ScopedTeachingRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    delete: { ...pageBase, operationId: 'scoped_teaching_role_assignment_delete', 'x-permission': 'teaching.roles.manage', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/teaching-role-exclusions'] = {
+    get: { ...pageBase, operationId: 'teaching_role_exclusions_list', 'x-permission': 'teaching.roles.read | teaching.roles.manage', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    post: { ...pageBase, operationId: 'teaching_role_exclusion_create', 'x-permission': 'teaching.roles.manage', parameters: [mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TeachingRoleExclusionMutation' } } } }, responses: { '201': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/teaching-role-exclusions/{id}'] = {
+    patch: { ...pageBase, operationId: 'teaching_role_exclusion_update', 'x-permission': 'teaching.roles.manage', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/TeachingRoleExclusionMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    delete: { ...pageBase, operationId: 'teaching_role_exclusion_delete', 'x-permission': 'teaching.roles.manage', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/users/{id}/status'] = {
     patch: { ...pageBase, operationId: 'user_status_update', 'x-permission': 'system.users.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/UserStatusMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
@@ -511,7 +526,7 @@ export function buildOpenApi() {
     RoleCreateMutation: {
       type: 'object', additionalProperties: false, required: ['domain', 'name', 'expected_epoch'],
       properties: {
-        domain: { type: 'string', enum: ['system', 'teaching'] }, teaching_id: { type: ['string', 'null'], format: 'uuid' },
+        domain: { type: 'string', enum: ['system', 'teaching'] },
         code: { type: ['string', 'null'], pattern: '^[a-z][a-z0-9_]*$' }, name: { type: 'string', minLength: 1, maxLength: 120 },
         description: { type: ['string', 'null'], maxLength: 500 }, parent_role_id: { type: ['string', 'null'], format: 'uuid' }, expected_epoch: { type: 'integer', minimum: 1 }, is_system: { type: 'boolean', const: false, description: 'Deprecated compatibility field; must be false' },
       },
@@ -545,12 +560,24 @@ export function buildOpenApi() {
     RolePermissionSetMutation: {
       type: 'object', additionalProperties: false, required: ['scope_type', 'expected_epoch', 'policies'],
       properties: {
-        scope_type: { type: 'string', enum: ['system', 'teaching', 'classroom', 'class_session'] }, scope_id: { type: ['string', 'null'], format: 'uuid' }, expected_epoch: { type: 'integer', minimum: 1 },
+        scope_type: { type: 'string', enum: ['system', 'classroom', 'class_session'] }, scope_id: { type: ['string', 'null'], format: 'uuid' }, expected_epoch: { type: 'integer', minimum: 1 },
         policies: { type: 'array', maxItems: 1000, items: { type: 'object', additionalProperties: false, required: ['permission_id', 'effect'], properties: { permission_id: { type: 'string', format: 'uuid' }, effect: { type: 'string', enum: ['allow', 'deny'] } } } },
       },
     },
     SystemRoleAssignmentMutation: {
       type: 'object', additionalProperties: false, required: ['user_id', 'role_id', 'expected_epoch'],
+      properties: { user_id: { type: 'string', format: 'uuid' }, role_id: { type: 'string', format: 'uuid' }, effective_from: { type: 'string', format: 'date' }, effective_to: { type: ['string', 'null'], format: 'date' }, expected_epoch: { type: 'integer', minimum: 1 } },
+    },
+    TeachingRoleAssignmentMutation: {
+      type: 'object', additionalProperties: false, required: ['user_id', 'role_id', 'expected_epoch'],
+      properties: { user_id: { type: 'string', format: 'uuid' }, role_id: { type: 'string', format: 'uuid' }, effective_from: { type: 'string', format: 'date' }, effective_to: { type: ['string', 'null'], format: 'date' }, expected_epoch: { type: 'integer', minimum: 1 } },
+    },
+    ScopedTeachingRoleAssignmentMutation: {
+      type: 'object', additionalProperties: false, required: ['scope_type', 'scope_id', 'user_id', 'role_id', 'effective_from', 'expected_epoch'],
+      properties: { scope_type: { type: 'string', enum: ['classroom', 'class_session'] }, scope_id: { type: 'string', format: 'uuid' }, user_id: { type: 'string', format: 'uuid' }, role_id: { type: 'string', format: 'uuid' }, effective_from: { type: 'string', format: 'date' }, effective_to: { type: ['string', 'null'], format: 'date' }, expected_epoch: { type: 'integer', minimum: 1 } },
+    },
+    TeachingRoleExclusionMutation: {
+      type: 'object', additionalProperties: false, required: ['user_id', 'role_id', 'effective_from', 'expected_epoch'],
       properties: { user_id: { type: 'string', format: 'uuid' }, role_id: { type: 'string', format: 'uuid' }, effective_from: { type: 'string', format: 'date' }, effective_to: { type: ['string', 'null'], format: 'date' }, expected_epoch: { type: 'integer', minimum: 1 } },
     },
     ClassroomRoleAssignmentMutation: {
@@ -577,8 +604,6 @@ export function buildOpenApi() {
     ReportCollaborationMutation: runtimeDocument(reportCollaborationSchema),
     TeacherAssignmentMutation: runtimeDocument(teacherAssignmentCreateSchema),
     TeacherAssignmentUpdateMutation: runtimeDocument(teacherAssignmentUpdateSchema),
-    TeachingMemberCreateMutation: runtimeDocument(teachingMemberCreateSchema),
-    TeachingMemberUpdateMutation: runtimeDocument(teachingMemberUpdateSchema),
     TransferMutation: runtimeDocument(transferBody),
     // Zod's JSON Schema emitter represents nullable fields conservatively and
     // can omit them from `required`; the runtime validator still requires
@@ -614,8 +639,8 @@ export function buildOpenApi() {
   }
   const pageResponseSchemas = {
     SettingsOverviewData: {
-      type: 'object', required: ['preferences', 'teachings', 'capabilities', 'tabs', 'sections'], additionalProperties: false,
-      properties: { preferences: { type: ['object', 'null'] }, teachings: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { type: 'string', format: 'uuid' }, name: { type: 'string' } } } }, capabilities: { type: 'object' }, tabs: { type: 'object', properties: { personal: { type: 'boolean' }, teaching: { type: 'boolean' }, system: { type: 'boolean' } } }, sections: { type: 'object' } },
+      type: 'object', required: ['preferences', 'capabilities', 'tabs', 'sections'], additionalProperties: false,
+      properties: { preferences: { type: ['object', 'null'] }, capabilities: { type: 'object' }, tabs: { type: 'object', properties: { personal: { type: 'boolean' }, system: { type: 'boolean' } } }, sections: { type: 'object' } },
     },
     PageClassroomsOverviewData: {
       type: 'object',

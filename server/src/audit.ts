@@ -19,8 +19,8 @@ export function auditRequest(req: Request, status: number) {
   const resourceId = safeUuid(req.auditContext?.resourceId)
   const teachingId = safeUuid(req.auditContext?.teachingId)
     ?? (resource === 'teachings' ? safeUuid(segments[2]) : null)
-  const scopeId = safeUuid(req.auditContext?.scopeId) ?? teachingId
-  const scopeType = req.auditContext?.scopeType ?? (scopeId === teachingId && teachingId ? 'teaching' : null)
+  const scopeId = safeUuid(req.auditContext?.scopeId)
+  const scopeType = req.auditContext?.scopeType ?? null
   const event = { actor_user_id: req.user.id, action: req.auditContext?.action ?? req.method.toLowerCase(), domain: req.auditContext?.domain ?? domain, resource, resource_id: resourceId, scope_id: scopeId, request_id: req.requestId, outcome, metadata: { user_id: req.user.id, teaching_id: teachingId, resource, resource_id: resourceId, scope_type: scopeType, scope_id: scopeId, permission: req.auditContext?.permission ?? null, error_code: req.auditContext?.errorCode ?? null, route: req.route?.path ?? req.path, method: req.method, status, latency_ms: Math.round(performance.now() - req.startedAt), request_id: req.requestId, trace_id: req.traceId, outcome } }
   return insertAudit(req.adminDb, event, req)
 }

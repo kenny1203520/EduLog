@@ -34,17 +34,13 @@ describe('resource-aware authorization', () => {
     })
   })
 
-  it('resolves broad teaching collections through the configured global scope', async () => {
+  it('resolves broad teaching collections through the platform root', async () => {
     const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
-    const req = {
-      ...requestWithRpc(rpc),
-      adminDb: { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: '00000000-0000-4000-8000-000000000040' }, error: null }) }) }) }) },
-    } as unknown as Request
+    const req = requestWithRpc(rpc)
     await authorizeCollection(req, resources.courses, 'teaching.courses.list')
-    expect(rpc).toHaveBeenCalledWith('has_teaching_permission', {
+    expect(rpc).toHaveBeenCalledWith('has_api_permission', {
       p_user_id: '00000000-0000-4000-8000-000000000001',
       p_permission_key: 'teaching.courses.list',
-      p_teaching_id: '00000000-0000-4000-8000-000000000040',
       p_classroom_id: null,
       p_class_session_id: null,
     })

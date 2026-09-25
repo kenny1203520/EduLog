@@ -53,7 +53,7 @@ async function authorizeScope(req: Request, action: 'create' | 'update', input: 
     teachingIds.add(result.data.teaching_id)
   }
   if (teachingIds.size !== 1) throw new ApiError(422, 'TEACHING_SCOPE_REQUIRED', 'Enrollment references must resolve to one teaching')
-  setAuditContext(req, { domain: 'teaching', resource: 'enrollments', action, permission: `teaching.enrollments.${action}`, teachingId: [...teachingIds][0], scopeId: [...teachingIds][0], scopeType: 'teaching' })
+  setAuditContext(req, { domain: 'teaching', resource: 'enrollments', action, permission: `teaching.enrollments.${action}`, teachingId: [...teachingIds][0] })
   if (!studentId) throw new ApiError(422, 'STUDENT_REQUIRED', 'student_id is required')
   const scoped = await req.db.rpc('can_access_enrollment_scope', {
     p_student_id: studentId,

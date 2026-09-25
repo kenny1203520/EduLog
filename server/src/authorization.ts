@@ -15,14 +15,12 @@ function rpcError(error: unknown): never {
   throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
 }
 
-async function teachingPermission(req: Request, permission: string, teachingId: string | null) {
-  setAuditContext(req, { domain: 'teaching', permission, teachingId, scopeId: teachingId, scopeType: 'teaching' })
+async function teachingPermission(req: Request, permission: string, _legacyTeachingId: string | null) {
+  setAuditContext(req, { domain: 'teaching', permission, scopeType: 'system' })
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  if (!teachingId) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
-  const { data, error } = await req.db.rpc('has_teaching_permission', {
+  const { data, error } = await req.db.rpc('has_api_permission', {
     p_user_id: req.user.id,
     p_permission_key: permission,
-    p_teaching_id: teachingId,
     p_classroom_id: null,
     p_class_session_id: null,
   })
@@ -64,17 +62,8 @@ async function selfPermission(req: Request, row?: Record<string, unknown>) {
   if (row && row.user_id !== req.user.id) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
 }
 
-async function globalTeachingId(req: Request) {
-  if (!req.adminDb) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
-  const result = await req.adminDb.from('teachings').select('id').eq('is_global', true).maybeSingle()
-  if (result.error) throw mapDatabaseError(result.error)
-  const id = result.data && typeof result.data.id === 'string' ? result.data.id : null
-  if (!id) throw new ApiError(503, 'GLOBAL_TEACHING_SCOPE_MISSING', 'The global teaching scope is not configured')
-  return id
-}
-
 async function globalTeachingPermission(req: Request, permission: string) {
-  return teachingPermission(req, permission, await globalTeachingId(req))
+  return teachingPermission(req, permission, null)
 }
 
 async function isAccountPersonProfile(req: Request, profileId: string | null) {
@@ -137,7 +126,7 @@ export async function authorizeResource(
   const scope: ScopeKind = def.scope ?? 'system'
   if (scope === 'system') return apiPermission(req, permission, null, null)
   if (scope === 'self') return selfPermission(req, row)
-  if (scope === 'teaching') return teachingPermission(req, permission, rowTeachingId(row) ?? id)
+  if (scope === 'platform') return apiPermission(req, permission, null, null)
   if (scope === 'course') {
     if (!req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
     const courseId = rowId(row, 'course_id') ?? id
@@ -225,9 +214,8 @@ export async function authorizeCollection(req: Request, def: ResourceDefinition,
     const teachingId = value('teaching_id')
     return teachingId ? teachingPermission(req, permission, teachingId) : globalTeachingPermission(req, permission)
   }
-  if (def.scope === 'teaching') {
-    const teachingId = value('teaching_id')
-    return teachingId ? teachingPermission(req, permission, teachingId) : globalTeachingPermission(req, permission)
+  if (def.scope === 'platform') {
+    return globalTeachingPermission(req, permission)
   }
   if (def.scope === 'self') {
     if (!req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
