@@ -13,7 +13,7 @@ BEGIN
   WHERE email IN ('unassigned@example.test', 'legacy-owner@example.test')
   ORDER BY CASE email WHEN 'unassigned@example.test' THEN 0 ELSE 1 END
   LIMIT 1;
-  SELECT id INTO v_role_id FROM public.roles WHERE code = 'teaching_owner' AND domain = 'teaching';
+  SELECT id INTO v_role_id FROM public.roles WHERE code = 'teacher' AND domain = 'teaching' AND is_builtin;
   SELECT id INTO v_permission_id FROM public.permissions WHERE key = 'teaching.roles.manage';
   IF v_user_id IS NULL OR v_role_id IS NULL OR v_permission_id IS NULL THEN
     RAISE EXCEPTION 'platform RBAC scope fixture is incomplete';
