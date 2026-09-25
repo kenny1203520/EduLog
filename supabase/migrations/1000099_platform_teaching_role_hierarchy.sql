@@ -66,6 +66,35 @@ ALTER TABLE public.user_role_assignments
 ALTER TABLE public.user_role_assignments
   ADD CONSTRAINT user_role_assignments_status_check CHECK (status IN ('active', 'suspended', 'removed'));
 
+-- Install the destination scope rules before promoting rows. The legacy
+-- assignment/policy triggers still reject teaching roles at the system root.
+CREATE OR REPLACE FUNCTION public.validate_rbac_role_policy_domain()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_role public.roles; v_permission public.permissions;
+BEGIN
+  SELECT * INTO v_role FROM public.roles WHERE id = NEW.role_id;
+  SELECT * INTO v_permission FROM public.permissions WHERE id = NEW.permission_id;
+  IF v_role.id IS NULL OR v_permission.id IS NULL OR v_role.domain <> v_permission.domain THEN RAISE EXCEPTION 'RBAC_DOMAIN_MISMATCH'; END IF;
+  IF v_role.domain = 'system' AND NEW.scope_type <> 'system' THEN RAISE EXCEPTION 'RBAC_SCOPE_DOMAIN_MISMATCH'; END IF;
+  IF v_role.domain = 'teaching' AND NEW.scope_type NOT IN ('system', 'classroom', 'class_session') THEN RAISE EXCEPTION 'RBAC_SCOPE_DOMAIN_MISMATCH'; END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.validate_user_role_assignment_domain()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_role public.roles;
+BEGIN
+  SELECT * INTO v_role FROM public.roles WHERE id = NEW.role_id;
+  IF v_role.id IS NULL
+     OR (v_role.domain = 'system' AND NEW.scope_type <> 'system')
+     OR (v_role.domain = 'teaching' AND NEW.scope_type NOT IN ('system', 'classroom', 'class_session')) THEN
+    RAISE EXCEPTION 'RBAC_ASSIGNMENT_DOMAIN_MISMATCH';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 -- Keep same-named custom role definitions from different former workspaces
 -- separate while satisfying the new platform-wide role uniqueness indexes.
 -- Include the full source id so collisions remain impossible and traceable.
@@ -250,33 +279,6 @@ ALTER TABLE public.user_role_assignments ADD CONSTRAINT user_role_assignment_sco
 );
 ALTER TABLE public.user_role_assignments DROP CONSTRAINT IF EXISTS user_role_assignments_scope_type_check;
 ALTER TABLE public.user_role_assignments ADD CONSTRAINT user_role_assignments_scope_type_check CHECK (scope_type IN ('system', 'classroom', 'class_session'));
-
-CREATE OR REPLACE FUNCTION public.validate_rbac_role_policy_domain()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE v_role public.roles; v_permission public.permissions;
-BEGIN
-  SELECT * INTO v_role FROM public.roles WHERE id = NEW.role_id;
-  SELECT * INTO v_permission FROM public.permissions WHERE id = NEW.permission_id;
-  IF v_role.id IS NULL OR v_permission.id IS NULL OR v_role.domain <> v_permission.domain THEN RAISE EXCEPTION 'RBAC_DOMAIN_MISMATCH'; END IF;
-  IF v_role.domain = 'system' AND NEW.scope_type <> 'system' THEN RAISE EXCEPTION 'RBAC_SCOPE_DOMAIN_MISMATCH'; END IF;
-  IF v_role.domain = 'teaching' AND NEW.scope_type NOT IN ('system', 'classroom', 'class_session') THEN RAISE EXCEPTION 'RBAC_SCOPE_DOMAIN_MISMATCH'; END IF;
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.validate_user_role_assignment_domain()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-DECLARE v_role public.roles;
-BEGIN
-  SELECT * INTO v_role FROM public.roles WHERE id = NEW.role_id;
-  IF v_role.id IS NULL
-     OR (v_role.domain = 'system' AND NEW.scope_type <> 'system')
-     OR (v_role.domain = 'teaching' AND NEW.scope_type NOT IN ('system', 'classroom', 'class_session')) THEN
-    RAISE EXCEPTION 'RBAC_SCOPE_DOMAIN_MISMATCH';
-  END IF;
-  RETURN NEW;
-END;
-$$;
 
 CREATE OR REPLACE FUNCTION public.resolve_teaching_permission(
   p_user_id uuid, p_permission_key text, p_teaching_id uuid,
