@@ -7,6 +7,7 @@ import { authorizeCollection, authorizeResource, permissionForResource } from '.
 import { setAuditContext } from './context.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
+const serviceOnlyViews = new Set(['users', 'teachers'])
 const sensitivePatchFields: Record<string, readonly string[]> = {
   students: ['gov_id', 'email', 'phone', 'residence_address', 'mailing_address', 'birthday'],
   teachers: ['email', 'phone', 'address', 'mailing_address', 'birthday', 'gov_id'],
@@ -115,7 +116,7 @@ async function list(req: Request, res: Response, def: ResourceDefinition) {
   if (!def.sortable.includes(sortName)) throw new ApiError(400, 'INVALID_SORT', 'The sort field is not supported')
   const descending = query.sort.startsWith('-')
   const listFields = def.listFields ?? def.fields
-  const queryDb = def.route === 'teachers' ? req.adminDb : req.db
+  const queryDb = serviceOnlyViews.has(def.route) ? req.adminDb : req.db
   if (!queryDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The requested resource is unavailable')
   let builder = queryDb.from(def.table).select(listFields.join(', '), { count: 'exact' })
   if (def.table === 'user_preferences' || def.table === 'user_entity_visibility_preferences' || def.table === 'copy_templates') builder = builder.eq('user_id', req.user!.id)
@@ -216,6 +217,30 @@ export async function attachTeacherProfile(req: Request, value: unknown, include
   return Array.isArray(value) ? enriched : enriched[0]
 }
 
+async function authorizeServiceViewItemBeforeRead(req: Request, def: ResourceDefinition, id: string) {
+  if (!serviceOnlyViews.has(def.route)) return
+  if (!req.user || !req.db) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  const action = req.method === 'GET' ? 'read' : req.method === 'DELETE' ? 'delete' : 'update'
+  const permission = permissionForResource(def, action)
+  if (def.route === 'users') {
+    // User account lookups use a service-role-only view, so enforce the
+    // system permission before the privileged query can reveal row existence.
+    await authorizeResource(req, def, permission, id)
+    return
+  }
+  if (req.method === 'DELETE') {
+    // Self-service access intentionally does not grant teacher deletion.
+    await authorizeResource(req, def, permission, id)
+    return
+  }
+  const { data, error } = await req.db.rpc('can_access_teacher', {
+    p_teacher_id: id,
+    p_permission_key: permission,
+  })
+  if (error) throw mapDatabaseError(error)
+  if (data !== true) throw new ApiError(404, 'NOT_FOUND', 'Resource was not found')
+}
+
 export async function item(req: Request, res: Response, def: ResourceDefinition) {
   const requestedId = typeof req.params.id === 'string' ? req.params.id : undefined
   if (!requestedId) throw new ApiError(400, 'INVALID_ID', 'Resource id is required')
@@ -227,8 +252,9 @@ export async function item(req: Request, res: Response, def: ResourceDefinition)
     : null
   if (req.method === 'PATCH' && !Object.keys(mutationBody ?? {}).length) throw new ApiError(422, 'EMPTY_MUTATION', 'At least one writable field is required')
   setAuditContext(req, { resource: def.route, resourceId: id, action: req.method.toLowerCase() })
+  await authorizeServiceViewItemBeforeRead(req, def, id)
   const itemFields = def.itemFields ?? def.fields
-  const queryDb = def.route === 'teachers' ? req.adminDb : req.db
+  const queryDb = serviceOnlyViews.has(def.route) ? req.adminDb : req.db
   if (!queryDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The requested resource is unavailable')
   const existing = await queryDb.from(def.table).select(itemFields.join(', ')).eq(def.idColumn, id).maybeSingle()
   if (existing.error) throw mapDatabaseError(existing.error as unknown as { code?: string; message?: string })

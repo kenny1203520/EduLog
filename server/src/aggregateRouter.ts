@@ -192,7 +192,8 @@ const incompleteQuerySchema = z.object({
 type TeacherScope = { id: string; user_id: string } | null
 
 async function loadCurrentTeacher(req: Request, operation: string): Promise<TeacherScope> {
-  const db = requireDb(req)
+  const db = req.adminDb
+  if (!db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const result = await database(req, () => db.from('teachers').select('id,user_id').eq('user_id', req.user!.id).maybeSingle())
   if (result.error) throwDatabaseError(req, operation, result.error)
   return result.data as TeacherScope

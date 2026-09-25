@@ -2,7 +2,7 @@ import type { Request } from 'express'
 import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { ZodError } from 'zod'
-import { collection, idempotency, parseFilters } from './resourceRouter.js'
+import { collection, idempotency, item, parseFilters } from './resourceRouter.js'
 import { resources } from './resources.js'
 
 describe('idempotency replay contract', () => {
@@ -106,5 +106,42 @@ describe('resource mutation validation boundary', () => {
     const source = readFileSync(new URL('./resourceRouter.ts', import.meta.url), 'utf8')
     expect(source).not.toContain("router.patch(`/${route}`")
     expect(source).toContain("if (req.method !== 'POST') throw new ApiError(405, 'METHOD_NOT_ALLOWED'")
+  })
+})
+
+describe('service-role-only view access boundary', () => {
+  it('does not query the user_accounts view when the system permission check fails', async () => {
+    const serviceFrom = vi.fn()
+    const req = {
+      method: 'GET',
+      query: {},
+      requestId: 'request-users-denied',
+      traceId: 'trace-users-denied',
+      user: { id: '00000000-0000-4000-8000-000000000001' },
+      db: { rpc: vi.fn().mockResolvedValue({ data: false, error: null }) },
+      adminDb: { from: serviceFrom },
+    } as unknown as Request
+
+    await expect(collection(req, {} as never, resources.users)).rejects.toMatchObject({ status: 403, code: 'PERMISSION_DENIED' })
+    expect(serviceFrom).not.toHaveBeenCalled()
+  })
+
+  it('does not query the teachers view when the scoped teacher check fails', async () => {
+    const teacherId = '00000000-0000-4000-8000-000000000002'
+    const serviceFrom = vi.fn()
+    const req = {
+      method: 'GET',
+      params: { id: teacherId },
+      query: {},
+      requestId: 'request-teacher-denied',
+      traceId: 'trace-teacher-denied',
+      user: { id: '00000000-0000-4000-8000-000000000001' },
+      db: { rpc: vi.fn().mockResolvedValue({ data: false, error: null }) },
+      adminDb: { from: serviceFrom },
+      header: vi.fn(),
+    } as unknown as Request
+
+    await expect(item(req, {} as never, resources.teachers)).rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' })
+    expect(serviceFrom).not.toHaveBeenCalled()
   })
 })

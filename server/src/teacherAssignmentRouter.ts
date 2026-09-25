@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from './errors.js'
 import { attachTeacherProfile, complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
 
-const assignmentFields = 'id,class_session_id,teacher_id,effective_from,effective_to,role_id,created_at,updated_at,roles(id,name,code),teachers(id,user_id,name,bio,created_at,updated_at)'
+const assignmentFields = 'id,class_session_id,teacher_id,effective_from,effective_to,role_id,created_at,updated_at'
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const assignmentFieldsSchema = z.object({
   teacher_id: z.string().uuid(),
@@ -58,14 +58,40 @@ function mapAssignment(row: any) {
   return { ...teacher, effective_from: row.effective_from, effective_to: row.effective_to, role_id: row.role_id, role: row.roles ?? null }
 }
 
+async function hydrateAssignments(req: Request, rows: any[]) {
+  if (!rows.length) return []
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The teacher service is unavailable')
+  const teacherIds = [...new Set(rows.map((row) => row.teacher_id).filter((id): id is string => typeof id === 'string'))]
+  const roleIds = [...new Set(rows.map((row) => row.role_id).filter((id): id is string => typeof id === 'string'))]
+  const [teacherResult, roleResult] = await Promise.all([
+    teacherIds.length
+      ? req.adminDb.from('teachers').select('id,user_id,name,bio,created_at,updated_at').in('id', teacherIds)
+      : Promise.resolve({ data: [], error: null }),
+    roleIds.length
+      ? req.adminDb.from('roles').select('id,name,code').in('id', roleIds)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  if (teacherResult.error) throw mapDatabaseError(teacherResult.error)
+  if (roleResult.error) throw mapDatabaseError(roleResult.error)
+  const teachers = new Map((teacherResult.data ?? []).map((row: any) => [row.id, row]))
+  const roles = new Map((roleResult.data ?? []).map((row: any) => [row.id, row]))
+  return rows.map((row) => ({
+    ...row,
+    teachers: teachers.get(row.teacher_id) ?? null,
+    roles: roles.get(row.role_id) ?? null,
+  }))
+}
+
 async function list(req: Request, res: Response) {
   const id = sessionId(req)
   await authorize(req, id, 'list')
-  const result = await req.db!.from('class_session_teachers').select(assignmentFields).eq('class_session_id', id).order('effective_from', { ascending: false })
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The teacher service is unavailable')
+  const result = await req.adminDb.from('class_session_teachers').select(assignmentFields).eq('class_session_id', id).order('effective_from', { ascending: false })
   if (result.error) throw mapDatabaseError(result.error)
   const onDate = typeof req.query.on_date === 'string' ? req.query.on_date : undefined
   if (onDate && !dateSchema.safeParse(onDate).success) throw new ApiError(400, 'INVALID_DATE', 'on_date is invalid')
-  const data = (result.data ?? []).filter((row: any) => !onDate || (row.effective_from <= onDate && (!row.effective_to || row.effective_to >= onDate))).map(mapAssignment).filter(Boolean)
+  const scopedRows = (result.data ?? []).filter((row: any) => !onDate || (row.effective_from <= onDate && (!row.effective_to || row.effective_to >= onDate)))
+  const data = (await hydrateAssignments(req, scopedRows)).map(mapAssignment).filter(Boolean)
   const enriched = await attachTeacherProfile(req, data)
   return res.json({ data: enriched, meta: { limit: data.length, offset: 0, total: data.length, sort: 'effective_from' }, request_id: req.requestId, trace_id: req.traceId })
 }
@@ -83,8 +109,9 @@ async function create(req: Request, res: Response) {
   const rows = await Promise.all(input.teachers.map(async (teacher) => ({ ...teacher, role_id: await resolveRoleId(req, teacher.role_id), class_session_id: id })))
   const result = await req.db!.from('class_session_teachers').insert(rows).select(assignmentFields)
   if (result.error) throw mapDatabaseError(result.error)
+  const data = (await hydrateAssignments(req, result.data ?? [])).map(mapAssignment).filter(Boolean)
   setAuditContext(req, { resourceId: null, scopeId: id, scopeType: 'class_session' })
-  const body = { data: result.data ?? [], meta: { count: result.data?.length ?? 0 }, request_id: req.requestId, trace_id: req.traceId }
+  const body = { data, meta: { count: data.length }, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 201, body)
   return res.status(201).json(body)
 }
@@ -108,8 +135,9 @@ async function remove(req: Request, res: Response) {
   if (input.effective_from) builder = builder.eq('effective_from', input.effective_from)
   const result = await builder.select(assignmentFields)
   if (result.error) throw mapDatabaseError(result.error)
+  const data = (await hydrateAssignments(req, result.data ?? [])).map(mapAssignment).filter(Boolean)
   setAuditContext(req, { resourceId: null, scopeId: id, scopeType: 'class_session' })
-  const body = { data: result.data ?? [], meta: { count: result.data?.length ?? 0 }, request_id: req.requestId, trace_id: req.traceId }
+  const body = { data, meta: { count: data.length }, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 200, body)
   return res.json(body)
 }
@@ -126,8 +154,9 @@ async function update(req: Request, res: Response) {
   const result = await req.db!.from('class_session_teachers').update(input).eq('id', assignmentId).eq('class_session_id', id).select(assignmentFields).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Teacher assignment was not found')
+  const data = (await hydrateAssignments(req, [result.data])).map(mapAssignment)[0]
   setAuditContext(req, { resourceId: assignmentId, scopeId: id, scopeType: 'class_session' })
-  const body = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }
+  const body = { data, meta: {}, request_id: req.requestId, trace_id: req.traceId }
   await complete(req, 200, body)
   return res.json(body)
 }
