@@ -79,7 +79,7 @@ BEGIN
     SELECT 1 FROM pg_policies
     WHERE schemaname = 'public'
       AND tablename = 'teacher_credentials'
-      AND policyname = 'Canonical teacher credentials read'
+      AND policyname = 'teacher_credentials_permission_read'
   ) THEN
     RAISE EXCEPTION 'teacher credential sensitive read policy is missing';
   END IF;
