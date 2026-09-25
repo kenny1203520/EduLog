@@ -119,10 +119,10 @@
     "system_admin": { "name": "System Administrator", "description": "Manages system configuration without ownership transfer" },
     "user_manager": { "name": "User Manager", "description": "Manages users and system role assignments" },
     "auditor": { "name": "Auditor", "description": "Reads audit events and system metadata" },
-    "teaching_owner": { "name": "Teaching Owner", "description": "Protected owner of a teaching workspace" },
-    "teaching_manager": { "name": "Teaching Manager", "description": "Manages a teaching workspace, members and resources" },
+    "teaching_owner": { "name": "Teaching Owner", "description": "Manages platform-wide teaching data and access" },
+    "teaching_manager": { "name": "Teaching Manager", "description": "Manages teaching data and operations within assigned scopes" },
     "teacher": { "name": "Teacher", "description": "Creates and maintains teaching records" },
     "assistant": { "name": "Assistant", "description": "Supports teaching operations with limited write access" },
-    "viewer": { "name": "Viewer", "description": "Read-only teaching workspace access" }
+    "viewer": { "name": "Viewer", "description": "Read-only access to teaching data" }
   }
 }

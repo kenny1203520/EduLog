@@ -119,10 +119,10 @@
     "system_admin": { "name": "系統管理員", "description": "管理系統設定，但不能轉移擁有權" },
     "user_manager": { "name": "使用者管理員", "description": "管理使用者與系統角色指派" },
     "auditor": { "name": "稽核員", "description": "讀取稽核事件與系統中繼資料" },
-    "teaching_owner": { "name": "教學擁有者", "description": "教學工作區的受保護擁有者" },
-    "teaching_manager": { "name": "教學管理員", "description": "管理教學工作區、成員與資源" },
+    "teaching_owner": { "name": "教學負責人", "description": "管理全平台教學資料與存取權限" },
+    "teaching_manager": { "name": "教學管理員", "description": "依指派範圍管理教學資料與作業" },
     "teacher": { "name": "教師", "description": "建立與維護教學紀錄" },
     "assistant": { "name": "助教", "description": "以有限寫入權限支援教學作業" },
-    "viewer": { "name": "檢視者", "description": "只能讀取教學工作區" }
+    "viewer": { "name": "檢視者", "description": "只能讀取教學資料" }
   }
 }
