@@ -50,6 +50,50 @@ REVOKE ALL ON public.teachers FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.teachers TO service_role;
 GRANT SELECT (id, profile_id, created_at, updated_at) ON public.teacher_records TO service_role;
 
+-- A dashboard read model needs only the caller's own teacher ID. Keep that
+-- narrow lookup in a hardened helper so authenticated RPC callers do not need
+-- direct SELECT access to the private teachers compatibility view.
+CREATE OR REPLACE FUNCTION public.current_user_teacher_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT teacher.id
+  FROM public.teacher_records teacher
+  JOIN public.profiles profile ON profile.id = teacher.profile_id
+  WHERE profile.auth_user_id = auth.uid()
+  LIMIT 1;
+$$;
+REVOKE ALL ON FUNCTION public.current_user_teacher_id() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.current_user_teacher_id() TO authenticated, service_role;
+
+-- get_dashboard_page is an authenticated RPC and therefore runs as its caller.
+-- Rewrite its self lookup to the narrow helper above before revoking view
+-- access; no other teacher records are exposed by the helper.
+DO $$
+DECLARE
+  function_definition text;
+BEGIN
+  SELECT pg_get_functiondef('public.get_dashboard_page(date,date)'::regprocedure)
+  INTO function_definition;
+  IF function_definition IS NULL THEN
+    RAISE EXCEPTION 'get_dashboard_page is missing';
+  END IF;
+  IF position('FROM public.teachers' IN function_definition) > 0 THEN
+    function_definition := replace(
+      function_definition,
+      'FROM public.teachers',
+      'FROM (SELECT public.current_user_teacher_id() AS id, auth.uid() AS user_id) AS current_teacher_record'
+    );
+    EXECUTE function_definition;
+  ELSIF position('public.current_user_teacher_id()' IN function_definition) = 0 THEN
+    RAISE EXCEPTION 'get_dashboard_page no longer contains the expected self-teacher lookup';
+  END IF;
+END;
+$$;
+
 -- Keep the current scoped holiday policy semantics and hoist the stable JWT
 -- identity lookup so PostgreSQL evaluates it once per statement.
 DROP POLICY IF EXISTS "Canonical holidays read" ON public.holidays;
