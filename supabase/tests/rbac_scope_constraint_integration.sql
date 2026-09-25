@@ -81,7 +81,10 @@ BEGIN
     INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
     VALUES (v_role_id, v_permission_id, 'teaching', v_scope_id, 'allow');
     RAISE EXCEPTION 'legacy teaching policy scope was accepted';
-  EXCEPTION WHEN check_violation THEN
+  EXCEPTION
+    WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'RBAC_SCOPE_DOMAIN_MISMATCH' THEN RAISE; END IF;
+    WHEN check_violation THEN
     NULL;
   END;
 
@@ -89,7 +92,10 @@ BEGIN
     INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id)
     VALUES (v_user_id, v_role_id, 'teaching', v_scope_id);
     RAISE EXCEPTION 'legacy teaching assignment scope was accepted';
-  EXCEPTION WHEN check_violation THEN
+  EXCEPTION
+    WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'RBAC_ASSIGNMENT_DOMAIN_MISMATCH' THEN RAISE; END IF;
+    WHEN check_violation THEN
     NULL;
   END;
 END;
