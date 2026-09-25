@@ -298,8 +298,11 @@ BEGIN
   IF has_table_privilege('authenticated', 'public.profiles', 'SELECT') THEN
     RAISE EXCEPTION 'authenticated users can directly read sensitive profiles';
   END IF;
-  IF NOT has_table_privilege('authenticated', 'public.teachers', 'SELECT') THEN
-    RAISE EXCEPTION 'permission-filtered teacher compatibility view is not readable';
+  IF has_table_privilege('authenticated', 'public.teachers', 'SELECT') THEN
+    RAISE EXCEPTION 'authenticated users can bypass the teacher API through the compatibility view';
+  END IF;
+  IF NOT has_table_privilege('service_role', 'public.teachers', 'SELECT') THEN
+    RAISE EXCEPTION 'the trusted API role cannot read the teacher compatibility view';
   END IF;
 END;
 $$;
