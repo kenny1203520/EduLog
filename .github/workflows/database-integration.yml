@@ -86,7 +86,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *100004[0-9]*|*100005*|*100006*|*100007*|*100008*|*100009*) continue ;;
+              *100004[0-9]*|*100005*|*100006*|*100007*|*100008*|*100009*|*100010*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
@@ -94,6 +94,7 @@ jobs:
           for migration in supabase/migrations/100004*.sql supabase/migrations/100005*.sql supabase/migrations/100006*.sql supabase/migrations/100007*.sql supabase/migrations/100008*.sql supabase/migrations/100009*.sql; do
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000100_platform_teaching_roles_without_workspace.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/sensitive_data_integration.sql
