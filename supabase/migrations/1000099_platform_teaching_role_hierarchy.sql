@@ -249,7 +249,10 @@ ON public.user_role_assignments FOR EACH ROW EXECUTE FUNCTION public.prevent_cla
 -- Promote every teaching-domain policy from former teaching roots to the
 -- platform root. Materialize before deleting legacy rows; deny wins across
 -- source workspaces when policies conflict.
-CREATE TEMP TABLE platform_teaching_root_policies ON COMMIT DROP AS
+-- Keep this session-local table for the remaining statements in the migration.
+-- CI and Supabase apply migrations with autocommit, so ON COMMIT DROP would
+-- remove it immediately after this CREATE TABLE statement.
+CREATE TEMP TABLE platform_teaching_root_policies AS
 SELECT policy.role_id, policy.permission_id,
        CASE WHEN bool_or(policy.effect = 'deny') THEN 'deny' ELSE 'allow' END AS effect
 FROM public.role_permission_policies policy
