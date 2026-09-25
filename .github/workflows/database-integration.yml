@@ -176,7 +176,6 @@ jobs:
           # This standalone audit index is independent of the later platform
           # role/profile migrations and is required by the shared chain check.
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000094_audit_events_created_at_index.sql
-          # These fixture assertions target a pre-1000043 upgrade and run in
-          # the preceding legacy-upgrade job; this database starts at 1000061.
-          psql -v ON_ERROR_STOP=1 -f supabase/tests/migration_chain_integration.sql
+          # The migration-chain assertions use the latest profiles/RBAC shape
+          # and run in the clean-install and current-upgrade jobs.
           psql -v ON_ERROR_STOP=1 -f supabase/tests/core_rls_security.sql
