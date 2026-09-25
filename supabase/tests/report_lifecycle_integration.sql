@@ -12,7 +12,7 @@ ON CONFLICT (id) DO NOTHING;
 -- The fixture owner gets a platform teaching role; the unrelated account
 -- remains unassigned. Teaching membership is no longer stored per workspace.
 INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, effective_to, status)
-SELECT '91000000-0000-4000-8000-000000000001', id, 'system', NULL, CURRENT_DATE, NULL, 'active'
+SELECT '91000000-0000-4000-8000-000000000001', id, 'system', NULL, DATE '2020-01-01', NULL, 'active'
 FROM public.roles WHERE code = 'teaching_owner' AND domain = 'teaching'
 ON CONFLICT DO NOTHING;
 
