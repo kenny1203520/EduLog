@@ -106,5 +106,6 @@ describe('RBAC migration contract', () => {
             .toBeLessThan(platformTeachingHierarchy.indexOf('UPDATE public.user_role_assignments assignment'))
         expect(platformTeachingHierarchy.indexOf('CREATE OR REPLACE FUNCTION public.validate_rbac_role_policy_domain()'))
             .toBeLessThan(platformTeachingHierarchy.indexOf('INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)'))
+        expect(platformTeachingHierarchy).toContain("assigned_role.domain = 'system'")
     })
 })

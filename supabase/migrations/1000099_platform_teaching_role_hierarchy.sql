@@ -471,6 +471,7 @@ CREATE OR REPLACE FUNCTION public.has_system_permission(p_user_id uuid, p_permis
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 WITH RECURSIVE assigned_roles(role_id) AS (
   SELECT assignment.role_id FROM public.user_role_assignments assignment
+  JOIN public.roles assigned_role ON assigned_role.id = assignment.role_id AND assigned_role.domain = 'system'
   WHERE assignment.user_id = p_user_id AND assignment.scope_type = 'system'
     AND assignment.status = 'active' AND assignment.effective_from <= CURRENT_DATE
     AND (assignment.effective_to IS NULL OR assignment.effective_to >= CURRENT_DATE)
@@ -496,6 +497,7 @@ CREATE OR REPLACE FUNCTION public.rbac_is_system_owner(p_user_id uuid DEFAULT au
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 WITH RECURSIVE assigned(role_id) AS (
   SELECT assignment.role_id FROM public.user_role_assignments assignment
+  JOIN public.roles assigned_role ON assigned_role.id = assignment.role_id AND assigned_role.domain = 'system'
   WHERE assignment.user_id = p_user_id AND assignment.scope_type = 'system'
     AND assignment.status = 'active' AND assignment.effective_from <= CURRENT_DATE
     AND (assignment.effective_to IS NULL OR assignment.effective_to >= CURRENT_DATE)
