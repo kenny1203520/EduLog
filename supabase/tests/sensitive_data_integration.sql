@@ -45,15 +45,21 @@ BEGIN
 
   IF has_column_privilege('authenticated', 'public.students', 'email', 'SELECT')
      OR has_column_privilege('authenticated', 'public.students', 'gov_id', 'SELECT')
-     OR has_column_privilege('authenticated', 'public.teachers', 'email', 'SELECT')
-     OR has_column_privilege('authenticated', 'public.teachers', 'gov_id', 'SELECT') THEN
+     OR EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'teachers'
+         AND column_name IN ('email', 'gov_id')
+     ) THEN
     RAISE EXCEPTION 'authenticated role can directly select core sensitive columns';
   END IF;
 
   IF has_column_privilege('authenticated', 'public.students', 'email', 'UPDATE')
      OR has_column_privilege('authenticated', 'public.students', 'gov_id', 'UPDATE')
-     OR has_column_privilege('authenticated', 'public.teachers', 'email', 'UPDATE')
-     OR has_column_privilege('authenticated', 'public.teachers', 'gov_id', 'UPDATE') THEN
+     OR EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'teachers'
+         AND column_name IN ('email', 'gov_id')
+     ) THEN
     RAISE EXCEPTION 'authenticated role can directly update core sensitive columns';
   END IF;
 END;
