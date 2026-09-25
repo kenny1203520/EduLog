@@ -7,8 +7,6 @@ import { useFeedback } from '@/composables/useFeedback'
 
 const props = withDefaults(defineProps<{
     domain: RbacDomain
-    teachings?: Array<{ id: string; name: string }>
-    teachingId?: string
     title?: string
     canManage?: boolean
     policyScopeType?: PolicyScope
@@ -30,11 +28,8 @@ const saving = ref(false)
 const dirty = ref(false)
 const conflict = ref(false)
 const capabilityCanManage = ref<boolean | null>(null)
-const selectedTeachingId = ref(props.teachingId ?? props.teachings?.[0]?.id ?? '')
-const targetScopeType = computed<PolicyScope>(() => props.policyScopeType ?? props.domain)
-const targetScopeId = computed<string | null>(() => props.policyScopeType
-    ? props.policyScopeId ?? null
-    : props.domain === 'teaching' ? selectedTeachingId.value || null : null)
+const targetScopeType = computed<PolicyScope>(() => props.policyScopeType ?? 'system')
+const targetScopeId = computed<string | null>(() => props.policyScopeId ?? null)
 
 const selectedRole = computed(() => roles.value.find(role => role.id === selectedRoleId.value) ?? null)
 const canEdit = computed(() => props.canManage && capabilityCanManage.value !== false)
@@ -90,18 +85,17 @@ function inheritedSource(row: RolePermissionMatrixRow) {
 }
 
 async function loadRoles() {
-    if (props.domain === 'teaching' && !selectedTeachingId.value && !props.policyScopeType) return
     loading.value = true
     try {
-        const capabilities = await RoleService.getCapabilities(props.domain === 'teaching' ? selectedTeachingId.value : undefined)
+        const capabilities = await RoleService.getCapabilities()
         epoch.value = capabilities.epoch
         const domainCapabilities = props.domain === 'system' ? capabilities.system : capabilities.teaching
         capabilityCanManage.value = props.policyScopeType
-            ? await RoleService.canManageRoleScope(targetScopeType.value, targetScopeId.value)
+            ? await RoleService.canManageRoleScope(targetScopeType.value, targetScopeId.value, props.domain)
             : typeof domainCapabilities?.roles_manage === 'boolean' ? domainCapabilities.roles_manage : null
         roles.value = props.policyScopeType
-            ? await RoleService.getRolesForScope({ domain: props.domain, teachingId: selectedTeachingId.value || undefined, scopeType: targetScopeType.value, scopeId: targetScopeId.value })
-            : await RoleService.getRoles({ domain: props.domain, teachingId: selectedTeachingId.value })
+            ? await RoleService.getRolesForScope({ domain: props.domain, scopeType: targetScopeType.value, scopeId: targetScopeId.value })
+            : await RoleService.getRoles({ domain: props.domain })
         if (!roles.value.some(role => role.id === selectedRoleId.value)) selectedRoleId.value = roles.value[0]?.id ?? ''
         await loadPermissions()
     } catch (error) { reportError(error) } finally { loading.value = false }
@@ -156,9 +150,9 @@ async function saveRoleDetails() {
 }
 
 async function createRole() {
-    if (!newRoleName.value.trim() || (props.domain === 'teaching' && !selectedTeachingId.value)) return
+    if (!newRoleName.value.trim()) return
     try {
-        await RoleService.createRole(newRoleName.value, { domain: props.domain, teachingId: selectedTeachingId.value, expectedEpoch: epoch.value })
+        await RoleService.createRole(newRoleName.value, { domain: props.domain, expectedEpoch: epoch.value })
         newRoleName.value = ''
         await loadRoles()
     } catch (error) { reportError(error) }
@@ -169,8 +163,7 @@ async function deleteRole() {
     try { await RoleService.deleteRole(selectedRole.value.id, epoch.value); await loadRoles() } catch (error) { reportError(error) }
 }
 
-watch(() => [props.domain, props.teachingId, props.policyScopeType, props.policyScopeId], () => { selectedTeachingId.value = props.teachingId ?? props.teachings?.[0]?.id ?? ''; void loadRoles() })
-watch(selectedTeachingId, () => { if (props.domain === 'teaching') void loadRoles() })
+watch(() => [props.domain, props.policyScopeType, props.policyScopeId], () => { void loadRoles() })
 watch(selectedRoleId, loadPermissions)
 onMounted(loadRoles)
 </script>
@@ -183,9 +176,6 @@ onMounted(loadRoles)
                 <p class="text-xs text-gray-500">{{ t('rbac.permissions.subtitle', 'Configure local policy and review inherited access.') }}</p>
             </div>
             <div class="flex items-center gap-3">
-                <select v-if="domain === 'teaching' && teachings?.length" v-model="selectedTeachingId" class="rounded-lg border px-3 py-2 text-sm">
-                    <option v-for="teaching in teachings" :key="teaching.id" :value="teaching.id">{{ teaching.name }}</option>
-                </select>
                 <span v-if="selectedRole?.is_protected" class="rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">{{ t('rbac.protected_read_only', 'Protected role · read only') }}</span>
             </div>
         </div>

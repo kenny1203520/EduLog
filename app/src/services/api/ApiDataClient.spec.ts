@@ -90,19 +90,19 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(result.error?.message).toContain('p_enrollment_id')
   })
 
-  it('maps RBAC policy replacement to the permission policy REST route', async () => {
+  it('maps platform-root RBAC policy replacement to the permission policy REST route', async () => {
     const permissionId = '00000000-0000-4000-8000-000000000010'
     getMock.mockResolvedValueOnce({ data: [{ id: permissionId, key: 'rbac.manage' }], meta: {}, request_id: 'r', trace_id: 't' })
     patchMock.mockResolvedValueOnce({ data: { permission_id: permissionId }, meta: {}, request_id: 'r2', trace_id: 't2' })
     const result = await apiDataClient.rpc('replace_role_permission_policies', {
       p_permission_key: 'rbac.manage',
-      p_scope_type: 'teaching',
-      p_scope_id: '00000000-0000-4000-8000-000000000011',
+      p_scope_type: 'system',
+      p_scope_id: null,
       p_policies: [{ role_id: '00000000-0000-4000-8000-000000000012', effect: 'allow' }],
     })
     expect(getMock).toHaveBeenCalledWith('/permissions?search=rbac.manage&limit=100&offset=0&sort=key')
     expect(patchMock).toHaveBeenCalledWith(`/permissions/${permissionId}/policies`, {
-      scope: { type: 'teaching', id: '00000000-0000-4000-8000-000000000011' },
+      scope: { type: 'system', id: null },
       policies: [{ role_id: '00000000-0000-4000-8000-000000000012', effect: 'allow' }],
     })
     expect(result.error).toBeNull()
@@ -134,14 +134,8 @@ describe('ApiDataClient server-side query compatibility', () => {
     expect(result.error).toBeNull()
   })
 
-  it('maps teaching member table compatibility to the nested scoped route', async () => {
-    getMock.mockResolvedValueOnce({ data: { teaching_id: 'teaching-1', user_id: 'user-1' }, meta: {}, request_id: 'r', trace_id: 't' })
-    const result = await apiDataClient.from('teaching_members')
-      .select('*')
-      .eq('teaching_id', 'teaching-1')
-      .eq('user_id', 'user-1')
-      .maybeSingle()
-    expect(getMock).toHaveBeenCalledWith('/teachings/teaching-1/members/user-1')
-    expect(result.data.user_id).toBe('user-1')
+  it('rejects archived teaching workspace tables at the API facade', () => {
+    expect(() => apiDataClient.from('teachings')).toThrow('archived')
+    expect(() => apiDataClient.from('teaching_members')).toThrow('archived')
   })
 })

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { getMock, postMock } = vi.hoisted(() => ({ getMock: vi.fn(), postMock: vi.fn() }))
-vi.mock('@/services/api/ApiV1Client', () => ({ apiV1Client: { get: getMock, post: postMock } }))
+vi.mock('@/services/api/ApiV1Client', () => ({
+    apiV1Client: { get: getMock, post: postMock },
+    registerApiAuthRecovery: vi.fn(),
+}))
 
 import { AuthService } from './AuthService'
 

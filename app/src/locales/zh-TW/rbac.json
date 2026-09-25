@@ -1,4 +1,5 @@
 {
+  "platform_teaching_assignments": { "title": "教學角色指派", "description": "平台角色會向下套用至所有教室與班級。範圍排除只影響該分支；更下層指派可重新授予角色。", "root_title": "全平台指派", "root_badge": "套用至所有教室", "root_hint": "新建教室與班級也會自動繼承這些指派。", "grant_root": "指派全平台角色", "no_root_assignments": "目前沒有全平台教學角色指派。", "local_title": "教室與班級覆寫", "local_hint": "檢視繼承角色、排除此分支的角色，或在此範圍重新授予。", "regrant": "在此授予", "exclude": "排除繼承角色", "local_grants": "此範圍的角色指派", "exclusions": "繼承角色排除", "no_local_grants": "此範圍目前沒有角色指派。", "no_exclusions": "此範圍目前沒有排除任何繼承角色。", "select_scope": "請選擇教室或班級以管理局部角色設定。", "selected_scope": "目前範圍：{scope}", "read_only": "您可以檢視此範圍，但沒有管理角色指派的權限。", "directory_required": "搜尋並選取帳號需要使用者目錄權限。", "saved": "角色指派已儲存。", "exclusion_saved": "角色排除已儲存。", "save_failed": "無法儲存角色變更。", "load_failed": "無法載入角色指派。", "overlap": "此使用者在此角色與範圍已有重疊期間的指派。", "remove_confirm": "確定要移除 {user} 的「{role}」嗎？", "remove_failed": "無法移除角色變更。" },
   "builtin": "內建",
   "protected_read_only": "受保護角色・僅供檢視",
 "system_permissions": "系統角色權限",
@@ -70,7 +71,7 @@
   "denied": "拒絕",
   "version_conflict": "權限設定已變更。已保留目前草稿，請重新載入後再儲存。",
 "save_permissions": "儲存權限",
-"scope": { "label": "政策範圍", "global_teaching": "所有教學空間", "teaching": "教學空間", "teaching_context": "教學空間", "classroom": "教室", "class_session": "課堂", "select_context": "請選擇範圍以檢視教學角色權限。" },
+"scope": { "label": "政策範圍", "global_teaching": "全平台", "teaching": "教學空間", "teaching_context": "教學空間", "classroom": "教室", "class_session": "班級／課堂", "select_context": "請選擇範圍以檢視教學角色權限。" },
 "sensitive_student_data_hint": "學生敏感資料權限控制個人資料、聯絡方式、學校資料及憑證的存取。報告依所屬課堂套用教室或課堂範圍。",
   "permissions": {
     "title": "角色權限",

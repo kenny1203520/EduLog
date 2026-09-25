@@ -4,7 +4,7 @@ type QueryFilter = { field: string; operator: 'eq' | 'neq' | 'in' | 'gte' | 'lte
 type QueryResult = { data: any; error: any; count?: number | null }
 
 const tableToResource: Record<string, string> = {
-  profiles: 'users', user_preferences: 'user-preferences', user_entity_visibility_preferences: 'visibility-preferences', roles: 'roles', permissions: 'permissions', audit_events: 'audit-events', teachings: 'teachings', teaching_members: 'teaching-members', courses: 'courses', lessons: 'lessons', classrooms: 'classrooms', classroom_schedules: 'classroom-schedules', class_sessions: 'class-sessions', class_session_schedule_rules: 'class-session-schedule-rules', students: 'students', student_contacts: 'student-contacts', student_schools: 'student-schools', student_credentials: 'student-credentials', teachers: 'teachers', teacher_credentials: 'teacher-credentials', class_session_teachers: 'class-session-teachers', enrollments: 'enrollments', class_occurrences: 'occurrences', occurrence_reports: 'reports', report_versions: 'report-versions', report_templates: 'report-templates', copy_templates: 'copy-templates', student_suspensions: 'student-suspensions', holidays: 'holidays',
+  profiles: 'users', user_preferences: 'user-preferences', user_entity_visibility_preferences: 'visibility-preferences', roles: 'roles', permissions: 'permissions', audit_events: 'audit-events', courses: 'courses', lessons: 'lessons', classrooms: 'classrooms', classroom_schedules: 'classroom-schedules', class_sessions: 'class-sessions', class_session_schedule_rules: 'class-session-schedule-rules', students: 'students', student_contacts: 'student-contacts', student_schools: 'student-schools', student_credentials: 'student-credentials', teachers: 'teachers', teacher_credentials: 'teacher-credentials', class_session_teachers: 'class-session-teachers', enrollments: 'enrollments', class_occurrences: 'occurrences', occurrence_reports: 'reports', report_versions: 'report-versions', report_templates: 'report-templates', copy_templates: 'copy-templates', student_suspensions: 'student-suspensions', holidays: 'holidays',
 }
 function resourceFor(table: string) { return tableToResource[table] ?? table.replaceAll('_', '-') }
 function toError(error: unknown) { return error instanceof Error ? { message: error.message } : { message: String(error) } }
@@ -18,7 +18,7 @@ function stringArg(args: Record<string, unknown>, key: string) {
 // prevents callers from attempting to move a row between owners.
 function sanitizeWritePayload(resource: string, payload: unknown): unknown {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload
-  if (resource === 'teachers' || resource === 'teaching-members') return payload
+  if (resource === 'teachers') return payload
   const { user_id: _userId, ...safePayload } = payload as Record<string, unknown>
   return safePayload
 }
@@ -109,10 +109,8 @@ async function invokeCanonicalRpc<T>(name: string, args: Record<string, unknown>
     const query = new URLSearchParams({ permission })
     const classroomId = stringArg(args, 'p_classroom_id')
     const classSessionId = stringArg(args, 'p_class_session_id')
-    const teachingId = stringArg(args, 'p_teaching_id')
     if (classroomId) query.set('classroom_id', classroomId)
     if (classSessionId) query.set('class_session_id', classSessionId)
-    if (teachingId) query.set('teaching_id', teachingId)
     const response = await apiV1Client.get<{ allowed: boolean }>(`/rbac/capability?${query.toString()}`)
     return { data: { is_allowed: response.data.allowed, is_denied: !response.data.allowed } as T, error: null }
   }
@@ -151,7 +149,10 @@ class ApiQuery implements PromiseLike<QueryResult> {
   private payload: any
   private expectSingle = false
   private allowMissing = false
-  constructor(table: string) { this.resource = resourceFor(table) }
+  constructor(table: string) {
+    if (table === 'teachings' || table === 'teaching_members') throw new Error('Teaching workspaces and membership are archived')
+    this.resource = resourceFor(table)
+  }
   select(..._columns: unknown[]) { this.operation = 'select'; return this }
   insert(payload: unknown, ..._options: unknown[]) { this.operation = 'insert'; this.payload = payload; return this }
   update(payload: unknown, ..._options: unknown[]) { this.operation = 'update'; this.payload = payload; return this }
@@ -179,25 +180,7 @@ class ApiQuery implements PromiseLike<QueryResult> {
       const idFilter = this.filters.find((filter) => filter.field === 'id' || (this.resource === 'user-preferences' && filter.field === 'user_id'))
       let response: ApiEnvelope<any>
       if (this.operation === 'select') {
-        if (this.resource === 'teaching-members') {
-          const teachingId = this.filters.find((filter) => filter.field === 'teaching_id' && filter.operator === 'eq')?.value
-          const userId = this.filters.find((filter) => filter.field === 'user_id' && filter.operator === 'eq')?.value
-          if (typeof teachingId !== 'string') throw new Error('API teaching member query requires a teaching_id filter')
-          response = typeof userId === 'string'
-            ? await apiV1Client.get(`/teachings/${encodeURIComponent(teachingId)}/members/${encodeURIComponent(userId)}`)
-            : await apiV1Client.get(`/teachings/${encodeURIComponent(teachingId)}/members?${(() => {
-              const params = new URLSearchParams({ limit: String(this.limitValue ?? 100), offset: String(this.offsetValue) })
-              if (this.sort) params.set('sort', this.sort)
-              for (const filter of this.filters) {
-                if (filter.field === 'teaching_id') continue
-                if (filter.field === 'status' && filter.operator === 'eq' && typeof filter.value === 'string') params.set('status', filter.value)
-                else if (filter.field === 'user_id' && filter.operator === 'eq' && typeof filter.value === 'string') params.set('user_id', filter.value)
-                else if (filter.field === 'user_id' && filter.operator === 'ilike' && typeof filter.value === 'string') params.set('search', filter.value.replace(/^%|%$/g, ''))
-                else throw new Error(`API teaching member filter is not supported: ${filter.field}`)
-              }
-              return params.toString()
-            })()}`)
-        } else if (this.resource === 'report-collab-docs') {
+      if (this.resource === 'report-collab-docs') {
           const reportId = this.filters.find((filter) => filter.field === 'occurrence_report_id' && filter.operator === 'eq')?.value
           if (typeof reportId !== 'string') throw new Error('API collaboration query requires an occurrence_report_id filter')
           response = await apiV1Client.get(`/reports/${encodeURIComponent(reportId)}/collaboration`)
@@ -208,22 +191,6 @@ class ApiQuery implements PromiseLike<QueryResult> {
       const payloads = (Array.isArray(this.payload) ? this.payload : [this.payload])
         .map((payload) => sanitizeWritePayload(this.resource, payload))
       const body = this.resource === 'reports' ? reportPayload(payloads[0], this.filters) : payloads[0]
-      if (this.resource === 'teaching-members') {
-        const payload = body && typeof body === 'object' ? body as Record<string, unknown> : {}
-        const teachingId = stringArg(payload, 'teaching_id') ?? stringArg(Object.fromEntries(this.filters.map((filter) => [filter.field, filter.value])), 'teaching_id')
-        const userId = stringArg(payload, 'user_id') ?? stringArg(Object.fromEntries(this.filters.map((filter) => [filter.field, filter.value])), 'user_id')
-        if (!teachingId) throw new Error('API teaching member mutation requires a teaching_id')
-        if (this.operation === 'insert' || this.operation === 'upsert') {
-          const { teaching_id: _teachingId, ...memberPayload } = payload
-          const result = await apiV1Client.post(`/teachings/${encodeURIComponent(teachingId)}/members`, memberPayload)
-          return { data: result.data, error: null, count: 1 }
-        }
-        if (!userId) throw new Error('API teaching member mutation requires a user_id')
-        const path = `/teachings/${encodeURIComponent(teachingId)}/members/${encodeURIComponent(userId)}`
-        const { teaching_id: _teachingId, user_id: _userId, ...memberPayload } = payload
-        const result = this.operation === 'delete' ? await apiV1Client.delete(path) : await apiV1Client.patch(path, memberPayload)
-        return { data: result.data, error: null, count: 1 }
-      }
       const idInFilter = this.filters.find((filter) => filter.field === 'id' && filter.operator === 'in')
       if (idInFilter && Array.isArray(idInFilter.value)) {
         const rows: unknown[] = []

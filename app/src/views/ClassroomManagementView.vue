@@ -1161,7 +1161,6 @@ function clearTeacherSelection() {
         <!-- Responsive Room Management Panel -->
         <ClassroomManagementPanel v-if="isCreateRoomModalOpen" v-model:room="newClassroom"
             v-model:room-selections="roomPolicySelections" :room-id="editingClassroom?.id"
-            :teaching-id="editingClassroom?.teaching_id"
             :sessions="roomSessions" :roles="roles" :policies="notificationPolicies" :saving="isSavingRoom"
             :initial-tab="roomPanelInitialTab"
             @close="closeRoomModal" @save="saveClassroom" @edit-session="editSessionFromRoomPanel"

@@ -1,6 +1,6 @@
 export type PolicyEffect = 'allow' | 'deny'
 export type RbacDomain = 'system' | 'teaching'
-export type PolicyScope = 'system' | 'teaching' | 'classroom' | 'class_session'
+export type PolicyScope = 'system' | 'classroom' | 'class_session'
 
 export interface RoleDTO {
     id: string
@@ -63,9 +63,8 @@ export interface RbacCapabilities {
 
 export interface SettingsOverview {
     preferences: { time_zone?: string | null; editor_settings?: Record<string, unknown> | null } | null
-    teachings: Array<{ id: string; name: string; owner_user_id?: string | null }>
     capabilities: RbacCapabilities
-    tabs: { personal: boolean; teaching: boolean; system: boolean }
+    tabs: { personal: boolean; system: boolean }
     sections: Record<string, Record<string, boolean>>
 }
 

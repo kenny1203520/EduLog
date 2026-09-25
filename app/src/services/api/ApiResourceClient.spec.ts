@@ -17,13 +17,12 @@ describe('ApiResourceClient', () => {
     await expect(client.list('classrooms', { mode: 'v1' })).rejects.toMatchObject({ kind: 'authorization' })
   })
 
-  it('serializes scoped filters and boolean query options for the server', async () => {
+  it('serializes business filters and boolean query options for the server', async () => {
     const request = vi.fn().mockResolvedValue({ data: [], meta: { limit: 10, offset: 10, total: 0, sort: '-updated_at' }, request_id: 'r', trace_id: 't' })
     const client = new ApiResourceClient(new ApiModeClient({ request }, { request }))
     await client.list('reports', {
       page: 2,
       perPage: 10,
-      teachingId: '00000000-0000-0000-0000-000000000001',
       status: 'active',
       filters: [{ field: 'is_completed', operator: 'eq', value: false }],
       or: 'attendance_status.eq.present,progress_letter.eq.A',
@@ -33,17 +32,10 @@ describe('ApiResourceClient', () => {
 
     const path = String(request.mock.calls[0][0])
     const query = new URL(path, 'http://localhost').searchParams
-    expect(query.get('teaching_id')).toBe('00000000-0000-0000-0000-000000000001')
     expect(query.get('status')).toBe('active')
     expect(query.get('sort')).toBe('-updated_at')
     expect(JSON.parse(query.get('filters') ?? '')).toEqual([{ field: 'is_completed', operator: 'eq', value: false }])
     expect(query.get('or')).toBe('attendance_status.eq.present,progress_letter.eq.A')
   })
 
-  it('uses the nested teaching member contract instead of a flat table route', async () => {
-    const request = vi.fn().mockResolvedValue({ data: [], meta: { limit: 25, offset: 0, total: 0 }, request_id: 'r', trace_id: 't' })
-    const client = new ApiResourceClient(new ApiModeClient({ request }, { request }))
-    await client.listMembers('00000000-0000-0000-0000-000000000001', { perPage: 25 }, 'v1')
-    expect(request.mock.calls[0][0]).toBe('/teachings/00000000-0000-0000-0000-000000000001/members?limit=25&offset=0')
-  })
 })

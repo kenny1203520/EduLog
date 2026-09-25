@@ -12,7 +12,6 @@ import { roleDisplayName } from '@/utils/roleDisplay'
 
 const props = defineProps<{
     classroomId?: string | null
-    teachingId?: string | null
 }>()
 
 const { t, locale } = useI18n()
@@ -177,7 +176,7 @@ async function loadPanel() {
     canManage.value = await RoleService.canManageRoleScope('classroom', props.classroomId).catch(() => false)
     const results = await Promise.allSettled([
         ClassroomRoleAssignmentService.list(props.classroomId, 1, pageSize),
-        RoleService.getRolesForScope({ domain: 'teaching', teachingId: props.teachingId ?? undefined, scopeType: 'classroom', scopeId: props.classroomId })
+        RoleService.getRolesForScope({ domain: 'teaching', scopeType: 'classroom', scopeId: props.classroomId })
     ])
     const assignmentResult = results[0]
     if (assignmentResult.status === 'fulfilled') {
@@ -204,7 +203,7 @@ async function submitAssignment() {
     formError.value = ''
     try {
         const isNewAssignment = !editingAssignment.value
-        const capabilities = await RoleService.getCapabilities(props.teachingId ?? undefined)
+        const capabilities = await RoleService.getCapabilities()
         const input = {
             user_id: selectedUserId.value,
             role_id: selectedRoleId.value,
@@ -238,7 +237,7 @@ async function revokeAssignment(assignment: ClassroomRoleAssignmentDTO) {
     if (!props.classroomId || !window.confirm(t('classroom.role_assignments.confirm_revoke', { user: assignmentUserLabel(assignment), role: assignmentRoleLabel(assignment) }))) return
     saving.value = true
     try {
-        const capabilities = await RoleService.getCapabilities(props.teachingId ?? undefined)
+        const capabilities = await RoleService.getCapabilities()
         await ClassroomRoleAssignmentService.delete(props.classroomId, assignment.id, capabilities.epoch)
         toast.success(t('classroom.role_assignments.revoked'))
         if (assignments.value.length === 1 && page.value > 1) page.value -= 1
@@ -251,7 +250,7 @@ async function revokeAssignment(assignment: ClassroomRoleAssignmentDTO) {
 }
 
 watch(page, () => { void loadAssignments() })
-watch(() => [props.classroomId, props.teachingId], () => { void loadPanel() })
+watch(() => props.classroomId, () => { void loadPanel() })
 onMounted(() => { void loadPanel() })
 onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 </script>

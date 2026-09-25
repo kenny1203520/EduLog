@@ -11,7 +11,6 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 import type { SettingsOverview } from '@/models/Rbac'
 import { useFeedback } from '@/composables/useFeedback'
 
-const TeachingSettingsPanel = defineAsyncComponent(() => import('@/components/settings/TeachingSettingsPanel.vue'))
 const SystemSettingsPanel = defineAsyncComponent(() => import('@/components/settings/SystemSettingsPanel.vue'))
 const route = useRoute()
 const router = useRouter()
@@ -43,17 +42,15 @@ const securityNotice = ref('')
 const emailChange = ref({ current_password: '', email: '' })
 const passwordChange = ref({ current_password: '', new_password: '', confirm_password: '' })
 const currentEmail = computed(() => auth.user?.email ?? '')
-const requestedTab = computed(() => { const value = typeof route.query.tab === 'string' ? route.query.tab : 'personal'; return ['personal', 'teaching', 'system'].includes(value) ? value as 'personal' | 'teaching' | 'system' : 'personal' })
-const activeTab = ref<'personal' | 'teaching' | 'system'>('personal')
-const canTeaching = computed(() => overview.value?.tabs.teaching === true)
+const requestedTab = computed(() => { const value = typeof route.query.tab === 'string' ? route.query.tab : 'personal'; return ['personal', 'system'].includes(value) ? value as 'personal' | 'system' : 'personal' })
+const activeTab = ref<'personal' | 'system'>('personal')
 const canSystem = computed(() => overview.value?.tabs.system === true)
-const selectedTeachingId = computed(() => typeof route.query.teaching_id === 'string' ? route.query.teaching_id : overview.value?.teachings[0]?.id)
 
-function isTabAllowed(tab: 'personal' | 'teaching' | 'system') {
-    return tab === 'personal' || (tab === 'teaching' && canTeaching.value) || (tab === 'system' && canSystem.value)
+function isTabAllowed(tab: 'personal' | 'system') {
+    return tab === 'personal' || (tab === 'system' && canSystem.value)
 }
 
-async function syncTab(tab: 'personal' | 'teaching' | 'system') {
+async function syncTab(tab: 'personal' | 'system') {
     if (!overview.value || isTabAllowed(tab)) { activeTab.value = tab; return }
     activeTab.value = 'personal'
     await router.replace({ query: { ...route.query, tab: 'personal' } })
@@ -65,9 +62,9 @@ async function savePersonProfile() { profileSaving.value = true; try { const fie
 function securityErrorKey(error: unknown) { const code = (error as { code?: string })?.code; return code === 'CURRENT_PASSWORD_INVALID' ? 'settings.security.current_password_invalid' : code === 'RATE_LIMITED' ? 'settings.security.rate_limited' : 'settings.security.request_failed' }
 async function requestEmailChange() { securityBusy.value = 'email'; securityError.value = ''; securityNotice.value = ''; try { await apiV1Client.post('/auth/me/email', emailChange.value); emailChange.value = { current_password: '', email: '' }; securityNotice.value = 'settings.security.email_confirmation_sent' } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
 async function changePassword() { securityError.value = ''; securityNotice.value = ''; if (passwordChange.value.new_password !== passwordChange.value.confirm_password) { securityError.value = 'settings.security.password_mismatch'; return } securityBusy.value = 'password'; try { await apiV1Client.post('/auth/me/password', passwordChange.value); passwordChange.value = { current_password: '', new_password: '', confirm_password: '' }; securityNotice.value = 'settings.security.password_changed' } catch (error) { securityError.value = securityErrorKey(error) } finally { securityBusy.value = null } }
-async function selectTab(tab: 'personal' | 'teaching' | 'system') { if (dirty.value && !window.confirm('目前有尚未儲存的修改，確定要切換分頁嗎？')) return; if (tab === 'teaching' && !canTeaching.value) return router.replace({ query: { ...route.query, tab: 'personal' } }); if (tab === 'system' && !canSystem.value) return router.replace({ query: { ...route.query, tab: 'personal' } }); dirty.value = false; await router.replace({ query: { ...route.query, tab } }) }
+async function selectTab(tab: 'personal' | 'system') { if (dirty.value && !window.confirm('目前有尚未儲存的修改，確定要切換分頁嗎？')) return; if (tab === 'system' && !canSystem.value) return router.replace({ query: { ...route.query, tab: 'personal' } }); dirty.value = false; await router.replace({ query: { ...route.query, tab } }) }
 function useBrowserTimeZone() { preferences.timeZone = DateUtils.getBrowserTimeZone() }
-watch([requestedTab, canTeaching, canSystem], ([value]) => { void syncTab(value) })
+watch([requestedTab, canSystem], ([value]) => { void syncTab(value) })
 watch(() => preferences.timeZone, () => { dirty.value = true })
 onMounted(async () => { await Promise.all([loadOverview(), loadPersonProfile()]); await syncTab(requestedTab.value) })
 </script>
@@ -79,7 +76,6 @@ onMounted(async () => { await Promise.all([loadOverview(), loadPersonProfile()])
         <template v-else>
             <nav class="flex flex-wrap gap-2 rounded-3xl border border-gray-100 bg-white p-3 shadow-sm" :aria-label="$t('settings.tabs_aria')">
                 <button class="rounded-2xl px-5 py-3 text-sm font-black transition" :class="activeTab === 'personal' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-50'" @click="selectTab('personal')">{{ $t('settings.tab_personal') }}</button>
-                <button v-if="canTeaching" class="rounded-2xl px-5 py-3 text-sm font-black transition" :class="activeTab === 'teaching' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-50'" @click="selectTab('teaching')">{{ $t('settings.tab_teaching') }}</button>
                 <button v-if="canSystem" class="rounded-2xl px-5 py-3 text-sm font-black transition" :class="activeTab === 'system' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-50'" @click="selectTab('system')">{{ $t('settings.tab_system') }}</button>
             </nav>
             <div v-if="activeTab === 'personal'" class="grid gap-6 lg:grid-cols-[18rem_1fr]">
@@ -125,7 +121,6 @@ onMounted(async () => { await Promise.all([loadOverview(), loadPersonProfile()])
                     <section id="appearance" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm"><h2 class="text-xl font-black">{{ $t('settings.appearance.title') }}</h2><div class="mt-5 flex items-center gap-4"><button class="h-12 w-12 rounded-xl bg-gray-50 text-xl font-black" @click="preferences.adjustGlobalScale(-preferences.STEP)" :aria-label="$t('settings.appearance.decrease_font')">&minus;</button><span class="font-black">{{ preferences.globalFontScale }}%</span><button class="h-12 w-12 rounded-xl bg-gray-50 text-xl font-black" @click="preferences.adjustGlobalScale(preferences.STEP)" :aria-label="$t('settings.appearance.increase_font')">&plus;</button></div><div class="mt-6 border-t border-gray-100 pt-5"><LanguageSwitcher full-width label-on-mobile align="left" /></div></section>
                 </div>
             </div>
-            <TeachingSettingsPanel v-else-if="activeTab === 'teaching'" :teachings="overview?.teachings ?? []" :teaching-id="selectedTeachingId" />
             <SystemSettingsPanel v-else-if="activeTab === 'system'" />
         </template>
     </div>
