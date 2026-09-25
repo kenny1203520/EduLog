@@ -446,7 +446,7 @@ Deno.test('1000072 isolates sensitive student and teacher data behind owner capa
   assertStringIncludes(sensitiveDataIntegration, 'authenticated role can directly update core sensitive columns')
   assertStringIncludes(sensitiveDataIntegration, 'sensitive permissions were implicitly granted to a non-owner role')
   assertStringIncludes(sensitiveDataIntegration, 'Canonical student credentials read')
-  assertStringIncludes(sensitiveDataIntegration, 'Canonical teacher credentials read')
+  assertStringIncludes(sensitiveDataIntegration, 'teacher_credentials_permission_read')
 })
 
 Deno.test('1000073 creates an invoker dashboard read model with safe projections', () => {
