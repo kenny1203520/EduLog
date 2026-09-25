@@ -9,21 +9,20 @@ INSERT INTO auth.users(id, email) VALUES
   ('91000000-0000-4000-8000-000000000002', 'lifecycle-other@example.test')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.teachings(id, name, owner_user_id, is_quarantine) VALUES
-  ('92000000-0000-4000-8000-000000000001', 'Lifecycle Teaching A', '91000000-0000-4000-8000-000000000001', false),
-  ('92000000-0000-4000-8000-000000000002', 'Lifecycle Teaching B', '91000000-0000-4000-8000-000000000002', false)
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO public.teaching_members(teaching_id, user_id, role_id)
-SELECT '92000000-0000-4000-8000-000000000001', '91000000-0000-4000-8000-000000000001', id
-FROM public.roles WHERE code = 'teaching_owner'
-ON CONFLICT (teaching_id, user_id) DO UPDATE SET role_id = EXCLUDED.role_id, status = 'active';
+-- The fixture owner gets a platform teaching role; the unrelated account
+-- remains unassigned. Teaching membership is no longer stored per workspace.
+INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, effective_to, status)
+SELECT '91000000-0000-4000-8000-000000000001', id, 'system', NULL, CURRENT_DATE, NULL, 'active'
+FROM public.roles WHERE code = 'teaching_owner' AND domain = 'teaching'
+ON CONFLICT DO NOTHING;
 
 INSERT INTO public.classrooms(id, name, user_id, teaching_id)
-VALUES ('93000000-0000-4000-8000-000000000001', 'Lifecycle Classroom', '91000000-0000-4000-8000-000000000001', '92000000-0000-4000-8000-000000000001')
+SELECT '93000000-0000-4000-8000-000000000001', 'Lifecycle Classroom', '91000000-0000-4000-8000-000000000001', id
+FROM public.teachings WHERE is_global LIMIT 1
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
-VALUES ('94000000-0000-4000-8000-000000000001', 'Lifecycle Course', 'primary', '91000000-0000-4000-8000-000000000001', '92000000-0000-4000-8000-000000000001')
+SELECT '94000000-0000-4000-8000-000000000001', 'Lifecycle Course', 'primary', '91000000-0000-4000-8000-000000000001', id
+FROM public.teachings WHERE is_global LIMIT 1
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.lessons(id, course_id, title, sequence, user_id)
 VALUES
@@ -31,7 +30,8 @@ VALUES
   ('95000000-0000-4000-8000-000000000002', '94000000-0000-4000-8000-000000000001', 'Lesson 2', 2, '91000000-0000-4000-8000-000000000001')
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, end_date, teaching_id)
-VALUES ('96000000-0000-4000-8000-000000000001', 'Lifecycle Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '09:00', '10:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', DATE '2026-03-31', '92000000-0000-4000-8000-000000000001')
+SELECT '96000000-0000-4000-8000-000000000001', 'Lifecycle Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '09:00', '10:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-01', DATE '2026-03-31', teaching.id
+FROM public.teachings teaching WHERE teaching.is_global LIMIT 1
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.class_session_schedule_rules(id, class_session_id, schedule_kind, day_of_week, start_time, end_time)
 VALUES ('97000000-0000-4000-8000-000000000001', '96000000-0000-4000-8000-000000000001', 'weekly', 1, '09:00', '10:00')
@@ -52,7 +52,8 @@ ON CONFLICT (id) DO NOTHING;
 -- A closed-at-first-occurrence session proves that lifecycle provisioning
 -- respects class_sessions.end_date instead of creating an out-of-range row.
 INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, start_time, end_time, user_id, start_date, end_date, teaching_id)
-VALUES ('96000000-0000-4000-8000-000000000002', 'Lifecycle Closed Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '11:00', '12:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-05', DATE '2026-01-05', '92000000-0000-4000-8000-000000000001')
+SELECT '96000000-0000-4000-8000-000000000002', 'Lifecycle Closed Session', '93000000-0000-4000-8000-000000000001', ARRAY['94000000-0000-4000-8000-000000000001']::uuid[], '11:00', '12:00', '91000000-0000-4000-8000-000000000001', DATE '2026-01-05', DATE '2026-01-05', teaching.id
+FROM public.teachings teaching WHERE teaching.is_global LIMIT 1
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.class_session_schedule_rules(id, class_session_id, schedule_kind, day_of_week, start_time, end_time)
 VALUES ('97000000-0000-4000-8000-000000000002', '96000000-0000-4000-8000-000000000002', 'weekly', 1, '11:00', '12:00')
@@ -260,16 +261,14 @@ BEGIN
   RESET ROLE;
   UPDATE public.role_permission_policies policy
   SET effect = 'deny'
-  FROM public.teaching_members member,
-       public.permissions permission,
-       public.teachings teaching
-  WHERE policy.role_id = member.role_id
+  FROM public.user_role_assignments assignment,
+       public.permissions permission
+  WHERE policy.role_id = assignment.role_id
     AND policy.permission_id = permission.id
-    AND policy.scope_type = 'teaching'
-    AND policy.scope_id = teaching.id
-    AND member.teaching_id = teaching.id
-    AND member.user_id = '91000000-0000-4000-8000-000000000001'
-    AND teaching.id = '92000000-0000-4000-8000-000000000001'
+    AND policy.scope_type = 'system'
+    AND policy.scope_id IS NULL
+    AND assignment.scope_type = 'system'
+    AND assignment.user_id = '91000000-0000-4000-8000-000000000001'
     AND permission.key = 'teaching.reports.delete';
   IF NOT FOUND THEN
     RAISE EXCEPTION 'explicit deny fixture policy was not found';
@@ -281,9 +280,13 @@ BEGIN
     RAISE EXCEPTION 'delete replay survived explicit permission deny';
   END IF;
   RESET ROLE;
-  DELETE FROM public.teaching_members
-  WHERE teaching_id = '92000000-0000-4000-8000-000000000001'
-    AND user_id = '91000000-0000-4000-8000-000000000001';
+  DELETE FROM public.user_role_assignments assignment
+  USING public.roles role
+  WHERE assignment.role_id = role.id
+    AND role.code = 'teaching_owner'
+    AND role.domain = 'teaching'
+    AND assignment.scope_type = 'system'
+    AND assignment.user_id = '91000000-0000-4000-8000-000000000001';
   SET LOCAL ROLE service_role;
   IF EXISTS (SELECT 1 FROM public.replay_deleted_report_idempotency(
     '91000000-0000-4000-8000-000000000001', 'lifecycle-delete-replay-001',
