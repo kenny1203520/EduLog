@@ -32,4 +32,17 @@ describe('useAuthStore', () => {
     expect(store.session).toEqual({ user })
     expect(store.isAuthenticated).toBe(true)
   })
+
+  it('preserves disabled-account state from the session check without treating it as a login session', async () => {
+    vi.mocked(authService.getSession).mockResolvedValue({
+      session: null,
+      error: Object.assign(new Error('This account is disabled'), { code: 'ACCOUNT_DISABLED' })
+    })
+
+    const store = useAuthStore()
+    await store.initialize()
+
+    expect(store.accountDisabled).toBe(true)
+    expect(store.isAuthenticated).toBe(false)
+  })
 })

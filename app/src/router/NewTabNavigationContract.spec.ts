@@ -70,7 +70,8 @@ describe('native internal navigation contract', () => {
 
         const login = source('src/views/LoginView.vue')
         expectNativeInternalLinks(tagsContaining(login, 'router-link', 'to="/"'))
-        expect(login).toContain("router.push('/dashboard')")
+        expect(login).toContain('getSafePostLoginTarget(route.query.redirect, router)')
+        expect(login).toContain('router.replace(')
 
         const profile = source('src/views/StudentProfileView.vue')
         expect(tagsContaining(profile, 'router-link', 'to="/dashboard"')).toHaveLength(2)

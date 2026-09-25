@@ -8,9 +8,29 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<BffUser | null>(null)
   const session = ref<BffSession | null>(null)
   const loading = ref(true)
+  const accountDisabled = ref(false)
   let initializePromise: Promise<void> | null = null
 
   const isAuthenticated = computed(() => !!user.value)
+
+  function acceptRefreshedUser(nextUser: BffUser) {
+    session.value = { user: nextUser }
+    user.value = nextUser
+    loading.value = false
+  }
+
+  function clearSession() {
+    AggregateService.clearCache()
+    user.value = null
+    session.value = null
+    loading.value = false
+    accountDisabled.value = false
+  }
+
+  function markAccountDisabled() {
+    clearSession()
+    accountDisabled.value = true
+  }
 
   async function initialize() {
     // App.vue and route guards can both initialise the store during boot.  Keep
@@ -20,9 +40,10 @@ export const useAuthStore = defineStore('auth', () => {
     initializePromise = (async () => {
       loading.value = true
       try {
-        const { session: currentSession } = await authService.getSession()
+        const { session: currentSession, error } = await authService.getSession()
         session.value = currentSession
         user.value = currentSession?.user ?? null
+        accountDisabled.value = (error as { code?: string } | null)?.code === 'ACCOUNT_DISABLED'
       } finally {
         loading.value = false
       }
@@ -40,6 +61,7 @@ export const useAuthStore = defineStore('auth', () => {
     const { error } = result
     if (error) throw error
     if (result.user) {
+      accountDisabled.value = false
       AggregateService.clearCache()
       session.value = result.session ?? { user: result.user }
       user.value = result.user
@@ -49,9 +71,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function signOut() {
     const { error } = await authService.logout()
     if (error) throw error
-    AggregateService.clearCache()
-    user.value = null
-    session.value = null
+    clearSession()
   }
 
   return {
@@ -61,6 +81,10 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     initialize,
     signIn,
-    signOut
+    signOut,
+    acceptRefreshedUser,
+    clearSession,
+    markAccountDisabled,
+    accountDisabled
   }
 })

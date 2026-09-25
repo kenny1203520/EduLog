@@ -2,6 +2,8 @@
 import { ref } from 'vue'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
+import { getSafePostLoginTarget } from '@/router/authRedirect'
 import { useI18n } from 'vue-i18n'
 import LanguageSwitcher from '@/components/common/LanguageSwitcher.vue'
 
@@ -14,6 +16,7 @@ const loading = ref(false)
 
 const authStore = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 async function handleLogin() {
     loading.value = true
@@ -21,7 +24,7 @@ async function handleLogin() {
 
     try {
         await authStore.signIn(email.value, password.value)
-        router.push('/dashboard')
+        await router.replace(getSafePostLoginTarget(route.query.redirect, router))
     } catch (e: any) {
         const message = e.message || ''
         if (message.includes('Invalid login credentials')) {

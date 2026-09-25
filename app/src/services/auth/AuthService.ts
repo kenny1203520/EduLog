@@ -1,4 +1,4 @@
-import { apiV1Client } from '@/services/api/ApiV1Client'
+import { apiV1Client, registerApiAuthRecovery } from '@/services/api/ApiV1Client'
 
 export type BffUser = { id: string; email?: string | null; full_name?: string | null; nickname?: string | null; display_name?: string | null; user_metadata?: { full_name?: string; [key: string]: unknown }; [key: string]: unknown }
 export type BffSession = { user: BffUser }
@@ -6,8 +6,13 @@ type AuthResult = { user: BffUser | null; session: BffSession | null; error: Err
 type AuthSubscription = { data: { subscription: { unsubscribe: () => void } } }
 export class AuthService {
   private static instance: AuthService
-  private constructor() {}
   public static getInstance() { if (!AuthService.instance) AuthService.instance = new AuthService(); return AuthService.instance }
+  private constructor() {
+    registerApiAuthRecovery(async () => {
+      const result = await this.refresh()
+      return result.error || !result.user ? null : result.user
+    })
+  }
   async login(email: string, password: string): Promise<AuthResult> {
     try {
       const result = await apiV1Client.post<BffUser>('/auth/login', { email, password })
