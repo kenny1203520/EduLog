@@ -117,6 +117,10 @@ WHERE role.domain = 'teaching' AND role.teaching_id IS NOT NULL
   AND lower(btrim(role.name)) IN (SELECT normalized_name FROM duplicate_names);
 
 -- The source teaching id no longer limits teaching-domain role definitions.
+ALTER TABLE public.roles DROP CONSTRAINT IF EXISTS roles_domain_teaching_shape;
+ALTER TABLE public.roles ADD CONSTRAINT roles_domain_teaching_shape CHECK (
+  domain IN ('system', 'teaching') AND teaching_id IS NULL
+);
 UPDATE public.roles SET teaching_id = NULL WHERE domain = 'teaching';
 
 -- Preserve the old scope rows in the archive and promote their active role
