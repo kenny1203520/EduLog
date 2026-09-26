@@ -103,6 +103,26 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.unsubscribe()
   })
 
+  it('only treats the matching join reply as subscribed', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost:5173' } })
+    const callback = vi.fn()
+    const channel = new ApiRealtimeChannel('report-id', 'presence-key')
+    channel.subscribe(callback)
+    const socket = MockWebSocket.latest!
+    socket.emit('open')
+    const { join_ref: joinRef, topic } = JSON.parse(socket.sent[0])
+
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref: '2', topic, event: 'phx_reply', payload: { status: 'ok', response: {} } }) })
+    expect(callback).not.toHaveBeenCalledWith('SUBSCRIBED')
+
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref: joinRef, topic, event: 'phx_reply', payload: { status: 'ok', response: {} } }) })
+    expect(callback).toHaveBeenCalledTimes(1)
+    expect(callback).toHaveBeenCalledWith('SUBSCRIBED')
+    channel.unsubscribe()
+  })
+
   it('dispatches broadcast and presence replies decoded from Phoenix JSON objects', () => {
     vi.stubGlobal('WebSocket', MockWebSocket)
     vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost:5173' } })

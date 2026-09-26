@@ -162,10 +162,12 @@ export class ApiRealtimeChannel {
     }
     if (message.topic !== this.topic) return
     if (message.event === 'phx_reply') {
+      // Only the reply to this socket's current join attempt means the room is
+      // ready. Other replies can acknowledge presence/broadcast operations.
+      if (!this.joinRef || message.ref !== this.joinRef) return
       if (message.payload?.status === 'ok') {
         this.failureHandled = false
         this.reconnectAttempt = 0
-        this.joinRef = message.joinRef || this.joinRef
         this.startHeartbeat()
         this.subscribedCallback?.('SUBSCRIBED')
       } else {

@@ -189,10 +189,10 @@ export async function remove(req: Request, res: Response) {
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, teachingId: context.teaching_id, permission: 'teaching.reports.delete', scopeId: context.class_occurrence_id, scopeType: 'class_occurrence' })
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 200, envelope); return res.json(envelope)
 }
-async function readCollaboration(req: Request, res: Response) {
+export async function readCollaboration(req: Request, res: Response) {
   const id = reportId(req)
   await canAccess(req, id, 'teaching.reports.read')
-  const result = await req.db!.from('report_collab_docs').select('occurrence_report_id,snapshot_base64,base_report_version,updated_at').eq('occurrence_report_id', id).maybeSingle()
+  const result = await req.db!.from('report_collab_docs').select('occurrence_report_id,snapshot_base64,base_report_version,updated_at:last_updated_at').eq('occurrence_report_id', id).maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   return res.json({ data: result.data ?? { occurrence_report_id: id, snapshot_base64: null, base_report_version: null, updated_at: null }, meta: {}, request_id: req.requestId, trace_id: req.traceId })
 }

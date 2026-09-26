@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Request, Response } from 'express'
-import { remove } from './reportRouter.js'
+import { readCollaboration, remove } from './reportRouter.js'
 import { assertClientManagedAttendanceReason, assertReportAttendanceUpdate, firstUncompletedSequence } from './reportRouter.js'
 
 describe('report lifecycle progress', () => {
@@ -114,5 +114,47 @@ describe('report lifecycle progress', () => {
     await expect(remove(req, response)).rejects.toMatchObject({ status: 400, code: 'INVALID_ID' })
     expect(dbRpc).not.toHaveBeenCalled()
     expect(adminRpc).not.toHaveBeenCalled()
+  })
+})
+
+describe('report collaboration snapshot API', () => {
+  const reportId = 'a1000000-0000-4000-8000-000000000001'
+
+  function makeRequest(snapshot: unknown, error: unknown = null) {
+    const maybeSingle = vi.fn().mockResolvedValue({ data: snapshot, error })
+    const eq = vi.fn(() => ({ maybeSingle }))
+    const select = vi.fn(() => ({ eq }))
+    const from = vi.fn(() => ({ select }))
+    const rpc = vi.fn().mockResolvedValue({ data: true, error: null })
+    const req = {
+      params: { id: reportId }, requestId: 'request-1', traceId: 'trace-1',
+      user: { id: 'user-1' }, db: { rpc, from }, auditContext: {},
+    } as unknown as Request
+    const response = { json: vi.fn() } as unknown as Response
+    return { req, response, rpc, from, select, eq, maybeSingle }
+  }
+
+  it('returns an empty snapshot when no row exists and aliases last_updated_at for API compatibility', async () => {
+    const { req, response, rpc, from, select } = makeRequest(null)
+    await readCollaboration(req, response)
+
+    expect(rpc).toHaveBeenCalledWith('can_access_report', { p_report_id: reportId, p_permission_key: 'teaching.reports.read' })
+    expect(from).toHaveBeenCalledWith('report_collab_docs')
+    expect(select).toHaveBeenCalledWith('occurrence_report_id,snapshot_base64,base_report_version,updated_at:last_updated_at')
+    expect(response.json).toHaveBeenCalledWith({
+      data: { occurrence_report_id: reportId, snapshot_base64: null, base_report_version: null, updated_at: null },
+      meta: {}, request_id: 'request-1', trace_id: 'trace-1',
+    })
+  })
+
+  it('preserves snapshot timestamps and reports database errors instead of treating them as empty', async () => {
+    const updatedAt = '2026-09-26T02:00:00.000Z'
+    const row = { occurrence_report_id: reportId, snapshot_base64: 'snapshot', base_report_version: 4, updated_at: updatedAt }
+    const success = makeRequest(row)
+    await readCollaboration(success.req, success.response)
+    expect(success.response.json).toHaveBeenCalledWith(expect.objectContaining({ data: row }))
+
+    const failed = makeRequest(null, { code: '42703', message: 'column does not exist' })
+    await expect(readCollaboration(failed.req, failed.response)).rejects.toMatchObject({ status: 500, code: 'DATABASE_ERROR' })
   })
 })
