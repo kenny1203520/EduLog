@@ -18,10 +18,12 @@
             {{ $t('report.editor.collaboration_connecting', 'Collaboration is connecting. You can continue editing.') }}
         </div>
         <div v-else-if="effectiveCollaborationEnabled && (collaborationStatus === 'error' || collabInitialState === 'error')"
-            class="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800"
-            role="status">
-            {{ $t('report.editor.collaboration_fallback', 'Collaboration unavailable; switched to single-user editing. Saving remains available.') }}
-            <span v-if="collaborationError" class="sr-only">{{ collaborationError }}</span>
+            class="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+            role="status" aria-live="polite">
+            <span>{{ $t('report.editor.collaboration_disconnected') }}</span>
+            <button type="button" class="min-h-9 rounded-lg border border-amber-300 bg-white px-3 font-bold text-amber-900 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700 disabled:opacity-50" :disabled="collaborationStatus === 'connecting'" @click="reconnectCollaboration">
+                {{ collaborationStatus === 'connecting' ? $t('report.editor.collaboration_connecting_short') : $t('report.editor.collaboration_retry') }}
+            </button>
         </div>
         <div v-else-if="effectiveCollaborationEnabled && collaborationRecovered"
             class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
@@ -706,8 +708,8 @@ interface Props {
     initialProgressEnd?: string // 進度結束
     initialAttendanceStatus?: 'present' | 'absent' | 'pending' // 出缺勤狀態
     initialAbsenceReason?: string // 缺勤原因
-    initialClassParticipation?: number // 課堂參與
-    initialClassroomBehavior?: number // 課堂秩序
+    initialClassParticipation?: number | null // 課堂參與
+    initialClassroomBehavior?: number | null // 課堂秩序
     initialContactNotes?: string // 聯絡欄
     initialContactNotesDocument?: RichTextDocumentV1 | null
     initialClassNotes?: string // 課堂筆記/紀錄
@@ -747,8 +749,8 @@ const props = withDefaults(defineProps<Props>(), {
     initialProgressEnd: undefined,
     initialAttendanceStatus: 'pending',
     initialAbsenceReason: undefined,
-    initialClassParticipation: 0,
-    initialClassroomBehavior: 0,
+    initialClassParticipation: null,
+    initialClassroomBehavior: null,
     initialContactNotes: '',
     initialContactNotesDocument: null,
     initialClassNotes: '',
@@ -1582,10 +1584,10 @@ const {
     ydoc,
     provider: awarenessProvider,
     ready,
-    error: collaborationError,
     initialState: collabInitialState,
     saveSnapshot,
     setBaseReportVersion,
+    reconnect: reconnectCollaboration,
     status: collaborationStatus,
     activePeers,
     onlineParticipantCount,
@@ -1673,6 +1675,11 @@ function withCollabGuard(fn: () => void) {
     }
 }
 
+function normalizeReportRating(value: unknown): number | null {
+    const rating = value === null || value === undefined || value === '' ? null : Number(value)
+    return typeof rating === 'number' && Number.isFinite(rating) && rating > 0 ? rating : null
+}
+
 function syncTextRefsFromEditors() {
     if (isTextEditorHandle(contentEditorRef.value)) {
         const content = contentEditorRef.value.getContent()
@@ -1736,11 +1743,15 @@ watch(ready, (isReady) => {
                 else metaMap.set('absenceReason', absenceReason.value)
             }
 
-            if (metaMap.has('classParticipation')) classParticipation.value = Number(metaMap.get('classParticipation') ?? 0)
-            else metaMap.set('classParticipation', classParticipation.value)
+            if (metaMap.has('classParticipation')) {
+                classParticipation.value = normalizeReportRating(metaMap.get('classParticipation'))
+                if (metaMap.get('classParticipation') !== classParticipation.value) metaMap.set('classParticipation', classParticipation.value)
+            } else metaMap.set('classParticipation', classParticipation.value)
 
-            if (metaMap.has('classroomBehavior')) classroomBehavior.value = Number(metaMap.get('classroomBehavior') ?? 0)
-            else metaMap.set('classroomBehavior', classroomBehavior.value)
+            if (metaMap.has('classroomBehavior')) {
+                classroomBehavior.value = normalizeReportRating(metaMap.get('classroomBehavior'))
+                if (metaMap.get('classroomBehavior') !== classroomBehavior.value) metaMap.set('classroomBehavior', classroomBehavior.value)
+            } else metaMap.set('classroomBehavior', classroomBehavior.value)
 
             if (metaMap.has('isCompleted')) isCompleted.value = Boolean(metaMap.get('isCompleted'))
             else metaMap.set('isCompleted', isCompleted.value)
@@ -1794,8 +1805,16 @@ watch(ready, (isReady) => {
                             else if (metaMap.get('absenceReason') !== (props.initialAbsenceReason || '')) metaMap.set('absenceReason', props.initialAbsenceReason || '')
                         }
                     }
-                    if (key === 'classParticipation' && Number(newVal ?? 0) !== classParticipation.value) classParticipation.value = Number(newVal ?? 0)
-                    if (key === 'classroomBehavior' && Number(newVal ?? 0) !== classroomBehavior.value) classroomBehavior.value = Number(newVal ?? 0)
+                    if (key === 'classParticipation') {
+                        const rating = normalizeReportRating(newVal)
+                        if (newVal !== rating) metaMap.set(key, rating)
+                        if (rating !== classParticipation.value) classParticipation.value = rating
+                    }
+                    if (key === 'classroomBehavior') {
+                        const rating = normalizeReportRating(newVal)
+                        if (newVal !== rating) metaMap.set(key, rating)
+                        if (rating !== classroomBehavior.value) classroomBehavior.value = rating
+                    }
                     if (key === 'isCompleted' && Boolean(newVal) !== isCompleted.value) isCompleted.value = Boolean(newVal)
                     if (key === 'progressStart' && (newVal || '') !== progressStart.value) progressStart.value = newVal as any || ''
                     if (key === 'progressEnd' && (newVal || '') !== progressEnd.value) progressEnd.value = newVal as any || ''
@@ -1956,8 +1975,8 @@ const managedAttendanceReason = ref<'holiday' | 'suspension' | null>(normalizeSy
 const managedAttendanceStatus = ref<'present' | 'absent' | 'pending' | null>(
     managedAttendanceReason.value ? (props.initialAttendanceStatus || 'absent') : null
 )
-const classParticipation = ref(props.initialClassParticipation ?? 0)
-const classroomBehavior = ref(props.initialClassroomBehavior ?? 0)
+const classParticipation = ref<number | null>(normalizeReportRating(props.initialClassParticipation))
+const classroomBehavior = ref<number | null>(normalizeReportRating(props.initialClassroomBehavior))
 const contactNotes = ref(initialContactContent.plainText)
 const contactNotesDocument = ref(initialContactContent.richText)
 const classNotes = ref(initialClassContent.plainText)
@@ -1985,8 +2004,8 @@ type ReportSavePayload = {
     progressLetter?: string | null
     attendanceStatus?: AttendanceStatus
     absenceReason?: string | null
-    classParticipation?: number
-    classroomBehavior?: number
+    classParticipation?: number | null
+    classroomBehavior?: number | null
     contactNotes?: string
     contactNotesDocument?: RichTextDocumentV1
     classNotes?: string
@@ -2063,8 +2082,8 @@ function buildSnapshotFromProps(): ReportDraftSnapshot {
         absenceReason: initialStatus === 'absent'
             ? (managedReason || normalizeAbsenceReason(initialStatus, props.initialAbsenceReason))
             : null,
-        classParticipation: props.initialClassParticipation ?? 0,
-        classroomBehavior: props.initialClassroomBehavior ?? 0,
+        classParticipation: normalizeReportRating(props.initialClassParticipation),
+        classroomBehavior: normalizeReportRating(props.initialClassroomBehavior),
         contactNotes: contact.plainText,
         contactNotesDocument: contact.richText,
         classNotes: classNotesContent.plainText,
@@ -2086,8 +2105,8 @@ function buildSnapshotFromDto(report: OccurrenceReportDTO): ReportDraftSnapshot 
         attendanceStatus: report.attendance_status || 'pending',
         absenceReason: normalizeSystemManagedReason(report.absence_reason)
             || normalizeAbsenceReason(report.attendance_status || 'pending', report.absence_reason),
-        classParticipation: report.class_participation ?? 0,
-        classroomBehavior: report.classroom_behavior ?? 0,
+        classParticipation: normalizeReportRating(report.class_participation),
+        classroomBehavior: normalizeReportRating(report.classroom_behavior),
         contactNotes: contact.plainText,
         contactNotesDocument: contact.richText,
         classNotes: classNotesContent.plainText,
@@ -2463,11 +2482,11 @@ watch(() => props.initialAbsenceReason, (newVal) => {
 })
 
 watch(() => props.initialClassParticipation, (newVal) => {
-    if (!hasUnsavedChanges.value) classParticipation.value = newVal ?? 0
+    if (!hasUnsavedChanges.value) classParticipation.value = normalizeReportRating(newVal)
 })
 
 watch(() => props.initialClassroomBehavior, (newVal) => {
-    if (!hasUnsavedChanges.value) classroomBehavior.value = newVal ?? 0
+    if (!hasUnsavedChanges.value) classroomBehavior.value = normalizeReportRating(newVal)
 })
 
 watch(() => props.initialContactNotes, (newVal) => {
@@ -2650,8 +2669,8 @@ function replaceWithCanonicalReport(report: OccurrenceReportDTO, notifyParent = 
     progressEnd.value = report.progress_letter && report.progress_letter.includes('-') ? report.progress_letter.split('-')[1] : ''
     attendanceStatus.value = report.attendance_status as any
     absenceReason.value = report.absence_reason || ''
-    classParticipation.value = report.class_participation ?? 0
-    classroomBehavior.value = report.classroom_behavior ?? 0
+    classParticipation.value = normalizeReportRating(report.class_participation)
+    classroomBehavior.value = normalizeReportRating(report.classroom_behavior)
     contactNotes.value = contact.plainText
     contactNotesDocument.value = contact.richText
     classNotes.value = classNotesContent.plainText

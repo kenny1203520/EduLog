@@ -1,5 +1,5 @@
 <template>
-  <div class="flex items-center gap-1.5">
+  <div class="flex flex-wrap items-center gap-2">
     <div class="flex relative">
       <template v-for="i in 5" :key="i">
         <div 
@@ -45,37 +45,49 @@
           <!-- Click Targets (Invisible) -->
           <button 
             type="button" 
-            class="absolute top-0 left-0 w-1/2 h-full z-20 focus:outline-none"
+            class="absolute top-0 left-0 z-20 h-full w-1/2 rounded-l focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700"
             @mouseenter="hoverValue = i - 0.5"
             @click="updateRating(i - 0.5)"
-            aria-label="Half star"
+            :aria-label="t('report.editor.rate_half_star', { value: i - 0.5 })"
+            :aria-pressed="modelValue === i - 0.5"
           ></button>
           
           <button 
             type="button" 
-            class="absolute top-0 right-0 w-1/2 h-full z-20 focus:outline-none"
+            class="absolute top-0 right-0 z-20 h-full w-1/2 rounded-r focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700"
             @mouseenter="hoverValue = i"
             @click="updateRating(i)"
-            aria-label="Full star"
+            :aria-label="t('report.editor.rate_full_star', { value: i })"
+            :aria-pressed="modelValue === i"
           ></button>
         </div>
       </template>
     </div>
-    <span class="text-sm font-black text-gray-500 min-w-[2rem] text-center bg-gray-100 rounded-md px-1.5 py-0.5" v-if="showValue">
-      {{ modelValue }}
+    <span class="text-sm font-black text-gray-600 min-w-[3rem] text-center bg-gray-100 rounded-md px-1.5 py-1" v-if="showValue" aria-live="polite">
+      {{ modelValue === null ? t('report.editor.unrated') : modelValue }}
     </span>
+    <button v-if="clearable && modelValue !== null" type="button" class="min-h-8 rounded-md px-2 text-xs font-bold text-gray-600 underline decoration-gray-300 underline-offset-2 hover:bg-gray-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-700" @click="updateRating(null)">
+      {{ t('report.editor.clear_rating') }}
+    </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   modelValue: {
-    type: Number,
-    default: 0
+    type: Number as () => number | null,
+    default: null
   },
   showValue: {
+    type: Boolean,
+    default: true
+  },
+  clearable: {
     type: Boolean,
     default: true
   }
@@ -87,13 +99,13 @@ const hoverValue = ref<number | null>(null)
 
 function getStarClass(value: number) {
   const current = hoverValue.value !== null ? hoverValue.value : props.modelValue
-  if (current >= value) {
+  if (current !== null && current >= value) {
     return 'text-amber-400'
   }
   return 'text-gray-200'
 }
 
-function updateRating(value: number) {
+function updateRating(value: number | null) {
   emit('update:modelValue', value)
 }
 </script>

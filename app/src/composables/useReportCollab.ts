@@ -61,6 +61,9 @@ export function useReportCollab(
     const lastSyncedAt = ref<Date | null>(null)
     let generation = 0
     let awarenessHandler: (() => void) | null = null
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let retryAttempt = 0
+    let connectionPromise: Promise<boolean> | null = null
 
     const getReportId = () => (typeof reportId === 'string' ? reportId : reportId.value)
     const getReportVersion = () => (typeof reportVersion === 'number' ? reportVersion : reportVersion.value)
@@ -76,7 +79,7 @@ export function useReportCollab(
     // occurrence_reports would otherwise be silently discarded whenever either
     // happens, which is exactly the "switched pages" / "closed the tab mid-edit"
     // data-loss path this guards against.
-    async function destroyCurrent(flush = true) {
+    async function destroyCurrent(flush = true, preserveDocument = false) {
         ready.value = false
         initialState.value = 'none'
         activePeers.value = []
@@ -87,10 +90,19 @@ export function useReportCollab(
             await provider.value.destroy()
             provider.value = null
         }
-        if (ydoc.value) {
+        if (ydoc.value && !preserveDocument) {
             ydoc.value.destroy()
             ydoc.value = null
         }
+    }
+
+    function scheduleRetry() {
+        if (!configuration.enabled || retryTimer) return
+        const delay = Math.min(30_000, 500 * (2 ** Math.min(retryAttempt++, 6)))
+        retryTimer = setTimeout(() => {
+            retryTimer = null
+            void connect()
+        }, delay)
     }
 
     function handleStatus(next: ReportCollabConnectionStatus): void {
@@ -98,13 +110,15 @@ export function useReportCollab(
         if (next === 'error') error.value = i18n.global.t('report.collaboration_connection_failed')
     }
 
-    const connect = async () => {
+    const connectOnce = async () => {
         if (!configuration.enabled) {
             status.value = 'disabled'
             return false
         }
         const token = ++generation
-        await destroyCurrent(false)
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
+        await destroyCurrent(false, true)
         if (token !== generation) return false
         const reportIdValue = getReportId()
         if (!reportIdValue) {
@@ -114,7 +128,7 @@ export function useReportCollab(
 
         error.value = null
         status.value = 'connecting'
-        const doc = new Y.Doc()
+        const doc = ydoc.value || new Y.Doc()
         ydoc.value = doc
         const userId = authStore.user?.id || ''
         const nextProvider = providerFactory(doc, reportIdValue, getReportVersion(), userId, {
@@ -132,34 +146,49 @@ export function useReportCollab(
             if (token === generation) {
                 error.value = reason?.message || i18n.global.t('report.collaboration_init_failed')
                 status.value = 'error'
-                await destroyCurrent(false)
+                await destroyCurrent(false, true)
+                scheduleRetry()
             } else {
                 await nextProvider.destroy()
-                doc.destroy()
             }
             return false
         }
 
         if (token !== generation) {
             await nextProvider.destroy()
-            doc.destroy()
             return false
         }
         initialState.value = nextProvider.initialState
         ready.value = true
         status.value = nextProvider.connected ? 'ready' : status.value
+        retryAttempt = 0
         updatePeers()
         return true
     }
 
+    const connect = () => {
+        if (connectionPromise) return connectionPromise
+        connectionPromise = connectOnce().finally(() => { connectionPromise = null })
+        return connectionPromise
+    }
+
     const disconnect = async (options: { flush?: boolean } = {}) => {
         generation += 1
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
         await destroyCurrent(options.flush ?? true)
         status.value = configuration.enabled ? 'error' : 'disabled'
     }
 
     const reconnect = async () => {
-        await disconnect({ flush: true })
+        retryAttempt = 0
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
+        generation += 1
+        await destroyCurrent(true, true)
+        // destroy() settles a provider's pending ready promise. Wait for that
+        // stale attempt to unwind before starting a new provider on the same Y.Doc.
+        await connectionPromise
         return connect()
     }
 
@@ -192,6 +221,8 @@ export function useReportCollab(
 
     const destroy = async () => {
         generation += 1
+        if (retryTimer) clearTimeout(retryTimer)
+        retryTimer = null
         await destroyCurrent()
         status.value = configuration.enabled ? 'error' : 'disabled'
     }

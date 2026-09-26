@@ -35,11 +35,17 @@ describe('editor reliability contracts', () => {
     })
     it('keeps the editor visible when collaboration is unavailable', () => {
         const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
         expect(editor).not.toContain(':user="collaborationUser""')
         expect(editor).toContain('v-if="ready && ydoc"')
         expect(editor).toContain('v-else')
         expect(editor).toContain('dedupeKey:')
-        expect(editor).toContain('collaboration_fallback')
+        expect(editor).toContain('collaboration_disconnected')
+        expect(editor).toContain('@click="reconnectCollaboration"')
+        expect(collab).toContain('scheduleRetry()')
+        expect(collab).toContain('connect, disconnect, reconnect, saveSnapshot')
+        expect(collab).toContain('await connectionPromise')
+        expect(collab).toContain('preserveDocument = false')
     })
 
     it('keeps system-managed attendance read-only and out of dirty mutations', () => {

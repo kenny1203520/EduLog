@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { resources, resourceSchemas } from './resources.js'
 
 describe('student API resource boundaries', () => {
+  it('returns report-only links and nullable scores in report list projections', () => {
+    expect(resources.reports.listFields).toEqual(expect.arrayContaining([
+      'external_link', 'class_participation', 'classroom_behavior',
+    ]))
+  })
+
   it('registers explicit student child resources with the student permission scope', () => {
     expect(resources['student-contacts'].table).toBe('student_contacts')
     expect(resources['student-schools'].table).toBe('student_schools')

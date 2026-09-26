@@ -34,11 +34,10 @@ export class ApiRealtimeChannel {
 
   private scheduleReconnect() {
     if (this.closedByUser || this.reconnectTimer) return
-    if (this.reconnectAttempt >= 3) {
-      this.subscribedCallback?.('CHANNEL_ERROR')
-      return
-    }
-    const delay = Math.min(4000, 500 * (2 ** this.reconnectAttempt++))
+    // Keep collaboration recoverable through temporary proxy, network, and
+    // Realtime outages. The bounded backoff avoids a hot retry loop while
+    // allowing the same Y.Doc to reconnect without dropping local edits.
+    const delay = Math.min(30_000, 500 * (2 ** Math.min(this.reconnectAttempt++, 6)))
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       this.connectSocket()

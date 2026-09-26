@@ -44,8 +44,8 @@ export class OccurrenceReportService {
             progressLetter?: string | null
             attendanceStatus?: 'present' | 'absent' | 'pending'
             absenceReason?: string | null
-            classParticipation?: number
-            classroomBehavior?: number
+            classParticipation?: number | null
+            classroomBehavior?: number | null
             contactNotes?: string
             contactNotesDocument?: RichTextDocumentV1
             classNotes?: string

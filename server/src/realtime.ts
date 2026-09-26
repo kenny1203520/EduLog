@@ -13,6 +13,20 @@ function cookieValue(header: string | undefined, name: string) {
 const MAX_MESSAGE_BYTES = 1024 * 1024
 const UPSTREAM_CONNECT_TIMEOUT_MS = 10_000
 
+export function resolveRealtimeUrl(config: ApiConfig): URL {
+  const realtimeUrl = config.SUPABASE_REALTIME_URL
+  const upstream = new URL(realtimeUrl || config.SUPABASE_URL)
+  if (!realtimeUrl) {
+    upstream.protocol = upstream.protocol === 'https:' ? 'wss:' : 'ws:'
+    upstream.pathname = '/realtime/v1/websocket'
+    upstream.search = ''
+  }
+  if (!upstream.pathname || upstream.pathname === '/') upstream.pathname = '/socket/websocket'
+  if (!upstream.searchParams.has('apikey')) upstream.searchParams.set('apikey', config.SUPABASE_ANON_KEY)
+  if (!upstream.searchParams.has('vsn')) upstream.searchParams.set('vsn', '1.0.0')
+  return upstream
+}
+
 function rejectUpgrade(socket: Socket, status: number, reason: string) {
   socket.write(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\n\r\n`)
   socket.destroy()
@@ -61,12 +75,8 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
     } catch {
       rejectUpgrade(socket, 401, 'Unauthorized'); return
     }
-    if (!config.SUPABASE_REALTIME_URL) { rejectUpgrade(socket, 503, 'Service Unavailable'); return }
     socketServer.handleUpgrade(request, socket, head, (client) => {
-      const upstream = new URL(config.SUPABASE_REALTIME_URL!)
-      if (!upstream.pathname || upstream.pathname === '/') upstream.pathname = '/socket/websocket'
-      if (!upstream.searchParams.has('apikey')) upstream.searchParams.set('apikey', config.SUPABASE_ANON_KEY)
-      if (!upstream.searchParams.has('vsn')) upstream.searchParams.set('vsn', '1.0.0')
+      const upstream = resolveRealtimeUrl(config)
       const upstreamSocket = new WebSocket(upstream.toString(), { maxPayload: MAX_MESSAGE_BYTES, handshakeTimeout: UPSTREAM_CONNECT_TIMEOUT_MS })
       const roomTopic = `realtime:room:${roomId}`
       const pending: string[] = []
@@ -81,10 +91,16 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
       client.on('message', forward)
       upstreamSocket.on('open', () => { upstreamReady = true; flush() })
       upstreamSocket.on('message', (message) => { if (client.readyState === WebSocket.OPEN) client.send(message) })
-      upstreamSocket.on('close', () => client.close())
+      upstreamSocket.on('close', (code) => {
+        if (client.readyState === WebSocket.OPEN) client.close(code === 1000 ? 1000 : 1011, 'Realtime upstream disconnected')
+      })
       client.on('close', () => upstreamSocket.close())
       client.on('error', () => upstreamSocket.close())
-      upstreamSocket.on('error', () => client.close())
+      upstreamSocket.on('error', (error: Error) => {
+        // Keep credentials and the upstream URL out of server logs.
+        console.error(JSON.stringify({ event: 'realtime_upstream_error', error_type: error.name }))
+        if (client.readyState === WebSocket.OPEN) client.close(1011, 'Realtime service unavailable')
+      })
     })
   })
 }
