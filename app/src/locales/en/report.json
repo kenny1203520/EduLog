@@ -103,6 +103,7 @@
         "collaboration_disconnected": "Live collaboration is disconnected. You can keep editing and saving; changes will sync after reconnection.",
         "collaboration_retry": "Retry connection",
         "collaboration_error_detail": "Connection detail:",
+        "collaboration_connecting": "Connecting to live collaboration. You can continue editing.",
         "collaboration_connecting_short": "Connecting…",
         "first_save_success": "Report saved",
         "save_failed_with_message": "Save failed: {message}",

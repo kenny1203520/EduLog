@@ -49,6 +49,7 @@ import type { OccurrenceReportDTO } from '@/models/OccurrenceReport'
 import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceScope'
 import { roleDisplayName } from '@/utils/roleDisplay'
 import { getEffectiveTeacherAssignments } from '@/utils/effectiveTeacherAssignments'
+import { absenceReasonLabel } from '@/utils/absenceReason'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -881,7 +882,7 @@ async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
     try {
         await OccurrenceReportService.saveAttendanceOnly(report.id, report.version, undefined, {
             attendanceStatus: status,
-            absenceReason: status === 'absent' ? t('report.editor.absence_reasons.reason_not_provided') : null
+            absenceReason: status === 'absent' ? 'reason_not_provided' : null
         })
         reportMap.value.set(enrId, await OccurrenceReportService.getReportById(report.id))
     } catch (error) {
@@ -933,9 +934,7 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
     const today = getTodayCourseSummary(enrollment)
     const attendanceStatus = (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus
     const absenceReason = reportMap.value.get(enrollment.id!)?.absenceReason || null
-    const absenceReasonLabel = absenceReason
-        ? t(`report.editor.absence_reasons.${absenceReason}`, absenceReason)
-        : null
+    const absenceReasonText = absenceReasonLabel(absenceReason, t)
     return {
         id: enrollment.id!,
         studentId: enrollment.studentId || '',
@@ -952,7 +951,7 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         attendanceStatus,
         attendanceLabel: t('attendance.' + attendanceStatus),
         absenceReason,
-        absenceReasonLabel,
+        absenceReasonLabel: absenceReasonText,
         isSavingAttendance: savingMap.value.get(enrollment.id!) === true,
         todayTitle: today.title,
         todayProgress: today.chapterProgress,
