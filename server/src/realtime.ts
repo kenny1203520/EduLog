@@ -23,7 +23,9 @@ export function resolveRealtimeUrl(config: ApiConfig): URL {
   }
   if (!upstream.pathname || upstream.pathname === '/') upstream.pathname = '/socket/websocket'
   if (!upstream.searchParams.has('apikey')) upstream.searchParams.set('apikey', config.SUPABASE_ANON_KEY)
-  if (!upstream.searchParams.has('vsn')) upstream.searchParams.set('vsn', '1.0.0')
+  // ApiRealtimeChannel speaks Phoenix's JSON-array 1.0.0 wire format.
+  // Override stale environment query parameters to prevent serializer drift.
+  upstream.searchParams.set('vsn', '1.0.0')
   return upstream
 }
 
@@ -32,26 +34,31 @@ function rejectUpgrade(socket: Socket, status: number, reason: string) {
   socket.destroy()
 }
 
-function parseMessage(raw: WebSocket.RawData): Record<string, any> | null {
+function parseMessage(raw: WebSocket.RawData): unknown[] | null {
   const text = raw.toString()
   if (Buffer.byteLength(text, 'utf8') > MAX_MESSAGE_BYTES) return null
   try {
     const message = JSON.parse(text)
-    return message && typeof message === 'object' && !Array.isArray(message) ? message : null
+    return Array.isArray(message) && message.length === 5 ? message : null
   } catch {
     return null
   }
 }
 
-function normalizeClientMessage(raw: WebSocket.RawData, roomTopic: string, accessToken: string) {
+export function normalizeClientMessage(raw: WebSocket.RawData, roomTopic: string, accessToken: string) {
   const message = parseMessage(raw)
-  if (!message || typeof message.topic !== 'string' || typeof message.event !== 'string') return null
-  const isHeartbeat = message.topic === 'phoenix' && message.event === 'heartbeat'
-  const isRoomMessage = message.topic === roomTopic
+  if (!message) return null
+  const [joinRef, ref, topic, event, payload] = message
+  if ((joinRef !== null && typeof joinRef !== 'string') || (ref !== null && typeof ref !== 'string')) return null
+  if (typeof topic !== 'string' || typeof event !== 'string') return null
+  const isHeartbeat = topic === 'phoenix' && event === 'heartbeat'
+  const isRoomMessage = topic === roomTopic
   if (!isHeartbeat && !isRoomMessage) return null
-  if (!['phx_join', 'phx_leave', 'broadcast', 'presence', 'heartbeat'].includes(message.event)) return null
-  if (message.event === 'phx_join') {
-    message.payload = { ...(message.payload && typeof message.payload === 'object' ? message.payload : {}), access_token: accessToken }
+  if (!['phx_join', 'phx_leave', 'broadcast', 'presence', 'heartbeat'].includes(event)) return null
+  if (isHeartbeat && event !== 'heartbeat') return null
+  if (event === 'phx_join') {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+    message[4] = { ...payload, access_token: accessToken }
   }
   return JSON.stringify(message)
 }
@@ -89,16 +96,22 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
         else if (pending.length < 16) pending.push(normalized)
       }
       client.on('message', forward)
-      upstreamSocket.on('open', () => { upstreamReady = true; flush() })
+      upstreamSocket.on('open', () => {
+        upstreamReady = true
+        console.info(JSON.stringify({ event: 'realtime_upstream_connected' }))
+        flush()
+      })
       upstreamSocket.on('message', (message) => { if (client.readyState === WebSocket.OPEN) client.send(message) })
       upstreamSocket.on('close', (code) => {
+        const log = code === 1000 ? console.info : console.warn
+        log(JSON.stringify({ event: 'realtime_upstream_closed', close_code: code }))
         if (client.readyState === WebSocket.OPEN) client.close(code === 1000 ? 1000 : 1011, 'Realtime upstream disconnected')
       })
       client.on('close', () => upstreamSocket.close())
       client.on('error', () => upstreamSocket.close())
       upstreamSocket.on('error', (error: Error) => {
         // Keep credentials and the upstream URL out of server logs.
-        console.error(JSON.stringify({ event: 'realtime_upstream_error', error_type: error.name }))
+        console.error(JSON.stringify({ event: 'realtime_upstream_error', error_type: error.name || 'Error' }))
         if (client.readyState === WebSocket.OPEN) client.close(1011, 'Realtime service unavailable')
       })
     })

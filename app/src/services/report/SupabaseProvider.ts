@@ -69,7 +69,7 @@ function decodeBoundedBase64(value: string, maxBytes: number): Uint8Array {
 export interface SupabaseProviderOptions {
     snapshotDebounceMs?: number
     presenceEnabled?: boolean
-    onStatus?: (status: ReportCollabConnectionStatus) => void
+    onStatus?: (status: ReportCollabConnectionStatus, detail?: string) => void
 }
 
 export class SupabaseProvider {
@@ -122,7 +122,7 @@ export class SupabaseProvider {
     private baseReportVersion: number
     private readonly snapshotDebounceMs: number
     private readonly presenceEnabled: boolean
-    private readonly onStatus?: (status: ReportCollabConnectionStatus) => void
+    private readonly onStatus?: (status: ReportCollabConnectionStatus, detail?: string) => void
     public initialState: ReportCollabInitialState = 'none'
 
     constructor(
@@ -159,7 +159,7 @@ export class SupabaseProvider {
         this.setupSupabase()
         this.onStatus?.('connecting')
 
-        this.channel.subscribe(async (status: string) => {
+        this.channel.subscribe(async (status: string, detail?: string) => {
             if (this.isDestroyed) return
 
             if (status === 'SUBSCRIBED') {
@@ -179,8 +179,8 @@ export class SupabaseProvider {
             } else {
                 this.isSubscribed = false
                 const failed = status === 'CHANNEL_ERROR' || status === 'TIMED_OUT'
-                this.onStatus?.(failed ? 'error' : 'disconnected')
-                if (failed) this.failReady(new Error('Realtime collaboration channel ' + status.toLowerCase()))
+                this.onStatus?.(failed ? 'error' : 'disconnected', detail)
+                if (failed) this.failReady(new Error(detail || 'Realtime collaboration channel ' + status.toLowerCase()))
             }
         })
     }

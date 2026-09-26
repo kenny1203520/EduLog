@@ -102,6 +102,7 @@
         "rate_full_star": "評為 {value} / 5 分",
         "collaboration_disconnected": "即時協作已中斷。您仍可編輯及儲存；連線恢復後會繼續同步。",
         "collaboration_retry": "重新連線",
+        "collaboration_error_detail": "連線資訊：",
         "collaboration_connecting_short": "連線中…",
         "first_save_success": "報告已儲存",
         "save_failed_with_message": "儲存失敗：{message}",

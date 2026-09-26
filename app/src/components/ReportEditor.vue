@@ -24,6 +24,9 @@
             <button type="button" class="min-h-9 rounded-lg border border-amber-300 bg-white px-3 font-bold text-amber-900 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700 disabled:opacity-50" :disabled="collaborationStatus === 'connecting'" @click="reconnectCollaboration">
                 {{ collaborationStatus === 'connecting' ? $t('report.editor.collaboration_connecting_short') : $t('report.editor.collaboration_retry') }}
             </button>
+            <span v-if="collaborationError" class="basis-full break-words text-[11px] font-medium" aria-live="polite">
+                {{ $t('report.editor.collaboration_error_detail') }} {{ collaborationError }}
+            </span>
         </div>
         <div v-else-if="effectiveCollaborationEnabled && collaborationRecovered"
             class="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
@@ -1584,6 +1587,7 @@ const {
     ydoc,
     provider: awarenessProvider,
     ready,
+    error: collaborationError,
     initialState: collabInitialState,
     saveSnapshot,
     setBaseReportVersion,

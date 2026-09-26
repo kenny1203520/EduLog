@@ -105,9 +105,10 @@ export function useReportCollab(
         }, delay)
     }
 
-    function handleStatus(next: ReportCollabConnectionStatus): void {
+    function handleStatus(next: ReportCollabConnectionStatus, detail?: string): void {
         status.value = next === 'connected' ? 'ready' : next === 'disconnected' ? 'error' : next
-        if (next === 'error') error.value = i18n.global.t('report.collaboration_connection_failed')
+        if (next === 'error') error.value = detail || i18n.global.t('report.collaboration_connection_failed')
+        else if (next === 'connected') error.value = null
     }
 
     const connectOnce = async () => {

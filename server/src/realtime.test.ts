@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildOpenApi } from './openapi.js'
-import { resolveRealtimeUrl } from './realtime.js'
+import { normalizeClientMessage, resolveRealtimeUrl } from './realtime.js'
 
 describe('realtime proxy security contract', () => {
   it('requires a report room and evaluates access with the user JWT client', () => {
@@ -44,5 +44,34 @@ describe('realtime proxy security contract', () => {
     expect(endpoint.host).toBe('realtime:4000')
     expect(endpoint.pathname).toBe('/socket/websocket')
     expect(endpoint.searchParams.get('custom')).toBe('1')
+  })
+
+  it('forces the JSON-array Phoenix 1.0 serializer even if the URL has a V2 value', () => {
+    const endpoint = resolveRealtimeUrl({
+      SUPABASE_URL: 'http://kong:8000',
+      SUPABASE_REALTIME_URL: 'ws://realtime:4000/socket/websocket?vsn=2.0.0',
+      SUPABASE_ANON_KEY: 'public-anon-key'
+    } as any)
+    expect(endpoint.searchParams.get('vsn')).toBe('1.0.0')
+  })
+
+  it('accepts Phoenix array frames and replaces the client join token with the authenticated cookie token', () => {
+    const roomTopic = 'realtime:room:c2944526-bc67-48c6-8a49-3c597b317b2a'
+    const frame = JSON.stringify(['1', '1', roomTopic, 'phx_join', {
+      config: { private: true }, access_token: '',
+    }])
+    const normalized = normalizeClientMessage(Buffer.from(frame), roomTopic, 'verified-cookie-token')
+    expect(JSON.parse(normalized!)).toEqual(['1', '1', roomTopic, 'phx_join', {
+      config: { private: true }, access_token: 'verified-cookie-token',
+    }])
+  })
+
+  it('rejects object frames, unrelated topics, unsupported events, and non-heartbeat Phoenix messages', () => {
+    const roomTopic = 'realtime:room:c2944526-bc67-48c6-8a49-3c597b317b2a'
+    expect(normalizeClientMessage(Buffer.from(JSON.stringify({ topic: roomTopic, event: 'phx_join' })), roomTopic, 'token')).toBeNull()
+    expect(normalizeClientMessage(Buffer.from(JSON.stringify([null, '1', 'realtime:room:other', 'phx_join', {}])), roomTopic, 'token')).toBeNull()
+    expect(normalizeClientMessage(Buffer.from(JSON.stringify([null, '1', roomTopic, 'phx_close', {}])), roomTopic, 'token')).toBeNull()
+    expect(normalizeClientMessage(Buffer.from(JSON.stringify([null, '1', 'phoenix', 'phx_join', {}])), roomTopic, 'token')).toBeNull()
+    expect(normalizeClientMessage(Buffer.from(JSON.stringify([null, '1', 'phoenix', 'heartbeat', {}])), roomTopic, 'token')).not.toBeNull()
   })
 })

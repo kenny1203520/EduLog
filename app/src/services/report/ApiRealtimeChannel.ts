@@ -1,6 +1,34 @@
 type Callback = (payload: any) => void
-
+type SubscribeCallback = (status: string, detail?: string) => void
 type PresenceState = Record<string, any[]>
+
+export interface PhoenixMessage {
+  joinRef: string | null
+  ref: string | null
+  topic: string
+  event: string
+  payload: any
+}
+
+/** Phoenix 1.0.0 serializes frames as [join_ref, ref, topic, event, payload]. */
+export function encodePhoenixMessage(message: PhoenixMessage): string {
+  return JSON.stringify([message.joinRef, message.ref, message.topic, message.event, message.payload])
+}
+
+export function decodePhoenixMessage(raw: unknown): PhoenixMessage {
+  if (typeof raw !== 'string') throw new Error('Realtime sent a non-text frame while using Phoenix 1.0.0')
+  const frame: unknown = JSON.parse(raw)
+  if (!Array.isArray(frame) || frame.length !== 5 || typeof frame[2] !== 'string' || typeof frame[3] !== 'string') {
+    throw new Error('Realtime sent an invalid Phoenix 1.0.0 frame')
+  }
+  return {
+    joinRef: typeof frame[0] === 'string' ? frame[0] : null,
+    ref: typeof frame[1] === 'string' ? frame[1] : null,
+    topic: frame[2],
+    event: frame[3],
+    payload: frame[4]
+  }
+}
 
 export class ApiRealtimeChannel {
   private socket: WebSocket | null = null
@@ -9,7 +37,8 @@ export class ApiRealtimeChannel {
   private readonly handlers: Array<{ type: string; event?: string; callback: Callback }> = []
   private readonly state: PresenceState = {}
   private ref = 0
-  private subscribedCallback: ((status: string) => void) | null = null
+  private joinRef: string | null = null
+  private subscribedCallback: SubscribeCallback | null = null
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempt = 0
@@ -23,25 +52,38 @@ export class ApiRealtimeChannel {
     this.reconnectTimer = null
   }
 
+  private nextRef() { return String(++this.ref) }
+
+  private sendFrame(socket: WebSocket, topic: string, event: string, payload: unknown, joinRef: string | null = this.joinRef) {
+    socket.send(encodePhoenixMessage({ joinRef, ref: this.nextRef(), topic, event, payload }))
+  }
+
   private startHeartbeat() {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     this.heartbeatTimer = setInterval(() => {
       if (this.socket?.readyState === WebSocket.OPEN) {
-        this.socket.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: String(++this.ref) }))
+        this.sendFrame(this.socket, 'phoenix', 'heartbeat', {}, null)
       }
     }, 25_000)
   }
 
   private scheduleReconnect() {
     if (this.closedByUser || this.reconnectTimer) return
-    // Keep collaboration recoverable through temporary proxy, network, and
-    // Realtime outages. The bounded backoff avoids a hot retry loop while
-    // allowing the same Y.Doc to reconnect without dropping local edits.
     const delay = Math.min(30_000, 500 * (2 ** Math.min(this.reconnectAttempt++, 6)))
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       this.connectSocket()
     }, delay)
+  }
+
+  private failConnection(detail: string, closeSocket = true) {
+    if (this.closedByUser || this.failureHandled) return
+    this.failureHandled = true
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
+    this.heartbeatTimer = null
+    this.subscribedCallback?.('CHANNEL_ERROR', detail)
+    if (closeSocket && this.socket?.readyState === WebSocket.OPEN) this.socket.close(1011, 'Realtime channel failed')
+    this.scheduleReconnect()
   }
 
   private connectSocket() {
@@ -52,19 +94,30 @@ export class ApiRealtimeChannel {
     const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime?room=${encodeURIComponent(room)}`)
     this.socket = socket
     socket.addEventListener('open', () => {
-      socket.send(JSON.stringify({ topic: this.topic, event: 'phx_join', payload: { config: { broadcast: { ack: false }, presence: { key: this.presenceKey }, private: true }, access_token: '' }, ref: String(++this.ref) }))
+      this.joinRef = this.nextRef()
+      socket.send(encodePhoenixMessage({
+        joinRef: this.joinRef,
+        ref: this.joinRef,
+        topic: this.topic,
+        event: 'phx_join',
+        payload: {
+          config: { broadcast: { ack: false }, presence: { key: this.presenceKey }, private: true },
+          access_token: ''
+        }
+      }))
     })
     socket.addEventListener('message', (event) => this.handleMessage(event.data))
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (event) => {
       if (this.socket !== socket || this.closedByUser || this.failureHandled) return
       this.failureHandled = true
-      this.subscribedCallback?.('CLOSED')
+      const detail = event.code ? `Realtime socket closed (${event.code})` : 'Realtime socket closed before joining the report room'
+      this.subscribedCallback?.('CHANNEL_ERROR', detail)
       this.scheduleReconnect()
     })
     socket.addEventListener('error', () => {
       if (this.socket !== socket || this.closedByUser || this.failureHandled) return
       this.failureHandled = true
-      this.subscribedCallback?.('CLOSED')
+      this.subscribedCallback?.('CHANNEL_ERROR', 'Realtime socket connection failed')
       this.scheduleReconnect()
     })
   }
@@ -79,7 +132,7 @@ export class ApiRealtimeChannel {
     return this
   }
 
-  subscribe(callback: (status: string) => void) {
+  subscribe(callback: SubscribeCallback) {
     this.subscribedCallback = callback
     this.closedByUser = false
     this.reconnectAttempt = 0
@@ -88,13 +141,28 @@ export class ApiRealtimeChannel {
   }
 
   private handleMessage(raw: unknown) {
-    let message: any
-    try { message = JSON.parse(String(raw)) } catch { return }
+    let message: PhoenixMessage
+    try {
+      message = decodePhoenixMessage(raw)
+    } catch (error) {
+      this.failConnection(error instanceof Error ? error.message : 'Realtime sent an invalid frame')
+      return
+    }
     if (message.topic !== this.topic) return
-    if (message.event === 'phx_reply' && message.payload?.status === 'ok') {
-      this.reconnectAttempt = 0
-      this.startHeartbeat()
-      this.subscribedCallback?.('SUBSCRIBED')
+    if (message.event === 'phx_reply') {
+      if (message.payload?.status === 'ok') {
+        this.failureHandled = false
+        this.reconnectAttempt = 0
+        this.joinRef = message.joinRef || this.joinRef
+        this.startHeartbeat()
+        this.subscribedCallback?.('SUBSCRIBED')
+      } else {
+        const reason = message.payload?.response?.reason
+        const detail = typeof reason === 'string' && reason.length > 0
+          ? `Realtime rejected the report room: ${reason.slice(0, 240)}`
+          : 'Realtime rejected joining the report room'
+        this.failConnection(detail)
+      }
       return
     }
     if (message.event === 'broadcast') {
@@ -105,7 +173,7 @@ export class ApiRealtimeChannel {
     }
     if (message.event === 'presence_state') {
       Object.assign(this.state, message.payload ?? {})
-      this.handlers.filter((handler) => handler.type === 'presence' && handler.event === 'sync').forEach((handler) => handler.callback({}))
+      this.handlers.filter((handler) => handler.type === 'presence' && handler.event === 'sync').forEach((handler) => handler.callback({}));
       return
     }
     if (message.event === 'presence_diff') {
@@ -116,7 +184,6 @@ export class ApiRealtimeChannel {
         if (Object.keys(joins).length) this.handlers.filter((handler) => handler.type === 'presence' && handler.event === 'join').forEach((handler) => handler.callback({ key, currentPresences: Object.values(joins) }))
         if (Object.keys(leaves).length) this.handlers.filter((handler) => handler.type === 'presence' && handler.event === 'leave').forEach((handler) => handler.callback({ key, leftPresences: Object.values(leaves) }))
       }
-      return
     }
   }
 
@@ -124,7 +191,10 @@ export class ApiRealtimeChannel {
 
   send(message: { type: string; event: string; payload: unknown }) {
     if (this.socket?.readyState !== WebSocket.OPEN) return Promise.resolve({ status: 'error' })
-    this.socket.send(JSON.stringify({ topic: this.topic, event: message.type === 'broadcast' ? 'broadcast' : message.type, payload: message, ref: String(++this.ref) }))
+    const payload = message.type === 'broadcast'
+      ? { type: 'broadcast', event: message.event, payload: message.payload }
+      : { type: message.type, event: message.event, payload: message.payload }
+    this.sendFrame(this.socket, this.topic, message.type === 'broadcast' ? 'broadcast' : message.type, payload)
     return Promise.resolve({ status: 'ok' })
   }
 
@@ -133,6 +203,9 @@ export class ApiRealtimeChannel {
   unsubscribe() {
     this.closedByUser = true
     this.clearTimers()
+    if (this.socket?.readyState === WebSocket.OPEN && this.joinRef) {
+      this.sendFrame(this.socket, this.topic, 'phx_leave', {}, this.joinRef)
+    }
     this.socket?.close()
     this.socket = null
     return Promise.resolve('ok')
