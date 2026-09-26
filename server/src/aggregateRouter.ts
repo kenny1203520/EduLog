@@ -434,7 +434,7 @@ export function createAggregateRouter() {
   router.get('/pages/me/preferences', wrap(preferences))
   router.get('/pages/me/person-profile', wrap(myPersonProfile))
   router.patch('/pages/me/person-profile', wrap(myPersonProfile))
-  router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReports))
+  router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReportsPage))
   router.get('/pages/classrooms/overview', wrap(classroomManager))
   router.get('/pages/holidays/overview', wrap(holidays))
   router.get('/pages/reports/incomplete', wrap(incomplete))

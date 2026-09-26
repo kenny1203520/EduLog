@@ -13,7 +13,7 @@ describe('aggregate API contract', () => {
 
   it('exposes page read models without restoring the removed aggregate aliases', () => {
     expect(source).toContain("router.get('/pages/me/preferences', wrap(preferences))")
-    expect(source).toContain("router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReports))")
+    expect(source).toContain("router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReportsPage))")
     expect(source).toContain("router.get('/pages/classrooms/overview', wrap(classroomManager))")
     expect(source).toContain("router.get('/pages/holidays/overview', wrap(holidays))")
     expect(source).toContain("router.get('/pages/reports/incomplete', wrap(incomplete))")
