@@ -26,14 +26,15 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     MockWebSocket.latest = null
   })
 
-  it('encodes and decodes five-element Phoenix JSON-array frames', () => {
+  it('encodes and decodes Phoenix 1.0 JSON object frames', () => {
     const frame = encodePhoenixMessage({ joinRef: '7', ref: '7', topic: 'realtime:room:r', event: 'phx_join', payload: {} })
-    expect(JSON.parse(frame)).toEqual(['7', '7', 'realtime:room:r', 'phx_join', {}])
+    expect(JSON.parse(frame)).toEqual({ join_ref: '7', ref: '7', topic: 'realtime:room:r', event: 'phx_join', payload: {} })
     expect(decodePhoenixMessage(frame)).toEqual({ joinRef: '7', ref: '7', topic: 'realtime:room:r', event: 'phx_join', payload: {} })
     expect(() => decodePhoenixMessage(new ArrayBuffer(4))).toThrow(/non-text frame/)
+    expect(() => decodePhoenixMessage(JSON.stringify(['7', '7', 'realtime:room:r', 'phx_join', {}]))).toThrow(/invalid Phoenix/)
   })
 
-  it('joins with array frames, reports rejection detail, and retries with backoff', () => {
+  it('joins with JSON object frames, reports rejection detail, and retries with backoff', () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)
     vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost:5173' } })
@@ -42,13 +43,16 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.subscribe(callback)
     const socket = MockWebSocket.latest!
     socket.emit('open')
-    expect(JSON.parse(socket.sent[0])).toMatchObject([expect.any(String), expect.any(String), 'realtime:room:report-id', 'phx_join', {
-      access_token: '',
-      config: { private: true }
-    }])
+    expect(JSON.parse(socket.sent[0])).toMatchObject({
+      join_ref: expect.any(String),
+      ref: expect.any(String),
+      topic: 'realtime:room:report-id',
+      event: 'phx_join',
+      payload: { access_token: '', config: { private: true } }
+    })
 
-    const [joinRef, ref, topic] = JSON.parse(socket.sent[0])
-    socket.emit('message', { data: JSON.stringify([joinRef, ref, topic, 'phx_reply', { status: 'error', response: { reason: 'private channel authorization failed' } }]) })
+    const { join_ref: joinRef, ref, topic } = JSON.parse(socket.sent[0])
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref, topic, event: 'phx_reply', payload: { status: 'error', response: { reason: 'private channel authorization failed' } } }) })
     expect(callback).toHaveBeenCalledWith('CHANNEL_ERROR', 'Realtime rejected the report room: private channel authorization failed')
     expect(socket.readyState).toBe(3)
 
@@ -57,7 +61,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.unsubscribe()
   })
 
-  it('sends heartbeat, broadcast, and presence frames as Phoenix arrays', () => {
+  it('sends heartbeat, broadcast, and presence frames as Phoenix JSON objects', () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)
     vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost:5173' } })
@@ -65,24 +69,24 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.subscribe(vi.fn())
     const socket = MockWebSocket.latest!
     socket.emit('open')
-    const [joinRef, ref, topic] = JSON.parse(socket.sent[0])
-    socket.emit('message', { data: JSON.stringify([joinRef, ref, topic, 'phx_reply', { status: 'ok', response: {} }]) })
+    const { join_ref: joinRef, ref, topic } = JSON.parse(socket.sent[0])
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref, topic, event: 'phx_reply', payload: { status: 'ok', response: {} } }) })
 
     channel.send({ type: 'broadcast', event: 'sync-update', payload: { update: 'abc' } })
-    expect(JSON.parse(socket.sent[1])).toEqual([joinRef, expect.any(String), topic, 'broadcast', {
+    expect(JSON.parse(socket.sent[1])).toEqual({ join_ref: joinRef, ref: expect.any(String), topic, event: 'broadcast', payload: {
       type: 'broadcast', event: 'sync-update', payload: { update: 'abc' }
-    }])
+    } })
     channel.track({ clientId: 42 })
-    expect(JSON.parse(socket.sent[2])).toEqual([joinRef, expect.any(String), topic, 'presence', {
+    expect(JSON.parse(socket.sent[2])).toEqual({ join_ref: joinRef, ref: expect.any(String), topic, event: 'presence', payload: {
       type: 'presence', event: 'track', payload: { clientId: 42 }
-    }])
+    } })
 
     vi.advanceTimersByTime(25_000)
-    expect(JSON.parse(socket.sent[3])).toEqual([null, expect.any(String), 'phoenix', 'heartbeat', {}])
+    expect(JSON.parse(socket.sent[3])).toEqual({ join_ref: null, ref: expect.any(String), topic: 'phoenix', event: 'heartbeat', payload: {} })
     channel.unsubscribe()
   })
 
-  it('dispatches broadcast and presence replies decoded from Phoenix arrays', () => {
+  it('dispatches broadcast and presence replies decoded from Phoenix JSON objects', () => {
     vi.stubGlobal('WebSocket', MockWebSocket)
     vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost:5173' } })
     const channel = new ApiRealtimeChannel('report-id', 'presence-key')
@@ -93,12 +97,12 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.subscribe(vi.fn())
     const socket = MockWebSocket.latest!
     socket.emit('open')
-    const [joinRef, ref, topic] = JSON.parse(socket.sent[0])
-    socket.emit('message', { data: JSON.stringify([joinRef, ref, topic, 'phx_reply', { status: 'ok', response: {} }]) })
-    socket.emit('message', { data: JSON.stringify([joinRef, '2', topic, 'broadcast', {
+    const { join_ref: joinRef, ref, topic } = JSON.parse(socket.sent[0])
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref, topic, event: 'phx_reply', payload: { status: 'ok', response: {} } }) })
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref: '2', topic, event: 'broadcast', payload: {
       type: 'broadcast', event: 'sync-update', payload: { update: 'encoded-yjs-update' }
-    }]) })
-    socket.emit('message', { data: JSON.stringify([joinRef, '3', topic, 'presence_state', { key: [{ clientId: 12 }] }]) })
+    } }) })
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref: '3', topic, event: 'presence_state', payload: { key: [{ clientId: 12 }] } }) })
 
     expect(broadcast).toHaveBeenCalledWith({ payload: { update: 'encoded-yjs-update' }, event: 'sync-update' })
     expect(presenceSync).toHaveBeenCalledOnce()

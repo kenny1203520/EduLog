@@ -10,23 +10,33 @@ export interface PhoenixMessage {
   payload: any
 }
 
-/** Phoenix 1.0.0 serializes frames as [join_ref, ref, topic, event, payload]. */
+/** Supabase Realtime's Phoenix 1.0.0 serializer uses JSON object frames. */
 export function encodePhoenixMessage(message: PhoenixMessage): string {
-  return JSON.stringify([message.joinRef, message.ref, message.topic, message.event, message.payload])
+  return JSON.stringify({
+    join_ref: message.joinRef,
+    ref: message.ref,
+    topic: message.topic,
+    event: message.event,
+    payload: message.payload
+  })
 }
 
 export function decodePhoenixMessage(raw: unknown): PhoenixMessage {
   if (typeof raw !== 'string') throw new Error('Realtime sent a non-text frame while using Phoenix 1.0.0')
   const frame: unknown = JSON.parse(raw)
-  if (!Array.isArray(frame) || frame.length !== 5 || typeof frame[2] !== 'string' || typeof frame[3] !== 'string') {
+  if (!frame || typeof frame !== 'object' || Array.isArray(frame)) {
+    throw new Error('Realtime sent an invalid Phoenix 1.0.0 frame')
+  }
+  const message = frame as Record<string, unknown>
+  if (typeof message.topic !== 'string' || typeof message.event !== 'string') {
     throw new Error('Realtime sent an invalid Phoenix 1.0.0 frame')
   }
   return {
-    joinRef: typeof frame[0] === 'string' ? frame[0] : null,
-    ref: typeof frame[1] === 'string' ? frame[1] : null,
-    topic: frame[2],
-    event: frame[3],
-    payload: frame[4]
+    joinRef: typeof message.join_ref === 'string' ? message.join_ref : null,
+    ref: typeof message.ref === 'string' ? message.ref : null,
+    topic: message.topic,
+    event: message.event,
+    payload: message.payload
   }
 }
 
