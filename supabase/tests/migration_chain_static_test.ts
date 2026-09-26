@@ -56,6 +56,7 @@ const profileNamesAndAuthEmail = await readMigration('1000098_profile_names_and_
 const platformTeachingHierarchy = await readMigration('1000099_platform_teaching_role_hierarchy.sql')
 const platformTeachingRolesWithoutWorkspace = await readMigration('1000100_platform_teaching_roles_without_workspace.sql')
 const studentOverviewGlobalVisibility = await readMigration('1000102_student_overview_global_visibility.sql')
+const reportCollaborationAuthorization = await readMigration('1000103_report_collaboration_authorization.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -116,7 +117,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102', '1000103']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -182,6 +183,18 @@ Deno.test('1000102 includes global students without broadening scoped access', (
   assertStringIncludes(studentOverviewGlobalVisibility, "GRANT EXECUTE ON FUNCTION public.get_students_overview(integer,integer,text,text) TO authenticated")
   assertStringIncludes(studentOverviewGlobalVisibility, "NOTIFY pgrst, 'reload schema'")
   assert(!studentOverviewGlobalVisibility.includes('GRANT EXECUTE ON FUNCTION public.get_students_overview(integer,integer,text,text) TO anon'))
+})
+
+Deno.test('1000103 authorizes report collaboration snapshots through current teaching RBAC', () => {
+  assertStringIncludes(reportCollaborationAuthorization, "public.can_access_report(occurrence_report_id, 'teaching.reports.read')")
+  assertStringIncludes(reportCollaborationAuthorization, "public.can_access_report(occurrence_report_id, 'teaching.reports.update')")
+  assertStringIncludes(reportCollaborationAuthorization, "public.can_access_report(occurrence_report_id, 'teaching.reports.delete')")
+  assertStringIncludes(reportCollaborationAuthorization, "public.can_access_report(p_occurrence_report_id, 'teaching.reports.update')")
+  assertStringIncludes(reportCollaborationAuthorization, 'length(p_snapshot_base64) > 1398104')
+  assertStringIncludes(reportCollaborationAuthorization, 'report.version = p_base_report_version')
+  assertStringIncludes(reportCollaborationAuthorization, 'report_collab_docs.base_report_version <= EXCLUDED.base_report_version')
+  assert(!reportCollaborationAuthorization.includes('can_access_occurrence_report'))
+  assertStringIncludes(reportCollaborationAuthorization, 'GRANT SELECT, INSERT, UPDATE, DELETE ON public.report_collab_docs TO authenticated')
 })
 
 Deno.test('1000084 centralizes suspension attendance and occupancy semantics', () => {
@@ -318,6 +331,10 @@ Deno.test('report lifecycle integration is executable and authenticated', () => 
   assertStringIncludes(lifecycleIntegration, 'completed enrollment report was provisioned')
   assertStringIncludes(lifecycleIntegration, 'regular enrollment report was not provisioned')
   assertStringIncludes(lifecycleIntegration, 'report provisioning was not idempotent')
+  assertStringIncludes(lifecycleIntegration, 'save_report_collab_snapshot')
+  assertStringIncludes(lifecycleIntegration, 'authorized collaboration snapshot was not saved')
+  assertStringIncludes(lifecycleIntegration, 'stale collaboration snapshot was saved')
+  assertStringIncludes(lifecycleIntegration, 'RLS exposed collaboration snapshot to unassigned account')
   assertStringIncludes(lifecycleIntegration, "DATE '2026-01-05', DATE '2026-01-05'")
 })
 

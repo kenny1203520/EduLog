@@ -185,6 +185,19 @@ BEGIN
     RAISE EXCEPTION 'rejected lifecycle patch mutated report';
   END IF;
 
+  IF NOT public.can_access_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.read') THEN
+    RAISE EXCEPTION 'teaching owner cannot read collaboration snapshot';
+  END IF;
+  IF NOT public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 4) THEN
+    RAISE EXCEPTION 'authorized collaboration snapshot was not saved';
+  END IF;
+  IF (SELECT snapshot_base64 FROM public.report_collab_docs WHERE occurrence_report_id = '9b000000-0000-4000-8000-000000000001') IS DISTINCT FROM 'c25qc25hcA==' THEN
+    RAISE EXCEPTION 'authorized collaboration snapshot is not visible';
+  END IF;
+  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 3) THEN
+    RAISE EXCEPTION 'stale collaboration snapshot was saved';
+  END IF;
+
   SELECT * INTO v_report FROM public.apply_occurrence_report_lifecycle(
     '9b000000-0000-4000-8000-000000000002', 1,
     '{"is_completed":true,"lesson_id":"95000000-0000-4000-8000-000000000001"}'::jsonb
@@ -228,6 +241,15 @@ BEGIN
   END IF;
 
   PERFORM set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000002', true);
+  IF public.can_access_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.read') THEN
+    RAISE EXCEPTION 'unassigned account can read collaboration snapshot';
+  END IF;
+  IF (SELECT count(*) FROM public.report_collab_docs WHERE occurrence_report_id = '9b000000-0000-4000-8000-000000000001') <> 0 THEN
+    RAISE EXCEPTION 'RLS exposed collaboration snapshot to unassigned account';
+  END IF;
+  IF public.save_report_collab_snapshot('9b000000-0000-4000-8000-000000000001', 'c25qc25hcA==', 4) THEN
+    RAISE EXCEPTION 'unassigned account saved collaboration snapshot';
+  END IF;
   IF public.can_mutate_occurrence_report('9b000000-0000-4000-8000-000000000001', 'teaching.reports.update') THEN
     RAISE EXCEPTION 'cross-teaching report write was authorized';
   END IF;
