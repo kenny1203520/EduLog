@@ -4,6 +4,7 @@ export interface AuthUserSearchResultDTO {
     id: string
     email: string
     display_name?: string | null
+    account_status?: 'active' | 'disabled' | null
     created_at?: string
     last_sign_in_at?: string | null
 }

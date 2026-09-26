@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { RoleService } from '@/services/rbac/RoleService'
@@ -11,16 +11,21 @@ import PlatformTeachingRoleAssignmentsPanel from '@/components/settings/Platform
 import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
 import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import Pagination from '@/components/common/Pagination.vue'
+import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
 import { roleDisplayDescription } from '@/utils/roleDisplay'
 
-type SystemUser = { id: string; email?: string | null; display_name?: string | null; account_status?: 'active' | 'disabled' | null }
 type Assignment = { id: string; user_id: string; role_id: string; roles?: { code?: string; name?: string }; effective_from?: string; effective_to?: string | null }
 
 const { errorKey, reportError, success } = useFeedback()
 const { t } = useI18n()
 const roles = ref<RoleDTO[]>([])
-const users = ref<SystemUser[]>([])
+const users = ref<AuthUserSearchResultDTO[]>([])
+const selectedUser = ref<AuthUserSearchResultDTO | null>(null)
 const assignments = ref<Assignment[]>([])
+const assignmentTotal = ref(0)
+const assignmentPage = ref(1)
+const assignmentPageSize = ref(20)
 const selectedUserId = ref('')
 const selectedRoleId = ref('')
 const selectedStatus = ref<'active' | 'disabled'>('active')
@@ -28,9 +33,14 @@ const statusReason = ref('')
 const epoch = ref(1)
 const activeSection = ref<'permissions' | 'teaching_permissions' | 'teaching_assignments' | 'notifications' | 'assignments' | 'users' | 'audit'>('permissions')
 const loading = ref(false)
+const userLoading = ref(false)
+const assignmentLoading = ref(false)
+const userQuery = ref('')
 const saving = ref(false)
 const effectiveFrom = ref(todayLocal())
 const effectiveTo = ref('')
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+let searchSequence = 0
 
 function todayLocal() {
     const now = new Date()
@@ -65,28 +75,12 @@ const assignmentConflict = computed(() => {
 })
 
 function userName(userId: string) {
-    const user = users.value.find(user => user.id === userId)
+    const user = selectedUser.value?.id === userId ? selectedUser.value : users.value.find(user => user.id === userId)
     return user?.display_name?.trim() || user?.email || t('rbac.system_ui.unknown_user')
 }
 
 function userEmail(userId: string) {
-    return users.value.find(user => user.id === userId)?.email || ''
-}
-
-async function loadAllPages<T>(resource: string) {
-    const limit = 100
-    const rows: T[] = []
-    let offset = 0
-    let total = Number.POSITIVE_INFINITY
-    while (offset < total) {
-        const result = await apiV1Client.get<T[]>(`/${resource}?limit=${limit}&offset=${offset}&sort=${resource === 'users' ? 'display_name' : '-created_at'}`)
-        const page = result.data ?? []
-        rows.push(...page)
-        total = Number(result.meta?.total ?? rows.length)
-        if (page.length === 0) break
-        offset += page.length
-    }
-    return rows
+    return (selectedUser.value?.id === userId ? selectedUser.value.email : users.value.find(user => user.id === userId)?.email) || ''
 }
 
 async function refreshEpoch() {
@@ -96,19 +90,62 @@ async function refreshEpoch() {
 async function load() {
     loading.value = true
     try {
-        const [roleResult, allUsers, allAssignments] = await Promise.all([
+        const [roleResult] = await Promise.all([
             RoleService.getRoles({ domain: 'system' }),
-            loadAllPages<SystemUser>('users'),
-            loadAllPages<Assignment>('system-role-assignments'),
         ])
         roles.value = roleResult
-        users.value = allUsers
-        assignments.value = allAssignments
+        await loadAssignments()
         selectedRoleId.value ||= roles.value.find(role => role.code === 'auditor')?.id ?? roles.value[0]?.id ?? ''
-        selectedUserId.value ||= users.value[0]?.id ?? ''
-        if (selectedUserId.value) selectedStatus.value = users.value.find(user => user.id === selectedUserId.value)?.account_status === 'disabled' ? 'disabled' : 'active'
         await refreshEpoch()
     } catch (error) { reportError(error) } finally { loading.value = false }
+}
+
+function assignmentStatus(assignment: Assignment) {
+    const today = todayLocal()
+    if (assignment.effective_from && assignment.effective_from > today) return t('rbac.system_ui.scheduled')
+    if (assignment.effective_to && assignment.effective_to < today) return t('rbac.system_ui.expired')
+    return t('rbac.system_ui.active')
+}
+
+function searchUsers(query: string) {
+    if (searchTimer) clearTimeout(searchTimer)
+    const sequence = ++searchSequence
+    userQuery.value = query.trim()
+    if (userQuery.value.length < 2) { users.value = []; userLoading.value = false; return }
+    userLoading.value = true
+    searchTimer = setTimeout(async () => {
+        try {
+            const results = await AuthUserSearchService.searchUsers(userQuery.value)
+            if (sequence === searchSequence) users.value = results
+        } catch (error) {
+            if (sequence === searchSequence) { users.value = []; reportError(error) }
+        } finally { if (sequence === searchSequence) userLoading.value = false }
+    }, 250)
+}
+
+function onUserSelected(userId: string) {
+    selectedUserId.value = userId
+    selectedUser.value = users.value.find(user => user.id === userId) ?? selectedUser.value
+    if (selectedUser.value?.id === userId) selectedStatus.value = selectedUser.value.account_status === 'disabled' ? 'disabled' : 'active'
+    assignmentPage.value = 1
+    void loadAssignments()
+}
+
+async function loadAssignments() {
+    if (!selectedUserId.value) { assignments.value = []; assignmentTotal.value = 0; return }
+    assignmentLoading.value = true
+    try {
+        const params = new URLSearchParams({
+            user_id: selectedUserId.value,
+            limit: String(assignmentPageSize.value),
+            offset: String((assignmentPage.value - 1) * assignmentPageSize.value),
+            sort: '-effective_from',
+        })
+        const result = await apiV1Client.get<Assignment[]>(`/system-role-assignments?${params}`)
+        assignments.value = result.data ?? []
+        assignmentTotal.value = Number(result.meta?.total ?? 0)
+    } catch (error) { assignments.value = []; assignmentTotal.value = 0; reportError(error) }
+    finally { assignmentLoading.value = false }
 }
 
 async function assignRole() {
@@ -122,7 +159,7 @@ async function assignRole() {
             effective_to: effectiveTo.value || null,
             expected_epoch: epoch.value,
         })
-        await load()
+        await loadAssignments()
         success('rbac.system_assignment_saved')
     } catch (error) {
         if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'SYSTEM_ROLE_ASSIGNMENT_OVERLAP') errorKey('errors.system_role_assignment_overlap')
@@ -137,7 +174,8 @@ async function updateStatus() {
     try {
         await apiV1Client.patch(`/users/${selectedUserId.value}/status`, { status: selectedStatus.value, reason: selectedStatus.value === 'disabled' ? statusReason.value.trim() : null, expected_epoch: epoch.value })
         statusReason.value = ''
-        await load()
+        if (selectedUser.value) selectedUser.value.account_status = selectedStatus.value
+        users.value = users.value.map(user => user.id === selectedUserId.value ? { ...user, account_status: selectedStatus.value } : user)
         success('common.save_success')
     } catch (error) { reportError(error) } finally { saving.value = false }
 }
@@ -147,7 +185,7 @@ async function removeAssignment(assignment: Assignment) {
     saving.value = true
     try {
         await apiV1Client.delete(`/system-role-assignments/${assignment.id}`, { expected_epoch: epoch.value })
-        await load()
+        await loadAssignments()
         success('common.deleted')
     } catch (error) { reportError(error) } finally { saving.value = false }
 }
@@ -157,6 +195,8 @@ function selectSection(section: typeof activeSection.value) {
 }
 
 onMounted(load)
+watch(assignmentPage, loadAssignments)
+watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments() })
 </script>
 
 <template>
@@ -171,11 +211,11 @@ onMounted(load)
             </nav>
         </div>
 
-        <div v-if="activeSection === 'assignments' || activeSection === 'users'" class="grid gap-6 lg:grid-cols-2">
+        <div v-if="activeSection === 'assignments' || activeSection === 'users'" class="grid gap-6">
             <div v-if="activeSection === 'assignments'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                 <h3 class="mb-4 font-black">{{ t('rbac.system_ui.role_assignments') }}</h3>
                 <div class="grid gap-3">
-                    <SearchableSelect v-model="selectedUserId" :options="userOptions" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.user_search')" />
+                    <SearchableSelect :model-value="selectedUserId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.user_search')" :no-results-text="userQuery.length < 2 ? t('rbac.system_ui.user_search_hint') : t('rbac.system_ui.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
                     <SearchableSelect v-model="selectedRoleId" :options="roleOptions" :placeholder="t('rbac.system_ui.select_system_role')" :aria-label="t('rbac.system_ui.system_role_search')" />
                     <div class="grid gap-3 sm:grid-cols-2">
                         <label class="space-y-1 text-xs font-bold text-gray-500"><span>{{ t('rbac.system_ui.effective_from') }}</span><input v-model="effectiveFrom" type="date" required class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800" /></label>
@@ -184,16 +224,20 @@ onMounted(load)
                     <p v-if="assignmentConflict" role="alert" class="rounded-xl bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700">{{ t('rbac.system_ui.assignment_overlap') }}</p>
                     <button :disabled="saving || !selectedUserId || !selectedRoleId || !effectiveFrom || assignmentConflict || Boolean(effectiveTo && effectiveTo < effectiveFrom)" class="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 font-black text-white disabled:opacity-40" @click="assignRole">{{ saving ? t('common.saving') : t('rbac.system_ui.assign_role') }}</button>
                 </div>
-                <p v-if="loading" class="mt-4 text-sm text-gray-400">{{ t('common.loading') }}</p>
+                <div v-if="selectedUser" class="mt-5 rounded-xl bg-gray-50 px-4 py-3"><p class="font-bold text-gray-900">{{ selectedUser.display_name?.trim() || selectedUser.email }}</p><p class="text-sm text-gray-500">{{ selectedUser.email }}</p></div>
+                <p v-if="loading || assignmentLoading" class="mt-4 text-sm text-gray-400">{{ t('common.loading') }}</p>
+                <p v-else-if="!selectedUserId" class="mt-4 rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">{{ t('rbac.system_ui.search_user_to_view') }}</p>
                 <div v-for="assignment in assignments" :key="assignment.id" class="mt-4 flex items-center justify-between gap-3 border-t border-gray-50 pt-3">
-                    <div class="min-w-0"><p class="truncate font-bold">{{ userName(assignment.user_id) }}</p><p v-if="userEmail(assignment.user_id)" class="truncate text-xs text-gray-500">{{ userEmail(assignment.user_id) }}</p><p class="mt-1 text-xs font-semibold text-gray-700">{{ roleLabel(assignment.roles) || t('rbac.system_ui.system_role') }}</p><p class="text-xs text-gray-400">{{ assignment.effective_from }} - {{ assignment.effective_to || t('rbac.system_ui.no_end_date') }}</p></div>
+                    <div class="min-w-0"><p class="truncate font-bold">{{ userName(assignment.user_id) }}</p><p v-if="userEmail(assignment.user_id)" class="truncate text-xs text-gray-500">{{ userEmail(assignment.user_id) }}</p><p class="mt-1 text-xs font-semibold text-gray-700">{{ roleLabel(assignment.roles) || t('rbac.system_ui.system_role') }} · {{ assignmentStatus(assignment) }}</p><p class="text-xs text-gray-400">{{ assignment.effective_from }} - {{ assignment.effective_to || t('rbac.system_ui.no_end_date') }}</p></div>
                     <button class="min-h-11 rounded-lg px-3 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-40" :disabled="saving" @click="removeAssignment(assignment)">{{ saving ? t('common.processing') : t('common.delete') }}</button>
                 </div>
+                <p v-if="selectedUserId && !assignmentLoading && assignments.length === 0" class="mt-4 rounded-xl border border-dashed border-gray-200 px-4 py-8 text-center text-sm text-gray-500">{{ t('rbac.system_ui.no_assignments_for_user') }}</p>
+                <Pagination v-if="assignmentTotal > 0" v-model="assignmentPage" v-model:per-page="assignmentPageSize" :total-items="assignmentTotal" />
             </div>
 
             <div v-if="activeSection === 'users'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                 <h3 class="mb-4 font-black">{{ t('rbac.system_ui.account_status') }}</h3>
-                <SearchableSelect v-model="selectedUserId" :options="userOptions" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.status_user')" />
+                <SearchableSelect :model-value="selectedUserId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.status_user')" :no-results-text="userQuery.length < 2 ? t('rbac.system_ui.user_search_hint') : t('rbac.system_ui.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
                 <div class="mt-4 flex gap-3">
                     <select v-model="selectedStatus" class="rounded-xl border border-gray-200 px-3 py-2" :aria-label="t('rbac.system_ui.account_status')"><option value="active">{{ t('rbac.system_ui.active') }}</option><option value="disabled">{{ t('rbac.system_ui.disabled') }}</option></select>
                     <input v-if="selectedStatus === 'disabled'" v-model="statusReason" class="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2" :placeholder="t('rbac.system_ui.disable_reason')" />

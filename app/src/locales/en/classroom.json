@@ -131,6 +131,7 @@
     "refresh_failed": "Failed to refresh schedule",
     "refresh_confirm": "Are you sure you want to refresh the schedule? This will delete all future occurrences that do not have reports and regenerate them based on current settings.",
     "session": "Session",
+    "room": "Classroom",
     "class_info": "Class Information",
     "copy_attendance": "Copy Attendance",
     "copy_template_settings": "Attendance Copy Style",

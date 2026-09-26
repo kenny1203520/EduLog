@@ -12,6 +12,7 @@ import {
 } from '@/services/rbac/PermissionPolicyService'
 import type { PermissionDTO, PolicyScope, RoleDTO, RolePermissionPolicyDTO } from '@/models/Rbac'
 import ScopedRolePolicyEditor, { type PolicySelection } from '@/components/settings/ScopedRolePolicyEditor.vue'
+import SearchableSelect from '@/components/common/SearchableSelect.vue'
 
 const { t } = useI18n()
 const props = withDefaults(defineProps<{ titleKey?: string; descriptionKey?: string }>(), {
@@ -36,6 +37,11 @@ const canManageRbac = ref(false)
 const filteredSessions = computed(() => !classroomId.value
     ? sessions.value
     : sessions.value.filter(session => session.classroom_id === classroomId.value))
+const classroomOptions = computed(() => classrooms.value.map(room => ({ value: room.id, label: room.name, searchText: room.name })))
+const sessionOptions = computed(() => filteredSessions.value.map(session => {
+    const room = classrooms.value.find(item => item.id === session.classroom_id)
+    return { value: session.id, label: session.name, description: room?.name, searchText: `${session.name} ${room?.name ?? ''}` }
+}))
 const scopeId = computed(() => scopeType.value === 'system'
     ? null
     : scopeType.value === 'classroom' ? classroomId.value : sessionId.value)
@@ -136,20 +142,14 @@ onMounted(load)
                         <option value="class_session">{{ $t('settings.incomplete_notifications.class_session') }}</option>
                     </select>
                 </label>
-                <label v-if="scopeType !== 'system'" class="space-y-2">
+                <div v-if="scopeType !== 'system'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.room') }}</span>
-                    <select v-model="classroomId" class="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-3 font-bold">
-                        <option value="">{{ $t('common.select_placeholder') }}</option>
-                        <option v-for="room in classrooms" :key="room.id" :value="room.id">{{ room.name }}</option>
-                    </select>
-                </label>
-                <label v-if="scopeType === 'class_session'" class="space-y-2">
+                    <SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="$t('common.select_placeholder')" :aria-label="$t('classroom.room')" />
+                </div>
+                <div v-if="scopeType === 'class_session'" class="space-y-2">
                     <span class="text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.session') }}</span>
-                    <select v-model="sessionId" class="w-full rounded-xl border-gray-200 bg-gray-50 px-4 py-3 font-bold">
-                        <option value="">{{ $t('common.select_placeholder') }}</option>
-                        <option v-for="item in filteredSessions" :key="item.id" :value="item.id">{{ item.name }}</option>
-                    </select>
-                </label>
+                    <SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="$t('common.select_placeholder')" :aria-label="$t('classroom.session')" />
+                </div>
             </div>
             <div v-if="loading" class="py-8 text-center font-bold text-gray-400">{{ $t('common.loading') }}</div>
             <template v-else>

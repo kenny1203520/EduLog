@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import Pagination from '@/components/common/Pagination.vue'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { SessionService } from '@/services/session/SessionService'
 import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
@@ -41,6 +42,13 @@ const roleId = ref('')
 const effectiveFrom = ref(today())
 const effectiveTo = ref('')
 const epoch = ref(1)
+const pageSize = 20
+const rootPage = ref(1)
+const localPage = ref(1)
+const exclusionPage = ref(1)
+const rootTotal = ref(0)
+const localTotal = ref(0)
+const exclusionTotal = ref(0)
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let requestSequence = 0
 
@@ -58,6 +66,11 @@ const userOptions = computed(() => users.value.map(user => ({
     description: user.display_name?.trim() ? user.email : undefined,
     searchText: `${user.display_name ?? ''} ${user.email}`
 })))
+const classroomOptions = computed(() => classrooms.value.map(room => ({ value: room.id, label: room.name, searchText: room.name })))
+const sessionOptions = computed(() => sessions.value.map(session => {
+    const room = classrooms.value.find(item => item.id === session.classroom_id)
+    return { value: session.id, label: session.name, description: room?.name, searchText: `${session.name} ${room?.name ?? ''}` }
+}))
 function today() {
     const now = new Date()
     return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
@@ -82,15 +95,21 @@ function formattedDate(value: string) {
 }
 
 async function loadLists() {
-    if (!scopeReady.value) { localAssignments.value = []; exclusions.value = []; localCanManage.value = false; return }
+    if (!scopeReady.value || !userId.value) { localAssignments.value = []; exclusions.value = []; localTotal.value = 0; exclusionTotal.value = 0; localCanManage.value = false; return }
     localCanManage.value = await RoleService.canManageRoleScope(scopeType.value, scopeId.value).catch(() => false)
-    const query = `scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}&limit=100&offset=0`
+    const baseQuery = new URLSearchParams({ scope_type: scopeType.value, scope_id: scopeId.value, user_id: userId.value, limit: String(pageSize) })
+    const assignmentQuery = new URLSearchParams(baseQuery)
+    assignmentQuery.set('offset', String((localPage.value - 1) * pageSize))
+    const exclusionQuery = new URLSearchParams(baseQuery)
+    exclusionQuery.set('offset', String((exclusionPage.value - 1) * pageSize))
     const [assignments, blocked] = await Promise.allSettled([
-        apiV1Client.get<TeachingRoleAssignment[]>(`/teaching-role-assignments/scoped?${query}`),
-        apiV1Client.get<TeachingRoleAssignment[]>(`/teaching-role-exclusions?${query}`)
+        apiV1Client.get<TeachingRoleAssignment[]>(`/teaching-role-assignments/scoped?${assignmentQuery}`),
+        apiV1Client.get<TeachingRoleAssignment[]>(`/teaching-role-exclusions?${exclusionQuery}`)
     ])
     localAssignments.value = assignments.status === 'fulfilled' ? assignments.value.data ?? [] : []
     exclusions.value = blocked.status === 'fulfilled' ? blocked.value.data ?? [] : []
+    localTotal.value = assignments.status === 'fulfilled' ? Number(assignments.value.meta?.total ?? 0) : 0
+    exclusionTotal.value = blocked.status === 'fulfilled' ? Number(blocked.value.meta?.total ?? 0) : 0
     if (assignments.status === 'fulfilled' && blocked.status === 'fulfilled') {
         canListUsers.value = assignments.value.meta?.can_list_users === true && blocked.value.meta?.can_list_users === true
     }
@@ -112,20 +131,40 @@ async function load() {
         if (classroomId.value && !sessions.value.some(session => session.id === sessionId.value)) {
             sessionId.value = sessions.value.find(session => session.classroom_id === classroomId.value)?.id ?? ''
         }
-        const rootResponse = rootCanManage.value
-            ? await apiV1Client.get<TeachingRoleAssignment[]>('/teaching-role-assignments?limit=100&offset=0&sort=-effective_from').catch(() => null)
-            : null
-        rootAssignments.value = rootResponse?.data ?? []
-        if (rootResponse) canListUsers.value = rootResponse.meta?.can_list_users === true
         if (scopeReady.value) {
             roles.value = await RoleService.getRolesForScope({ domain: 'teaching', scopeType: scopeType.value, scopeId: scopeId.value })
         }
         roleId.value ||= roles.value[0]?.id ?? ''
-        await loadLists()
+        await loadAssignments()
     } catch (error) {
         rootAssignments.value = []
         if (error) toast.error(t('rbac.platform_teaching_assignments.load_failed'))
     } finally { loading.value = false }
+}
+
+function assignmentStatus(assignment: TeachingRoleAssignment) {
+    const currentDay = today()
+    if (assignment.effective_from > currentDay) return t('classroom.role_assignments.status_scheduled')
+    if (assignment.effective_to && assignment.effective_to < currentDay) return t('classroom.role_assignments.status_expired')
+    return t('classroom.role_assignments.status_active')
+}
+
+async function loadRootAssignments() {
+    if (!rootCanManage.value || !userId.value) { rootAssignments.value = []; rootTotal.value = 0; return }
+    const params = new URLSearchParams({ user_id: userId.value, limit: String(pageSize), offset: String((rootPage.value - 1) * pageSize), sort: '-effective_from' })
+    const response = await apiV1Client.get<TeachingRoleAssignment[]>(`/teaching-role-assignments?${params}`)
+    rootAssignments.value = response.data ?? []
+    rootTotal.value = Number(response.meta?.total ?? 0)
+    canListUsers.value = response.meta?.can_list_users === true
+}
+
+async function loadAssignments() {
+    if (!userId.value) {
+        rootAssignments.value = []; rootTotal.value = 0
+        await loadLists()
+        return
+    }
+    await Promise.all([loadRootAssignments().catch(() => { rootAssignments.value = []; rootTotal.value = 0 }), loadLists()])
 }
 
 function searchUsers(query: string) {
@@ -185,19 +224,29 @@ async function removeAssignment(assignment: TeachingRoleAssignment, target: 'roo
         if (target === 'root') await apiV1Client.delete(`/teaching-role-assignments/${assignment.id}`, body)
         else if (target === 'local') await apiV1Client.delete(`/teaching-role-assignments/scoped/${assignment.id}?scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}`, body)
         else await apiV1Client.delete(`/teaching-role-exclusions/${assignment.id}?scope_type=${scopeType.value}&scope_id=${encodeURIComponent(scopeId.value)}`, body)
-        await load()
+        if (target === 'root') await loadRootAssignments()
+        else await loadLists()
         toast.success(t('common.deleted'))
     } catch { toast.error(t('rbac.platform_teaching_assignments.remove_failed')) }
     finally { saving.value = false }
 }
 
 watch([scopeType, classroomId, sessionId], async () => {
+    localPage.value = 1
+    exclusionPage.value = 1
     if (scopeReady.value) {
         roles.value = await RoleService.getRolesForScope({ domain: 'teaching', scopeType: scopeType.value, scopeId: scopeId.value }).catch(() => roles.value)
         roleId.value ||= roles.value[0]?.id ?? ''
     }
-    void loadLists()
+    void loadAssignments()
 })
+watch(userId, () => {
+    rootPage.value = 1; localPage.value = 1; exclusionPage.value = 1
+    void loadAssignments()
+})
+watch(rootPage, () => { void loadRootAssignments() })
+watch(localPage, () => { void loadLists() })
+watch(exclusionPage, () => { void loadLists() })
 onMounted(load)
 </script>
 
@@ -224,13 +273,15 @@ onMounted(load)
                 </div>
                 <p v-else class="mt-4 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.read_only') }}</p>
                 <p v-if="rootCanManage && !canListUsers" class="mt-2 text-xs text-amber-700">{{ t('rbac.platform_teaching_assignments.directory_required') }}</p>
-                <ul v-if="rootAssignments.length" class="mt-4 divide-y divide-emerald-100 rounded-xl border border-emerald-100 bg-white">
+                <ul v-if="userId && rootAssignments.length" class="mt-4 divide-y divide-emerald-100 rounded-xl border border-emerald-100 bg-white">
                     <li v-for="assignment in rootAssignments" :key="assignment.id" class="flex flex-wrap items-center justify-between gap-3 p-3">
-                        <div class="min-w-0"><p class="truncate font-bold text-gray-900">{{ userName(assignment) }}</p><p class="text-xs text-gray-500">{{ roleName(assignment) }} · {{ formattedDate(assignment.effective_from) }} — {{ assignment.effective_to ? formattedDate(assignment.effective_to) : t('classroom.role_assignments.no_end_date') }}</p></div>
+                        <div class="min-w-0"><p class="truncate font-bold text-gray-900">{{ userName(assignment) }}</p><p class="text-xs text-gray-500">{{ roleName(assignment) }} · {{ assignmentStatus(assignment) }} · {{ formattedDate(assignment.effective_from) }} — {{ assignment.effective_to ? formattedDate(assignment.effective_to) : t('classroom.role_assignments.no_end_date') }}</p></div>
                         <button v-if="rootCanManage" type="button" class="text-sm font-bold text-rose-700" :disabled="saving" @click="removeAssignment(assignment, 'root')">{{ t('classroom.role_assignments.revoke') }}</button>
                     </li>
                 </ul>
+                <p v-else-if="!userId" class="mt-4 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.search_user_to_view') }}</p>
                 <p v-else class="mt-4 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.no_root_assignments') }}</p>
+                <Pagination v-if="rootTotal > pageSize" v-model="rootPage" :per-page="pageSize" :total-items="rootTotal" />
             </section>
 
             <section class="mt-6 rounded-2xl border border-gray-200 p-4 sm:p-5">
@@ -238,8 +289,8 @@ onMounted(load)
                     <div><h4 class="font-black text-gray-900">{{ t('rbac.platform_teaching_assignments.local_title') }}</h4><p class="mt-1 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.local_hint') }}</p></div>
                     <div class="flex flex-wrap gap-2">
                         <select v-model="scopeType" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold"><option value="classroom">{{ t('rbac.scope.classroom') }}</option><option value="class_session">{{ t('rbac.scope.class_session') }}</option></select>
-                        <select v-if="scopeType === 'classroom'" v-model="classroomId" class="max-w-56 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold"><option v-for="room in classrooms" :key="room.id" :value="room.id">{{ room.name }}</option></select>
-                        <select v-else v-model="sessionId" class="max-w-56 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold"><option v-for="session in sessions" :key="session.id" :value="session.id">{{ session.name }}</option></select>
+                        <div v-if="scopeType === 'classroom'" class="w-full sm:w-64"><SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.classroom')" /></div>
+                        <div v-else class="w-full sm:w-64"><SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.class_session')" /></div>
                     </div>
                 </div>
                 <p v-if="scopeReady && !localCanManage" class="mt-4 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.read_only') }}</p>
@@ -250,8 +301,8 @@ onMounted(load)
                 </div>
                 <p v-if="scopeReady && localCanManage && !canListUsers" class="mt-2 text-xs text-amber-700">{{ t('rbac.platform_teaching_assignments.directory_required') }}</p>
                 <div class="mt-5 grid gap-4 xl:grid-cols-2">
-                    <div><h5 class="mb-2 text-sm font-black text-gray-700">{{ t('rbac.platform_teaching_assignments.local_grants') }}</h5><ul v-if="localAssignments.length" class="divide-y divide-gray-100 rounded-xl border border-gray-100"><li v-for="assignment in localAssignments" :key="assignment.id" class="flex items-center justify-between gap-2 p-3"><div class="min-w-0"><p class="truncate text-sm font-bold">{{ userName(assignment) }}</p><p class="text-xs text-gray-500">{{ roleName(assignment) }} · {{ formattedDate(assignment.effective_from) }} — {{ assignment.effective_to ? formattedDate(assignment.effective_to) : t('classroom.role_assignments.no_end_date') }}</p></div><button v-if="localCanManage" class="text-xs font-bold text-rose-700" :disabled="saving" @click="removeAssignment(assignment, 'local')">{{ t('classroom.role_assignments.revoke') }}</button></li></ul><p v-else class="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.no_local_grants') }}</p></div>
-                    <div><h5 class="mb-2 text-sm font-black text-gray-700">{{ t('rbac.platform_teaching_assignments.exclusions') }}</h5><ul v-if="exclusions.length" class="divide-y divide-gray-100 rounded-xl border border-gray-100"><li v-for="assignment in exclusions" :key="assignment.id" class="flex items-center justify-between gap-2 p-3"><div class="min-w-0"><p class="truncate text-sm font-bold">{{ userName(assignment) }}</p><p class="text-xs text-gray-500">{{ roleName(assignment) }} · {{ formattedDate(assignment.effective_from) }} — {{ assignment.effective_to ? formattedDate(assignment.effective_to) : t('classroom.role_assignments.no_end_date') }}</p></div><button v-if="localCanManage" class="text-xs font-bold text-rose-700" :disabled="saving" @click="removeAssignment(assignment, 'exclusion')">{{ t('classroom.role_assignments.revoke') }}</button></li></ul><p v-else class="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.no_exclusions') }}</p></div>
+                    <div><h5 class="mb-2 text-sm font-black text-gray-700">{{ t('rbac.platform_teaching_assignments.local_grants') }}</h5><ul v-if="localAssignments.length" class="divide-y divide-gray-100 rounded-xl border border-gray-100"><li v-for="assignment in localAssignments" :key="assignment.id" class="flex items-center justify-between gap-2 p-3"><div class="min-w-0"><p class="truncate text-sm font-bold">{{ roleName(assignment) }} · {{ assignmentStatus(assignment) }}</p><p class="text-xs text-gray-500">{{ formattedDate(assignment.effective_from) }} — {{ assignment.effective_to ? formattedDate(assignment.effective_to) : t('classroom.role_assignments.no_end_date') }}</p></div><button v-if="localCanManage" class="text-xs font-bold text-rose-700" :disabled="saving" @click="removeAssignment(assignment, 'local')">{{ t('classroom.role_assignments.revoke') }}</button></li></ul><p v-else class="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">{{ userId ? t('rbac.platform_teaching_assignments.no_local_grants') : t('rbac.platform_teaching_assignments.search_user_to_view') }}</p><Pagination v-if="localTotal > pageSize" v-model="localPage" :per-page="pageSize" :total-items="localTotal" /></div>
+                    <div><h5 class="mb-2 text-sm font-black text-gray-700">{{ t('rbac.platform_teaching_assignments.exclusions') }}</h5><ul v-if="exclusions.length" class="divide-y divide-gray-100 rounded-xl border border-gray-100"><li v-for="assignment in exclusions" :key="assignment.id" class="flex items-center justify-between gap-2 p-3"><div class="min-w-0"><p class="truncate text-sm font-bold">{{ roleName(assignment) }} · {{ assignmentStatus(assignment) }}</p><p class="text-xs text-gray-500">{{ formattedDate(assignment.effective_from) }} — {{ assignment.effective_to ? formattedDate(assignment.effective_to) : t('classroom.role_assignments.no_end_date') }}</p></div><button v-if="localCanManage" class="text-xs font-bold text-rose-700" :disabled="saving" @click="removeAssignment(assignment, 'exclusion')">{{ t('classroom.role_assignments.revoke') }}</button></li></ul><p v-else class="rounded-xl border border-dashed border-gray-200 p-4 text-sm text-gray-500">{{ userId ? t('rbac.platform_teaching_assignments.no_exclusions') : t('rbac.platform_teaching_assignments.search_user_to_view') }}</p><Pagination v-if="exclusionTotal > pageSize" v-model="exclusionPage" :per-page="pageSize" :total-items="exclusionTotal" /></div>
                 </div>
                 <p v-if="!scopeReady" class="mt-4 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.select_scope') }}</p>
                 <p v-else class="mt-4 text-xs text-gray-400">{{ t('rbac.platform_teaching_assignments.selected_scope', { scope: scopeLabel(scopeType) }) }}</p>

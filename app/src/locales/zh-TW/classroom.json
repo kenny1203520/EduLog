@@ -131,6 +131,7 @@
     "refresh_failed": "重整授課表失敗",
     "refresh_confirm": "確定要重新整理課表嗎？這將刪除所有未填寫報告的未來課堂並根據目前的設定重新生成。",
     "session": "班級時段",
+    "room": "教室",
     "class_info": "班級資訊",
     "copy_attendance": "複製點名資訊",
     "copy_template_settings": "點名樣式設定",
