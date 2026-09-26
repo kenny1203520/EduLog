@@ -64,6 +64,7 @@ const classroomAssignmentMutation = z.object({
 }).strict()
 const exclusionListQuery = z.object({
   scope_type: z.enum(['classroom', 'class_session']), scope_id: uuid,
+  user_id: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(100),
   offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 }).strict()
@@ -72,6 +73,7 @@ const teachingAssignmentMutation = z.object({
   effective_to: z.string().date().nullable().optional(), expected_epoch: z.coerce.number().int().positive(),
 }).strict()
 const scopedTeachingAssignmentQuery = z.object({ scope_type: z.enum(['classroom', 'class_session']), scope_id: uuid,
+  user_id: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1_000_000).default(0) }).strict()
 const scopedTeachingAssignmentMutation = z.object({
   scope_type: z.enum(['classroom', 'class_session']), scope_id: uuid,
@@ -518,10 +520,11 @@ export function createRbacRouter() {
     requireRequest(req)
     const query = scopedTeachingAssignmentQuery.parse(req.query)
     await authorizeRoleScope(req, 'teaching', { type: query.scope_type, id: query.scope_id }, 'read')
-    const result = await req.adminDb!.from('user_role_assignments')
+    let builder = req.adminDb!.from('user_role_assignments')
       .select('id,user_id,role_id,scope_type,scope_id,status,effective_from,effective_to,created_at,updated_at,roles!inner(id,code,name,description,domain,is_builtin)', { count: 'exact' })
       .eq('scope_type', query.scope_type).eq('scope_id', query.scope_id).eq('roles.domain', 'teaching')
-      .order('effective_from', { ascending: false }).range(query.offset, query.offset + query.limit - 1)
+    if (query.user_id) builder = builder.eq('user_id', query.user_id)
+    const result = await builder.order('effective_from', { ascending: false }).range(query.offset, query.offset + query.limit - 1)
     if (result.error) throw mapDatabaseError(result.error)
     const canListUsers = await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'system.users.list', p_classroom_id: null, p_class_session_id: null })
     let data: any[] = result.data ?? []
@@ -576,10 +579,11 @@ export function createRbacRouter() {
     requireRequest(req)
     const query = exclusionListQuery.parse(req.query)
     await authorizeRoleScope(req, 'teaching', { type: query.scope_type, id: query.scope_id }, 'read')
-    const result = await req.adminDb!.from('user_role_assignment_exclusions')
+    let builder = req.adminDb!.from('user_role_assignment_exclusions')
       .select('id,user_id,role_id,scope_type,scope_id,effective_from,effective_to,created_at,updated_at,roles(id,code,name,domain,is_builtin)', { count: 'exact' })
       .eq('scope_type', query.scope_type).eq('scope_id', query.scope_id)
-      .order('effective_from', { ascending: false }).range(query.offset, query.offset + query.limit - 1)
+    if (query.user_id) builder = builder.eq('user_id', query.user_id)
+    const result = await builder.order('effective_from', { ascending: false }).range(query.offset, query.offset + query.limit - 1)
     if (result.error) throw mapDatabaseError(result.error)
     const canListUsers = await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'system.users.list', p_classroom_id: null, p_class_session_id: null })
     let data: any[] = result.data ?? []

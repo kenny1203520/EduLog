@@ -57,6 +57,14 @@ describe('generated API contract', () => {
     expect(enrollmentParameters.some((parameter) => parameter.$ref === '#/components/parameters/Status')).toBe(true)
   })
 
+  it('supports user-filtered teaching role assignment and exclusion lists', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    for (const path of ['/api/teaching-role-assignments/scoped', '/api/teaching-role-exclusions']) {
+      const userFilter = spec.paths[path]?.get?.parameters?.find((parameter: any) => parameter.name === 'user_id')
+      expect(userFilter).toMatchObject({ in: 'query', schema: { type: 'string', format: 'uuid' } })
+    }
+  })
+
   it('generates mutation schemas from the runtime resource registry', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
     const studentCreate = spec.paths['/api/students']?.post?.requestBody?.content?.['application/json']?.schema
