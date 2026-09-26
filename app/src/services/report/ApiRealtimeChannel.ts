@@ -86,13 +86,15 @@ export class ApiRealtimeChannel {
     }, delay)
   }
 
-  private failConnection(detail: string, closeSocket = true) {
+  private failConnection(detail: string, closeSocket = true, protocolError = false) {
     if (this.closedByUser || this.failureHandled) return
     this.failureHandled = true
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer)
     this.heartbeatTimer = null
     this.subscribedCallback?.('CHANNEL_ERROR', detail)
-    if (closeSocket && this.socket?.readyState === WebSocket.OPEN) this.socket.close(1011, 'Realtime channel failed')
+    if (closeSocket && this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.close(protocolError ? 1003 : 1011, protocolError ? 'Phoenix 1.0 requires text frames' : 'Realtime channel failed')
+    }
     this.scheduleReconnect()
   }
 
@@ -120,7 +122,7 @@ export class ApiRealtimeChannel {
     socket.addEventListener('close', (event) => {
       if (this.socket !== socket || this.closedByUser || this.failureHandled) return
       this.failureHandled = true
-      const detail = event.code ? `Realtime socket closed (${event.code})` : 'Realtime socket closed before joining the report room'
+      const detail = event.reason || (event.code ? `Realtime socket closed (${event.code})` : 'Realtime socket closed before joining the report room')
       this.subscribedCallback?.('CHANNEL_ERROR', detail)
       this.scheduleReconnect()
     })
@@ -155,7 +157,7 @@ export class ApiRealtimeChannel {
     try {
       message = decodePhoenixMessage(raw)
     } catch (error) {
-      this.failConnection(error instanceof Error ? error.message : 'Realtime sent an invalid frame')
+      this.failConnection(error instanceof Error ? error.message : 'Realtime sent an invalid frame', true, true)
       return
     }
     if (message.topic !== this.topic) return

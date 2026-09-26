@@ -29,6 +29,12 @@ export function resolveRealtimeUrl(config: ApiConfig): URL {
   return upstream
 }
 
+/** Phoenix 1.0.0 uses text JSON frames. ws delivers both text and binary frames as Buffers. */
+export function decodeUpstreamTextFrame(raw: WebSocket.RawData, isBinary: boolean): string | null {
+  if (isBinary) return null
+  return raw.toString()
+}
+
 function rejectUpgrade(socket: Socket, status: number, reason: string) {
   socket.write(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\n\r\n`)
   socket.destroy()
@@ -45,7 +51,8 @@ function parseMessage(raw: WebSocket.RawData): Record<string, unknown> | null {
   }
 }
 
-export function normalizeClientMessage(raw: WebSocket.RawData, roomTopic: string, accessToken: string) {
+export function normalizeClientMessage(raw: WebSocket.RawData, roomTopic: string, accessToken: string, isBinary = false) {
+  if (isBinary) return null
   const message = parseMessage(raw)
   if (!message) return null
   const { join_ref: joinRef, ref, topic, event, payload } = message
@@ -89,8 +96,14 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
       const pending: string[] = []
       let upstreamReady = false
       const flush = () => { while (pending.length && upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.send(pending.shift()!) }
-      const forward = (raw: WebSocket.RawData) => {
-        const normalized = normalizeClientMessage(raw, roomTopic, token)
+      const forward = (raw: WebSocket.RawData, isBinary: boolean) => {
+        if (isBinary) {
+          console.warn(JSON.stringify({ event: 'realtime_protocol_error', direction: 'client', reason: 'binary_frame' }))
+          if (client.readyState === WebSocket.OPEN) client.close(1003, 'Phoenix 1.0 requires text frames')
+          upstreamSocket.close()
+          return
+        }
+        const normalized = normalizeClientMessage(raw, roomTopic, token, isBinary)
         if (!normalized) return
         if (upstreamReady && upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.send(normalized)
         else if (pending.length < 16) pending.push(normalized)
@@ -101,7 +114,16 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
         console.info(JSON.stringify({ event: 'realtime_upstream_connected' }))
         flush()
       })
-      upstreamSocket.on('message', (message) => { if (client.readyState === WebSocket.OPEN) client.send(message) })
+      upstreamSocket.on('message', (message, isBinary) => {
+        if (isBinary) {
+          console.warn(JSON.stringify({ event: 'realtime_protocol_error', direction: 'upstream', reason: 'binary_frame' }))
+          if (client.readyState === WebSocket.OPEN) client.close(1003, 'Phoenix 1.0 requires text frames')
+          upstreamSocket.close()
+          return
+        }
+        const text = decodeUpstreamTextFrame(message, false)
+        if (text !== null && client.readyState === WebSocket.OPEN) client.send(text, { binary: false })
+      })
       upstreamSocket.on('close', (code) => {
         const log = code === 1000 ? console.info : console.warn
         log(JSON.stringify({ event: 'realtime_upstream_closed', close_code: code }))

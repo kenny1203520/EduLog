@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildOpenApi } from './openapi.js'
-import { normalizeClientMessage, resolveRealtimeUrl } from './realtime.js'
+import { decodeUpstreamTextFrame, normalizeClientMessage, resolveRealtimeUrl } from './realtime.js'
 
 describe('realtime proxy security contract', () => {
   it('requires a report room and evaluates access with the user JWT client', () => {
@@ -66,6 +66,12 @@ describe('realtime proxy security contract', () => {
     } })
   })
 
+  it('preserves Phoenix 1.0 text frames when ws supplies a Buffer and rejects actual binary frames', () => {
+    const frame = JSON.stringify({ topic: 'realtime:room:r', event: 'phx_reply', payload: { status: 'ok' } })
+    expect(decodeUpstreamTextFrame(Buffer.from(frame), false)).toBe(frame)
+    expect(decodeUpstreamTextFrame(Buffer.from(frame), true)).toBeNull()
+  })
+
   it('rejects array frames, unrelated topics, unsupported events, and non-heartbeat Phoenix messages', () => {
     const roomTopic = 'realtime:room:c2944526-bc67-48c6-8a49-3c597b317b2a'
     expect(normalizeClientMessage(Buffer.from(JSON.stringify([null, '1', roomTopic, 'phx_join', {}])), roomTopic, 'token')).toBeNull()
@@ -73,5 +79,6 @@ describe('realtime proxy security contract', () => {
     expect(normalizeClientMessage(Buffer.from(JSON.stringify({ join_ref: null, ref: '1', topic: roomTopic, event: 'phx_close', payload: {} })), roomTopic, 'token')).toBeNull()
     expect(normalizeClientMessage(Buffer.from(JSON.stringify({ join_ref: null, ref: '1', topic: 'phoenix', event: 'phx_join', payload: {} })), roomTopic, 'token')).toBeNull()
     expect(normalizeClientMessage(Buffer.from(JSON.stringify({ join_ref: null, ref: '1', topic: 'phoenix', event: 'heartbeat', payload: {} })), roomTopic, 'token')).not.toBeNull()
+    expect(normalizeClientMessage(Buffer.from(JSON.stringify({ join_ref: null, ref: '1', topic: roomTopic, event: 'phx_join', payload: {} })), roomTopic, 'token', true)).toBeNull()
   })
 })

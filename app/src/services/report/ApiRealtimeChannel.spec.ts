@@ -14,7 +14,7 @@ class MockWebSocket {
   send(message: string) { this.sent.push(message) }
   close(code = 1000) {
     this.readyState = 3
-    this.emit('close', { code })
+    this.emit('close', { code, reason: code === 1003 ? 'Phoenix 1.0 requires text frames' : '' })
   }
   emit(name: string, event: any = {}) { this.listeners.get(name)?.forEach((listener) => listener(event)) }
 }
@@ -56,6 +56,23 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     expect(callback).toHaveBeenCalledWith('CHANNEL_ERROR', 'Realtime rejected the report room: private channel authorization failed')
     expect(socket.readyState).toBe(3)
 
+    vi.advanceTimersByTime(500)
+    expect(MockWebSocket.latest).not.toBe(socket)
+    channel.unsubscribe()
+  })
+
+  it('reports unexpected binary frames and retries with backoff', () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost:5173' } })
+    const callback = vi.fn()
+    const channel = new ApiRealtimeChannel('report-id', 'presence-key')
+    channel.subscribe(callback)
+    const socket = MockWebSocket.latest!
+    socket.emit('open')
+    socket.emit('message', { data: new ArrayBuffer(4) })
+
+    expect(callback).toHaveBeenCalledWith('CHANNEL_ERROR', 'Realtime sent a non-text frame while using Phoenix 1.0.0')
     vi.advanceTimersByTime(500)
     expect(MockWebSocket.latest).not.toBe(socket)
     channel.unsubscribe()
