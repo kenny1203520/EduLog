@@ -10,6 +10,29 @@ import { PageApiService } from '@/services/api/PageApiService'
 
 export const REPORT_EDITOR_COLUMNS = 'id, enrollment_id, class_occurrence_id, lesson_id, is_completed, progress_letter, attendance_status, absence_reason, class_participation, classroom_behavior, contact_notes, contact_notes_document, class_notes, class_notes_document, content, content_document, external_link, version, last_edited_by, last_edited_at, created_at, updated_at'
 
+function relationObject<T>(value: T | T[] | null | undefined): T | null {
+    if (Array.isArray(value)) return value[0] ?? null
+    return value ?? null
+}
+
+/** Normalize PostgREST relation names to the shape used by report list consumers. */
+export function normalizeEnrollmentReportRelations(report: any): any {
+    const occurrence = relationObject(report?.class_occurrence ?? report?.class_occurrences)
+    const rawSession = relationObject(occurrence?.class_session ?? occurrence?.class_sessions)
+    const session = rawSession
+        ? {
+            ...rawSession,
+            classroom: relationObject(rawSession.classroom ?? rawSession.classrooms)
+        }
+        : null
+
+    return {
+        ...report,
+        class_occurrence: occurrence ? { ...occurrence, class_session: session } : null,
+        lesson: relationObject(report?.lesson ?? report?.lessons)
+    }
+}
+
 export class ReportQueryService {
     private static getOccurrenceSortKey(report: any): string {
         const occurrence = Array.isArray(report?.class_occurrences)
@@ -251,7 +274,7 @@ export class ReportQueryService {
     ): Promise<any[]> {
         if (getApiV1Mode() === 'v1') {
             const response = await PageApiService.getEnrollmentReports(enrollmentId, { limit: 100, offset: 0, sort: '-occurrence_date' })
-            return response.data?.reports || []
+            return (response.data?.reports || []).map(normalizeEnrollmentReportRelations)
         }
         // List/preview consumers (StudentReportsView, TransferModal) only ever
         // read the plain-text content/notes fields, never the *_document rich

@@ -1109,19 +1109,19 @@ async function loadOccurrences() {
 
         // Map reports to ClassOccurrence objects
         const historicalOccurrences: ClassOccurrence[] = reportsWithDetails.map((r: any) => {
-            const occData = r.class_occurrence
+            const occData = r.class_occurrence || {}
             const occ = new ClassOccurrence({
                 id: r.class_occurrence_id,
-                class_session_id: occData.class_session?.id,
-                occurrence_date: occData.occurrence_date,
-                status: occData.status,
-                original_start_time: occData.original_start_time,
-                original_end_time: occData.original_end_time,
-                actual_start_time: occData.actual_start_time,
-                actual_end_time: occData.actual_end_time,
-                notes: occData.notes,
-                created_at: occData.created_at,
-                updated_at: occData.updated_at
+                class_session_id: occData.class_session?.id || occData.class_session_id,
+                occurrence_date: occData.occurrence_date || '',
+                status: occData.status || 'scheduled',
+                original_start_time: occData.original_start_time || null,
+                original_end_time: occData.original_end_time || null,
+                actual_start_time: occData.actual_start_time || null,
+                actual_end_time: occData.actual_end_time || null,
+                notes: occData.notes || null,
+                created_at: occData.created_at || r.created_at,
+                updated_at: occData.updated_at || r.updated_at
             })
 
             if (occData.class_session) {
