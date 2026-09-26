@@ -58,17 +58,22 @@ async function load() {
     loading.value = true
     try {
         canManageRbac.value = await PermissionPolicyService.canManageRbac()
-        const [roleData, permissionData, classroomResult, sessionResult] = await Promise.all([
+        const [roleData, permissionData] = await Promise.all([
             RoleService.getRoles(),
-            PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION),
-            ClassroomService.getAllClassrooms(),
-            SessionService.getAllClassSessions()
+            PermissionPolicyService.getPermission(INCOMPLETE_REPORT_PERMISSION)
         ])
         roles.value = roleData
         permission.value = permissionData
         policies.value = await PermissionPolicyService.getPolicies(permissionData.id)
-        classrooms.value = classroomResult.data
-        sessions.value = sessionResult.data
+        // Global policy management should remain usable even when the operator
+        // has no permission to browse classroom/session records. These lookups
+        // only populate scope selectors and must not block system scope.
+        const [classroomResult, sessionResult] = await Promise.allSettled([
+            ClassroomService.getAllClassrooms(),
+            SessionService.getAllClassSessions()
+        ])
+        if (classroomResult.status === 'fulfilled') classrooms.value = classroomResult.value.data
+        if (sessionResult.status === 'fulfilled') sessions.value = sessionResult.value.data
         syncSelections()
     } catch (error: any) {
         reportError(error)

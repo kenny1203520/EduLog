@@ -9,6 +9,7 @@ import RolePermissionEditor from '@/components/settings/RolePermissionEditor.vue
 import TeachingRolePermissionsPanel from '@/components/settings/TeachingRolePermissionsPanel.vue'
 import PlatformTeachingRoleAssignmentsPanel from '@/components/settings/PlatformTeachingRoleAssignmentsPanel.vue'
 import AuditLogPanel from '@/components/settings/AuditLogPanel.vue'
+import IncompleteReportNotificationSettings from '@/components/settings/IncompleteReportNotificationSettings.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import { roleDisplayDescription } from '@/utils/roleDisplay'
 
@@ -25,7 +26,7 @@ const selectedRoleId = ref('')
 const selectedStatus = ref<'active' | 'disabled'>('active')
 const statusReason = ref('')
 const epoch = ref(1)
-const activeSection = ref<'permissions' | 'teaching_permissions' | 'teaching_assignments' | 'assignments' | 'users' | 'audit'>('permissions')
+const activeSection = ref<'permissions' | 'teaching_permissions' | 'teaching_assignments' | 'notifications' | 'assignments' | 'users' | 'audit'>('permissions')
 const loading = ref(false)
 const saving = ref(false)
 const effectiveFrom = ref(todayLocal())
@@ -164,7 +165,7 @@ onMounted(load)
             <h2 class="text-xl font-black text-gray-900">{{ t('rbac.system_title') }}</h2>
             <p class="mt-1 text-sm font-bold text-gray-400">{{ t('rbac.system_subtitle') }}</p>
             <nav class="mt-5 flex flex-wrap gap-2" role="group" :aria-label="t('rbac.system_sections.label')">
-                <button v-for="section in ['permissions', 'teaching_permissions', 'teaching_assignments', 'assignments', 'users', 'audit'] as const" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
+                <button v-for="section in ['permissions', 'teaching_permissions', 'teaching_assignments', 'notifications', 'assignments', 'users', 'audit'] as const" :key="section" type="button" :aria-pressed="activeSection === section" class="min-h-11 rounded-xl px-4 py-2 text-sm font-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-600" :class="activeSection === section ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-600'" @click="selectSection(section)">
                     {{ t(`rbac.system_sections.${section}`) }}
                 </button>
             </nav>
@@ -209,6 +210,8 @@ onMounted(load)
         <TeachingRolePermissionsPanel v-if="activeSection === 'teaching_permissions'" />
 
         <PlatformTeachingRoleAssignmentsPanel v-else-if="activeSection === 'teaching_assignments'" />
+
+        <IncompleteReportNotificationSettings v-else-if="activeSection === 'notifications'" />
 
         <AuditLogPanel v-if="activeSection === 'audit'" />
     </section>
