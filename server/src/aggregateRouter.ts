@@ -443,7 +443,7 @@ export function createAggregateRouter() {
   router.get('/pages/students/overview', wrap(studentsOverview))
   router.get('/pages/students/:studentId/profile', wrap(studentProfile))
   router.get('/pages/students/:studentId/private-details', wrap(studentPrivateDetails))
-  router.get('/pages/students/:studentId/reports', wrap(studentReportsPage))
+  router.get('/pages/students/:studentId/reports', wrap(studentReports))
   router.get('/pages/teachers/overview', wrap(teachersOverview))
   router.get('/pages/teachers/:teacherId/private-details', wrap(teacherPrivateDetails))
   router.get('/pages/class-sessions/:sessionId/workspace', wrap(classSessionWorkspace))

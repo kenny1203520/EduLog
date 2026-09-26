@@ -13,7 +13,6 @@ describe('aggregate API contract', () => {
 
   it('exposes page read models without restoring the removed aggregate aliases', () => {
     expect(source).toContain("router.get('/pages/me/preferences', wrap(preferences))")
-    expect(source).toContain("router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReportsPage))")
     expect(source).toContain("router.get('/pages/classrooms/overview', wrap(classroomManager))")
     expect(source).toContain("router.get('/pages/holidays/overview', wrap(holidays))")
     expect(source).toContain("router.get('/pages/reports/incomplete', wrap(incomplete))")
@@ -21,11 +20,15 @@ describe('aggregate API contract', () => {
     expect(source).toContain("router.get('/pages/courses/overview', wrap(coursesOverview))")
     expect(source).toContain("router.get('/pages/students/overview', wrap(studentsOverview))")
     expect(source).toContain("router.get('/pages/students/:studentId/profile', wrap(studentProfile))")
-    expect(source).toContain("router.get('/pages/students/:studentId/reports', wrap(studentReportsPage))")
     expect(source).toContain("router.get('/pages/teachers/overview', wrap(teachersOverview))")
     expect(source).toContain("router.get('/pages/class-sessions/:sessionId/workspace', wrap(classSessionWorkspace))")
     expect(source).not.toContain('/aggregates/')
     expect(source).not.toContain("router.get('/dashboard'")
+  })
+
+  it('routes student and enrollment report lists to handlers using their matching IDs', () => {
+    expect(source).toContain("router.get('/pages/students/:studentId/reports', wrap(studentReports))")
+    expect(source).toContain("router.get('/pages/enrollments/:enrollmentId/reports', wrap(studentReportsPage))")
   })
 
   it('keeps nested class session selects balanced for PostgREST', () => {
