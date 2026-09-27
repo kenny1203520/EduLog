@@ -1,5 +1,39 @@
 \set ON_ERROR_STOP on
 
+-- 1000106 removes the overlapping SELECT access from the former FOR ALL
+-- policy. Keep exactly one permissive authenticated policy per operation.
+DO $$
+DECLARE
+  action_name text;
+  policy_count integer;
+BEGIN
+  FOREACH action_name IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] LOOP
+    SELECT count(*) INTO policy_count
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'role_permission_policies'
+      AND cmd = action_name
+      AND permissive = 'PERMISSIVE'
+      AND roles @> ARRAY['authenticated'::name];
+    IF policy_count <> 1 THEN
+      RAISE EXCEPTION 'expected one authenticated % policy on role_permission_policies, found %',
+        action_name, policy_count;
+    END IF;
+  END LOOP;
+
+  SELECT count(*) INTO policy_count
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename = 'role_permission_policies'
+    AND cmd = 'ALL'
+    AND permissive = 'PERMISSIVE'
+    AND roles @> ARRAY['authenticated'::name];
+  IF policy_count <> 0 THEN
+    RAISE EXCEPTION 'broad authenticated policy remains on role_permission_policies';
+  END IF;
+END;
+$$;
+
 DO $$
 DECLARE forbidden_count integer;
 BEGIN

@@ -58,6 +58,7 @@ const platformTeachingRolesWithoutWorkspace = await readMigration('1000100_platf
 const studentOverviewGlobalVisibility = await readMigration('1000102_student_overview_global_visibility.sql')
 const reportCollaborationAuthorization = await readMigration('1000103_report_collaboration_authorization.sql')
 const queryPerformanceIndexes = await readMigration('1000105_query_performance_indexes.sql')
+const rbacPolicySelectOverlap = await readMigration('1000106_rbac_policy_select_overlap.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -118,7 +119,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102', '1000103']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102', '1000103', '1000104', '1000105', '1000106']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -194,6 +195,20 @@ Deno.test('1000105 adds only the uncovered query performance indexes', () => {
   assertStringIncludes(queryPerformanceIndexes, 'students_birthday_idx')
   assertStringIncludes(queryPerformanceIndexes, 'ON public.students USING btree (birthday)')
   assert(!queryPerformanceIndexes.includes('ON public.lessons USING btree (course_id)'))
+})
+
+Deno.test('1000106 splits RBAC policy reads and writes without broadening scope', () => {
+  assertStringIncludes(rbacPolicySelectOverlap, 'FOR SELECT TO authenticated')
+  assertStringIncludes(rbacPolicySelectOverlap, 'FOR INSERT TO authenticated')
+  assertStringIncludes(rbacPolicySelectOverlap, 'FOR UPDATE TO authenticated')
+  assertStringIncludes(rbacPolicySelectOverlap, 'FOR DELETE TO authenticated')
+  assert(!rbacPolicySelectOverlap.includes('FOR ALL TO authenticated'))
+  assertStringIncludes(rbacPolicySelectOverlap, 'role.domain = permission.domain')
+  assertStringIncludes(rbacPolicySelectOverlap, "'system.roles.read'")
+  assertStringIncludes(rbacPolicySelectOverlap, "'system.roles.manage'")
+  assertStringIncludes(rbacPolicySelectOverlap, "'teaching.roles.read'")
+  assertStringIncludes(rbacPolicySelectOverlap, "'teaching.roles.manage'")
+  assertStringIncludes(rbacPolicySelectOverlap, 'WITH CHECK (')
 })
 
 Deno.test('1000103 authorizes report collaboration snapshots through current teaching RBAC', () => {
