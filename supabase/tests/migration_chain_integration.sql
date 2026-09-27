@@ -590,9 +590,10 @@ BEGIN
   student_page := public.get_students_overview(10, 0, 'Migration Visibility', 'name');
   IF (student_page->>'total')::integer <> 1
      OR student_page->'items'->0->>'name' <> 'Migration Visibility Classroom' THEN
-    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %, classroom_permission=%',
+    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %, classroom_permission=%, enrollment_student_access=%',
       student_page,
-      public.has_api_permission(auth.uid(), 'teaching.students.read', '30000000-0000-0000-0000-000000000001', NULL);
+      public.has_api_permission(auth.uid(), 'teaching.students.read', '30000000-0000-0000-0000-000000000001', NULL),
+      public.can_access_student('20000000-0000-0000-0000-000000000103', 'teaching.students.read');
   END IF;
 END;
 $$;
