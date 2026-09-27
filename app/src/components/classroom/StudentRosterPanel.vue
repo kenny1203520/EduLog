@@ -146,7 +146,6 @@ function requestAttendance(item: StudentRosterItem) {
                             </span>
                     </div>
                     <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
-                    <CourseProgressGapHint :lessons="item.progressGaps || []" />
                     </div>
                     <button v-if="hasOccurrence" type="button"
                         class="shrink-0 rounded-xl border px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50"
@@ -163,6 +162,8 @@ function requestAttendance(item: StudentRosterItem) {
                         {{ item.absenceReasonLabel }}
                     </span>
                 </div>
+
+                <CourseProgressGapHint :lessons="item.progressGaps || []" />
 
                 <div class="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5">
                     <div class="flex flex-wrap items-start justify-between gap-2">
