@@ -132,7 +132,11 @@ export class ReportQueryService {
         lessons: Array<{ id: string; sequence: number; title: string }>
         reports: Array<{ id: string; lesson_id: string; is_completed: boolean; progress_letter: string | null; attendance_status: string; occurrence_date: string }>
         latest_prior_report: { id: string; lesson_id: string; is_completed: boolean; progress_letter: string | null; attendance_status: string; occurrence_date: string } | null
-    }> {
+    } | null> {
+        // This route is implemented by the v1 API only. Returning null lets the
+        // editor explain that the optional context check is unavailable while
+        // leaving the regular report editor usable in legacy and mock modes.
+        if (getApiV1Mode() !== 'v1') return null
         const params = new URLSearchParams({ occurrence_id: occurrenceId })
         params.set('report_id', reportId)
         const response = await apiV1Client.get<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/report-progress-context?${params}`)
