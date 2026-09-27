@@ -33,6 +33,7 @@ import ReportEditor from '@/components/ReportEditor.vue'
 import OccurrenceCalendar from '@/components/OccurrenceCalendar.vue'
 import QuickAttendancePanel, { type QuickAttendanceStatus } from '@/components/classroom/QuickAttendancePanel.vue'
 import StudentRosterPanel, { type StudentRosterItem } from '@/components/classroom/StudentRosterPanel.vue'
+import type { ProgressGapHintLesson } from '@/components/classroom/CourseProgressGapHint.vue'
 import ConflictModal from '@/components/ConflictModal.vue'
 import ConfirmModal from '@/components/common/ConfirmModal.vue'
 import CopyTemplateEditorModal from '@/components/common/CopyTemplateEditorModal.vue'
@@ -169,6 +170,10 @@ const studentAttendanceFilter = ref<'all' | 'present' | 'absent' | 'pending'>('a
 const courseLessons = ref<any[]>([])
 const courseLessonsByCourseId = ref<Record<string, Lesson[]>>({})
 const studentProgressSummaries = ref<Record<string, StudentProgressSummary>>({})
+const studentProgressGaps = ref<Record<string, ProgressGapHintLesson[]>>({})
+const isLoadingProgressGaps = ref(false)
+const progressGapCheckFailed = ref(false)
+let progressGapRequestGeneration = 0
 const loading = ref(true)
 
 type ProgressTone = 'completed' | 'incomplete' | 'empty'
@@ -462,6 +467,43 @@ async function loadStudentProgressSummaries(
     studentProgressSummaries.value = nextSummaries
 }
 
+async function loadStudentProgressGaps(
+    enrollmentList: Enrollment[],
+    occurrence: ClassOccurrence | null = todayOccurrence.value
+) {
+    const generation = ++progressGapRequestGeneration
+    studentProgressGaps.value = {}
+    progressGapCheckFailed.value = false
+    if (!occurrence?.id || !occurrence.occurrenceDate) {
+        isLoadingProgressGaps.value = false
+        return
+    }
+
+    const occurrenceId = occurrence.id
+    const occurrenceDate = DateUtils.formatLocalDate(occurrence.occurrenceDate)
+    const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
+    isLoadingProgressGaps.value = true
+    try {
+        const summaries = await OccurrenceReportService.getProgressGapsByEnrollments(occurrenceId, enrollmentIds)
+        if (generation !== progressGapRequestGeneration
+            || todayOccurrence.value?.id !== occurrenceId
+            || DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== occurrenceDate) return
+        studentProgressGaps.value = Object.fromEntries(summaries)
+    } catch (error) {
+        if (generation !== progressGapRequestGeneration) return
+        console.error('Failed to check course progress gaps:', error)
+        studentProgressGaps.value = {}
+        progressGapCheckFailed.value = true
+    } finally {
+        if (generation === progressGapRequestGeneration) isLoadingProgressGaps.value = false
+    }
+}
+
+function retryStudentProgressGaps() {
+    if (!todayOccurrence.value) return
+    void loadStudentProgressGaps(enrollments.value, todayOccurrence.value)
+}
+
 function getStudentProgressSummary(enrollmentId?: string): StudentProgressSummary {
     if (!enrollmentId) {
         return getDefaultProgressSummary()
@@ -700,6 +742,10 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
             reportMap.value = new Map()
             enrollments.value = []
             studentProgressSummaries.value = {}
+            studentProgressGaps.value = {}
+            progressGapRequestGeneration++
+            isLoadingProgressGaps.value = false
+            progressGapCheckFailed.value = false
             isOccurrenceInHoliday.value = false
             occurrenceTeachers.value = []
             teacherLeaveById.value = {}
@@ -737,7 +783,8 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
                 throw error
             }),
             loadOccurrenceTeachers(),
-            loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate)
+            loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate),
+            loadStudentProgressGaps(enrollments.value, occurrence)
         ])
     } catch (error) {
         if (loadToken === occurrenceLoadToken) {
@@ -1031,6 +1078,7 @@ async function refreshCurrentOccurrenceFromRealtime() {
             await Promise.all([
                 loadOccurrenceTeachers(),
                 loadStudentProgressSummaries(enrollments.value, 'replace', occurrenceDate),
+                loadStudentProgressGaps(enrollments.value, todayOccurrence.value),
             ])
             if (selectedEditorEnrollment.value?.courseId) {
                 courseLessons.value = await getLessonsForCourse(selectedEditorEnrollment.value.courseId)
@@ -1047,6 +1095,10 @@ async function refreshCurrentOccurrenceFromRealtime() {
                 ? new Map([[selectedId, selectedReport]])
                 : new Map()
             studentProgressSummaries.value = {}
+            studentProgressGaps.value = {}
+            progressGapRequestGeneration++
+            isLoadingProgressGaps.value = false
+            progressGapCheckFailed.value = false
         }
 
         if (requestId !== realtimeRefreshRequest) return
@@ -1166,7 +1218,8 @@ const quickAttendanceStudents = computed(() => filteredEnrollments.value.map(enr
     status: (reportMap.value.get(enrollment.id!)?.attendanceStatus || 'pending') as QuickAttendanceStatus,
     isSaving: savingMap.value.get(enrollment.id!) === true,
     disabled: !reportMap.value.has(enrollment.id!),
-    disabledReason: !reportMap.value.has(enrollment.id!) ? t('classroom.trial_report_unavailable') : undefined
+    disabledReason: !reportMap.value.has(enrollment.id!) ? t('classroom.trial_report_unavailable') : undefined,
+    progressGaps: studentProgressGaps.value[enrollment.id!] || []
 })))
 
 const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollments.value.map(enrollment => {
@@ -1204,7 +1257,8 @@ const studentRosterItems = computed<StudentRosterItem[]>(() => filteredEnrollmen
         latestStatus: progress.latestProgressStatus,
         latestTone: progress.latestProgressTone,
         isEditing: selectedEnrollmentId.value === enrollment.id && showSplitView.value,
-        reportAvailable: reportMap.value.has(enrollment.id!)
+        reportAvailable: reportMap.value.has(enrollment.id!),
+        progressGaps: studentProgressGaps.value[enrollment.id!] || []
     }
 }))
 
@@ -2249,6 +2303,16 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <span class="shrink-0 px-2 text-center text-xs font-black uppercase tracking-widest text-gray-400">{{ $t('classroom.student_filter_count', { count: filteredEnrollments.length }) }}</span>
                     </div>
 
+                    <div v-if="todayOccurrence && isLoadingProgressGaps" class="mb-3 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600" role="status" aria-live="polite" aria-busy="true">
+                        <span class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-emerald-600 motion-reduce:animate-none" aria-hidden="true"></span>
+                        {{ $t('classroom.progress_gap_checking') }}
+                    </div>
+                    <div v-if="todayOccurrence && progressGapCheckFailed" class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-950" role="alert" aria-busy="false">
+                        <span>{{ $t('classroom.progress_gap_check_failed') }}</span>
+                        <button type="button" class="min-h-11 rounded-lg border border-amber-400 bg-white px-4 py-2 text-xs font-black text-amber-900 transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-700" @click="retryStudentProgressGaps">
+                            {{ $t('classroom.progress_gap_retry') }}
+                        </button>
+                    </div>
                     <QuickAttendancePanel v-if="todayOccurrence"
                         v-model:expanded="isQuickAttendanceExpanded"
                         :students="quickAttendanceStudents"

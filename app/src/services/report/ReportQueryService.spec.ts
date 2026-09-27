@@ -81,6 +81,36 @@ describe('ReportQueryService.getEnrollmentReportProgressContext', () => {
     })
 })
 
+describe('ReportQueryService.getProgressGapsByEnrollments', () => {
+    it('requests authorized batch summaries without loading report bodies', async () => {
+        apiModeMock.mockReturnValue('v1')
+        apiV1GetMock.mockResolvedValueOnce({ data: [
+            { enrollment_id: 'enrollment-1', gaps: [{ id: 'lesson-6', sequence: 6, title: 'Lesson 6' }] },
+            { enrollment_id: 'enrollment-2', gaps: [] }
+        ] })
+
+        const result = await ReportQueryService.getProgressGapsByEnrollments('occurrence-1', ['enrollment-1', 'enrollment-2'])
+
+        expect(apiV1GetMock).toHaveBeenCalledWith('/occurrences/occurrence-1/report-progress-gaps?enrollment_ids=enrollment-1%2Cenrollment-2')
+        expect(fromMock).not.toHaveBeenCalled()
+        expect(result.get('enrollment-1')).toEqual([{ id: 'lesson-6', sequence: 6, title: 'Lesson 6' }])
+        expect(result.get('enrollment-2')).toEqual([])
+    })
+
+    it('splits large rosters into bounded API batches', async () => {
+        apiModeMock.mockReturnValue('v1')
+        apiV1GetMock.mockResolvedValue({ data: [] })
+        const ids = Array.from({ length: 101 }, (_, index) => `enrollment-${index}`)
+
+        await ReportQueryService.getProgressGapsByEnrollments('occurrence-1', ids)
+
+        expect(apiV1GetMock).toHaveBeenCalledTimes(2)
+        expect(apiV1GetMock.mock.calls[0][0]).toContain('enrollment_ids=')
+        expect(decodeURIComponent(apiV1GetMock.mock.calls[0][0])).toContain(ids.slice(0, 100).join(','))
+        expect(decodeURIComponent(apiV1GetMock.mock.calls[1][0])).toContain(ids[100])
+    })
+})
+
 describe('ReportQueryService.getReportsWithDetails', () => {
     it('normalizes the plural API relation shape for the report list', async () => {
         apiModeMock.mockReturnValue('v1')

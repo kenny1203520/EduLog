@@ -7,6 +7,7 @@ import { apiV1Client } from '@/services/api/ApiV1Client'
 import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { PageApiService } from '@/services/api/PageApiService'
+import { findCourseProgressGaps, type OrderedLesson } from '@/utils/courseProgressGaps'
 
 export const REPORT_EDITOR_COLUMNS = 'id, enrollment_id, class_occurrence_id, lesson_id, is_completed, progress_letter, attendance_status, absence_reason, class_participation, classroom_behavior, contact_notes, contact_notes_document, class_notes, class_notes_document, content, content_document, external_link, version, last_edited_by, last_edited_at, created_at, updated_at'
 
@@ -34,6 +35,97 @@ export function normalizeEnrollmentReportRelations(report: any): any {
 }
 
 export class ReportQueryService {
+    static async getProgressGapsByEnrollments(
+        occurrenceId: string,
+        enrollmentIds: string[]
+    ): Promise<Map<string, OrderedLesson[]>> {
+        const uniqueEnrollmentIds = [...new Set(enrollmentIds.filter(Boolean))]
+        const gapsByEnrollment = new Map<string, OrderedLesson[]>()
+        if (!uniqueEnrollmentIds.length) return gapsByEnrollment
+
+        if (getApiV1Mode() === 'v1') {
+            for (let offset = 0; offset < uniqueEnrollmentIds.length; offset += 100) {
+                const batch = uniqueEnrollmentIds.slice(offset, offset + 100)
+                const params = new URLSearchParams({ enrollment_ids: batch.join(',') })
+                const response = await apiV1Client.get<Array<{ enrollment_id: string; gaps: OrderedLesson[] }>>(
+                    `/occurrences/${encodeURIComponent(occurrenceId)}/report-progress-gaps?${params}`
+                )
+                for (const summary of response.data || []) gapsByEnrollment.set(summary.enrollment_id, summary.gaps || [])
+            }
+            return gapsByEnrollment
+        }
+
+        const occurrenceResult = await apiDataClient.from('class_occurrences')
+            .select('id,occurrence_date')
+            .eq('id', occurrenceId)
+            .maybeSingle()
+        if (occurrenceResult.error) throw new Error(`Failed to fetch occurrence for progress gaps: ${occurrenceResult.error.message}`)
+        if (!occurrenceResult.data) throw new Error('Occurrence was not found while checking progress gaps')
+
+        const rosterResult = await apiDataClient.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
+        if (rosterResult.error) throw new Error(`Failed to fetch occurrence roster for progress gaps: ${rosterResult.error.message}`)
+        const effectiveIds = new Set((rosterResult.data || []).map((row: any) => row.enrollment_id as string))
+        const scopedEnrollmentIds = uniqueEnrollmentIds.filter((id) => effectiveIds.has(id))
+        if (!scopedEnrollmentIds.length) return gapsByEnrollment
+
+        const enrollmentResult = await apiDataClient.from('enrollments')
+            .select('id,course_id')
+            .in('id', scopedEnrollmentIds)
+        if (enrollmentResult.error) throw new Error(`Failed to fetch enrollments for progress gaps: ${enrollmentResult.error.message}`)
+        const courseIds = [...new Set((enrollmentResult.data || []).map((row: any) => row.course_id).filter(Boolean))]
+        const [lessonResult, currentReportResult] = await Promise.all([
+            courseIds.length
+                ? apiDataClient.from('lessons').select('id,course_id,sequence,title').in('course_id', courseIds).order('sequence', { ascending: true })
+                : Promise.resolve({ data: [], error: null }),
+            apiDataClient.from('occurrence_reports').select('enrollment_id,lesson_id')
+                .eq('class_occurrence_id', occurrenceId).in('enrollment_id', scopedEnrollmentIds)
+        ])
+        if (lessonResult.error) throw new Error(`Failed to fetch lessons for progress gaps: ${lessonResult.error.message}`)
+        if (currentReportResult.error) throw new Error(`Failed to fetch current reports for progress gaps: ${currentReportResult.error.message}`)
+
+        const reports: Array<{ enrollment_id: string; lesson_id: string }> = []
+        for (let offset = 0; ; offset += 500) {
+            const result = await apiDataClient.from('occurrence_reports')
+                .select('enrollment_id,lesson_id,class_occurrences!inner(occurrence_date)')
+                .in('enrollment_id', scopedEnrollmentIds)
+                .eq('attendance_status', 'present')
+                .not('lesson_id', 'is', null)
+                .lt('class_occurrences.occurrence_date', occurrenceResult.data.occurrence_date)
+                .range(offset, offset + 499)
+            if (result.error) throw new Error(`Failed to fetch prior reports for progress gaps: ${result.error.message}`)
+            const page = result.data || []
+            reports.push(...page.filter((row: any): row is { enrollment_id: string; lesson_id: string } => Boolean(row.lesson_id)))
+            if (page.length < 500) break
+        }
+
+        const lessonsByCourse = new Map<string, OrderedLesson[]>()
+        for (const lesson of lessonResult.data || []) {
+            const lessons = lessonsByCourse.get(lesson.course_id) || []
+            lessons.push({ id: lesson.id, sequence: lesson.sequence, title: lesson.title })
+            lessonsByCourse.set(lesson.course_id, lessons)
+        }
+        const courseByEnrollment = new Map((enrollmentResult.data || []).map((row: any) => [row.id, row.course_id]))
+        const recordedByEnrollment = new Map<string, string[]>()
+        for (const report of reports) {
+            const recorded = recordedByEnrollment.get(report.enrollment_id) || []
+            recorded.push(report.lesson_id)
+            recordedByEnrollment.set(report.enrollment_id, recorded)
+        }
+        const selectedByEnrollment = new Map<string, string>()
+        for (const report of currentReportResult.data || []) {
+            if (report.lesson_id) selectedByEnrollment.set(report.enrollment_id, report.lesson_id)
+        }
+        for (const enrollmentId of scopedEnrollmentIds) {
+            const courseId = courseByEnrollment.get(enrollmentId) as string | undefined
+            gapsByEnrollment.set(enrollmentId, findCourseProgressGaps(
+                courseId ? lessonsByCourse.get(courseId) || [] : [],
+                recordedByEnrollment.get(enrollmentId) || [],
+                selectedByEnrollment.get(enrollmentId)
+            ))
+        }
+        return gapsByEnrollment
+    }
+
     static async getEnrollmentReportProgressContext(enrollmentId: string, occurrenceId: string, reportId: string): Promise<{
         enrollment_id: string
         occurrence_date: string

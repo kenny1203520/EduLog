@@ -35,6 +35,15 @@ describe('QuickAttendancePanel', () => {
         expect(wrapper.text()).toContain('Python 基礎課程')
     })
 
+    it('shows the shared gap hint on the same student tile without changing attendance actions', () => {
+        const wrapper = mountPanel({ students: [{ ...students[0], progressGaps: [{ id: 'lesson-6', sequence: 6, title: 'Lesson Six' }] }] })
+        const tile = wrapper.get('[data-student-id="student-1"]')
+
+        expect(tile.text()).toContain('classroom.progress_gap_short')
+        expect(tile.find('details summary').exists()).toBe(true)
+        expect(tile.findAll('[data-attendance-status]')).toHaveLength(3)
+    })
+
     it('emits focus-student only when the student name is clicked', async () => {
         const wrapper = mountPanel()
         await wrapper.get('[data-student-id="student-1"] button[aria-label="classroom.student_name: 王小明"]').trigger('click')

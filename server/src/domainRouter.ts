@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { findReportProgressGaps } from './reportProgressGaps.js'
 
 const occurrenceFields = 'id,class_session_id,occurrence_date,status,original_start_time,original_end_time,actual_start_time,actual_end_time,time_zone,is_conducted,teacher_ids,teacher_attendance,created_at,updated_at,class_sessions(id,name,time_zone,classroom_id,classrooms(id,name,color))'
 const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,version,last_edited_by,last_edited_at,created_at,updated_at'
@@ -195,6 +196,87 @@ async function progressSummaryReports(req: Request, res: Response) {
   return res.json(envelope(req, result.data ?? [], { limit: query.limit, offset: 0, total: result.data?.length ?? 0, sort: query.sort }))
 }
 
+async function occurrenceReportProgressGaps(req: Request, res: Response) {
+  const occurrenceId = uuid.parse(req.params.id)
+  const query = z.object({ enrollment_ids: z.string().min(1).max(10000) }).strict().parse(req.query)
+  const enrollmentIds = [...new Set(query.enrollment_ids.split(',').filter(Boolean))]
+  if (!enrollmentIds.length || enrollmentIds.length > 100 || enrollmentIds.some((id) => !uuid.safeParse(id).success)) {
+    throw new ApiError(400, 'INVALID_QUERY', 'enrollment_ids contains an invalid id')
+  }
+
+  const occurrence = await req.db!.from('class_occurrences').select('id,class_session_id,occurrence_date').eq('id', occurrenceId).maybeSingle()
+  if (occurrence.error) throw mapDatabaseError(occurrence.error)
+  if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
+  await permission(req, 'teaching.reports.list', occurrence.data.class_session_id)
+
+  const effectiveRoster = await req.db!.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
+  if (effectiveRoster.error) throw mapDatabaseError(effectiveRoster.error)
+  const effectiveIds = new Set(((effectiveRoster.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id))
+  if (enrollmentIds.some((id) => !effectiveIds.has(id))) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found in this occurrence')
+
+  const enrollments = await req.db!.from('enrollments').select('id,course_id').in('id', enrollmentIds)
+  if (enrollments.error) throw mapDatabaseError(enrollments.error)
+  if ((enrollments.data ?? []).length !== enrollmentIds.length) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  const courseIds = [...new Set((enrollments.data ?? []).map((row) => row.course_id).filter((id): id is string => Boolean(id)))]
+
+  const [lessonResult, currentReports] = await Promise.all([
+    courseIds.length
+      ? req.db!.from('lessons').select('id,course_id,sequence,title').in('course_id', courseIds).order('sequence', { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    req.db!.from('occurrence_reports').select('enrollment_id,lesson_id').eq('class_occurrence_id', occurrenceId).in('enrollment_id', enrollmentIds),
+  ])
+  if (lessonResult.error) throw mapDatabaseError(lessonResult.error)
+  if (currentReports.error) throw mapDatabaseError(currentReports.error)
+
+  const priorReports: Array<{ enrollment_id: string; lesson_id: string }> = []
+  const pageSize = 500
+  for (let offset = 0; ; offset += pageSize) {
+    const result = await req.db!.from('occurrence_reports')
+      .select('enrollment_id,lesson_id,class_occurrences!inner(occurrence_date)')
+      .in('enrollment_id', enrollmentIds)
+      .eq('attendance_status', 'present')
+      .not('lesson_id', 'is', null)
+      .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1)
+    if (result.error) throw mapDatabaseError(result.error)
+    const page = (result.data ?? []) as Array<{ enrollment_id: string; lesson_id: string | null }>
+    priorReports.push(...page.filter((row): row is { enrollment_id: string; lesson_id: string } => Boolean(row.lesson_id)))
+    if (page.length < pageSize) break
+  }
+
+  const lessonByCourse = new Map<string, Array<{ id: string; sequence: number; title: string }>>()
+  for (const lesson of lessonResult.data ?? []) {
+    const lessons = lessonByCourse.get(lesson.course_id) ?? []
+    lessons.push({ id: lesson.id, sequence: lesson.sequence, title: lesson.title })
+    lessonByCourse.set(lesson.course_id, lessons)
+  }
+  const courseIdByEnrollment = new Map((enrollments.data ?? []).map((enrollment) => [enrollment.id, enrollment.course_id]))
+  const recordedByEnrollment = new Map<string, string[]>()
+  for (const report of priorReports) {
+    const lessonIds = recordedByEnrollment.get(report.enrollment_id) ?? []
+    lessonIds.push(report.lesson_id)
+    recordedByEnrollment.set(report.enrollment_id, lessonIds)
+  }
+  const selectedLessonByEnrollment = new Map<string, string>()
+  for (const report of currentReports.data ?? []) {
+    if (report.lesson_id) selectedLessonByEnrollment.set(report.enrollment_id, report.lesson_id)
+  }
+
+  const summaries = enrollmentIds.map((enrollmentId) => {
+    const courseId = courseIdByEnrollment.get(enrollmentId)
+    return {
+      enrollment_id: enrollmentId,
+      gaps: findReportProgressGaps(
+        courseId ? lessonByCourse.get(courseId) ?? [] : [],
+        recordedByEnrollment.get(enrollmentId) ?? [],
+        selectedLessonByEnrollment.get(enrollmentId),
+      ),
+    }
+  })
+  return res.json(envelope(req, summaries, { total: summaries.length }))
+}
+
 async function enrollmentReportProgressContext(req: Request, res: Response) {
   const enrollmentId = uuid.parse(req.params.id)
   const query = z.object({
@@ -336,6 +418,7 @@ export function createDomainRouter() {
   router.get('/occurrences/:id/preferred', wrap(preferredOccurrence))
   router.get('/occurrences/:id/navigation', wrap(navigation))
   router.get('/occurrences/:id', wrap(occurrenceItem))
+  router.get('/occurrences/:id/report-progress-gaps', wrap(occurrenceReportProgressGaps))
   router.post('/occurrences/:occurrenceId/reports', wrap(provisionReports))
   router.get('/reports/progress-summary', wrap(progressSummaryReports))
   router.get('/enrollments/:id/report-progress-context', wrap(enrollmentReportProgressContext))

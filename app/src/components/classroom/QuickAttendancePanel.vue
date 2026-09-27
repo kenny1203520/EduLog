@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import CourseProgressGapHint, { type ProgressGapHintLesson } from './CourseProgressGapHint.vue'
 
 export type QuickAttendanceStatus = 'pending' | 'present' | 'absent'
 
@@ -12,6 +13,7 @@ export interface QuickAttendanceStudent {
     isSaving: boolean
     disabled?: boolean
     disabledReason?: string
+    progressGaps?: ProgressGapHintLesson[]
 }
 
 const props = withDefaults(defineProps<{
@@ -147,6 +149,7 @@ function statusClass(status: QuickAttendanceStatus, active: boolean): string {
                                 {{ student.name }}
                             </button>
                             <p class="mt-1 break-words text-xs font-bold text-slate-500">{{ student.currentCourse }}</p>
+                            <CourseProgressGapHint :lessons="student.progressGaps || []" />
                             <p class="mt-1 text-xs font-bold" :class="student.status === 'present' ? 'text-emerald-600' : student.status === 'absent' ? 'text-red-600' : 'text-gray-400'">
                                 {{ student.disabled ? student.disabledReason : t(`attendance.${student.status}`) + ' · ' + (student.isSaving ? t('common.saving') : t('classroom.attendance_saved')) }}
                             </p>
