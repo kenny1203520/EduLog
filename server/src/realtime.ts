@@ -51,7 +51,13 @@ function parseMessage(raw: WebSocket.RawData): Record<string, unknown> | null {
   }
 }
 
-export function normalizeClientMessage(raw: WebSocket.RawData, roomTopic: string, accessToken: string, isBinary = false) {
+export function normalizeClientMessage(
+  raw: WebSocket.RawData,
+  roomTopic: string,
+  accessToken: string,
+  isBinary = false,
+  channelKind: 'report' | 'class_session' = 'report',
+) {
   if (isBinary) return null
   const message = parseMessage(raw)
   if (!message) return null
@@ -61,7 +67,10 @@ export function normalizeClientMessage(raw: WebSocket.RawData, roomTopic: string
   const isHeartbeat = topic === 'phoenix' && event === 'heartbeat'
   const isRoomMessage = topic === roomTopic
   if (!isHeartbeat && !isRoomMessage) return null
-  if (!['phx_join', 'phx_leave', 'broadcast', 'presence', 'heartbeat'].includes(event)) return null
+  const supportedRoomEvents = channelKind === 'class_session'
+    ? ['phx_join', 'phx_leave']
+    : ['phx_join', 'phx_leave', 'broadcast', 'presence']
+  if (!supportedRoomEvents.includes(event) && event !== 'heartbeat') return null
   if (isHeartbeat && event !== 'heartbeat') return null
   if (event === 'phx_join') {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
@@ -78,21 +87,36 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
     const origin = request.headers.origin
     if (origin && !resolveAllowedOrigins(config).includes(origin)) { rejectUpgrade(socket, 403, 'Forbidden'); return }
     const token = cookieValue(request.headers.cookie, 'edulog_access')
+    const classSessionId = url.searchParams.get('class_session')
     const roomId = url.searchParams.get('room')
+    const channelKind = classSessionId ? 'class_session' : 'report'
+    const resourceId = classSessionId || roomId
     if (!token) { rejectUpgrade(socket, 401, 'Unauthorized'); return }
-    if (!roomId || !/^[0-9a-f-]{36}$/i.test(roomId)) { rejectUpgrade(socket, 400, 'Bad Request'); return }
+    if (!resourceId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resourceId) || (classSessionId && roomId)) { rejectUpgrade(socket, 400, 'Bad Request'); return }
     try {
       await validateAccessToken(adminClient, token, config)
       const userClient = createUserClient(config, token)
-      const authorization = await userClient.rpc('can_access_report', { p_report_id: roomId, p_permission_key: 'teaching.reports.read' })
-      if (authorization.error || authorization.data !== true) { rejectUpgrade(socket, 403, 'Forbidden'); return }
+      if (channelKind === 'class_session') {
+        const [sessionRead, sessionList] = await Promise.all([
+          userClient.rpc('can_access_class_session', { p_class_session_id: resourceId, p_permission_key: 'teaching.class_sessions.read' }),
+          userClient.rpc('can_access_class_session', { p_class_session_id: resourceId, p_permission_key: 'teaching.class_sessions.list' }),
+        ])
+        if ((sessionRead.error || sessionRead.data !== true) && (sessionList.error || sessionList.data !== true)) {
+          rejectUpgrade(socket, 403, 'Forbidden'); return
+        }
+      } else {
+        const authorization = await userClient.rpc('can_access_report', { p_report_id: resourceId, p_permission_key: 'teaching.reports.read' })
+        if (authorization.error || authorization.data !== true) { rejectUpgrade(socket, 403, 'Forbidden'); return }
+      }
     } catch {
       rejectUpgrade(socket, 401, 'Unauthorized'); return
     }
     socketServer.handleUpgrade(request, socket, head, (client) => {
       const upstream = resolveRealtimeUrl(config)
       const upstreamSocket = new WebSocket(upstream.toString(), { maxPayload: MAX_MESSAGE_BYTES, handshakeTimeout: UPSTREAM_CONNECT_TIMEOUT_MS })
-      const roomTopic = `realtime:room:${roomId}`
+      const roomTopic = channelKind === 'class_session'
+        ? `realtime:class-session:${resourceId}`
+        : `realtime:room:${resourceId}`
       const pending: string[] = []
       let upstreamReady = false
       const flush = () => { while (pending.length && upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.send(pending.shift()!) }
@@ -103,7 +127,7 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
           upstreamSocket.close()
           return
         }
-        const normalized = normalizeClientMessage(raw, roomTopic, token, isBinary)
+        const normalized = normalizeClientMessage(raw, roomTopic, token, isBinary, channelKind)
         if (!normalized) return
         if (upstreamReady && upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.send(normalized)
         else if (pending.length < 16) pending.push(normalized)

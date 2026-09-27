@@ -35,6 +35,46 @@ END;
 $$;
 
 DO $$
+DECLARE
+  workspace_definition text;
+  invalidation_policy text;
+  trigger_count integer;
+BEGIN
+  workspace_definition := pg_get_functiondef('public.get_class_session_workspace(uuid,date)'::regprocedure);
+  IF workspace_definition NOT LIKE '%get_effective_occurrence_enrollment_ids%'
+     OR workspace_definition NOT LIKE '%v_occurrence_id IS NULL%' THEN
+    RAISE EXCEPTION 'class session workspace does not use transfer-effective occurrence rosters with the pre-generation fallback';
+  END IF;
+
+  SELECT qual INTO invalidation_policy
+  FROM pg_policies
+  WHERE schemaname = 'realtime' AND tablename = 'messages'
+    AND policyname = 'Authorized users can receive private report and class session messages';
+  IF invalidation_policy IS NULL
+     OR invalidation_policy NOT LIKE '%can_access_class_session%'
+     OR invalidation_policy NOT LIKE '%class-session:%' THEN
+    RAISE EXCEPTION 'private class-session invalidation channel does not enforce class-session read permission';
+  END IF;
+
+  SELECT count(*) INTO trigger_count
+  FROM pg_trigger
+  WHERE NOT tgisinternal AND tgname = 'class_session_workspace_invalidation'
+    AND tgrelid IN (
+      'public.class_sessions'::regclass, 'public.class_session_schedule_rules'::regclass,
+      'public.class_session_teachers'::regclass, 'public.enrollments'::regclass,
+      'public.class_occurrences'::regclass, 'public.occurrence_reports'::regclass,
+      'public.single_lesson_transfers'::regclass, 'public.students'::regclass,
+      'public.student_suspensions'::regclass, 'public.courses'::regclass,
+      'public.lessons'::regclass, 'public.classrooms'::regclass, 'public.holidays'::regclass,
+      'public.teacher_records'::regclass, 'public.profiles'::regclass
+    );
+  IF trigger_count <> 15 THEN
+    RAISE EXCEPTION 'expected invalidation triggers on 15 class-session source tables, found %', trigger_count;
+  END IF;
+END;
+$$;
+
+DO $$
 DECLARE forbidden_count integer;
 BEGIN
   IF NOT EXISTS (

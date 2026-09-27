@@ -4,13 +4,16 @@ import { buildOpenApi } from './openapi.js'
 import { decodeUpstreamTextFrame, normalizeClientMessage, resolveRealtimeUrl } from './realtime.js'
 
 describe('realtime proxy security contract', () => {
-  it('requires a report room and evaluates access with the user JWT client', () => {
+  it('validates report and class-session access with the user JWT client', () => {
     const source = readFileSync(new URL('./realtime.ts', import.meta.url), 'utf8')
     expect(source).toContain("url.pathname !== '/api/realtime'")
     expect(source).toContain("url.searchParams.get('room')")
     expect(source).toContain('createUserClient(config, token)')
     expect(source).toContain("rpc('can_access_report'")
     expect(source).toContain("'teaching.reports.read'")
+    expect(source).toContain("url.searchParams.get('class_session')")
+    expect(source).toContain("rpc('can_access_class_session'")
+    expect(source).toContain("'teaching.class_sessions.list'")
     expect(source).toContain('resolveRealtimeUrl(config)')
   })
 
@@ -18,9 +21,10 @@ describe('realtime proxy security contract', () => {
     const document = buildOpenApi() as { paths: Record<string, Record<string, any>> }
     const operation = document.paths['/api/realtime'].get
     expect(operation['x-websocket']).toBe(true)
-    expect(operation['x-permission']).toBe('teaching.reports.read')
+    expect(operation['x-permission']).toContain('teaching.reports.read')
     expect(operation.security).toEqual([{ cookieAuth: [] }])
-    expect(operation.parameters).toEqual([{ name: 'room', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }])
+    expect(operation.parameters).toHaveLength(2)
+    expect(operation.parameters.map((parameter: any) => parameter.name)).toEqual(['room', 'class_session'])
   })
 
   it('derives the realtime websocket endpoint from the configured Supabase URL when no override is set', () => {
@@ -80,5 +84,15 @@ describe('realtime proxy security contract', () => {
     expect(normalizeClientMessage(Buffer.from(JSON.stringify({ join_ref: null, ref: '1', topic: 'phoenix', event: 'phx_join', payload: {} })), roomTopic, 'token')).toBeNull()
     expect(normalizeClientMessage(Buffer.from(JSON.stringify({ join_ref: null, ref: '1', topic: 'phoenix', event: 'heartbeat', payload: {} })), roomTopic, 'token')).not.toBeNull()
     expect(normalizeClientMessage(Buffer.from(JSON.stringify({ join_ref: null, ref: '1', topic: roomTopic, event: 'phx_join', payload: {} })), roomTopic, 'token', true)).toBeNull()
+  })
+
+  it('allows class-session subscribers to join but blocks client broadcasts and presence writes', () => {
+    const topic = 'realtime:class-session:c2944526-bc67-48c6-8a49-3c597b317b2a'
+    const join = JSON.stringify({ join_ref: '1', ref: '1', topic, event: 'phx_join', payload: { config: { private: true }, access_token: '' } })
+    const broadcast = JSON.stringify({ join_ref: '1', ref: '2', topic, event: 'broadcast', payload: { type: 'broadcast', event: 'changed', payload: {} } })
+    const presence = JSON.stringify({ join_ref: '1', ref: '3', topic, event: 'presence', payload: { type: 'presence', event: 'track', payload: {} } })
+    expect(normalizeClientMessage(Buffer.from(join), topic, 'cookie-token', false, 'class_session')).toContain('cookie-token')
+    expect(normalizeClientMessage(Buffer.from(broadcast), topic, 'cookie-token', false, 'class_session')).toBeNull()
+    expect(normalizeClientMessage(Buffer.from(presence), topic, 'cookie-token', false, 'class_session')).toBeNull()
   })
 })

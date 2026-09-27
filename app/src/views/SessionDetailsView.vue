@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CourseCatalogService } from '@/services/course/CourseCatalogService'
 import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
-import { CourseService } from '@/services/course/CourseService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
 import { useAuthStore } from '@/stores/useAuthStore'
@@ -50,6 +49,7 @@ import { isTeacherPresentForScope } from '@/services/report/TeacherAttendanceSco
 import { roleDisplayName } from '@/utils/roleDisplay'
 import { getEffectiveTeacherAssignments } from '@/utils/effectiveTeacherAssignments'
 import { absenceReasonLabel } from '@/utils/absenceReason'
+import { ApiRealtimeChannel } from '@/services/report/ApiRealtimeChannel'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -137,6 +137,15 @@ const showSplitView = ref(false)
 const selectedEnrollmentId = ref<string | null>(null)
 const isRefreshing = ref(false)
 const quickReportEditorRef = ref<ReportEditorExpose | null>(null)
+const realtimeStatus = ref<'connecting' | 'connected' | 'offline'>('connecting')
+const isRealtimeRefreshing = ref(false)
+const realtimeRefreshError = ref(false)
+const lastRealtimeUpdateAt = ref<Date | null>(null)
+const selectedEditorEnrollmentSnapshot = ref<Enrollment | null>(null)
+let classSessionChannel: ApiRealtimeChannel | null = null
+let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
+let realtimeRefreshRequest = 0
+let hasJoinedClassSessionChannel = false
 
 // Conflict Resolution State
 const showConflictModal = ref(false)
@@ -576,50 +585,44 @@ async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
     sessionOccurrences.value = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
 }
 
-async function loadReportsForCurrentOccurrence() {
-    reportMap.value = new Map()
-    if (!todayOccurrence.value?.id) return
+async function loadReportsForCurrentOccurrence(options: { preserveOpenEditor?: boolean } = {}) {
+    const occurrenceId = todayOccurrence.value?.id
+    const selectedId = options.preserveOpenEditor && showSplitView.value ? selectedEnrollmentId.value : null
+    const selectedReport = selectedId ? reportMap.value.get(selectedId) : null
+    const nextReportMap = new Map<string, any>()
+    if (!occurrenceId) {
+        reportMap.value = nextReportMap
+        return
+    }
 
-    const occurrenceReports = await OccurrenceReportService.createReportsForOccurrence(todayOccurrence.value.id)
-    const reportEnrollmentIds = new Set(occurrenceReports.map(r => r.enrollmentId))
-    occurrenceReports.forEach(r => {
-        if (r.enrollmentId) reportMap.value.set(r.enrollmentId, r)
+    const occurrenceReports = await OccurrenceReportService.createReportsForOccurrence(occurrenceId)
+    if (todayOccurrence.value?.id !== occurrenceId) return
+    const currentEnrollmentIds = new Set(enrollments.value.map(enrollment => enrollment.id).filter(Boolean))
+    occurrenceReports.forEach(report => {
+        // The workspace RPC is the canonical effective roster. Never let an
+        // old source-occurrence report re-introduce a transferred student.
+        if (report.enrollmentId && currentEnrollmentIds.has(report.enrollmentId)) {
+            nextReportMap.set(report.enrollmentId, report)
+        }
     })
 
-    const currentEnrollmentIds = new Set(enrollments.value.map(e => e.id))
-    const guestEnrollmentIds = [...reportEnrollmentIds].filter(id => id && !currentEnrollmentIds.has(id))
-    if (guestEnrollmentIds.length > 0) {
-        const guests = await CourseService.getEnrollmentsByIds(guestEnrollmentIds as string[])
-        const addedGuests: Enrollment[] = []
-        guests.forEach(guest => {
-            if (!guest) return
-            // The workspace API is the canonical date-scoped roster.  A report
-            // lookup may contain historical or stale rows for an enrollment
-            // that is no longer active in this session; never re-add those
-            // rows to the visible roster.  Regular guest transfers remain
-            // supported.
-            if (guest.status !== 'regular') return
-            ;(guest as any).isGuest = true
-            if (!enrollments.value.find(e => e.id === guest.id)) {
-                enrollments.value.push(guest)
-                addedGuests.push(guest)
-            }
-        })
-        if (addedGuests.length > 0) {
-            await loadStudentProgressSummaries(addedGuests, 'merge', todayOccurrence.value.occurrenceDate)
-        }
-    }
-
     for (const enrollment of enrollments.value) {
-        if (enrollment.id && !reportMap.value.has(enrollment.id)) reportMap.value.set(enrollment.id, null)
+        if (enrollment.id && !nextReportMap.has(enrollment.id)) nextReportMap.set(enrollment.id, null)
     }
+    if (selectedId && selectedReport) {
+        // Keep the editor's current report object mounted through roster
+        // refreshes; its document continues to synchronize through Yjs.
+        nextReportMap.set(selectedId, selectedReport)
+    }
+    reportMap.value = nextReportMap
 }
 
-async function loadWorkspaceRoster(occurrenceDate: Date): Promise<void> {
+async function loadWorkspaceRoster(occurrenceDate: Date, force = false): Promise<void> {
     const date = DateUtils.formatLocalDate(occurrenceDate)
-    if (workspaceRosterDate === date) return
+    if (!force && workspaceRosterDate === date) return
 
     const workspace = (await PageApiService.getClassSessionWorkspace(sessionId, date)).data
+    if (todayOccurrence.value?.occurrenceDate && DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== date) return
     if (!workspace.session) throw new Error('Class session workspace is unavailable')
     if (workspace.session.roster_date && workspace.session.roster_date !== date) {
         throw new Error('Class session workspace returned an unexpected roster date')
@@ -627,6 +630,17 @@ async function loadWorkspaceRoster(occurrenceDate: Date): Promise<void> {
 
     enrollments.value = workspace.enrollments.map(enrollment => new Enrollment(enrollment))
     workspaceRosterDate = date
+    if (session.value) {
+        const rawSession = workspace.session as any
+        session.value = {
+            ...session.value,
+            ...rawSession,
+            schedule_rules: rawSession.schedule_rules ?? rawSession.class_session_schedule_rules ?? [],
+            classroom_name: rawSession.classrooms?.name ?? session.value.classroom_name,
+            classroom_address: rawSession.classrooms?.address ?? session.value.classroom_address,
+            classroom_external_link: rawSession.classrooms?.external_link ?? session.value.classroom_external_link,
+        }
+    }
 }
 
 async function loadOccurrenceTeachers() {
@@ -768,6 +782,10 @@ const rosterLists = computed(() => getRosterEnrollments(
 ))
 const allRosterEnrollments = computed(() => rosterLists.value.all)
 const filteredEnrollments = computed(() => rosterLists.value.filtered)
+const selectedEditorEnrollment = computed(() =>
+    allRosterEnrollments.value.find(enrollment => enrollment.id === selectedEnrollmentId.value)
+    || selectedEditorEnrollmentSnapshot.value
+)
 const highlightedEnrollmentId = ref<string | null>(null)
 let rosterHighlightTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -812,6 +830,13 @@ const teacherAttendanceCounts = computed(() => {
     }
     return { present, absent, onLeave }
 })
+const lastRealtimeUpdateLabel = computed(() => lastRealtimeUpdateAt.value
+    ? lastRealtimeUpdateAt.value.toLocaleTimeString(preferences.locale, {
+        timeZone: preferences.timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+    })
+    : '')
 
 function isTeacherOnLeave(teacherId?: string): boolean {
     return Boolean(teacherId && teacherLeaveById.value[teacherId])
@@ -865,8 +890,127 @@ async function loadData() {
     }
 }
 
-onMounted(() => {
-    loadData()
+function scheduleRealtimeRefresh() {
+    if (realtimeRefreshTimer) clearTimeout(realtimeRefreshTimer)
+    realtimeRefreshTimer = setTimeout(() => {
+        realtimeRefreshTimer = null
+        void refreshCurrentOccurrenceFromRealtime()
+    }, 300)
+}
+
+async function refreshCurrentOccurrenceFromRealtime() {
+    const requestId = ++realtimeRefreshRequest
+    const occurrenceAtStart = todayOccurrence.value as ClassOccurrence | null
+    const selectedDate = occurrenceAtStart?.occurrenceDate || DateUtils.todayDate(sessionTimeZone.value)
+    const selectedDateKey = DateUtils.formatLocalDate(selectedDate)
+    const selectedEnrollmentAtStart = selectedEnrollmentId.value
+        ? enrollments.value.find(enrollment => enrollment.id === selectedEnrollmentId.value) || selectedEditorEnrollmentSnapshot.value
+        : null
+    isRealtimeRefreshing.value = true
+    realtimeRefreshError.value = false
+    try {
+        await Promise.all([
+            loadWorkspaceRoster(selectedDate, true),
+            loadSessionOccurrences(selectedDate),
+        ])
+        if (requestId !== realtimeRefreshRequest || (todayOccurrence.value?.occurrenceDate && DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== selectedDateKey)) return
+
+        const refreshedOccurrence = findOccurrenceByDate(selectedDate)
+        if (refreshedOccurrence) todayOccurrence.value = refreshedOccurrence
+        else if (occurrenceAtStart) todayOccurrence.value = null
+
+        if (selectedEnrollmentAtStart && selectedEnrollmentId.value) {
+            selectedEditorEnrollmentSnapshot.value = enrollments.value.find(enrollment => enrollment.id === selectedEnrollmentId.value) || selectedEnrollmentAtStart
+        }
+        const validEnrollmentIds = new Set(enrollments.value.map(enrollment => enrollment.id).filter(Boolean))
+        selectedEnrollmentIds.value = new Set([...selectedEnrollmentIds.value].filter(id => validEnrollmentIds.has(id)))
+
+        if (todayOccurrence.value?.id) {
+            const occurrenceId = todayOccurrence.value.id
+            const occurrenceDate = todayOccurrence.value.occurrenceDate
+            const date = DateUtils.formatLocalDate(occurrenceDate)
+            courseLessonsByCourseId.value = {}
+            courseLessons.value = []
+            const [assignments, holiday, navigation] = await Promise.all([
+                TeacherService.getSessionTeachers(sessionId),
+                HolidayService.isHoliday(date, undefined, sessionId),
+                OccurrenceService.getOccurrenceNavigationState(sessionId, occurrenceDate),
+            ])
+            if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
+            sessionTeachers.value = assignments
+            isOccurrenceInHoliday.value = holiday
+            previousOccurrence.value = navigation.previous
+            nextOccurrence.value = navigation.next
+            await loadReportsForCurrentOccurrence({ preserveOpenEditor: true })
+            if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
+            await Promise.all([
+                loadOccurrenceTeachers(),
+                loadStudentProgressSummaries(enrollments.value, 'replace', occurrenceDate),
+            ])
+            if (selectedEditorEnrollment.value?.courseId) {
+                courseLessons.value = await getLessonsForCourse(selectedEditorEnrollment.value.courseId)
+            }
+        } else {
+            // A remote change can remove the currently selected occurrence
+            // (for example, an occurrence was deleted) while its editor is
+            // still open. Keep that report mounted until the user closes it
+            // so local Yjs state and pending edits are not reset by the page
+            // refresh.
+            const selectedId = showSplitView.value ? selectedEnrollmentId.value : null
+            const selectedReport = selectedId ? reportMap.value.get(selectedId) : null
+            reportMap.value = selectedId && selectedReport
+                ? new Map([[selectedId, selectedReport]])
+                : new Map()
+            studentProgressSummaries.value = {}
+        }
+
+        if (requestId !== realtimeRefreshRequest) return
+        lastRealtimeUpdateAt.value = new Date()
+        toast.info(t('classroom.live_update_applied'))
+    } catch (error) {
+        if (requestId !== realtimeRefreshRequest) return
+        console.error('Failed to refresh class session after a remote change:', error)
+        realtimeRefreshError.value = true
+    } finally {
+        if (requestId === realtimeRefreshRequest) isRealtimeRefreshing.value = false
+    }
+}
+
+function startClassSessionRealtime() {
+    const presenceKey = `${auth.user?.id || 'user'}:${Date.now()}`
+    classSessionChannel = new ApiRealtimeChannel(sessionId, presenceKey, 'class_session')
+        .on('broadcast', { event: 'class_session_invalidated' }, () => scheduleRealtimeRefresh())
+    classSessionChannel.subscribe(status => {
+        if (status === 'SUBSCRIBED') {
+            realtimeStatus.value = 'connected'
+            if (hasJoinedClassSessionChannel) scheduleRealtimeRefresh()
+            hasJoinedClassSessionChannel = true
+        } else {
+            realtimeStatus.value = 'offline'
+        }
+    })
+}
+
+function retryRealtimeAction() {
+    if (realtimeRefreshError.value) {
+        scheduleRealtimeRefresh()
+        return
+    }
+    classSessionChannel?.unsubscribe()
+    realtimeStatus.value = 'connecting'
+    startClassSessionRealtime()
+}
+
+onMounted(async () => {
+    await loadData()
+    startClassSessionRealtime()
+})
+
+onBeforeUnmount(() => {
+    if (realtimeRefreshTimer) clearTimeout(realtimeRefreshTimer)
+    realtimeRefreshTimer = null
+    classSessionChannel?.unsubscribe()
+    classSessionChannel = null
 })
 
 // Attendance & Rating Handlers
@@ -1446,6 +1590,7 @@ async function toggleSplitView(enrollmentId: string) {
     }
 
     selectedEnrollmentId.value = enrollmentId
+    selectedEditorEnrollmentSnapshot.value = enrollment || null
     showSplitView.value = true
 
     // Fetch latest report content to ensure sync with server (fixes stale data issues)
@@ -1470,6 +1615,7 @@ async function closeSplitView() {
     if (saveSucceeded === false) return
     showSplitView.value = false
     selectedEnrollmentId.value = null
+    selectedEditorEnrollmentSnapshot.value = null
 
     await nextTick()
     if (enrollmentIdToRestore) scrollToEnrollment(enrollmentIdToRestore)
@@ -1793,6 +1939,28 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
         </div>
 
         <div v-else class="session-workspace w-full">
+            <div v-if="realtimeStatus !== 'connected' || isRealtimeRefreshing || realtimeRefreshError || lastRealtimeUpdateAt"
+                class="mb-4 flex flex-col gap-3 rounded-2xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+                :class="realtimeRefreshError ? 'border-rose-200 bg-rose-50 text-rose-800' : (realtimeStatus === 'offline' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-100 bg-emerald-50/70 text-emerald-900')"
+                role="status" aria-live="polite" :aria-busy="isRealtimeRefreshing">
+                <div class="flex min-w-0 items-start gap-3">
+                    <span v-if="isRealtimeRefreshing" class="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
+                    <span v-else class="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full" :class="realtimeStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'" aria-hidden="true"></span>
+                    <div class="min-w-0">
+                        <p class="font-bold">
+                            {{ realtimeRefreshError ? $t('classroom.live_update_failed') : (isRealtimeRefreshing ? $t('classroom.live_update_loading') : (realtimeStatus === 'offline' ? $t('classroom.live_updates_disconnected') : $t('classroom.live_updates_connected'))) }}
+                        </p>
+                        <p v-if="lastRealtimeUpdateAt && !isRealtimeRefreshing && !realtimeRefreshError" class="mt-0.5 text-xs opacity-75">
+                            {{ $t('classroom.live_update_time', { time: lastRealtimeUpdateLabel }) }}
+                        </p>
+                    </div>
+                </div>
+                <button v-if="realtimeStatus === 'offline' || realtimeRefreshError" type="button"
+                    class="min-h-10 shrink-0 rounded-xl border border-current/20 bg-white/80 px-4 py-2 text-xs font-black transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    :disabled="isRealtimeRefreshing" @click="retryRealtimeAction">
+                    {{ realtimeRefreshError ? $t('classroom.live_update_retry') : $t('classroom.live_reconnect') }}
+                </button>
+            </div>
             <div v-if="occurrenceLoadError" class="flex flex-col items-center justify-center rounded-3xl border border-red-100 bg-white px-6 py-20 text-center shadow-sm">
                 <p class="font-black text-red-700">{{ occurrenceLoadError }}</p>
                 <button type="button" class="mt-5 rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white hover:bg-red-700" @click="loadData">
@@ -2065,12 +2233,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 <!-- Avatar and Name -->
                                 <div
                                     class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl shrink-0 shadow-lg shadow-emerald-100">
-                                    {{allRosterEnrollments.find(e => e.id ===
-                                        selectedEnrollmentId)?.studentName?.charAt(0)}}
+                                    {{selectedEditorEnrollment?.studentName?.charAt(0)}}
                                 </div>
                                 <div class="min-w-0">
                                     <div class="font-black text-gray-900 text-xl leading-tight truncate">
-                                        {{allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName}}
+                                        {{selectedEditorEnrollment?.studentName}}
                                     </div>
                                     <div class="flex items-center gap-1.5 mt-1">
                                         <div class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -2103,12 +2270,12 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :initial-version="reportMap.get(selectedEnrollmentId)?.version"
                                 :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
                                 :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString(preferences.locale)} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
-                                :course-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseSubject + ' ' + allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseStage"
-                                :course-display-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.courseDisplayName"
+                                :course-name="selectedEditorEnrollment?.courseSubject + ' ' + selectedEditorEnrollment?.courseStage"
+                                :course-display-name="selectedEditorEnrollment?.courseDisplayName"
                                 :initial-classroom-name="session?.classroom_name" :initial-session-name="session?.name"
                                 :initial-session-time="session ? `${session.start_time?.slice(0, 5) || ''}-${session.end_time?.slice(0, 5) || ''}` : ''"
-                                :initial-student-name="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentName"
-                                :initial-student-id="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.studentId"
+                                :initial-student-name="selectedEditorEnrollment?.studentName"
+                                :initial-student-id="selectedEditorEnrollment?.studentId"
                                 :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
                                 :available-lessons="courseLessons"
                                 :initial-report-external-link="reportMap.get(selectedEnrollmentId)?.externalLink"
@@ -2125,7 +2292,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :initial-class-notes-document="reportMap.get(selectedEnrollmentId)?.classNotesDocument"
                                 :initial-content="reportMap.get(selectedEnrollmentId)?.content"
                                 :initial-content-document="reportMap.get(selectedEnrollmentId)?.contentDocument"
-                                :initial-enrollment-external-link="allRosterEnrollments.find(e => e.id === selectedEnrollmentId)?.externalLink"
+                                :initial-enrollment-external-link="selectedEditorEnrollment?.externalLink"
                                 @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                                 @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
                                 @save-success="handleSaveSuccess($event, selectedEnrollmentId!)"

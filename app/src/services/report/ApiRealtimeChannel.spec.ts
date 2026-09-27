@@ -61,6 +61,28 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     channel.unsubscribe()
   })
 
+  it('opens a private class-session invalidation channel using the scoped endpoint', () => {
+    vi.stubGlobal('WebSocket', MockWebSocket)
+    vi.stubGlobal('window', { location: { protocol: 'https:', host: 'edulog.example' } })
+    const callback = vi.fn()
+    const invalidate = vi.fn()
+    const channel = new ApiRealtimeChannel('session-id', 'session-presence', 'class_session')
+    channel.on('broadcast', { event: 'class_session_invalidated' }, invalidate)
+    channel.subscribe(callback)
+    const socket = MockWebSocket.latest!
+    expect(socket.url).toBe('wss://edulog.example/api/realtime?class_session=session-id')
+    socket.emit('open')
+    const { join_ref: joinRef, ref, topic } = JSON.parse(socket.sent[0])
+    expect(topic).toBe('realtime:class-session:session-id')
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref, topic, event: 'phx_reply', payload: { status: 'ok', response: {} } }) })
+    socket.emit('message', { data: JSON.stringify({ join_ref: joinRef, ref: '2', topic, event: 'broadcast', payload: {
+      type: 'broadcast', event: 'class_session_invalidated', payload: { resource: 'class_session', change: 'report' }
+    } }) })
+    expect(callback).toHaveBeenCalledWith('SUBSCRIBED')
+    expect(invalidate).toHaveBeenCalledWith({ payload: { resource: 'class_session', change: 'report' }, event: 'class_session_invalidated' })
+    channel.unsubscribe()
+  })
+
   it('reports unexpected binary frames and retries with backoff', () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', MockWebSocket)

@@ -1,6 +1,7 @@
 type Callback = (payload: any) => void
 type SubscribeCallback = (status: string, detail?: string) => void
 type PresenceState = Record<string, any[]>
+export type ApiRealtimeChannelKind = 'report' | 'class_session'
 
 export interface PhoenixMessage {
   joinRef: string | null
@@ -44,6 +45,7 @@ export class ApiRealtimeChannel {
   private socket: WebSocket | null = null
   private readonly topic: string
   private readonly presenceKey: string
+  private readonly channelKind: ApiRealtimeChannelKind
   private readonly handlers: Array<{ type: string; event?: string; callback: Callback }> = []
   private readonly state: PresenceState = {}
   private ref = 0
@@ -102,8 +104,9 @@ export class ApiRealtimeChannel {
     if (this.closedByUser) return
     this.failureHandled = false
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const room = this.topic.slice('realtime:room:'.length)
-    const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime?room=${encodeURIComponent(room)}`)
+    const resourceId = this.topic.slice(this.channelKind === 'class_session' ? 'realtime:class-session:'.length : 'realtime:room:'.length)
+    const parameter = this.channelKind === 'class_session' ? 'class_session' : 'room'
+    const socket = new WebSocket(`${protocol}//${window.location.host}/api/realtime?${parameter}=${encodeURIComponent(resourceId)}`)
     this.socket = socket
     socket.addEventListener('open', () => {
       this.joinRef = this.nextRef()
@@ -134,8 +137,9 @@ export class ApiRealtimeChannel {
     })
   }
 
-  constructor(roomId: string, presenceKey: string) {
-    this.topic = `realtime:room:${roomId}`
+  constructor(roomId: string, presenceKey: string, channelKind: ApiRealtimeChannelKind = 'report') {
+    this.channelKind = channelKind
+    this.topic = channelKind === 'class_session' ? `realtime:class-session:${roomId}` : `realtime:room:${roomId}`
     this.presenceKey = presenceKey
   }
 

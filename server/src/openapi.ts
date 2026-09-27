@@ -503,12 +503,15 @@ export function buildOpenApi() {
   paths['/api/realtime'] = {
     get: {
       operationId: 'realtime_websocket',
-      summary: 'Authenticated report collaboration WebSocket upgrade',
-      description: 'Upgrade to a WebSocket after the HttpOnly session cookie, Origin allowlist, and teaching.reports.read permission are validated. The room query parameter is one report UUID and is locked for the lifetime of the socket. The server injects the upstream JWT; it is never exposed to the browser. Only Phoenix heartbeat, join/leave, broadcast, and presence events are forwarded. Snapshot REST fallback remains available when the upstream is unavailable.',
+      summary: 'Authenticated report collaboration and class-session invalidation WebSocket upgrade',
+      description: 'Upgrade to a WebSocket after the HttpOnly session cookie and Origin allowlist are validated. Supply exactly one of room (report UUID, teaching.reports.read) or class_session (class-session UUID, teaching.class_sessions.read or teaching.class_sessions.list). The server injects the upstream JWT; it is never exposed to the browser. Class-session channels receive only database invalidation broadcasts and cannot publish application events.',
       security: [{ cookieAuth: [] }],
       'x-websocket': true,
-      'x-permission': 'teaching.reports.read',
-      parameters: [{ name: 'room', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }],
+      'x-permission': 'teaching.reports.read | teaching.class_sessions.read | teaching.class_sessions.list',
+      parameters: [
+        { name: 'room', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+        { name: 'class_session', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
+      ],
       responses: {
         '101': { description: 'WebSocket protocol upgrade' },
         '400': { description: 'Invalid report room' },

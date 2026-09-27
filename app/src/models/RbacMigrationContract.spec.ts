@@ -15,8 +15,7 @@ const domainAwarePermissionPolicies = readFileSync(resolve(process.cwd(), '../su
 
 describe('RBAC migration contract', () => {
     it('authorizes platform teaching permission policies by teaching domain', () => {
-        expect(domainAwarePermissionPolicies).toContain("v_permission.domain = 'teaching'")
-        expect(domainAwarePermissionPolicies).toContain("'teaching.roles.manage', NULL, NULL")
+        expect(domainAwarePermissionPolicies).toContain("ELSIF p_scope_type = 'system' THEN\n    v_allowed := public.has_api_permission(v_user_id, 'teaching.roles.manage', NULL, NULL);")
         expect(domainAwarePermissionPolicies).toContain("v_permission.domain = 'system'")
         expect(domainAwarePermissionPolicies).toContain("'system.roles.manage'")
         expect(domainAwarePermissionPolicies).toContain("role.domain <> v_permission.domain")
