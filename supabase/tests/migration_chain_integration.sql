@@ -574,8 +574,8 @@ BEGIN
   VALUES ('00000000-0000-0000-0000-000000000003', classroom_role_id, 'classroom', classroom_id, CURRENT_DATE, 'active');
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
   VALUES (course_id, 'Scoped roster test', 'primary', NULL, platform_teaching_id);
-  INSERT INTO public.students(id, name, user_id, teaching_id)
-  VALUES (student_id, 'Migration Visibility Classroom', NULL, platform_teaching_id);
+  INSERT INTO public.students(id, name, user_id)
+  VALUES (student_id, 'Migration Visibility Classroom', NULL);
   INSERT INTO public.enrollments(student_id, course_id, classroom_id, user_id, status, start_date, teaching_id)
   VALUES (student_id, course_id, classroom_id, NULL, 'regular', CURRENT_DATE, platform_teaching_id);
 END;
