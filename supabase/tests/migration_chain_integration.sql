@@ -565,7 +565,7 @@ DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
 BEGIN
   SELECT id INTO platform_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO public.roles(id, code, name, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
-  VALUES (classroom_role_id, 'integration_classroom_student_reader', 'Integration Classroom Student Reader', false, 900, 'teaching', platform_teaching_id, false, false);
+  VALUES (classroom_role_id, 'integration_classroom_student_reader', 'Integration Classroom Student Reader', false, 900, 'teaching', NULL, false, false);
   INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
   SELECT classroom_role_id, permission.id, 'classroom', classroom_id, 'allow'
   FROM public.permissions permission
@@ -590,7 +590,9 @@ BEGIN
   student_page := public.get_students_overview(10, 0, 'Migration Visibility', 'name');
   IF (student_page->>'total')::integer <> 1
      OR student_page->'items'->0->>'name' <> 'Migration Visibility Classroom' THEN
-    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %', student_page;
+    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %, classroom_permission=%',
+      student_page,
+      public.has_api_permission(auth.uid(), 'teaching.students.read', '30000000-0000-0000-0000-000000000001', NULL);
   END IF;
 END;
 $$;
