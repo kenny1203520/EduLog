@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { QuickAttendanceStatus } from './QuickAttendancePanel.vue'
+import CourseProgressGapHint, { type ProgressGapHintLesson } from './CourseProgressGapHint.vue'
 
 export type RosterProgressTone = 'completed' | 'incomplete' | 'empty'
 
@@ -33,6 +34,7 @@ export interface StudentRosterItem {
     latestTone: RosterProgressTone
     isEditing: boolean
     reportAvailable?: boolean
+    progressGaps?: ProgressGapHintLesson[]
 }
 
 const props = withDefaults(defineProps<{
@@ -142,8 +144,8 @@ function requestAttendance(item: StudentRosterItem) {
                             <span v-if="item.isGuest" class="rounded-full border border-purple-100 bg-purple-50 px-2 py-0.5 text-[10px] font-black text-purple-700">
                                 {{ t('common.rescheduled') }}
                             </span>
-                        </div>
-                        <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
+                    </div>
+                    <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
                     </div>
                     <button v-if="hasOccurrence" type="button"
                         class="shrink-0 rounded-xl border px-2.5 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-50"
@@ -160,6 +162,8 @@ function requestAttendance(item: StudentRosterItem) {
                         {{ item.absenceReasonLabel }}
                     </span>
                 </div>
+
+                <CourseProgressGapHint :lessons="item.progressGaps || []" />
 
                 <div class="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-3.5">
                     <div class="flex flex-wrap items-start justify-between gap-2">
@@ -249,6 +253,7 @@ function requestAttendance(item: StudentRosterItem) {
                                     <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
                                 </div>
                             </div>
+                            <CourseProgressGapHint :lessons="item.progressGaps || []" />
                         </td>
                             <td class="px-4 py-5">
                             <button v-if="hasOccurrence" type="button" class="rounded-xl border px-3 py-2 text-xs font-black transition disabled:opacity-50"

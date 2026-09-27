@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReportQueryService, normalizeEnrollmentReportRelations } from './ReportQueryService'
 
-const { fromMock, apiModeMock, getEnrollmentReportsMock } = vi.hoisted(() => ({
+const { fromMock, apiModeMock, getEnrollmentReportsMock, apiV1GetMock } = vi.hoisted(() => ({
     fromMock: vi.fn(),
     apiModeMock: vi.fn(() => 'legacy'),
-    getEnrollmentReportsMock: vi.fn()
+    getEnrollmentReportsMock: vi.fn(),
+    apiV1GetMock: vi.fn()
 }))
 
 vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: fromMock } }))
@@ -16,6 +17,10 @@ vi.mock('@/services/api/PageApiService', async (importOriginal) => ({
     ...await importOriginal<typeof import('@/services/api/PageApiService')>(),
     PageApiService: { ...(await importOriginal<typeof import('@/services/api/PageApiService')>()).PageApiService, getEnrollmentReports: getEnrollmentReportsMock }
 }))
+vi.mock('@/services/api/ApiV1Client', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/services/api/ApiV1Client')>()
+    return { ...actual, apiV1Client: { ...actual.apiV1Client, get: apiV1GetMock } }
+})
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -63,6 +68,46 @@ describe('ReportQueryService.getProgressSummaryReportsByEnrollments', () => {
 
         await expect(ReportQueryService.getProgressSummaryReportsByEnrollments(['e1']))
             .rejects.toThrow('Failed to fetch progress summary reports: boom')
+    })
+})
+
+describe('ReportQueryService.getEnrollmentReportProgressContext', () => {
+    it('requests only the selected enrollment report context through the authenticated API', async () => {
+        const context = { enrollment_id: 'enrollment-1', occurrence_date: '2026-09-27', lessons: [], reports: [], latest_prior_report: null }
+        apiV1GetMock.mockResolvedValueOnce({ data: context })
+
+        await expect(ReportQueryService.getEnrollmentReportProgressContext('enrollment-1', 'occurrence-1', 'report-1')).resolves.toEqual(context)
+        expect(apiV1GetMock).toHaveBeenCalledWith('/enrollments/enrollment-1/report-progress-context?occurrence_id=occurrence-1&report_id=report-1')
+    })
+})
+
+describe('ReportQueryService.getProgressGapsByEnrollments', () => {
+    it('requests authorized batch summaries without loading report bodies', async () => {
+        apiModeMock.mockReturnValue('v1')
+        apiV1GetMock.mockResolvedValueOnce({ data: [
+            { enrollment_id: 'enrollment-1', gaps: [{ id: 'lesson-6', sequence: 6, title: 'Lesson 6' }] },
+            { enrollment_id: 'enrollment-2', gaps: [] }
+        ] })
+
+        const result = await ReportQueryService.getProgressGapsByEnrollments('occurrence-1', ['enrollment-1', 'enrollment-2'])
+
+        expect(apiV1GetMock).toHaveBeenCalledWith('/occurrences/occurrence-1/report-progress-gaps?enrollment_ids=enrollment-1%2Cenrollment-2')
+        expect(fromMock).not.toHaveBeenCalled()
+        expect(result.get('enrollment-1')).toEqual([{ id: 'lesson-6', sequence: 6, title: 'Lesson 6' }])
+        expect(result.get('enrollment-2')).toEqual([])
+    })
+
+    it('splits large rosters into bounded API batches', async () => {
+        apiModeMock.mockReturnValue('v1')
+        apiV1GetMock.mockResolvedValue({ data: [] })
+        const ids = Array.from({ length: 101 }, (_, index) => `enrollment-${index}`)
+
+        await ReportQueryService.getProgressGapsByEnrollments('occurrence-1', ids)
+
+        expect(apiV1GetMock).toHaveBeenCalledTimes(2)
+        expect(apiV1GetMock.mock.calls[0][0]).toContain('enrollment_ids=')
+        expect(decodeURIComponent(apiV1GetMock.mock.calls[0][0])).toContain(ids.slice(0, 100).join(','))
+        expect(decodeURIComponent(apiV1GetMock.mock.calls[1][0])).toContain(ids[100])
     })
 })
 

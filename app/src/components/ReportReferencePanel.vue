@@ -414,6 +414,11 @@ const props = defineProps<{
     lessonId?: string
     studentId?: string
     currentReportId?: string
+    focusedReportId?: string
+    focusedLessonSequence?: number
+    focusedLessonTitle?: string
+    focusedCourseName?: string
+    focusedStudentName?: string
 }>()
 
 const emit = defineEmits(['close', 'copy'])
@@ -485,11 +490,11 @@ function handleKeyDown(e: KeyboardEvent) {
     }
 }
 
-// Watch panel visibility
-watch(() => props.show, (newVal) => {
-    if (newVal) {
-        refreshData()
-    }
+let refreshRequestId = 0
+watch(() => [props.show, props.focusedReportId] as const, ([isOpen, reportId]) => {
+    if (!isOpen) return
+    if (reportId) activeTab.value = 'history'
+    refreshData()
 })
 
 // Tab handling
@@ -526,6 +531,7 @@ async function loadFilterOptions() {
 
 async function refreshData() {
     if (!props.show) return
+    const requestId = ++refreshRequestId
 
     // Auto-switch to history if no lessonId but studentId is present
     if (!props.lessonId && props.studentId && activeTab.value === 'peer') {
@@ -534,7 +540,23 @@ async function refreshData() {
 
     loading.value = true
     loadError.value = null
+    reports.value = []
+    totalCount.value = 0
     try {
+        if (activeTab.value === 'history' && props.focusedReportId) {
+            const report = await OccurrenceReportService.getReportById(props.focusedReportId)
+            if (requestId !== refreshRequestId) return
+            const dto = report.toDTO()
+            reports.value = [{
+                ...dto,
+                updated_at: dto.updated_at,
+                class_occurrences: { occurrence_date: dto.occurrence_date },
+                lessons: { sequence: props.focusedLessonSequence, title: props.focusedLessonTitle },
+                enrollments: { courses: { display_name: props.focusedCourseName }, students: { name: props.focusedStudentName } }
+            }]
+            totalCount.value = 1
+            return
+        }
         const commonParams = {
             excludeReportId: props.currentReportId,
             page: currentPage.value,
@@ -568,16 +590,19 @@ async function refreshData() {
                 courseId: filterCourse.value
             })
         }
-        reports.value = res.data
-        totalCount.value = res.count
+        if (requestId === refreshRequestId) {
+            reports.value = res.data
+            totalCount.value = res.count
+        }
     } catch (e) {
+        if (requestId !== refreshRequestId) return
         console.error('Failed to load reports:', e)
         reports.value = []
         totalCount.value = 0
         loadError.value = t('report.reference_panel.load_error')
         reportError(e)
     } finally {
-        loading.value = false
+        if (requestId === refreshRequestId) loading.value = false
     }
 }
 

@@ -161,6 +161,38 @@
                 </div>
                 <BaseDropdown data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
                     theme="emerald" />
+                <section v-if="progressContextLoading || progressContextError || progressGaps.length || previousProgressReport"
+                    class="mt-3 rounded-xl border px-3 py-3 sm:px-4"
+                    :class="progressContextError ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'"
+                    :aria-busy="progressContextLoading" aria-live="polite" aria-atomic="true">
+                    <p v-if="progressContextLoading" class="text-sm text-slate-600" role="status">{{ $t('report.editor.progress_check.loading') }}</p>
+                    <div v-else-if="progressContextError" class="flex flex-wrap items-center justify-between gap-2 text-sm text-rose-800" role="status">
+                        <span>{{ $t('report.editor.progress_check.load_error') }}</span>
+                        <button type="button" class="min-h-9 rounded-lg border border-rose-300 bg-white px-3 font-semibold" @click="loadProgressContext">{{ $t('report.editor.progress_check.retry') }}</button>
+                    </div>
+                    <div v-else class="space-y-3 text-sm">
+                        <div v-if="progressGaps.length">
+                            <p class="font-bold text-amber-950">{{ $t('report.editor.progress_check.gaps_title') }}</p>
+                            <ul class="mt-1 flex flex-wrap gap-2">
+                                <li v-for="lesson in progressGaps" :key="lesson.id" class="rounded-full bg-white px-3 py-1 text-amber-900 ring-1 ring-amber-200">
+                                    {{ $t('report.editor.progress_check.lesson', { sequence: lesson.sequence, title: lesson.title }) }}
+                                </li>
+                            </ul>
+                        </div>
+                        <div v-if="previousProgressReport" class="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 pt-2">
+                            <div class="min-w-0">
+                                <p class="font-bold text-slate-900">{{ $t('report.editor.progress_check.previous_title') }}</p>
+                                <p class="break-words text-slate-700">
+                                    {{ $t('report.editor.progress_check.lesson', { sequence: previousProgressReport.lesson.sequence, title: previousProgressReport.lesson.title }) }}
+                                    <span v-if="previousProgressReport.report.progress_letter"> · {{ previousProgressReport.report.progress_letter }}</span>
+                                    <span> · {{ previousProgressReport.report.is_completed ? $t('report.editor.progress_check.completed') : $t('report.editor.progress_check.incomplete') }}</span>
+                                </p>
+                            </div>
+                            <button type="button" class="min-h-9 shrink-0 rounded-lg border border-amber-300 bg-white px-3 font-semibold text-amber-950 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700"
+                                @click="viewPreviousProgressReport">{{ $t('report.editor.progress_check.view_report') }}</button>
+                        </div>
+                    </div>
+                </section>
             </div>
 
             <!-- Report External Link Input -->
@@ -467,7 +499,10 @@
         </div>
 
         <ReportReferencePanel :show="showReferencePanel" :lesson-id="selectedLessonId"
-            :student-id="props.initialStudentId" :current-report-id="props.reportId" @close="showReferencePanel = false"
+            :student-id="props.initialStudentId" :current-report-id="props.reportId" @close="closeReferencePanel"
+            :focused-report-id="focusedProgressReport?.id" :focused-lesson-sequence="focusedProgressReport?.lesson.sequence"
+            :focused-lesson-title="focusedProgressReport?.lesson.title" :focused-course-name="props.courseDisplayName || props.courseName"
+            :focused-student-name="props.initialStudentName"
             @copy="handleCopyContent" />
 
         <ConfirmModal :is-open="confirmState.isOpen" :title="confirmState.title" :message="confirmState.message"
@@ -681,6 +716,7 @@ import { formatNumber } from '@/utils/numberFormatting'
 import { safeExternalHref } from '@/utils/safeExternalHref'
 import { normalizeAbsenceReasonCode } from '@/utils/absenceReason'
 import { mergeReportConflict } from '@/services/report/ReportConflictMerge'
+import { findCourseProgressGaps } from '@/utils/courseProgressGaps'
 
 import type { Lesson } from '@/models/Course'
 
@@ -1973,6 +2009,60 @@ const remoteVersionDrift = ref(false)
 
 // Detailed fields
 const selectedLessonId = ref(props.initialLessonId || '')
+type ProgressContext = Awaited<ReturnType<typeof OccurrenceReportService.getEnrollmentReportProgressContext>>
+const progressContext = ref<ProgressContext | null>(null)
+const progressContextLoading = ref(false)
+const progressContextError = ref(false)
+const focusedProgressReport = ref<{ id: string; lesson: { sequence: number; title: string } } | null>(null)
+let progressContextRequest = 0
+const progressGaps = computed(() => {
+    const lessons = (props.availableLessons || []).filter((lesson): lesson is typeof lesson & { id: string } => Boolean(lesson.id))
+    return findCourseProgressGaps(lessons, progressContext.value?.reports.map((report) => report.lesson_id) || [], selectedLessonId.value)
+})
+const previousProgressReport = computed(() => {
+    const report = progressContext.value?.latest_prior_report
+    if (!report) return null
+    const lesson = props.availableLessons?.find((item) => item.id === report.lesson_id)
+    return lesson ? { report, lesson } : null
+})
+
+async function loadProgressContext() {
+    const requestId = ++progressContextRequest
+    const enrollmentId = props.enrollmentId
+    const occurrenceId = props.classOccurrenceId
+    const reportId = props.reportId
+    if (!enrollmentId || !occurrenceId || !reportId) {
+        progressContext.value = null
+        progressContextError.value = false
+        progressContextLoading.value = false
+        return
+    }
+    progressContext.value = null
+    focusedProgressReport.value = null
+    progressContextError.value = false
+    progressContextLoading.value = true
+    try {
+        const context = await OccurrenceReportService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
+        if (requestId === progressContextRequest) progressContext.value = context
+    } catch {
+        if (requestId === progressContextRequest) progressContextError.value = true
+    } finally {
+        if (requestId === progressContextRequest) progressContextLoading.value = false
+    }
+}
+
+function viewPreviousProgressReport() {
+    if (!previousProgressReport.value) return
+    focusedProgressReport.value = { id: previousProgressReport.value.report.id, lesson: previousProgressReport.value.lesson }
+    showReferencePanel.value = true
+}
+
+function closeReferencePanel() {
+    showReferencePanel.value = false
+    focusedProgressReport.value = null
+}
+
+watch(() => [props.enrollmentId, props.classOccurrenceId, props.reportId] as const, () => { void loadProgressContext() }, { immediate: true })
 const isCompleted = ref(props.initialIsCompleted)
 const progressStart = ref(props.initialProgressStart || '')
 const progressEnd = ref(props.initialProgressEnd || '')

@@ -108,6 +108,14 @@ export class OccurrenceReportService {
         return ReportQueryService.getProgressSummaryReportsByEnrollments(enrollmentIds)
     }
 
+    static async getProgressGapsByEnrollments(occurrenceId: string, enrollmentIds: string[]) {
+        return ReportQueryService.getProgressGapsByEnrollments(occurrenceId, enrollmentIds)
+    }
+
+    static async getEnrollmentReportProgressContext(enrollmentId: string, occurrenceId: string, reportId: string) {
+        return ReportQueryService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
+    }
+
     static async getReportsByOccurrence(
         occurrenceId: string
     ): Promise<OccurrenceReport[]> {
