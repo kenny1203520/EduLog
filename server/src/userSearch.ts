@@ -15,15 +15,15 @@ export function createUserSearchRouter() {
       const escapedQuery = input.query.replace(/[\\%_]/g, (character) => `\\${character}`)
       const pattern = `%${escapedQuery}%`
       const [emailMatches, fullNameMatches, nicknameMatches] = await Promise.all([
-        req.adminDb.from('user_accounts').select('id,email,display_name,account_status,created_at').ilike('email', pattern).limit(20),
-        req.adminDb.from('user_accounts').select('id,email,display_name,account_status,created_at').ilike('full_name', pattern).limit(20),
-        req.adminDb.from('user_accounts').select('id,email,display_name,account_status,created_at').ilike('nickname', pattern).limit(20),
+        req.adminDb.from('user_accounts').select('id,email,display_name,account_status,disabled_at,disabled_reason,created_at').ilike('email', pattern).limit(20),
+        req.adminDb.from('user_accounts').select('id,email,display_name,account_status,disabled_at,disabled_reason,created_at').ilike('full_name', pattern).limit(20),
+        req.adminDb.from('user_accounts').select('id,email,display_name,account_status,disabled_at,disabled_reason,created_at').ilike('nickname', pattern).limit(20),
       ])
       if (emailMatches.error || fullNameMatches.error || nicknameMatches.error) throw new ApiError(502, 'USER_DIRECTORY_ERROR', 'The user directory is unavailable')
-      const byId = new Map<string, { id: string; email: string; display_name: string | null; account_status: string | null; created_at: string; last_sign_in_at: null }>()
+      const byId = new Map<string, { id: string; email: string; display_name: string | null; account_status: string | null; disabled_at: string | null; disabled_reason: string | null; created_at: string; last_sign_in_at: null }>()
       for (const profile of [...(emailMatches.data ?? []), ...(fullNameMatches.data ?? []), ...(nicknameMatches.data ?? [])]) {
         if (!profile.id || !profile.email || byId.has(profile.id)) continue
-        byId.set(profile.id, { id: profile.id, email: profile.email, display_name: profile.display_name, account_status: profile.account_status, created_at: profile.created_at, last_sign_in_at: null })
+        byId.set(profile.id, { id: profile.id, email: profile.email, display_name: profile.display_name, account_status: profile.account_status, disabled_at: profile.disabled_at, disabled_reason: profile.disabled_reason, created_at: profile.created_at, last_sign_in_at: null })
       }
       let users = [...byId.values()].slice(0, 20)
       if (input.only_unlinked) {
