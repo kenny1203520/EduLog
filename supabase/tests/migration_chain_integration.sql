@@ -1,5 +1,39 @@
 \set ON_ERROR_STOP on
 
+-- 1000106 removes the overlapping SELECT access from the former FOR ALL
+-- policy. Keep exactly one permissive authenticated policy per operation.
+DO $$
+DECLARE
+  action_name text;
+  policy_count integer;
+BEGIN
+  FOREACH action_name IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE'] LOOP
+    SELECT count(*) INTO policy_count
+    FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'role_permission_policies'
+      AND cmd = action_name
+      AND permissive = 'PERMISSIVE'
+      AND roles @> ARRAY['authenticated'::name];
+    IF policy_count <> 1 THEN
+      RAISE EXCEPTION 'expected one authenticated % policy on role_permission_policies, found %',
+        action_name, policy_count;
+    END IF;
+  END LOOP;
+
+  SELECT count(*) INTO policy_count
+  FROM pg_policies
+  WHERE schemaname = 'public'
+    AND tablename = 'role_permission_policies'
+    AND cmd = 'ALL'
+    AND permissive = 'PERMISSIVE'
+    AND roles @> ARRAY['authenticated'::name];
+  IF policy_count <> 0 THEN
+    RAISE EXCEPTION 'broad authenticated policy remains on role_permission_policies';
+  END IF;
+END;
+$$;
+
 DO $$
 DECLARE forbidden_count integer;
 BEGIN
@@ -55,6 +89,80 @@ BEGIN
       AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'created_at'
   ) THEN
     RAISE EXCEPTION 'audit event timestamp lookup index is missing or invalid';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class index_relation
+    JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace
+    JOIN pg_index index_metadata ON index_metadata.indexrelid = index_relation.oid
+    JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
+    JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
+    WHERE index_schema.nspname = 'public'
+      AND index_relation.relname = 'occurrence_reports_created_at_idx'
+      AND table_schema.nspname = 'public'
+      AND table_relation.relname = 'occurrence_reports'
+      AND index_metadata.indisvalid
+      AND index_metadata.indisready
+      AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'created_at'
+  ) THEN
+    RAISE EXCEPTION 'occurrence report creation timestamp index is missing or invalid';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class index_relation
+    JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace
+    JOIN pg_index index_metadata ON index_metadata.indexrelid = index_relation.oid
+    JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
+    JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
+    WHERE index_schema.nspname = 'public'
+      AND index_relation.relname = 'lessons_sequence_idx'
+      AND table_schema.nspname = 'public'
+      AND table_relation.relname = 'lessons'
+      AND index_metadata.indisvalid
+      AND index_metadata.indisready
+      AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'sequence'
+  ) THEN
+    RAISE EXCEPTION 'lesson sequence index is missing or invalid';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class index_relation
+    JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace
+    JOIN pg_index index_metadata ON index_metadata.indexrelid = index_relation.oid
+    JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
+    JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
+    WHERE index_schema.nspname = 'public'
+      AND index_relation.relname = 'lessons_course_id_sequence_idx'
+      AND table_schema.nspname = 'public'
+      AND table_relation.relname = 'lessons'
+      AND index_metadata.indisvalid
+      AND index_metadata.indisready
+      AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'course_id'
+      AND pg_get_indexdef(index_metadata.indexrelid, 2, true) = 'sequence'
+      AND pg_get_indexdef(index_metadata.indexrelid, 3, true) = 'id'
+  ) THEN
+    RAISE EXCEPTION 'existing lesson course/sequence index is missing or invalid';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class index_relation
+    JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace
+    JOIN pg_index index_metadata ON index_metadata.indexrelid = index_relation.oid
+    JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
+    JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
+    WHERE index_schema.nspname = 'public'
+      AND index_relation.relname = 'students_birthday_idx'
+      AND table_schema.nspname = 'public'
+      AND table_relation.relname = 'students'
+      AND index_metadata.indisvalid
+      AND index_metadata.indisready
+      AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'birthday'
+  ) THEN
+    RAISE EXCEPTION 'student birthday index is missing or invalid';
   END IF;
 
   SELECT count(*) INTO forbidden_count
