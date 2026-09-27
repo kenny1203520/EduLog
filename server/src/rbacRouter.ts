@@ -147,13 +147,19 @@ async function roleById(req: Request, id: string) {
   return result.data
 }
 
-async function authorizePolicyScope(req: Request, scope: z.infer<typeof policyUpdate>['scope']) {
+async function authorizePolicyScope(req: Request, permissionDomain: 'system' | 'teaching', scope: z.infer<typeof policyUpdate>['scope']) {
   requireRequest(req)
-  setAuditContext(req, { domain: scope.type === 'system' ? 'system' : 'teaching', resource: 'rbac-policies', action: 'manage', scopeId: scope.id ?? null, scopeType: scope.type, permission: scope.type === 'system' ? 'system.roles.manage' : 'teaching.roles.manage' })
+  const domain = permissionDomain
+  const permission = `${domain}.roles.manage`
+  setAuditContext(req, { domain, resource: 'rbac-policies', action: 'manage', scopeId: scope.id ?? null, scopeType: scope.type, permission })
   if (scope.type === 'system') {
-    if (!await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: 'system.roles.manage' })) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')
+    const allowed = permissionDomain === 'system'
+      ? await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: 'system.roles.manage' })
+      : await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null })
+    if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')
     return
   }
+  if (permissionDomain !== 'teaching') throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'System permissions only support the system scope')
   if (!scope.id) throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'A scoped policy requires a scope id')
   const result = await req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: scope.type === 'classroom' ? scope.id : null, p_class_session_id: scope.type === 'class_session' ? scope.id : null })
   if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')
@@ -667,9 +673,10 @@ export function createRbacRouter() {
   router.patch('/permissions/:permissionId/policies', wrap(async (req, res) => {
     requireRequest(req); res.setHeader('Deprecation', 'true'); res.setHeader('Link', '</api/roles/{id}/permissions>; rel="successor-version"')
     const permissionId = uuid.parse(req.params.permissionId); const input = policyUpdate.parse(req.body)
-    const permission = await req.db!.from('permissions').select('id,key').eq('id', permissionId).maybeSingle()
+    const permission = await req.db!.from('permissions').select('id,key,domain').eq('id', permissionId).maybeSingle()
     if (permission.error) throw mapDatabaseError(permission.error); if (!permission.data) throw new ApiError(404, 'NOT_FOUND', 'Permission was not found')
-    await authorizePolicyScope(req, input.scope)
+    if (permission.data.domain !== 'system' && permission.data.domain !== 'teaching') throw new ApiError(422, 'BUSINESS_VALIDATION_FAILED', 'Permission domain is invalid')
+    await authorizePolicyScope(req, permission.data.domain, input.scope)
     const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
     const scopeId = input.scope.type === 'system' ? null : input.scope.id ?? null
     const result = await req.db!.rpc('replace_role_permission_policies', { p_permission_key: permission.data.key, p_scope_type: input.scope.type, p_scope_id: scopeId, p_policies: input.policies })

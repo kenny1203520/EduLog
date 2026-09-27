@@ -11,7 +11,18 @@ const platformTeachingHierarchy = readFileSync(resolve(process.cwd(), '../supaba
 const edgeFunction = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/index.ts'), 'utf8')
 const notificationPolicy = readFileSync(resolve(process.cwd(), '../supabase/volumes/functions/aggregate-incomplete-reports/policy.ts'), 'utf8')
 
+const domainAwarePermissionPolicies = readFileSync(resolve(process.cwd(), '../supabase/migrations/1000104_domain_aware_permission_policies.sql'), 'utf8')
+
 describe('RBAC migration contract', () => {
+    it('authorizes platform teaching permission policies by teaching domain', () => {
+        expect(domainAwarePermissionPolicies).toContain("v_permission.domain = 'teaching'")
+        expect(domainAwarePermissionPolicies).toContain("'teaching.roles.manage', NULL, NULL")
+        expect(domainAwarePermissionPolicies).toContain("v_permission.domain = 'system'")
+        expect(domainAwarePermissionPolicies).toContain("'system.roles.manage'")
+        expect(domainAwarePermissionPolicies).toContain("role.domain <> v_permission.domain")
+        expect(domainAwarePermissionPolicies).toContain('RBAC_DOMAIN_MISMATCH')
+        expect(domainAwarePermissionPolicies).toContain('CREATE POLICY "RBAC managers can manage role policies"')
+    })
     it('preserves legacy role and assignment identifiers during conversion', () => {
         expect(migration).toContain('ALTER TABLE public.teacher_role_types RENAME TO roles')
         expect(migration).toContain('RENAME COLUMN role_type_id TO role_id')
