@@ -285,7 +285,7 @@ onMounted(() => {
             <Pagination v-if="!loading && totalItems > 0" :model-value="pagination.page" :per-page="pagination.perPage" :total-items="totalItems" @update:model-value="pagination.page = $event" @update:per-page="pagination.perPage = $event" />
         </div>
 
-        <dialog ref="detailDialog" class="max-h-[90vh] w-[min(46rem,calc(100%-2rem))] overflow-y-auto rounded-2xl p-0 shadow-2xl backdrop:bg-slate-950/50" aria-labelledby="audit-detail-title" @close="selectedEvent = null" @click.self="closeDetails">
+        <dialog ref="detailDialog" class="fixed inset-x-0 bottom-0 top-auto m-0 max-h-[min(88dvh,48rem)] w-full max-w-none translate-y-0 overflow-y-auto overscroll-contain rounded-t-2xl rounded-b-none p-0 pb-[env(safe-area-inset-bottom)] shadow-2xl backdrop:bg-slate-950/50 sm:inset-0 sm:m-auto sm:max-h-[90dvh] sm:w-[min(46rem,calc(100vw-2rem))] sm:rounded-2xl sm:pb-0" aria-labelledby="audit-detail-title" @close="selectedEvent = null" @click.self="closeDetails">
             <article v-if="selectedEvent" class="bg-white">
                 <header class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-gray-100 bg-white px-5 py-4 sm:px-6">
                     <div class="min-w-0">
