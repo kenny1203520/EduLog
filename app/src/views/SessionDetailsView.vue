@@ -6,6 +6,7 @@ import { PageApiService } from '@/services/api/PageApiService'
 import { SessionService } from '@/services/session/SessionService'
 import { EnrollmentService } from '@/services/enrollment/EnrollmentService'
 import { OccurrenceService } from '@/services/occurrence/OccurrenceService'
+import { invalidationAffectsDate, parseClassSessionDate } from '@/services/session/ClassSessionInvalidation'
 import { useAuthStore } from '@/stores/useAuthStore'
 import { OccurrenceReportService } from '@/services/occurrence/OccurrenceReportService'
 import { CopyTemplateService } from '@/services/copy_template/CopyTemplateService'
@@ -73,6 +74,7 @@ const router = useRouter()
 const auth = useAuthStore()
 const sessionId = route.params.id as string
 const todayOccurrence = ref<any>(null)
+const selectedDateKey = ref<string | null>(parseClassSessionDate(route.query.date) || null)
 const sessionOccurrences = ref<ClassOccurrence[]>([])
 const sessionTeachers = ref<SessionTeacherAssignmentDTO[]>([])
 const weekAnchorDate = ref(DateUtils.todayDate(preferences.timeZone))
@@ -89,6 +91,7 @@ const occurrenceLoadError = ref<string | null>(null)
 const previousOccurrence = ref<ClassOccurrence | null>(null)
 const nextOccurrence = ref<ClassOccurrence | null>(null)
 let occurrenceLoadToken = 0
+let occurrenceListRequest = 0
 let workspaceRosterDate: string | null = null
 const showAttendanceTemplateModal = ref(false)
 let attendanceTemplateRequestGeneration = 0
@@ -145,6 +148,9 @@ const selectedEditorEnrollmentSnapshot = ref<Enrollment | null>(null)
 let classSessionChannel: ApiRealtimeChannel | null = null
 let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let realtimeRefreshRequest = 0
+let selectedDateRequest = 0
+let hasLoadedInitialData = false
+let pendingRealtimeInvalidations: unknown[] = []
 let hasJoinedClassSessionChannel = false
 
 // Conflict Resolution State
@@ -466,7 +472,10 @@ function getStudentProgressSummary(enrollmentId?: string): StudentProgressSummar
 
 const displayedOccurrenceDate = computed(() => {
     if (!todayOccurrence.value?.occurrenceDate) {
-        return t('classroom.no_teaching_day_selected')
+        const selected = selectedDateKey.value ? DateUtils.parseLocalDate(selectedDateKey.value) : undefined
+        return selected
+            ? DateUtils.displayDate(selected, preferences.locale, preferences.timeZone)
+            : t('classroom.no_teaching_day_selected')
     }
 
     return DateUtils.displayDate(todayOccurrence.value.occurrenceDate, preferences.locale, preferences.timeZone)
@@ -582,7 +591,9 @@ async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
     rangeStart.setFullYear(rangeStart.getFullYear() - 1)
     const rangeEnd = new Date(anchorDate)
     rangeEnd.setFullYear(rangeEnd.getFullYear() + 1)
-    sessionOccurrences.value = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
+    const request = ++occurrenceListRequest
+    const occurrences = await OccurrenceService.getOccurrencesByDateRange(rangeStart, rangeEnd, [sessionId])
+    if (request === occurrenceListRequest) sessionOccurrences.value = occurrences
 }
 
 async function loadReportsForCurrentOccurrence(options: { preserveOpenEditor?: boolean } = {}) {
@@ -622,6 +633,7 @@ async function loadWorkspaceRoster(occurrenceDate: Date, force = false): Promise
     if (!force && workspaceRosterDate === date) return
 
     const workspace = (await PageApiService.getClassSessionWorkspace(sessionId, date)).data
+    if (selectedDateKey.value && selectedDateKey.value !== date) return
     if (todayOccurrence.value?.occurrenceDate && DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== date) return
     if (!workspace.session) throw new Error('Class session workspace is unavailable')
     if (workspace.session.roster_date && workspace.session.roster_date !== date) {
@@ -687,6 +699,11 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
         if (!occurrence?.occurrenceDate) {
             reportMap.value = new Map()
             enrollments.value = []
+            studentProgressSummaries.value = {}
+            isOccurrenceInHoliday.value = false
+            occurrenceTeachers.value = []
+            teacherLeaveById.value = {}
+            selectedTeacherIds.value = new Set()
             workspaceRosterDate = null
             previousOccurrence.value = null
             nextOccurrence.value = null
@@ -733,17 +750,53 @@ async function setCurrentOccurrence(occurrence: ClassOccurrence | null) {
     }
 }
 
-async function handleCalendarOccurrenceSelect(occurrence: ClassOccurrence) {
-    if (isOccurrenceLoading.value) return
-    await setCurrentOccurrence(occurrence)
+async function handleCalendarDateSelect(date: Date) {
+    await selectClassDate(DateUtils.formatLocalDate(date))
+}
+
+function syncSelectedDateToUrl(date: string) {
+    if (parseClassSessionDate(route.query.date) === date) return
+    void router.replace({
+        query: { ...route.query, date }
+    })
+}
+
+async function selectClassDate(date: string, updateUrl = true) {
+    const validDate = parseClassSessionDate(date)
+    if (!validDate) return
+    const request = ++selectedDateRequest
+    realtimeRefreshRequest++
+    isRealtimeRefreshing.value = false
+    selectedDateKey.value = validDate
+    weekAnchorDate.value = DateUtils.parseLocalDate(validDate) || weekAnchorDate.value
+    if (updateUrl) syncSelectedDateToUrl(validDate)
+
+    // Clear the previous day's data immediately; never leave it visible under
+    // a newly selected date while the occurrence range is loading.
+    await setCurrentOccurrence(null)
+    try {
+        if (request === selectedDateRequest) isOccurrenceLoading.value = true
+        const selectedDate = DateUtils.parseLocalDate(validDate)
+        if (!selectedDate) return
+        await loadSessionOccurrences(selectedDate)
+        if (request !== selectedDateRequest) return
+        const occurrence = findOccurrenceByDate(selectedDate) || null
+        await setCurrentOccurrence(occurrence)
+    } catch (error) {
+        if (request === selectedDateRequest) {
+            console.error('Failed to load selected class date:', error)
+            occurrenceLoadError.value = t('classroom.occurrence_load_error')
+        }
+    } finally {
+        if (request === selectedDateRequest) isOccurrenceLoading.value = false
+    }
 }
 
 async function moveOccurrence(direction: 'previous' | 'next') {
-    if (isOccurrenceLoading.value || !todayOccurrence.value) return
+    if (!todayOccurrence.value) return
     const adjacent = direction === 'previous' ? previousOccurrence.value : nextOccurrence.value
     if (!adjacent) return
-    await setCurrentOccurrence(adjacent)
-    await loadSessionOccurrences(adjacent.occurrenceDate)
+    await selectClassDate(DateUtils.formatLocalDate(adjacent.occurrenceDate))
 }
 
 async function ensureTodayOccurrence(today: Date): Promise<void> {
@@ -756,13 +809,11 @@ async function ensureTodayOccurrence(today: Date): Promise<void> {
 }
 
 async function goToToday() {
-    if (isOccurrenceLoading.value) return
     const today = DateUtils.todayDate(sessionTimeZone.value)
     try {
         await ensureTodayOccurrence(today)
         const preferred = await OccurrenceService.getPreferredOccurrence(sessionId, today)
-        await setCurrentOccurrence(preferred)
-        if (preferred) await loadSessionOccurrences(preferred.occurrenceDate)
+        await selectClassDate(DateUtils.formatLocalDate(preferred?.occurrenceDate || today))
     } catch (error) {
         console.error(error)
         occurrenceLoadError.value = t('classroom.occurrence_load_error')
@@ -876,12 +927,32 @@ async function loadData() {
         if (allEnrollments[0]?.courseId) courseLessons.value = courseLessonsByCourseId.value[allEnrollments[0].courseId] || []
 
         const today = DateUtils.todayDate(sessionTimeZone.value)
+        const requestedDate = parseClassSessionDate(route.query.date)
+        const initialDate = requestedDate ? DateUtils.parseLocalDate(requestedDate) || today : today
         todayOccurrence.value = null
-        weekAnchorDate.value = today
-        await ensureTodayOccurrence(today)
-        const preferredOccurrence = await OccurrenceService.getPreferredOccurrence(sessionId, today)
-        if (preferredOccurrence) await loadSessionOccurrences(preferredOccurrence.occurrenceDate)
-        await setCurrentOccurrence(preferredOccurrence)
+        selectedDateKey.value = requestedDate || DateUtils.formatLocalDate(today)
+        weekAnchorDate.value = initialDate
+
+        let initialOccurrence: ClassOccurrence | null = null
+        if (requestedDate) {
+            await loadSessionOccurrences(initialDate)
+            initialOccurrence = findOccurrenceByDate(initialDate) || null
+        } else {
+            await ensureTodayOccurrence(today)
+            initialOccurrence = await OccurrenceService.getPreferredOccurrence(sessionId, today)
+            if (initialOccurrence) await loadSessionOccurrences(initialOccurrence.occurrenceDate)
+        }
+        if (initialOccurrence?.occurrenceDate) {
+            selectedDateKey.value = DateUtils.formatLocalDate(initialOccurrence.occurrenceDate)
+        }
+        await setCurrentOccurrence(initialOccurrence)
+        if (initialOccurrence?.occurrenceDate) {
+            selectedDateKey.value = DateUtils.formatLocalDate(initialOccurrence.occurrenceDate)
+        } else {
+            selectedDateKey.value = DateUtils.formatLocalDate(initialDate)
+        }
+        syncSelectedDateToUrl(selectedDateKey.value)
+        hasLoadedInitialData = true
     } catch (error) {
         console.error(error)
         occurrenceLoadError.value = t('classroom.occurrence_load_error')
@@ -890,10 +961,22 @@ async function loadData() {
     }
 }
 
-function scheduleRealtimeRefresh() {
+function scheduleRealtimeRefresh(invalidation?: unknown) {
+    pendingRealtimeInvalidations.push(invalidation ?? {})
     if (realtimeRefreshTimer) clearTimeout(realtimeRefreshTimer)
     realtimeRefreshTimer = setTimeout(() => {
         realtimeRefreshTimer = null
+        const selectedDate = selectedDateKey.value || DateUtils.todayString(sessionTimeZone.value)
+        const relevant = pendingRealtimeInvalidations.some((event) => {
+            const payload = event && typeof event === 'object' && 'payload' in event
+                ? (event as { payload?: unknown }).payload
+                : event
+            return invalidationAffectsDate(selectedDate, payload && typeof payload === 'object'
+                ? payload as { date_from?: unknown; date_to?: unknown }
+                : {})
+        })
+        pendingRealtimeInvalidations = []
+        if (!relevant) return
         void refreshCurrentOccurrenceFromRealtime()
     }, 300)
 }
@@ -901,8 +984,10 @@ function scheduleRealtimeRefresh() {
 async function refreshCurrentOccurrenceFromRealtime() {
     const requestId = ++realtimeRefreshRequest
     const occurrenceAtStart = todayOccurrence.value as ClassOccurrence | null
-    const selectedDate = occurrenceAtStart?.occurrenceDate || DateUtils.todayDate(sessionTimeZone.value)
-    const selectedDateKey = DateUtils.formatLocalDate(selectedDate)
+    const selectedDate = (selectedDateKey.value && DateUtils.parseLocalDate(selectedDateKey.value))
+        || occurrenceAtStart?.occurrenceDate
+        || DateUtils.todayDate(sessionTimeZone.value)
+    const selectedDateString = DateUtils.formatLocalDate(selectedDate)
     const selectedEnrollmentAtStart = selectedEnrollmentId.value
         ? enrollments.value.find(enrollment => enrollment.id === selectedEnrollmentId.value) || selectedEditorEnrollmentSnapshot.value
         : null
@@ -913,7 +998,7 @@ async function refreshCurrentOccurrenceFromRealtime() {
             loadWorkspaceRoster(selectedDate, true),
             loadSessionOccurrences(selectedDate),
         ])
-        if (requestId !== realtimeRefreshRequest || (todayOccurrence.value?.occurrenceDate && DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== selectedDateKey)) return
+        if (requestId !== realtimeRefreshRequest || selectedDateKey.value !== selectedDateString || (todayOccurrence.value?.occurrenceDate && DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== selectedDateString)) return
 
         const refreshedOccurrence = findOccurrenceByDate(selectedDate)
         if (refreshedOccurrence) todayOccurrence.value = refreshedOccurrence
@@ -979,7 +1064,7 @@ async function refreshCurrentOccurrenceFromRealtime() {
 function startClassSessionRealtime() {
     const presenceKey = `${auth.user?.id || 'user'}:${Date.now()}`
     classSessionChannel = new ApiRealtimeChannel(sessionId, presenceKey, 'class_session')
-        .on('broadcast', { event: 'class_session_invalidated' }, () => scheduleRealtimeRefresh())
+        .on('broadcast', { event: 'class_session_invalidated' }, (message) => scheduleRealtimeRefresh(message?.payload))
     classSessionChannel.subscribe(status => {
         if (status === 'SUBSCRIBED') {
             realtimeStatus.value = 'connected'
@@ -1004,6 +1089,17 @@ function retryRealtimeAction() {
 onMounted(async () => {
     await loadData()
     startClassSessionRealtime()
+})
+
+watch(() => route.query.date, (value) => {
+    if (!hasLoadedInitialData) return
+    const date = parseClassSessionDate(value)
+    if (!date) {
+        const today = DateUtils.todayString(sessionTimeZone.value)
+        void selectClassDate(today)
+        return
+    }
+    if (date !== selectedDateKey.value) void selectClassDate(date, false)
 })
 
 onBeforeUnmount(() => {
@@ -2017,8 +2113,8 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         <Transition name="fade-slide">
                             <div v-show="isCalendarExpanded" class="max-w-4xl mx-auto w-full">
                                 <OccurrenceCalendar :occurrences="sessionOccurrences" :compact="true"
-                                    :model-value="todayOccurrence?.occurrenceDate || null"
-                                    @select-occurrence="handleCalendarOccurrenceSelect" />
+                                    :model-value="selectedDateKey || null"
+                                    @select-date="handleCalendarDateSelect" />
                             </div>
                         </Transition>
                     </div>

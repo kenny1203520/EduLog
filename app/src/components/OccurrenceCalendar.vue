@@ -79,6 +79,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
+    'select-date': [date: Date]
     'select-occurrence': [occurrence: ClassOccurrence]
 }>()
 
@@ -93,6 +94,7 @@ function getOccurrencesForDate(date: Date): ClassOccurrence[] {
 }
 
 function handleSelectDate(date: Date) {
+    emit('select-date', date)
     if (props.compact) {
         const occs = getOccurrencesForDate(date)
         if (occs.length > 0) {

@@ -60,6 +60,7 @@ const reportCollaborationAuthorization = await readMigration('1000103_report_col
 const queryPerformanceIndexes = await readMigration('1000105_query_performance_indexes.sql')
 const rbacPolicySelectOverlap = await readMigration('1000106_rbac_policy_select_overlap.sql')
 const effectiveSessionRosterInvalidation = await readMigration('1000107_effective_session_roster_and_invalidation.sql')
+const dateScopedSessionInvalidation = await readMigration('1000108_date_scoped_class_session_invalidation.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -120,7 +121,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102', '1000103', '1000104', '1000105', '1000106', '1000107']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102', '1000103', '1000104', '1000105', '1000106', '1000107', '1000108']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -225,6 +226,18 @@ Deno.test('1000107 uses transfer-effective rosters and private invalidation-only
   assertStringIncludes(effectiveSessionRosterInvalidation, 'CREATE TRIGGER class_session_workspace_invalidation AFTER INSERT OR UPDATE OR DELETE')
   assert(!effectiveSessionRosterInvalidation.includes('broadcast_changes'))
   assert(!effectiveSessionRosterInvalidation.includes("jsonb_build_object('content'"))
+})
+
+Deno.test('1000108 scopes date-dependent class-session invalidations', () => {
+  assertStringIncludes(dateScopedSessionInvalidation, 'broadcast_class_session_invalidation_for_dates')
+  assertStringIncludes(dateScopedSessionInvalidation, "'date_from', p_date_from")
+  assertStringIncludes(dateScopedSessionInvalidation, "'date_to', p_date_to")
+  assertStringIncludes(dateScopedSessionInvalidation, "'occurrence_reports'")
+  assertStringIncludes(dateScopedSessionInvalidation, "'single_lesson_transfers'")
+  assertStringIncludes(dateScopedSessionInvalidation, "'student_suspensions'")
+  assertStringIncludes(dateScopedSessionInvalidation, "'holidays'")
+  assertStringIncludes(dateScopedSessionInvalidation, 'DROP TRIGGER IF EXISTS class_session_workspace_invalidation')
+  assertStringIncludes(dateScopedSessionInvalidation, 'notify_class_session_workspace_date_changed()')
 })
 
 Deno.test('1000103 authorizes report collaboration snapshots through current teaching RBAC', () => {
