@@ -578,6 +578,14 @@ BEGIN
   VALUES (student_id, 'Migration Visibility Classroom', NULL);
   INSERT INTO public.enrollments(student_id, course_id, classroom_id, user_id, status, start_date)
   VALUES (student_id, course_id, classroom_id, NULL, 'regular', CURRENT_DATE);
+  IF NOT EXISTS (
+    SELECT 1 FROM public.enrollments enrollment
+    WHERE enrollment.student_id = student_id
+      AND enrollment.classroom_id = classroom_id
+      AND enrollment.course_id = course_id
+  ) THEN
+    RAISE EXCEPTION 'classroom scope integration fixture did not persist its enrollment classroom/course';
+  END IF;
 END;
 $$;
 
@@ -590,9 +598,10 @@ BEGIN
   student_page := public.get_students_overview(10, 0, 'Migration Visibility', 'name');
   IF (student_page->>'total')::integer <> 1
      OR student_page->'items'->0->>'name' <> 'Migration Visibility Classroom' THEN
-    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %, classroom_permission=%, enrollment_student_access=%',
+    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %, classroom_permission=%, scoped_permission=%, enrollment_student_access=%',
       student_page,
       public.has_api_permission(auth.uid(), 'teaching.students.read', '30000000-0000-0000-0000-000000000001', NULL),
+      public.has_teaching_permission(auth.uid(), 'teaching.students.read', (SELECT id FROM public.teachings WHERE is_global LIMIT 1), '30000000-0000-0000-0000-000000000001', NULL),
       public.can_access_student('20000000-0000-0000-0000-000000000103', 'teaching.students.read');
   END IF;
 END;
