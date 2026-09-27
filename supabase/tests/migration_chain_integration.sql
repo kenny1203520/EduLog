@@ -580,9 +580,9 @@ BEGIN
   VALUES (student_id, course_id, classroom_id, NULL, 'regular', CURRENT_DATE);
   IF NOT EXISTS (
     SELECT 1 FROM public.enrollments enrollment
-    WHERE enrollment.student_id = student_id
-      AND enrollment.classroom_id = classroom_id
-      AND enrollment.course_id = course_id
+    WHERE enrollment.student_id = '20000000-0000-0000-0000-000000000103'
+      AND enrollment.classroom_id = '30000000-0000-0000-0000-000000000001'
+      AND enrollment.course_id = '50000000-0000-0000-0000-000000000101'
   ) THEN
     RAISE EXCEPTION 'classroom scope integration fixture did not persist its enrollment classroom/course';
   END IF;
