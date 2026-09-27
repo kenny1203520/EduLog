@@ -61,6 +61,7 @@ const queryPerformanceIndexes = await readMigration('1000105_query_performance_i
 const rbacPolicySelectOverlap = await readMigration('1000106_rbac_policy_select_overlap.sql')
 const effectiveSessionRosterInvalidation = await readMigration('1000107_effective_session_roster_and_invalidation.sql')
 const dateScopedSessionInvalidation = await readMigration('1000108_date_scoped_class_session_invalidation.sql')
+const removeDuplicateLessonsCourseIndex = await readMigration('1000109_remove_duplicate_lessons_course_index.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -121,7 +122,7 @@ Deno.test('historical migration versions are preserved', async () => {
     if (entry.isFile && entry.name.endsWith('.sql')) names.push(entry.name)
   }
   names.sort()
-  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102', '1000103', '1000104', '1000105', '1000106', '1000107', '1000108']) {
+  for (const version of ['1000001', '1000002', '1000003', '1000040', '1000041', '1000042', '1000043', '1000044', '1000045', '1000046', '1000047', '1000048', '1000049', '1000050', '1000051', '1000052', '1000053', '1000054', '1000055', '1000056', '1000057', '1000058', '1000059', '1000060', '1000061', '1000062', '1000063', '1000064', '1000065', '1000066', '1000067', '1000068', '1000069', '1000070', '1000071', '1000072', '1000073', '1000074', '1000075', '1000076', '1000077', '1000078', '1000079', '1000080', '1000081', '1000082', '1000083', '1000084', '1000085', '1000086', '1000087', '1000088', '1000089', '1000090', '1000091', '1000096', '1000097', '1000098', '1000099', '1000100', '1000101', '1000102', '1000103', '1000104', '1000105', '1000106', '1000107', '1000108', '1000109']) {
     assert(names.some((name) => name.startsWith(version)), `missing migration ${version}`)
   }
   const compatibilityName = '1000057a_rbac_scope_constraint_compatibility.sql'
@@ -189,14 +190,15 @@ Deno.test('1000102 includes global students without broadening scoped access', (
   assert(!studentOverviewGlobalVisibility.includes('GRANT EXECUTE ON FUNCTION public.get_students_overview(integer,integer,text,text) TO anon'))
 })
 
-Deno.test('1000105 adds only the uncovered query performance indexes', () => {
+Deno.test('1000105 adds the query performance indexes recommended by Supabase', () => {
   assertStringIncludes(queryPerformanceIndexes, 'occurrence_reports_created_at_idx')
   assertStringIncludes(queryPerformanceIndexes, 'ON public.occurrence_reports USING btree (created_at)')
   assertStringIncludes(queryPerformanceIndexes, 'lessons_sequence_idx')
   assertStringIncludes(queryPerformanceIndexes, 'ON public.lessons USING btree (sequence)')
   assertStringIncludes(queryPerformanceIndexes, 'students_birthday_idx')
   assertStringIncludes(queryPerformanceIndexes, 'ON public.students USING btree (birthday)')
-  assert(!queryPerformanceIndexes.includes('ON public.lessons USING btree (course_id)'))
+  assertStringIncludes(queryPerformanceIndexes, 'lessons_course_id_idx')
+  assertStringIncludes(queryPerformanceIndexes, 'ON public.lessons USING btree (course_id)')
 })
 
 Deno.test('1000106 splits RBAC policy reads and writes without broadening scope', () => {
@@ -218,7 +220,8 @@ Deno.test('1000107 uses transfer-effective rosters and private invalidation-only
   assertStringIncludes(effectiveSessionRosterInvalidation, "v_occurrence_id IS NULL")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'class_session_invalidated'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'class-session:' || p_class_session_id::text")
-  assertStringIncludes(effectiveSessionRosterInvalidation, "'Report editors can receive private room messages'")
+  assertStringIncludes(effectiveSessionRosterInvalidation, 'DROP POLICY IF EXISTS "Report editors can receive private room messages"')
+  assertStringIncludes(effectiveSessionRosterInvalidation, 'CREATE POLICY "Authorized users can receive private report and class session messages"')
   assertStringIncludes(effectiveSessionRosterInvalidation, "'teaching.class_sessions.read'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'teaching.class_sessions.list'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'single_lesson_transfers'")
@@ -238,6 +241,11 @@ Deno.test('1000108 scopes date-dependent class-session invalidations', () => {
   assertStringIncludes(dateScopedSessionInvalidation, "'holidays'")
   assertStringIncludes(dateScopedSessionInvalidation, 'DROP TRIGGER IF EXISTS class_session_workspace_invalidation')
   assertStringIncludes(dateScopedSessionInvalidation, 'notify_class_session_workspace_date_changed()')
+})
+
+Deno.test('1000109 removes the standalone course_id index covered by the composite index', () => {
+  assertStringIncludes(removeDuplicateLessonsCourseIndex, "to_regclass('public.lessons_course_id_sequence_idx')")
+  assertStringIncludes(removeDuplicateLessonsCourseIndex, 'DROP INDEX IF EXISTS public.lessons_course_id_idx')
 })
 
 Deno.test('1000103 authorizes report collaboration snapshots through current teaching RBAC', () => {
