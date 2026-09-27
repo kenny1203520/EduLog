@@ -82,7 +82,11 @@
     "allow": "Allow",
     "deny": "Deny"
   },
+  "teaching_assignment_guidance": {
+    "select_user": "Select a user first to view, assign, revoke, or exclude teaching roles."
+  },
   "resources": {
+    "rbac": { "name": "Role and permission policies", "description": "Role-based access control resources and policies" },
     "users": { "name": "Users", "description": "System user accounts and status" },
     "roles": { "name": "Roles", "description": "Role definitions and inheritance" },
     "role_assignments": { "name": "Role assignments", "description": "Roles assigned to users or teaching members" },

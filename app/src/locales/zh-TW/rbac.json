@@ -82,7 +82,11 @@
     "allow": "允許",
     "deny": "拒絕"
   },
+  "teaching_assignment_guidance": {
+    "select_user": "請先選取使用者，才能檢視、指派、撤銷或排除教學角色。"
+  },
   "resources": {
+    "rbac": { "name": "角色與權限政策", "description": "角色存取控制資源與政策" },
     "users": { "name": "使用者", "description": "系統使用者帳號與狀態" },
     "roles": { "name": "角色", "description": "角色定義與繼承關係" },
     "role_assignments": { "name": "角色指派", "description": "指派給使用者或教學成員的角色" },
