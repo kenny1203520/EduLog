@@ -576,8 +576,8 @@ BEGIN
   VALUES (course_id, 'Scoped roster test', 'primary', NULL, platform_teaching_id);
   INSERT INTO public.students(id, name, user_id)
   VALUES (student_id, 'Migration Visibility Classroom', NULL);
-  INSERT INTO public.enrollments(student_id, course_id, classroom_id, user_id, status, start_date, teaching_id)
-  VALUES (student_id, course_id, classroom_id, NULL, 'regular', CURRENT_DATE, platform_teaching_id);
+  INSERT INTO public.enrollments(student_id, course_id, classroom_id, user_id, status, start_date)
+  VALUES (student_id, course_id, classroom_id, NULL, 'regular', CURRENT_DATE);
 END;
 $$;
 
