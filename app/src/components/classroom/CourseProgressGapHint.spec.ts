@@ -15,12 +15,14 @@ describe('CourseProgressGapHint', () => {
         const details = wrapper.get('details')
         const summary = details.get('summary')
         expect(summary.attributes('tabindex')).toBeUndefined()
+        expect(summary.get('span.min-w-0').classes()).toContain('truncate')
         expect(summary.text()).toContain('classroom.progress_gap_short 6')
         expect(summary.text()).toContain('+1')
         await summary.trigger('click')
         expect(details.attributes('open')).toBeDefined()
         expect(details.text()).toContain('classroom.progress_gap_details 6 Lesson Six')
         expect(details.text()).toContain('classroom.progress_gap_details 9 Lesson Nine')
+        expect(details.find('li').classes()).toContain('break-words')
     })
 
     it('does not render a hint when no lessons are missing', () => {
