@@ -561,6 +561,7 @@ DECLARE classroom_role_id uuid := gen_random_uuid();
 DECLARE platform_teaching_id uuid;
 DECLARE classroom_id uuid := '30000000-0000-0000-0000-000000000001';
 DECLARE course_id uuid := '50000000-0000-0000-0000-000000000101';
+DECLARE class_session_id uuid := '60000000-0000-0000-0000-000000000103';
 DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
 BEGIN
   SELECT id INTO platform_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
@@ -576,8 +577,10 @@ BEGIN
   VALUES (course_id, 'Scoped roster test', 'primary', NULL, platform_teaching_id);
   INSERT INTO public.students(id, name, user_id)
   VALUES (student_id, 'Migration Visibility Classroom', NULL);
-  INSERT INTO public.enrollments(student_id, course_id, classroom_id, user_id, status, start_date)
-  VALUES (student_id, course_id, classroom_id, NULL, 'regular', CURRENT_DATE);
+  INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, user_id, teaching_id)
+  VALUES (class_session_id, 'Scoped roster test session', classroom_id, ARRAY[course_id], '00000000-0000-0000-0000-000000000001', platform_teaching_id);
+  INSERT INTO public.enrollments(student_id, course_id, classroom_id, class_session_id, user_id, status, start_date)
+  VALUES (student_id, course_id, classroom_id, class_session_id, NULL, 'regular', CURRENT_DATE);
   IF NOT EXISTS (
     SELECT 1 FROM public.enrollments enrollment
     WHERE enrollment.student_id = '20000000-0000-0000-0000-000000000103'
