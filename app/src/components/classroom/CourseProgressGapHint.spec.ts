@@ -18,13 +18,16 @@ describe('CourseProgressGapHint', () => {
         expect(summary.classes()).toContain('flex-wrap')
         expect(summary.text()).toContain('classroom.progress_gap_short')
         expect(summary.text()).toContain('classroom.progress_gap_sequence 6')
+        expect(summary.text()).toContain('classroom.progress_gap_more 1')
         expect(summary.text()).not.toContain('...')
-        expect(summary.text()).toContain('+1')
+        expect(summary.find('span.rounded-full').exists()).toBe(false)
+        expect(summary.classes()).toContain('text-left')
         await summary.trigger('click')
         expect(details.attributes('open')).toBeDefined()
         expect(details.text()).toContain('classroom.progress_gap_details 6 Lesson Six')
         expect(details.text()).toContain('classroom.progress_gap_details 9 Lesson Nine')
         expect(details.find('li').classes()).toContain('break-words')
+        expect(details.find('ul').classes()).toContain('border-l-2')
         expect(details.find('ul').classes()).toContain('progress-gap-lessons')
     })
 
@@ -40,7 +43,7 @@ describe('CourseProgressGapHint', () => {
 
         expect(summary.text()).toContain('classroom.progress_gap_short')
         expect(summary.text()).toContain('classroom.progress_gap_sequence 6')
-        expect(summary.text()).not.toContain('+')
+        expect(summary.text()).not.toContain('classroom.progress_gap_more')
 
         await summary.trigger('click')
         expect(wrapper.get('li').classes()).toContain('break-words')

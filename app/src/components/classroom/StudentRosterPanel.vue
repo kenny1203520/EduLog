@@ -251,9 +251,9 @@ function requestAttendance(item: StudentRosterItem) {
                                         <span class="rounded-full border px-2 py-0.5 text-[9px] font-black" :class="enrollmentToneClasses(item.enrollmentTone)">{{ item.enrollmentStatus }}</span>
                                     </div>
                                     <p class="mt-1 line-clamp-2 text-xs font-bold leading-5 text-slate-500">{{ item.currentCourse }}</p>
-                                    <CourseProgressGapHint :lessons="item.progressGaps || []" />
                                 </div>
                             </div>
+                            <CourseProgressGapHint :lessons="item.progressGaps || []" />
                         </td>
                             <td class="px-4 py-5">
                             <button v-if="hasOccurrence" type="button" class="rounded-xl border px-3 py-2 text-xs font-black transition disabled:opacity-50"

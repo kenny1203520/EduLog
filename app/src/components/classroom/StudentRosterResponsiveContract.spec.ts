@@ -30,4 +30,9 @@ describe('student roster responsive contract', () => {
         expect(component).toContain("t('classroom.koding_check')")
         expect(component).toContain("t('common.profile')")
     })
+
+    it('places the table hint below the avatar row so it can use the full name column', () => {
+        const table = component.slice(component.indexOf('<div v-if="hasItems" class="roster-table'))
+        expect(table).toMatch(/<div class="flex min-w-0 gap-3">[\s\S]*?<\/div>\s*<CourseProgressGapHint/)
+    })
 })
