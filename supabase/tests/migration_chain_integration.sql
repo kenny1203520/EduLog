@@ -195,6 +195,25 @@ BEGIN
     JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
     JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
     WHERE index_schema.nspname = 'public'
+      AND index_relation.relname = 'lessons_course_id_idx'
+      AND table_schema.nspname = 'public'
+      AND table_relation.relname = 'lessons'
+      AND index_metadata.indisvalid
+      AND index_metadata.indisready
+      AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'course_id'
+      AND index_metadata.indnatts = 1
+  ) THEN
+    RAISE EXCEPTION 'dedicated lesson course_id index is missing or invalid';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class index_relation
+    JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace
+    JOIN pg_index index_metadata ON index_metadata.indexrelid = index_relation.oid
+    JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
+    JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
+    WHERE index_schema.nspname = 'public'
       AND index_relation.relname = 'students_birthday_idx'
       AND table_schema.nspname = 'public'
       AND table_relation.relname = 'students'
