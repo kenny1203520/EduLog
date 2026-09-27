@@ -57,6 +57,7 @@ const platformTeachingHierarchy = await readMigration('1000099_platform_teaching
 const platformTeachingRolesWithoutWorkspace = await readMigration('1000100_platform_teaching_roles_without_workspace.sql')
 const studentOverviewGlobalVisibility = await readMigration('1000102_student_overview_global_visibility.sql')
 const reportCollaborationAuthorization = await readMigration('1000103_report_collaboration_authorization.sql')
+const queryPerformanceIndexes = await readMigration('1000105_query_performance_indexes.sql')
 const migrationChainIntegration = await Deno.readTextFile(new URL('migration_chain_integration.sql', import.meta.url))
 const sensitiveDataIntegration = await Deno.readTextFile(new URL('sensitive_data_integration.sql', import.meta.url))
 const lifecycleIntegration = await Deno.readTextFile(new URL('report_lifecycle_integration.sql', import.meta.url))
@@ -183,6 +184,16 @@ Deno.test('1000102 includes global students without broadening scoped access', (
   assertStringIncludes(studentOverviewGlobalVisibility, "GRANT EXECUTE ON FUNCTION public.get_students_overview(integer,integer,text,text) TO authenticated")
   assertStringIncludes(studentOverviewGlobalVisibility, "NOTIFY pgrst, 'reload schema'")
   assert(!studentOverviewGlobalVisibility.includes('GRANT EXECUTE ON FUNCTION public.get_students_overview(integer,integer,text,text) TO anon'))
+})
+
+Deno.test('1000105 adds only the uncovered query performance indexes', () => {
+  assertStringIncludes(queryPerformanceIndexes, 'occurrence_reports_created_at_idx')
+  assertStringIncludes(queryPerformanceIndexes, 'ON public.occurrence_reports USING btree (created_at)')
+  assertStringIncludes(queryPerformanceIndexes, 'lessons_sequence_idx')
+  assertStringIncludes(queryPerformanceIndexes, 'ON public.lessons USING btree (sequence)')
+  assertStringIncludes(queryPerformanceIndexes, 'students_birthday_idx')
+  assertStringIncludes(queryPerformanceIndexes, 'ON public.students USING btree (birthday)')
+  assert(!queryPerformanceIndexes.includes('ON public.lessons USING btree (course_id)'))
 })
 
 Deno.test('1000103 authorizes report collaboration snapshots through current teaching RBAC', () => {
