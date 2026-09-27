@@ -90,6 +90,17 @@
     "editor": {
         "title": "Class Report",
         "lesson_label": "Lesson",
+        "progress_check": {
+            "loading": "Checking progress for this course…",
+            "load_error": "Unable to check course progress.",
+            "retry": "Retry",
+            "gaps_title": "Course progress has gaps",
+            "lesson": "Lesson {sequence}: {title}",
+            "previous_title": "Most recent attended progress",
+            "completed": "Completed",
+            "incomplete": "Not completed",
+            "view_report": "View full report"
+        },
         "lesson_selector_label": "Lesson",
         "select_lesson": "Select a lesson",
         "lesson_completed": "Lesson Completed",

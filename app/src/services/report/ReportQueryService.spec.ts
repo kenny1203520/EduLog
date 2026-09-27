@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ReportQueryService, normalizeEnrollmentReportRelations } from './ReportQueryService'
 
-const { fromMock, apiModeMock, getEnrollmentReportsMock } = vi.hoisted(() => ({
+const { fromMock, apiModeMock, getEnrollmentReportsMock, apiV1GetMock } = vi.hoisted(() => ({
     fromMock: vi.fn(),
     apiModeMock: vi.fn(() => 'legacy'),
-    getEnrollmentReportsMock: vi.fn()
+    getEnrollmentReportsMock: vi.fn(),
+    apiV1GetMock: vi.fn()
 }))
 
 vi.mock('@/services/api/ApiDataClient', () => ({ apiDataClient: { from: fromMock } }))
@@ -16,6 +17,10 @@ vi.mock('@/services/api/PageApiService', async (importOriginal) => ({
     ...await importOriginal<typeof import('@/services/api/PageApiService')>(),
     PageApiService: { ...(await importOriginal<typeof import('@/services/api/PageApiService')>()).PageApiService, getEnrollmentReports: getEnrollmentReportsMock }
 }))
+vi.mock('@/services/api/ApiV1Client', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/services/api/ApiV1Client')>()
+    return { ...actual, apiV1Client: { ...actual.apiV1Client, get: apiV1GetMock } }
+})
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -63,6 +68,16 @@ describe('ReportQueryService.getProgressSummaryReportsByEnrollments', () => {
 
         await expect(ReportQueryService.getProgressSummaryReportsByEnrollments(['e1']))
             .rejects.toThrow('Failed to fetch progress summary reports: boom')
+    })
+})
+
+describe('ReportQueryService.getEnrollmentReportProgressContext', () => {
+    it('requests only the selected enrollment report context through the authenticated API', async () => {
+        const context = { enrollment_id: 'enrollment-1', occurrence_date: '2026-09-27', lessons: [], reports: [], latest_prior_report: null }
+        apiV1GetMock.mockResolvedValueOnce({ data: context })
+
+        await expect(ReportQueryService.getEnrollmentReportProgressContext('enrollment-1', 'occurrence-1', 'report-1')).resolves.toEqual(context)
+        expect(apiV1GetMock).toHaveBeenCalledWith('/enrollments/enrollment-1/report-progress-context?occurrence_id=occurrence-1&report_id=report-1')
     })
 })
 

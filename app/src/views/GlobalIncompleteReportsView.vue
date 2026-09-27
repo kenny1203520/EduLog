@@ -316,6 +316,7 @@
                     <div
                         class="flex-1 overflow-y-auto rounded-[3rem] bg-white shadow-2xl shadow-gray-200/50 border border-gray-100/50 relative min-h-0 custom-scrollbar">
                         <ReportEditor :key="selectedReport.id + '-' + editorRefreshKey" :report-id="selectedReport.id"
+                            :enrollment-id="selectedReport.enrollmentId" :class-occurrence-id="selectedReport.occurrenceId"
                             :initial-content="selectedReport.content"
                             :initial-content-document="selectedReport.contentDocument"
                             :initial-version="selectedReport.version"

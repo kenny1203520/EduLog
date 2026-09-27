@@ -2365,6 +2365,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :key="selectedEnrollmentId" :report-id="reportMap.get(selectedEnrollmentId)?.id"
                                 :initial-version="reportMap.get(selectedEnrollmentId)?.version"
                                 :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
+                                :enrollment-id="selectedEditorEnrollment?.id" :class-occurrence-id="todayOccurrence?.id"
                                 :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString(preferences.locale)} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
                                 :course-name="selectedEditorEnrollment?.courseSubject + ' ' + selectedEditorEnrollment?.courseStage"
                                 :course-display-name="selectedEditorEnrollment?.courseDisplayName"

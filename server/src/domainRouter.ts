@@ -195,6 +195,62 @@ async function progressSummaryReports(req: Request, res: Response) {
   return res.json(envelope(req, result.data ?? [], { limit: query.limit, offset: 0, total: result.data?.length ?? 0, sort: query.sort }))
 }
 
+async function enrollmentReportProgressContext(req: Request, res: Response) {
+  const enrollmentId = uuid.parse(req.params.id)
+  const query = z.object({
+    occurrence_id: uuid,
+    report_id: uuid,
+  }).strict().parse(req.query)
+  const enrollment = await req.db!.from('enrollments').select('id,course_id').eq('id', enrollmentId).maybeSingle()
+  if (enrollment.error) throw mapDatabaseError(enrollment.error)
+  if (!enrollment.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
+  const occurrence = await req.db!.from('class_occurrences').select('id,class_session_id,occurrence_date').eq('id', query.occurrence_id).maybeSingle()
+  if (occurrence.error) throw mapDatabaseError(occurrence.error)
+  if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
+  await permission(req, 'teaching.reports.list', occurrence.data.class_session_id)
+
+  const currentReport = await req.db!.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id').eq('id', query.report_id).maybeSingle()
+  if (currentReport.error) throw mapDatabaseError(currentReport.error)
+  if (currentReport.data?.enrollment_id !== enrollmentId || currentReport.data.class_occurrence_id !== occurrence.data.id) {
+    throw new ApiError(404, 'NOT_FOUND', 'Report was not found')
+  }
+
+  const lessons = await req.db!.from('lessons').select('id,sequence,title').eq('course_id', enrollment.data.course_id).order('sequence', { ascending: true })
+  if (lessons.error) throw mapDatabaseError(lessons.error)
+
+  const reports: Array<Record<string, any>> = []
+  const pageSize = 500
+  for (let offset = 0; ; offset += pageSize) {
+    let builder = req.db!.from('occurrence_reports')
+      .select('id,lesson_id,is_completed,progress_letter,attendance_status,class_occurrences!inner(occurrence_date)')
+      .eq('enrollment_id', enrollmentId)
+      .eq('attendance_status', 'present')
+      .not('lesson_id', 'is', null)
+      .lt('class_occurrences.occurrence_date', occurrence.data.occurrence_date)
+      .order('occurrence_date', { ascending: true, foreignTable: 'class_occurrences' })
+    builder = builder.neq('id', query.report_id)
+    const result = await builder.range(offset, offset + pageSize - 1)
+    if (result.error) throw mapDatabaseError(result.error)
+    const page = (result.data ?? []) as Array<Record<string, any>>
+    reports.push(...page)
+    if (page.length < pageSize) break
+  }
+
+  const lessonById = new Map((lessons.data ?? []).map((lesson) => [lesson.id, lesson]))
+  const summaries = reports
+    .filter((report) => lessonById.has(report.lesson_id))
+    .map((report) => ({
+      id: report.id,
+      lesson_id: report.lesson_id,
+      is_completed: report.is_completed,
+      progress_letter: report.progress_letter,
+      attendance_status: report.attendance_status,
+      occurrence_date: Array.isArray(report.class_occurrences) ? report.class_occurrences[0]?.occurrence_date : report.class_occurrences?.occurrence_date,
+    }))
+  const latestPriorReport = summaries.at(-1) ?? null
+  return res.json(envelope(req, { enrollment_id: enrollmentId, occurrence_date: occurrence.data.occurrence_date, lessons: lessons.data ?? [], reports: summaries, latest_prior_report: latestPriorReport }))
+}
+
 async function enrollmentProgress(req: Request, res: Response) {
   const enrollmentId = uuid.parse(req.params.id)
   const enrollment = await req.db!.from('enrollments').select('id,course_id,lesson_number,status,class_session_id').eq('id', enrollmentId).maybeSingle()
@@ -282,6 +338,7 @@ export function createDomainRouter() {
   router.get('/occurrences/:id', wrap(occurrenceItem))
   router.post('/occurrences/:occurrenceId/reports', wrap(provisionReports))
   router.get('/reports/progress-summary', wrap(progressSummaryReports))
+  router.get('/enrollments/:id/report-progress-context', wrap(enrollmentReportProgressContext))
   router.post('/reports/:reportId/versions/:versionId/restore', wrap(restoreVersion))
   router.post('/reports/:reportId/conflicts/resolve', wrap(resolveConflict))
   router.get('/enrollments/:id/progress', wrap(enrollmentProgress))

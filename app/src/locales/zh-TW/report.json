@@ -90,6 +90,17 @@
     "editor": {
         "title": "課堂報告",
         "lesson_label": "課次",
+        "progress_check": {
+            "loading": "正在檢查這門課的進度…",
+            "load_error": "課程進度檢查失敗。",
+            "retry": "重試",
+            "gaps_title": "課程進度有缺口",
+            "lesson": "第 {sequence} 課：{title}",
+            "previous_title": "上次出席進度",
+            "completed": "已完成",
+            "incomplete": "尚未完成",
+            "view_report": "檢視完整報告"
+        },
         "lesson_selector_label": "課次",
         "select_lesson": "請選擇課程",
         "lesson_completed": "課程已完成",

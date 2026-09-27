@@ -34,6 +34,19 @@ export function normalizeEnrollmentReportRelations(report: any): any {
 }
 
 export class ReportQueryService {
+    static async getEnrollmentReportProgressContext(enrollmentId: string, occurrenceId: string, reportId: string): Promise<{
+        enrollment_id: string
+        occurrence_date: string
+        lessons: Array<{ id: string; sequence: number; title: string }>
+        reports: Array<{ id: string; lesson_id: string; is_completed: boolean; progress_letter: string | null; attendance_status: string; occurrence_date: string }>
+        latest_prior_report: { id: string; lesson_id: string; is_completed: boolean; progress_letter: string | null; attendance_status: string; occurrence_date: string } | null
+    }> {
+        const params = new URLSearchParams({ occurrence_id: occurrenceId })
+        params.set('report_id', reportId)
+        const response = await apiV1Client.get<any>(`/enrollments/${encodeURIComponent(enrollmentId)}/report-progress-context?${params}`)
+        return response.data
+    }
+
     private static getOccurrenceSortKey(report: any): string {
         const occurrence = Array.isArray(report?.class_occurrences)
             ? report.class_occurrences[0]
