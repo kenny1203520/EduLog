@@ -161,11 +161,12 @@
                 </div>
                 <BaseDropdown data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
                     theme="emerald" />
-                <section v-if="progressContextLoading || progressContextError || progressGaps.length || previousProgressReport"
+                <section v-if="progressContextLoading || progressContextError || progressContextUnsupported || progressGaps.length || previousProgressReport"
                     class="mt-3 rounded-xl border px-3 py-3 sm:px-4"
                     :class="progressContextError ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'"
                     :aria-busy="progressContextLoading" aria-live="polite" aria-atomic="true">
                     <p v-if="progressContextLoading" class="text-sm text-slate-600" role="status">{{ $t('report.editor.progress_check.loading') }}</p>
+                    <p v-else-if="progressContextUnsupported" class="text-sm text-slate-600" role="status">{{ $t('report.editor.progress_check.unsupported') }}</p>
                     <div v-else-if="progressContextError" class="flex flex-wrap items-center justify-between gap-2 text-sm text-rose-800" role="status">
                         <span>{{ $t('report.editor.progress_check.load_error') }}</span>
                         <button type="button" class="min-h-9 rounded-lg border border-rose-300 bg-white px-3 font-semibold" @click="loadProgressContext">{{ $t('report.editor.progress_check.retry') }}</button>
@@ -2013,6 +2014,7 @@ type ProgressContext = Awaited<ReturnType<typeof OccurrenceReportService.getEnro
 const progressContext = ref<ProgressContext | null>(null)
 const progressContextLoading = ref(false)
 const progressContextError = ref(false)
+const progressContextUnsupported = ref(false)
 const focusedProgressReport = ref<{ id: string; lesson: { sequence: number; title: string } } | null>(null)
 let progressContextRequest = 0
 const progressGaps = computed(() => {
@@ -2034,16 +2036,21 @@ async function loadProgressContext() {
     if (!enrollmentId || !occurrenceId || !reportId) {
         progressContext.value = null
         progressContextError.value = false
+        progressContextUnsupported.value = false
         progressContextLoading.value = false
         return
     }
     progressContext.value = null
     focusedProgressReport.value = null
     progressContextError.value = false
+    progressContextUnsupported.value = false
     progressContextLoading.value = true
     try {
         const context = await OccurrenceReportService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
-        if (requestId === progressContextRequest) progressContext.value = context
+        if (requestId === progressContextRequest) {
+            progressContext.value = context
+            progressContextUnsupported.value = context === null
+        }
     } catch {
         if (requestId === progressContextRequest) progressContextError.value = true
     } finally {

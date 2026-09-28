@@ -195,6 +195,25 @@ BEGIN
     JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
     JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
     WHERE index_schema.nspname = 'public'
+      AND index_relation.relname = 'lessons_course_id_idx'
+      AND table_schema.nspname = 'public'
+      AND table_relation.relname = 'lessons'
+      AND index_metadata.indisvalid
+      AND index_metadata.indisready
+      AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'course_id'
+      AND index_metadata.indnatts = 1
+  ) THEN
+    RAISE EXCEPTION 'dedicated lesson course_id index is missing or invalid';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_class index_relation
+    JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace
+    JOIN pg_index index_metadata ON index_metadata.indexrelid = index_relation.oid
+    JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
+    JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
+    WHERE index_schema.nspname = 'public'
       AND index_relation.relname = 'students_birthday_idx'
       AND table_schema.nspname = 'public'
       AND table_relation.relname = 'students'
@@ -485,11 +504,11 @@ FROM (VALUES
 CROSS JOIN LATERAL (SELECT id FROM public.teachings WHERE is_global LIMIT 1) teaching
 ON CONFLICT (id) DO NOTHING;
 
--- These standalone students model records whose former owner was cleared by
--- the global-scope migrations and which have no enrollment to reveal them.
-INSERT INTO public.students(id, name, user_id, teaching_id) VALUES
-  ('20000000-0000-0000-0000-000000000101', 'Migration Visibility A', NULL, (SELECT id FROM public.teachings WHERE is_global LIMIT 1)),
-  ('20000000-0000-0000-0000-000000000102', 'Migration Visibility B', NULL, (SELECT id FROM public.teachings WHERE is_global LIMIT 1))
+-- These standalone system-level students have no owner or enrollment; the
+-- platform teaching permission should make them visible in the overview.
+INSERT INTO public.students(id, name, user_id) VALUES
+  ('20000000-0000-0000-0000-000000000101', 'Migration Visibility A', NULL),
+  ('20000000-0000-0000-0000-000000000102', 'Migration Visibility B', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 SET ROLE authenticated;
@@ -542,6 +561,7 @@ DECLARE classroom_role_id uuid := gen_random_uuid();
 DECLARE platform_teaching_id uuid;
 DECLARE classroom_id uuid := '30000000-0000-0000-0000-000000000001';
 DECLARE course_id uuid := '50000000-0000-0000-0000-000000000101';
+DECLARE class_session_id uuid := '60000000-0000-0000-0000-000000000103';
 DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
 BEGIN
   SELECT id INTO platform_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
@@ -555,10 +575,20 @@ BEGIN
   VALUES ('00000000-0000-0000-0000-000000000003', classroom_role_id, 'classroom', classroom_id, CURRENT_DATE, 'active');
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
   VALUES (course_id, 'Scoped roster test', 'primary', NULL, platform_teaching_id);
-  INSERT INTO public.students(id, name, user_id, teaching_id)
-  VALUES (student_id, 'Migration Visibility Classroom', NULL, platform_teaching_id);
-  INSERT INTO public.enrollments(student_id, course_id, classroom_id, user_id, status, start_date, teaching_id)
-  VALUES (student_id, course_id, classroom_id, NULL, 'regular', CURRENT_DATE, platform_teaching_id);
+  INSERT INTO public.students(id, name, user_id)
+  VALUES (student_id, 'Migration Visibility Classroom', NULL);
+  INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, user_id, teaching_id)
+  VALUES (class_session_id, 'Scoped roster test session', classroom_id, ARRAY[course_id], '00000000-0000-0000-0000-000000000001', platform_teaching_id);
+  INSERT INTO public.enrollments(student_id, course_id, classroom_id, class_session_id, user_id, status, start_date)
+  VALUES (student_id, course_id, classroom_id, class_session_id, NULL, 'regular', CURRENT_DATE);
+  IF NOT EXISTS (
+    SELECT 1 FROM public.enrollments enrollment
+    WHERE enrollment.student_id = '20000000-0000-0000-0000-000000000103'
+      AND enrollment.classroom_id = '30000000-0000-0000-0000-000000000001'
+      AND enrollment.course_id = '50000000-0000-0000-0000-000000000101'
+  ) THEN
+    RAISE EXCEPTION 'classroom scope integration fixture did not persist its enrollment classroom/course';
+  END IF;
 END;
 $$;
 
@@ -571,7 +601,11 @@ BEGIN
   student_page := public.get_students_overview(10, 0, 'Migration Visibility', 'name');
   IF (student_page->>'total')::integer <> 1
      OR student_page->'items'->0->>'name' <> 'Migration Visibility Classroom' THEN
-    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %', student_page;
+    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %, classroom_permission=%, scoped_permission=%, enrollment_student_access=%',
+      student_page,
+      public.has_api_permission(auth.uid(), 'teaching.students.read', '30000000-0000-0000-0000-000000000001', NULL),
+      public.has_teaching_permission(auth.uid(), 'teaching.students.read', (SELECT id FROM public.teachings WHERE is_global LIMIT 1), '30000000-0000-0000-0000-000000000001', NULL),
+      public.can_access_student('20000000-0000-0000-0000-000000000103', 'teaching.students.read');
   END IF;
 END;
 $$;

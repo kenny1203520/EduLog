@@ -92,6 +92,7 @@
         "lesson_label": "Lesson",
         "progress_check": {
             "loading": "Checking progress for this course…",
+            "unsupported": "Course progress checks are unavailable in the current API mode.",
             "load_error": "Unable to check course progress.",
             "retry": "Retry",
             "gaps_title": "Course progress has gaps",

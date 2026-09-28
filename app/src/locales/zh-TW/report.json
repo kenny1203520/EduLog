@@ -92,6 +92,7 @@
         "lesson_label": "課次",
         "progress_check": {
             "loading": "正在檢查這門課的進度…",
+            "unsupported": "目前 API 模式不支援課程進度檢查。",
             "load_error": "課程進度檢查失敗。",
             "retry": "重試",
             "gaps_title": "課程進度有缺口",

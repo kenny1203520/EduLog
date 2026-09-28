@@ -189,14 +189,15 @@ Deno.test('1000102 includes global students without broadening scoped access', (
   assert(!studentOverviewGlobalVisibility.includes('GRANT EXECUTE ON FUNCTION public.get_students_overview(integer,integer,text,text) TO anon'))
 })
 
-Deno.test('1000105 adds only the uncovered query performance indexes', () => {
+Deno.test('1000105 adds the query performance indexes recommended by Supabase', () => {
   assertStringIncludes(queryPerformanceIndexes, 'occurrence_reports_created_at_idx')
   assertStringIncludes(queryPerformanceIndexes, 'ON public.occurrence_reports USING btree (created_at)')
   assertStringIncludes(queryPerformanceIndexes, 'lessons_sequence_idx')
   assertStringIncludes(queryPerformanceIndexes, 'ON public.lessons USING btree (sequence)')
   assertStringIncludes(queryPerformanceIndexes, 'students_birthday_idx')
   assertStringIncludes(queryPerformanceIndexes, 'ON public.students USING btree (birthday)')
-  assert(!queryPerformanceIndexes.includes('ON public.lessons USING btree (course_id)'))
+  assertStringIncludes(queryPerformanceIndexes, 'lessons_course_id_idx')
+  assertStringIncludes(queryPerformanceIndexes, 'ON public.lessons USING btree (course_id)')
 })
 
 Deno.test('1000106 splits RBAC policy reads and writes without broadening scope', () => {
@@ -218,7 +219,8 @@ Deno.test('1000107 uses transfer-effective rosters and private invalidation-only
   assertStringIncludes(effectiveSessionRosterInvalidation, "v_occurrence_id IS NULL")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'class_session_invalidated'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'class-session:' || p_class_session_id::text")
-  assertStringIncludes(effectiveSessionRosterInvalidation, "'Report editors can receive private room messages'")
+  assertStringIncludes(effectiveSessionRosterInvalidation, 'DROP POLICY IF EXISTS "Report editors can receive private room messages"')
+  assertStringIncludes(effectiveSessionRosterInvalidation, 'CREATE POLICY "Authorized users can receive private report and class session messages"')
   assertStringIncludes(effectiveSessionRosterInvalidation, "'teaching.class_sessions.read'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'teaching.class_sessions.list'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'single_lesson_transfers'")

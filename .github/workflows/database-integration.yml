@@ -97,6 +97,10 @@ jobs:
           done
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000100_platform_teaching_roles_without_workspace.sql
           psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000101_private_invoker_views_and_lint_remediation.sql
+          # The lifecycle integration exercises the authenticated collaboration
+          # snapshot RPC, whose table grants and RLS boundary are finalized by
+          # 1000103. Apply it before running that integration on upgrade paths.
+          psql -v ON_ERROR_STOP=1 -f supabase/migrations/1000103_report_collaboration_authorization.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/report_lifecycle_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/rate_limit_integration.sql
           psql -v ON_ERROR_STOP=1 -f supabase/tests/sensitive_data_integration.sql

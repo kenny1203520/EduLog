@@ -291,6 +291,12 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
   if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   await permission(req, 'teaching.reports.list', occurrence.data.class_session_id)
 
+  const effectiveRoster = await req.db!.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: occurrence.data.id })
+  if (effectiveRoster.error) throw mapDatabaseError(effectiveRoster.error)
+  const isOnEffectiveRoster = ((effectiveRoster.data ?? []) as Array<{ enrollment_id: string }>)
+    .some((row) => row.enrollment_id === enrollmentId)
+  if (!isOnEffectiveRoster) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found in this occurrence')
+
   const currentReport = await req.db!.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id').eq('id', query.report_id).maybeSingle()
   if (currentReport.error) throw mapDatabaseError(currentReport.error)
   if (currentReport.data?.enrollment_id !== enrollmentId || currentReport.data.class_occurrence_id !== occurrence.data.id) {
