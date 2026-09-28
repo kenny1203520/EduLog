@@ -39,6 +39,24 @@ describe('session schedule display items', () => {
         expect(new Set(items.map(item => item.key)).size).toBe(2)
     })
 
+    it('uses localized weekday and monthly text for the active locale', () => {
+        const localizedTranslate = (key: string, named?: Record<string, unknown>) => {
+            if (key === 'classroom.schedule_draft') return '尚未排課'
+            if (key === 'classroom.monthly_day_summary') return `每月 ${named?.day} 日 ${named?.time}`
+            return key
+        }
+        const localizedDay = (day: number) => ['週日', '週一', '週二', '週三', '週四', '週五', '週六'][day] || String(day)
+
+        const weekly = buildSessionScheduleDisplayItems(regular(), localizedTranslate, localizedDay)
+        const monthly = buildSessionScheduleDisplayItems(regular({
+            schedule_mode: 'monthly',
+            schedule_rules: [{ schedule_kind: 'monthly', day_of_month: 28, start_time: '09:00', end_time: '10:30' }]
+        }), localizedTranslate, localizedDay)
+
+        expect(weekly[0]?.text).toBe('週一 10:00-12:00')
+        expect(monthly[0]?.text).toBe('每月 28 日 09:00-10:30')
+    })
+
     it('formats monthly and exact-date schedules without joining them into one long string', () => {
         const monthly = buildSessionScheduleDisplayItems(regular({
             schedule_mode: 'monthly',

@@ -11,12 +11,14 @@ import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/
 import { apiV1Client } from '@/services/api/ApiV1Client'
 import { RoleService } from '@/services/rbac/RoleService'
 import type { PolicyScope, RoleDTO } from '@/models/Rbac'
+import type { ClassSessionDTO } from '@/models/ClassSession'
 import { roleDisplayName } from '@/utils/roleDisplay'
+import { buildSessionScheduleDisplayItems } from '@/utils/sessionScheduleDisplay'
 
 type Scope = Extract<PolicyScope, 'classroom' | 'class_session'>
 type TeachingRoleAssignment = { id: string; user_id: string; role_id: string; scope_type: 'system' | Scope; scope_id: string | null; status: string; effective_from: string; effective_to: string | null; roles?: RoleDTO | null; user?: AuthUserSearchResultDTO | null }
 type Classroom = { id: string; name: string }
-type Session = { id: string; name: string; classroom_id?: string | null }
+type Session = ClassSessionDTO & { id: string }
 
 const { t, locale } = useI18n()
 const toast = useToast()
@@ -86,7 +88,19 @@ const sessionFilterOptions = computed(() => [{ value: '', label: t('rbac.platfor
 const filteredSessions = computed(() => sessions.value.filter(session => !filterClassroomId.value || session.classroom_id === filterClassroomId.value))
 const sessionOptions = computed(() => filteredSessions.value.map(session => {
     const room = classrooms.value.find(item => item.id === session.classroom_id)
-    return { value: session.id, label: session.name, description: room?.name, searchText: `${session.name} ${room?.name ?? ''}` }
+    const scheduleItems = buildSessionScheduleDisplayItems(
+        session,
+        (key, named) => named ? t(key, named) : t(key),
+        day => t(`classroom.days.${day}`)
+    )
+    const scheduleText = scheduleItems.map(item => item.text).join(' · ')
+    const description = [room?.name, scheduleText].filter(Boolean).join(' · ')
+    return {
+        value: session.id,
+        label: session.name,
+        description,
+        searchText: `${session.name} ${room?.name ?? ''} ${scheduleText}`
+    }
 }))
 function today() {
     const now = new Date()
@@ -364,7 +378,7 @@ onMounted(load)
                         <div v-if="scopeType === 'classroom'" class="w-full sm:w-64"><SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.classroom')" /></div>
                         <template v-else>
                             <div class="w-full sm:w-64"><SearchableSelect v-model="filterClassroomId" :options="sessionFilterOptions" :placeholder="t('rbac.platform_teaching_assignments.all_classrooms')" :aria-label="t('rbac.platform_teaching_assignments.classroom_filter')" /></div>
-                            <div class="w-full sm:w-64"><SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.class_session')" /></div>
+                            <div class="w-full sm:w-64"><SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.class_session')" description-placement="below" show-selected-description /></div>
                         </template>
                     </div>
                 </div>

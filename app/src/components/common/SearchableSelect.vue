@@ -20,6 +20,8 @@ const props = withDefaults(defineProps<{
     loading?: boolean
     noResultsText?: string
     loadingText?: string
+    descriptionPlacement?: 'inline' | 'below'
+    showSelectedDescription?: boolean
 }>(), {
     placeholder: '',
     fontSizeClass: 'text-sm',
@@ -29,7 +31,9 @@ const props = withDefaults(defineProps<{
     remoteSearch: false,
     loading: false,
     noResultsText: '',
-    loadingText: ''
+    loadingText: '',
+    descriptionPlacement: 'inline',
+    showSelectedDescription: false
 })
 
 const emit = defineEmits<{
@@ -66,6 +70,13 @@ const selectedTitle = computed(() => {
     const option = props.options.find(item => item.value === props.modelValue)
         ?? (selectedOptionCache.value?.value === props.modelValue ? selectedOptionCache.value : null)
     return optionText(option ?? undefined)
+})
+
+const selectedDescription = computed(() => {
+    if (props.multiple) return ''
+    const option = props.options.find(item => item.value === props.modelValue)
+        ?? (selectedOptionCache.value?.value === props.modelValue ? selectedOptionCache.value : null)
+    return option?.description ?? ''
 })
 
 const filteredOptions = computed(() => {
@@ -177,9 +188,13 @@ onUnmounted(() => {
         <button ref="triggerRef" type="button" role="button" :disabled="disabled" @click="openDropdown" @keydown="onTriggerKeydown"
             :aria-disabled="disabled" :aria-haspopup="'listbox'" :aria-expanded="isOpen" :aria-label="ariaLabel || undefined"
             :title="selectedTitle || placeholder || $t('common.select_placeholder')"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus-within:ring-2 focus-within:ring-emerald-500 cursor-pointer flex items-center justify-between"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus-within:ring-2 focus-within:ring-emerald-500 cursor-pointer flex items-center justify-between gap-2 text-left"
             :class="[fontSizeClass, disabled ? 'cursor-not-allowed bg-gray-100 opacity-60' : '']">
-            <span class="truncate w-full text-left" :class="!selectedLabel ? 'text-gray-400' : 'text-gray-700'">{{ selectedLabel || (placeholder || $t('common.select_placeholder')) }}</span>
+            <span v-if="showSelectedDescription && selectedDescription" class="min-w-0 flex-1">
+                <span class="block break-words text-gray-700">{{ selectedLabel }}</span>
+                <span class="mt-0.5 block whitespace-normal break-words text-xs leading-4 text-gray-500">{{ selectedDescription }}</span>
+            </span>
+            <span v-else class="min-w-0 flex-1 truncate" :class="!selectedLabel ? 'text-gray-400' : 'text-gray-700'">{{ selectedLabel || (placeholder || $t('common.select_placeholder')) }}</span>
 
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-400 shrink-0 transition-transform"
                 :class="isOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -195,9 +210,13 @@ onUnmounted(() => {
                 :placeholder="placeholder || $t('common.select_placeholder')" :aria-label="ariaLabel || placeholder || $t('common.select_placeholder')" @keydown="onSearchKeydown" />
             <ul :id="listId" role="listbox" :aria-multiselectable="multiple" class="max-h-60 overflow-y-auto py-1">
                 <li v-for="(opt, index) in filteredOptions" :id="`${listId}-option-${index}`" :key="opt.value" role="option" :aria-selected="isSelected(opt)" :title="[opt.label, opt.description].filter(Boolean).join(' — ')" @mouseenter="activeIndex = index" @click.stop="selectOption(opt)"
-                    class="flex cursor-pointer items-center justify-between px-3 py-2 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
-                    :class="[isSelected(opt) || activeIndex === index ? 'bg-emerald-50 text-emerald-700' : '', fontSizeClass]">
-                    <span class="min-w-0 truncate">{{ opt.label }}<span v-if="opt.description" class="ml-2 text-xs text-gray-400">{{ opt.description }}</span></span>
+                    class="flex cursor-pointer justify-between gap-2 px-3 py-2 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
+                    :class="[isSelected(opt) || activeIndex === index ? 'bg-emerald-50 text-emerald-700' : '', descriptionPlacement === 'below' ? 'items-start' : 'items-center', fontSizeClass]">
+                    <span v-if="descriptionPlacement === 'below' && opt.description" class="min-w-0 flex-1 text-left">
+                        <span class="block whitespace-normal break-words">{{ opt.label }}</span>
+                        <span class="mt-0.5 block whitespace-normal break-words text-xs leading-4 text-gray-500">{{ opt.description }}</span>
+                    </span>
+                    <span v-else class="min-w-0 flex-1 truncate text-left">{{ opt.label }}<span v-if="opt.description" class="ml-2 text-xs text-gray-400">{{ opt.description }}</span></span>
                     <svg v-if="isSelected(opt) && multiple" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-600 shrink-0 ml-2" viewBox="0 0 20 20" fill="currentColor">
                         <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
                     </svg>

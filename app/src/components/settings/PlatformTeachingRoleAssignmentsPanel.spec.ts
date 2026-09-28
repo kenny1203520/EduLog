@@ -29,4 +29,12 @@ describe('teaching role assignment selection guidance', () => {
         expect(source).toContain('if (sessionId.value && !filteredSessions.value.some')
         expect(source).not.toContain('userQuery.value.length < 2')
     })
+
+    it('formats full localized schedules into visible searchable session descriptions', () => {
+        expect(source).toContain("import { buildSessionScheduleDisplayItems } from '@/utils/sessionScheduleDisplay'")
+        expect(source).toContain('const scheduleItems = buildSessionScheduleDisplayItems(')
+        expect(source).toContain(".join(' · ')")
+        expect(source).toContain('searchText: `${session.name} ${room?.name ?? \'\'} ${scheduleText}`')
+        expect(source).toContain('description-placement="below" show-selected-description')
+    })
 })

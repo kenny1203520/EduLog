@@ -92,4 +92,28 @@ describe('SearchableSelect', () => {
         expect(wrapper.find('[role="option"]').attributes('title')).toBe('A long classroom name — Full schedule details')
         wrapper.unmount()
     })
+
+    it('shows an opted-in description below the selected label and option without truncating it', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: {
+                modelValue: 'session-1',
+                options: [{ value: 'session-1', label: 'Saturday class', description: 'Room 3 · Sat 10:00-12:00 · Sat 14:00-16:00' }],
+                descriptionPlacement: 'below',
+                showSelectedDescription: true
+            },
+            global: { mocks: { $t: (key: string) => key } }
+        })
+
+        const trigger = wrapper.find('button[aria-haspopup="listbox"]')
+        expect(trigger.text()).toContain('Saturday class')
+        expect(trigger.text()).toContain('Room 3 · Sat 10:00-12:00 · Sat 14:00-16:00')
+        expect(trigger.find('span.whitespace-normal.break-words').exists()).toBe(true)
+
+        await trigger.trigger('keydown', { key: 'Enter' })
+        const option = wrapper.find('[role="option"]')
+        expect(option.text()).toContain('Saturday class')
+        expect(option.text()).toContain('Room 3 · Sat 10:00-12:00 · Sat 14:00-16:00')
+        expect(option.find('span.whitespace-normal.break-words').exists()).toBe(true)
+        wrapper.unmount()
+    })
 })
