@@ -47,14 +47,9 @@ export function requireAuthorizationDecision(
       scope_type: details.scopeType ?? null,
       scope_id: details.scopeId ?? null,
     }, 'authorization_check_failed')
-    const databaseError = mapDatabaseError(result.error)
-    // An authorization RPC error is not a negative permission decision. In
-    // particular, Postgres 42501 here indicates a broken DB/function grant,
-    // because normal lack of permission is returned as `false`.
-    if (databaseError.status === 403) {
-      throw new ApiError(503, 'AUTHORIZATION_CHECK_UNAVAILABLE', 'Authorization could not be verified')
-    }
-    throw databaseError
+    // Authorization RPC errors never mean "permission denied". Keep their
+    // database code in the server log and return a retryable service error.
+    throw new ApiError(503, 'AUTHORIZATION_CHECK_UNAVAILABLE', 'Authorization could not be verified')
   }
 
   if (result.data !== true) {
@@ -69,6 +64,47 @@ export function requireAuthorizationDecision(
     }, 'authorization_denied')
     throw new ApiError(403, 'PERMISSION_DENIED', details.message ?? 'You do not have permission to perform this action')
   }
+
+  setAuditContext(req, { authorizationResult: 'allowed', errorCode: null })
+}
+
+export async function requireAuthorizationRpcDecision(
+  req: Request,
+  resultPromise: PromiseLike<AuthorizationRpcResult>,
+  details: Parameters<typeof requireAuthorizationDecision>[2],
+) {
+  setAuditContext(req, {
+    domain: details.permission.startsWith('system.') ? 'system' : 'teaching',
+    permission: details.permission,
+    ...(details.teachingId !== undefined ? { teachingId: details.teachingId } : {}),
+    ...(details.scopeId !== undefined ? { scopeId: details.scopeId } : {}),
+    ...(details.scopeType !== undefined ? { scopeType: details.scopeType } : {}),
+    authorizationStage: details.stage,
+    authorizationResult: null,
+    errorCode: null,
+  })
+
+  let result: AuthorizationRpcResult
+  try {
+    result = await resultPromise
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : 'UNKNOWN'
+    setAuditContext(req, { authorizationResult: 'rpc_error', errorCode: 'AUTHORIZATION_RPC_ERROR' })
+    req.log?.error({
+      event: 'authorization_check_failed',
+      permission: details.permission,
+      authorization_stage: details.stage,
+      database_error_code: code,
+      teaching_id: details.teachingId ?? null,
+      scope_type: details.scopeType ?? null,
+      scope_id: details.scopeId ?? null,
+    }, 'authorization_check_failed')
+    throw new ApiError(503, 'AUTHORIZATION_CHECK_UNAVAILABLE', 'Authorization could not be verified')
+  }
+
+  requireAuthorizationDecision(req, result, details)
 }
 
 async function teachingPermission(req: Request, permission: string, teachingId: string | null) {

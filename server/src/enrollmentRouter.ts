@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
-import { requireAuthorizationDecision } from './authorization.js'
+import { requireAuthorizationDecision, requireAuthorizationRpcDecision } from './authorization.js'
 
 const fields = 'id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,user_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name,address),class_sessions(id,name,day_of_week,start_time,end_time,capacity,time_zone,session_type,schedule_mode,class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)),students(name)'
 const mutable = ['student_id', 'course_id', 'classroom_id', 'class_session_id', 'status', 'start_date', 'lesson_number', 'external_link', 'time_zone', 'koding_admission_id'] as const
@@ -62,31 +62,33 @@ async function authorizeScope(req: Request, action: 'create' | 'update', input: 
   if (teachingIds.size !== 1) throw new ApiError(422, 'TEACHING_SCOPE_REQUIRED', 'Enrollment references must resolve to one teaching')
   setAuditContext(req, { domain: 'teaching', resource: 'enrollments', action, permission: `teaching.enrollments.${action}`, teachingId: [...teachingIds][0] })
   if (!studentId) throw new ApiError(422, 'STUDENT_REQUIRED', 'student_id is required')
-  const scoped = await req.db.rpc('can_access_enrollment_scope', {
+  if (action === 'create') {
+    const studentRead = req.db.rpc('has_teaching_permission', {
+      p_user_id: req.user.id,
+      p_permission_key: 'teaching.students.read',
+      p_teaching_id: [...teachingIds][0],
+      p_classroom_id: classroomId ?? session?.classroom_id ?? null,
+      p_class_session_id: sessionId ?? null,
+    })
+    await requireAuthorizationRpcDecision(req, studentRead, {
+      permission: 'teaching.students.read',
+      stage: 'enrollment_student_read_permission',
+      message: 'You do not have permission to read students in this scope',
+      teachingId: [...teachingIds][0],
+      scopeId: sessionId ?? classroomId ?? null,
+      scopeType: sessionId ? 'class_session' : classroomId ? 'classroom' : 'teaching',
+    })
+  }
+  const scoped = req.db.rpc('can_access_enrollment_scope', {
     p_student_id: studentId,
     p_course_id: courseId ?? null,
     p_classroom_id: classroomId ?? session?.classroom_id ?? null,
     p_class_session_id: sessionId ?? null,
     p_permission_key: 'teaching.enrollments.' + action,
   })
-  requireAuthorizationDecision(req, scoped, {
+  await requireAuthorizationRpcDecision(req, scoped, {
     permission: `teaching.enrollments.${action}`,
     stage: 'enrollment_student_and_teaching_scope',
-    message: 'You do not have permission to modify enrollments',
-    teachingId: [...teachingIds][0],
-    scopeId: sessionId ?? classroomId ?? courseId ?? null,
-    scopeType: sessionId ? 'class_session' : classroomId ? 'classroom' : 'teaching',
-  })
-  const result = await req.db.rpc('has_teaching_permission', {
-    p_user_id: req.user.id,
-    p_permission_key: 'teaching.enrollments.' + action,
-    p_teaching_id: [...teachingIds][0],
-    p_classroom_id: classroomId ?? session?.classroom_id ?? null,
-    p_class_session_id: sessionId ?? null,
-  })
-  requireAuthorizationDecision(req, result, {
-    permission: `teaching.enrollments.${action}`,
-    stage: 'enrollment_teaching_permission',
     message: 'You do not have permission to modify enrollments',
     teachingId: [...teachingIds][0],
     scopeId: sessionId ?? classroomId ?? null,

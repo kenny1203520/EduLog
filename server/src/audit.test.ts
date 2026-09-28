@@ -38,4 +38,16 @@ describe('audit resource identifiers', () => {
     await expect(auditRequest(req, 409)).resolves.toBeUndefined()
     expect(errors).toHaveLength(1)
   })
+
+  it('does not persist a blank authorization result when a staged check fails unexpectedly', async () => {
+    let inserted: Record<string, any> | undefined
+    const req: any = {
+      method: 'POST', path: '/api/enrollments', requestId: 'request-3', traceId: 'trace-3', startedAt: performance.now(),
+      user: { id: '00000000-0000-4000-8000-000000000011' },
+      auditContext: { resource: 'enrollments', permission: 'teaching.enrollments.create', authorizationStage: 'enrollment_student_read_permission' },
+      log: { error() {} }, adminDb: { from() { return { insert(value: Record<string, any>) { inserted = value; return Promise.resolve({ error: null }) } } } },
+    }
+    await auditRequest(req, 503)
+    expect(inserted?.metadata).toMatchObject({ authorization_result: 'check_failed', error_code: 'AUTHORIZATION_CHECK_INCOMPLETE' })
+  })
 })
