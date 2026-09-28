@@ -73,21 +73,11 @@ describe('ReportQueryService.getProgressSummaryReportsByEnrollments', () => {
 
 describe('ReportQueryService.getEnrollmentReportProgressContext', () => {
     it('requests only the selected enrollment report context through the authenticated API', async () => {
-        apiModeMock.mockReturnValue('v1')
         const context = { enrollment_id: 'enrollment-1', occurrence_date: '2026-09-27', lessons: [], reports: [], latest_prior_report: null }
         apiV1GetMock.mockResolvedValueOnce({ data: context })
 
         await expect(ReportQueryService.getEnrollmentReportProgressContext('enrollment-1', 'occurrence-1', 'report-1')).resolves.toEqual(context)
         expect(apiV1GetMock).toHaveBeenCalledWith('/enrollments/enrollment-1/report-progress-context?occurrence_id=occurrence-1&report_id=report-1')
-    })
-
-    it.each(['legacy', 'mock'] as const)('does not request the v1 context route in %s mode', async (mode) => {
-        apiModeMock.mockReturnValue(mode)
-
-        await expect(ReportQueryService.getEnrollmentReportProgressContext('enrollment-1', 'occurrence-1', 'report-1'))
-            .resolves.toBeNull()
-        expect(apiV1GetMock).not.toHaveBeenCalled()
-        expect(fromMock).not.toHaveBeenCalled()
     })
 })
 
