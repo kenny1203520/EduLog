@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RoleService, type EffectiveTeachingRoleDTO } from '@/services/rbac/RoleService'
 import type { PolicyScope } from '@/models/Rbac'
+import { roleDisplayName } from '@/utils/roleDisplay'
 
 const props = defineProps<{
   userId?: string | null
@@ -20,7 +21,7 @@ const includedRoles = computed(() => rows.value.filter(row => !row.is_excluded))
 const excludedRoles = computed(() => rows.value.filter(row => row.is_excluded))
 
 function roleName(row: EffectiveTeachingRoleDTO) {
-  return row.code ? t(`rbac.role_names.${row.code}`, row.name) : row.name
+  return roleDisplayName({ code: row.code, name: row.name }, t)
 }
 function sourceName(row: EffectiveTeachingRoleDTO) {
   if (row.is_excluded) return t('rbac.effective_roles.source_exclusion')
