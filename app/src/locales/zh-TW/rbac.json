@@ -113,6 +113,7 @@
     "occurrences": { "name": "課堂", "description": "排程產生的實際課堂" },
     "reports": { "name": "報告", "description": "學生學習報告" },
     "templates": { "name": "範本", "description": "報告與教學範本" },
+    "report-templates": { "name": "報告範本", "description": "建立與管理學生報告使用的範本" },
     "holidays": { "name": "假日", "description": "教學行事曆假日" }
   },
   "actions": {

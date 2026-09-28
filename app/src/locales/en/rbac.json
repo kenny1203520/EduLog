@@ -113,6 +113,7 @@
     "occurrences": { "name": "Occurrences", "description": "Scheduled class occurrences" },
     "reports": { "name": "Reports", "description": "Student learning reports" },
     "templates": { "name": "Templates", "description": "Report and teaching templates" },
+    "report-templates": { "name": "Report templates", "description": "Reusable templates for student reports" },
     "holidays": { "name": "Holidays", "description": "Teaching calendar holidays" }
   },
   "actions": {

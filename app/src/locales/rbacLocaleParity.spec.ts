@@ -26,4 +26,15 @@ describe('RBAC locale contract', () => {
             }
         }
     })
+
+    it('localizes the report-templates resource emitted by the API', () => {
+        expect(english.resources['report-templates']).toEqual({
+            name: 'Report templates',
+            description: 'Reusable templates for student reports',
+        })
+        expect(traditionalChinese.resources['report-templates']).toEqual({
+            name: '報告範本',
+            description: '建立與管理學生報告使用的範本',
+        })
+    })
 })
