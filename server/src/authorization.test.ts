@@ -1,6 +1,6 @@
 import type { Request } from 'express'
 import { describe, expect, it, vi } from 'vitest'
-import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from './authorization.js'
+import { authorizeCollection, authorizeResource, requireAuthorizationDecision, requireAuthorizationRpcDecision } from './authorization.js'
 import { resources } from './resources.js'
 
 function requestWithRpc(rpc: ReturnType<typeof vi.fn>) {
@@ -29,12 +29,12 @@ describe('authorization decision diagnostics', () => {
     }), 'authorization_denied')
   })
 
-  it('records authorization RPC failures separately and maps them as database errors', () => {
+  it('records authorization RPC failures separately as unavailable checks', () => {
     const req = requestWithRpc(vi.fn())
     expect(() => requireAuthorizationDecision(req, { data: null, error: { code: '08006', message: 'private database detail' } }, {
       permission: 'teaching.enrollments.create',
       stage: 'enrollment_teaching_permission',
-    })).toThrowError(expect.objectContaining({ status: 500, code: 'DATABASE_ERROR' }))
+    })).toThrowError(expect.objectContaining({ status: 503, code: 'AUTHORIZATION_CHECK_UNAVAILABLE' }))
     expect(req.auditContext).toMatchObject({
       authorizationStage: 'enrollment_teaching_permission',
       authorizationResult: 'rpc_error',
@@ -52,6 +52,22 @@ describe('authorization decision diagnostics', () => {
       stage: 'enrollment_teaching_permission',
     })).toThrowError(expect.objectContaining({ status: 503, code: 'AUTHORIZATION_CHECK_UNAVAILABLE' }))
     expect(req.auditContext).toMatchObject({ authorizationResult: 'rpc_error', errorCode: 'AUTHORIZATION_RPC_ERROR' })
+  })
+
+  it('records rejected authorization RPC promises as unavailable rather than permission denials', async () => {
+    const req = requestWithRpc(vi.fn())
+    await expect(requireAuthorizationRpcDecision(req, Promise.reject({ code: '08006' }), {
+      permission: 'teaching.enrollments.create', stage: 'enrollment_student_read_permission',
+      teachingId: '00000000-0000-4000-8000-000000000009', scopeId: '00000000-0000-4000-8000-000000000010', scopeType: 'class_session',
+    })).rejects.toMatchObject({ status: 503, code: 'AUTHORIZATION_CHECK_UNAVAILABLE' })
+    expect(req.auditContext).toMatchObject({ authorizationResult: 'rpc_error', errorCode: 'AUTHORIZATION_RPC_ERROR', authorizationStage: 'enrollment_student_read_permission' })
+    expect(JSON.stringify((req.log as any).error.mock.calls)).toContain('08006')
+  })
+
+  it('records successful authorization decisions explicitly', () => {
+    const req = requestWithRpc(vi.fn())
+    requireAuthorizationDecision(req, { data: true, error: null }, { permission: 'teaching.students.read', stage: 'enrollment_student_read_permission' })
+    expect(req.auditContext).toMatchObject({ authorizationResult: 'allowed', permission: 'teaching.students.read' })
   })
 })
 

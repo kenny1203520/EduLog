@@ -58,7 +58,7 @@ async function loadProfiles() {
 function searchAccounts(value: string) {
   query.value = value
   if (searchTimer) clearTimeout(searchTimer)
-  if (value.trim().length < 2) { accounts.value = []; return }
+  if (!value.trim()) { accounts.value = []; return }
   searchTimer = setTimeout(async () => {
     try {
       const response = await apiV1Client.get<Account[]>(`/users/search?query=${encodeURIComponent(value.trim())}`)
@@ -106,7 +106,7 @@ function displayValue(value: unknown) {
       <div class="space-y-5 p-5">
         <label class="block text-sm font-semibold text-slate-700">{{ t('teacher.account_link.target_account') }}
           <div class="mt-2 flex gap-2">
-            <SearchableSelect v-model="selectedAccountId" class="min-w-0 flex-1" :options="options" remote-search :loading="loading" :placeholder="t('teacher.account_link.search_account')" :aria-label="t('teacher.account_link.target_account')" :no-results-text="query.length < 2 ? t('teacher.account_link.search_hint') : t('teacher.account_link.no_accounts')" @search="searchAccounts" />
+            <SearchableSelect v-model="selectedAccountId" class="min-w-0 flex-1" :options="options" remote-search :loading="loading" :placeholder="t('teacher.account_link.search_account')" :aria-label="t('teacher.account_link.target_account')" :no-results-text="!query.trim() ? t('teacher.account_link.search_hint') : t('teacher.account_link.no_accounts')" @search="searchAccounts" />
             <button v-if="selectedAccountId" type="button" class="rounded-lg border border-slate-300 px-3 text-sm hover:bg-slate-50" @click="selectedAccountId = null">{{ t('teacher.account_link.unlink') }}</button>
           </div>
         </label>

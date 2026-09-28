@@ -109,7 +109,7 @@ export function buildOpenApi() {
       },
     },
   }
-  const addSpecialized = (path: string, method: 'get' | 'post' | 'patch' | 'delete', operationId: string, permission: string | undefined, status: string, params: unknown[] = [], requestBody?: unknown) => {
+  const addSpecialized = (path: string, method: 'get' | 'post' | 'put' | 'patch' | 'delete', operationId: string, permission: string | undefined, status: string, params: unknown[] = [], requestBody?: unknown) => {
     const existing = (paths[path] as Record<string, unknown> | undefined) ?? {}
     paths[path] = { ...existing, [method]: { security: [{ cookieAuth: [] }], operationId, ...(permission ? { 'x-permission': permission, 'x-required-permissions': [permission] } : {}), parameters: params, ...(requestBody ? { requestBody } : {}), responses: { [status]: { $ref: '#/components/responses/Envelope' }, ...errorResponses } } }
   }
@@ -178,8 +178,9 @@ export function buildOpenApi() {
   for (const [method, operationId, permission, status] of [
     ['get', 'class_session_teachers_by_session_list', 'teaching.class_sessions.list', '200'],
     ['post', 'class_session_teachers_create', 'teaching.class_sessions.update', '201'],
+    ['put', 'class_session_teachers_replace', 'teaching.class_sessions.update & teaching.roles.manage', '200'],
     ['delete', 'class_session_teachers_delete', 'teaching.class_sessions.update', '200'],
-  ] as const) addSpecialized('/api/class-sessions/{sessionId}/teachers', method, operationId, permission, status, [pathParam('sessionId'), ...(method === 'get' ? [teacherAssignmentDateParameter] : method === 'delete' ? [...teacherAssignmentRemoveParameters, mutationParam] : [mutationParam])], method === 'post' ? refBody('TeacherAssignmentMutation') : undefined)
+  ] as const) addSpecialized('/api/class-sessions/{sessionId}/teachers', method, operationId, permission, status, [pathParam('sessionId'), ...(method === 'get' ? [teacherAssignmentDateParameter] : method === 'delete' ? [...teacherAssignmentRemoveParameters, mutationParam] : [mutationParam])], method === 'post' || method === 'put' ? refBody('TeacherAssignmentMutation') : undefined)
   addSpecialized('/api/class-sessions/{sessionId}/teachers/{assignmentId}', 'patch', 'class_session_teachers_update', 'teaching.class_sessions.update', '200', [pathParam('sessionId'), pathParam('assignmentId'), mutationParam], refBody('TeacherAssignmentUpdateMutation'))
   addSpecialized('/api/class-sessions/{sessionId}/teachers/{teacherId}', 'delete', 'class_session_teachers_delete_teacher', 'teaching.class_sessions.update', '200', [pathParam('sessionId'), pathParam('teacherId'), mutationParam])
   paths['/api/class-sessions'] = {
@@ -492,6 +493,14 @@ export function buildOpenApi() {
   paths['/api/teaching-role-assignments/scoped/{id}'] = {
     patch: { ...pageBase, operationId: 'scoped_teaching_role_assignment_update', 'x-permission': 'teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/ScopedTeachingRoleAssignmentMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
     delete: { ...pageBase, operationId: 'scoped_teaching_role_assignment_delete', 'x-permission': 'teaching.roles.manage', parameters: [idParam, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/AssignmentDeleteMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+  }
+  paths['/api/teaching-role-assignments/effective'] = {
+    get: { ...pageBase, operationId: 'teaching_role_assignments_effective_list', 'x-permission': 'teaching.roles.read | teaching.roles.manage', parameters: [
+      { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } },
+      { name: 'scope_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid', nullable: true } },
+      { name: 'user_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } },
+      { name: 'effective_date', in: 'query', required: false, schema: { type: 'string', format: 'date' } },
+    ], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/teaching-role-exclusions'] = {
     get: { ...pageBase, operationId: 'teaching_role_exclusions_list', 'x-permission': 'teaching.roles.read | teaching.roles.manage', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'user_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },

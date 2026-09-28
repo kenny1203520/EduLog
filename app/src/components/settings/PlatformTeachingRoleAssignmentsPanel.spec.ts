@@ -21,4 +21,12 @@ describe('teaching role assignment selection guidance', () => {
         expect(source).toContain('!userId.value || !roleId.value || !effectiveFrom.value')
         expect(source).toContain('!scopeReady.value || !userId.value || !roleId.value')
     })
+
+    it('allows one-character account searches and filters class sessions by classroom', () => {
+        expect(source).toContain('if (!userQuery.value)')
+        expect(source).toContain('const filteredSessions = computed(() => sessions.value.filter')
+        expect(source).toContain('v-model="filterClassroomId"')
+        expect(source).toContain('if (sessionId.value && !filteredSessions.value.some')
+        expect(source).not.toContain('userQuery.value.length < 2')
+    })
 })

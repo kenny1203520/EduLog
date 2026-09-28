@@ -97,7 +97,7 @@
     "description": "連結或拆分帳號前，請逐欄選擇資料應保留的位置。",
     "target_account": "目標系統帳號",
     "search_account": "依姓名或 Email 搜尋",
-    "search_hint": "輸入至少兩個字元以搜尋帳號。",
+    "search_hint": "輸入姓名或 Email 即可搜尋帳號。",
     "no_accounts": "找不到符合的帳號。",
     "search_failed": "搜尋帳號失敗。",
     "load_failed": "載入個人資料失敗。",

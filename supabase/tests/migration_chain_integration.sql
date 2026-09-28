@@ -460,7 +460,8 @@ $$;
 INSERT INTO auth.users(id, email) VALUES
   ('00000000-0000-0000-0000-000000000001', 'owner-a@example.test'),
   ('00000000-0000-0000-0000-000000000002', 'owner-b@example.test'),
-  ('00000000-0000-0000-0000-000000000003', 'unassigned@example.test')
+  ('00000000-0000-0000-0000-000000000003', 'unassigned@example.test'),
+  ('00000000-0000-0000-0000-000000000004', 'enrollment-creator@example.test')
 ON CONFLICT (id) DO NOTHING;
 
 -- Teaching roles are assigned at the platform root and stay separate from
@@ -533,6 +534,15 @@ BEGIN
   IF (student_page->>'total')::integer <> 0 OR jsonb_array_length(student_page->'items') <> 0 THEN
     RAISE EXCEPTION 'unassigned account can see platform students: %', student_page;
   END IF;
+  IF public.can_access_enrollment_scope(
+    '20000000-0000-0000-0000-000000000101',
+    '50000000-0000-0000-0000-000000000101',
+    '30000000-0000-0000-0000-000000000001',
+    '60000000-0000-0000-0000-000000000104',
+    'teaching.enrollments.create'
+  ) THEN
+    RAISE EXCEPTION 'account without target teaching permissions can create an enrollment';
+  END IF;
 END;
 $$;
 RESET ROLE;
@@ -541,6 +551,7 @@ RESET ROLE;
 -- platform records or students from another classroom.
 DO $$
 DECLARE classroom_role_id uuid := gen_random_uuid();
+DECLARE classroom_creator_role_id uuid := gen_random_uuid();
 DECLARE platform_teaching_id uuid;
 DECLARE classroom_id uuid := '30000000-0000-0000-0000-000000000001';
 DECLARE course_id uuid := '50000000-0000-0000-0000-000000000101';
@@ -555,6 +566,14 @@ BEGIN
   WHERE permission.key IN ('teaching.students.list', 'teaching.students.read', 'teaching.class_sessions.list');
   INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)
   VALUES ('00000000-0000-0000-0000-000000000003', classroom_role_id, 'classroom', classroom_id, CURRENT_DATE, 'active');
+  INSERT INTO public.roles(id, code, name, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
+  VALUES (classroom_creator_role_id, 'integration_classroom_enrollment_creator', 'Integration Classroom Enrollment Creator', false, 901, 'teaching', NULL, false, false);
+  INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
+  SELECT classroom_creator_role_id, permission.id, 'classroom', classroom_id, 'allow'
+  FROM public.permissions permission
+  WHERE permission.key = 'teaching.enrollments.create';
+  INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)
+  VALUES ('00000000-0000-0000-0000-000000000004', classroom_creator_role_id, 'classroom', classroom_id, CURRENT_DATE, 'active');
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
   VALUES (course_id, 'Scoped roster test', 'primary', NULL, platform_teaching_id);
   INSERT INTO public.students(id, name, user_id)
@@ -587,6 +606,44 @@ BEGIN
 END;
 $$;
 
+-- The destination-scope grants authorize a standalone student with no prior
+-- enrollment in any classroom.
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000004', false);
+DO $$
+BEGIN
+  IF public.can_access_enrollment_scope(
+    '20000000-0000-0000-0000-000000000101',
+    '50000000-0000-0000-0000-000000000101',
+    '30000000-0000-0000-0000-000000000001',
+    '60000000-0000-0000-0000-000000000104',
+    'teaching.enrollments.create'
+  ) THEN
+    RAISE EXCEPTION 'target create permission without target student-read permission was accepted';
+  END IF;
+END;
+$$;
+RESET ROLE;
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+DO $$
+BEGIN
+  IF NOT public.can_access_enrollment_scope(
+    '20000000-0000-0000-0000-000000000101',
+    '50000000-0000-0000-0000-000000000101',
+    '30000000-0000-0000-0000-000000000001',
+    '60000000-0000-0000-0000-000000000104',
+    'teaching.enrollments.create'
+  ) THEN
+    RAISE EXCEPTION 'target-scope owner could not enroll a student without prior enrollment';
+  END IF;
+END;
+$$;
+RESET ROLE;
+
 SET ROLE authenticated;
 SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
@@ -597,6 +654,15 @@ DECLARE student_page jsonb;
   source_workspace jsonb;
   makeup_count integer;
 BEGIN
+  IF public.can_access_enrollment_scope(
+    '20000000-0000-0000-0000-000000000101',
+    '50000000-0000-0000-0000-000000000101',
+    '30000000-0000-0000-0000-000000000001',
+    '60000000-0000-0000-0000-000000000104',
+    'teaching.enrollments.create'
+  ) THEN
+    RAISE EXCEPTION 'target student-read permission without target enrollment-create permission was accepted';
+  END IF;
   student_page := public.get_students_overview(10, 0, 'Migration Visibility', 'name');
   IF (student_page->>'total')::integer <> 1
      OR student_page->'items'->0->>'name' <> 'Migration Visibility Classroom' THEN
@@ -759,3 +825,36 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- Execute the effective teaching-role RPC for a historical date. This catches
+-- ambiguity between RETURNS TABLE output names and columns inside its CTEs.
+INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, effective_to, status)
+SELECT '00000000-0000-0000-0000-000000000003', role.id, 'classroom',
+       '30000000-0000-0000-0000-000000000001', DATE '2025-07-05', DATE '2025-07-05', 'active'
+FROM public.roles role
+WHERE role.code = 'integration_classroom_student_reader' AND role.domain = 'teaching'
+ON CONFLICT DO NOTHING;
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+DO $$
+DECLARE effective_role_count integer;
+BEGIN
+  SELECT count(*) INTO effective_role_count
+  FROM public.get_effective_teaching_roles(
+    '00000000-0000-0000-0000-000000000003',
+    'class_session',
+    '60000000-0000-0000-0000-000000000104',
+    DATE '2025-07-05'
+  ) effective_role
+  WHERE effective_role.code = 'integration_classroom_student_reader'
+    AND effective_role.source_type = 'direct'
+    AND effective_role.source_scope_type = 'classroom'
+    AND effective_role.source_scope_id = '30000000-0000-0000-0000-000000000001';
+  IF effective_role_count <> 1 THEN
+    RAISE EXCEPTION 'effective teaching-role RPC did not return the historical classroom assignment';
+  END IF;
+END;
+$$;
+RESET ROLE;

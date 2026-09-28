@@ -351,11 +351,12 @@ export class TeacherService {
         sessionId: string,
         teachers: { teacher_id: string, role_id: string, effective_from: string, effective_to?: string | null }[]
     ): Promise<void> {
+        if (getApiV1Mode() === 'v1') {
+            await apiV1Client.put('/class-sessions/' + encodeURIComponent(sessionId) + '/teachers', { teachers })
+            return
+        }
         await this.clearSessionTeachers(sessionId)
-
-        if (teachers.length === 0) return
-
-        await this.assignTeachersToSession(sessionId, teachers)
+        if (teachers.length) await this.assignTeachersToSession(sessionId, teachers)
     }
 
     static async assignTeachersToSession(

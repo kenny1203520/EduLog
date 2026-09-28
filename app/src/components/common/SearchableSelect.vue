@@ -57,6 +57,17 @@ const selectedLabel = computed(() => {
     }
 })
 
+const selectedTitle = computed(() => {
+    const optionText = (option?: Option) => option ? [option.label, option.description].filter(Boolean).join(' — ') : ''
+    if (props.multiple) {
+        if (!Array.isArray(props.modelValue)) return ''
+        return props.modelValue.map((value: any) => optionText(props.options.find(option => option.value === value))).filter(Boolean).join(', ')
+    }
+    const option = props.options.find(item => item.value === props.modelValue)
+        ?? (selectedOptionCache.value?.value === props.modelValue ? selectedOptionCache.value : null)
+    return optionText(option ?? undefined)
+})
+
 const filteredOptions = computed(() => {
     if (props.remoteSearch) return props.options
     if (!searchQuery.value) return props.options
@@ -165,6 +176,7 @@ onUnmounted(() => {
         <!-- Trigger/Input -->
         <button ref="triggerRef" type="button" role="button" :disabled="disabled" @click="openDropdown" @keydown="onTriggerKeydown"
             :aria-disabled="disabled" :aria-haspopup="'listbox'" :aria-expanded="isOpen" :aria-label="ariaLabel || undefined"
+            :title="selectedTitle || placeholder || $t('common.select_placeholder')"
             class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus-within:ring-2 focus-within:ring-emerald-500 cursor-pointer flex items-center justify-between"
             :class="[fontSizeClass, disabled ? 'cursor-not-allowed bg-gray-100 opacity-60' : '']">
             <span class="truncate w-full text-left" :class="!selectedLabel ? 'text-gray-400' : 'text-gray-700'">{{ selectedLabel || (placeholder || $t('common.select_placeholder')) }}</span>
@@ -182,7 +194,7 @@ onUnmounted(() => {
                 class="w-full border-b border-gray-100 px-3 py-2 outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500"
                 :placeholder="placeholder || $t('common.select_placeholder')" :aria-label="ariaLabel || placeholder || $t('common.select_placeholder')" @keydown="onSearchKeydown" />
             <ul :id="listId" role="listbox" :aria-multiselectable="multiple" class="max-h-60 overflow-y-auto py-1">
-                <li v-for="(opt, index) in filteredOptions" :id="`${listId}-option-${index}`" :key="opt.value" role="option" :aria-selected="isSelected(opt)" @mouseenter="activeIndex = index" @click.stop="selectOption(opt)"
+                <li v-for="(opt, index) in filteredOptions" :id="`${listId}-option-${index}`" :key="opt.value" role="option" :aria-selected="isSelected(opt)" :title="[opt.label, opt.description].filter(Boolean).join(' — ')" @mouseenter="activeIndex = index" @click.stop="selectOption(opt)"
                     class="flex cursor-pointer items-center justify-between px-3 py-2 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
                     :class="[isSelected(opt) || activeIndex === index ? 'bg-emerald-50 text-emerald-700' : '', fontSizeClass]">
                     <span class="min-w-0 truncate">{{ opt.label }}<span v-if="opt.description" class="ml-2 text-xs text-gray-400">{{ opt.description }}</span></span>

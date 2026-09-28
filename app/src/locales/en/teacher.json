@@ -97,7 +97,7 @@
     "description": "Choose which profile keeps each field before linking or separating this teacher from an account.",
     "target_account": "Target system account",
     "search_account": "Search by name or email",
-    "search_hint": "Enter at least two characters to search accounts.",
+    "search_hint": "Enter a name or email to search accounts.",
     "no_accounts": "No matching accounts found.",
     "search_failed": "Could not search accounts.",
     "load_failed": "Could not load profile data.",

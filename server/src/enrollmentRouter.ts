@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
-import { requireAuthorizationDecision } from './authorization.js'
+import { requireAuthorizationDecision, requireAuthorizationRpcDecision } from './authorization.js'
 
 const fields = 'id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,user_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name,address),class_sessions(id,name,day_of_week,start_time,end_time,capacity,time_zone,session_type,schedule_mode,class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)),students(name)'
 const mutable = ['student_id', 'course_id', 'classroom_id', 'class_session_id', 'status', 'start_date', 'lesson_number', 'external_link', 'time_zone', 'koding_admission_id'] as const
@@ -62,31 +62,33 @@ async function authorizeScope(req: Request, action: 'create' | 'update', input: 
   if (teachingIds.size !== 1) throw new ApiError(422, 'TEACHING_SCOPE_REQUIRED', 'Enrollment references must resolve to one teaching')
   setAuditContext(req, { domain: 'teaching', resource: 'enrollments', action, permission: `teaching.enrollments.${action}`, teachingId: [...teachingIds][0] })
   if (!studentId) throw new ApiError(422, 'STUDENT_REQUIRED', 'student_id is required')
-  const scoped = await req.db.rpc('can_access_enrollment_scope', {
+  if (action === 'create') {
+    const studentRead = req.db.rpc('has_teaching_permission', {
+      p_user_id: req.user.id,
+      p_permission_key: 'teaching.students.read',
+      p_teaching_id: [...teachingIds][0],
+      p_classroom_id: classroomId ?? session?.classroom_id ?? null,
+      p_class_session_id: sessionId ?? null,
+    })
+    await requireAuthorizationRpcDecision(req, studentRead, {
+      permission: 'teaching.students.read',
+      stage: 'enrollment_student_read_permission',
+      message: 'You do not have permission to read students in this scope',
+      teachingId: [...teachingIds][0],
+      scopeId: sessionId ?? classroomId ?? null,
+      scopeType: sessionId ? 'class_session' : classroomId ? 'classroom' : 'teaching',
+    })
+  }
+  const scoped = req.db.rpc('can_access_enrollment_scope', {
     p_student_id: studentId,
     p_course_id: courseId ?? null,
     p_classroom_id: classroomId ?? session?.classroom_id ?? null,
     p_class_session_id: sessionId ?? null,
     p_permission_key: 'teaching.enrollments.' + action,
   })
-  requireAuthorizationDecision(req, scoped, {
+  await requireAuthorizationRpcDecision(req, scoped, {
     permission: `teaching.enrollments.${action}`,
     stage: 'enrollment_student_and_teaching_scope',
-    message: 'You do not have permission to modify enrollments',
-    teachingId: [...teachingIds][0],
-    scopeId: sessionId ?? classroomId ?? courseId ?? null,
-    scopeType: sessionId ? 'class_session' : classroomId ? 'classroom' : 'teaching',
-  })
-  const result = await req.db.rpc('has_teaching_permission', {
-    p_user_id: req.user.id,
-    p_permission_key: 'teaching.enrollments.' + action,
-    p_teaching_id: [...teachingIds][0],
-    p_classroom_id: classroomId ?? session?.classroom_id ?? null,
-    p_class_session_id: sessionId ?? null,
-  })
-  requireAuthorizationDecision(req, result, {
-    permission: `teaching.enrollments.${action}`,
-    stage: 'enrollment_teaching_permission',
     message: 'You do not have permission to modify enrollments',
     teachingId: [...teachingIds][0],
     scopeId: sessionId ?? classroomId ?? null,
@@ -104,25 +106,39 @@ async function align(req: Request, input: Record<string, unknown>, existing?: Re
   if (!Array.isArray(result.data.course_ids) || !result.data.course_ids.includes(courseId)) throw new ApiError(422, 'SESSION_COURSE_MISMATCH', 'The selected course is not scheduled for this class session')
   return { ...input, classroom_id: result.data.classroom_id ?? null }
 }
-async function provisionExistingReports(req: Request, enrollmentId: string, targetCount?: number) {
+async function provisionExistingReports(req: Request, enrollment: { id: string; class_session_id: string | null; start_date: string | null }, targetCount?: number) {
   if (!targetCount || targetCount <= 0) return
-  const enrollment = await req.db!.from('enrollments').select('class_session_id,start_date').eq('id', enrollmentId).maybeSingle()
-  if (enrollment.error || !enrollment.data?.class_session_id) return
-  const startDate = enrollment.data.start_date ?? new Date().toISOString().slice(0, 10)
-  const occurrences = await req.db!.from('class_occurrences').select('id').eq('class_session_id', enrollment.data.class_session_id).gte('occurrence_date', startDate).order('occurrence_date', { ascending: true }).limit(targetCount)
-  if (occurrences.error || !occurrences.data?.length) return
-  const ids = occurrences.data.map((row) => row.id)
-  for (const occurrence of occurrences.data) {
+  if (!enrollment.class_session_id) return
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The enrollment service is unavailable')
+  setAuditContext(req, { authorizationStage: 'enrollment_report_provisioning', authorizationResult: 'allowed' })
+  const startDate = enrollment.start_date ?? new Date().toISOString().slice(0, 10)
+  const occurrences = await req.adminDb.from('class_occurrences').select('id').eq('class_session_id', enrollment.class_session_id).gte('occurrence_date', startDate).order('occurrence_date', { ascending: true }).limit(targetCount)
+  if (occurrences.error) {
+    req.log.warn({ event: 'enrollment_occurrence_lookup_failed', database_error_code: occurrences.error.code ?? 'UNKNOWN' }, 'enrollment_occurrence_lookup_failed')
+    throw mapDatabaseError(occurrences.error)
+  }
+  for (const occurrence of occurrences.data ?? []) {
     const provision = await req.db!.rpc('provision_occurrence_reports', { p_occurrence_id: occurrence.id })
-    if (provision.error) throw mapDatabaseError(provision.error)
+    if (provision.error) {
+      req.log.warn({ event: 'enrollment_report_provisioning_failed', database_error_code: provision.error.code ?? 'UNKNOWN' }, 'enrollment_report_provisioning_failed')
+      throw mapDatabaseError(provision.error)
+    }
   }
 }
 async function create(req: Request, res: Response) {
-  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (!req.db || !req.adminDb || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const input = enrollmentCreateSchema.parse(req.body); const aligned = await align(req, pick(input)); await authorizeScope(req, 'create', aligned); const replay = await idempotency(req, 201, null); if (replay) return res.status(replay.status).json(replay.body)
   const payload = { ...aligned, user_id: req.user.id, status: input.status ?? 'regular', time_zone: input.time_zone ?? 'Asia/Taipei' }
-  const result = await req.db.from('enrollments').insert(payload).select(fields).single(); if (result.error) throw mapDatabaseError(result.error)
-  await provisionExistingReports(req, result.data.id, input.target_report_count)
+  // Explicit permission checks above authorize this exact student and target
+  // scope. Return only the inserted row through the server client so creation
+  // does not also require the separate enrollment read/list policy.
+  setAuditContext(req, { authorizationStage: 'enrollment_create_write', authorizationResult: 'allowed' })
+  const result = await req.adminDb.from('enrollments').insert(payload).select(fields).single()
+  if (result.error) {
+    req.log.warn({ event: 'enrollment_create_write_failed', database_error_code: result.error.code ?? 'UNKNOWN' }, 'enrollment_create_write_failed')
+    throw mapDatabaseError(result.error)
+  }
+  await provisionExistingReports(req, result.data, input.target_report_count)
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, envelope); return res.status(201).json(envelope)
 }
 async function update(req: Request, res: Response) {
@@ -131,7 +147,7 @@ async function update(req: Request, res: Response) {
   const input = enrollmentBodySchema.parse(req.body); const previous = await req.db.from('enrollments').select('id,status,student_id,course_id,classroom_id,class_session_id').eq('id', id).maybeSingle(); if (previous.error) throw mapDatabaseError(previous.error); if (!previous.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   await authorizeExisting(req, 'update', id); const aligned = await align(req, pick(input), previous.data); await authorizeScope(req, 'update', aligned, previous.data); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db.from('enrollments').update(aligned).eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
-  if (input.status === 'regular' && previous.data.status !== 'regular') await provisionExistingReports(req, id, input.target_total_reports)
+  if (input.status === 'regular' && previous.data.status !== 'regular') await provisionExistingReports(req, result.data, input.target_total_reports)
   if (input.status === 'dropped' && previous.data.status !== 'dropped') {
     const pending = await req.db.from('occurrence_reports').select('id,content,class_notes,contact_notes,progress_letter,lesson_id').eq('enrollment_id', id).eq('is_completed', false).eq('attendance_status', 'pending'); if (pending.error) throw mapDatabaseError(pending.error)
     const deletable = (pending.data ?? []).filter((row) => !row.lesson_id && [row.content, row.class_notes, row.contact_notes, row.progress_letter].every((value) => !value?.trim())).map((row) => row.id)

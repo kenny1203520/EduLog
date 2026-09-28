@@ -76,4 +76,20 @@ describe('SearchableSelect', () => {
         await wrapper.find('input').trigger('keydown', { key: 'Escape' })
         expect(wrapper.find('[role="listbox"]').exists()).toBe(false)
     })
+
+    it('exposes full selected and option text through native hover titles', async () => {
+        const wrapper = mount(SearchableSelect, {
+            props: {
+                modelValue: 'long-option',
+                options: [{ value: 'long-option', label: 'A long classroom name', description: 'Full schedule details' }]
+            },
+            global: { mocks: { $t: (key: string) => key } }
+        })
+
+        const trigger = wrapper.find('button[aria-haspopup="listbox"]')
+        expect(trigger.attributes('title')).toBe('A long classroom name — Full schedule details')
+        await trigger.trigger('click')
+        expect(wrapper.find('[role="option"]').attributes('title')).toBe('A long classroom name — Full schedule details')
+        wrapper.unmount()
+    })
 })

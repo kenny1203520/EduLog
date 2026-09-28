@@ -21,7 +21,7 @@ declare global {
         permission?: string | null
         errorCode?: string | null
         authorizationStage?: string | null
-        authorizationResult?: 'denied' | 'rpc_error' | null
+        authorizationResult?: 'allowed' | 'denied' | 'rpc_error' | 'check_failed' | null
       }
       user?: { id: string; email?: string; role?: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }
       accessToken?: string

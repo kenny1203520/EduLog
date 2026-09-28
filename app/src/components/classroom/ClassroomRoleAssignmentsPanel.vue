@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
 import type { RoleDTO } from '@/models/Rbac'
 import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
 import { ClassroomRoleAssignmentService, type ClassroomRoleAssignmentDTO } from '@/services/rbac/ClassroomRoleAssignmentService'
@@ -99,7 +100,7 @@ function clearForm() {
 
 function openCreateForm() {
     clearForm()
-    selectedRoleId.value = roleOptions.value[0]?.value ?? ''
+    selectedRoleId.value = roles.value.find(role => role.code === 'teacher')?.id ?? ''
     isFormOpen.value = true
 }
 
@@ -126,7 +127,7 @@ function searchAccounts(query: string) {
     const normalized = query.trim()
     userSearchQuery.value = normalized
     userSearchError.value = false
-    if (normalized.length < 2) {
+    if (!normalized) {
         userOptions.value = []
         userSearchLoading.value = false
         return
@@ -279,7 +280,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="min-w-0 space-y-2">
                     <span class="text-sm font-bold text-gray-700">{{ t('classroom.role_assignments.account') }}</span>
-                    <SearchableSelect v-model="selectedUserId" :options="userOptions.map(user => ({ value: user.id, label: userLabel(user), searchText: `${user.email} ${user.display_name ?? ''}` }))" remote-search :loading="userSearchLoading" :no-results-text="userSearchQuery.length < 2 ? t('classroom.role_assignments.user_search_hint') : userSearchError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" @search="searchAccounts" />
+                    <SearchableSelect v-model="selectedUserId" :options="userOptions.map(user => ({ value: user.id, label: userLabel(user), searchText: `${user.email} ${user.display_name ?? ''}` }))" remote-search :loading="userSearchLoading" :no-results-text="!userSearchQuery ? t('classroom.role_assignments.user_search_hint') : userSearchError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" @search="searchAccounts" />
                     <span class="block text-xs leading-5 text-gray-500">{{ t('classroom.role_assignments.account_search_hint') }}</span>
                 </label>
                 <label class="min-w-0 space-y-2">
@@ -295,6 +296,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                     <input v-model="effectiveTo" type="date" class="min-h-11 w-full rounded-xl border-gray-300 focus:border-emerald-600 focus:ring-emerald-600">
                 </label>
             </div>
+            <EffectiveTeachingRoles v-if="selectedUserId && classroomId" :user-id="selectedUserId" scope-type="classroom" :scope-id="classroomId" />
             <p v-if="formError" role="alert" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{{ formError }}</p>
             <div class="flex flex-col-reverse justify-end gap-2 sm:flex-row">
                 <button type="button" class="min-h-11 rounded-xl px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400" :disabled="saving" @click="clearForm">{{ t('common.cancel') }}</button>
