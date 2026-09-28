@@ -106,25 +106,39 @@ async function align(req: Request, input: Record<string, unknown>, existing?: Re
   if (!Array.isArray(result.data.course_ids) || !result.data.course_ids.includes(courseId)) throw new ApiError(422, 'SESSION_COURSE_MISMATCH', 'The selected course is not scheduled for this class session')
   return { ...input, classroom_id: result.data.classroom_id ?? null }
 }
-async function provisionExistingReports(req: Request, enrollmentId: string, targetCount?: number) {
+async function provisionExistingReports(req: Request, enrollment: { id: string; class_session_id: string | null; start_date: string | null }, targetCount?: number) {
   if (!targetCount || targetCount <= 0) return
-  const enrollment = await req.db!.from('enrollments').select('class_session_id,start_date').eq('id', enrollmentId).maybeSingle()
-  if (enrollment.error || !enrollment.data?.class_session_id) return
-  const startDate = enrollment.data.start_date ?? new Date().toISOString().slice(0, 10)
-  const occurrences = await req.db!.from('class_occurrences').select('id').eq('class_session_id', enrollment.data.class_session_id).gte('occurrence_date', startDate).order('occurrence_date', { ascending: true }).limit(targetCount)
-  if (occurrences.error || !occurrences.data?.length) return
-  const ids = occurrences.data.map((row) => row.id)
-  for (const occurrence of occurrences.data) {
+  if (!enrollment.class_session_id) return
+  if (!req.adminDb) throw new ApiError(503, 'RESOURCE_SERVICE_UNAVAILABLE', 'The enrollment service is unavailable')
+  setAuditContext(req, { authorizationStage: 'enrollment_report_provisioning', authorizationResult: 'allowed' })
+  const startDate = enrollment.start_date ?? new Date().toISOString().slice(0, 10)
+  const occurrences = await req.adminDb.from('class_occurrences').select('id').eq('class_session_id', enrollment.class_session_id).gte('occurrence_date', startDate).order('occurrence_date', { ascending: true }).limit(targetCount)
+  if (occurrences.error) {
+    req.log.warn({ event: 'enrollment_occurrence_lookup_failed', database_error_code: occurrences.error.code ?? 'UNKNOWN' }, 'enrollment_occurrence_lookup_failed')
+    throw mapDatabaseError(occurrences.error)
+  }
+  for (const occurrence of occurrences.data ?? []) {
     const provision = await req.db!.rpc('provision_occurrence_reports', { p_occurrence_id: occurrence.id })
-    if (provision.error) throw mapDatabaseError(provision.error)
+    if (provision.error) {
+      req.log.warn({ event: 'enrollment_report_provisioning_failed', database_error_code: provision.error.code ?? 'UNKNOWN' }, 'enrollment_report_provisioning_failed')
+      throw mapDatabaseError(provision.error)
+    }
   }
 }
 async function create(req: Request, res: Response) {
-  if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
+  if (!req.db || !req.adminDb || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const input = enrollmentCreateSchema.parse(req.body); const aligned = await align(req, pick(input)); await authorizeScope(req, 'create', aligned); const replay = await idempotency(req, 201, null); if (replay) return res.status(replay.status).json(replay.body)
   const payload = { ...aligned, user_id: req.user.id, status: input.status ?? 'regular', time_zone: input.time_zone ?? 'Asia/Taipei' }
-  const result = await req.db.from('enrollments').insert(payload).select(fields).single(); if (result.error) throw mapDatabaseError(result.error)
-  await provisionExistingReports(req, result.data.id, input.target_report_count)
+  // Explicit permission checks above authorize this exact student and target
+  // scope. Return only the inserted row through the server client so creation
+  // does not also require the separate enrollment read/list policy.
+  setAuditContext(req, { authorizationStage: 'enrollment_create_write', authorizationResult: 'allowed' })
+  const result = await req.adminDb.from('enrollments').insert(payload).select(fields).single()
+  if (result.error) {
+    req.log.warn({ event: 'enrollment_create_write_failed', database_error_code: result.error.code ?? 'UNKNOWN' }, 'enrollment_create_write_failed')
+    throw mapDatabaseError(result.error)
+  }
+  await provisionExistingReports(req, result.data, input.target_report_count)
   const envelope = { data: result.data, meta: {}, request_id: req.requestId, trace_id: req.traceId }; await complete(req, 201, envelope); return res.status(201).json(envelope)
 }
 async function update(req: Request, res: Response) {
@@ -133,7 +147,7 @@ async function update(req: Request, res: Response) {
   const input = enrollmentBodySchema.parse(req.body); const previous = await req.db.from('enrollments').select('id,status,student_id,course_id,classroom_id,class_session_id').eq('id', id).maybeSingle(); if (previous.error) throw mapDatabaseError(previous.error); if (!previous.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   await authorizeExisting(req, 'update', id); const aligned = await align(req, pick(input), previous.data); await authorizeScope(req, 'update', aligned, previous.data); const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db.from('enrollments').update(aligned).eq('id', id).select(fields).maybeSingle(); if (result.error) throw mapDatabaseError(result.error); if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
-  if (input.status === 'regular' && previous.data.status !== 'regular') await provisionExistingReports(req, id, input.target_total_reports)
+  if (input.status === 'regular' && previous.data.status !== 'regular') await provisionExistingReports(req, result.data, input.target_total_reports)
   if (input.status === 'dropped' && previous.data.status !== 'dropped') {
     const pending = await req.db.from('occurrence_reports').select('id,content,class_notes,contact_notes,progress_letter,lesson_id').eq('enrollment_id', id).eq('is_completed', false).eq('attendance_status', 'pending'); if (pending.error) throw mapDatabaseError(pending.error)
     const deletable = (pending.data ?? []).filter((row) => !row.lesson_id && [row.content, row.class_notes, row.contact_notes, row.progress_letter].every((value) => !value?.trim())).map((row) => row.id)

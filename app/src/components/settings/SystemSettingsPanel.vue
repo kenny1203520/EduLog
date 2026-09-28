@@ -119,7 +119,7 @@ function searchUsers(query: string) {
     if (searchTimer) clearTimeout(searchTimer)
     const sequence = ++searchSequence
     userQuery.value = query.trim()
-    if (userQuery.value.length < 2) { users.value = []; userLoading.value = false; return }
+    if (!userQuery.value) { users.value = []; userLoading.value = false; return }
     userLoading.value = true
     searchTimer = setTimeout(async () => {
         try {
@@ -244,7 +244,7 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
             <div v-if="activeSection === 'assignments'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                 <h3 class="mb-4 font-black">{{ t('rbac.system_ui.role_assignments') }}</h3>
                 <div class="grid gap-3">
-                    <SearchableSelect :model-value="selectedUserId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.user_search')" :no-results-text="userQuery.length < 2 ? t('rbac.system_ui.user_search_hint') : t('rbac.system_ui.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
+                    <SearchableSelect :model-value="selectedUserId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.user_search')" :no-results-text="!userQuery ? t('rbac.system_ui.user_search_hint') : t('rbac.system_ui.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
                     <SearchableSelect v-model="selectedRoleId" :options="roleOptions" :placeholder="t('rbac.system_ui.select_system_role')" :aria-label="t('rbac.system_ui.system_role_search')" :disabled="assignmentLoading || loading" />
                     <div class="grid gap-3 sm:grid-cols-2">
                         <label class="space-y-1 text-xs font-bold text-gray-500"><span>{{ t('rbac.system_ui.effective_from') }}</span><input v-model="effectiveFrom" type="date" required class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800" /></label>
@@ -267,7 +267,7 @@ watch(assignmentPageSize, () => { assignmentPage.value = 1; void loadAssignments
 
             <div v-if="activeSection === 'users'" class="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm">
                 <h3 class="mb-4 font-black">{{ t('rbac.system_ui.account_status') }}</h3>
-                <SearchableSelect :model-value="selectedUserId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.status_user')" :no-results-text="userQuery.length < 2 ? t('rbac.system_ui.user_search_hint') : t('rbac.system_ui.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
+                <SearchableSelect :model-value="selectedUserId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('rbac.system_ui.select_user')" :aria-label="t('rbac.system_ui.status_user')" :no-results-text="!userQuery ? t('rbac.system_ui.user_search_hint') : t('rbac.system_ui.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
                 <section v-if="selectedUser" class="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4" :aria-busy="saving">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0"><h4 class="font-black text-gray-900">{{ selectedUser.display_name?.trim() || selectedUser.email }}</h4><p class="text-sm text-gray-600">{{ selectedUser.email }}</p></div>

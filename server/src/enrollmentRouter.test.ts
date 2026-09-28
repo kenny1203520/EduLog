@@ -23,5 +23,16 @@ describe('enrollment API contract', () => {
     expect(source).toContain("classroom_id: result.data.classroom_id ?? null")
     expect(source).toContain('idempotency(req')
   })
+
+  it('returns a created enrollment without requiring the separate read/list policy', () => {
+    const source = readFileSync(new URL('./enrollmentRouter.ts', import.meta.url), 'utf8')
+    const authorization = source.indexOf("await authorizeScope(req, 'create', aligned)")
+    const privilegedInsert = source.indexOf("req.adminDb.from('enrollments').insert(payload).select(fields).single()")
+    expect(authorization).toBeGreaterThanOrEqual(0)
+    expect(privilegedInsert).toBeGreaterThan(authorization)
+    expect(source).toContain("authorizationStage: 'enrollment_create_write'")
+    expect(source).toContain("event: 'enrollment_create_write_failed'")
+    expect(source).not.toContain("req.db.from('enrollments').insert(payload).select(fields).single()")
+  })
 })
 

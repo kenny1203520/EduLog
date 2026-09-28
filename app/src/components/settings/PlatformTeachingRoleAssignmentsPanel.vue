@@ -47,6 +47,7 @@ const rolesLoadError = ref(false)
 const saving = ref(false)
 const scopeType = ref<Scope>('classroom')
 const classroomId = ref('')
+const filterClassroomId = ref('')
 const sessionId = ref('')
 const userId = ref('')
 const roleId = ref('')
@@ -81,7 +82,9 @@ const userOptions = computed(() => users.value.map(user => ({
     searchText: `${user.display_name ?? ''} ${user.email}`
 })))
 const classroomOptions = computed(() => classrooms.value.map(room => ({ value: room.id, label: room.name, searchText: room.name })))
-const sessionOptions = computed(() => sessions.value.map(session => {
+const sessionFilterOptions = computed(() => [{ value: '', label: t('rbac.platform_teaching_assignments.all_classrooms') }, ...classroomOptions.value])
+const filteredSessions = computed(() => sessions.value.filter(session => !filterClassroomId.value || session.classroom_id === filterClassroomId.value))
+const sessionOptions = computed(() => filteredSessions.value.map(session => {
     const room = classrooms.value.find(item => item.id === session.classroom_id)
     return { value: session.id, label: session.name, description: room?.name, searchText: `${session.name} ${room?.name ?? ''}` }
 }))
@@ -233,7 +236,7 @@ function searchUsers(query: string) {
     const sequence = ++requestSequence
     userQuery.value = query.trim()
     userError.value = false
-    if (userQuery.value.length < 2) { users.value = []; userLoading.value = false; return }
+    if (!userQuery.value) { users.value = []; userLoading.value = false; return }
     userLoading.value = true
     searchTimer = setTimeout(async () => {
         try {
@@ -303,6 +306,9 @@ watch([scopeType, classroomId, sessionId], async () => {
     void loadRolesForScope()
     void loadAssignments()
 }, { flush: 'sync' })
+watch(filterClassroomId, () => {
+    if (sessionId.value && !filteredSessions.value.some(session => session.id === sessionId.value)) sessionId.value = ''
+})
 watch(userId, () => {
     rootPage.value = 1; localPage.value = 1; exclusionPage.value = 1
     void loadAssignments()
@@ -328,7 +334,7 @@ onMounted(load)
                 </div>
                 <p class="mt-1 text-sm text-gray-600">{{ t('rbac.platform_teaching_assignments.root_hint') }}</p>
                 <div v-if="rootCanManage" class="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto]">
-                    <SearchableSelect :model-value="userId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" :no-results-text="userQuery.length < 2 ? t('classroom.role_assignments.user_search_hint') : userError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
+                    <SearchableSelect :model-value="userId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" :no-results-text="!userQuery ? t('classroom.role_assignments.user_search_hint') : userError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
                     <SearchableSelect v-model="roleId" :options="roleOptions" :placeholder="t('classroom.role_assignments.select_role')" :aria-label="t('classroom.role_assignments.role')" :disabled="rootLoading || rolesLoading || !userId" />
                     <button type="button" class="min-h-11 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40" :disabled="saving || rootLoading || rolesLoading || !userId || !roleId || !rootCanListUsers" @click="mutateAssignment('root')">{{ saving ? t('common.saving') : t('rbac.platform_teaching_assignments.grant_root') }}</button>
                     <label class="space-y-1 text-xs font-bold text-gray-500"><span>{{ t('classroom.role_assignments.effective_from') }}</span><input v-model="effectiveFrom" type="date" :disabled="!userId" class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 disabled:cursor-not-allowed disabled:bg-gray-100" /></label>
@@ -356,12 +362,15 @@ onMounted(load)
                     <div class="flex flex-wrap gap-2">
                         <select v-model="scopeType" class="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-bold"><option value="classroom">{{ t('rbac.scope.classroom') }}</option><option value="class_session">{{ t('rbac.scope.class_session') }}</option></select>
                         <div v-if="scopeType === 'classroom'" class="w-full sm:w-64"><SearchableSelect v-model="classroomId" :options="classroomOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.classroom')" /></div>
-                        <div v-else class="w-full sm:w-64"><SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.class_session')" /></div>
+                        <template v-else>
+                            <div class="w-full sm:w-64"><SearchableSelect v-model="filterClassroomId" :options="sessionFilterOptions" :placeholder="t('rbac.platform_teaching_assignments.all_classrooms')" :aria-label="t('rbac.platform_teaching_assignments.classroom_filter')" /></div>
+                            <div class="w-full sm:w-64"><SearchableSelect v-model="sessionId" :options="sessionOptions" :placeholder="t('common.select_placeholder')" :aria-label="t('rbac.scope.class_session')" /></div>
+                        </template>
                     </div>
                 </div>
                 <p v-if="scopeReady && !localCanManage" class="mt-4 text-sm text-gray-500">{{ t('rbac.platform_teaching_assignments.read_only') }}</p>
                 <div v-if="scopeReady && localCanManage" class="mt-4 grid gap-3 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,1fr)_auto]">
-                    <SearchableSelect :model-value="userId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" :no-results-text="userQuery.length < 2 ? t('classroom.role_assignments.user_search_hint') : userError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
+                    <SearchableSelect :model-value="userId" :options="userOptions" remote-search :loading="userLoading" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" :no-results-text="!userQuery ? t('classroom.role_assignments.user_search_hint') : userError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" @search="searchUsers" @update:model-value="onUserSelected" />
                     <SearchableSelect v-model="roleId" :options="roleOptions" :placeholder="t('classroom.role_assignments.select_role')" :aria-label="t('classroom.role_assignments.role')" :disabled="rolesLoading || localLoading || exclusionLoading || !userId" />
                     <div class="flex flex-wrap gap-2"><button type="button" class="min-h-11 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-40" :disabled="saving || localLoading || exclusionLoading || rolesLoading || !userId || !roleId || !localCanListUsers" @click="mutateAssignment('local')">{{ saving ? t('common.saving') : t('rbac.platform_teaching_assignments.regrant') }}</button><button type="button" class="min-h-11 rounded-xl border border-amber-300 px-3 py-2 text-xs font-black text-amber-800 disabled:opacity-40" :disabled="saving || localLoading || exclusionLoading || rolesLoading || !userId || !roleId || !localCanListUsers" @click="excludeRole">{{ saving ? t('common.saving') : t('rbac.platform_teaching_assignments.exclude') }}</button></div>
                 </div>

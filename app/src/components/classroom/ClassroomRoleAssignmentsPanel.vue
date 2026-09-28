@@ -127,7 +127,7 @@ function searchAccounts(query: string) {
     const normalized = query.trim()
     userSearchQuery.value = normalized
     userSearchError.value = false
-    if (normalized.length < 2) {
+    if (!normalized) {
         userOptions.value = []
         userSearchLoading.value = false
         return
@@ -280,7 +280,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
             <div class="grid gap-4 sm:grid-cols-2">
                 <label class="min-w-0 space-y-2">
                     <span class="text-sm font-bold text-gray-700">{{ t('classroom.role_assignments.account') }}</span>
-                    <SearchableSelect v-model="selectedUserId" :options="userOptions.map(user => ({ value: user.id, label: userLabel(user), searchText: `${user.email} ${user.display_name ?? ''}` }))" remote-search :loading="userSearchLoading" :no-results-text="userSearchQuery.length < 2 ? t('classroom.role_assignments.user_search_hint') : userSearchError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" @search="searchAccounts" />
+                    <SearchableSelect v-model="selectedUserId" :options="userOptions.map(user => ({ value: user.id, label: userLabel(user), searchText: `${user.email} ${user.display_name ?? ''}` }))" remote-search :loading="userSearchLoading" :no-results-text="!userSearchQuery ? t('classroom.role_assignments.user_search_hint') : userSearchError ? t('classroom.role_assignments.user_search_failed') : t('classroom.role_assignments.no_users_found')" :loading-text="t('common.loading')" :placeholder="t('classroom.role_assignments.search_account')" :aria-label="t('classroom.role_assignments.account')" @search="searchAccounts" />
                     <span class="block text-xs leading-5 text-gray-500">{{ t('classroom.role_assignments.account_search_hint') }}</span>
                 </label>
                 <label class="min-w-0 space-y-2">
