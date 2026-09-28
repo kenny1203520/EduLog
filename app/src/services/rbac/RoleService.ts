@@ -2,6 +2,19 @@ import type { PermissionDTO, RoleDTO, RolePermissionMatrixRow, RbacDomain, Polic
 import { apiResourceClient } from '@/services/api/ApiResourceClient'
 import { apiV1Client } from '@/services/api/ApiV1Client'
 
+export interface EffectiveTeachingRoleDTO {
+    role_id: string
+    code: string | null
+    name: string
+    source_type: 'direct' | 'teaching_assignment' | 'exclusion'
+    source_scope_type: 'system' | 'classroom' | 'class_session'
+    source_scope_id: string | null
+    effective_from: string
+    effective_to: string | null
+    is_excluded: boolean
+    is_inherited: boolean
+}
+
 export class RoleService {
     static async getCapabilities(): Promise<{ epoch: number; system?: Record<string, boolean>; teaching?: Record<string, boolean> }> {
         const data = (await apiV1Client.get<{ epoch?: number; system?: Record<string, boolean>; teaching?: Record<string, boolean> }>('/rbac/capabilities')).data
@@ -21,6 +34,12 @@ export class RoleService {
         const params = new URLSearchParams({ domain: options.domain ?? 'teaching', limit: '100', offset: '0', sort: 'sort_order', scope_type: options.scopeType })
         if (options.scopeId) params.set('scope_id', options.scopeId)
         return (await apiV1Client.get<RoleDTO[]>(`/roles?${params}`)).data ?? []
+    }
+    static async getEffectiveTeachingRoles(options: { userId: string; scopeType: PolicyScope; scopeId?: string | null; effectiveDate?: string }): Promise<EffectiveTeachingRoleDTO[]> {
+        const params = new URLSearchParams({ user_id: options.userId, scope_type: options.scopeType })
+        if (options.scopeId) params.set('scope_id', options.scopeId)
+        if (options.effectiveDate) params.set('effective_date', options.effectiveDate)
+        return (await apiV1Client.get<EffectiveTeachingRoleDTO[]>(`/teaching-role-assignments/effective?${params}`)).data ?? []
     }
     static async createRole(name: string, options: { domain?: RbacDomain; parentRoleId?: string | null; expectedEpoch?: number } = {}): Promise<RoleDTO> {
         const normalizedName = name.trim()

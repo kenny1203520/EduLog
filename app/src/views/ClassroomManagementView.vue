@@ -26,6 +26,7 @@ import { useToast } from 'vue-toastification'
 import { useFeedback } from '@/composables/useFeedback'
 import Pagination from '@/components/common/Pagination.vue'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
+import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
 import { usePreferencesStore } from '@/stores/usePreferencesStore'
 import { DateUtils } from '@/utils/DateUtils'
 import { paginateTeacherAssignments, partitionTeacherAssignments } from '@/utils/teacherAssignmentHistory'
@@ -109,6 +110,9 @@ const classroomOverviewCounts = ref({ total: 0, visible: 0, hidden: 0 })
 const sessionOverviewCounts = ref({ total: 0, visible: 0, hidden: 0 })
 const teachersList = ref<any[]>([])
 const roles = ref<RoleDTO[]>([])
+const teacherRoleCatalog = ref<RoleDTO[]>([])
+const teacherRoleCatalogError = ref(false)
+let teacherRoleCatalogSequence = 0
 const notificationPermission = ref<PermissionDTO | null>(null)
 const notificationPolicies = ref<RolePermissionPolicyDTO[]>([])
 const roomPolicySelections = ref<RolePolicySelections>({})
@@ -290,6 +294,35 @@ async function ensureEditorDependencies() {
     if (!notificationPermission.value) await loadNotificationPolicies()
 }
 
+async function loadTeacherRoleCatalog(scopeType: 'classroom' | 'class_session', scopeId: string) {
+    const sequence = ++teacherRoleCatalogSequence
+    teacherRoleCatalog.value = []
+    teacherRoleCatalogError.value = false
+    try {
+        const catalog = await RoleService.getRolesForScope({ domain: 'teaching', scopeType, scopeId })
+        if (sequence === teacherRoleCatalogSequence) teacherRoleCatalog.value = catalog
+    } catch (error) {
+        if (sequence === teacherRoleCatalogSequence) {
+            teacherRoleCatalog.value = []
+            teacherRoleCatalogError.value = true
+        }
+        reportError(error)
+    }
+}
+
+function retryTeacherRoleCatalog() {
+    if (editingSession.value?.id) {
+        void loadTeacherRoleCatalog('class_session', editingSession.value.id)
+    } else if (newSession.value.classroom_id) {
+        void loadTeacherRoleCatalog('classroom', newSession.value.classroom_id)
+    }
+}
+
+watch(() => [isCreateSessionModalOpen.value, editingSession.value?.id, newSession.value.classroom_id] as const, ([isOpen, sessionId, classroomId]) => {
+    if (!isOpen || sessionId || !classroomId) return
+    void loadTeacherRoleCatalog('classroom', classroomId)
+}, { immediate: true })
+
 async function loadSessions() {
     const res = await AggregateService.getClassSessionsOverview(
         sessionsPagination.value.page,
@@ -449,10 +482,13 @@ const teacherOptions = computed(() => teachersList.value.map(t => ({
     value: t.id
 })))
 
-const roleOptions = computed(() => roles.value.map(role => ({
+const teacherRoleOptions = computed(() => teacherRoleCatalog.value.map(role => ({
     label: roleDisplayName(role, t),
     value: role.id
 })))
+function linkedTeacherUserId(teacherId: string) {
+    return teachersList.value.find(teacher => teacher.id === teacherId)?.user_id ?? null
+}
 
 const roomOptions = computed(() => allClassrooms.value.map(c => ({
     label: c.name + (c.address ? ` (${c.address})` : ''),
@@ -635,6 +671,7 @@ async function saveSession() {
 
 async function openEditSession(session: ClassSessionDTO) {
     await ensureEditorDependencies()
+    if (session.id) await loadTeacherRoleCatalog('class_session', session.id)
     editingSession.value = session
     currentUpcomingAssignmentsPage.value = 1
     pastAssignmentsPage.value = 1
@@ -669,6 +706,8 @@ async function openCreateSessionModal() {
     pastAssignmentsPage.value = 1
     showPastAssignments.value = false
     clearTeacherSelection()
+    teacherRoleCatalog.value = []
+    teacherRoleCatalogError.value = false
     editingSession.value = null
     sessionPolicySelections.value = Object.fromEntries(roles.value.map(role => [role.id, 'inherit'])) as RolePolicySelections
     newSession.value = {
@@ -755,7 +794,7 @@ function addTeacherAssignment() {
     currentUpcomingAssignmentsPage.value = Math.max(1, Math.ceil((currentUpcomingTeacherAssignments.value.length + 1) / teacherAssignmentsPerPage))
     selectedTeacherConfigs.value.push({
         teacher_id: '',
-        role_id: roles.value.find(role => role.code === 'teacher')?.id || roles.value[0]?.id || '',
+        role_id: teacherRoleCatalog.value.find(role => role.code === 'teacher')?.id || '',
         effective_from: newSession.value.start_date || DateUtils.todayString(newSession.value.time_zone || preferences.timeZone),
         effective_to: null
     })
@@ -1359,8 +1398,9 @@ function clearTeacherSelection() {
                                     <div class="flex-1">
                                         <label class="block text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
                                             {{ $t('classroom.teacher_role') }}</label>
-                                        <SearchableSelect v-model="entry.config.role_id" :options="roleOptions"
-                                            :placeholder="$t('classroom.teacher_role_placeholder')" />
+                                        <SearchableSelect v-model="entry.config.role_id" :options="teacherRoleOptions"
+                                            :placeholder="$t('classroom.teacher_role_placeholder')"
+                                            :disabled="teacherRoleCatalogError || !teacherRoleCatalog.length" />
                                     </div>
                                     <button @click="removeTeacherAssignment(entry.index)"
                                         class="mt-6 p-2 text-gray-400 hover:text-red-500 transition-colors">
@@ -1370,6 +1410,15 @@ function clearTeacherSelection() {
                                         </svg>
                                     </button>
                                 </div>
+                                <div v-if="teacherRoleCatalogError" role="alert" class="flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-rose-700">
+                                    <span>{{ $t('rbac.teacher_assignment_role_catalog_failed') }}</span>
+                                    <button type="button" class="min-h-11 rounded-lg px-3 underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500" @click="retryTeacherRoleCatalog">{{ $t('rbac.platform_teaching_assignments.retry') }}</button>
+                                </div>
+                                <p v-else-if="entry.config.teacher_id && !linkedTeacherUserId(entry.config.teacher_id)" role="status" class="text-xs leading-5 text-amber-700">{{ $t('rbac.teacher_assignment_unlinked') }}</p>
+                                <template v-else>
+                                    <p class="text-xs leading-5 text-slate-500">{{ $t('rbac.teacher_assignment_role_grant_notice') }}</p>
+                                    <EffectiveTeachingRoles v-if="editingSession?.id && linkedTeacherUserId(entry.config.teacher_id)" :user-id="linkedTeacherUserId(entry.config.teacher_id)" scope-type="class_session" :scope-id="editingSession.id" :effective-date="entry.config.effective_from" />
+                                </template>
                                 <div class="grid grid-cols-2 gap-3">
                                     <div>
                                         <label

@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
 import { ClassroomService } from '@/services/classroom/ClassroomService'
 import { SessionService } from '@/services/session/SessionService'
 import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
@@ -367,6 +368,7 @@ onMounted(load)
                 <p v-if="scopeReady && localCanManage && !localCanListUsers" class="mt-2 text-xs text-amber-700">{{ t('rbac.platform_teaching_assignments.directory_required') }}</p>
                 <p v-if="!userId" role="status" aria-live="polite" class="mt-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">{{ t('rbac.teaching_assignment_guidance.select_user') }}</p>
                 <p v-if="userId && selectedUser" class="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-sm text-gray-700">{{ t('rbac.platform_teaching_assignments.selected_context', { user: selectedUser.display_name?.trim() || selectedUser.email, scope: scopeLabel(scopeType) }) }}</p>
+                <EffectiveTeachingRoles v-if="scopeReady && userId" :user-id="userId" :scope-type="scopeType" :scope-id="scopeId" class="mt-4" />
                 <p v-if="rolesLoading" role="status" aria-live="polite" class="mt-3 text-sm text-gray-600">{{ t('rbac.platform_teaching_assignments.loading_scope_roles', { scope: scopeLabel(scopeType) }) }}</p>
                 <div v-else-if="rolesLoadError" role="alert" class="mt-3 flex items-center justify-between gap-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-800"><span>{{ t('rbac.platform_teaching_assignments.roles_load_failed') }}</span><button type="button" class="min-h-11 px-3 font-bold underline" @click="loadRolesForScope">{{ t('rbac.platform_teaching_assignments.retry') }}</button></div>
                 <div class="mt-5 grid gap-4 xl:grid-cols-2">

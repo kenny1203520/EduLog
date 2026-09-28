@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import SearchableSelect from '@/components/common/SearchableSelect.vue'
 import Pagination from '@/components/common/Pagination.vue'
+import EffectiveTeachingRoles from '@/components/rbac/EffectiveTeachingRoles.vue'
 import type { RoleDTO } from '@/models/Rbac'
 import { AuthUserSearchService, type AuthUserSearchResultDTO } from '@/services/auth/AuthUserSearchService'
 import { ClassroomRoleAssignmentService, type ClassroomRoleAssignmentDTO } from '@/services/rbac/ClassroomRoleAssignmentService'
@@ -99,7 +100,7 @@ function clearForm() {
 
 function openCreateForm() {
     clearForm()
-    selectedRoleId.value = roleOptions.value[0]?.value ?? ''
+    selectedRoleId.value = roles.value.find(role => role.code === 'teacher')?.id ?? ''
     isFormOpen.value = true
 }
 
@@ -295,6 +296,7 @@ onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
                     <input v-model="effectiveTo" type="date" class="min-h-11 w-full rounded-xl border-gray-300 focus:border-emerald-600 focus:ring-emerald-600">
                 </label>
             </div>
+            <EffectiveTeachingRoles v-if="selectedUserId && classroomId" :user-id="selectedUserId" scope-type="classroom" :scope-id="classroomId" />
             <p v-if="formError" role="alert" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{{ formError }}</p>
             <div class="flex flex-col-reverse justify-end gap-2 sm:flex-row">
                 <button type="button" class="min-h-11 rounded-xl px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400" :disabled="saving" @click="clearForm">{{ t('common.cancel') }}</button>

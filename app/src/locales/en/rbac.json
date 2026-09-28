@@ -1,4 +1,8 @@
 {
+  "effective_roles": {"title": "Effective teaching roles", "date": "As of {date}", "today": "Today", "load_failed": "Could not load effective roles.", "empty": "No teaching roles are effective on this date.", "exclusions": "Roles excluded at this scope", "source_teaching_assignment": "Teaching assignment", "source_exclusion": "Inherited role exclusion", "scope_system": "Platform assignment", "scope_classroom": "Classroom assignment", "scope_class_session": "Class assignment", "no_end_date": "No end date", "source_role_inheritance": "Inherited role"},
+  "teacher_assignment_role_grant_notice": "The selected class role also grants this teacher its permissions for the selected validity period.",
+  "teacher_assignment_role_catalog_failed": "Could not load teaching roles for this class. Check role-management access and try again.",
+  "teacher_assignment_unlinked": "This teacher is not linked to a user account, so no class permissions will be granted.",
   "builtin": "Built-in",
   "protected_read_only": "Protected role · read only",
 "system_permissions": "System role permissions",
