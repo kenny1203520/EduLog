@@ -6,7 +6,7 @@ For authenticated self-service credential changes, configure Supabase Auth to re
 
 The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000080` remain unchanged. The current forward migrations add strict system/teaching RBAC domains (`1000081`), atomic RBAC management functions (`1000082`), system-managed account status (`1000083`), canonical suspension attendance/occupancy semantics (`1000084`), regular-enrollment-only report provisioning (`1000085`), the missing invoker table grants required by attendance evaluation (`1000086`), aligned report INSERT RLS (`1000087`), permission parity for roster provisioning (`1000088`), removal of the stale report INSERT policy (`1000089`), a narrow authenticated provisioning command that isolates placeholder insertion from interactive report CRUD (`1000090`), an occurrence-date-scoped class-session roster read model (`1000091`), scoped teaching-role permission policies (`1000092`), overlapping system-role assignment protection (`1000093`), the audit-event date index (`1000094`), classroom-scoped teaching-role assignments (`1000095`), the initial global teaching scope and canonical person profile transition (`1000096`), the final single-`profiles` person model (`1000097`), distinct full-name/nickname fields with Auth-owned login email (`1000098`), current report collaboration snapshot RLS (`1000103`), domain-aware permission policies (`1000104`), query-performance indexes (`1000105`), separate action-specific RBAC policy RLS (`1000106`), transfer-aware occurrence rosters with private class-session invalidation hints (`1000107`), date-scoped class-session invalidation (`1000108`), and target-occurrence workspace inclusion for report-backed makeup enrollments (`1000109`). `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
 
-This directory contains the append-only database history for EduLog. Existing migrations must not be edited. The current chain includes the pre-1000058 compatibility step and the forward-only repairs through 1000109, without rewriting applied migration files.
+This directory contains the append-only database history for EduLog. Existing migrations must not be edited. The current chain includes the pre-1000058 compatibility step and the forward-only repairs through 1000110, without rewriting applied migration files.
 
 The `1000078` read-model migration covers courses, classrooms, teachers, incomplete reports, holidays, and class-session workspaces with authenticated-only, explicit projections.
 
@@ -134,12 +134,13 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000107 | `1000107_effective_session_roster_and_invalidation.sql` | Use transfer-effective class occurrence rosters and broadcast private class-session invalidation hints |
 | 1000108 | `1000108_date_scoped_class_session_invalidation.sql` | Scope class-session invalidation hints to affected dates for reports, rosters, transfers, suspensions, and holidays |
 | 1000109 | `1000109_makeup_reports_in_session_workspace.sql` | Include report-backed one-off makeup enrollments in the target occurrence workspace only |
+| 1000110 | `1000110_teaching_role_sources_and_enrollment_visibility.sql` | Link class-session teacher assignments to reversible role grants and use student-read access for enrollment creation |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
 ## Current canonical chain
 
-The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062` through `1000109` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
+The security and scope changes are intentionally kept as separate migration files. Apply `1000040` through `1000061` in lexical order, including `1000057a` before `1000058`, then apply `1000062` through `1000110` in order. Do not use the deleted consolidated migration names; they are not part of the current chain.
 
 ## Clean install
 
@@ -147,7 +148,7 @@ Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/test
 
 ## Upgrade an existing database
 
-Back up the database first. Apply only migrations not recorded in the migration history. For a database at 1000039, apply the individual 1000040-1000061 files in lexical order, including 1000057a before 1000058, then apply 1000062-1000109 in order. Run both 1000096 and 1000097 preflight reports against the relevant pre-migration schemas, and do not apply 1000097 before its report has been reviewed. A database that has already recorded 1000058 must not apply 1000057a out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, sensitive-data, Dashboard read-model, core RLS, RBAC domain, suspension/occupancy, report-provisioning, attendance privilege, report RLS, stale-policy, narrow-command, occurrence-roster, audit-index, profiles-person, student-overview, role-policy-per-action, transfer-aware session invalidation, date-scoped invalidation, and makeup-roster assertions. Do not edit historical migrations.
+Back up the database first. Apply only migrations not recorded in the migration history. For a database at 1000039, apply the individual 1000040-1000061 files in lexical order, including 1000057a before 1000058, then apply 1000062-1000110 in order. Run both 1000096 and 1000097 preflight reports against the relevant pre-migration schemas, and do not apply 1000097 before its report has been reviewed. A database that has already recorded 1000058 must not apply 1000057a out of order; apply the pending forward repairs in version order. Finish with the migration upgrade, RBAC scope, report lifecycle, sensitive-data, Dashboard read-model, core RLS, RBAC domain, suspension/occupancy, report-provisioning, attendance privilege, report RLS, stale-policy, narrow-command, occurrence-roster, audit-index, profiles-person, student-overview, role-policy-per-action, transfer-aware session invalidation, date-scoped invalidation, and makeup-roster assertions. Do not edit historical migrations.
 
 ## Rerun and rollback
 
