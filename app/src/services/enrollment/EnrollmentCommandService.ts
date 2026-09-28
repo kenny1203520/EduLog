@@ -242,18 +242,7 @@ export class EnrollmentCommandService {
             console.error('Failed to generate occurrence for makeup enrollment:', err)
         })
 
-        let { data: targetOccurrences, error: targetOccurrenceError } = await apiDataClient
-            .from('class_occurrences')
-            .select('id, created_at')
-            .eq('class_session_id', targetSessionId)
-            .eq('occurrence_date', normalizedTargetDate)
-            .order('created_at', { ascending: false })
-
-        if (targetOccurrenceError) {
-            throw new Error(`Failed to find target occurrence: ${targetOccurrenceError.message}`)
-        }
-
-        const targetOccurrence = targetOccurrences?.[0]
+        const targetOccurrence = await OccurrenceService.getOccurrenceBySessionAndDate(targetSessionId, normalizedTargetDate)
         if (!targetOccurrence?.id) {
             throw new Error('Failed to find target occurrence: not found')
         }

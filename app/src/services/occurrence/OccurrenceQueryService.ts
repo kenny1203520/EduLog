@@ -103,6 +103,32 @@ export class OccurrenceQueryService {
         })
     }
 
+    static async getOccurrenceBySessionAndDate(sessionId: string, occurrenceDate: string): Promise<ClassOccurrence | null> {
+        if (getApiV1Mode() === 'v1') {
+            const params = new URLSearchParams({
+                class_session_id: sessionId,
+                date: occurrenceDate,
+                limit: '1',
+                sort: '-created_at'
+            })
+            const response = await apiV1Client.get<any[]>(`/occurrences?${params}`)
+            const row = response.data?.[0]
+            return row ? this.fromApi(row) : null
+        }
+
+        const { data, error } = await apiDataClient
+            .from('class_occurrences')
+            .select('*')
+            .eq('class_session_id', sessionId)
+            .eq('occurrence_date', occurrenceDate)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        if (error) throw new Error(`Failed to fetch occurrence: ${error.message}`)
+        return data ? new ClassOccurrence(data as any) : null
+    }
+
     static async getPreferredOccurrence(
         sessionId: string,
         referenceDate: Date
