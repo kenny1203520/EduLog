@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import i18n from '../i18n'
 
 function loadLocale(locale: 'en' | 'zh-TW') {
     return JSON.parse(readFileSync(resolve(process.cwd(), `src/locales/${locale}/rbac.json`), 'utf8')) as Record<string, Record<string, unknown>>
@@ -35,6 +36,19 @@ describe('RBAC locale contract', () => {
         expect(traditionalChinese.resources['report-templates']).toEqual({
             name: '報告範本',
             description: '建立與管理學生報告使用的範本',
+        })
+    })
+
+    it('includes the resource in the runtime zh alias as well as zh-TW', () => {
+        expect(i18n.global.getLocaleMessage('zh')).toMatchObject({
+            rbac: {
+                resources: {
+                    'report-templates': {
+                        name: '報告範本',
+                        description: '建立與管理學生報告使用的範本',
+                    },
+                },
+            },
         })
     })
 })
