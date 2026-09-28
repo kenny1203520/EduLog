@@ -584,7 +584,16 @@ export function createRbacRouter() {
       p_scope_id: query.scope_id,
       p_effective_date: query.effective_date,
     })
-    if (result.error) throw mapDatabaseError(result.error)
+    if (result.error) {
+      req.log?.error({
+        event: 'effective_teaching_roles_query_failed',
+        operation: 'get_effective_teaching_roles',
+        database_error_code: result.error.code ?? 'UNKNOWN',
+        request_id: req.requestId,
+        trace_id: req.traceId,
+      }, 'effective_teaching_roles_query_failed')
+      throw mapDatabaseError(result.error)
+    }
     return sendData(req, res, result.data ?? [], { effective_date: query.effective_date, scope_type: query.scope_type, scope_id: query.scope_id })
   }))
 

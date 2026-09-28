@@ -759,3 +759,36 @@ BEGIN
   END IF;
 END;
 $$;
+
+-- Execute the effective teaching-role RPC for a historical date. This catches
+-- ambiguity between RETURNS TABLE output names and columns inside its CTEs.
+INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, effective_to, status)
+SELECT '00000000-0000-0000-0000-000000000003', role.id, 'classroom',
+       '30000000-0000-0000-0000-000000000001', DATE '2025-07-05', DATE '2025-07-05', 'active'
+FROM public.roles role
+WHERE role.code = 'integration_classroom_student_reader' AND role.domain = 'teaching'
+ON CONFLICT DO NOTHING;
+
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', false);
+DO $$
+DECLARE effective_role_count integer;
+BEGIN
+  SELECT count(*) INTO effective_role_count
+  FROM public.get_effective_teaching_roles(
+    '00000000-0000-0000-0000-000000000003',
+    'class_session',
+    '60000000-0000-0000-0000-000000000104',
+    DATE '2025-07-05'
+  ) effective_role
+  WHERE effective_role.code = 'integration_classroom_student_reader'
+    AND effective_role.source_type = 'direct'
+    AND effective_role.source_scope_type = 'classroom'
+    AND effective_role.source_scope_id = '30000000-0000-0000-0000-000000000001';
+  IF effective_role_count <> 1 THEN
+    RAISE EXCEPTION 'effective teaching-role RPC did not return the historical classroom assignment';
+  END IF;
+END;
+$$;
+RESET ROLE;
