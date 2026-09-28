@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from './errors.js'
 import { sendData } from './response.js'
 import { isTeacherPresent } from './reportSemantics.js'
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from './context.js'
-import { authorizeCollection, authorizeResource } from './authorization.js'
+import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from './authorization.js'
 import { resources } from './resources.js'
 import { attachTeacherProfile, complete, idempotency } from './resourceRouter.js'
 
@@ -37,7 +37,7 @@ async function requirePagePermission(req: Request, permission: string, resource:
     req.log.error({ operation, database_error_code: result.error.code ?? 'UNKNOWN', request_id: req.requestId, trace_id: req.traceId }, 'database_operation_failed')
     throw mapDatabaseError(result.error)
   }
-  if (result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read this page')
+  requireAuthorizationDecision(req, result, { permission, stage: 'page_read_permission', message: 'You do not have permission to read this page', scopeId: resourceId, scopeType: resourceId ? 'resource' : 'system' })
 }
 
 async function requireEnrollmentReportsPermission(req: Request, enrollmentId: string) {

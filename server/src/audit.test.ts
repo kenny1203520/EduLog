@@ -9,7 +9,7 @@ describe('audit resource identifiers', () => {
     expect(safeUuid(undefined)).toBeNull()
   })
 
-  it('writes a safe, complete success audit event', async () => {
+  it('writes a safe, complete authorization-denial audit event', async () => {
     let inserted: Record<string, any> | undefined
     const req: any = {
       method: 'PATCH', path: '/api/reports/00000000-0000-4000-8000-000000000010',
@@ -17,14 +17,14 @@ describe('audit resource identifiers', () => {
       user: { id: '00000000-0000-4000-8000-000000000011' }, auditContext: {
         domain: 'teaching', resource: 'reports', resourceId: '00000000-0000-4000-8000-000000000010',
         teachingId: '00000000-0000-4000-8000-000000000012', scopeId: '00000000-0000-4000-8000-000000000013',
-        scopeType: 'class_occurrence', permission: 'teaching.reports.update', action: 'update',
+        scopeType: 'class_occurrence', permission: 'teaching.reports.update', action: 'update', authorizationStage: 'report_scope_permission', authorizationResult: 'denied', errorCode: 'PERMISSION_DENIED',
       }, log: { error() {} }, adminDb: { from() { return { insert(value: Record<string, any>) { inserted = value; return Promise.resolve({ error: null }) } } } },
     }
-    await auditRequest(req, 200)
+    await auditRequest(req, 403)
     expect(inserted).toBeDefined()
     const event = inserted!
-    expect(event).toMatchObject({ actor_user_id: req.user.id, action: 'update', domain: 'teaching', resource: 'reports', resource_id: req.auditContext.resourceId, scope_id: req.auditContext.scopeId, request_id: 'request-1', outcome: 'success' })
-    expect(event.metadata).toMatchObject({ user_id: req.user.id, teaching_id: req.auditContext.teachingId, resource_id: req.auditContext.resourceId, scope_type: 'class_occurrence', scope_id: req.auditContext.scopeId, route: '/api/reports/:id', method: 'PATCH', status: 200, request_id: 'request-1', trace_id: 'trace-1', outcome: 'success' })
+    expect(event).toMatchObject({ actor_user_id: req.user.id, action: 'update', domain: 'teaching', resource: 'reports', resource_id: req.auditContext.resourceId, scope_id: req.auditContext.scopeId, request_id: 'request-1', outcome: 'denied' })
+    expect(event.metadata).toMatchObject({ user_id: req.user.id, teaching_id: req.auditContext.teachingId, resource_id: req.auditContext.resourceId, scope_type: 'class_occurrence', scope_id: req.auditContext.scopeId, permission: 'teaching.reports.update', authorization_stage: 'report_scope_permission', authorization_result: 'denied', error_code: 'PERMISSION_DENIED', route: '/api/reports/:id', method: 'PATCH', status: 403, request_id: 'request-1', trace_id: 'trace-1', outcome: 'denied' })
     expect(event.metadata).not.toHaveProperty('body')
   })
 

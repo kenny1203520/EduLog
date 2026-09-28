@@ -4,6 +4,7 @@ import { ApiError, mapDatabaseError } from './errors.js'
 import { sendData } from './response.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 import { clearUserValidation } from './supabase.js'
 import { hasOverlappingSystemRoleAssignment } from './systemRoleAssignmentPolicy.js'
 
@@ -101,16 +102,36 @@ async function rpcBoolean(req: Request, name: string, args: Record<string, unkno
   return result.data === true
 }
 
+async function requireAnyAuthorization(
+  req: Request,
+  checks: Array<{ rpc: 'has_api_permission' | 'has_system_permission'; permission: string; args: Record<string, unknown> }>,
+  details: { permission: string; stage: string; message: string; scopeId?: string | null; scopeType?: string | null },
+) {
+  requireRequest(req)
+  for (const check of checks) {
+    const result = await req.db!.rpc(check.rpc, check.args)
+    if (result.error) requireAuthorizationDecision(req, result, { ...details, permission: check.permission })
+    if (result.data === true) {
+      requireAuthorizationDecision(req, result, { ...details, permission: check.permission })
+      return
+    }
+  }
+  requireAuthorizationDecision(req, { data: false, error: null }, details)
+}
+
 async function authorizeRoleDomain(req: Request, domain: 'system' | 'teaching', _legacyTeachingId: string | null | undefined, action: 'read' | 'manage' = 'manage') {
   if (domain === 'system') {
-    const allowed = await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: `system.roles.${action}` })
-      || (action === 'read' && await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: 'system.roles.manage' }))
-    if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage system roles')
+    await requireAnyAuthorization(req, [
+      { rpc: 'has_system_permission', permission: `system.roles.${action}`, args: { p_user_id: req.user!.id, p_permission_key: `system.roles.${action}` } },
+      ...(action === 'read' ? [{ rpc: 'has_system_permission' as const, permission: 'system.roles.manage', args: { p_user_id: req.user!.id, p_permission_key: 'system.roles.manage' } }] : []),
+    ], { permission: `system.roles.${action}`, stage: `system_roles_${action}`, message: 'You do not have permission to manage system roles', scopeType: 'system' })
     return
   }
   // Teaching roles are platform-root roles. Legacy teaching IDs are ignored.
-  const allowed = await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: `teaching.roles.${action}`, p_classroom_id: null, p_class_session_id: null })
-  if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read teaching roles')
+  await requireAnyAuthorization(req, [
+    { rpc: 'has_api_permission', permission: `teaching.roles.${action}`, args: { p_user_id: req.user!.id, p_permission_key: `teaching.roles.${action}`, p_classroom_id: null, p_class_session_id: null } },
+    ...(action === 'read' ? [{ rpc: 'has_api_permission' as const, permission: 'teaching.roles.manage', args: { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null } }] : []),
+  ], { permission: `teaching.roles.${action}`, stage: `teaching_roles_${action}`, message: 'You do not have permission to read teaching roles', scopeType: 'system' })
 }
 
 async function authorizeRoleScope(req: Request, domain: 'system' | 'teaching', scope: { type: 'system' | 'classroom' | 'class_session'; id?: string | null }, action: 'read' | 'manage') {
@@ -120,23 +141,18 @@ async function authorizeRoleScope(req: Request, domain: 'system' | 'teaching', s
   }
   if (scope.type === 'system') {
     const required = `teaching.roles.${action}`
-    const allowed = await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: required, p_classroom_id: null, p_class_session_id: null })
-      || (action === 'read' && await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null }))
-    if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'Platform teaching role policies require platform teaching role management permission')
+    await requireAnyAuthorization(req, [
+      { rpc: 'has_api_permission', permission: required, args: { p_user_id: req.user!.id, p_permission_key: required, p_classroom_id: null, p_class_session_id: null } },
+      ...(action === 'read' ? [{ rpc: 'has_api_permission' as const, permission: 'teaching.roles.manage', args: { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null } }] : []),
+    ], { permission: required, stage: `platform_teaching_roles_${action}`, message: 'Platform teaching role policies require platform teaching role management permission', scopeId: null, scopeType: 'system' })
     return
   }
   if (!scope.id) throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'A scoped policy requires a scope id')
-  const allowed = await rpcBoolean(req, 'has_api_permission', {
-    p_user_id: req.user!.id,
-    p_permission_key: `teaching.roles.${action}`,
-    p_classroom_id: scope.type === 'classroom' ? scope.id : null,
-    p_class_session_id: scope.type === 'class_session' ? scope.id : null,
-  }) || (action === 'read' && await rpcBoolean(req, 'has_api_permission', {
-    p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage',
-    p_classroom_id: scope.type === 'classroom' ? scope.id : null,
-    p_class_session_id: scope.type === 'class_session' ? scope.id : null,
-  }))
-  if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read or manage teaching roles in this scope')
+  const scopeArgs = { p_classroom_id: scope.type === 'classroom' ? scope.id : null, p_class_session_id: scope.type === 'class_session' ? scope.id : null }
+  await requireAnyAuthorization(req, [
+    { rpc: 'has_api_permission', permission: `teaching.roles.${action}`, args: { p_user_id: req.user!.id, p_permission_key: `teaching.roles.${action}`, ...scopeArgs } },
+    ...(action === 'read' ? [{ rpc: 'has_api_permission' as const, permission: 'teaching.roles.manage', args: { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', ...scopeArgs } }] : []),
+  ], { permission: `teaching.roles.${action}`, stage: `scoped_teaching_roles_${action}`, message: 'You do not have permission to read or manage teaching roles in this scope', scopeId: scope.id, scopeType: scope.type })
 }
 
 async function roleById(req: Request, id: string) {
@@ -153,16 +169,18 @@ async function authorizePolicyScope(req: Request, permissionDomain: 'system' | '
   const permission = `${domain}.roles.manage`
   setAuditContext(req, { domain, resource: 'rbac-policies', action: 'manage', scopeId: scope.id ?? null, scopeType: scope.type, permission })
   if (scope.type === 'system') {
-    const allowed = permissionDomain === 'system'
-      ? await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: 'system.roles.manage' })
-      : await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null })
-    if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')
+    const permissionKey = `${permissionDomain}.roles.manage`
+    await requireAnyAuthorization(req, [{
+      rpc: permissionDomain === 'system' ? 'has_system_permission' : 'has_api_permission',
+      permission: permissionKey,
+      args: { p_user_id: req.user!.id, p_permission_key: permissionKey, p_classroom_id: null, p_class_session_id: null },
+    }], { permission: permissionKey, stage: 'rbac_policy_scope_permission', message: 'You do not have permission to manage RBAC policies', scopeId: null, scopeType: 'system' })
     return
   }
   if (permissionDomain !== 'teaching') throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'System permissions only support the system scope')
   if (!scope.id) throw new ApiError(400, 'INVALID_POLICY_SCOPE', 'A scoped policy requires a scope id')
   const result = await req.db!.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: scope.type === 'classroom' ? scope.id : null, p_class_session_id: scope.type === 'class_session' ? scope.id : null })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage RBAC policies')
+  requireAuthorizationDecision(req, result, { permission: 'teaching.roles.manage', stage: 'rbac_policy_scope_permission', message: 'You do not have permission to manage RBAC policies', scopeId: scope.id ?? null, scopeType: scope.type })
 }
 
 export function createRbacRouter() {
@@ -317,8 +335,10 @@ export function createRbacRouter() {
 
   router.get('/system-role-assignments', wrap(async (req, res) => {
     requireRequest(req); const query = assignmentListQuery.parse(req.query)
-    const canRead = await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: 'system.role_assignments.read' }) || await rpcBoolean(req, 'has_system_permission', { p_user_id: req.user!.id, p_permission_key: 'system.role_assignments.manage' })
-    if (!canRead) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read system role assignments')
+    await requireAnyAuthorization(req, [
+      { rpc: 'has_system_permission', permission: 'system.role_assignments.read', args: { p_user_id: req.user!.id, p_permission_key: 'system.role_assignments.read' } },
+      { rpc: 'has_system_permission', permission: 'system.role_assignments.manage', args: { p_user_id: req.user!.id, p_permission_key: 'system.role_assignments.manage' } },
+    ], { permission: 'system.role_assignments.read', stage: 'system_role_assignments_read', message: 'You do not have permission to read system role assignments', scopeType: 'system' })
     const sort = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
     let builder = req.adminDb!.from('user_role_assignments').select('id,user_id,role_id,scope_type,scope_id,status,effective_from,effective_to,created_at,updated_at,roles!inner(id,code,name,domain,is_protected)', { count: 'exact' }).eq('scope_type', 'system').eq('roles.domain', 'system')
     if (query.user_id) builder = builder.eq('user_id', query.user_id); if (query.role_id) builder = builder.eq('role_id', query.role_id)
@@ -395,9 +415,9 @@ export function createRbacRouter() {
     const assignmentId = req.params.assignmentId ? uuid.parse(req.params.assignmentId) : null
     const input = classroomAssignmentMutation.parse(req.body)
     await authorizeRoleScope(req, 'teaching', { type: 'classroom', id: classroomId }, 'manage')
-    if (!await rpcBoolean(req, 'has_api_permission', {
+    await requireAnyAuthorization(req, [{ rpc: 'has_api_permission', permission: 'system.users.list', args: {
       p_user_id: req.user!.id, p_permission_key: 'system.users.list', p_classroom_id: null, p_class_session_id: null,
-    })) throw new ApiError(403, 'PERMISSION_DENIED', 'You need user directory access to assign a classroom role')
+    } }], { permission: 'system.users.list', stage: 'classroom_role_user_directory_permission', message: 'You need user directory access to assign a classroom role', scopeId: classroomId, scopeType: 'classroom' })
 
     const classroom = await req.adminDb!.from('classrooms').select('id').eq('id', classroomId).maybeSingle()
     if (classroom.error) throw mapDatabaseError(classroom.error)
@@ -463,9 +483,10 @@ export function createRbacRouter() {
   router.get('/teaching-role-assignments', wrap(async (req, res) => {
     requireRequest(req)
     const query = assignmentListQuery.parse(req.query)
-    const canRead = await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.read', p_classroom_id: null, p_class_session_id: null })
-      || await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null })
-    if (!canRead) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read platform teaching-role assignments')
+    await requireAnyAuthorization(req, [
+      { rpc: 'has_api_permission', permission: 'teaching.roles.read', args: { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.read', p_classroom_id: null, p_class_session_id: null } },
+      { rpc: 'has_api_permission', permission: 'teaching.roles.manage', args: { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null } },
+    ], { permission: 'teaching.roles.read', stage: 'platform_teaching_role_assignments_read', message: 'You do not have permission to read platform teaching-role assignments', scopeType: 'system' })
     const sort = query.sort.startsWith('-') ? query.sort.slice(1) : query.sort
     let builder = req.adminDb!.from('user_role_assignments')
       .select('id,user_id,role_id,scope_type,scope_id,status,effective_from,effective_to,created_at,updated_at,roles!inner(id,code,name,description,domain,is_builtin)', { count: 'exact' })
@@ -490,8 +511,7 @@ export function createRbacRouter() {
     requireRequest(req)
     const input = teachingAssignmentMutation.parse(req.body)
     const assignmentId = req.params.id ? uuid.parse(req.params.id) : null
-    const allowed = await rpcBoolean(req, 'has_api_permission', { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null })
-    if (!allowed) throw new ApiError(403, 'PERMISSION_DENIED', 'Platform teaching-role assignment requires platform role management permission')
+    await requireAnyAuthorization(req, [{ rpc: 'has_api_permission', permission: 'teaching.roles.manage', args: { p_user_id: req.user!.id, p_permission_key: 'teaching.roles.manage', p_classroom_id: null, p_class_session_id: null } }], { permission: 'teaching.roles.manage', stage: 'platform_teaching_role_assignment_manage', message: 'Platform teaching-role assignment requires platform role management permission', scopeType: 'system' })
     if (input.effective_to && input.effective_to < input.effective_from) throw new ApiError(422, 'INVALID_DATE_RANGE', 'The end date must not be before the start date')
     setAuditContext(req, { domain: 'teaching', resource: 'platform-role-assignments', resourceId: assignmentId, action: assignmentId ? 'update' : 'create', scopeType: 'system', permission: 'teaching.roles.manage' })
     const replay = await idempotency(req, assignmentId ? 200 : 201, null)

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const fields = 'id,student_id,course_id,classroom_id,class_session_id,status,start_date,lesson_number,external_link,time_zone,koding_admission_id,user_id,created_at,updated_at,courses(subject,stage,display_name),classrooms(name,address),class_sessions(id,name,day_of_week,start_time,end_time,capacity,time_zone,session_type,schedule_mode,class_session_schedule_rules(id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)),students(name)'
 const mutable = ['student_id', 'course_id', 'classroom_id', 'class_session_id', 'status', 'start_date', 'lesson_number', 'external_link', 'time_zone', 'koding_admission_id'] as const
@@ -20,7 +21,13 @@ async function authorizeExisting(req: Request, action: 'update' | 'delete', enro
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   setAuditContext(req, { domain: 'teaching', resource: 'enrollments', resourceId: enrollmentId, action, permission: `teaching.enrollments.${action}`, scopeId: enrollmentId, scopeType: 'enrollment' })
   const result = await req.db.rpc('can_access_enrollment', { p_enrollment_id: enrollmentId, p_permission_key: 'teaching.enrollments.' + action })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify enrollments')
+  requireAuthorizationDecision(req, result, {
+    permission: `teaching.enrollments.${action}`,
+    stage: 'enrollment_existing_scope',
+    message: 'You do not have permission to modify enrollments',
+    scopeId: enrollmentId,
+    scopeType: 'enrollment',
+  })
 }
 
 async function authorizeScope(req: Request, action: 'create' | 'update', input: Record<string, unknown>, existing?: Record<string, unknown>) {
@@ -62,7 +69,14 @@ async function authorizeScope(req: Request, action: 'create' | 'update', input: 
     p_class_session_id: sessionId ?? null,
     p_permission_key: 'teaching.enrollments.' + action,
   })
-  if (scoped.error || scoped.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify enrollments')
+  requireAuthorizationDecision(req, scoped, {
+    permission: `teaching.enrollments.${action}`,
+    stage: 'enrollment_student_and_teaching_scope',
+    message: 'You do not have permission to modify enrollments',
+    teachingId: [...teachingIds][0],
+    scopeId: sessionId ?? classroomId ?? courseId ?? null,
+    scopeType: sessionId ? 'class_session' : classroomId ? 'classroom' : 'teaching',
+  })
   const result = await req.db.rpc('has_teaching_permission', {
     p_user_id: req.user.id,
     p_permission_key: 'teaching.enrollments.' + action,
@@ -70,7 +84,14 @@ async function authorizeScope(req: Request, action: 'create' | 'update', input: 
     p_classroom_id: classroomId ?? session?.classroom_id ?? null,
     p_class_session_id: sessionId ?? null,
   })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify enrollments')
+  requireAuthorizationDecision(req, result, {
+    permission: `teaching.enrollments.${action}`,
+    stage: 'enrollment_teaching_permission',
+    message: 'You do not have permission to modify enrollments',
+    teachingId: [...teachingIds][0],
+    scopeId: sessionId ?? classroomId ?? null,
+    scopeType: sessionId ? 'class_session' : classroomId ? 'classroom' : 'teaching',
+  })
 }
 async function align(req: Request, input: Record<string, unknown>, existing?: Record<string, unknown>) {
   const sessionId = input.class_session_id !== undefined ? input.class_session_id : existing?.class_session_id

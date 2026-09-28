@@ -1,11 +1,59 @@
 import type { Request } from 'express'
 import { describe, expect, it, vi } from 'vitest'
-import { authorizeCollection, authorizeResource } from './authorization.js'
+import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from './authorization.js'
 import { resources } from './resources.js'
 
 function requestWithRpc(rpc: ReturnType<typeof vi.fn>) {
-  return { user: { id: '00000000-0000-4000-8000-000000000001' }, db: { rpc } } as unknown as Request
+  return { user: { id: '00000000-0000-4000-8000-000000000001' }, db: { rpc }, log: { warn: vi.fn(), error: vi.fn() }, auditContext: {} } as unknown as Request
 }
+
+describe('authorization decision diagnostics', () => {
+  it('records a permission denial with the failed stage and scope', () => {
+    const req = requestWithRpc(vi.fn())
+    expect(() => requireAuthorizationDecision(req, { data: false, error: null }, {
+      permission: 'teaching.enrollments.create',
+      stage: 'enrollment_student_and_teaching_scope',
+      scopeId: '00000000-0000-4000-8000-000000000010',
+      scopeType: 'class_session',
+    })).toThrowError(expect.objectContaining({ status: 403, code: 'PERMISSION_DENIED' }))
+    expect(req.auditContext).toMatchObject({
+      permission: 'teaching.enrollments.create',
+      authorizationStage: 'enrollment_student_and_teaching_scope',
+      authorizationResult: 'denied',
+      errorCode: 'PERMISSION_DENIED',
+    })
+    expect((req.log as any).warn).toHaveBeenCalledWith(expect.objectContaining({
+      event: 'authorization_denied',
+      permission: 'teaching.enrollments.create',
+      authorization_stage: 'enrollment_student_and_teaching_scope',
+    }), 'authorization_denied')
+  })
+
+  it('records authorization RPC failures separately and maps them as database errors', () => {
+    const req = requestWithRpc(vi.fn())
+    expect(() => requireAuthorizationDecision(req, { data: null, error: { code: '08006', message: 'private database detail' } }, {
+      permission: 'teaching.enrollments.create',
+      stage: 'enrollment_teaching_permission',
+    })).toThrowError(expect.objectContaining({ status: 500, code: 'DATABASE_ERROR' }))
+    expect(req.auditContext).toMatchObject({
+      authorizationStage: 'enrollment_teaching_permission',
+      authorizationResult: 'rpc_error',
+      errorCode: 'AUTHORIZATION_RPC_ERROR',
+    })
+    const logged = JSON.stringify((req.log as any).error.mock.calls)
+    expect(logged).toContain('08006')
+    expect(logged).not.toContain('private database detail')
+  })
+
+  it('does not report an authorization RPC privilege/configuration error as a user denial', () => {
+    const req = requestWithRpc(vi.fn())
+    expect(() => requireAuthorizationDecision(req, { data: null, error: { code: '42501', message: 'function execute grant missing' } }, {
+      permission: 'teaching.enrollments.create',
+      stage: 'enrollment_teaching_permission',
+    })).toThrowError(expect.objectContaining({ status: 503, code: 'AUTHORIZATION_CHECK_UNAVAILABLE' }))
+    expect(req.auditContext).toMatchObject({ authorizationResult: 'rpc_error', errorCode: 'AUTHORIZATION_RPC_ERROR' })
+  })
+})
 
 describe('resource-aware authorization', () => {
   it('uses the report scope helper instead of treating a report id as a classroom id', async () => {

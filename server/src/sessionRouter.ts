@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const sessionFields = 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,time_zone,session_type,schedule_mode,teaching_id,created_at,updated_at,class_session_schedule_rules(id,class_session_id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)'
 
@@ -59,7 +60,7 @@ async function authorize(req: Request, action: 'read' | 'create' | 'update' | 'd
     p_class_session_id: id,
   })
   setAuditContext(req, { domain: 'teaching', resource: 'class-sessions', action, resourceId: id, permission: `teaching.class_sessions.${action}`, scopeId: id, scopeType: 'class_session' })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify class sessions')
+  requireAuthorizationDecision(req, result, { permission: `teaching.class_sessions.${action}`, stage: 'class_session_permission', message: 'You do not have permission to modify class sessions', scopeId: id, scopeType: 'class_session' })
 }
 
 export async function authorizeRelatedRead(req: Request, permission: string, sessionId: string) {
@@ -70,7 +71,7 @@ export async function authorizeRelatedRead(req: Request, permission: string, ses
     p_classroom_id: null,
     p_class_session_id: sessionId,
   })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read the related session data')
+  requireAuthorizationDecision(req, result, { permission, stage: 'related_class_session_read_permission', message: 'You do not have permission to read the related session data', scopeId: sessionId, scopeType: 'class_session' })
 }
 
 async function authorizeSaveScope(req: Request, action: 'create' | 'update', id: string | null, input: z.infer<typeof sessionSchema>) {
@@ -120,7 +121,7 @@ async function authorizeSaveScope(req: Request, action: 'create' | 'update', id:
       p_classroom_id: null,
       p_class_session_id: null,
     })
-  if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify class sessions')
+  requireAuthorizationDecision(req, permission, { permission: `teaching.class_sessions.${action}`, stage: 'class_session_teaching_permission', message: 'You do not have permission to modify class sessions', teachingId, scopeType: 'teaching' })
 }
 
 async function read(req: Request, res: Response) {

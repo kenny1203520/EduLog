@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
@@ -18,7 +19,7 @@ async function remove(req: Request, res: Response) {
     p_student_id: id,
     p_permission_key: 'teaching.students.delete',
   })
-  if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to delete students')
+  requireAuthorizationDecision(req, permission, { permission: 'teaching.students.delete', stage: 'student_delete_scope_permission', message: 'You do not have permission to delete students', scopeId: id, scopeType: 'student' })
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
 
@@ -51,8 +52,7 @@ async function credentials(req: Request, res: Response) {
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   setAuditContext(req, { domain: 'teaching', resource: 'student-credentials', resourceId: id, action: 'read', permission: 'teaching.students.read_sensitive', scopeId: id, scopeType: 'student' })
   const permission = await req.db.rpc('can_access_sensitive_student', { p_student_id: id, p_permission_key: 'teaching.students.read_sensitive' })
-  if (permission.error) throw mapDatabaseError(permission.error)
-  if (permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to read student credentials')
+  requireAuthorizationDecision(req, permission, { permission: 'teaching.students.read_sensitive', stage: 'student_sensitive_data_permission', message: 'You do not have permission to read student credentials', scopeId: id, scopeType: 'student' })
   const result = await req.db.from('student_credentials').select('id,student_id,platform,username,password,url,created_at,updated_at').eq('student_id', id).order('created_at', { ascending: true })
   if (result.error) throw mapDatabaseError(result.error)
   const body = { data: result.data ?? [], meta: { total: result.data?.length ?? 0 }, request_id: req.requestId, trace_id: req.traceId }

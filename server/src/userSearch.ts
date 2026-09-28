@@ -1,6 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
 import { ApiError } from './errors.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const searchSchema = z.object({ query: z.string().trim().min(1).max(200), only_unlinked: z.coerce.boolean().optional() }).strict()
 
@@ -11,7 +12,7 @@ export function createUserSearchRouter() {
       if (!req.db || !req.adminDb || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
       const input = searchSchema.parse(req.query)
       const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'system.users.list', p_classroom_id: null, p_class_session_id: null })
-      if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to search users')
+      requireAuthorizationDecision(req, permission, { permission: 'system.users.list', stage: 'user_directory_permission', message: 'You do not have permission to search users', scopeType: 'system' })
       const escapedQuery = input.query.replace(/[\\%_]/g, (character) => `\\${character}`)
       const pattern = `%${escapedQuery}%`
       const [emailMatches, fullNameMatches, nicknameMatches] = await Promise.all([

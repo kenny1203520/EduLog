@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const fields = 'id,class_session_id,occurrence_date,status,notes,original_start_time,original_end_time,actual_start_time,actual_end_time,teacher_ids,teacher_attendance,is_conducted,time_zone,created_at,updated_at'
 const syncBody = z.object({ scope: z.enum(['future', 'all']).default('future') }).strict()
@@ -30,7 +31,7 @@ async function sync(req: Request, res: Response) {
   const input = syncBody.parse(req.body ?? {})
   setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: null, action: 'update', permission: 'teaching.class_sessions.update', scopeId: sessionId, scopeType: 'class_session' })
   const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.class_sessions.update', p_classroom_id: null, p_class_session_id: sessionId })
-  if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to synchronize this session')
+  requireAuthorizationDecision(req, permission, { permission: 'teaching.class_sessions.update', stage: 'session_sync_permission', message: 'You do not have permission to synchronize this session', scopeId: sessionId, scopeType: 'class_session' })
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const session = await req.db.from('class_sessions').select('id,start_date,end_date,time_zone,user_id,class_session_schedule_rules(schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)').eq('id', sessionId).maybeSingle()

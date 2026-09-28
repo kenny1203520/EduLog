@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const historyFields = 'id,created_at,cancelled_at,course_display_name,source_occurrence_date,source_start_time,source_end_time,source_session_name,source_classroom_name,target_occurrence_date,target_start_time,target_end_time,target_session_name,target_classroom_name'
 const targetFields = 'transfer_id,source_occurrence_id,target_occurrence_id,is_effective_target,target_report_id'
@@ -70,7 +71,7 @@ async function assertPermission(req: Request, sessionId: string | null, action: 
     p_class_session_id: sessionId,
   })
   setAuditContext(req, { domain: 'teaching', resource: 'enrollments', action, permission: `teaching.enrollments.${action}`, scopeId: sessionId, scopeType: 'class_session' })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to access this enrollment')
+  requireAuthorizationDecision(req, result, { permission: `teaching.enrollments.${action}`, stage: 'transfer_enrollment_scope_permission', message: 'You do not have permission to access this enrollment', scopeId: sessionId, scopeType: 'class_session' })
 }
 
 async function assertOccurrencePermission(req: Request, occurrenceId: string, action: 'read' | 'update') {
@@ -80,7 +81,7 @@ async function assertOccurrencePermission(req: Request, occurrenceId: string, ac
   if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   const result = await req.db.rpc('has_api_permission', { p_user_id: req.user!.id, p_permission_key: `teaching.occurrences.${action}`, p_classroom_id: null, p_class_session_id: occurrence.data.class_session_id })
   setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: occurrenceId, action, permission: `teaching.occurrences.${action}`, scopeId: occurrence.data.class_session_id, scopeType: 'class_session' })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to access this occurrence')
+  requireAuthorizationDecision(req, result, { permission: `teaching.occurrences.${action}`, stage: 'transfer_occurrence_scope_permission', message: 'You do not have permission to access this occurrence', scopeId: occurrence.data.class_session_id, scopeType: 'class_session' })
 }
 
 async function history(req: Request, res: Response) {
@@ -158,7 +159,7 @@ async function cancel(req: Request, res: Response) {
     p_transfer_id: input.transfer_id,
     p_permission_key: 'teaching.enrollments.update',
   })
-  if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to cancel this transfer')
+  requireAuthorizationDecision(req, permission, { permission: 'teaching.enrollments.update', stage: 'transfer_cancel_scope_permission', message: 'You do not have permission to cancel this transfer', scopeId: input.transfer_id, scopeType: 'single_lesson_transfer' })
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const result = await req.db!.rpc('cancel_single_lesson_transfer', { p_transfer_id: input.transfer_id })

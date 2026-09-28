@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const fields = 'id,start_date,end_date,time_zone,name,kind,classroom_ids,class_session_ids,teacher_ids,created_at,updated_at'
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -60,16 +61,16 @@ export async function permission(req: Request, action: 'create' | 'update' | 'de
       p_classroom_id: null,
       p_class_session_id: null,
     })
-    if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage holidays')
+    requireAuthorizationDecision(req, result, { permission: `teaching.holidays.${action}`, stage: 'holiday_teaching_permission', message: 'You do not have permission to manage holidays', scopeType: 'teaching' })
     return
   }
   for (const classroomId of classroomIds) {
     const result = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.holidays.${action}`, p_classroom_id: classroomId, p_class_session_id: null })
-    if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage holidays')
+    requireAuthorizationDecision(req, result, { permission: `teaching.holidays.${action}`, stage: 'holiday_classroom_permission', message: 'You do not have permission to manage holidays', scopeId: classroomId, scopeType: 'classroom' })
   }
   for (const sessionId of sessionIds) {
     const result = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.holidays.${action}`, p_classroom_id: null, p_class_session_id: sessionId })
-    if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage holidays')
+    requireAuthorizationDecision(req, result, { permission: `teaching.holidays.${action}`, stage: 'holiday_class_session_permission', message: 'You do not have permission to manage holidays', scopeId: sessionId, scopeType: 'class_session' })
   }
 }
 

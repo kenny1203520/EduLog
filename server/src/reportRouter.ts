@@ -4,6 +4,7 @@ import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { initialReportAttendance } from './reportSemantics.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const fields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,version,last_edited_by,last_edited_at,created_at,updated_at'
 const writable = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const
@@ -56,7 +57,7 @@ async function canAccess(req: Request, id: string, permission: string) {
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: id, action: permission.split('.').at(-1) ?? 'read', permission, scopeType: 'occurrence_report' })
   const rpcName = permission.endsWith('.update') || permission.endsWith('.delete') ? 'can_mutate_occurrence_report' : 'can_access_report'
   const result = await req.db.rpc(rpcName, { p_report_id: id, p_permission_key: permission })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to access this report')
+  requireAuthorizationDecision(req, result, { permission, stage: 'report_scope_permission', message: 'You do not have permission to access this report', scopeId: id, scopeType: 'report' })
 }
 function pick(input: Body) { return Object.fromEntries(Object.entries(input).filter(([key]) => (writable as readonly string[]).includes(key))) }
 
@@ -145,7 +146,7 @@ async function create(req: Request, res: Response) {
     assertClientManagedAttendanceReason(input.absence_reason)
     setAuditContext(req, { domain: 'teaching', resource: 'reports', action: 'create', permission: 'teaching.reports.create', scopeId: input.class_occurrence_id, scopeType: 'class_occurrence' })
     const permission = await req.db.rpc('can_create_occurrence_report', { p_enrollment_id: input.enrollment_id, p_class_occurrence_id: input.class_occurrence_id })
-  if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to create this report')
+  requireAuthorizationDecision(req, permission, { permission: 'teaching.reports.create', stage: 'report_creation_scope_permission', message: 'You do not have permission to create this report', scopeId: input.class_occurrence_id, scopeType: 'occurrence' })
   const replay = await idempotency(req, 201, null); if (replay) return res.status(replay.status).json(replay.body)
   const automaticAttendance = await resolveInitialAttendance(req, input.enrollment_id, input.class_occurrence_id)
   const payload = { enrollment_id: input.enrollment_id, class_occurrence_id: input.class_occurrence_id, content: input.content ?? '', version: 1, is_completed: input.is_completed ?? false, attendance_status: input.attendance_status ?? automaticAttendance.attendance_status, ...pick(input), ...(automaticAttendance.attendance_status === 'absent' ? automaticAttendance : {}) }
@@ -161,7 +162,10 @@ async function update(req: Request, res: Response) {
   const contextResult = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: id, p_permission_key: 'teaching.reports.update' }).maybeSingle()
   if (contextResult.error) throw mapDatabaseError(contextResult.error)
   const context = contextResult.data as MutationContext | null
-  if (!context) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to update this report')
+  if (!context) {
+    requireAuthorizationDecision(req, { data: false, error: null }, { permission: 'teaching.reports.update', stage: 'report_mutation_context', message: 'You do not have permission to update this report', scopeId: id, scopeType: 'occurrence_report' })
+    return
+  }
   if (context.version !== input.expected_version) throw new ApiError(409, 'VERSION_CONFLICT', 'The report was modified by another user')
   assertReportAttendanceUpdate(context, input)
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
@@ -180,7 +184,8 @@ export async function remove(req: Request, res: Response) {
   if (!context) {
     const deletedReplay = await replayDeletedReport(req, id)
     if (deletedReplay) return res.status(deletedReplay.status).json(deletedReplay.body)
-    throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to delete this report')
+    requireAuthorizationDecision(req, { data: false, error: null }, { permission: 'teaching.reports.delete', stage: 'report_mutation_context', message: 'You do not have permission to delete this report', scopeId: id, scopeType: 'occurrence_report' })
+    return
   }
   const replay = await idempotency(req, 200, null); if (replay) return res.status(replay.status).json(replay.body)
   const bound = await req.adminDb!.rpc('bind_api_idempotency_scope', { p_user_id: req.user.id, p_key: req.header('idempotency-key')!.trim(), p_resource_id: id, p_teaching_id: context.teaching_id, p_classroom_id: context.classroom_id, p_class_session_id: context.class_session_id, p_permission_key: 'teaching.reports.delete' })

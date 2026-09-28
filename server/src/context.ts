@@ -20,6 +20,8 @@ declare global {
         scopeType?: string | null
         permission?: string | null
         errorCode?: string | null
+        authorizationStage?: string | null
+        authorizationResult?: 'denied' | 'rpc_error' | null
       }
       user?: { id: string; email?: string; role?: string; app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }
       accessToken?: string

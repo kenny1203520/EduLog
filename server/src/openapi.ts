@@ -81,7 +81,7 @@ export function buildOpenApi() {
     const item = `${collection}/{id}`
     const methods = new Set(def.genericMethods ?? ['GET', 'POST', 'PATCH', 'DELETE'])
     const name = def.route.replaceAll('-', '_')
-    const base = { security: [{ cookieAuth: [] }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
+    const base = { security: [{ cookieAuth: [] }], ...(def.selfAuthorization ? { 'x-authorization-model': 'owner-identity' } : {}), responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } }
     const collectionPath: Record<string, unknown> = {}
     const permission = (action: 'create' | 'read' | 'update' | 'delete' | 'list') => def.selfAuthorization ? undefined : permissionForResource(def, action)
     const filterableFields = def.filterable ?? []
@@ -392,7 +392,7 @@ export function buildOpenApi() {
     },
   }
   paths['/api/rbac/capability'] = {
-    get: { operationId: 'rbac_capability', security: [{ cookieAuth: [] }], parameters: [
+    get: { operationId: 'rbac_capability', security: [{ cookieAuth: [] }], 'x-authorization-model': 'permission-probe', parameters: [
       { name: 'permission', in: 'query', required: true, schema: { type: 'string' } },
       { name: 'teaching_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
       { name: 'classroom_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } },
@@ -404,6 +404,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'page_settings_overview',
       summary: 'Read the settings navigation and capability summary for the signed-in user',
+      'x-authorization-model': 'current-user-capabilities',
       parameters: [{ name: 'teaching_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } }],
       responses: { '200': pageResponse('SettingsOverviewData'), ...errorResponses },
     },
@@ -413,6 +414,7 @@ export function buildOpenApi() {
       ...pageBase,
       operationId: 'rbac_capabilities',
       summary: 'Read effective RBAC management capabilities for the signed-in user',
+      'x-authorization-model': 'current-user-capabilities',
       parameters: [{ name: 'teaching_id', in: 'query', required: false, schema: { type: 'string', format: 'uuid' } }],
       responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses },
     },
@@ -454,10 +456,10 @@ export function buildOpenApi() {
     put: { ...pageBase, operationId: 'role_permissions_replace', 'x-permission': 'system.roles.manage | teaching.roles.manage', parameters: [idParam, mutationParam], requestBody: { required: true, content: { 'application/json': { schema: { $ref: '#/components/schemas/RolePermissionSetMutation' } } } }, responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/rbac/effective-permissions'] = {
-    get: { ...pageBase, operationId: 'rbac_effective_permissions', summary: 'Preview local, inherited and effective permissions for a role', parameters: [{ name: 'role_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: { ...pageBase, operationId: 'rbac_effective_permissions', summary: 'Preview local, inherited and effective permissions for a role', 'x-authorization-model': 'role-scope-permission', parameters: [{ name: 'role_id', in: 'query', required: true, schema: { type: 'string', format: 'uuid' } }, { name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/rbac/scoped-capability'] = {
-    get: { ...pageBase, operationId: 'rbac_scoped_capability', summary: 'Check whether the current user can manage a role policy at a scope', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', description: 'Required for classroom and class_session; omit for platform-wide teaching policy', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: { ...pageBase, operationId: 'rbac_scoped_capability', summary: 'Check whether the current user can manage a role policy at a scope', 'x-authorization-model': 'permission-probe', parameters: [{ name: 'scope_type', in: 'query', required: true, schema: { type: 'string', enum: ['system', 'classroom', 'class_session'] } }, { name: 'scope_id', in: 'query', description: 'Required for classroom and class_session; omit for platform-wide teaching policy', schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   paths['/api/system-role-assignments'] = {
     get: { ...pageBase, operationId: 'system_role_assignments_list', 'x-permission': 'system.role_assignments.read', parameters: [{ $ref: '#/components/parameters/Limit' }, { $ref: '#/components/parameters/Offset' }, { name: 'user_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'role_id', in: 'query', schema: { type: 'string', format: 'uuid' } }, { name: 'sort', in: 'query', schema: { type: 'string', enum: ['created_at', '-created_at', 'effective_from', '-effective_from'], default: '-created_at' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
@@ -506,7 +508,7 @@ export function buildOpenApi() {
     get: {
       operationId: 'realtime_websocket',
       summary: 'Authenticated report collaboration and class-session invalidation WebSocket upgrade',
-      description: 'Upgrade to a WebSocket after the HttpOnly session cookie and Origin allowlist are validated. Supply exactly one of room (report UUID, teaching.reports.read) or class_session (class-session UUID, teaching.class_sessions.read or teaching.class_sessions.list). The server injects the upstream JWT; it is never exposed to the browser. Class-session channels receive only database invalidation broadcasts and cannot publish application events.',
+      description: 'Upgrade to a WebSocket after the HttpOnly session cookie and Origin allowlist are validated. Supply exactly one of room (report UUID, teaching.reports.read) or class_session (class-session UUID, teaching.class_sessions.read or teaching.class_sessions.list). The server injects the upstream JWT; it is never exposed to the browser. Class-session channels receive only database invalidation broadcasts and cannot publish application events. The proxy pings both connections every 25 seconds and treats a missing pong after 10 seconds as a retryable interruption. Clients should create a new connection and revalidate session and resource access after close code 1012; code 4403 means access is denied and should not be retried.',
       security: [{ cookieAuth: [] }],
       'x-websocket': true,
       'x-permission': 'teaching.reports.read | teaching.class_sessions.read | teaching.class_sessions.list',
@@ -518,14 +520,14 @@ export function buildOpenApi() {
         '101': { description: 'WebSocket protocol upgrade' },
         '400': { description: 'Invalid report room' },
         '401': { $ref: '#/components/responses/Unauthorized' },
-        '403': { $ref: '#/components/responses/Forbidden' },
+        '403': { description: 'Origin is not allowed' },
         '503': { description: 'Realtime upstream is unavailable' },
       },
     },
   }
   paths['/api/permissions/{permissionId}/policies'] = {
-    get: { operationId: 'permission_policies_list', deprecated: true, 'x-successor': '/api/roles/{id}/permissions', security: [{ cookieAuth: [] }], parameters: [{ name: 'permissionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
-    patch: { operationId: 'permission_policies_replace', deprecated: true, 'x-successor': '/api/roles/{id}/permissions', security: [{ cookieAuth: [] }], parameters: [{ name: 'permissionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, { $ref: '#/components/parameters/IdempotencyKey' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    get: { operationId: 'permission_policies_list', deprecated: true, 'x-successor': '/api/roles/{id}/permissions', 'x-authorization-model': 'database-rls', security: [{ cookieAuth: [] }], parameters: [{ name: 'permissionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
+    patch: { operationId: 'permission_policies_replace', deprecated: true, 'x-successor': '/api/roles/{id}/permissions', 'x-authorization-model': 'scope-permission', security: [{ cookieAuth: [] }], parameters: [{ name: 'permissionId', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }, { $ref: '#/components/parameters/IdempotencyKey' }], responses: { '200': { $ref: '#/components/responses/Envelope' }, ...errorResponses } },
   }
   const specializedSchemas = {
     RoleCreateMutation: {

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 import { findReportProgressGaps } from './reportProgressGaps.js'
 
 const occurrenceFields = 'id,class_session_id,occurrence_date,status,original_start_time,original_end_time,actual_start_time,actual_end_time,time_zone,is_conducted,teacher_ids,teacher_attendance,created_at,updated_at,class_sessions(id,name,time_zone,classroom_id,classrooms(id,name,color))'
@@ -27,7 +28,7 @@ async function permission(req: Request, key: string, sessionId?: string | null) 
     p_class_session_id: sessionId ?? null,
   })
   setAuditContext(req, { domain: 'teaching', permission: key, action: key.split('.').at(-1) ?? 'read', scopeId: sessionId ?? null, scopeType: sessionId ? 'class_session' : null })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to access this resource')
+  requireAuthorizationDecision(req, result, { permission: key, stage: 'domain_route_permission', message: 'You do not have permission to access this resource', scopeId: sessionId ?? null, scopeType: sessionId ? 'class_session' : null })
 }
 
 const occurrenceQuery = z.object({
@@ -121,7 +122,7 @@ async function reportMutation(req: Request, reportId: string, patch: Record<stri
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const context = await req.db.rpc('get_occurrence_report_mutation_context', { p_report_id: reportId, p_permission_key: 'teaching.reports.update' }).maybeSingle()
   if (context.error) throw mapDatabaseError(context.error)
-  if (!context.data) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify this report')
+  requireAuthorizationDecision(req, { data: Boolean(context.data), error: null }, { permission: 'teaching.reports.update', stage: 'report_mutation_context', message: 'You do not have permission to modify this report', scopeId: reportId, scopeType: 'occurrence_report' })
   const mutationContext = context.data as { teaching_id?: string | null; class_occurrence_id?: string | null }
   setAuditContext(req, { domain: 'teaching', resource: 'reports', resourceId: reportId, permission: 'teaching.reports.update', action: 'update', teachingId: mutationContext.teaching_id ?? null, scopeId: mutationContext.class_occurrence_id ?? null, scopeType: 'class_occurrence' })
   const replay = await idempotency(req, 200, null)
@@ -290,12 +291,6 @@ async function enrollmentReportProgressContext(req: Request, res: Response) {
   if (occurrence.error) throw mapDatabaseError(occurrence.error)
   if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   await permission(req, 'teaching.reports.list', occurrence.data.class_session_id)
-
-  const effectiveRoster = await req.db!.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: occurrence.data.id })
-  if (effectiveRoster.error) throw mapDatabaseError(effectiveRoster.error)
-  const isOnEffectiveRoster = ((effectiveRoster.data ?? []) as Array<{ enrollment_id: string }>)
-    .some((row) => row.enrollment_id === enrollmentId)
-  if (!isOnEffectiveRoster) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found in this occurrence')
 
   const currentReport = await req.db!.from('occurrence_reports').select('id,enrollment_id,class_occurrence_id').eq('id', query.report_id).maybeSingle()
   if (currentReport.error) throw mapDatabaseError(currentReport.error)

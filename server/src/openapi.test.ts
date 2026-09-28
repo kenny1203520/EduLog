@@ -192,6 +192,36 @@ describe('generated API contract', () => {
     }
   })
 
+  it('declares feature authorization for every protected API operation', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
+    const withoutFeaturePermission: string[] = []
+    const authorizationModels = new Set([
+      'owner-identity',
+      'current-user-capabilities',
+      'permission-probe',
+      'role-scope-permission',
+      'database-rls',
+      'scope-permission',
+    ])
+    for (const [path, pathItem] of Object.entries(spec.paths)) {
+      for (const [method, operation] of Object.entries(pathItem ?? {})) {
+        if (!operation?.operationId || operation['x-websocket']) continue
+        if (!operation.security?.some((scheme: Record<string, unknown>) => 'cookieAuth' in scheme)) continue
+        // Session establishment and CSRF operations use authentication/session protections
+        // instead of a domain permission. Self-service operations are authorized by identity.
+        if (path.startsWith('/api/auth/')) continue
+        if (operation['x-self-service'] === true) continue
+        const hasPermission = typeof operation['x-permission'] === 'string'
+          || (Array.isArray(operation['x-permissions']) && operation['x-permissions'].length > 0)
+          || (Array.isArray(operation['x-rpc-allowlist']) && operation['x-rpc-allowlist'].length > 0)
+        const authorizationModel = operation['x-authorization-model']
+        if (!hasPermission && !authorizationModels.has(authorizationModel)) withoutFeaturePermission.push(`${method.toUpperCase()} ${path} (${operation.operationId})`)
+        if (authorizationModel !== undefined) expect(authorizationModels.has(authorizationModel), `${method.toUpperCase()} ${path}`).toBe(true)
+      }
+    }
+    expect(withoutFeaturePermission).toEqual([])
+  })
+
   it('documents auth CSRF and user search routes that are mounted outside the registry', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
     expect(spec.paths['/api/auth/csrf']?.get?.operationId).toBe('csrfToken')

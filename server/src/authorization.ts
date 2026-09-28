@@ -10,12 +10,68 @@ function permissionFor(def: ResourceDefinition, action: string) {
     ?? `${def.permission.slice(0, def.permission.lastIndexOf('.') + 1)}${action}`
 }
 
-function rpcError(error: unknown): never {
-  if (error) throw mapDatabaseError(error as { code?: string; message?: string })
-  throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to perform this action')
+type AuthorizationRpcResult = {
+  data: unknown
+  error: { code?: string; message?: string } | null
 }
 
-async function teachingPermission(req: Request, permission: string, _legacyTeachingId: string | null) {
+export function requireAuthorizationDecision(
+  req: Request,
+  result: AuthorizationRpcResult,
+  details: {
+    permission: string
+    stage: string
+    message?: string
+    teachingId?: string | null
+    scopeId?: string | null
+    scopeType?: string | null
+  },
+) {
+  setAuditContext(req, {
+    domain: details.permission.startsWith('system.') ? 'system' : 'teaching',
+    permission: details.permission,
+    ...(details.teachingId !== undefined ? { teachingId: details.teachingId } : {}),
+    ...(details.scopeId !== undefined ? { scopeId: details.scopeId } : {}),
+    ...(details.scopeType !== undefined ? { scopeType: details.scopeType } : {}),
+    authorizationStage: details.stage,
+  })
+
+  if (result.error) {
+    setAuditContext(req, { authorizationResult: 'rpc_error', errorCode: 'AUTHORIZATION_RPC_ERROR' })
+    req.log?.error({
+      event: 'authorization_check_failed',
+      permission: details.permission,
+      authorization_stage: details.stage,
+      database_error_code: result.error.code ?? 'UNKNOWN',
+      teaching_id: details.teachingId ?? null,
+      scope_type: details.scopeType ?? null,
+      scope_id: details.scopeId ?? null,
+    }, 'authorization_check_failed')
+    const databaseError = mapDatabaseError(result.error)
+    // An authorization RPC error is not a negative permission decision. In
+    // particular, Postgres 42501 here indicates a broken DB/function grant,
+    // because normal lack of permission is returned as `false`.
+    if (databaseError.status === 403) {
+      throw new ApiError(503, 'AUTHORIZATION_CHECK_UNAVAILABLE', 'Authorization could not be verified')
+    }
+    throw databaseError
+  }
+
+  if (result.data !== true) {
+    setAuditContext(req, { authorizationResult: 'denied', errorCode: 'PERMISSION_DENIED' })
+    req.log?.warn({
+      event: 'authorization_denied',
+      permission: details.permission,
+      authorization_stage: details.stage,
+      teaching_id: details.teachingId ?? null,
+      scope_type: details.scopeType ?? null,
+      scope_id: details.scopeId ?? null,
+    }, 'authorization_denied')
+    throw new ApiError(403, 'PERMISSION_DENIED', details.message ?? 'You do not have permission to perform this action')
+  }
+}
+
+async function teachingPermission(req: Request, permission: string, teachingId: string | null) {
   setAuditContext(req, { domain: 'teaching', permission, scopeType: 'system' })
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const { data, error } = await req.db.rpc('has_api_permission', {
@@ -24,7 +80,12 @@ async function teachingPermission(req: Request, permission: string, _legacyTeach
     p_classroom_id: null,
     p_class_session_id: null,
   })
-  if (error || data !== true) rpcError(error)
+  requireAuthorizationDecision(req, { data, error }, {
+    permission,
+    stage: 'global_teaching_permission',
+    teachingId,
+    scopeType: teachingId ? 'teaching' : 'system',
+  })
 }
 
 async function coursePermission(req: Request, permission: string, courseId: string) {
@@ -49,7 +110,12 @@ async function apiPermission(req: Request, permission: string, classroomId: stri
     p_classroom_id: classroomId,
     p_class_session_id: sessionId,
   })
-  if (error || data !== true) rpcError(error)
+  requireAuthorizationDecision(req, { data, error }, {
+    permission,
+    stage: 'api_permission',
+    scopeId: classroomId ?? sessionId,
+    scopeType: classroomId ? 'classroom' : sessionId ? 'class_session' : null,
+  })
 }
 
 function uuidList(row: Record<string, unknown> | undefined, key: string) {
@@ -97,7 +163,12 @@ async function entityPermission(req: Request, kind: 'student' | 'enrollment' | '
     ? (permission.endsWith('_sensitive') ? 'can_access_sensitive_student' : 'can_access_student')
     : kind === 'enrollment' ? 'can_access_enrollment' : 'can_access_report'
   const { data, error } = await req.db.rpc(functionName, { [`p_${kind}_id`]: id, p_permission_key: permission })
-  if (error || data !== true) rpcError(error)
+  requireAuthorizationDecision(req, { data, error }, {
+    permission,
+    stage: `${kind}_entity_permission`,
+    scopeId: id,
+    scopeType: kind === 'student' ? 'student' : kind === 'enrollment' ? 'enrollment' : 'report',
+  })
 }
 
 function rowTeachingId(row: Record<string, unknown> | undefined) {

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const fields = 'id,enrollment_id,start_date,end_date,time_zone,reason,created_at,updated_at'
 export const suspensionCreateSchema = z.object({ enrollment_id: z.string().uuid(), start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), time_zone: z.string().min(1).max(64).optional(), reason: z.string().max(2000).nullable().optional() }).strict()
@@ -19,7 +20,7 @@ async function enrollment(req: Request, id: string) {
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data) throw new ApiError(404, 'NOT_FOUND', 'Enrollment was not found')
   const permission = await req.db.rpc('can_access_enrollment', { p_enrollment_id: id, p_permission_key: 'teaching.students.update' })
-  if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage suspensions')
+  requireAuthorizationDecision(req, permission, { permission: 'teaching.students.update', stage: 'suspension_enrollment_permission', message: 'You do not have permission to manage suspensions', scopeId: id, scopeType: 'enrollment' })
   return result.data
 }
 

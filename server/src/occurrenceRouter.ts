@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const fields = 'id,class_session_id,occurrence_date,status,notes,original_start_time,original_end_time,actual_start_time,actual_end_time,teacher_ids,teacher_attendance,is_conducted,time_zone,created_at,updated_at'
 export const occurrenceBodySchema = z.object({ status: z.enum(['scheduled', 'completed', 'cancelled']).optional(), notes: z.string().max(10000).nullable().optional(), actual_start_time: z.string().max(32).nullable().optional(), actual_end_time: z.string().max(32).nullable().optional(), teacher_attendance: z.record(z.string(), z.boolean()).optional(), is_conducted: z.boolean().optional() }).strict()
@@ -11,7 +12,7 @@ async function authorize(req: Request, id: string, action: 'update' | 'delete' =
   if (!req.db || !req.user) throw new ApiError(401, 'AUTH_REQUIRED', 'Authentication is required')
   const occurrence = await req.db.from('class_occurrences').select('class_session_id,occurrence_date').eq('id', id).maybeSingle(); if (occurrence.error) throw mapDatabaseError(occurrence.error); if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   setAuditContext(req, { domain: 'teaching', resource: 'occurrences', resourceId: id, action, permission: `teaching.occurrences.${action}`, scopeId: occurrence.data.class_session_id, scopeType: 'class_session' })
-  const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.occurrences.${action}`, p_classroom_id: null, p_class_session_id: occurrence.data.class_session_id }); if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to modify this occurrence')
+  const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: `teaching.occurrences.${action}`, p_classroom_id: null, p_class_session_id: occurrence.data.class_session_id }); requireAuthorizationDecision(req, permission, { permission: `teaching.occurrences.${action}`, stage: 'occurrence_session_permission', message: 'You do not have permission to modify this occurrence', scopeId: occurrence.data.class_session_id, scopeType: 'class_session' })
   return occurrence.data
 }
 async function update(req: Request, res: Response) {
@@ -56,7 +57,7 @@ async function generate(req: Request, res: Response) {
   const spanDays = Math.floor((Date.parse(`${input.end_date}T00:00:00Z`) - Date.parse(`${input.start_date}T00:00:00Z`)) / 86400000)
   if (!Number.isFinite(spanDays) || spanDays > 3660) throw new ApiError(422, 'DATE_RANGE_TOO_LARGE', 'The generation range is too large')
   const permission = await req.db.rpc('has_api_permission', { p_user_id: req.user.id, p_permission_key: 'teaching.occurrences.create', p_classroom_id: null, p_class_session_id: input.class_session_id })
-  if (permission.error || permission.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to generate occurrences')
+  requireAuthorizationDecision(req, permission, { permission: 'teaching.occurrences.create', stage: 'occurrence_generation_permission', message: 'You do not have permission to generate occurrences', scopeId: input.class_session_id, scopeType: 'class_session' })
   const replay = await idempotency(req, 200, null)
   if (replay) return res.status(replay.status).json(replay.body)
   const session = await req.db.from('class_sessions').select('id,user_id,start_date,end_date,time_zone,session_type,schedule_mode,class_session_schedule_rules(schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)').eq('id', input.class_session_id).maybeSingle()

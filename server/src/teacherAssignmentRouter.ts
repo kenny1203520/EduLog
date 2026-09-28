@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './errors.js'
 import { attachTeacherProfile, complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './context.js'
+import { requireAuthorizationDecision } from './authorization.js'
 
 const assignmentFields = 'id,class_session_id,teacher_id,effective_from,effective_to,role_id,created_at,updated_at'
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -41,7 +42,7 @@ async function authorize(req: Request, id: string, action: 'read' | 'list' | 'cr
     p_classroom_id: null,
     p_class_session_id: id,
   })
-  if (result.error || result.data !== true) throw new ApiError(403, 'PERMISSION_DENIED', 'You do not have permission to manage session teachers')
+  requireAuthorizationDecision(req, result, { permission: `teaching.class_sessions.${action}`, stage: 'session_teacher_assignment_permission', message: 'You do not have permission to manage session teachers', scopeId: id, scopeType: 'class_session' })
 }
 
 async function resolveRoleId(req: Request, roleId?: string) {
