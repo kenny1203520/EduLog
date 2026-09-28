@@ -76,6 +76,16 @@ const teachingAssignmentMutation = z.object({
 const scopedTeachingAssignmentQuery = z.object({ scope_type: z.enum(['classroom', 'class_session']), scope_id: uuid,
   user_id: uuid.optional(),
   limit: z.coerce.number().int().min(1).max(100).default(100), offset: z.coerce.number().int().min(0).max(1_000_000).default(0) }).strict()
+const effectiveTeachingRolesQuery = z.object({
+  scope_type: z.enum(['system', 'classroom', 'class_session']),
+  scope_id: nullableUuid,
+  user_id: uuid,
+  effective_date: z.string().date().default(() => new Date().toISOString().slice(0, 10)),
+}).strict().superRefine((query, context) => {
+  if ((query.scope_type === 'system') !== (query.scope_id == null)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['scope_id'], message: 'scope_id must be omitted for system scope and supplied otherwise' })
+  }
+})
 const scopedTeachingAssignmentMutation = z.object({
   scope_type: z.enum(['classroom', 'class_session']), scope_id: uuid,
   user_id: uuid, role_id: uuid, effective_from: z.string().date(), effective_to: z.string().date().nullable().optional(),
@@ -561,6 +571,21 @@ export function createRbacRouter() {
       data = data.map(row => ({ ...row, user: byId.get(row.user_id) ?? null }))
     } else data = data.map(row => ({ ...row, user: null }))
     return sendData(req, res, data, { limit: query.limit, offset: query.offset, total: result.count ?? 0, can_list_users: canListUsers })
+  }))
+
+  router.get('/teaching-role-assignments/effective', wrap(async (req, res) => {
+    requireRequest(req)
+    const query = effectiveTeachingRolesQuery.parse(req.query)
+    await authorizeRoleScope(req, 'teaching', { type: query.scope_type, id: query.scope_id }, 'read')
+    setAuditContext(req, { domain: 'teaching', resource: 'effective-role-assignments', action: 'read', scopeId: query.scope_id, scopeType: query.scope_type, permission: 'teaching.roles.read | teaching.roles.manage' })
+    const result = await req.db!.rpc('get_effective_teaching_roles', {
+      p_user_id: query.user_id,
+      p_scope_type: query.scope_type,
+      p_scope_id: query.scope_id,
+      p_effective_date: query.effective_date,
+    })
+    if (result.error) throw mapDatabaseError(result.error)
+    return sendData(req, res, result.data ?? [], { effective_date: query.effective_date, scope_type: query.scope_type, scope_id: query.scope_id })
   }))
 
   const mutateScopedTeachingAssignment = async (req: Request, res: Response) => {

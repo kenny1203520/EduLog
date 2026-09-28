@@ -43,11 +43,25 @@ async function authorize(req: Request, id: string, action: 'read' | 'list' | 'cr
     p_class_session_id: id,
   })
   requireAuthorizationDecision(req, result, { permission: `teaching.class_sessions.${action}`, stage: 'session_teacher_assignment_permission', message: 'You do not have permission to manage session teachers', scopeId: id, scopeType: 'class_session' })
+  if (action === 'create' || action === 'update' || action === 'delete') {
+    const roleResult = await req.db.rpc('has_api_permission', {
+      p_user_id: req.user.id,
+      p_permission_key: 'teaching.roles.manage',
+      p_classroom_id: null,
+      p_class_session_id: id,
+    })
+    requireAuthorizationDecision(req, roleResult, { permission: 'teaching.roles.manage', stage: 'session_teacher_assignment_role_permission', message: 'Teaching-role management permission is required to assign class roles', scopeId: id, scopeType: 'class_session' })
+  }
 }
 
 async function resolveRoleId(req: Request, roleId?: string) {
-  if (roleId) return roleId
-  const result = await req.db!.from('roles').select('id').eq('code', 'teacher').maybeSingle()
+  if (roleId) {
+    const result = await req.db!.from('roles').select('id').eq('id', roleId).eq('domain', 'teaching').maybeSingle()
+    if (result.error) throw mapDatabaseError(result.error)
+    if (!result.data) throw new ApiError(422, 'INVALID_REFERENCE', 'The selected role is not a teaching role')
+    return roleId
+  }
+  const result = await req.db!.from('roles').select('id').eq('domain', 'teaching').eq('code', 'teacher').maybeSingle()
   if (result.error) throw mapDatabaseError(result.error)
   if (!result.data?.id) throw new ApiError(422, 'INVALID_REFERENCE', 'The default teacher role is not configured')
   return result.data.id as string
@@ -117,6 +131,25 @@ async function create(req: Request, res: Response) {
   return res.status(201).json(body)
 }
 
+async function replace(req: Request, res: Response) {
+  const id = sessionId(req)
+  const input = teacherAssignmentCreateSchema.parse(req.body)
+  await authorize(req, id, 'update')
+  const replay = await idempotency(req, 200, null)
+  if (replay) return res.status(replay.status).json(replay.body)
+  const rows = await Promise.all(input.teachers.map(async (teacher) => ({
+    ...teacher,
+    role_id: await resolveRoleId(req, teacher.role_id),
+  })))
+  const result = await req.db!.rpc('replace_class_session_teacher_assignments', { p_session_id: id, p_teachers: rows })
+  if (result.error) throw mapDatabaseError(result.error)
+  const data = (await hydrateAssignments(req, result.data ?? [])).map(mapAssignment).filter(Boolean)
+  setAuditContext(req, { resourceId: null, scopeId: id, scopeType: 'class_session' })
+  const body = { data, meta: { count: data.length }, request_id: req.requestId, trace_id: req.traceId }
+  await complete(req, 200, body)
+  return res.json(body)
+}
+
 async function remove(req: Request, res: Response) {
   const id = sessionId(req)
   const removalBody = req.body && typeof req.body === 'object' ? req.body as Record<string, unknown> : {}
@@ -166,6 +199,7 @@ export function createTeacherAssignmentRouter() {
   const router = Router()
   router.get('/class-sessions/:sessionId/teachers', wrap(list))
   router.post('/class-sessions/:sessionId/teachers', wrap(create))
+  router.put('/class-sessions/:sessionId/teachers', wrap(replace))
   router.delete('/class-sessions/:sessionId/teachers', wrap(remove))
   router.delete('/class-sessions/:sessionId/teachers/:teacherId', wrap(remove))
   router.patch('/class-sessions/:sessionId/teachers/:assignmentId', wrap(update))

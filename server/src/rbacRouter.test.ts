@@ -18,6 +18,8 @@ describe('RBAC API contract', () => {
     expect(document.paths['/api/classrooms/{classroomId}/role-assignments'].post?.['x-permission']).toBe('teaching.roles.manage')
     expect(document.paths['/api/classrooms/{classroomId}/role-assignments/{assignmentId}'].patch).toBeTruthy()
     expect(document.paths['/api/classrooms/{classroomId}/role-assignments/{assignmentId}'].delete).toBeTruthy()
+    expect(document.paths['/api/teaching-role-assignments/effective'].get?.['x-permission']).toContain('teaching.roles.read')
+    expect(document.paths['/api/class-sessions/{sessionId}/teachers'].put?.['x-permission']).toContain('teaching.roles.manage')
     expect(document.components.schemas.ClassroomRoleAssignmentMutation.required).toContain('effective_from')
   })
 })
