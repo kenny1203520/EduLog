@@ -45,10 +45,13 @@ const isOpen = ref(false)
 const searchQuery = ref('')
 const containerRef = ref<HTMLElement | null>(null)
 const triggerRef = ref<HTMLButtonElement | null>(null)
+const menuRef = ref<HTMLElement | null>(null)
 const searchInput = ref<HTMLInputElement | null>(null)
 const activeIndex = ref(0)
 const selectedOptionCache = ref<Option | null>(null)
 const listId = `searchable-select-${Math.random().toString(36).slice(2)}`
+const menuStyle = ref<Record<string, string>>({})
+const listMaxHeight = ref('15rem')
 
 const selectedLabel = computed(() => {
     if (props.multiple) {
@@ -127,6 +130,7 @@ function selectOption(option: Option) {
 
 function closeDropdown(returnFocus = false) {
     isOpen.value = false
+    stopPositionTracking()
     searchQuery.value = ''
     activeIndex.value = 0
     if (returnFocus) void nextTick(() => triggerRef.value?.focus())
@@ -165,11 +169,63 @@ function onSearchKeydown(event: KeyboardEvent) {
     }
 }
 
+function updateMenuPosition() {
+    const trigger = triggerRef.value
+    if (!trigger) return
+
+    const rect = trigger.getBoundingClientRect()
+    const margin = 8
+    const viewportWidth = document.documentElement.clientWidth || window.innerWidth
+    const viewportHeight = window.innerHeight
+    const width = Math.max(0, Math.min(rect.width, viewportWidth - margin * 2))
+    const left = Math.min(Math.max(rect.left, margin), viewportWidth - width - margin)
+    const spaceBelow = Math.max(0, viewportHeight - rect.bottom - margin)
+    const spaceAbove = Math.max(0, rect.top - margin)
+    const openAbove = spaceBelow < Math.min(240, spaceAbove)
+    const availableHeight = openAbove ? spaceAbove : spaceBelow
+    const maxHeight = Math.max(96, Math.min(300, availableHeight))
+
+    menuStyle.value = {
+        position: 'fixed',
+        top: openAbove ? 'auto' : `${rect.bottom + 4}px`,
+        bottom: openAbove ? `${viewportHeight - rect.top + 4}px` : 'auto',
+        left: `${left}px`,
+        width: `${width}px`,
+        maxHeight: `${maxHeight}px`,
+        zIndex: '10050'
+    }
+    listMaxHeight.value = `${Math.max(48, maxHeight - 52)}px`
+}
+
+function startPositionTracking() {
+    window.addEventListener('scroll', updateMenuPosition, true)
+    window.addEventListener('resize', updateMenuPosition)
+    window.visualViewport?.addEventListener('resize', updateMenuPosition)
+    window.visualViewport?.addEventListener('scroll', updateMenuPosition)
+}
+
+function stopPositionTracking() {
+    window.removeEventListener('scroll', updateMenuPosition, true)
+    window.removeEventListener('resize', updateMenuPosition)
+    window.visualViewport?.removeEventListener('resize', updateMenuPosition)
+    window.visualViewport?.removeEventListener('scroll', updateMenuPosition)
+}
+
+watch(isOpen, async open => {
+    stopPositionTracking()
+    if (!open) return
+
+    startPositionTracking()
+    await nextTick()
+    updateMenuPosition()
+})
+
 // Click outside to close
 function handleClickOutside(event: MouseEvent) {
-    if (containerRef.value && !containerRef.value.contains(event.target as Node)) {
-        closeDropdown()
-    }
+    const target = event.target
+    if (!(target instanceof Node)) return
+    if (containerRef.value?.contains(target) || menuRef.value?.contains(target)) return
+    closeDropdown()
 }
 
 onMounted(() => {
@@ -178,6 +234,7 @@ onMounted(() => {
 
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside)
+    stopPositionTracking()
 })
 
 </script>
@@ -202,13 +259,14 @@ onUnmounted(() => {
             </svg>
         </button>
 
-        <!-- Dropdown -->
-        <div v-if="isOpen"
-            class="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
+        <!-- Teleport avoids clipping by responsive cards and scroll containers. -->
+        <Teleport to="body">
+        <div v-if="isOpen" ref="menuRef" :style="menuStyle"
+            class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl">
             <input v-model="searchQuery" ref="searchInput" role="combobox" aria-autocomplete="list" :aria-expanded="true" :aria-controls="listId" :aria-activedescendant="activeOptionId"
                 class="w-full border-b border-gray-100 px-3 py-2 outline-none focus:ring-2 focus:ring-inset focus:ring-emerald-500"
                 :placeholder="placeholder || $t('common.select_placeholder')" :aria-label="ariaLabel || placeholder || $t('common.select_placeholder')" @keydown="onSearchKeydown" />
-            <ul :id="listId" role="listbox" :aria-multiselectable="multiple" class="max-h-60 overflow-y-auto py-1">
+            <ul :id="listId" role="listbox" :aria-multiselectable="multiple" :style="{ maxHeight: listMaxHeight }" class="overflow-y-auto py-1">
                 <li v-for="(opt, index) in filteredOptions" :id="`${listId}-option-${index}`" :key="opt.value" role="option" :aria-selected="isSelected(opt)" :title="[opt.label, opt.description].filter(Boolean).join(' — ')" @mouseenter="activeIndex = index" @click.stop="selectOption(opt)"
                     class="flex cursor-pointer justify-between gap-2 px-3 py-2 text-gray-700 hover:bg-emerald-50 hover:text-emerald-700"
                     :class="[isSelected(opt) || activeIndex === index ? 'bg-emerald-50 text-emerald-700' : '', descriptionPlacement === 'below' ? 'items-start' : 'items-center', fontSizeClass]">
@@ -226,6 +284,7 @@ onUnmounted(() => {
                 </li>
             </ul>
         </div>
+        </Teleport>
     </div>
 </template>
 
