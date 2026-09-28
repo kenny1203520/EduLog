@@ -128,5 +128,34 @@ describe('report SupabaseProvider snapshot versioning', () => {
         await provider.destroy()
     })
 
+    it('keeps transient channel recovery alive and reloads the snapshot and presence after resubscribe', async () => {
+        const { supabase, channel, query } = createSupabaseMock({ snapshot_base64: encodedTextSnapshot('recovered draft'), base_report_version: 7 })
+        let notify: ((status: string, detail?: string) => void) | undefined
+        channel.subscribe.mockImplementation((callback: (status: string, detail?: string) => void) => {
+            notify = callback
+            return channel
+        })
+        const statuses: string[] = []
+        const provider = new SupabaseProvider(supabase as any, new Y.Doc(), 'report-1', 7, 'user-1', {
+            onStatus: status => statuses.push(status)
+        })
+
+        notify?.('CHANNEL_ERROR', 'upstream interrupted')
+        notify?.('RECONNECTING')
+        expect(statuses).toContain('reconnecting')
+        notify?.('SUBSCRIBED')
+        await provider.ready
+        expect(query.maybeSingle).toHaveBeenCalledOnce()
+        expect(channel.track).toHaveBeenCalledOnce()
+
+        notify?.('OFFLINE')
+        notify?.('SUBSCRIBED')
+        await Promise.resolve()
+        await Promise.resolve()
+        expect(query.maybeSingle).toHaveBeenCalledTimes(2)
+        expect(channel.track).toHaveBeenCalledTimes(2)
+        await provider.destroy()
+    })
+
 
 })

@@ -12,17 +12,17 @@
         </div>
 
         <!-- Header -->
-        <div v-if="effectiveCollaborationEnabled && collaborationStatus === 'connecting'"
+        <div v-if="effectiveCollaborationEnabled && (collaborationStatus === 'connecting' || collaborationStatus === 'subscribing')"
             class="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700"
             role="status">
-            {{ $t('report.editor.collaboration_connecting', 'Collaboration is connecting. You can continue editing.') }}
+            {{ collaborationConnectingMessage }}
         </div>
-        <div v-else-if="effectiveCollaborationEnabled && (collaborationStatus === 'error' || collabInitialState === 'error')"
+        <div v-else-if="effectiveCollaborationEnabled && (collaborationStatus === 'error' || collaborationStatus === 'reconnecting' || collaborationStatus === 'offline' || collaborationStatus === 'forbidden' || collaborationStatus === 'auth-expired' || collaborationStatus === 'account-disabled' || collabInitialState === 'error')"
             class="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
             role="status" aria-live="polite">
-            <span>{{ $t('report.editor.collaboration_disconnected') }}</span>
-            <button type="button" class="min-h-9 rounded-lg border border-amber-300 bg-white px-3 font-bold text-amber-900 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700 disabled:opacity-50" :disabled="collaborationStatus === 'connecting'" @click="reconnectCollaboration">
-                {{ collaborationStatus === 'connecting' ? $t('report.editor.collaboration_connecting_short') : $t('report.editor.collaboration_retry') }}
+            <span>{{ collaborationStatusMessage }}</span>
+            <button v-if="collaborationStatus !== 'forbidden' && collaborationStatus !== 'auth-expired' && collaborationStatus !== 'account-disabled'" type="button" class="min-h-9 rounded-lg border border-amber-300 bg-white px-3 font-bold text-amber-900 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-amber-700 disabled:opacity-50" @click="reconnectCollaboration">
+                {{ $t('report.editor.collaboration_retry') }}
             </button>
             <span v-if="collaborationError" class="basis-full break-words text-[11px] font-medium" aria-live="polite">
                 {{ $t('report.editor.collaboration_error_detail') }} {{ collaborationError }}
@@ -161,12 +161,11 @@
                 </div>
                 <BaseDropdown data-collab-field="lesson" v-model="selectedLessonId" :options="lessonOptions" :disabled="disabled"
                     theme="emerald" />
-                <section v-if="progressContextLoading || progressContextError || progressContextUnsupported || progressGaps.length || previousProgressReport"
+                <section v-if="progressContextLoading || progressContextError || progressGaps.length || previousProgressReport"
                     class="mt-3 rounded-xl border px-3 py-3 sm:px-4"
                     :class="progressContextError ? 'border-rose-200 bg-rose-50' : 'border-amber-200 bg-amber-50'"
                     :aria-busy="progressContextLoading" aria-live="polite" aria-atomic="true">
                     <p v-if="progressContextLoading" class="text-sm text-slate-600" role="status">{{ $t('report.editor.progress_check.loading') }}</p>
-                    <p v-else-if="progressContextUnsupported" class="text-sm text-slate-600" role="status">{{ $t('report.editor.progress_check.unsupported') }}</p>
                     <div v-else-if="progressContextError" class="flex flex-wrap items-center justify-between gap-2 text-sm text-rose-800" role="status">
                         <span>{{ $t('report.editor.progress_check.load_error') }}</span>
                         <button type="button" class="min-h-9 rounded-lg border border-rose-300 bg-white px-3 font-semibold" @click="loadProgressContext">{{ $t('report.editor.progress_check.retry') }}</button>
@@ -1984,6 +1983,18 @@ watch(ready, (isReady) => {
 
 const authStore = useAuthStore()
 const { t } = useI18n()
+const collaborationConnectingMessage = computed(() => collaborationStatus.value === 'subscribing'
+    ? t('report.editor.collaboration_subscribing')
+    : t('report.editor.collaboration_connecting'))
+const collaborationStatusMessage = computed(() => {
+    switch (collaborationStatus.value) {
+        case 'offline': return t('report.editor.collaboration_offline')
+        case 'forbidden': return t('report.editor.collaboration_forbidden')
+        case 'auth-expired': return t('report.editor.collaboration_auth_expired')
+        case 'account-disabled': return t('report.editor.collaboration_account_disabled')
+        default: return t('report.editor.collaboration_disconnected')
+    }
+})
 
 // Local state
 const initialMainContent = createTextEditorContent(props.initialContentDocument || props.initialContent)
@@ -2014,7 +2025,6 @@ type ProgressContext = Awaited<ReturnType<typeof OccurrenceReportService.getEnro
 const progressContext = ref<ProgressContext | null>(null)
 const progressContextLoading = ref(false)
 const progressContextError = ref(false)
-const progressContextUnsupported = ref(false)
 const focusedProgressReport = ref<{ id: string; lesson: { sequence: number; title: string } } | null>(null)
 let progressContextRequest = 0
 const progressGaps = computed(() => {
@@ -2036,21 +2046,16 @@ async function loadProgressContext() {
     if (!enrollmentId || !occurrenceId || !reportId) {
         progressContext.value = null
         progressContextError.value = false
-        progressContextUnsupported.value = false
         progressContextLoading.value = false
         return
     }
     progressContext.value = null
     focusedProgressReport.value = null
     progressContextError.value = false
-    progressContextUnsupported.value = false
     progressContextLoading.value = true
     try {
         const context = await OccurrenceReportService.getEnrollmentReportProgressContext(enrollmentId, occurrenceId, reportId)
-        if (requestId === progressContextRequest) {
-            progressContext.value = context
-            progressContextUnsupported.value = context === null
-        }
+        if (requestId === progressContextRequest) progressContext.value = context
     } catch {
         if (requestId === progressContextRequest) progressContextError.value = true
     } finally {

@@ -21,7 +21,7 @@ The browser uses HttpOnly cookies through `/api/auth/*`; it must not receive `SU
 
 - Email/password authentication is implemented through the Express BFF. OAuth callback routes are intentionally not enabled until redirect allowlists and provider secrets are designed.
 - No Storage calls were found in the current frontend. A future Storage proxy must issue signed URLs from Express only.
-- Realtime uses the authenticated `/api/realtime` WebSocket upgrade path. The server validates the cookie before proxying to Supabase Realtime and enforces a one-megabyte frame limit.
+- Realtime uses the authenticated `/api/realtime` WebSocket upgrade path. The server validates the cookie and resource permission before proxying to Supabase Realtime and enforces a one-megabyte frame limit. The proxy pings both sides every 25 seconds and closes a half-open pair after a 10-second pong timeout. Clients reconnect with jittered exponential backoff, refresh the session through `/api/auth/me`, then revalidate permission and rejoin; server close code `1012` is retryable and `4403` means access was denied. Browser-initiated closes use application codes (`4000` for retryable failures, `4001` while offline, and `4400` for protocol errors), since browser WebSocket APIs reject protocol close codes such as `1003` and `1011`. The client pauses retries while offline, refreshes class data or the report snapshot/presence after joining again, and stops retries if the session expires.
 
 ## Verification
 

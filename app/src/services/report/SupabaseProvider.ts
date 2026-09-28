@@ -40,7 +40,7 @@ interface ReportPresencePayload {
 }
 
 export type ReportCollabInitialState = 'none' | 'loaded' | 'legacy' | 'stale' | 'error'
-export type ReportCollabConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
+export type ReportCollabConnectionStatus = 'connecting' | 'subscribing' | 'reconnecting' | 'offline' | 'connected' | 'disconnected' | 'forbidden' | 'auth-expired' | 'account-disabled' | 'error'
 export interface ReportCollabActivity {
     field?: string
     focused?: boolean
@@ -146,9 +146,14 @@ export class SupabaseProvider {
             this.resolveReady = resolve
             this.rejectReady = reject
         })
-        this.readyTimer = setTimeout(() => {
-            this.failReady(new Error('Realtime collaboration subscription timed out'))
-        }, REALTIME_READY_TIMEOUT_MS)
+        // ApiRealtimeChannel owns socket-open and Phoenix join deadlines and
+        // retries. Keep a fallback deadline only for the legacy injected
+        // transport, whose subscription lifecycle is managed by supabase-js.
+        if (this.injectedTransport) {
+            this.readyTimer = setTimeout(() => {
+                this.failReady(new Error('Realtime collaboration subscription timed out'))
+            }, REALTIME_READY_TIMEOUT_MS)
+        }
 
         const presenceKey = `${this.userId || 'anonymous'}:${this.awareness.clientID}`
         this.channel = typeof this.injectedTransport?.channel === 'function'
@@ -178,9 +183,37 @@ export class SupabaseProvider {
                 }
             } else {
                 this.isSubscribed = false
-                const failed = status === 'CHANNEL_ERROR' || status === 'TIMED_OUT'
-                this.onStatus?.(failed ? 'error' : 'disconnected', detail)
-                if (failed) this.failReady(new Error(detail || 'Realtime collaboration channel ' + status.toLowerCase()))
+                const retrying = status === 'CHANNEL_ERROR' || status === 'RECONNECTING' || status === 'OFFLINE' || status === 'CONNECTING' || status === 'SUBSCRIBING'
+                const failed = status === 'TIMED_OUT' || status === 'PERMISSION_DENIED' || status === 'AUTH_EXPIRED' || status === 'ACCOUNT_DISABLED'
+                if (retrying && this.readyTimer) {
+                    // The API channel now owns retry/backoff and session renewal.
+                    // Do not let the initial subscription deadline tear it down.
+                    clearTimeout(this.readyTimer)
+                    this.readyTimer = null
+                }
+                const connectionStatus: ReportCollabConnectionStatus = status === 'CONNECTING'
+                    ? 'connecting'
+                    : status === 'SUBSCRIBING'
+                        ? 'subscribing'
+                        : status === 'RECONNECTING' || status === 'CHANNEL_ERROR'
+                            ? 'reconnecting'
+                            : status === 'OFFLINE'
+                                ? 'offline'
+                                : status === 'PERMISSION_DENIED'
+                                    ? 'forbidden'
+                                    : status === 'AUTH_EXPIRED'
+                                        ? 'auth-expired'
+                                        : status === 'ACCOUNT_DISABLED'
+                                            ? 'account-disabled'
+                                            : failed ? 'error' : 'disconnected'
+                this.onStatus?.(connectionStatus, detail)
+                if (failed) {
+                    const failure = new Error(detail || 'Realtime collaboration channel ' + status.toLowerCase()) as Error & { code?: string }
+                    if (status === 'PERMISSION_DENIED') failure.code = 'REALTIME_FORBIDDEN'
+                    if (status === 'AUTH_EXPIRED') failure.code = 'AUTH_EXPIRED'
+                    if (status === 'ACCOUNT_DISABLED') failure.code = 'ACCOUNT_DISABLED'
+                    this.failReady(failure)
+                }
             }
         })
     }

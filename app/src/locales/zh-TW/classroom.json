@@ -297,6 +297,7 @@
     "add_student_submit": "建立本次報告",
     "add_student_success": "已建立本次課堂報告，可立即編輯",
     "add_student_failed": "新增補課報告失敗",
+    "add_student_retry_error": "建立失敗，您的選擇仍保留。請檢查網路後重試。",
     "add_student_load_failed": "載入可選課程失敗",
     "add_student_required_fields": "請先選擇學生、課程與加入日期",
     "add_student_enrollment_not_found": "找不到所選擇的學生課程",
@@ -357,6 +358,11 @@
     "retry_occurrence_load": "重新載入",
     "live_updates_connected": "即時更新已連線",
     "live_updates_disconnected": "即時更新暫時中斷，系統會自動重新連線。",
+    "live_updates_reconnecting": "正在自動恢復即時連線…",
+    "live_updates_offline": "目前離線，網路恢復後會自動重新連線。",
+    "live_updates_forbidden": "您目前沒有檢視此班級即時更新的權限。",
+    "live_updates_expired": "登入工作階段已失效，正在返回登入頁面…",
+    "live_updates_disabled": "此帳號已停用，正在前往帳號狀態頁面…",
     "live_reconnect": "重新連線",
     "live_update_loading": "正在更新班級資料…",
     "live_update_applied": "班級資訊已更新",
@@ -368,5 +374,8 @@
     "attendance_select_student": "選取學生",
     "student_roster_title": "學生列表",
     "student_roster_subtitle": "快速掌握出席、今日課程與學習進度",
-    "student_filter_result": "顯示學生"
+    "student_filter_result": "顯示學生",
+    "live_updates_connecting": "正在建立即時連線…",
+    "live_updates_subscribing": "連線已建立，正在加入更新頻道…",
+    "live_update_detail": "連線資訊："
 }

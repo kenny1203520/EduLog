@@ -297,6 +297,7 @@
     "add_student_submit": "Create Single Report",
     "add_student_success": "Class report created. You can edit it now.",
     "add_student_failed": "Failed to create make-up report",
+    "add_student_retry_error": "Could not create the report. Your selections are saved here; check your connection and try again.",
     "add_student_load_failed": "Failed to load enrollment candidates",
     "add_student_required_fields": "Please select student, course, and date",
     "add_student_enrollment_not_found": "Selected student course was not found",
@@ -357,6 +358,11 @@
     "retry_occurrence_load": "Reload",
     "live_updates_connected": "Live updates connected",
     "live_updates_disconnected": "Live updates are temporarily disconnected. Reconnecting automatically.",
+    "live_updates_reconnecting": "Restoring the live connection automatically…",
+    "live_updates_offline": "You are offline. Live updates will resume when the connection returns.",
+    "live_updates_forbidden": "You no longer have permission to view live updates for this class.",
+    "live_updates_expired": "Your sign-in session has expired. Redirecting to sign in…",
+    "live_updates_disabled": "This account has been disabled. Redirecting to account status…",
     "live_reconnect": "Reconnect",
     "live_update_loading": "Updating class information…",
     "live_update_applied": "Class information updated",
@@ -368,5 +374,8 @@
     "attendance_select_student": "Select student",
     "student_roster_title": "Student Roster",
     "student_roster_subtitle": "Review attendance, today’s course, and learning progress",
-    "student_filter_result": "Students shown"
+    "student_filter_result": "Students shown",
+    "live_updates_connecting": "Establishing the live connection…",
+    "live_updates_subscribing": "Connected. Joining the live update channel…",
+    "live_update_detail": "Connection detail:"
 }

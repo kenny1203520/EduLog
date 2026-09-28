@@ -12,7 +12,7 @@ import { getApiV1Mode } from '@/services/api/ApiModeClient'
 import * as Y from 'yjs'
 import { useAuthStore } from '@/stores/useAuthStore'
 
-export type ReportCollaborationStatus = 'disabled' | 'connecting' | 'ready' | 'error'
+export type ReportCollaborationStatus = 'disabled' | 'connecting' | 'subscribing' | 'reconnecting' | 'offline' | 'ready' | 'error' | 'forbidden' | 'auth-expired' | 'account-disabled'
 
 export interface ReportCollaborationConfiguration {
     enabled: boolean
@@ -98,7 +98,9 @@ export function useReportCollab(
 
     function scheduleRetry() {
         if (!configuration.enabled || retryTimer) return
-        const delay = Math.min(30_000, 500 * (2 ** Math.min(retryAttempt++, 6)))
+        const baseDelay = Math.min(30_000, 500 * (2 ** Math.min(retryAttempt++, 6)))
+        const delay = Math.round(baseDelay * (0.8 + Math.random() * 0.4))
+        status.value = 'reconnecting'
         retryTimer = setTimeout(() => {
             retryTimer = null
             void connect()
@@ -106,9 +108,22 @@ export function useReportCollab(
     }
 
     function handleStatus(next: ReportCollabConnectionStatus, detail?: string): void {
-        status.value = next === 'connected' ? 'ready' : next === 'disconnected' ? 'error' : next
-        if (next === 'error') error.value = detail || i18n.global.t('report.collaboration_connection_failed')
+        const statusByConnectionState: Record<ReportCollabConnectionStatus, ReportCollaborationStatus> = {
+            connecting: 'connecting',
+            subscribing: 'subscribing',
+            reconnecting: 'reconnecting',
+            offline: 'offline',
+            connected: 'ready',
+            disconnected: 'reconnecting',
+            forbidden: 'forbidden',
+            'auth-expired': 'auth-expired',
+            'account-disabled': 'account-disabled',
+            error: 'error'
+        }
+        status.value = statusByConnectionState[next]
+        if (detail) error.value = detail
         else if (next === 'connected') error.value = null
+        else if (next === 'error') error.value = i18n.global.t('report.collaboration_connection_failed')
     }
 
     const connectOnce = async () => {
@@ -145,10 +160,15 @@ export function useReportCollab(
             await nextProvider.ready
         } catch (reason: any) {
             if (token === generation) {
-                error.value = reason?.message || i18n.global.t('report.collaboration_init_failed')
-                status.value = 'error'
+                const errorCode = reason?.code
                 await destroyCurrent(false, true)
-                scheduleRetry()
+                if (token !== generation) return false
+                error.value = reason?.message || i18n.global.t('report.collaboration_init_failed')
+                if (errorCode === 'REALTIME_FORBIDDEN') status.value = 'forbidden'
+                else if (errorCode === 'AUTH_EXPIRED') status.value = 'auth-expired'
+                else if (errorCode === 'ACCOUNT_DISABLED') status.value = 'account-disabled'
+                else status.value = 'error'
+                if (errorCode !== 'REALTIME_FORBIDDEN' && errorCode !== 'AUTH_EXPIRED' && errorCode !== 'ACCOUNT_DISABLED') scheduleRetry()
             } else {
                 await nextProvider.destroy()
             }

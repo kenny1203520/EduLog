@@ -92,7 +92,6 @@
         "lesson_label": "課次",
         "progress_check": {
             "loading": "正在檢查這門課的進度…",
-            "unsupported": "目前 API 模式不支援課程進度檢查。",
             "load_error": "課程進度檢查失敗。",
             "retry": "重試",
             "gaps_title": "課程進度有缺口",
@@ -281,7 +280,12 @@
         "restore_conflict_error": "回檔失敗：已有其他使用者修改了此報告。請先重新載入取得最新版本。",
         "restore_failed": "回檔失敗，請稍後再試。",
         "remote_update_notice": "其他使用者剛剛儲存了這份報告的變更，下次存檔時會進行衝突檢查。",
-        "stale_collab_snapshot_notice": "此報告在您上次協作編輯後已被其他地方變更，目前顯示的是最新已儲存的內容，請確認後再繼續編輯。"
+        "stale_collab_snapshot_notice": "此報告在您上次協作編輯後已被其他地方變更，目前顯示的是最新已儲存的內容，請確認後再繼續編輯。",
+        "collaboration_subscribing": "連線已建立，正在加入即時協作頻道。您仍可繼續編輯。",
+        "collaboration_offline": "目前離線，網路恢復後會自動重新連線。您仍可繼續編輯及儲存。",
+        "collaboration_forbidden": "您目前沒有檢視此報告即時協作的權限。",
+        "collaboration_auth_expired": "登入狀態已失效，請重新登入後繼續使用即時協作。",
+        "collaboration_account_disabled": "此帳號已停用，無法使用即時協作。"
     },
     "conflict": {
         "title": "偵測到版本衝突",

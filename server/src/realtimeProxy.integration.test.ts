@@ -1,0 +1,228 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { once } from 'node:events'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { WebSocket, WebSocketServer } from 'ws'
+import type { ApiConfig } from './config.js'
+
+const supabaseMocks = vi.hoisted(() => ({
+  createUserClient: vi.fn(),
+  validateAccessToken: vi.fn(),
+}))
+
+vi.mock('./supabase.js', () => supabaseMocks)
+
+import { attachRealtimeProxy } from './realtime.js'
+
+const RESOURCE_ID = 'bbe2ea83-8e94-4197-83c5-f126cf027abc'
+const AUTHORIZED = { data: true, error: null }
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
+async function listen(server: Server) {
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  return (server.address() as AddressInfo).port
+}
+
+function closeServer(server: Server) {
+  return new Promise<void>((resolve, reject) => {
+    if (!server.listening) { resolve(); return }
+    server.close((error) => error ? reject(error) : resolve())
+  })
+}
+
+describe('realtime proxy upgrade-to-join flow', () => {
+  let apiServer: Server
+  let upstreamServer: Server
+  let upstreamWss: WebSocketServer
+  let client: WebSocket | null = null
+  let upstreamConnections = 0
+  let upstreamJoinFrames: string[] = []
+
+  beforeEach(() => {
+    upstreamConnections = 0
+    upstreamJoinFrames = []
+    supabaseMocks.validateAccessToken.mockResolvedValue(undefined)
+    vi.spyOn(console, 'info').mockImplementation(() => {})
+  })
+
+  afterEach(async () => {
+    client?.terminate()
+    client = null
+    for (const upstream of upstreamWss?.clients ?? []) upstream.terminate()
+    await Promise.all([
+      upstreamWss ? new Promise<void>((resolve) => upstreamWss.close(() => resolve())) : Promise.resolve(),
+      apiServer ? closeServer(apiServer) : Promise.resolve(),
+      upstreamServer ? closeServer(upstreamServer) : Promise.resolve(),
+    ])
+    vi.restoreAllMocks()
+  })
+
+  async function startProxy(options: { upstreamHandshakeDelayMs?: number } = {}) {
+    upstreamServer = createServer()
+    const upstreamPort = await listen(upstreamServer)
+    upstreamWss = new WebSocketServer({ noServer: true })
+    upstreamServer.on('upgrade', (request, socket, head) => {
+      const accept = () => upstreamWss.handleUpgrade(request, socket, head, (upstream) => upstreamWss.emit('connection', upstream, request))
+      if (options.upstreamHandshakeDelayMs) setTimeout(accept, options.upstreamHandshakeDelayMs)
+      else accept()
+    })
+    upstreamWss.on('connection', (upstream) => {
+      upstreamConnections += 1
+      upstream.on('message', (raw) => {
+        const text = raw.toString()
+        const frame = JSON.parse(text)
+        if (frame.event === 'phx_join') {
+          upstreamJoinFrames.push(text)
+          upstream.send(JSON.stringify({
+            join_ref: frame.join_ref,
+            ref: frame.ref,
+            topic: frame.topic,
+            event: 'phx_reply',
+            payload: { status: 'ok', response: {} },
+          }))
+        }
+      })
+    })
+
+    apiServer = createServer()
+    const config = {
+      NODE_ENV: 'test',
+      API_BASE_URL: 'http://localhost:4173',
+      API_ALLOWED_ORIGINS: '',
+      SUPABASE_REALTIME_URL: `ws://127.0.0.1:${upstreamPort}/socket/websocket`,
+      SUPABASE_ANON_KEY: 'test-anon-key',
+    } as ApiConfig
+    attachRealtimeProxy(apiServer, {} as never, config)
+    const apiPort = await listen(apiServer)
+    return `ws://127.0.0.1:${apiPort}/api/realtime`
+  }
+
+  function connect(url: string, parameter: 'class_session' | 'room') {
+    client = new WebSocket(`${url}?${parameter}=${RESOURCE_ID}`, {
+      headers: { Cookie: 'edulog_access=test-access-token', Origin: 'http://localhost:5173' },
+    })
+    return client
+  }
+
+  function sendJoin(socket: WebSocket, topic: string) {
+    socket.send(JSON.stringify({
+      join_ref: 'join-1',
+      ref: 'join-1',
+      topic,
+      event: 'phx_join',
+      payload: { config: { private: true }, access_token: '' },
+    }))
+  }
+
+  it.each([
+    ['class-session', 'class_session', 'realtime:class-session:'],
+    ['report', 'room', 'realtime:room:'],
+  ] as const)('buffers the immediate %s phx_join until delayed authorization succeeds', async (_label, parameter, topicPrefix) => {
+    const authorization = deferred<typeof AUTHORIZED>()
+    const rpc = vi.fn(() => authorization.promise)
+    supabaseMocks.createUserClient.mockReturnValue({ rpc })
+    const url = await startProxy()
+    const socket = connect(url, parameter)
+    await once(socket, 'open')
+    const topic = `${topicPrefix}${RESOURCE_ID}`
+    const reply = once(socket, 'message').then(([raw]) => JSON.parse(raw.toString()))
+    sendJoin(socket, topic)
+
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(upstreamConnections).toBe(0)
+
+    authorization.resolve(AUTHORIZED)
+    const joined = await reply
+    expect(joined).toMatchObject({ topic, event: 'phx_reply', ref: 'join-1', payload: { status: 'ok' } })
+    expect(upstreamConnections).toBe(1)
+    expect(upstreamJoinFrames).toHaveLength(1)
+    expect(JSON.parse(upstreamJoinFrames[0]!).payload.access_token).toBe('test-access-token')
+  })
+
+  it('does not open an upstream connection when delayed authorization denies access', async () => {
+    const authorization = deferred<typeof AUTHORIZED>()
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn(() => authorization.promise) })
+    const url = await startProxy()
+    const socket = connect(url, 'class_session')
+    await once(socket, 'open')
+    sendJoin(socket, `realtime:class-session:${RESOURCE_ID}`)
+    const closed = once(socket, 'close').then(([code]) => code)
+
+    authorization.resolve({ data: false, error: null })
+    expect(await closed).toBe(4403)
+    expect(upstreamConnections).toBe(0)
+  })
+
+  it('keeps the join queued while the authorized upstream handshake is delayed', async () => {
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn().mockResolvedValue(AUTHORIZED) })
+    const url = await startProxy({ upstreamHandshakeDelayMs: 80 })
+    const socket = connect(url, 'class_session')
+    await once(socket, 'open')
+    const topic = `realtime:class-session:${RESOURCE_ID}`
+    const reply = once(socket, 'message').then(([raw]) => JSON.parse(raw.toString()))
+    sendJoin(socket, topic)
+
+    expect(await reply).toMatchObject({ topic, event: 'phx_reply', ref: 'join-1', payload: { status: 'ok' } })
+    expect(upstreamConnections).toBe(1)
+    expect(upstreamJoinFrames).toHaveLength(1)
+  })
+
+  it('closes retryably when the authorization service fails', async () => {
+    const authorization = deferred<typeof AUTHORIZED>()
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn(() => authorization.promise) })
+    const url = await startProxy()
+    const socket = connect(url, 'room')
+    await once(socket, 'open')
+    sendJoin(socket, `realtime:room:${RESOURCE_ID}`)
+    const closed = once(socket, 'close').then(([code]) => code)
+
+    authorization.reject(new Error('authorization unavailable'))
+    expect(await closed).toBe(1012)
+    expect(upstreamConnections).toBe(0)
+  })
+
+  it('closes explicitly when the pre-authorization message queue is full', async () => {
+    const authorization = deferred<typeof AUTHORIZED>()
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn(() => authorization.promise) })
+    const url = await startProxy()
+    const socket = connect(url, 'room')
+    await once(socket, 'open')
+    const topic = `realtime:room:${RESOURCE_ID}`
+    const closed = once(socket, 'close').then(([code]) => code)
+    for (let index = 1; index <= 17; index += 1) {
+      socket.send(JSON.stringify({ join_ref: 'join-1', ref: String(index), topic, event: 'phx_leave', payload: {} }))
+    }
+
+    expect(await closed).toBe(1013)
+    authorization.resolve(AUTHORIZED)
+    expect(upstreamConnections).toBe(0)
+  })
+
+  it('stops the delayed authorization flow if the browser disconnects before it completes', async () => {
+    const authorization = deferred<typeof AUTHORIZED>()
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn(() => authorization.promise) })
+    const url = await startProxy()
+    const socket = connect(url, 'class_session')
+    await once(socket, 'open')
+    sendJoin(socket, `realtime:class-session:${RESOURCE_ID}`)
+    const serverClosed = new Promise<void>((resolve) => {
+      // The browser close waits for the server's close listener and cleanup.
+      socket.once('close', () => resolve())
+    })
+    socket.close()
+    await serverClosed
+    authorization.resolve(AUTHORIZED)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(upstreamConnections).toBe(0)
+  })
+})

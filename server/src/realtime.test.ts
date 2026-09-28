@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { buildOpenApi } from './openapi.js'
-import { decodeUpstreamTextFrame, normalizeClientMessage, resolveRealtimeUrl } from './realtime.js'
+import { classifyRealtimeClientCloseReason, decodeUpstreamTextFrame, normalizeClientMessage, resolveRealtimeUrl } from './realtime.js'
 
 describe('realtime proxy security contract', () => {
+  it('classifies client close diagnostics without recording free-form close text', () => {
+    expect(classifyRealtimeClientCloseReason('Timed out waiting for the realtime channel join reply')).toBe('channel_join_timeout')
+    expect(classifyRealtimeClientCloseReason('Timed out opening the realtime WebSocket')).toBe('websocket_open_timeout')
+    expect(classifyRealtimeClientCloseReason('Realtime heartbeat timed out')).toBe('heartbeat_timeout')
+    expect(classifyRealtimeClientCloseReason('private-data secret-token')).toBe('other')
+  })
+
   it('validates report and class-session access with the user JWT client', () => {
     const source = readFileSync(new URL('./realtime.ts', import.meta.url), 'utf8')
     expect(source).toContain("url.pathname !== '/api/realtime'")

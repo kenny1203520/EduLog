@@ -92,7 +92,6 @@
         "lesson_label": "Lesson",
         "progress_check": {
             "loading": "Checking progress for this course…",
-            "unsupported": "Course progress checks are unavailable in the current API mode.",
             "load_error": "Unable to check course progress.",
             "retry": "Retry",
             "gaps_title": "Course progress has gaps",
@@ -281,7 +280,12 @@
         "restore_conflict_error": "Restore failed: Another user has modified this report. Please refresh first.",
         "restore_failed": "Restore failed, please try again.",
         "remote_update_notice": "Another user just saved changes to this report. Your next save will be checked for conflicts.",
-        "stale_collab_snapshot_notice": "This report changed elsewhere since your last collaborative session. Showing the latest saved content; please review it before continuing."
+        "stale_collab_snapshot_notice": "This report changed elsewhere since your last collaborative session. Showing the latest saved content; please review it before continuing.",
+        "collaboration_subscribing": "Connected. Joining the live collaboration channel. You can continue editing.",
+        "collaboration_offline": "You are offline. Collaboration will reconnect when the network returns. You can keep editing and saving.",
+        "collaboration_forbidden": "You do not have permission to collaborate on this report.",
+        "collaboration_auth_expired": "Your sign-in session has expired. Sign in again to resume live collaboration.",
+        "collaboration_account_disabled": "This account is disabled and cannot use live collaboration."
     },
     "conflict": {
         "title": "Conflict Detected",
