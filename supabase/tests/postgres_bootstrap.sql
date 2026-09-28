@@ -33,14 +33,5 @@ CREATE TABLE IF NOT EXISTS realtime.messages (id bigint GENERATED ALWAYS AS IDEN
 CREATE OR REPLACE FUNCTION realtime.topic() RETURNS text LANGUAGE sql STABLE AS $$
   SELECT COALESCE(NULLIF(current_setting('realtime.topic', true), ''), '');
 $$;
--- The isolated Postgres test stack does not run Supabase Realtime. Provide the
--- production RPC signature so database triggers can be exercised without
--- persisting or delivering broadcast messages in tests.
-CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean)
-RETURNS void LANGUAGE plpgsql AS $$
-BEGIN
-  RETURN;
-END;
-$$;
 
 GRANT USAGE ON SCHEMA public, auth, realtime TO anon, authenticated, service_role;

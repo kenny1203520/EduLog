@@ -118,6 +118,8 @@ const selectedAttendanceTemplateModes = ref<Record<string, string>>({
 })
 const showAddStudentModal = ref(false)
 const isAddingStudent = ref(false)
+const makeupSubmitError = ref('')
+const makeupSubmitErrorElement = ref<HTMLElement | null>(null)
 const makeupCandidates = ref<Enrollment[]>([])
 const makeupSearch = ref('')
 const selectedMakeupStudentId = ref<string | null>(null)
@@ -141,18 +143,38 @@ const showSplitView = ref(false)
 const selectedEnrollmentId = ref<string | null>(null)
 const isRefreshing = ref(false)
 const quickReportEditorRef = ref<ReportEditorExpose | null>(null)
-const realtimeStatus = ref<'connecting' | 'connected' | 'offline'>('connecting')
+const realtimeStatus = ref<'connecting' | 'subscribing' | 'connected' | 'offline' | 'reconnecting' | 'forbidden' | 'expired' | 'disabled'>('connecting')
+const realtimeStatusDetail = ref('')
 const isRealtimeRefreshing = ref(false)
 const realtimeRefreshError = ref(false)
 const lastRealtimeUpdateAt = ref<Date | null>(null)
+const realtimeStatusMessage = computed(() => {
+    if (realtimeRefreshError.value) return t('classroom.live_update_failed')
+    if (isRealtimeRefreshing.value) return t('classroom.live_update_loading')
+    switch (realtimeStatus.value) {
+        case 'forbidden': return t('classroom.live_updates_forbidden')
+        case 'expired': return t('classroom.live_updates_expired')
+        case 'disabled': return t('classroom.live_updates_disabled')
+        case 'offline': return t('classroom.live_updates_offline')
+        case 'connecting': return t('classroom.live_updates_connecting')
+        case 'subscribing': return t('classroom.live_updates_subscribing')
+        case 'reconnecting': return t('classroom.live_updates_reconnecting')
+        default: return t('classroom.live_updates_connected')
+    }
+})
 const selectedEditorEnrollmentSnapshot = ref<Enrollment | null>(null)
+const selectedEditorReportSnapshot = ref<OccurrenceReport | null>(null)
+const selectedEditorReport = computed(() => selectedEditorReportSnapshot.value)
 let classSessionChannel: ApiRealtimeChannel | null = null
 let realtimeRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let realtimeRefreshRequest = 0
+let realtimeRefreshRunning = false
 let selectedDateRequest = 0
 let hasLoadedInitialData = false
 let pendingRealtimeInvalidations: unknown[] = []
 let hasJoinedClassSessionChannel = false
+let lessonLoadPromises = new Map<string, Promise<Lesson[]>>()
+let progressSummaryRequestGeneration = 0
 
 // Conflict Resolution State
 const showConflictModal = ref(false)
@@ -208,19 +230,26 @@ function getDefaultProgressSummary(): StudentProgressSummary {
     }
 }
 
-function getLessonsForCourse(courseId: string): Promise<Lesson[]> {
+function getLessonsForCourse(courseId: string, options: { refresh?: boolean } = {}): Promise<Lesson[]> {
     const cachedLessons = courseLessonsByCourseId.value[courseId]
-    if (cachedLessons) {
+    if (cachedLessons && !options.refresh) {
         return Promise.resolve(cachedLessons)
     }
 
-    return CourseCatalogService.getLessonsByCourse(courseId).then(lessons => {
+    const pending = lessonLoadPromises.get(courseId)
+    if (pending) return pending
+
+    const request = CourseCatalogService.getLessonsByCourse(courseId).then(lessons => {
         courseLessonsByCourseId.value = {
             ...courseLessonsByCourseId.value,
             [courseId]: lessons
         }
         return lessons
+    }).finally(() => {
+        if (lessonLoadPromises.get(courseId) === request) lessonLoadPromises.delete(courseId)
     })
+    lessonLoadPromises.set(courseId, request)
+    return request
 }
 
 function getLessonTitle(lessons: Lesson[], sequence?: number, fallbackLessonId?: string): string {
@@ -434,10 +463,15 @@ function getTodayCourseSummary(enrollment: Enrollment): TodayCourseSummary {
 async function loadStudentProgressSummaries(
     enrollmentList: Enrollment[],
     mode: 'replace' | 'merge' = 'replace',
-    referenceDate: Date = todayOccurrence.value?.occurrenceDate || new Date()
+    referenceDate: Date = todayOccurrence.value?.occurrenceDate || new Date(),
+    options: { loadMissingLessons?: boolean } = {}
 ) {
+    const generation = ++progressSummaryRequestGeneration
+    const requestedDate = DateUtils.formatLocalDate(referenceDate)
     const uniqueCourseIds = [...new Set(enrollmentList.map(enrollment => enrollment.courseId).filter(Boolean))]
-    await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
+    if (options.loadMissingLessons !== false) {
+        await Promise.all(uniqueCourseIds.map(courseId => getLessonsForCourse(courseId)))
+    }
 
     const enrollmentIds = enrollmentList.map(enrollment => enrollment.id).filter((id): id is string => !!id)
     // One request for the whole roster instead of one paginated, full-row
@@ -449,12 +483,17 @@ async function loadStudentProgressSummaries(
             return [enrollment.id, getDefaultProgressSummary()] as const
         }
 
-        const lessons = await getLessonsForCourse(enrollment.courseId)
+        const lessons = options.loadMissingLessons === false
+            ? courseLessonsByCourseId.value[enrollment.courseId] || []
+            : await getLessonsForCourse(enrollment.courseId)
         const reports = reportsByEnrollment.get(enrollment.id) || []
         return [enrollment.id, buildStudentProgressSummary(enrollment, reports, lessons, referenceDate)] as const
     }))
 
     const nextSummaries = Object.fromEntries(summaryEntries.filter(([id]) => !!id)) as Record<string, StudentProgressSummary>
+
+    if (generation !== progressSummaryRequestGeneration
+        || (selectedDateKey.value && selectedDateKey.value !== requestedDate)) return
 
     if (mode === 'merge') {
         studentProgressSummaries.value = {
@@ -472,7 +511,6 @@ async function loadStudentProgressGaps(
     occurrence: ClassOccurrence | null = todayOccurrence.value
 ) {
     const generation = ++progressGapRequestGeneration
-    studentProgressGaps.value = {}
     progressGapCheckFailed.value = false
     if (!occurrence?.id || !occurrence.occurrenceDate) {
         isLoadingProgressGaps.value = false
@@ -492,7 +530,6 @@ async function loadStudentProgressGaps(
     } catch (error) {
         if (generation !== progressGapRequestGeneration) return
         console.error('Failed to check course progress gaps:', error)
-        studentProgressGaps.value = {}
         progressGapCheckFailed.value = true
     } finally {
         if (generation === progressGapRequestGeneration) isLoadingProgressGaps.value = false
@@ -623,6 +660,10 @@ function handleMakeupStudentChange() {
     selectedMakeupEnrollmentId.value = null
 }
 
+watch([selectedMakeupStudentId, selectedMakeupEnrollmentId, makeupJoinDate], () => {
+    makeupSubmitError.value = ''
+})
+
 function findOccurrenceByDate(date: Date): ClassOccurrence | undefined {
     const target = DateUtils.formatLocalDate(date)
     return sessionOccurrences.value.find(occ => DateUtils.formatLocalDate(occ.occurrenceDate) === target)
@@ -638,34 +679,35 @@ async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
     if (request === occurrenceListRequest) sessionOccurrences.value = occurrences
 }
 
-async function loadReportsForCurrentOccurrence(options: { preserveOpenEditor?: boolean } = {}) {
+async function loadReportsForCurrentOccurrence(options: { createMissing?: boolean } = {}) {
     const occurrenceId = todayOccurrence.value?.id
-    const selectedId = options.preserveOpenEditor && showSplitView.value ? selectedEnrollmentId.value : null
-    const selectedReport = selectedId ? reportMap.value.get(selectedId) : null
     const nextReportMap = new Map<string, any>()
     if (!occurrenceId) {
         reportMap.value = nextReportMap
         return
     }
 
-    const occurrenceReports = await OccurrenceReportService.createReportsForOccurrence(occurrenceId)
+    const occurrenceReports = options.createMissing === false
+        ? await OccurrenceReportService.getReportsByOccurrence(occurrenceId)
+        : await OccurrenceReportService.createReportsForOccurrence(occurrenceId)
     if (todayOccurrence.value?.id !== occurrenceId) return
     const currentEnrollmentIds = new Set(enrollments.value.map(enrollment => enrollment.id).filter(Boolean))
     occurrenceReports.forEach(report => {
         // The workspace RPC is the canonical effective roster. Never let an
         // old source-occurrence report re-introduce a transferred student.
         if (report.enrollmentId && currentEnrollmentIds.has(report.enrollmentId)) {
-            nextReportMap.set(report.enrollmentId, report)
+            const currentReport = reportMap.value.get(report.enrollmentId) as OccurrenceReport | null | undefined
+            // A background read can race a newer save response. Keep the
+            // higher server version for the card instead of rolling it back.
+            nextReportMap.set(report.enrollmentId,
+                currentReport && currentReport.id === report.id && currentReport.version > report.version
+                    ? currentReport
+                    : report)
         }
     })
 
     for (const enrollment of enrollments.value) {
         if (enrollment.id && !nextReportMap.has(enrollment.id)) nextReportMap.set(enrollment.id, null)
-    }
-    if (selectedId && selectedReport) {
-        // Keep the editor's current report object mounted through roster
-        // refreshes; its document continues to synchronize through Yjs.
-        nextReportMap.set(selectedId, selectedReport)
     }
     reportMap.value = nextReportMap
 }
@@ -811,6 +853,14 @@ function syncSelectedDateToUrl(date: string) {
 async function selectClassDate(date: string, updateUrl = true) {
     const validDate = parseClassSessionDate(date)
     if (!validDate) return
+    if (validDate !== selectedDateKey.value && showSplitView.value) {
+        const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
+        if (saveSucceeded === false) return
+        showSplitView.value = false
+        selectedEnrollmentId.value = null
+        selectedEditorEnrollmentSnapshot.value = null
+        selectedEditorReportSnapshot.value = null
+    }
     const request = ++selectedDateRequest
     realtimeRefreshRequest++
     isRealtimeRefreshing.value = false
@@ -1010,25 +1060,41 @@ async function loadData() {
 
 function scheduleRealtimeRefresh(invalidation?: unknown) {
     pendingRealtimeInvalidations.push(invalidation ?? {})
-    if (realtimeRefreshTimer) clearTimeout(realtimeRefreshTimer)
+    if (realtimeRefreshTimer || realtimeRefreshRunning) return
     realtimeRefreshTimer = setTimeout(() => {
         realtimeRefreshTimer = null
-        const selectedDate = selectedDateKey.value || DateUtils.todayString(sessionTimeZone.value)
-        const relevant = pendingRealtimeInvalidations.some((event) => {
-            const payload = event && typeof event === 'object' && 'payload' in event
-                ? (event as { payload?: unknown }).payload
-                : event
-            return invalidationAffectsDate(selectedDate, payload && typeof payload === 'object'
-                ? payload as { date_from?: unknown; date_to?: unknown }
-                : {})
-        })
-        pendingRealtimeInvalidations = []
-        if (!relevant) return
-        void refreshCurrentOccurrenceFromRealtime()
+        void flushRealtimeInvalidations()
     }, 300)
 }
 
-async function refreshCurrentOccurrenceFromRealtime() {
+async function flushRealtimeInvalidations() {
+    if (realtimeRefreshRunning || pendingRealtimeInvalidations.length === 0) return
+    const events = pendingRealtimeInvalidations.splice(0)
+    const selectedDate = selectedDateKey.value || DateUtils.todayString(sessionTimeZone.value)
+    const relevantEvents = events.map(event => {
+        const payload = event && typeof event === 'object' && 'payload' in event
+            ? (event as { payload?: unknown }).payload
+            : event
+        return payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
+    }).filter(payload => invalidationAffectsDate(selectedDate, payload))
+
+    if (relevantEvents.length) {
+        const reportOnly = relevantEvents.every(payload => payload.change === 'report')
+        const refreshCatalog = relevantEvents.some(payload => payload.change === 'course_catalog' || payload.change === 'course' || payload.change === 'reconnect')
+        await refreshCurrentOccurrenceFromRealtime({ reportOnly, refreshCatalog })
+    }
+
+    if (pendingRealtimeInvalidations.length && !realtimeRefreshTimer) {
+        realtimeRefreshTimer = setTimeout(() => {
+            realtimeRefreshTimer = null
+            void flushRealtimeInvalidations()
+        }, 0)
+    }
+}
+
+async function refreshCurrentOccurrenceFromRealtime(options: { reportOnly?: boolean; refreshCatalog?: boolean } = {}) {
+    if (realtimeRefreshRunning) return
+    realtimeRefreshRunning = true
     const requestId = ++realtimeRefreshRequest
     const occurrenceAtStart = todayOccurrence.value as ClassOccurrence | null
     const selectedDate = (selectedDateKey.value && DateUtils.parseLocalDate(selectedDateKey.value))
@@ -1043,13 +1109,15 @@ async function refreshCurrentOccurrenceFromRealtime() {
     try {
         await Promise.all([
             loadWorkspaceRoster(selectedDate, true),
-            loadSessionOccurrences(selectedDate),
+            ...(!options.reportOnly ? [loadSessionOccurrences(selectedDate)] : []),
         ])
         if (requestId !== realtimeRefreshRequest || selectedDateKey.value !== selectedDateString || (todayOccurrence.value?.occurrenceDate && DateUtils.formatLocalDate(todayOccurrence.value.occurrenceDate) !== selectedDateString)) return
 
-        const refreshedOccurrence = findOccurrenceByDate(selectedDate)
-        if (refreshedOccurrence) todayOccurrence.value = refreshedOccurrence
-        else if (occurrenceAtStart) todayOccurrence.value = null
+        if (!options.reportOnly) {
+            const refreshedOccurrence = findOccurrenceByDate(selectedDate)
+            if (refreshedOccurrence) todayOccurrence.value = refreshedOccurrence
+            else if (occurrenceAtStart) todayOccurrence.value = null
+        }
 
         if (selectedEnrollmentAtStart && selectedEnrollmentId.value) {
             selectedEditorEnrollmentSnapshot.value = enrollments.value.find(enrollment => enrollment.id === selectedEnrollmentId.value) || selectedEnrollmentAtStart
@@ -1061,27 +1129,34 @@ async function refreshCurrentOccurrenceFromRealtime() {
             const occurrenceId = todayOccurrence.value.id
             const occurrenceDate = todayOccurrence.value.occurrenceDate
             const date = DateUtils.formatLocalDate(occurrenceDate)
-            courseLessonsByCourseId.value = {}
-            courseLessons.value = []
-            const [assignments, holiday, navigation] = await Promise.all([
-                TeacherService.getSessionTeachers(sessionId),
-                HolidayService.isHoliday(date, undefined, sessionId),
-                OccurrenceService.getOccurrenceNavigationState(sessionId, occurrenceDate),
-            ])
+            if (!options.reportOnly) {
+                const [assignments, holiday, navigation] = await Promise.all([
+                    TeacherService.getSessionTeachers(sessionId),
+                    HolidayService.isHoliday(date, undefined, sessionId),
+                    OccurrenceService.getOccurrenceNavigationState(sessionId, occurrenceDate),
+                ])
+                if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
+                sessionTeachers.value = assignments
+                isOccurrenceInHoliday.value = holiday
+                previousOccurrence.value = navigation.previous
+                nextOccurrence.value = navigation.next
+            }
+            await loadReportsForCurrentOccurrence({ createMissing: !options.reportOnly })
             if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
-            sessionTeachers.value = assignments
-            isOccurrenceInHoliday.value = holiday
-            previousOccurrence.value = navigation.previous
-            nextOccurrence.value = navigation.next
-            await loadReportsForCurrentOccurrence({ preserveOpenEditor: true })
-            if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
+            if (options.refreshCatalog) {
+                await Promise.all([...new Set(enrollments.value.map(enrollment => enrollment.courseId).filter(Boolean))]
+                    .map(courseId => getLessonsForCourse(courseId, { refresh: true })))
+            }
             await Promise.all([
-                loadOccurrenceTeachers(),
-                loadStudentProgressSummaries(enrollments.value, 'replace', occurrenceDate),
+                ...(!options.reportOnly ? [loadOccurrenceTeachers()] : []),
+                loadStudentProgressSummaries(enrollments.value, 'replace', occurrenceDate, {
+                    loadMissingLessons: !options.reportOnly,
+                }),
                 loadStudentProgressGaps(enrollments.value, todayOccurrence.value),
             ])
-            if (selectedEditorEnrollment.value?.courseId) {
-                courseLessons.value = await getLessonsForCourse(selectedEditorEnrollment.value.courseId)
+            if (progressGapCheckFailed.value) throw new Error('Failed to refresh course progress gaps')
+            if (options.refreshCatalog && selectedEditorEnrollment.value?.courseId) {
+                courseLessons.value = courseLessonsByCourseId.value[selectedEditorEnrollment.value.courseId] || []
             }
         } else {
             // A remote change can remove the currently selected occurrence
@@ -1103,13 +1178,13 @@ async function refreshCurrentOccurrenceFromRealtime() {
 
         if (requestId !== realtimeRefreshRequest) return
         lastRealtimeUpdateAt.value = new Date()
-        toast.info(t('classroom.live_update_applied'))
     } catch (error) {
         if (requestId !== realtimeRefreshRequest) return
         console.error('Failed to refresh class session after a remote change:', error)
         realtimeRefreshError.value = true
     } finally {
         if (requestId === realtimeRefreshRequest) isRealtimeRefreshing.value = false
+        realtimeRefreshRunning = false
     }
 }
 
@@ -1117,13 +1192,34 @@ function startClassSessionRealtime() {
     const presenceKey = `${auth.user?.id || 'user'}:${Date.now()}`
     classSessionChannel = new ApiRealtimeChannel(sessionId, presenceKey, 'class_session')
         .on('broadcast', { event: 'class_session_invalidated' }, (message) => scheduleRealtimeRefresh(message?.payload))
-    classSessionChannel.subscribe(status => {
+    classSessionChannel.subscribe((status, detail) => {
         if (status === 'SUBSCRIBED') {
             realtimeStatus.value = 'connected'
-            if (hasJoinedClassSessionChannel) scheduleRealtimeRefresh()
+            realtimeStatusDetail.value = ''
+            if (hasJoinedClassSessionChannel) scheduleRealtimeRefresh({ change: 'reconnect' })
             hasJoinedClassSessionChannel = true
-        } else {
+        } else if (status === 'CONNECTING') {
+            realtimeStatus.value = 'connecting'
+        } else if (status === 'SUBSCRIBING') {
+            realtimeStatus.value = 'subscribing'
+        } else if (status === 'RECONNECTING') {
+            realtimeStatus.value = 'reconnecting'
+        } else if (status === 'CHANNEL_ERROR') {
+            realtimeStatusDetail.value = detail || ''
+        } else if (status === 'OFFLINE') {
             realtimeStatus.value = 'offline'
+            realtimeStatusDetail.value = ''
+        } else if (status === 'PERMISSION_DENIED') {
+            realtimeStatus.value = 'forbidden'
+            realtimeStatusDetail.value = detail || ''
+        } else if (status === 'AUTH_EXPIRED') {
+            realtimeStatus.value = 'expired'
+            realtimeStatusDetail.value = detail || ''
+        } else if (status === 'ACCOUNT_DISABLED') {
+            realtimeStatus.value = 'disabled'
+            realtimeStatusDetail.value = detail || ''
+        } else {
+            if (!['forbidden', 'expired', 'disabled'].includes(realtimeStatus.value)) realtimeStatus.value = 'reconnecting'
         }
     })
 }
@@ -1133,9 +1229,8 @@ function retryRealtimeAction() {
         scheduleRealtimeRefresh()
         return
     }
-    classSessionChannel?.unsubscribe()
+    classSessionChannel?.reconnect()
     realtimeStatus.value = 'connecting'
-    startClassSessionRealtime()
 }
 
 onMounted(async () => {
@@ -1739,24 +1834,29 @@ async function toggleSplitView(enrollmentId: string) {
         courseLessons.value = await getLessonsForCourse(enrollment.courseId)
     }
 
-    selectedEnrollmentId.value = enrollmentId
-    selectedEditorEnrollmentSnapshot.value = enrollment || null
-    showSplitView.value = true
-
-    // Fetch latest report content to ensure sync with server (fixes stale data issues)
+    let editorReport = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
+    // Resolve the current persisted version before mounting the editor. Once
+    // mounted, background refreshes only replace the card snapshot.
     if (todayOccurrence.value?.id) {
         savingMap.value.set(enrollmentId, true)
-        OccurrenceReportService.getReport(enrollmentId, todayOccurrence.value.id)
-            .then(report => {
-                reportMap.value.set(enrollmentId, report)
-            })
-            .catch(e => {
-                console.error('Failed to sync report on quick edit open', e)
-            })
-            .finally(() => {
-                savingMap.value.delete(enrollmentId)
-            })
+        try {
+            const fetched = await OccurrenceReportService.getReport(enrollmentId, todayOccurrence.value.id)
+            if (fetched) {
+                const cardReport = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
+                editorReport = cardReport && cardReport.id === fetched.id && cardReport.version > fetched.version ? cardReport : fetched
+                reportMap.value = new Map(reportMap.value).set(enrollmentId, editorReport)
+            }
+        } catch (error) {
+            console.error('Failed to sync report on quick edit open', error)
+        } finally {
+            savingMap.value.delete(enrollmentId)
+        }
     }
+
+    selectedEnrollmentId.value = enrollmentId
+    selectedEditorEnrollmentSnapshot.value = enrollment || null
+    selectedEditorReportSnapshot.value = editorReport ? new OccurrenceReport(editorReport.toDTO()) : null
+    showSplitView.value = true
 }
 
 async function closeSplitView() {
@@ -1766,6 +1866,7 @@ async function closeSplitView() {
     showSplitView.value = false
     selectedEnrollmentId.value = null
     selectedEditorEnrollmentSnapshot.value = null
+    selectedEditorReportSnapshot.value = null
 
     await nextTick()
     if (enrollmentIdToRestore) scrollToEnrollment(enrollmentIdToRestore)
@@ -1788,6 +1889,7 @@ async function openKodingCheck(enrollment: Enrollment) {
 
 async function openAddStudentModal() {
     showAddStudentModal.value = true
+    makeupSubmitError.value = ''
     makeupSearch.value = ''
     selectedMakeupStudentId.value = ''
     selectedMakeupEnrollmentId.value = ''
@@ -1830,61 +1932,117 @@ async function submitAddStudentToClass() {
 
     try {
         isAddingStudent.value = true
+        makeupSubmitError.value = ''
         await EnrollmentService.addEnrollmentToSessionOccurrence(
             selectedMakeupEnrollmentId.value,
             sessionId,
             normalizedJoinDate
         )
 
-        if (normalizeDateInput(todayOccurrence.value?.occurrenceDate) === normalizedJoinDate) {
-            await loadReportsForCurrentOccurrence()
+        if (selectedDateKey.value === normalizedJoinDate) {
+            try {
+                const displayDate = DateUtils.parseLocalDate(normalizedJoinDate)
+                if (displayDate) {
+                    await loadSessionOccurrences(displayDate)
+                    const refreshedOccurrence = findOccurrenceByDate(displayDate)
+                    if (refreshedOccurrence && todayOccurrence.value?.id !== refreshedOccurrence.id) {
+                        await setCurrentOccurrence(refreshedOccurrence)
+                    } else if (refreshedOccurrence) {
+                        const occurrenceDate = refreshedOccurrence.occurrenceDate
+                        await loadWorkspaceRoster(occurrenceDate, true)
+                        await loadReportsForCurrentOccurrence({ createMissing: false })
+                        await Promise.all([
+                            loadStudentProgressSummaries(enrollments.value, 'replace', occurrenceDate),
+                            loadStudentProgressGaps(enrollments.value, todayOccurrence.value),
+                        ])
+                    }
+                }
+            } catch (refreshError) {
+                // The makeup report is already committed; a roster refresh
+                // failure must not make retrying the add operation duplicate it.
+                console.error('Failed to refresh the class roster after adding a makeup report:', refreshError)
+            }
         }
 
         toast.success(t('classroom.add_student_success'))
         closeAddStudentModal()
     } catch (error: any) {
+        let errorMessage = t('classroom.add_student_retry_error')
         if (error?.message?.includes('Invalid date format')) {
-            toast.error(t('classroom.add_student_invalid_date'))
-            return
+            errorMessage = t('classroom.add_student_invalid_date')
+        } else if (error?.message?.includes('DUPLICATE_OCCURRENCE_REPORT')) {
+            errorMessage = t('classroom.add_student_duplicate_report')
+        } else if (error?.message?.includes('MAKEUP_DATE_NOT_CLASS_DAY')) {
+            errorMessage = t('classroom.add_student_not_class_day')
         }
-        if (error?.message?.includes('DUPLICATE_OCCURRENCE_REPORT')) {
-            toast.error(t('classroom.add_student_duplicate_report'))
-            return
-        }
-        if (error?.message?.includes('MAKEUP_DATE_NOT_CLASS_DAY')) {
-            toast.error(t('classroom.add_student_not_class_day'))
-            return
-        }
-        toast.error(error?.message || t('classroom.add_student_failed'))
+        makeupSubmitError.value = errorMessage
+        await nextTick()
+        makeupSubmitErrorElement.value?.focus()
     } finally {
         isAddingStudent.value = false
     }
 }
 
 function handleEditorUpdate(content: string, enrollmentId: string) {
-    const report = reportMap.value.get(enrollmentId)
+    const report = selectedEnrollmentId.value === enrollmentId ? selectedEditorReportSnapshot.value : null
     if (report) {
         report.content = content
     }
 }
 
 function handleReportExternalLinkUpdate(link: string, enrollmentId: string) {
-    const report = reportMap.value.get(enrollmentId)
+    const report = selectedEnrollmentId.value === enrollmentId ? selectedEditorReportSnapshot.value : null
     if (report) {
         report.externalLink = link
     }
 }
 
 function handleSaveSuccess(updatedReport: OccurrenceReportDTO, enrollmentId: string) {
-    const report = reportMap.value.get(enrollmentId)
-    if (report) {
-        report.applyDTO(updatedReport)
+    const report = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
+    if (updatedReport.class_occurrence_id !== todayOccurrence.value?.id) return
+    if (report && report.id === updatedReport.id && report.version > updatedReport.version) return
+    const progressChanged = !report
+        || report.lessonId !== updatedReport.lesson_id
+        || report.isCompleted !== (updatedReport.is_completed ?? false)
+        || report.progressLetter !== updatedReport.progress_letter
+        || report.attendanceStatus !== updatedReport.attendance_status
+
+    // Cards intentionally show committed data only. Keep the editor's own
+    // draft snapshot independent so this replacement cannot reset its fields.
+    reportMap.value = new Map(reportMap.value).set(enrollmentId, new OccurrenceReport(updatedReport))
+    if (progressChanged) void refreshStudentProgressAfterSave(enrollmentId, todayOccurrence.value)
+}
+
+async function refreshStudentProgressAfterSave(enrollmentId: string, occurrence: ClassOccurrence | null) {
+    if (!occurrence?.id || !occurrence.occurrenceDate) return
+    const date = DateUtils.formatLocalDate(occurrence.occurrenceDate)
+    const generation = realtimeRefreshRequest
+    if (!enrollments.value.some(item => item.id === enrollmentId)) return
+    try {
+        await Promise.all([
+            loadStudentProgressSummaries(enrollments.value, 'replace', occurrence.occurrenceDate, { loadMissingLessons: false }),
+            loadStudentProgressGaps(enrollments.value, occurrence),
+        ])
+        if (progressGapCheckFailed.value) throw new Error('Failed to refresh course progress gaps')
+        if (generation !== realtimeRefreshRequest
+            || todayOccurrence.value?.id !== occurrence.id
+            || selectedDateKey.value !== date) return
+        lastRealtimeUpdateAt.value = new Date()
+        realtimeRefreshError.value = false
+    } catch (error) {
+        if (generation !== realtimeRefreshRequest
+            || todayOccurrence.value?.id !== occurrence.id
+            || selectedDateKey.value !== date) return
+        console.error('Failed to refresh saved student progress:', error)
+        realtimeRefreshError.value = true
     }
 }
 
 function handleReportRestored(restoredReport: OccurrenceReportDTO) {
     if (selectedEnrollmentId.value) {
-        reportMap.value.set(selectedEnrollmentId.value, new OccurrenceReport(restoredReport))
+        const restored = new OccurrenceReport(restoredReport)
+        reportMap.value = new Map(reportMap.value).set(selectedEnrollmentId.value, restored)
+        selectedEditorReportSnapshot.value = new OccurrenceReport(restoredReport)
     }
 }
 
@@ -2090,23 +2248,22 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
         <div v-else class="session-workspace w-full">
             <div v-if="realtimeStatus !== 'connected' || isRealtimeRefreshing || realtimeRefreshError || lastRealtimeUpdateAt"
-                class="mb-4 flex flex-col gap-3 rounded-2xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-                :class="realtimeRefreshError ? 'border-rose-200 bg-rose-50 text-rose-800' : (realtimeStatus === 'offline' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-100 bg-emerald-50/70 text-emerald-900')"
+                class="mb-2 flex min-h-6 flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"
+                :class="realtimeRefreshError || ['forbidden', 'expired', 'disabled'].includes(realtimeStatus) ? 'text-rose-700' : (realtimeStatus === 'offline' || realtimeStatus === 'reconnecting' ? 'text-amber-800' : 'text-slate-500')"
                 role="status" aria-live="polite" :aria-busy="isRealtimeRefreshing">
-                <div class="flex min-w-0 items-start gap-3">
-                    <span v-if="isRealtimeRefreshing" class="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
-                    <span v-else class="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full" :class="realtimeStatus === 'connected' ? 'bg-emerald-500' : 'bg-amber-500'" aria-hidden="true"></span>
-                    <div class="min-w-0">
-                        <p class="font-bold">
-                            {{ realtimeRefreshError ? $t('classroom.live_update_failed') : (isRealtimeRefreshing ? $t('classroom.live_update_loading') : (realtimeStatus === 'offline' ? $t('classroom.live_updates_disconnected') : $t('classroom.live_updates_connected'))) }}
-                        </p>
-                        <p v-if="lastRealtimeUpdateAt && !isRealtimeRefreshing && !realtimeRefreshError" class="mt-0.5 text-xs opacity-75">
-                            {{ $t('classroom.live_update_time', { time: lastRealtimeUpdateLabel }) }}
-                        </p>
-                    </div>
+                <div class="flex min-w-0 items-center gap-2">
+                    <span v-if="isRealtimeRefreshing" class="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
+                    <span v-else class="h-2 w-2 shrink-0 rounded-full" :class="realtimeStatus === 'connected' ? 'bg-emerald-500' : 'bg-current'" aria-hidden="true"></span>
+                    <span class="font-semibold">{{ realtimeStatusMessage }}</span>
+                    <span v-if="realtimeStatusDetail && !realtimeRefreshError" class="break-all opacity-75">
+                        {{ $t('classroom.live_update_detail') }} {{ realtimeStatusDetail }}
+                    </span>
                 </div>
-                <button v-if="realtimeStatus === 'offline' || realtimeRefreshError" type="button"
-                    class="min-h-10 shrink-0 rounded-xl border border-current/20 bg-white/80 px-4 py-2 text-xs font-black transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                <span v-if="lastRealtimeUpdateAt && !isRealtimeRefreshing && !realtimeRefreshError" class="ml-auto whitespace-nowrap text-slate-400">
+                    {{ $t('classroom.live_update_time', { time: lastRealtimeUpdateLabel }) }}
+                </span>
+                <button v-if="realtimeStatus === 'offline' || realtimeStatus === 'reconnecting' || realtimeRefreshError" type="button"
+                    class="min-h-8 shrink-0 rounded-lg border border-current/20 bg-white px-3 py-1 text-xs font-bold transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     :disabled="isRealtimeRefreshing" @click="retryRealtimeAction">
                     {{ realtimeRefreshError ? $t('classroom.live_update_retry') : $t('classroom.live_reconnect') }}
                 </button>
@@ -2425,9 +2582,9 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
                         <!-- Scrollable Body -->
                         <div class="flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar bg-gray-50/30">
-                            <ReportEditor ref="quickReportEditorRef" v-if="reportMap.get(selectedEnrollmentId)"
-                                :key="selectedEnrollmentId" :report-id="reportMap.get(selectedEnrollmentId)?.id"
-                                :initial-version="reportMap.get(selectedEnrollmentId)?.version"
+                            <ReportEditor ref="quickReportEditorRef" v-if="selectedEditorReport"
+                                :key="selectedEnrollmentId" :report-id="selectedEditorReport?.id"
+                                :initial-version="selectedEditorReport?.version"
                                 :loading="savingMap.get(selectedEnrollmentId!)" :show-manual-save="true"
                                 :enrollment-id="selectedEditorEnrollment?.id" :class-occurrence-id="todayOccurrence?.id"
                                 :title="todayOccurrence ? `${new Date(todayOccurrence.occurrenceDate).toLocaleDateString(preferences.locale)} ${todayOccurrence.effectiveStartTime?.slice(0, 5) || ''}` : undefined"
@@ -2437,22 +2594,22 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                                 :initial-session-time="session ? `${session.start_time?.slice(0, 5) || ''}-${session.end_time?.slice(0, 5) || ''}` : ''"
                                 :initial-student-name="selectedEditorEnrollment?.studentName"
                                 :initial-student-id="selectedEditorEnrollment?.studentId"
-                                :initial-lesson-id="reportMap.get(selectedEnrollmentId)?.lessonId"
+                                :initial-lesson-id="selectedEditorReport?.lessonId"
                                 :available-lessons="courseLessons"
-                                :initial-report-external-link="reportMap.get(selectedEnrollmentId)?.externalLink"
-                                :initial-is-completed="reportMap.get(selectedEnrollmentId)?.isCompleted"
-                                :initial-progress-start="reportMap.get(selectedEnrollmentId)?.progressStart"
-                                :initial-progress-end="reportMap.get(selectedEnrollmentId)?.progressEnd"
-                                :initial-attendance-status="reportMap.get(selectedEnrollmentId)?.attendanceStatus"
-                                :initial-absence-reason="reportMap.get(selectedEnrollmentId)?.absenceReason"
-                                :initial-class-participation="parseFloat(reportMap.get(selectedEnrollmentId)?.classParticipation || '0')"
-                                :initial-classroom-behavior="parseFloat(reportMap.get(selectedEnrollmentId)?.classroomBehavior || '0')"
-                                :initial-contact-notes="reportMap.get(selectedEnrollmentId)?.contactNotes"
-                                :initial-contact-notes-document="reportMap.get(selectedEnrollmentId)?.contactNotesDocument"
-                                :initial-class-notes="reportMap.get(selectedEnrollmentId)?.classNotes"
-                                :initial-class-notes-document="reportMap.get(selectedEnrollmentId)?.classNotesDocument"
-                                :initial-content="reportMap.get(selectedEnrollmentId)?.content"
-                                :initial-content-document="reportMap.get(selectedEnrollmentId)?.contentDocument"
+                                :initial-report-external-link="selectedEditorReport?.externalLink"
+                                :initial-is-completed="selectedEditorReport?.isCompleted"
+                                :initial-progress-start="selectedEditorReport?.progressStart"
+                                :initial-progress-end="selectedEditorReport?.progressEnd"
+                                :initial-attendance-status="selectedEditorReport?.attendanceStatus"
+                                :initial-absence-reason="selectedEditorReport?.absenceReason"
+                                :initial-class-participation="parseFloat(String(selectedEditorReport?.classParticipation ?? 0))"
+                                :initial-classroom-behavior="parseFloat(String(selectedEditorReport?.classroomBehavior ?? 0))"
+                                :initial-contact-notes="selectedEditorReport?.contactNotes"
+                                :initial-contact-notes-document="selectedEditorReport?.contactNotesDocument"
+                                :initial-class-notes="selectedEditorReport?.classNotes"
+                                :initial-class-notes-document="selectedEditorReport?.classNotesDocument"
+                                :initial-content="selectedEditorReport?.content"
+                                :initial-content-document="selectedEditorReport?.contentDocument"
                                 :initial-enrollment-external-link="selectedEditorEnrollment?.externalLink"
                                 @update:content="handleEditorUpdate($event, selectedEnrollmentId!)"
                                 @update:report-external-link="handleReportExternalLinkUpdate($event, selectedEnrollmentId!)"
@@ -2485,10 +2642,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
         <div v-if="showAddStudentModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
             <div
+                role="dialog" aria-modal="true" aria-labelledby="makeup-add-student-title"
                 class="bg-white rounded-2xl flex flex-col w-full max-w-2xl max-h-[85vh] shadow-2xl m-4 overflow-hidden">
                 <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-                    <h3 class="text-xl font-bold text-gray-900">{{ $t('classroom.add_student_modal_title') }}</h3>
-                    <button @click="closeAddStudentModal" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <h3 id="makeup-add-student-title" class="text-xl font-bold text-gray-900">{{ $t('classroom.add_student_modal_title') }}</h3>
+                    <button @click="closeAddStudentModal" :aria-label="$t('common.close')" class="text-gray-400 hover:text-gray-600 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -2499,6 +2657,11 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
 
                 <div class="flex-1 overflow-y-auto p-6 space-y-5">
                     <p class="text-sm text-gray-500">{{ $t('classroom.add_student_modal_hint') }}</p>
+
+                    <div v-if="makeupSubmitError" ref="makeupSubmitErrorElement" role="alert" tabindex="-1"
+                        class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium leading-6 text-rose-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500">
+                        {{ makeupSubmitError }}
+                    </div>
 
                     <div>
                         <label class="block text-sm font-bold text-gray-700 mb-2">{{ $t('classroom.add_student_search')

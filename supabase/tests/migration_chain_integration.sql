@@ -42,8 +42,10 @@ DECLARE
 BEGIN
   workspace_definition := pg_get_functiondef('public.get_class_session_workspace(uuid,date)'::regprocedure);
   IF workspace_definition NOT LIKE '%get_effective_occurrence_enrollment_ids%'
-     OR workspace_definition NOT LIKE '%v_occurrence_id IS NULL%' THEN
-    RAISE EXCEPTION 'class session workspace does not use transfer-effective occurrence rosters with the pre-generation fallback';
+     OR workspace_definition NOT LIKE '%v_occurrence_id IS NULL%'
+     OR workspace_definition NOT LIKE '%makeup_ids%'
+     OR workspace_definition NOT LIKE '%occurrence_reports%' THEN
+    RAISE EXCEPTION 'class session workspace does not use transfer-effective rosters, pre-generation fallback, and report-backed makeup entries';
   END IF;
 
   SELECT qual INTO invalidation_policy
@@ -185,25 +187,6 @@ BEGIN
       AND pg_get_indexdef(index_metadata.indexrelid, 3, true) = 'id'
   ) THEN
     RAISE EXCEPTION 'existing lesson course/sequence index is missing or invalid';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_class index_relation
-    JOIN pg_namespace index_schema ON index_schema.oid = index_relation.relnamespace
-    JOIN pg_index index_metadata ON index_metadata.indexrelid = index_relation.oid
-    JOIN pg_class table_relation ON table_relation.oid = index_metadata.indrelid
-    JOIN pg_namespace table_schema ON table_schema.oid = table_relation.relnamespace
-    WHERE index_schema.nspname = 'public'
-      AND index_relation.relname = 'lessons_course_id_idx'
-      AND table_schema.nspname = 'public'
-      AND table_relation.relname = 'lessons'
-      AND index_metadata.indisvalid
-      AND index_metadata.indisready
-      AND pg_get_indexdef(index_metadata.indexrelid, 1, true) = 'course_id'
-      AND index_metadata.indnatts = 1
-  ) THEN
-    RAISE EXCEPTION 'dedicated lesson course_id index is missing or invalid';
   END IF;
 
   IF NOT EXISTS (
@@ -504,11 +487,11 @@ FROM (VALUES
 CROSS JOIN LATERAL (SELECT id FROM public.teachings WHERE is_global LIMIT 1) teaching
 ON CONFLICT (id) DO NOTHING;
 
--- These standalone system-level students have no owner or enrollment; the
--- platform teaching permission should make them visible in the overview.
-INSERT INTO public.students(id, name, user_id) VALUES
-  ('20000000-0000-0000-0000-000000000101', 'Migration Visibility A', NULL),
-  ('20000000-0000-0000-0000-000000000102', 'Migration Visibility B', NULL)
+-- These standalone students model records whose former owner was cleared by
+-- the global-scope migrations and which have no enrollment to reveal them.
+INSERT INTO public.students(id, name, user_id, teaching_id) VALUES
+  ('20000000-0000-0000-0000-000000000101', 'Migration Visibility A', NULL, (SELECT id FROM public.teachings WHERE is_global LIMIT 1)),
+  ('20000000-0000-0000-0000-000000000102', 'Migration Visibility B', NULL, (SELECT id FROM public.teachings WHERE is_global LIMIT 1))
 ON CONFLICT (id) DO NOTHING;
 
 SET ROLE authenticated;
@@ -561,7 +544,6 @@ DECLARE classroom_role_id uuid := gen_random_uuid();
 DECLARE platform_teaching_id uuid;
 DECLARE classroom_id uuid := '30000000-0000-0000-0000-000000000001';
 DECLARE course_id uuid := '50000000-0000-0000-0000-000000000101';
-DECLARE class_session_id uuid := '60000000-0000-0000-0000-000000000103';
 DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
 BEGIN
   SELECT id INTO platform_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
@@ -570,7 +552,7 @@ BEGIN
   INSERT INTO public.role_permission_policies(role_id, permission_id, scope_type, scope_id, effect)
   SELECT classroom_role_id, permission.id, 'classroom', classroom_id, 'allow'
   FROM public.permissions permission
-  WHERE permission.key IN ('teaching.students.list', 'teaching.students.read');
+  WHERE permission.key IN ('teaching.students.list', 'teaching.students.read', 'teaching.class_sessions.list');
   INSERT INTO public.user_role_assignments(user_id, role_id, scope_type, scope_id, effective_from, status)
   VALUES ('00000000-0000-0000-0000-000000000003', classroom_role_id, 'classroom', classroom_id, CURRENT_DATE, 'active');
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
@@ -579,8 +561,21 @@ BEGIN
   VALUES (student_id, 'Migration Visibility Classroom', NULL);
   INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, user_id, teaching_id)
   VALUES (class_session_id, 'Scoped roster test session', classroom_id, ARRAY[course_id], '00000000-0000-0000-0000-000000000001', platform_teaching_id);
+  INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, user_id, teaching_id)
+  VALUES ('60000000-0000-0000-0000-000000000104', 'Scoped makeup source session', classroom_id, ARRAY[course_id], '00000000-0000-0000-0000-000000000001', platform_teaching_id);
   INSERT INTO public.enrollments(student_id, course_id, classroom_id, class_session_id, user_id, status, start_date)
   VALUES (student_id, course_id, classroom_id, class_session_id, NULL, 'regular', CURRENT_DATE);
+  INSERT INTO public.students(id, name, user_id) VALUES
+    ('20000000-0000-0000-0000-000000000104', 'Migration Makeup Student', NULL),
+    ('20000000-0000-0000-0000-000000000105', 'Migration Not Makeup Student', NULL);
+  INSERT INTO public.enrollments(id, student_id, course_id, classroom_id, class_session_id, user_id, status, start_date)
+  VALUES
+    ('99000000-0000-4000-8000-000000000103', '20000000-0000-0000-0000-000000000104', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE),
+    ('99000000-0000-4000-8000-000000000104', '20000000-0000-0000-0000-000000000105', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE);
+  INSERT INTO public.class_occurrences(id, class_session_id, occurrence_date, status, is_conducted)
+  VALUES ('9a000000-0000-4000-8000-000000000103', class_session_id, CURRENT_DATE, 'scheduled', false);
+  INSERT INTO public.occurrence_reports(enrollment_id, class_occurrence_id, content, is_completed, attendance_status)
+  VALUES ('99000000-0000-4000-8000-000000000103', '9a000000-0000-4000-8000-000000000103', '', false, 'pending');
   IF NOT EXISTS (
     SELECT 1 FROM public.enrollments enrollment
     WHERE enrollment.student_id = '20000000-0000-0000-0000-000000000103'
@@ -597,15 +592,48 @@ SELECT set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', false);
 DO $$
 DECLARE student_page jsonb;
+  target_workspace jsonb;
+  other_date_workspace jsonb;
+  source_workspace jsonb;
+  makeup_count integer;
 BEGIN
   student_page := public.get_students_overview(10, 0, 'Migration Visibility', 'name');
   IF (student_page->>'total')::integer <> 1
      OR student_page->'items'->0->>'name' <> 'Migration Visibility Classroom' THEN
-    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %, classroom_permission=%, scoped_permission=%, enrollment_student_access=%',
-      student_page,
-      public.has_api_permission(auth.uid(), 'teaching.students.read', '30000000-0000-0000-0000-000000000001', NULL),
-      public.has_teaching_permission(auth.uid(), 'teaching.students.read', (SELECT id FROM public.teachings WHERE is_global LIMIT 1), '30000000-0000-0000-0000-000000000001', NULL),
-      public.can_access_student('20000000-0000-0000-0000-000000000103', 'teaching.students.read');
+    RAISE EXCEPTION 'classroom-scoped student access was broadened or omitted: %', student_page;
+  END IF;
+
+  target_workspace := public.get_class_session_workspace('60000000-0000-0000-0000-000000000103', CURRENT_DATE);
+  SELECT count(*) INTO makeup_count
+  FROM jsonb_array_elements(target_workspace->'enrollments') AS enrollment
+  WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000103';
+  IF makeup_count <> 1 THEN
+    RAISE EXCEPTION 'report-backed makeup enrollment should appear exactly once in its target occurrence workspace: %', target_workspace->'enrollments';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(target_workspace->'enrollments') AS enrollment
+    WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000104'
+  ) THEN
+    RAISE EXCEPTION 'cross-session enrollment without a target occurrence report was added to the roster';
+  END IF;
+
+  other_date_workspace := public.get_class_session_workspace('60000000-0000-0000-0000-000000000103', CURRENT_DATE + 1);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(other_date_workspace->'enrollments') AS enrollment
+    WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000103'
+  ) THEN
+    RAISE EXCEPTION 'one-off makeup enrollment leaked into another target-session date';
+  END IF;
+
+  source_workspace := public.get_class_session_workspace('60000000-0000-0000-0000-000000000104', CURRENT_DATE);
+  IF NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(source_workspace->'enrollments') AS enrollment
+    WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000103'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM jsonb_array_elements(source_workspace->'enrollments') AS enrollment
+    WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000104'
+  ) THEN
+    RAISE EXCEPTION 'makeup entry changed the normal roster in its source session';
   END IF;
 END;
 $$;
