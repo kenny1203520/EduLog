@@ -52,6 +52,7 @@ import { roleDisplayName } from '@/utils/roleDisplay'
 import { getEffectiveTeacherAssignments } from '@/utils/effectiveTeacherAssignments'
 import { absenceReasonLabel } from '@/utils/absenceReason'
 import { ApiRealtimeChannel } from '@/services/report/ApiRealtimeChannel'
+import { shouldApplyCommittedReport } from '@/services/report/CommittedReportState'
 
 type ReportEditorExpose = {
     saveNow: (options?: { reason?: 'manual' | 'switch' }) => Promise<boolean>
@@ -93,6 +94,9 @@ const previousOccurrence = ref<ClassOccurrence | null>(null)
 const nextOccurrence = ref<ClassOccurrence | null>(null)
 let occurrenceLoadToken = 0
 let occurrenceListRequest = 0
+let reportLoadRequest = 0
+let editorSelectionRequest = 0
+let reportProvisionRequests = new Map<string, Promise<OccurrenceReport[]>>()
 let workspaceRosterDate: string | null = null
 const showAttendanceTemplateModal = ref(false)
 let attendanceTemplateRequestGeneration = 0
@@ -680,6 +684,7 @@ async function loadSessionOccurrences(anchorDate: Date): Promise<void> {
 }
 
 async function loadReportsForCurrentOccurrence(options: { createMissing?: boolean } = {}) {
+    const request = ++reportLoadRequest
     const occurrenceId = todayOccurrence.value?.id
     const nextReportMap = new Map<string, any>()
     if (!occurrenceId) {
@@ -687,10 +692,26 @@ async function loadReportsForCurrentOccurrence(options: { createMissing?: boolea
         return
     }
 
-    const occurrenceReports = options.createMissing === false
-        ? await OccurrenceReportService.getReportsByOccurrence(occurrenceId)
-        : await OccurrenceReportService.createReportsForOccurrence(occurrenceId)
-    if (todayOccurrence.value?.id !== occurrenceId) return
+    let occurrenceReports: OccurrenceReport[]
+    if (options.createMissing === false) {
+        // If the initial provisioning POST is still running, wait for its
+        // writes to settle before taking the complete read snapshot.
+        const provisioning = reportProvisionRequests.get(occurrenceId)
+        if (provisioning) await provisioning
+        occurrenceReports = await OccurrenceReportService.getReportsByOccurrence(occurrenceId)
+    } else {
+        let provisioning = reportProvisionRequests.get(occurrenceId)
+        if (!provisioning) {
+            provisioning = OccurrenceReportService.createReportsForOccurrence(occurrenceId)
+            reportProvisionRequests.set(occurrenceId, provisioning)
+        }
+        try {
+            occurrenceReports = await provisioning
+        } finally {
+            if (reportProvisionRequests.get(occurrenceId) === provisioning) reportProvisionRequests.delete(occurrenceId)
+        }
+    }
+    if (request !== reportLoadRequest || todayOccurrence.value?.id !== occurrenceId) return
     const currentEnrollmentIds = new Set(enrollments.value.map(enrollment => enrollment.id).filter(Boolean))
     occurrenceReports.forEach(report => {
         // The workspace RPC is the canonical effective roster. Never let an
@@ -700,7 +721,7 @@ async function loadReportsForCurrentOccurrence(options: { createMissing?: boolea
             // A background read can race a newer save response. Keep the
             // higher server version for the card instead of rolling it back.
             nextReportMap.set(report.enrollmentId,
-                currentReport && currentReport.id === report.id && currentReport.version > report.version
+                currentReport && currentReport.id === report.id && currentReport.version >= report.version
                     ? currentReport
                     : report)
         }
@@ -1141,7 +1162,10 @@ async function refreshCurrentOccurrenceFromRealtime(options: { reportOnly?: bool
                 previousOccurrence.value = navigation.previous
                 nextOccurrence.value = navigation.next
             }
-            await loadReportsForCurrentOccurrence({ createMissing: !options.reportOnly })
+            // Realtime/background refreshes must only read the complete saved
+            // roster. The provisioning POST intentionally creates reports for
+            // a narrower set of active enrollments.
+            await loadReportsForCurrentOccurrence({ createMissing: false })
             if (requestId !== realtimeRefreshRequest || todayOccurrence.value?.id !== occurrenceId) return
             if (options.refreshCatalog) {
                 await Promise.all([...new Set(enrollments.value.map(enrollment => enrollment.courseId).filter(Boolean))]
@@ -1264,14 +1288,25 @@ async function setAttendance(enrId: string, status: QuickAttendanceStatus) {
     }
     const report = reportMap.value.get(enrId)
     if (!report || savingMap.value.get(enrId) || (report.attendanceStatus || 'pending') === status) return
+    const occurrenceId = todayOccurrence.value?.id
+    if (!occurrenceId || report.classOccurrenceId !== occurrenceId) return
 
     savingMap.value.set(enrId, true)
     try {
-        await OccurrenceReportService.saveAttendanceOnly(report.id, report.version, undefined, {
+        const result = await OccurrenceReportService.saveAttendanceOnly(report.id, report.version, undefined, {
             attendanceStatus: status,
             absenceReason: status === 'absent' ? 'reason_not_provided' : null
         })
-        reportMap.value.set(enrId, await OccurrenceReportService.getReportById(report.id))
+        if (!result.success || !result.updatedReport) {
+            throw new Error(result.message || 'Attendance save did not return the committed report')
+        }
+        if (todayOccurrence.value?.id !== occurrenceId
+            || reportMap.value.get(enrId)?.id !== report.id
+            || !enrollments.value.some(enrollment => enrollment.id === enrId)) return
+        const current = reportMap.value.get(enrId) as OccurrenceReport | null | undefined
+        const updatedReport = new OccurrenceReport(result.updatedReport)
+        if (!shouldApplyCommittedReport(updatedReport, current, enrId, occurrenceId)) return
+        reportMap.value = new Map(reportMap.value).set(enrId, updatedReport)
     } catch (error) {
         console.error('Failed to set attendance:', error)
         toast.error(t('common.save_error'))
@@ -1825,22 +1860,35 @@ async function toggleSplitView(enrollmentId: string) {
         return
     }
 
+    const selectionRequest = ++editorSelectionRequest
     const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
-    if (saveSucceeded === false) return
+    if (saveSucceeded === false || selectionRequest !== editorSelectionRequest) return
 
-    // finding the enrollment to get the courseId
+    const occurrenceId = todayOccurrence.value?.id
+    const occurrenceDate = todayOccurrence.value?.occurrenceDate
+    const dateKey = occurrenceDate ? DateUtils.formatLocalDate(occurrenceDate) : null
+
+    // Resolve course lessons without allowing a slow request to change the
+    // editor after the user selected another student or occurrence.
     const enrollment = enrollments.value.find(e => e.id === enrollmentId)
     if (enrollment?.courseId) {
-        courseLessons.value = await getLessonsForCourse(enrollment.courseId)
+        const lessons = await getLessonsForCourse(enrollment.courseId)
+        if (selectionRequest !== editorSelectionRequest
+            || todayOccurrence.value?.id !== occurrenceId
+            || selectedDateKey.value !== dateKey) return
+        courseLessons.value = lessons
     }
 
     let editorReport = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
     // Resolve the current persisted version before mounting the editor. Once
     // mounted, background refreshes only replace the card snapshot.
-    if (todayOccurrence.value?.id) {
+    if (occurrenceId) {
         savingMap.value.set(enrollmentId, true)
         try {
-            const fetched = await OccurrenceReportService.getReport(enrollmentId, todayOccurrence.value.id)
+            const fetched = await OccurrenceReportService.getReport(enrollmentId, occurrenceId)
+            if (selectionRequest !== editorSelectionRequest
+                || todayOccurrence.value?.id !== occurrenceId
+                || selectedDateKey.value !== dateKey) return
             if (fetched) {
                 const cardReport = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
                 editorReport = cardReport && cardReport.id === fetched.id && cardReport.version > fetched.version ? cardReport : fetched
@@ -1853,6 +1901,10 @@ async function toggleSplitView(enrollmentId: string) {
         }
     }
 
+    if (selectionRequest !== editorSelectionRequest
+        || todayOccurrence.value?.id !== occurrenceId
+        || selectedDateKey.value !== dateKey) return
+
     selectedEnrollmentId.value = enrollmentId
     selectedEditorEnrollmentSnapshot.value = enrollment || null
     selectedEditorReportSnapshot.value = editorReport ? new OccurrenceReport(editorReport.toDTO()) : null
@@ -1861,6 +1913,7 @@ async function toggleSplitView(enrollmentId: string) {
 
 async function closeSplitView() {
     const enrollmentIdToRestore = selectedEnrollmentId.value
+    editorSelectionRequest++
     const saveSucceeded = await quickReportEditorRef.value?.saveNow({ reason: 'switch' })
     if (saveSucceeded === false) return
     showSplitView.value = false
@@ -1999,8 +2052,10 @@ function handleReportExternalLinkUpdate(link: string, enrollmentId: string) {
 
 function handleSaveSuccess(updatedReport: OccurrenceReportDTO, enrollmentId: string) {
     const report = reportMap.value.get(enrollmentId) as OccurrenceReport | null | undefined
-    if (updatedReport.class_occurrence_id !== todayOccurrence.value?.id) return
-    if (report && report.id === updatedReport.id && report.version > updatedReport.version) return
+    const occurrenceId = todayOccurrence.value?.id
+    if (!occurrenceId || !enrollments.value.some(enrollment => enrollment.id === enrollmentId)) return
+    const incomingReport = new OccurrenceReport(updatedReport)
+    if (!shouldApplyCommittedReport(incomingReport, report, enrollmentId, occurrenceId)) return
     const progressChanged = !report
         || report.lessonId !== updatedReport.lesson_id
         || report.isCompleted !== (updatedReport.is_completed ?? false)
@@ -2009,7 +2064,7 @@ function handleSaveSuccess(updatedReport: OccurrenceReportDTO, enrollmentId: str
 
     // Cards intentionally show committed data only. Keep the editor's own
     // draft snapshot independent so this replacement cannot reset its fields.
-    reportMap.value = new Map(reportMap.value).set(enrollmentId, new OccurrenceReport(updatedReport))
+    reportMap.value = new Map(reportMap.value).set(enrollmentId, incomingReport)
     if (progressChanged) void refreshStudentProgressAfterSave(enrollmentId, todayOccurrence.value)
 }
 
@@ -2541,8 +2596,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                 <!-- RIGHT COLUMN: Report Editor -->
                 <div v-if="showSplitView && selectedEnrollmentId"
                     class="animate-in slide-in-from-right-4 duration-500 min-w-0 w-full">
-                    <div class="sticky top-20 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 flex flex-col overflow-hidden"
-                        style="max-height: calc(100vh - 7rem);">
+                    <div class="session-report-editor sticky top-20 min-h-0 bg-white rounded-[2.5rem] border border-emerald-100 shadow-xl shadow-emerald-50/50 flex flex-col overflow-hidden">
                         <!-- Header: Fixed at top of sticky box -->
                         <div
                             class="flex items-center justify-between p-6 pb-4 shrink-0 bg-white z-20 border-b border-gray-50 shadow-sm shadow-gray-50/20">
@@ -2581,7 +2635,7 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
                         </div>
 
                         <!-- Scrollable Body -->
-                        <div class="flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar bg-gray-50/30">
+                        <div class="min-h-0 flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar bg-gray-50/30">
                             <ReportEditor ref="quickReportEditorRef" v-if="selectedEditorReport"
                                 :key="selectedEnrollmentId" :report-id="selectedEditorReport?.id"
                                 :initial-version="selectedEditorReport?.version"
@@ -2971,14 +3025,19 @@ async function removeAssignment(teacherId: string, effectiveFrom: string) {
     display: none;
 }
 
-@container session-workspace (min-width: 960px) {
+@container session-workspace (min-width: 1100px) {
     .session-workspace__grid--editing {
-        grid-template-columns: minmax(520px, 1fr) minmax(392px, 560px);
+        grid-template-columns: minmax(520px, 1fr) minmax(480px, 560px);
     }
 
     .session-workspace__class-column--editing {
         display: block;
     }
+}
+
+.session-report-editor {
+    max-height: calc(100vh - 6rem);
+    max-height: calc(100dvh - 6rem);
 }
 
 .custom-scrollbar::-webkit-scrollbar {

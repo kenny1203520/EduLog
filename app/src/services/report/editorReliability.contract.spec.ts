@@ -61,6 +61,16 @@ describe('editor reliability contracts', () => {
         expect(commandService).toContain('reconcileV1SystemManagedSave')
         expect(commandService).toContain('delete nonAttendanceData.attendanceStatus')
     })
+
+    it('hydrates editable attendance from committed API state instead of stale collaboration metadata', () => {
+        const editor = readFileSync(resolve(repoRoot, 'app/src/components/ReportEditor.vue'), 'utf8')
+        const attendanceInitialization = editor.slice(editor.indexOf('const shouldHydrateMeta ='), editor.indexOf("if (metaMap.has('classParticipation'))"))
+        expect(attendanceInitialization).toContain("attendanceStatus.value = props.initialAttendanceStatus || 'pending'")
+        expect(attendanceInitialization).toContain("metaMap.set('attendanceStatus', attendanceStatus.value)")
+        expect(attendanceInitialization).not.toContain("metaMap.get('attendanceStatus')")
+        expect(editor).toContain('collabMetaHydratedReportId !== reportKey || !hasUnsavedChanges.value')
+        expect(editor).toContain('editor has local unsaved changes')
+    })
     it('routes production collaboration through the same-origin API WebSocket', () => {
         const collab = readFileSync(resolve(repoRoot, 'app/src/composables/useReportCollab.ts'), 'utf8')
         expect(collab).toContain("getApiV1Mode() === 'v1' ? undefined : apiDataClient")

@@ -349,7 +349,24 @@ export class ReportQueryService {
     static async getReportsByOccurrence(
         occurrenceId: string
     ): Promise<OccurrenceReport[]> {
-        if (getApiV1Mode() === 'v1') { const response = await apiV1Client.get<any[]>('/reports?class_occurrence_id=' + encodeURIComponent(occurrenceId) + '&limit=100&sort=-created_at'); return (response.data || []).map((row) => new OccurrenceReport(row)) }
+        if (getApiV1Mode() === 'v1') {
+            const rows: any[] = []
+            const limit = 100
+            for (let offset = 0; ; offset += limit) {
+                const params = new URLSearchParams({
+                    class_occurrence_id: occurrenceId,
+                    limit: String(limit),
+                    offset: String(offset),
+                    sort: '-created_at',
+                })
+                const response = await apiV1Client.get<any[]>(`/reports?${params.toString()}`)
+                const page = response.data || []
+                rows.push(...page)
+                const total = Number(response.meta?.total)
+                if (page.length < limit || (Number.isFinite(total) && total > 0 && rows.length >= total)) break
+            }
+            return rows.map((row) => new OccurrenceReport(row))
+        }
         const { data, error } = await apiDataClient
             .from('occurrence_reports')
             .select(REPORT_EDITOR_COLUMNS)

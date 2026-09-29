@@ -9,14 +9,14 @@ describe('SessionDetails background refresh contract', () => {
         expect(source).toContain('const selectedEditorReportSnapshot = ref<OccurrenceReport | null>(null)')
         expect(source).toContain('v-if="selectedEditorReport"')
         expect(source).toContain(':initial-content="selectedEditorReport?.content"')
-        expect(source).toContain('reportMap.value = new Map(reportMap.value).set(enrollmentId, new OccurrenceReport(updatedReport))')
-        expect(source).toContain('if (report && report.id === updatedReport.id && report.version > updatedReport.version) return')
+        expect(source).toContain('reportMap.value = new Map(reportMap.value).set(enrollmentId, incomingReport)')
+        expect(source).toContain('shouldApplyCommittedReport(incomingReport, report, enrollmentId, occurrenceId)')
     })
 
     it('uses a read-only report refresh for report events and preserves lesson options', () => {
         expect(source).toContain("options.createMissing === false")
         expect(source).toContain('OccurrenceReportService.getReportsByOccurrence(occurrenceId)')
-        expect(source).toContain('await loadReportsForCurrentOccurrence({ createMissing: !options.reportOnly })')
+        expect(source).toContain('await loadReportsForCurrentOccurrence({ createMissing: false })')
         expect(source).toContain('loadWorkspaceRoster(selectedDate, true)')
         expect(source).toContain('loadMissingLessons: !options.reportOnly')
         expect(source).toContain('let lessonLoadPromises = new Map<string, Promise<Lesson[]>>()')

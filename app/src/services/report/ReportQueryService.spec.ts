@@ -111,6 +111,25 @@ describe('ReportQueryService.getProgressGapsByEnrollments', () => {
     })
 })
 
+describe('ReportQueryService.getReportsByOccurrence', () => {
+    it('reads every page of the authorized occurrence report list in v1 mode', async () => {
+        apiModeMock.mockReturnValue('v1')
+        apiV1GetMock
+            .mockResolvedValueOnce({ data: Array.from({ length: 100 }, (_, index) => ({ id: `report-${index + 1}`, enrollment_id: `active-${index + 1}`, class_occurrence_id: 'occurrence-1', attendance_status: 'pending', version: 1 })), meta: { total: 101 } })
+            .mockResolvedValueOnce({ data: [{ id: 'report-2', enrollment_id: 'completed', class_occurrence_id: 'occurrence-1', attendance_status: 'present', version: 4 }], meta: { total: 101 } })
+
+        const reports = await ReportQueryService.getReportsByOccurrence('occurrence-1')
+
+        expect(apiV1GetMock).toHaveBeenCalledTimes(2)
+        expect(apiV1GetMock.mock.calls[0][0]).toContain('limit=100')
+        expect(apiV1GetMock.mock.calls[0][0]).toContain('offset=0')
+        expect(apiV1GetMock.mock.calls[1][0]).toContain('offset=100')
+        expect(reports).toHaveLength(101)
+        expect(reports[0]?.attendanceStatus).toBe('pending')
+        expect(reports.at(-1)?.attendanceStatus).toBe('present')
+    })
+})
+
 describe('ReportQueryService.getReportsWithDetails', () => {
     it('normalizes the plural API relation shape for the report list', async () => {
         apiModeMock.mockReturnValue('v1')

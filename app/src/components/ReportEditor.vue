@@ -1694,6 +1694,7 @@ function handleCollaborationActivity(field: string, activity: { caret: number; s
 }
 let collabMetaMap: any = null
 let collabMetaObserver: ((event: any) => void) | null = null
+let collabMetaHydratedReportId: string | null = null
 let isApplyingRemoteCollab = false
 
 function cleanupReportCollabBindings() {
@@ -1766,8 +1767,12 @@ watch(ready, (isReady) => {
         const metaMap = ydoc.value.getMap('reportMeta')
         collabMetaMap = metaMap
 
-        // Initialize local fields from map if they exist, otherwise seed them from local state
-        withCollabGuard(() => {
+        // A reconnect reuses the same Y.Doc. Do not rehydrate Vue fields from
+        // its map while the editor has local unsaved changes; that would reset
+        // fields such as attendance to an older shared snapshot.
+        const reportKey = props.reportId || ''
+        const shouldHydrateMeta = collabMetaHydratedReportId !== reportKey || !hasUnsavedChanges.value
+        if (shouldHydrateMeta) withCollabGuard(() => {
             const managedReason = canonicalSystemManagedReason()
             if (managedReason) {
                 // The API/props are canonical for system-managed attendance;
@@ -1777,8 +1782,11 @@ watch(ready, (isReady) => {
                 metaMap.set('attendanceStatus', attendanceStatus.value)
                 metaMap.set('absenceReason', absenceReason.value)
             } else {
-                if (metaMap.has('attendanceStatus')) attendanceStatus.value = metaMap.get('attendanceStatus') as any
-                else metaMap.set('attendanceStatus', attendanceStatus.value)
+                // The API props are the committed report state. A retained Yjs
+                // snapshot can outlive a save or reconnect, so it must not
+                // replace the status shown on the cards with an older value.
+                attendanceStatus.value = props.initialAttendanceStatus || 'pending'
+                metaMap.set('attendanceStatus', attendanceStatus.value)
 
                 if (metaMap.has('absenceReason')) absenceReason.value = normalizeAbsenceReasonCode(String(metaMap.get('absenceReason') || ''))
                 else metaMap.set('absenceReason', absenceReason.value)
@@ -1819,6 +1827,7 @@ watch(ready, (isReady) => {
                 metaMap.set('version', version.value)
             }
         })
+        if (collabMetaHydratedReportId !== reportKey) collabMetaHydratedReportId = reportKey
         
         collabMetaObserver = (event) => {
             withCollabGuard(() => {
@@ -2662,6 +2671,7 @@ const isInitializing = ref(false)
 
 // Reset auto-save state when switching reports
 watch(() => props.reportId, () => {
+    collabMetaHydratedReportId = null
     isInitializing.value = true
     managedAttendanceReason.value = normalizeSystemManagedReason(props.initialAbsenceReason)
     managedAttendanceStatus.value = managedAttendanceReason.value

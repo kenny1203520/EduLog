@@ -114,6 +114,26 @@ describe('report SupabaseProvider snapshot versioning', () => {
         }))
         await provider.destroy()
     })
+    it('does not mark a stale snapshot as saved or advance its guarded report version', async () => {
+        const { supabase, rpc } = createSupabaseMock()
+        rpc.mockResolvedValue({ data: false, error: null })
+        const doc = new Y.Doc()
+        const provider = new SupabaseProvider(supabase as any, doc, 'report-1', 7, 'user-1')
+        await provider.ready
+        doc.getText('content').insert(0, 'local draft')
+
+        await expect(provider.saveSnapshot()).resolves.toBe(false)
+        await expect(provider.saveSnapshot()).resolves.toBe(false)
+
+        expect(rpc).toHaveBeenCalledTimes(2)
+        expect(rpc).toHaveBeenLastCalledWith('save_report_collab_snapshot', expect.objectContaining({
+            p_occurrence_report_id: 'report-1',
+            p_base_report_version: 7,
+            p_snapshot_base64: expect.any(String)
+        }))
+        expect(doc.getText('content').toString()).toBe('local draft')
+        await provider.destroy()
+    })
     it('rejects ready when the collaboration document cannot be loaded', async () => {
         const { supabase, query } = createSupabaseMock()
         query.maybeSingle.mockResolvedValue({ data: null, error: { message: 'permission denied' } })
