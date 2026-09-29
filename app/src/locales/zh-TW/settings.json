@@ -110,5 +110,23 @@
         "inherited": "上層繼承結果",
         "no_policy": "尚無政策",
         "legacy_fallback": "沿用當日出席教師"
+    },
+    "extension": {
+        "title": "瀏覽器擴充套件連線",
+        "description": "檢視並撤銷授予擴充套件的 EduLog 權限。配對請求會先顯示在此頁，核准後才會建立受限的整合憑證。",
+        "load_failed": "無法載入擴充套件連線設定。",
+        "pair_title": "核准瀏覽器擴充套件連線",
+        "pair_description": "只有在你剛從 EduLog 擴充套件開始配對時才核准。擴充套件核准後可使用此帳號的整合功能。",
+        "expires": "請求將於 {date} 到期",
+        "approve": "核准連線",
+        "approved": "已核准擴充套件連線，請回到擴充套件完成配對。",
+        "approve_failed": "無法核准此請求，可能已到期或已使用。",
+        "connections": "已連線的擴充套件",
+        "no_connections": "目前沒有有效的瀏覽器擴充套件連線。",
+        "last_used": "上次使用：{date}",
+        "never": "尚未使用",
+        "revoke": "撤銷連線",
+        "revoked": "已撤銷擴充套件存取權。",
+        "revoke_failed": "無法撤銷擴充套件存取權。"
     }
 }

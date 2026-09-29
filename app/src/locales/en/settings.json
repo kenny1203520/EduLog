@@ -110,5 +110,23 @@
         "inherited": "Inherited result",
         "no_policy": "No configured policy",
         "legacy_fallback": "Legacy attendance fallback"
+    },
+    "extension": {
+        "title": "Browser extension connections",
+        "description": "Review and revoke EduLog access granted to browser extensions. A pairing request is shown here before it receives a limited integration credential.",
+        "load_failed": "Could not load extension connection settings.",
+        "pair_title": "Approve browser extension connection",
+        "pair_description": "Only approve if you just started this pairing in the EduLog extension. The extension will be able to use its integration features for this account.",
+        "expires": "Request expires {date}",
+        "approve": "Approve connection",
+        "approved": "Extension connection approved. Return to the extension to finish pairing.",
+        "approve_failed": "Could not approve this request. It may have expired or already been used.",
+        "connections": "Connected extensions",
+        "no_connections": "No active browser extension connections.",
+        "last_used": "Last used: {date}",
+        "never": "Never",
+        "revoke": "Revoke",
+        "revoked": "Extension access revoked.",
+        "revoke_failed": "Could not revoke extension access."
     }
 }
