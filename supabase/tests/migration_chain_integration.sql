@@ -748,27 +748,44 @@ BEGIN
   IF EXISTS (
     SELECT 1
     FROM public.get_effective_occurrence_enrollment_ids('9a000000-0000-4000-8000-000000000103') AS roster
-    WHERE roster.enrollment_id IN (
-      '99000000-0000-4000-8000-000000000105', -- not effective yet
-      '99000000-0000-4000-8000-000000000106', -- course not offered by the target session
-      '99000000-0000-4000-8000-000000000107', -- transferred out of this occurrence
-      '99000000-0000-4000-8000-000000000108', -- completed without a qualifying completion report
-      '99000000-0000-4000-8000-000000000110'  -- completion was before the target occurrence
-    )
+    WHERE roster.enrollment_id = '99000000-0000-4000-8000-000000000107'
   ) THEN
-    RAISE EXCEPTION 'ineligible report-backed makeup enrollment was added to the shared effective roster';
+    RAISE EXCEPTION 'a report-backed enrollment transferred out of the occurrence remained in the shared roster';
+  END IF;
+  IF (
+    SELECT count(*)
+    FROM public.get_effective_occurrence_enrollment_ids('9a000000-0000-4000-8000-000000000103') AS roster
+    WHERE roster.enrollment_id IN (
+      '99000000-0000-4000-8000-000000000105', -- start date is after the occurrence
+      '99000000-0000-4000-8000-000000000106', -- course is not listed by the target session
+      '99000000-0000-4000-8000-000000000108', -- completed without a completion report
+      '99000000-0000-4000-8000-000000000110'  -- completion predates the occurrence
+    )
+  ) <> 4 THEN
+    RAISE EXCEPTION 'the target occurrence report did not override normal enrollment date, course, or status filters';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.get_effective_occurrence_enrollment_ids('9a000000-0000-4000-8000-000000000103') AS roster
     WHERE roster.enrollment_id = '99000000-0000-4000-8000-000000000109'
   ) THEN
-    RAISE EXCEPTION 'completed makeup enrollment should remain eligible through its completion date';
+    RAISE EXCEPTION 'completed report-backed makeup enrollment should remain eligible';
   END IF;
   SELECT count(*) INTO makeup_count
   FROM jsonb_array_elements(target_workspace->'enrollments') AS enrollment
   WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000109';
   IF makeup_count <> 1 THEN
     RAISE EXCEPTION 'completed makeup enrollment should appear once in its target-date workspace';
+  END IF;
+  SELECT count(DISTINCT enrollment->>'id') INTO makeup_count
+  FROM jsonb_array_elements(target_workspace->'enrollments') AS enrollment
+  WHERE enrollment->>'id' IN (
+    '99000000-0000-4000-8000-000000000105',
+    '99000000-0000-4000-8000-000000000106',
+    '99000000-0000-4000-8000-000000000108',
+    '99000000-0000-4000-8000-000000000110'
+  );
+  IF makeup_count <> 4 THEN
+    RAISE EXCEPTION 'the workspace filtered report-backed enrollments a second time: %', target_workspace->'enrollments';
   END IF;
 
   other_date_workspace := public.get_class_session_workspace('60000000-0000-0000-0000-000000000103', CURRENT_DATE + 1);
@@ -792,6 +809,23 @@ BEGIN
 END;
 $$;
 RESET ROLE;
+
+-- Cancelling an active transfer out restores the report-linked occurrence entry.
+DO $$
+BEGIN
+  UPDATE public.single_lesson_transfers
+  SET cancelled_at = now()
+  WHERE enrollment_id = '99000000-0000-4000-8000-000000000107'
+    AND source_occurrence_id = '9a000000-0000-4000-8000-000000000103'
+    AND cancelled_at IS NULL;
+  IF NOT FOUND OR NOT EXISTS (
+    SELECT 1 FROM public.get_effective_occurrence_enrollment_ids('9a000000-0000-4000-8000-000000000103') AS roster
+    WHERE roster.enrollment_id = '99000000-0000-4000-8000-000000000107'
+  ) THEN
+    RAISE EXCEPTION 'cancelling a transfer out did not restore the report-backed roster entry';
+  END IF;
+END;
+$$;
 
 GRANT EXECUTE ON FUNCTION public.get_dashboard_page(date, date) TO authenticated;
 SET ROLE authenticated;

@@ -75,7 +75,7 @@ jobs:
           for migration in supabase/migrations/*.sql; do
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
-          for migration in supabase/migrations/1000100*.sql supabase/migrations/1000101*.sql supabase/migrations/1000111*.sql supabase/migrations/1000112*.sql supabase/migrations/1000113*.sql supabase/migrations/1000114*.sql; do
+          for migration in supabase/migrations/1000100*.sql supabase/migrations/1000101*.sql supabase/migrations/1000111*.sql supabase/migrations/1000112*.sql supabase/migrations/1000113*.sql supabase/migrations/1000114*.sql supabase/migrations/1000115*.sql; do
             psql -v ON_ERROR_STOP=1 -f "$migration"
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
