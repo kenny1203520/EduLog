@@ -151,25 +151,42 @@ async function resolveConflict(req: Request, res: Response) {
   return reportMutation(req, reportId, input.report, input.expected_version, res)
 }
 
-async function provisionReports(req: Request, res: Response) {
+export async function provisionReports(req: Request, res: Response) {
   const occurrenceId = uuid.parse(req.params.occurrenceId)
   const occurrence = await req.db!.from('class_occurrences').select('id,class_session_id,occurrence_date').eq('id', occurrenceId).maybeSingle()
   if (occurrence.error) throw mapDatabaseError(occurrence.error)
   if (!occurrence.data) throw new ApiError(404, 'NOT_FOUND', 'Occurrence was not found')
   await permission(req, 'teaching.reports.create', occurrence.data.class_session_id)
+  // This endpoint also returns report data. Check read access before any
+  // provisioning side effects so create-only users do not create reports and
+  // then receive a misleading authorization failure.
+  await permission(req, 'teaching.reports.list', occurrence.data.class_session_id)
   const replay = await idempotency(req, 201, null)
   if (replay) return res.status(replay.status).json(replay.body)
-  const roster = await req.db!.rpc('get_provisionable_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
+  const roster = await req.db!.rpc('get_effective_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
   if (roster.error) throw mapDatabaseError(roster.error)
-  const enrollmentIds = ((roster.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id)
-  if (!enrollmentIds.length) { const body = envelope(req, []); await complete(req, 201, body); return res.status(201).json(body) }
-  const existing = await req.db!.from('occurrence_reports').select('enrollment_id').eq('class_occurrence_id', occurrenceId).in('enrollment_id', enrollmentIds)
-  if (existing.error) throw mapDatabaseError(existing.error)
-  const existingIds = new Set((existing.data ?? []).map((row) => row.enrollment_id))
-  const missingCount = enrollmentIds.filter((enrollmentId) => !existingIds.has(enrollmentId)).length
-  const provision = await req.db!.rpc('provision_occurrence_reports', { p_occurrence_id: occurrenceId })
-  if (provision.error) throw mapDatabaseError(provision.error)
-  const reports = await req.db!.from('occurrence_reports').select(reportFields).eq('class_occurrence_id', occurrenceId).in('enrollment_id', enrollmentIds)
+  const enrollmentIds = [...new Set(((roster.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id))]
+
+  // Provisioning has a deliberately narrower scope (active regular
+  // enrollments). Existing reports for completed and makeup students are
+  // still part of the effective occurrence roster and must be returned.
+  let missingCount = 0
+  if (enrollmentIds.length) {
+    const provisionable = await req.db!.rpc('get_provisionable_occurrence_enrollment_ids', { p_occurrence_id: occurrenceId })
+    if (provisionable.error) throw mapDatabaseError(provisionable.error)
+    const provisionableIds = [...new Set(((provisionable.data ?? []) as Array<{ enrollment_id: string }>).map((row) => row.enrollment_id))]
+    if (provisionableIds.length) {
+      const existing = await req.db!.from('occurrence_reports').select('enrollment_id').eq('class_occurrence_id', occurrenceId).in('enrollment_id', provisionableIds)
+      if (existing.error) throw mapDatabaseError(existing.error)
+      const existingIds = new Set((existing.data ?? []).map((row) => row.enrollment_id))
+      missingCount = provisionableIds.filter((enrollmentId) => !existingIds.has(enrollmentId)).length
+      const provision = await req.db!.rpc('provision_occurrence_reports', { p_occurrence_id: occurrenceId })
+      if (provision.error) throw mapDatabaseError(provision.error)
+    }
+  }
+
+  const reportsQuery = req.db!.from('occurrence_reports').select(reportFields).eq('class_occurrence_id', occurrenceId)
+  const reports = enrollmentIds.length ? await reportsQuery.in('enrollment_id', enrollmentIds) : { data: [], error: null }
   if (reports.error) throw mapDatabaseError(reports.error)
   const body = envelope(req, reports.data ?? [], { provisioned: missingCount, total: reports.data?.length ?? 0 })
   await complete(req, 201, body)

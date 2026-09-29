@@ -327,6 +327,10 @@ describe('generated API contract', () => {
       expect(operation.security, `${method.toUpperCase()} ${path}`).toEqual([{ cookieAuth: [] }])
       expect(operation.responses['401'], `${method.toUpperCase()} ${path}`).toBeDefined()
     }
+    expect(spec.paths['/api/occurrences/{occurrenceId}/reports']?.post?.['x-permissions']).toEqual([
+      'teaching.reports.create',
+      'teaching.reports.list'
+    ])
     expect(spec.paths['/api/aggregates/dashboard']).toBeUndefined()
   })
 
