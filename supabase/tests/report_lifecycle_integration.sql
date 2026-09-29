@@ -40,11 +40,14 @@ SELECT '9c000000-0000-4000-8000-000000000001', profile.id
 FROM public.profiles profile
 WHERE profile.auth_user_id = '91000000-0000-4000-8000-000000000001'
 ON CONFLICT (id) DO NOTHING;
+-- The role-source trigger validates the actor like the production RPC does.
+SELECT set_config('request.jwt.claim.sub', '91000000-0000-4000-8000-000000000001', false);
 INSERT INTO public.class_session_teachers(class_session_id, teacher_id, role_id, effective_from, effective_to)
 SELECT '96000000-0000-4000-8000-000000000001', '9c000000-0000-4000-8000-000000000001', role.id, DATE '2020-01-01', NULL
 FROM public.roles role
 WHERE role.code = 'teacher' AND role.domain = 'teaching' AND role.is_builtin
 ON CONFLICT (class_session_id, teacher_id, effective_from) DO NOTHING;
+SELECT set_config('request.jwt.claim.sub', '', false);
 INSERT INTO public.class_session_schedule_rules(id, class_session_id, schedule_kind, day_of_week, start_time, end_time)
 VALUES ('97000000-0000-4000-8000-000000000001', '96000000-0000-4000-8000-000000000001', 'weekly', 1, '09:00', '10:00')
 ON CONFLICT (id) DO NOTHING;
