@@ -226,7 +226,7 @@ Deno.test('1000114 unifies report-backed makeup eligibility in the occurrence ro
 Deno.test('1000115 makes an occurrence-linked report authoritative for roster membership', () => {
   assertStringIncludes(reportOccurrenceAuthoritativeRoster, 'report.class_occurrence_id = p_occurrence_id')
   assertStringIncludes(reportOccurrenceAuthoritativeRoster, 'report_backed_enrollments AS MATERIALIZED')
-  assertStringIncludes(reportOccurrenceAuthoritativeRoster, 'WHERE EXISTS (\n          SELECT 1 FROM report_backed_enrollments')
+  assertStringIncludes(reportOccurrenceAuthoritativeRoster, 'AND (EXISTS (\n          SELECT 1 FROM report_backed_enrollments')
   assert(!reportOccurrenceAuthoritativeRoster.includes('enrollment.course_id = ANY(COALESCE(target.course_ids'))
   assert(!reportOccurrenceAuthoritativeRoster.includes('enrollment.start_date <= occurrence.occurrence_date\n      AND enrollment.status'))
   assertStringIncludes(reportOccurrenceAuthoritativeRoster, 'transfer.cancelled_at IS NULL')

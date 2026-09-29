@@ -603,6 +603,8 @@ BEGIN
   VALUES (class_session_id, 'Scoped roster test session', classroom_id, ARRAY[course_id], '00000000-0000-0000-0000-000000000001', platform_teaching_id);
   INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, user_id, teaching_id)
   VALUES ('60000000-0000-0000-0000-000000000104', 'Scoped makeup source session', classroom_id, ARRAY[course_id], '00000000-0000-0000-0000-000000000001', platform_teaching_id);
+  INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, user_id, teaching_id)
+  VALUES ('60000000-0000-0000-0000-000000000105', 'Unrelated makeup source session', classroom_id, ARRAY[unrelated_course_id], '00000000-0000-0000-0000-000000000001', platform_teaching_id);
   INSERT INTO public.enrollments(student_id, course_id, classroom_id, class_session_id, user_id, status, start_date)
   VALUES (student_id, course_id, classroom_id, class_session_id, NULL, 'regular', CURRENT_DATE);
   INSERT INTO public.students(id, name, user_id) VALUES
@@ -618,7 +620,7 @@ BEGIN
     ('99000000-0000-4000-8000-000000000103', '20000000-0000-0000-0000-000000000104', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE),
     ('99000000-0000-4000-8000-000000000104', '20000000-0000-0000-0000-000000000105', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE),
     ('99000000-0000-4000-8000-000000000105', '20000000-0000-0000-0000-000000000106', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE + 1),
-    ('99000000-0000-4000-8000-000000000106', '20000000-0000-0000-0000-000000000107', unrelated_course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE),
+    ('99000000-0000-4000-8000-000000000106', '20000000-0000-0000-0000-000000000107', unrelated_course_id, classroom_id, '60000000-0000-0000-0000-000000000105', NULL, 'regular', CURRENT_DATE),
     ('99000000-0000-4000-8000-000000000107', '20000000-0000-0000-0000-000000000108', course_id, classroom_id, class_session_id, NULL, 'regular', CURRENT_DATE),
     ('99000000-0000-4000-8000-000000000108', '20000000-0000-0000-0000-000000000109', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'completed', CURRENT_DATE),
     ('99000000-0000-4000-8000-000000000109', '20000000-0000-0000-0000-000000000110', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'completed', CURRENT_DATE);
