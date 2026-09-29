@@ -639,12 +639,10 @@ BEGIN
     ('99000000-0000-4000-8000-000000000106', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
     ('99000000-0000-4000-8000-000000000107', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
     ('99000000-0000-4000-8000-000000000108', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
-    ('99000000-0000-4000-8000-000000000109', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
-    ('99000000-0000-4000-8000-000000000110', '9a000000-0000-4000-8000-000000000103', '', false, 'pending');
+    ('99000000-0000-4000-8000-000000000109', '9a000000-0000-4000-8000-000000000103', '', false, 'pending');
   INSERT INTO public.occurrence_reports(enrollment_id, class_occurrence_id, content, lesson_id, is_completed, attendance_status)
   VALUES
-    ('99000000-0000-4000-8000-000000000109', '9a000000-0000-4000-8000-000000000105', '', '95000000-0000-4000-8000-000000000103', true, 'present'),
-    ('99000000-0000-4000-8000-000000000110', '9a000000-0000-4000-8000-000000000106', '', '95000000-0000-4000-8000-000000000103', true, 'present');
+    ('99000000-0000-4000-8000-000000000109', '9a000000-0000-4000-8000-000000000106', '', '95000000-0000-4000-8000-000000000103', true, 'present');
   INSERT INTO public.single_lesson_transfers(enrollment_id, source_occurrence_id, target_occurrence_id)
   VALUES ('99000000-0000-4000-8000-000000000107', '9a000000-0000-4000-8000-000000000103', '9a000000-0000-4000-8000-000000000104');
   IF NOT EXISTS (
@@ -761,7 +759,7 @@ BEGIN
       '99000000-0000-4000-8000-000000000105', -- start date is after the occurrence
       '99000000-0000-4000-8000-000000000106', -- course is not listed by the target session
       '99000000-0000-4000-8000-000000000108', -- completed without a completion report
-      '99000000-0000-4000-8000-000000000110'  -- completion predates the occurrence
+      '99000000-0000-4000-8000-000000000109'  -- completion predates the occurrence
     )
   ) <> 4 THEN
     RAISE EXCEPTION 'the target occurrence report did not override normal enrollment date, course, or status filters';
@@ -784,7 +782,7 @@ BEGIN
     '99000000-0000-4000-8000-000000000105',
     '99000000-0000-4000-8000-000000000106',
     '99000000-0000-4000-8000-000000000108',
-    '99000000-0000-4000-8000-000000000110'
+    '99000000-0000-4000-8000-000000000109'
   );
   IF makeup_count <> 4 THEN
     RAISE EXCEPTION 'the workspace filtered report-backed enrollments a second time: %', target_workspace->'enrollments';
