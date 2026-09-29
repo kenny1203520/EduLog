@@ -33,5 +33,10 @@ CREATE TABLE IF NOT EXISTS realtime.messages (id bigint GENERATED ALWAYS AS IDEN
 CREATE OR REPLACE FUNCTION realtime.topic() RETURNS text LANGUAGE sql STABLE AS $$
   SELECT COALESCE(NULLIF(current_setting('realtime.topic', true), ''), '');
 $$;
+-- The isolated PostgreSQL runner does not include Supabase Realtime's
+-- broadcast service. Keep trigger execution compatible while treating sends
+-- as no-ops; authorization policies and payload construction remain tested.
+CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean)
+RETURNS void LANGUAGE sql AS $$ SELECT; $$;
 
 GRANT USAGE ON SCHEMA public, auth, realtime TO anon, authenticated, service_role;
