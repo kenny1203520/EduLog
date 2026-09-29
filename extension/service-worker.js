@@ -3,12 +3,49 @@ chrome.runtime.onInstalled.addListener(() => {
   void chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })
 })
 
-chrome.runtime.onMessage.addListener((message, sender) => {
-  if (message?.type !== 'open-edulog-settings' || !sender.url?.startsWith('https://corp.orangeapple.co/')) return
-  void chrome.storage.local.get('edulogExtension').then(({ edulogExtension }) => {
-    const origin = edulogExtension?.origin
-    if (typeof origin === 'string' && /^https:\/\//.test(origin)) {
-      return chrome.tabs.create({ url: `${origin}/dashboard/settings?tab=integrations`, active: true })
+function isTeachingPage(senderUrl) {
+  try {
+    const url = new URL(senderUrl)
+    return url.protocol === 'https:' && url.hostname === 'corp.orangeapple.co' && /(?:^|\/)(?:students?|courses?|classrooms?|classes?|sessions?|reports?|lessons?)(?:\/|$)/i.test(url.pathname)
+  } catch { return false }
+}
+
+async function getIntegrationStatus() {
+  const { edulogExtension } = await chrome.storage.local.get('edulogExtension')
+  if (!edulogExtension?.origin || !edulogExtension?.token) return { status: 'not-connected' }
+  if (new Date(edulogExtension.tokenExpiresAt).getTime() <= Date.now()) return { status: 'expired' }
+  try {
+    const response = await fetch(`${edulogExtension.origin}/api/extension/v1/me`, {
+      headers: { authorization: `Bearer ${edulogExtension.token}` },
+      cache: 'no-store',
+      credentials: 'omit',
+      redirect: 'error',
+    })
+    if (response.status === 401) return { status: 'revoked' }
+    if (!response.ok) return { status: 'unavailable' }
+    const { data } = await response.json()
+    return {
+      status: 'connected',
+      capabilities: {
+        orangeapple_import: data?.capabilities?.orangeapple_import === true,
+        orangeapple_report_prefill: data?.capabilities?.orangeapple_report_prefill === true,
+      },
     }
-  })
+  } catch { return { status: 'unavailable' } }
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!isTeachingPage(sender.url)) return
+  if (message?.type === 'get-edulog-integration-status') {
+    void getIntegrationStatus().then(sendResponse, () => sendResponse({ status: 'unavailable' }))
+    return true
+  }
+  if (message?.type === 'open-edulog-settings') {
+    void chrome.storage.local.get('edulogExtension').then(({ edulogExtension }) => {
+      const origin = edulogExtension?.origin
+      if (typeof origin === 'string' && /^https:\/\//.test(origin)) {
+        return chrome.tabs.create({ url: `${origin}/dashboard/settings?tab=integrations`, active: true })
+      }
+    })
+  }
 })

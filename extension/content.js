@@ -29,7 +29,14 @@
     section { margin: 12px; padding: 16px; border: 1px solid #e2e8f0; border-radius: 14px; background: white; }
     p { margin: 8px 0 0; color: #475569; }
     .notice { border-left: 3px solid #d97706; padding-left: 10px; font-size: 12px; }
+    .status { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; background: #f1f5f9; padding: 5px 9px; color: #475569; font-size: 12px; font-weight: 700; }
+    .status::before { width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; content: ""; }
+    .status[data-state="connected"] { background: #ecfdf5; color: #047857; }
+    .status[data-state="connected"]::before { background: #10b981; }
+    .status[data-state="revoked"], .status[data-state="expired"], .status[data-state="unavailable"] { background: #fff7ed; color: #b45309; }
+    .status[data-state="revoked"]::before, .status[data-state="expired"]::before, .status[data-state="unavailable"]::before { background: #f59e0b; }
     .link { display: inline-flex; align-items: center; min-height: 40px; margin-top: 12px; border: 0; border-radius: 9px; background: #1e40af; padding: 0 12px; color: white; font-weight: 700; }
+    .link:disabled { cursor: not-allowed; background: #94a3b8; }
     @media (max-width: 480px) { .panel { right: 8px; bottom: 60px; width: calc(100% - 16px); max-height: calc(100% - 68px); } }
     @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto !important; transition: none !important; } }
   `
@@ -37,13 +44,45 @@
   frame.innerHTML = `<button class="launcher" type="button" aria-label="開啟 EduLog" aria-expanded="false">E</button>
     <main class="panel" role="region" aria-label="EduLog 橘子蘋果整合" data-open="false">
       <header><div><h2>EduLog 工作區</h2><p>橘子蘋果教學頁</p></div><button class="close" type="button" aria-label="關閉面板">×</button></header>
-      <nav aria-label="教學區域"><button type="button" aria-current="page">總覽</button><button type="button" disabled title="需完成網站樣本對應">學生</button><button type="button" disabled title="需完成網站樣本對應">課程與班級</button><button type="button" disabled title="需完成網站樣本對應">報告</button></nav>
-      <section><strong>網站轉接器待驗證</strong><p>提供學生、課程、課次與報告頁的去識別化樣本後，才能安全對應資料欄位與原站操作。</p><p class="notice">目前不會讀取或修改原站資料，也不會代替你送出表單。</p><button class="link" type="button">開啟 EduLog 連線設定</button></section>
+      <section><strong>EduLog 連線</strong><p><span class="status" data-state="checking" role="status" aria-live="polite">正在檢查連線</span></p><p class="connection-detail">正在確認目前 EduLog 系統。</p></section>
+      <section><strong>橘子蘋果功能</strong><p class="feature-status">匯入資料與報告預填尚待完成網站欄位驗證。</p><p class="notice">這個面板目前不讀取或修改橘子蘋果資料，也不會代替你送出表單。</p><button class="link" type="button" disabled>前往 EduLog 整合設定</button></section>
     </main>`
   root.append(styles, frame)
   const launcher = root.querySelector('.launcher')
   const panel = root.querySelector('.panel')
-  root.querySelector('.link').addEventListener('click', () => { void chrome.runtime.sendMessage({ type: 'open-edulog-settings' }) })
+  const statusBadge = root.querySelector('.status')
+  const statusDetail = root.querySelector('.connection-detail')
+  const featureStatus = root.querySelector('.feature-status')
+  const settingsButton = root.querySelector('.link')
+  settingsButton.addEventListener('click', () => { void chrome.runtime.sendMessage({ type: 'open-edulog-settings' }) })
+  const statusLabels = {
+    'not-connected': ['未連線', '請點選瀏覽器工具列中的 EduLog 圖示，設定並連接自架 EduLog 系統。'],
+    expired: ['連線已過期', '請從 EduLog 擴充套件視窗重新連線。'],
+    revoked: ['連線已撤銷', '請從 EduLog 擴充套件視窗重新連線。'],
+    unavailable: ['暫時無法連線', '請確認 EduLog 伺服器可用，稍後再試。'],
+  }
+  chrome.runtime.sendMessage({ type: 'get-edulog-integration-status' }).then((result) => {
+    if (!result) return
+    if (result.status === 'connected') {
+      statusBadge.dataset.state = 'connected'
+      statusBadge.textContent = '已連線'
+      statusDetail.textContent = '已連接目前設定的 EduLog 系統。'
+      const capabilities = result.capabilities || {}
+      featureStatus.textContent = capabilities.orangeapple_import && capabilities.orangeapple_report_prefill
+        ? '資料匯入與報告預填已可使用。'
+        : '匯入資料與報告預填尚待完成網站欄位驗證。'
+      settingsButton.disabled = false
+      return
+    }
+    const [label, detail] = statusLabels[result.status] || statusLabels.unavailable
+    statusBadge.dataset.state = result.status
+    statusBadge.textContent = label
+    statusDetail.textContent = detail
+  }).catch(() => {
+    statusBadge.dataset.state = 'unavailable'
+    statusBadge.textContent = '暫時無法連線'
+    statusDetail.textContent = '請確認 EduLog 伺服器可用，稍後再試。'
+  })
   function closePanel() { panel.dataset.open = 'false'; launcher.setAttribute('aria-expanded', 'false'); launcher.focus() }
   launcher.addEventListener('click', () => { panel.dataset.open = 'true'; launcher.setAttribute('aria-expanded', 'true'); root.querySelector('.close').focus() })
   root.querySelector('.close').addEventListener('click', closePanel)
