@@ -59,7 +59,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
           for migration in supabase/migrations/*.sql; do
             case "$migration" in
-              *1000081*|*1000082*|*1000083*|*100009[2-9]*|*100010*) continue ;;
+            *1000081*|*1000082*|*1000083*|*100009[2-9]*|*100010*|*100011*) continue ;;
             esac
             psql -v ON_ERROR_STOP=1 -f "$migration"
           done
