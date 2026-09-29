@@ -556,6 +556,7 @@ DECLARE platform_teaching_id uuid;
 DECLARE classroom_id uuid := '30000000-0000-0000-0000-000000000001';
 DECLARE course_id uuid := '50000000-0000-0000-0000-000000000101';
 DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
+DECLARE class_session_id uuid := '60000000-0000-0000-0000-000000000103';
 BEGIN
   SELECT id INTO platform_teaching_id FROM public.teachings WHERE is_global LIMIT 1;
   INSERT INTO public.roles(id, code, name, is_system, sort_order, domain, teaching_id, is_builtin, is_protected)
