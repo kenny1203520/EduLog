@@ -18,6 +18,7 @@ const ConfigSchema = z.object({
   RATE_LIMIT_STORE: z.enum(['supabase', 'memory']).default('supabase'),
   API_BODY_LIMIT: z.string().default('1mb'),
   API_ALLOWED_ORIGINS: z.string().default(''),
+  API_EXTENSION_ALLOWED_ORIGINS: z.string().default(''),
   API_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
 })
 

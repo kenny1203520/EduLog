@@ -26,17 +26,23 @@ import { createAggregateRouter } from './aggregateRouter.js'
 import { createTeacherAssignmentRouter } from './teacherAssignmentRouter.js'
 import { createTeacherAccountLinkRouter } from './teacherAccountLinkRouter.js'
 import { createDomainRouter } from './domainRouter.js'
+import { createExtensionIntegrationRouter } from './extensionIntegrationRouter.js'
 
 const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
 
-export function resolveAllowedOrigins(config: Pick<ReturnType<typeof loadConfig>, 'API_ALLOWED_ORIGINS' | 'NODE_ENV' | 'API_BASE_URL'>) {
+export function resolveAllowedOrigins(config: Pick<ReturnType<typeof loadConfig>, 'API_ALLOWED_ORIGINS' | 'API_EXTENSION_ALLOWED_ORIGINS' | 'NODE_ENV' | 'API_BASE_URL'>) {
   const configuredOrigins = config.API_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+  const extensionOrigins = config.API_EXTENSION_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
+  if (extensionOrigins.some((origin) => !/^chrome-extension:\/\/[a-p]{32}$/.test(origin))) {
+    throw new Error('API_EXTENSION_ALLOWED_ORIGINS must contain exact Chrome extension origins')
+  }
   if (configuredOrigins.length) {
     if (configuredOrigins.includes('*')) throw new Error('API_ALLOWED_ORIGINS cannot contain wildcard origins')
-    return configuredOrigins
+    if (configuredOrigins.some((origin) => origin.includes('*'))) throw new Error('API_ALLOWED_ORIGINS must contain exact origins')
+    return [...new Set([...configuredOrigins, ...extensionOrigins])]
   }
   if (config.NODE_ENV === 'production') throw new Error('Production requires explicit API_ALLOWED_ORIGINS')
-  return LOCAL_DEVELOPMENT_ORIGINS
+  return [...new Set([...LOCAL_DEVELOPMENT_ORIGINS, ...extensionOrigins])]
 }
 
 export function createApp(env: NodeJS.ProcessEnv = process.env) {
@@ -66,6 +72,7 @@ export function createApp(env: NodeJS.ProcessEnv = process.env) {
   app.get('/api/healthz', (_req, res) => res.json({ data: { status: 'ok' }, meta: {}, request_id: _req.requestId, trace_id: _req.traceId }))
   app.get('/api/openapi.json', (_req, res) => res.json(buildOpenApi()))
   app.use('/api/auth', csrfProtection, rateLimitMiddleware(config, clients.adminClient), createAuthRouter(clients, config))
+  app.use('/api/extension', rateLimitMiddleware(config, clients.adminClient), createExtensionIntegrationRouter(clients, config))
   app.use('/api/users', csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient), createUserSearchRouter())
   const protectedApi = Router()
   protectedApi.use(csrfProtection, requireAuth(clients, config), rateLimitMiddleware(config, clients.adminClient))
