@@ -10,7 +10,9 @@ const REALTIME_RETRYABLE_CLOSE_CODE = 4000
 
 const MAX_RECONNECT_DELAY_MS = 30_000
 const SOCKET_OPEN_TIMEOUT_MS = 10_000
-const CHANNEL_JOIN_TIMEOUT_MS = 10_000
+// Authorization (10s) and the upstream websocket handshake (10s) happen
+// after the browser opens its socket, so leave room for both plus the reply.
+const CHANNEL_JOIN_TIMEOUT_MS = 25_000
 const HEARTBEAT_INTERVAL_MS = 25_000
 const HEARTBEAT_TIMEOUT_MS = 10_000
 const STABLE_CONNECTION_RESET_MS = 30_000

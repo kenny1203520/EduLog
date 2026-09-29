@@ -67,12 +67,20 @@ describe('realtime proxy upgrade-to-join flow', () => {
     vi.restoreAllMocks()
   })
 
-  async function startProxy(options: { upstreamHandshakeDelayMs?: number } = {}) {
+  async function startProxy(options: {
+    upstreamHandshakeDelayMs?: number
+    onUpstreamUpgrade?: () => void
+    proxyTimeouts?: { authorizationMs?: number; upstreamConnectMs?: number }
+  } = {}) {
     upstreamServer = createServer()
     const upstreamPort = await listen(upstreamServer)
     upstreamWss = new WebSocketServer({ noServer: true })
     upstreamServer.on('upgrade', (request, socket, head) => {
-      const accept = () => upstreamWss.handleUpgrade(request, socket, head, (upstream) => upstreamWss.emit('connection', upstream, request))
+      options.onUpstreamUpgrade?.()
+      const accept = () => {
+        if (socket.destroyed) return
+        upstreamWss.handleUpgrade(request, socket, head, (upstream) => upstreamWss.emit('connection', upstream, request))
+      }
       if (options.upstreamHandshakeDelayMs) setTimeout(accept, options.upstreamHandshakeDelayMs)
       else accept()
     })
@@ -102,7 +110,7 @@ describe('realtime proxy upgrade-to-join flow', () => {
       SUPABASE_REALTIME_URL: `ws://127.0.0.1:${upstreamPort}/socket/websocket`,
       SUPABASE_ANON_KEY: 'test-anon-key',
     } as ApiConfig
-    attachRealtimeProxy(apiServer, {} as never, config)
+    attachRealtimeProxy(apiServer, {} as never, config, options.proxyTimeouts)
     const apiPort = await listen(apiServer)
     return `ws://127.0.0.1:${apiPort}/api/realtime`
   }
@@ -177,6 +185,28 @@ describe('realtime proxy upgrade-to-join flow', () => {
     expect(upstreamJoinFrames).toHaveLength(1)
   })
 
+  it('closes retryably when the upstream websocket handshake times out', async () => {
+    let signalUpgradeStarted!: () => void
+    const upgradeStarted = new Promise<void>((resolve) => { signalUpgradeStarted = resolve })
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn().mockResolvedValue(AUTHORIZED) })
+    const url = await startProxy({
+      upstreamHandshakeDelayMs: 150,
+      onUpstreamUpgrade: signalUpgradeStarted,
+      proxyTimeouts: { upstreamConnectMs: 25 },
+    })
+    const socket = connect(url, 'room')
+    await once(socket, 'open')
+    sendJoin(socket, `realtime:room:${RESOURCE_ID}`)
+    const closed = once(socket, 'close')
+    await upgradeStarted
+
+    const [code] = await closed
+    expect(code).toBe(1012)
+    await new Promise((resolve) => setTimeout(resolve, 175))
+    expect(apiServer.listening).toBe(true)
+    expect(upstreamConnections).toBe(0)
+  })
+
   it('closes retryably when the authorization service fails', async () => {
     const authorization = deferred<typeof AUTHORIZED>()
     supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn(() => authorization.promise) })
@@ -189,6 +219,46 @@ describe('realtime proxy upgrade-to-join flow', () => {
     authorization.reject(new Error('authorization unavailable'))
     expect(await closed).toBe(1012)
     expect(upstreamConnections).toBe(0)
+  })
+
+  it('times out a stalled authorization check and ignores its late success', async () => {
+    const authorization = deferred<typeof AUTHORIZED>()
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn(() => authorization.promise) })
+    const url = await startProxy({ proxyTimeouts: { authorizationMs: 30 } })
+    const socket = connect(url, 'class_session')
+    await once(socket, 'open')
+    sendJoin(socket, `realtime:class-session:${RESOURCE_ID}`)
+
+    const [code] = await once(socket, 'close')
+    expect(code).toBe(1012)
+    authorization.resolve(AUTHORIZED)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(upstreamConnections).toBe(0)
+  })
+
+  it('keeps the proxy alive when the browser disconnects during an upstream handshake', async () => {
+    let signalUpgradeStarted!: () => void
+    const upgradeStarted = new Promise<void>((resolve) => { signalUpgradeStarted = resolve })
+    supabaseMocks.createUserClient.mockReturnValue({ rpc: vi.fn().mockResolvedValue(AUTHORIZED) })
+    const url = await startProxy({ upstreamHandshakeDelayMs: 80, onUpstreamUpgrade: signalUpgradeStarted })
+    const first = connect(url, 'class_session')
+    await once(first, 'open')
+    sendJoin(first, `realtime:class-session:${RESOURCE_ID}`)
+    await upgradeStarted
+
+    const firstClosed = once(first, 'close')
+    first.close(4000, 'Timed out waiting for the realtime channel join reply')
+    await firstClosed
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(apiServer.listening).toBe(true)
+    expect(upstreamConnections).toBe(0)
+
+    const second = connect(url, 'class_session')
+    await once(second, 'open')
+    const reply = once(second, 'message').then(([raw]) => JSON.parse(raw.toString()))
+    sendJoin(second, `realtime:class-session:${RESOURCE_ID}`)
+    expect(await reply).toMatchObject({ event: 'phx_reply', payload: { status: 'ok' } })
+    expect(upstreamConnections).toBe(1)
   })
 
   it('closes explicitly when the pre-authorization message queue is full', async () => {

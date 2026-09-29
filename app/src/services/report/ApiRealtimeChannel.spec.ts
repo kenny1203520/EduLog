@@ -142,7 +142,7 @@ describe('ApiRealtimeChannel Phoenix 1.0 protocol', () => {
     const firstSocket = MockWebSocket.latest!
     firstSocket.emit('open')
 
-    await vi.advanceTimersByTimeAsync(10_800)
+    await vi.advanceTimersByTimeAsync(25_800)
 
     expect(callback).toHaveBeenCalledWith('CHANNEL_ERROR', 'Timed out waiting for the realtime channel join reply')
     expect(firstSocket.readyState).toBe(MockWebSocket.CLOSED)

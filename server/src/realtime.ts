@@ -13,6 +13,7 @@ function cookieValue(header: string | undefined, name: string) {
 }
 
 const MAX_MESSAGE_BYTES = 1024 * 1024
+const AUTHORIZATION_TIMEOUT_MS = 10_000
 const UPSTREAM_CONNECT_TIMEOUT_MS = 10_000
 export const REALTIME_CLOSE_RETRYABLE = 1012
 export const REALTIME_CLOSE_FORBIDDEN = 4403
@@ -92,7 +93,14 @@ export function normalizeClientMessage(
   return JSON.stringify(message)
 }
 
-export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient, config: ApiConfig) {
+export function attachRealtimeProxy(
+  server: Server,
+  adminClient: SupabaseClient,
+  config: ApiConfig,
+  timeouts: { authorizationMs?: number; upstreamConnectMs?: number } = {},
+) {
+  const authorizationTimeoutMs = timeouts.authorizationMs ?? AUTHORIZATION_TIMEOUT_MS
+  const upstreamConnectTimeoutMs = timeouts.upstreamConnectMs ?? UPSTREAM_CONNECT_TIMEOUT_MS
   const socketServer = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 })
   server.on('upgrade', async (request: IncomingMessage, socket: Socket, head: Buffer) => {
     const url = new URL(request.url ?? '/', 'http://edulog.local')
@@ -137,17 +145,44 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
       let joinRequestedAt: number | null = null
       let stopClientLiveness = () => {}
       let stopUpstreamLiveness = () => {}
+      let authorizationTimer: ReturnType<typeof setTimeout> | null = null
+      let cancelAuthorization: ((error: Error) => void) | null = null
+      let upstreamListenersDisposed = false
+
+      const disposeUpstreamListeners = () => {
+        if (!upstreamSocket || upstreamListenersDisposed || upstreamSocket.readyState !== WebSocket.CLOSED) return
+        upstreamListenersDisposed = true
+        upstreamSocket.off('close', onUpstreamClose)
+        upstreamSocket.off('error', onUpstreamError)
+        upstreamSocket.off('message', onUpstreamMessage)
+      }
+      const stopUpstream = () => {
+        if (!upstreamSocket) return
+        if (upstreamSocket.readyState === WebSocket.OPEN) upstreamSocket.close()
+        else if (upstreamSocket.readyState === WebSocket.CONNECTING) {
+          try {
+            // ws may emit an asynchronous error when a connecting socket is
+            // terminated. Keep its error listener until the close event.
+            upstreamSocket.terminate()
+          } catch {
+            // The socket can reach CLOSED between the state check and terminate.
+            disposeUpstreamListeners()
+          }
+        } else disposeUpstreamListeners()
+      }
 
       const cleanup = () => {
         pending.length = 0
+        if (authorizationTimer) clearTimeout(authorizationTimer)
+        authorizationTimer = null
+        cancelAuthorization?.(new Error('Realtime connection closed'))
+        cancelAuthorization = null
         stopClientLiveness()
         stopUpstreamLiveness()
         client.off('message', forward)
         client.off('close', onClientClose)
         client.off('error', onClientError)
-        upstreamSocket?.off('close', onUpstreamClose)
-        upstreamSocket?.off('error', onUpstreamError)
-        upstreamSocket?.off('message', onUpstreamMessage)
+        disposeUpstreamListeners()
       }
       const closePair = (code: number, reason: string) => {
         if (closed) return
@@ -160,25 +195,28 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
         })
         cleanup()
         if (client.readyState === WebSocket.OPEN) client.close(code, reason)
-        if (upstreamSocket?.readyState === WebSocket.OPEN) upstreamSocket.close(code === 1003 ? code : 1000, reason)
-        else if (upstreamSocket?.readyState === WebSocket.CONNECTING) upstreamSocket.terminate()
+        if (upstreamSocket?.readyState === WebSocket.OPEN && code === 1003) upstreamSocket.close(code, reason)
+        else stopUpstream()
       }
       const onClientClose = (code: number, reason: Buffer) => {
         if (closed) return
         log('realtime_socket_closed', { side: 'client', channel_kind: channelKind, resource_fingerprint: resourceFingerprint, close_code: code, reason_category: classifyRealtimeClientCloseReason(reason.toString()) })
         closed = true
         cleanup()
-        if (upstreamSocket?.readyState === WebSocket.OPEN) upstreamSocket.close()
-        else if (upstreamSocket?.readyState === WebSocket.CONNECTING) upstreamSocket.terminate()
+        stopUpstream()
       }
       const onClientError = () => closePair(REALTIME_CLOSE_RETRYABLE, 'Browser connection lost')
       const onUpstreamClose = (code: number) => {
+        disposeUpstreamListeners()
         if (closed) return
         log('realtime_upstream_closed', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, close_code: code, outcome: code === 1000 ? 'normal' : 'retryable' })
         closePair(REALTIME_CLOSE_RETRYABLE, 'Realtime upstream disconnected')
       }
       const onUpstreamError = (error: Error) => {
-        if (closed) return
+        if (closed) {
+          log('realtime_upstream_error', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'during_cleanup', error_type: error.name || 'Error', error_code: (error as NodeJS.ErrnoException).code || null })
+          return
+        }
         log('realtime_upstream_error', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, error_type: error.name || 'Error', error_code: (error as NodeJS.ErrnoException).code || null })
         closePair(REALTIME_CLOSE_RETRYABLE, 'Realtime service unavailable')
       }
@@ -257,30 +295,42 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
       const authorizationStartedAt = Date.now()
       void (async () => {
         try {
-          const userClient = createUserClient(config, token)
-          if (channelKind === 'class_session') {
-            const [sessionRead, sessionList] = await Promise.all([
-              userClient.rpc('can_access_class_session', { p_class_session_id: resourceId, p_permission_key: 'teaching.class_sessions.read' }),
-              userClient.rpc('can_access_class_session', { p_class_session_id: resourceId, p_permission_key: 'teaching.class_sessions.list' }),
-            ])
-            if (sessionRead.error || sessionList.error) throw new Error('Realtime authorization check failed')
-            if (sessionRead.data !== true && sessionList.data !== true) {
-              log('realtime_authorization', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'denied', duration_ms: Date.now() - authorizationStartedAt })
-              closePair(REALTIME_CLOSE_FORBIDDEN, 'Realtime resource access denied')
-              return
+          const authorizationChecks = async () => {
+            const userClient = createUserClient(config, token)
+            if (channelKind === 'class_session') {
+              const [sessionRead, sessionList] = await Promise.all([
+                userClient.rpc('can_access_class_session', { p_class_session_id: resourceId, p_permission_key: 'teaching.class_sessions.read' }),
+                userClient.rpc('can_access_class_session', { p_class_session_id: resourceId, p_permission_key: 'teaching.class_sessions.list' }),
+              ])
+              if (sessionRead.error || sessionList.error) throw new Error('Realtime authorization check failed')
+              return sessionRead.data === true || sessionList.data === true
             }
-          } else {
             const authorization = await userClient.rpc('can_access_report', { p_report_id: resourceId, p_permission_key: 'teaching.reports.read' })
             if (authorization.error) throw new Error('Realtime authorization check failed')
-            if (authorization.data !== true) {
-              log('realtime_authorization', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'denied', duration_ms: Date.now() - authorizationStartedAt })
-              closePair(REALTIME_CLOSE_FORBIDDEN, 'Realtime resource access denied')
-              return
-            }
+            return authorization.data === true
+          }
+          const authorizedResult = await Promise.race([
+            authorizationChecks(),
+            new Promise<never>((_resolve, reject) => {
+              cancelAuthorization = reject
+              authorizationTimer = setTimeout(() => reject(new Error('Realtime authorization timed out')), authorizationTimeoutMs)
+            }),
+          ])
+          if (authorizationTimer) clearTimeout(authorizationTimer)
+          authorizationTimer = null
+          cancelAuthorization = null
+          if (!authorizedResult) {
+            log('realtime_authorization', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'denied', duration_ms: Date.now() - authorizationStartedAt })
+            closePair(REALTIME_CLOSE_FORBIDDEN, 'Realtime resource access denied')
+            return
           }
         } catch (error) {
+          if (authorizationTimer) clearTimeout(authorizationTimer)
+          authorizationTimer = null
+          cancelAuthorization = null
           if (!closed) {
-            log('realtime_authorization', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'error', error_type: error instanceof Error ? error.name : 'Error', duration_ms: Date.now() - authorizationStartedAt })
+            const authorizationTimedOut = error instanceof Error && error.message === 'Realtime authorization timed out'
+            log('realtime_authorization', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, outcome: 'error', reason_category: authorizationTimedOut ? 'authorization_timeout' : 'authorization_unavailable', error_type: error instanceof Error ? error.name : 'Error', duration_ms: Date.now() - authorizationStartedAt })
             closePair(REALTIME_CLOSE_RETRYABLE, 'Realtime authorization service unavailable')
           }
           return
@@ -292,7 +342,12 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
         const upstream = resolveRealtimeUrl(config)
         log('realtime_upstream_connecting', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint })
         const upstreamStartedAt = Date.now()
-        upstreamSocket = new WebSocket(upstream.toString(), { maxPayload: MAX_MESSAGE_BYTES, handshakeTimeout: UPSTREAM_CONNECT_TIMEOUT_MS })
+        upstreamSocket = new WebSocket(upstream.toString(), { maxPayload: MAX_MESSAGE_BYTES, handshakeTimeout: upstreamConnectTimeoutMs })
+        // Attach lifecycle guards synchronously after construction, before the
+        // browser can close and trigger cleanup while this socket is CONNECTING.
+        upstreamSocket.on('error', onUpstreamError)
+        upstreamSocket.on('close', onUpstreamClose)
+        upstreamSocket.on('message', onUpstreamMessage)
         upstreamSocket.on('unexpected-response', (_responseRequest, response) => {
           log('realtime_upstream_handshake_rejected', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, status_code: response.statusCode ?? null, duration_ms: Date.now() - upstreamStartedAt })
           closePair(REALTIME_CLOSE_RETRYABLE, 'Realtime service rejected the connection')
@@ -307,9 +362,6 @@ export function attachRealtimeProxy(server: Server, adminClient: SupabaseClient,
           log('realtime_upstream_connected', { channel_kind: channelKind, resource_fingerprint: resourceFingerprint, duration_ms: Date.now() - upstreamStartedAt })
           flush()
         })
-        upstreamSocket.on('message', onUpstreamMessage)
-        upstreamSocket.on('close', onUpstreamClose)
-        upstreamSocket.on('error', onUpstreamError)
       })()
     })
   })
