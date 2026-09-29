@@ -1,6 +1,6 @@
 (() => {
-  const teachingPath = /(?:^|\/)(?:students?|courses?|classrooms?|classes?|sessions?|reports?|lessons?)(?:\/|$)/i.test(location.pathname)
-  if (location.hostname !== 'corp.orangeapple.co' || !teachingPath || document.getElementById('edulog-extension-root')) return
+  const adapter = globalThis.edulogSiteAdapter
+  if (!adapter?.matchesHost(location.hostname) || !adapter.matchesTeachingPage(location.pathname) || document.getElementById('edulog-extension-root')) return
 
   const host = document.createElement('div')
   host.id = 'edulog-extension-root'
@@ -42,10 +42,10 @@
   `
   const frame = document.createElement('div')
   frame.innerHTML = `<button class="launcher" type="button" aria-label="開啟 EduLog" aria-expanded="false">E</button>
-    <main class="panel" role="region" aria-label="EduLog 橘子蘋果整合" data-open="false">
-      <header><div><h2>EduLog 工作區</h2><p>橘子蘋果教學頁</p></div><button class="close" type="button" aria-label="關閉面板">×</button></header>
+    <main class="panel" role="region" aria-label="EduLog 教學工作區" data-open="false">
+      <header><div><h2>EduLog 工作區</h2><p>教學系統整合</p></div><button class="close" type="button" aria-label="關閉面板">×</button></header>
       <section><strong>EduLog 連線</strong><p><span class="status" data-state="checking" role="status" aria-live="polite">正在檢查連線</span></p><p class="connection-detail">正在確認目前 EduLog 系統。</p></section>
-      <section><strong>橘子蘋果功能</strong><p class="feature-status">匯入資料與報告預填尚待完成網站欄位驗證。</p><p class="notice">這個面板目前不讀取或修改橘子蘋果資料，也不會代替你送出表單。</p><button class="link" type="button" disabled>前往 EduLog 整合設定</button></section>
+      <section><strong>教學資料與報告</strong><p class="feature-status">資料匯入與報告預填尚待完成網站欄位驗證。</p><p class="notice">此面板目前不讀取或修改教學系統資料，也不會代替你送出表單。</p><button class="link" type="button" disabled>前往 EduLog 整合設定</button></section>
     </main>`
   root.append(styles, frame)
   const launcher = root.querySelector('.launcher')
@@ -68,7 +68,7 @@
       statusBadge.textContent = '已連線'
       statusDetail.textContent = '已連接目前設定的 EduLog 系統。'
       const capabilities = result.capabilities || {}
-      featureStatus.textContent = capabilities.orangeapple_import && capabilities.orangeapple_report_prefill
+      featureStatus.textContent = capabilities.teaching_data_import && capabilities.report_prefill
         ? '資料匯入與報告預填已可使用。'
         : '匯入資料與報告預填尚待完成網站欄位驗證。'
       settingsButton.disabled = false

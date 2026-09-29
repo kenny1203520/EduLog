@@ -135,8 +135,8 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
     user_id: req.extensionPrincipal!.userId,
     capabilities: {
       connection_management: true,
-      orangeapple_import: false,
-      orangeapple_report_prefill: false,
+      teaching_data_import: false,
+      report_prefill: false,
     },
   }))))
   router.use('/v1', extensionApi)

@@ -92,8 +92,8 @@ async function render() {
     if (!response.ok) throw new Error('EduLog 已撤銷或無法驗證此連線，請重新連接。')
     const body = await response.json()
     const capabilities = body?.data?.capabilities
-    if (!capabilities?.orangeapple_import || !capabilities?.orangeapple_report_prefill) {
-      await setStatus('EduLog 已連線；橘子蘋果匯入與報告預填尚未啟用。')
+    if (!capabilities?.teaching_data_import || !capabilities?.report_prefill) {
+      await setStatus('EduLog 已連線；教學資料匯入與報告預填尚未啟用。')
     } else {
       await setStatus('EduLog 已連線。')
     }

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "EduLog for Orange Apple",
-  "description": "Connect EduLog with supported Orange Apple teaching pages.",
+  "name": "EduLog Teaching Tools",
+  "description": "Improve teaching system workflows with EduLog.",
   "version": "0.1.0",
   "minimum_chrome_version": "116",
   "action": {
@@ -17,7 +17,7 @@
   "content_scripts": [
     {
       "matches": ["https://corp.orangeapple.co/*"],
-      "js": ["content.js"],
+      "js": ["adapters/orange-apple.js", "content.js"],
       "run_at": "document_idle"
     }
   ]

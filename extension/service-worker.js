@@ -1,3 +1,5 @@
+import './adapters/orange-apple.js'
+
 chrome.runtime.onInstalled.addListener(() => {
   // Do not expose extension credentials to page content scripts.
   void chrome.storage.local.setAccessLevel({ accessLevel: 'TRUSTED_CONTEXTS' })
@@ -6,7 +8,8 @@ chrome.runtime.onInstalled.addListener(() => {
 function isTeachingPage(senderUrl) {
   try {
     const url = new URL(senderUrl)
-    return url.protocol === 'https:' && url.hostname === 'corp.orangeapple.co' && /(?:^|\/)(?:students?|courses?|classrooms?|classes?|sessions?|reports?|lessons?)(?:\/|$)/i.test(url.pathname)
+    const adapter = globalThis.edulogSiteAdapter
+    return url.protocol === 'https:' && adapter?.matchesHost(url.hostname) && adapter.matchesTeachingPage(url.pathname)
   } catch { return false }
 }
 
@@ -27,8 +30,8 @@ async function getIntegrationStatus() {
     return {
       status: 'connected',
       capabilities: {
-        orangeapple_import: data?.capabilities?.orangeapple_import === true,
-        orangeapple_report_prefill: data?.capabilities?.orangeapple_report_prefill === true,
+        teaching_data_import: data?.capabilities?.teaching_data_import === true,
+        report_prefill: data?.capabilities?.report_prefill === true,
       },
     }
   } catch { return { status: 'unavailable' } }
