@@ -490,9 +490,9 @@ ON CONFLICT (id) DO NOTHING;
 
 -- These standalone students model records whose former owner was cleared by
 -- the global-scope migrations and which have no enrollment to reveal them.
-INSERT INTO public.students(id, name, user_id, teaching_id) VALUES
-  ('20000000-0000-0000-0000-000000000101', 'Migration Visibility A', NULL, (SELECT id FROM public.teachings WHERE is_global LIMIT 1)),
-  ('20000000-0000-0000-0000-000000000102', 'Migration Visibility B', NULL, (SELECT id FROM public.teachings WHERE is_global LIMIT 1))
+INSERT INTO public.students(id, name, user_id) VALUES
+  ('20000000-0000-0000-0000-000000000101', 'Migration Visibility A', NULL),
+  ('20000000-0000-0000-0000-000000000102', 'Migration Visibility B', NULL)
 ON CONFLICT (id) DO NOTHING;
 
 SET ROLE authenticated;

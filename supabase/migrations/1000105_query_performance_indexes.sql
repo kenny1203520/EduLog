@@ -11,5 +11,3 @@ CREATE INDEX IF NOT EXISTS lessons_sequence_idx
 CREATE INDEX IF NOT EXISTS students_birthday_idx
   ON public.students USING btree (birthday);
 
-CREATE INDEX IF NOT EXISTS lessons_course_id_idx
-  ON public.lessons USING btree (course_id);
