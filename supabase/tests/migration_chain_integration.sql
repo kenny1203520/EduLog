@@ -43,9 +43,8 @@ BEGIN
   workspace_definition := pg_get_functiondef('public.get_class_session_workspace(uuid,date)'::regprocedure);
   IF workspace_definition NOT LIKE '%get_effective_occurrence_enrollment_ids%'
      OR workspace_definition NOT LIKE '%v_occurrence_id IS NULL%'
-     OR workspace_definition NOT LIKE '%makeup_ids%'
-     OR workspace_definition NOT LIKE '%occurrence_reports%' THEN
-    RAISE EXCEPTION 'class session workspace does not use transfer-effective rosters, pre-generation fallback, and report-backed makeup entries';
+     OR workspace_definition LIKE '%makeup_ids%' THEN
+    RAISE EXCEPTION 'class session workspace does not use the unified effective occurrence roster';
   END IF;
 
   SELECT qual INTO invalidation_policy
@@ -573,6 +572,7 @@ DECLARE classroom_creator_role_id uuid := gen_random_uuid();
 DECLARE platform_teaching_id uuid;
 DECLARE classroom_id uuid := '30000000-0000-0000-0000-000000000001';
 DECLARE course_id uuid := '50000000-0000-0000-0000-000000000101';
+DECLARE unrelated_course_id uuid := '50000000-0000-0000-0000-000000000103';
 DECLARE student_id uuid := '20000000-0000-0000-0000-000000000103';
 DECLARE class_session_id uuid := '60000000-0000-0000-0000-000000000103';
 BEGIN
@@ -595,6 +595,8 @@ BEGIN
   VALUES ('00000000-0000-0000-0000-000000000004', classroom_creator_role_id, 'classroom', classroom_id, CURRENT_DATE, 'active');
   INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
   VALUES (course_id, 'Scoped roster test', 'primary', NULL, platform_teaching_id);
+  INSERT INTO public.courses(id, subject, stage, user_id, teaching_id)
+  VALUES (unrelated_course_id, 'Unrelated makeup course', 'primary', NULL, platform_teaching_id);
   INSERT INTO public.students(id, name, user_id)
   VALUES (student_id, 'Migration Visibility Classroom', NULL);
   INSERT INTO public.class_sessions(id, name, classroom_id, course_ids, user_id, teaching_id)
@@ -605,15 +607,44 @@ BEGIN
   VALUES (student_id, course_id, classroom_id, class_session_id, NULL, 'regular', CURRENT_DATE);
   INSERT INTO public.students(id, name, user_id) VALUES
     ('20000000-0000-0000-0000-000000000104', 'Migration Makeup Student', NULL),
-    ('20000000-0000-0000-0000-000000000105', 'Migration Not Makeup Student', NULL);
+    ('20000000-0000-0000-0000-000000000105', 'Migration Not Makeup Student', NULL),
+    ('20000000-0000-0000-0000-000000000106', 'Migration Future Makeup Student', NULL),
+    ('20000000-0000-0000-0000-000000000107', 'Migration Course Mismatch Student', NULL),
+    ('20000000-0000-0000-0000-000000000108', 'Migration Transferred Out Student', NULL),
+    ('20000000-0000-0000-0000-000000000109', 'Migration Completed Makeup Student', NULL),
+    ('20000000-0000-0000-0000-000000000110', 'Migration Incomplete Completion Student', NULL);
   INSERT INTO public.enrollments(id, student_id, course_id, classroom_id, class_session_id, user_id, status, start_date)
   VALUES
     ('99000000-0000-4000-8000-000000000103', '20000000-0000-0000-0000-000000000104', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE),
-    ('99000000-0000-4000-8000-000000000104', '20000000-0000-0000-0000-000000000105', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE);
+    ('99000000-0000-4000-8000-000000000104', '20000000-0000-0000-0000-000000000105', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE),
+    ('99000000-0000-4000-8000-000000000105', '20000000-0000-0000-0000-000000000106', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE + 1),
+    ('99000000-0000-4000-8000-000000000106', '20000000-0000-0000-0000-000000000107', unrelated_course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'regular', CURRENT_DATE),
+    ('99000000-0000-4000-8000-000000000107', '20000000-0000-0000-0000-000000000108', course_id, classroom_id, class_session_id, NULL, 'regular', CURRENT_DATE),
+    ('99000000-0000-4000-8000-000000000108', '20000000-0000-0000-0000-000000000109', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'completed', CURRENT_DATE),
+    ('99000000-0000-4000-8000-000000000109', '20000000-0000-0000-0000-000000000110', course_id, classroom_id, '60000000-0000-0000-0000-000000000104', NULL, 'completed', CURRENT_DATE);
+  INSERT INTO public.lessons(id, course_id, title, sequence, user_id)
+  VALUES ('95000000-0000-4000-8000-000000000103', course_id, 'Roster completion lesson', 999999, '00000000-0000-0000-0000-000000000001');
   INSERT INTO public.class_occurrences(id, class_session_id, occurrence_date, status, is_conducted)
-  VALUES ('9a000000-0000-4000-8000-000000000103', class_session_id, CURRENT_DATE, 'scheduled', false);
+  VALUES
+    ('9a000000-0000-4000-8000-000000000103', class_session_id, CURRENT_DATE, 'scheduled', false),
+    ('9a000000-0000-4000-8000-000000000104', '60000000-0000-0000-0000-000000000104', CURRENT_DATE, 'scheduled', false),
+    ('9a000000-0000-4000-8000-000000000105', class_session_id, CURRENT_DATE + 1, 'scheduled', false),
+    ('9a000000-0000-4000-8000-000000000106', class_session_id, CURRENT_DATE - 1, 'scheduled', false);
   INSERT INTO public.occurrence_reports(enrollment_id, class_occurrence_id, content, is_completed, attendance_status)
-  VALUES ('99000000-0000-4000-8000-000000000103', '9a000000-0000-4000-8000-000000000103', '', false, 'pending');
+  VALUES
+    ('99000000-0000-4000-8000-000000000103', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
+    ('99000000-0000-4000-8000-000000000105', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
+    ('99000000-0000-4000-8000-000000000106', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
+    ('99000000-0000-4000-8000-000000000107', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
+    ('99000000-0000-4000-8000-000000000108', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
+    ('99000000-0000-4000-8000-000000000109', '9a000000-0000-4000-8000-000000000103', '', false, 'pending'),
+    ('99000000-0000-4000-8000-000000000110', '9a000000-0000-4000-8000-000000000103', '', false, 'pending');
+  INSERT INTO public.occurrence_reports(enrollment_id, class_occurrence_id, content, lesson_id, is_completed, attendance_status)
+  VALUES
+    ('99000000-0000-4000-8000-000000000109', '9a000000-0000-4000-8000-000000000105', '', '95000000-0000-4000-8000-000000000103', true, 'present'),
+    ('99000000-0000-4000-8000-000000000110', '9a000000-0000-4000-8000-000000000106', '', '95000000-0000-4000-8000-000000000103', true, 'present');
+  INSERT INTO public.single_lesson_transfers(enrollment_id, source_occurrence_id, target_occurrence_id)
+  VALUES ('99000000-0000-4000-8000-000000000107', '9a000000-0000-4000-8000-000000000103', '9a000000-0000-4000-8000-000000000104');
   IF NOT EXISTS (
     SELECT 1 FROM public.enrollments enrollment
     WHERE enrollment.student_id = '20000000-0000-0000-0000-000000000103'
@@ -672,6 +703,7 @@ DECLARE student_page jsonb;
   other_date_workspace jsonb;
   source_workspace jsonb;
   makeup_count integer;
+  effective_makeup_count integer;
 BEGIN
   IF public.can_access_enrollment_scope(
     '20000000-0000-0000-0000-000000000101',
@@ -689,6 +721,12 @@ BEGIN
   END IF;
 
   target_workspace := public.get_class_session_workspace('60000000-0000-0000-0000-000000000103', CURRENT_DATE);
+  SELECT count(*) INTO effective_makeup_count
+  FROM public.get_effective_occurrence_enrollment_ids('9a000000-0000-4000-8000-000000000103') AS roster
+  WHERE roster.enrollment_id = '99000000-0000-4000-8000-000000000103';
+  IF effective_makeup_count <> 1 THEN
+    RAISE EXCEPTION 'report-backed makeup enrollment should be part of the shared effective occurrence roster';
+  END IF;
   SELECT count(*) INTO makeup_count
   FROM jsonb_array_elements(target_workspace->'enrollments') AS enrollment
   WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000103';
@@ -700,6 +738,37 @@ BEGIN
     WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000104'
   ) THEN
     RAISE EXCEPTION 'cross-session enrollment without a target occurrence report was added to the roster';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.get_effective_occurrence_enrollment_ids('9a000000-0000-4000-8000-000000000103') AS roster
+    WHERE roster.enrollment_id = '99000000-0000-4000-8000-000000000104'
+  ) THEN
+    RAISE EXCEPTION 'cross-session enrollment without a target occurrence report was added to the shared effective roster';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM public.get_effective_occurrence_enrollment_ids('9a000000-0000-4000-8000-000000000103') AS roster
+    WHERE roster.enrollment_id IN (
+      '99000000-0000-4000-8000-000000000105', -- not effective yet
+      '99000000-0000-4000-8000-000000000106', -- course not offered by the target session
+      '99000000-0000-4000-8000-000000000107', -- transferred out of this occurrence
+      '99000000-0000-4000-8000-000000000108', -- completed without a qualifying completion report
+      '99000000-0000-4000-8000-000000000110'  -- completion was before the target occurrence
+    )
+  ) THEN
+    RAISE EXCEPTION 'ineligible report-backed makeup enrollment was added to the shared effective roster';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.get_effective_occurrence_enrollment_ids('9a000000-0000-4000-8000-000000000103') AS roster
+    WHERE roster.enrollment_id = '99000000-0000-4000-8000-000000000109'
+  ) THEN
+    RAISE EXCEPTION 'completed makeup enrollment should remain eligible through its completion date';
+  END IF;
+  SELECT count(*) INTO makeup_count
+  FROM jsonb_array_elements(target_workspace->'enrollments') AS enrollment
+  WHERE enrollment->>'id' = '99000000-0000-4000-8000-000000000109';
+  IF makeup_count <> 1 THEN
+    RAISE EXCEPTION 'completed makeup enrollment should appear once in its target-date workspace';
   END IF;
 
   other_date_workspace := public.get_class_session_workspace('60000000-0000-0000-0000-000000000103', CURRENT_DATE + 1);
