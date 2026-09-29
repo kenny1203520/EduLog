@@ -326,7 +326,7 @@ END;
 $$;
 
 DROP POLICY IF EXISTS "Report editors can receive private room messages" ON realtime.messages;
-CREATE POLICY "Report editors can receive private room messages"
+CREATE POLICY "Authorized users can receive private realtime messages"
   ON realtime.messages FOR SELECT TO authenticated
   USING (
     CASE

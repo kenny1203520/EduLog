@@ -221,7 +221,7 @@ Deno.test('1000107 uses transfer-effective rosters and private invalidation-only
   assertStringIncludes(effectiveSessionRosterInvalidation, "v_occurrence_id IS NULL")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'class_session_invalidated'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'class-session:' || p_class_session_id::text")
-  assertStringIncludes(effectiveSessionRosterInvalidation, "'Report editors can receive private room messages'")
+  assertStringIncludes(effectiveSessionRosterInvalidation, 'CREATE POLICY "Authorized users can receive private realtime messages"')
   assertStringIncludes(effectiveSessionRosterInvalidation, "'teaching.class_sessions.read'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'teaching.class_sessions.list'")
   assertStringIncludes(effectiveSessionRosterInvalidation, "'single_lesson_transfers'")

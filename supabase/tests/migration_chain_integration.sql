@@ -51,7 +51,7 @@ BEGIN
   SELECT qual INTO invalidation_policy
   FROM pg_policies
   WHERE schemaname = 'realtime' AND tablename = 'messages'
-    AND policyname = 'Authorized users can receive private report and class session messages';
+     AND policyname = 'Authorized users can receive private realtime messages';
   IF invalidation_policy IS NULL
      OR invalidation_policy NOT LIKE '%can_access_class_session%'
      OR invalidation_policy NOT LIKE '%class-session:%' THEN
