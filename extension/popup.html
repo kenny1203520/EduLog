@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EduLog</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header><span class="mark" aria-hidden="true">E</span><div><h1>EduLog</h1><p>橘子蘋果整合</p></div></header>
+    <label for="instance">EduLog 伺服器網址</label>
+    <input id="instance" type="url" inputmode="url" placeholder="https://edulog.example.com" autocomplete="url">
+    <p class="hint">請輸入自架 EduLog 系統網址；正式環境需使用 HTTPS，開發時可用 localhost。</p>
+    <button id="save" class="secondary" type="button">儲存伺服器</button>
+    <section id="connection" class="connection" aria-live="polite"></section>
+    <button id="pair" type="button">連接 EduLog</button>
+    <button id="finish" class="secondary hidden" type="button">完成核准配對</button>
+    <p id="status" role="status" aria-live="polite"></p>
+    <footer>連線憑證只用於 EduLog 整合 API，可隨時在 EduLog 設定中撤銷。</footer>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

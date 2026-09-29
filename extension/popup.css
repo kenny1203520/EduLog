@@ -1,0 +1,21 @@
+:root { color-scheme: light; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: #172033; background: #f8fafc; }
+* { box-sizing: border-box; }
+body { width: 340px; margin: 0; }
+main { padding: 18px; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+.mark { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; background: #1e40af; color: white; font-weight: 800; }
+h1, p { margin: 0; }
+h1 { font-size: 17px; line-height: 1.25; }
+header p { color: #64748b; font-size: 12px; }
+label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; }
+input { width: 100%; min-height: 42px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 10px; color: inherit; background: white; }
+input:focus-visible, button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
+.hint { margin: 6px 0 12px; color: #64748b; font-size: 12px; }
+button { width: 100%; min-height: 42px; margin-top: 10px; border: 0; border-radius: 9px; background: #1e40af; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+button:hover { background: #1d4ed8; }
+button.secondary { border: 1px solid #cbd5e1; background: white; color: #334155; }
+button.secondary:hover { background: #f1f5f9; }
+.connection { margin-top: 12px; color: #334155; font-size: 12px; overflow-wrap: anywhere; }
+#status { min-height: 22px; margin-top: 10px; color: #334155; font-size: 12px; }
+footer { margin-top: 8px; border-top: 1px solid #e2e8f0; padding-top: 12px; color: #64748b; font-size: 11px; }
+.hidden { display: none; }

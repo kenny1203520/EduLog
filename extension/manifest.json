@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "EduLog for Orange Apple",
+  "description": "Connect EduLog with supported Orange Apple teaching pages.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "EduLog",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+  "permissions": ["storage"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://corp.orangeapple.co/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
