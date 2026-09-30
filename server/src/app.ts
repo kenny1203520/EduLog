@@ -30,7 +30,7 @@ import { createExtensionIntegrationRouter } from './extensionIntegrationRouter.j
 
 const LOCAL_DEVELOPMENT_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://[::1]:5173']
 
-export function resolveAllowedOrigins(config: Pick<ReturnType<typeof loadConfig>, 'API_ALLOWED_ORIGINS' | 'API_EXTENSION_ALLOWED_ORIGINS' | 'NODE_ENV' | 'API_BASE_URL'>) {
+export function resolveAllowedOrigins(config: Pick<ReturnType<typeof loadConfig>, 'API_ALLOWED_ORIGINS' | 'API_EXTENSION_ALLOWED_ORIGINS' | 'NODE_ENV'>) {
   const configuredOrigins = config.API_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
   const extensionOrigins = config.API_EXTENSION_ALLOWED_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
   if (extensionOrigins.some((origin) => !/^chrome-extension:\/\/[a-p]{32}$/.test(origin))) {

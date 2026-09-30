@@ -3,7 +3,18 @@ import { z } from 'zod'
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().positive().default(3000),
-  API_BASE_URL: z.url().default('http://localhost:4173'),
+  EDULOG_WEB_BASE_URL: z.url().default('http://localhost:4173').superRefine((value, ctx) => {
+    let url: URL
+    try { url = new URL(value) } catch { return }
+    const localHosts = ['localhost', '127.0.0.1', '[::1]']
+    const localHttp = url.protocol === 'http:' && localHosts.includes(url.hostname)
+    if (url.protocol !== 'https:' && !localHttp) {
+      ctx.addIssue({ code: 'custom', message: 'EDULOG_WEB_BASE_URL must use HTTPS except for localhost development' })
+    }
+    if (url.username || url.password || url.search || url.hash) {
+      ctx.addIssue({ code: 'custom', message: 'EDULOG_WEB_BASE_URL must not contain credentials, a query, or a fragment' })
+    }
+  }),
   SUPABASE_URL: z.url(),
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
@@ -32,6 +43,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
   }
   if (parsed.data.NODE_ENV === 'production' && parsed.data.RATE_LIMIT_STORE !== 'supabase') {
     throw new Error('Production requires RATE_LIMIT_STORE=supabase')
+  }
+  if (parsed.data.NODE_ENV === 'production' && new URL(parsed.data.EDULOG_WEB_BASE_URL).protocol !== 'https:') {
+    throw new Error('Production requires EDULOG_WEB_BASE_URL to use HTTPS')
   }
   return parsed.data
 }

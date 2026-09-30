@@ -5,7 +5,7 @@ import { createApp, resolveAllowedOrigins } from './app.js'
 const env = {
   NODE_ENV: 'test',
   API_PORT: '3000',
-  API_BASE_URL: 'http://localhost:4173',
+  EDULOG_WEB_BASE_URL: 'http://localhost:4173',
   SUPABASE_URL: 'http://supabase.test',
   SUPABASE_ANON_KEY: 'anon-test-key',
   SUPABASE_SERVICE_ROLE_KEY: 'service-role-test-key',

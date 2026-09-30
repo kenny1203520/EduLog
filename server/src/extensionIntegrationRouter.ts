@@ -23,6 +23,15 @@ function hash(value: string) {
   return crypto.createHash('sha256').update(value).digest('hex')
 }
 
+export function buildExtensionApprovalUrl(webBaseUrl: string, pairingRequestId: string) {
+  const url = new URL(webBaseUrl)
+  const basePath = url.pathname.replace(/\/+$/, '')
+  url.pathname = `${basePath}/dashboard/settings`
+  url.searchParams.set('tab', 'integrations')
+  url.searchParams.set('extension_pair', pairingRequestId)
+  return url.toString()
+}
+
 function allowedExtensionOrigin(config: ApiConfig, origin: string | undefined) {
   if (!origin || !/^chrome-extension:\/\/[a-p]{32}$/.test(origin)) return false
   return config.API_EXTENSION_ALLOWED_ORIGINS.split(',').map((item) => item.trim()).filter(Boolean).includes(origin)
@@ -59,7 +68,7 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
     const input = pairStartBody.parse(req.body)
     const created = await admin.from('web_extension_pairing_requests').insert({ extension_origin: origin, code_challenge: input.code_challenge }).select('id,expires_at').single()
     if (created.error) throw mapDatabaseError(created.error)
-    return res.status(201).json(envelope(req, { id: created.data.id, authorize_url: `${config.API_BASE_URL.replace(/\/$/, '')}/dashboard/settings?tab=integrations&extension_pair=${created.data.id}`, expires_at: created.data.expires_at }))
+    return res.status(201).json(envelope(req, { id: created.data.id, authorize_url: buildExtensionApprovalUrl(config.EDULOG_WEB_BASE_URL, created.data.id), expires_at: created.data.expires_at }))
   }))
 
   // Status can be polled before approval; origin and PKCE verifier are checked again at claim.
