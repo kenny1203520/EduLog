@@ -692,7 +692,7 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       API_PORT: 3000
-      EDULOG_WEB_BASE_URL: ${EDULOG_WEB_BASE_URL:-http://localhost:4173}
+      EDULOG_WEB_BASE_URL: ${EDULOG_WEB_BASE_URL}
       SUPABASE_URL: ${EDULOG_SUPABASE_INTERNAL_URL:-http://kong:8000}
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}

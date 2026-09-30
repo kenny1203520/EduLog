@@ -3,7 +3,7 @@ import { z } from 'zod'
 const ConfigSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   API_PORT: z.coerce.number().int().positive().default(3000),
-  EDULOG_WEB_BASE_URL: z.url().default('http://localhost:4173').superRefine((value, ctx) => {
+  EDULOG_WEB_BASE_URL: z.url().superRefine((value, ctx) => {
     let url: URL
     try { url = new URL(value) } catch { return }
     const localHosts = ['localhost', '127.0.0.1', '[::1]']

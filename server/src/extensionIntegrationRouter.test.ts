@@ -11,6 +11,7 @@ const pairingId = '0051a2b5-fb29-4390-86f6-bd5e81ab7a16'
 
 describe('extension pairing authorization URL', () => {
   it.each([
+    ['http://localhost:5173', 'http://localhost:5173/dashboard/settings?tab=integrations&extension_pair=0051a2b5-fb29-4390-86f6-bd5e81ab7a16'],
     ['http://localhost:4173', 'http://localhost:4173/dashboard/settings?tab=integrations&extension_pair=0051a2b5-fb29-4390-86f6-bd5e81ab7a16'],
     ['https://school.example.test', 'https://school.example.test/dashboard/settings?tab=integrations&extension_pair=0051a2b5-fb29-4390-86f6-bd5e81ab7a16'],
     ['https://school.example.test/edulog/', 'https://school.example.test/edulog/dashboard/settings?tab=integrations&extension_pair=0051a2b5-fb29-4390-86f6-bd5e81ab7a16'],

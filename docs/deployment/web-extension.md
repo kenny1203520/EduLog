@@ -8,7 +8,7 @@ Set `API_EXTENSION_ALLOWED_ORIGINS` to a comma-separated list of exact origins i
 
 The API uses this list for CORS and pairing-origin checks. Keep the regular `API_ALLOWED_ORIGINS` configuration for EduLog web clients. The extension connects to a self-hosted EduLog system; production instances must use HTTPS, while HTTP is accepted only for localhost development.
 
-Set `EDULOG_WEB_BASE_URL` to the browser-facing EduLog frontend origin, such as `https://edulog.example.com`. In local Compose development it defaults to `http://localhost:4173`. The API container listens internally on port `3000` and does not serve dashboard pages; do not set this variable to the API container address. The old `API_BASE_URL` setting is no longer used for extension authorization links.
+Set `EDULOG_WEB_BASE_URL` explicitly to the browser-facing EduLog frontend URL users can open. There is no universal local port: Vite, preview, Docker Compose, a reverse proxy, and production deployments can all use different ports or hosts. The extension popup's server URL is where the API is reachable (for example, an API port or a frontend proxying `/api`); the API uses `EDULOG_WEB_BASE_URL` to construct the separate browser authorization link. These URLs may differ or share one host and port. The API container listens internally on port `3000` and does not serve dashboard pages; do not set this variable to an internal API container address unless that address is also browser-accessible and serves the frontend. Public deployments must use HTTPS. The old `API_BASE_URL` setting is no longer used for extension authorization links.
 
 ## Pairing
 

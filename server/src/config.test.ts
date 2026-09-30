@@ -9,8 +9,14 @@ const requiredEnv = {
 }
 
 describe('EduLog web base URL configuration', () => {
-  it('defaults to the local frontend origin', () => {
-    expect(loadConfig({ ...requiredEnv, NODE_ENV: 'test' }).EDULOG_WEB_BASE_URL).toBe('http://localhost:4173')
+  it('requires an explicit browser-facing frontend URL', () => {
+    expect(() => loadConfig({ ...requiredEnv, NODE_ENV: 'test' }))
+      .toThrow(/Invalid API configuration: EDULOG_WEB_BASE_URL/)
+  })
+
+  it('accepts a user-configured localhost port', () => {
+    expect(loadConfig({ ...requiredEnv, NODE_ENV: 'test', EDULOG_WEB_BASE_URL: 'http://localhost:7183' }).EDULOG_WEB_BASE_URL)
+      .toBe('http://localhost:7183')
   })
 
   it('accepts an explicit HTTPS frontend origin in production', () => {
@@ -28,9 +34,9 @@ describe('EduLog web base URL configuration', () => {
       .toThrow(/Invalid API configuration: EDULOG_WEB_BASE_URL/)
   })
 
-  it('rejects the localhost HTTP default in production until HTTPS is configured', () => {
+  it('rejects a missing frontend URL in production', () => {
     expect(() => loadConfig({ ...requiredEnv, NODE_ENV: 'production', RATE_LIMIT_STORE: 'supabase' }))
-      .toThrow(/Production requires EDULOG_WEB_BASE_URL to use HTTPS/)
+      .toThrow(/Invalid API configuration: EDULOG_WEB_BASE_URL/)
   })
 
   it('rejects malformed frontend URLs', () => {
