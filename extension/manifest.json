@@ -13,11 +13,13 @@
     "type": "module"
   },
   "permissions": ["storage"],
+  "host_permissions": ["https://corp.orangeapple.co/*"],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
   "content_scripts": [
     {
       "matches": ["https://corp.orangeapple.co/*"],
-      "js": ["adapters/orange-apple.js", "content.js"],
+      "js": ["runtime-bridge.js", "connection-ui.js", "adapters/orange-apple.js", "content.js"],
+      "css": ["adapters/orange-apple.css"],
       "run_at": "document_idle"
     }
   ]

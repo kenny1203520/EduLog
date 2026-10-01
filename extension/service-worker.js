@@ -13,42 +13,85 @@ function isTeachingPage(senderUrl) {
   } catch { return false }
 }
 
+function validSettingsUrl(value) {
+  try {
+    const url = new URL(value)
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+    return !url.username && !url.password && (url.protocol === 'https:' || (local && url.protocol === 'http:')) ? url.href : null
+  } catch { return null }
+}
+
 async function getIntegrationStatus() {
   const { edulogExtension } = await chrome.storage.local.get('edulogExtension')
-  if (!edulogExtension?.origin || !edulogExtension?.token) return { status: 'not-connected' }
-  if (new Date(edulogExtension.tokenExpiresAt).getTime() <= Date.now()) return { status: 'expired' }
+  const metadata = { origin: edulogExtension?.origin || null, settingsUrl: validSettingsUrl(edulogExtension?.settingsUrl), lastVerifiedAt: edulogExtension?.lastVerifiedAt || null }
+  if (edulogExtension?.pending) return { ...metadata, status: new Date(edulogExtension.pending.expiresAt).getTime() > Date.now() ? 'pending' : 'pairing-expired' }
+  if (!edulogExtension?.origin || !edulogExtension?.token) return { ...metadata, status: 'not-connected' }
+  if (!(new Date(edulogExtension.tokenExpiresAt).getTime() > Date.now())) return { ...metadata, status: 'expired' }
   try {
     const response = await fetch(`${edulogExtension.origin}/api/extension/v1/me`, {
       headers: { authorization: `Bearer ${edulogExtension.token}` },
       cache: 'no-store',
       credentials: 'omit',
       redirect: 'error',
+      signal: AbortSignal.timeout(15000),
     })
-    if (response.status === 401) return { status: 'revoked' }
-    if (!response.ok) return { status: 'unavailable' }
-    const { data } = await response.json()
+    const body = await response.json().catch(() => null)
+    if (!response.ok) {
+      const error = body?.error
+      const status = response.status === 401 && error?.code === 'EXTENSION_AUTH_INVALID' ? 'revoked'
+        : error?.code === 'EXTENSION_ORIGIN_FORBIDDEN' ? 'forbidden' : 'unavailable'
+      return { ...metadata, status, diagnostic: {
+        code: typeof error?.code === 'string' ? error.code.slice(0, 100) : `HTTP_${response.status}`,
+        message: typeof error?.message === 'string' ? error.message.slice(0, 300) : 'API 回應失敗。',
+        requestId: typeof error?.request_id === 'string' ? error.request_id.slice(0, 120) : null,
+      } }
+    }
+    const data = body?.data
+    if (!data || typeof data.user_id !== 'string') throw new Error('API 回應格式不正確。')
+    const settingsUrl = validSettingsUrl(data.settings_url) || metadata.settingsUrl
+    const lastVerifiedAt = new Date().toISOString()
+    const current = (await chrome.storage.local.get('edulogExtension')).edulogExtension
+    if (current?.origin !== edulogExtension.origin || current?.token !== edulogExtension.token) return { status: 'stale' }
+    await chrome.storage.local.set({ edulogExtension: { ...current, settingsUrl, lastVerifiedAt } })
     return {
-      status: 'connected',
+      ...metadata, status: 'connected', settingsUrl, lastVerifiedAt,
       capabilities: {
         teaching_data_import: data?.capabilities?.teaching_data_import === true,
         report_prefill: data?.capabilities?.report_prefill === true,
       },
     }
-  } catch { return { status: 'unavailable' } }
+  } catch (error) { return { ...metadata, status: 'unavailable', diagnostic: { code: 'CONNECTION_UNAVAILABLE', message: error?.message || '無法連接伺服器。' } } }
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!isTeachingPage(sender.url)) return
+  const fromPopup = sender.id === chrome.runtime.id && sender.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`)
+  if ((fromPopup || isTeachingPage(sender.url)) && ['get-ui-preferences', 'set-ui-preferences'].includes(message?.type)) {
+    void (async () => {
+      const key = 'edulogUiPreferences'
+      const stored = (await chrome.storage.local.get(key))[key] || {}
+      if (message.type === 'set-ui-preferences' && typeof message.enabled === 'boolean') {
+        stored[globalThis.edulogSiteAdapter.id] = { enabled: message.enabled }
+        await chrome.storage.local.set({ [key]: stored })
+        const tabs = await chrome.tabs.query({})
+        await Promise.allSettled(tabs.filter(tab => isTeachingPage(tab.url)).map(tab => chrome.tabs.sendMessage(tab.id, { type: 'ui-preferences-changed', enabled: message.enabled })))
+      }
+      return { enabled: stored[globalThis.edulogSiteAdapter.id]?.enabled !== false }
+    })().then(sendResponse, () => sendResponse({ error: 'PREFERENCES_UNAVAILABLE' }))
+    return true
+  }
+  if (!fromPopup && !isTeachingPage(sender.url)) return
   if (message?.type === 'get-edulog-integration-status') {
     void getIntegrationStatus().then(sendResponse, () => sendResponse({ status: 'unavailable' }))
     return true
   }
   if (message?.type === 'open-edulog-settings') {
-    void chrome.storage.local.get('edulogExtension').then(({ edulogExtension }) => {
-      const origin = edulogExtension?.origin
-      if (typeof origin === 'string' && /^https:\/\//.test(origin)) {
-        return chrome.tabs.create({ url: `${origin}/dashboard/settings?tab=integrations`, active: true })
-      }
-    })
+    void chrome.storage.local.get('edulogExtension').then(async ({ edulogExtension }) => {
+      // The authorization URL identifies the frontend; the API origin may differ.
+      const url = validSettingsUrl(edulogExtension?.settingsUrl)
+      if (!url) return { opened: false }
+      await chrome.tabs.create({ url, active: true })
+      return { opened: true }
+    }).then(sendResponse, () => sendResponse({ opened: false }))
+    return true
   }
 })

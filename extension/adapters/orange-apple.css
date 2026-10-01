@@ -1,0 +1,65 @@
+/* Opt-in provider styles. Native nodes, handlers and forms remain intact. */
+html[data-edulog-ui="on"] { --edulog-blue:#1e40af; --edulog-line:#dbe3ee; background:#f4f6fa; scroll-padding-top:80px; }
+html[data-edulog-ui="on"] body { background:#f4f6fa; color:#172033; font:15px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; }
+html[data-edulog-ui="on"] #page-body { margin:0; }
+html[data-edulog-ui="on"] #page-body > .sidebar { width:220px; max-width:220px; padding:calc(var(--edulog-toolbar-height,64px) + 12px) 16px 24px; background:white; border-right:1px solid var(--edulog-line); box-shadow:none; }
+html[data-edulog-ui="on"] #page-body > .content { width:calc(100% - 220px); max-width:none; margin-left:220px; padding:calc(var(--edulog-toolbar-height,64px) + 20px) 28px 40px; }
+html[data-edulog-ui="on"] #nav-teacher { background:transparent; padding:0; }
+html[data-edulog-ui="on"] .edulog-class-shortcuts { margin-bottom:28px; }
+html[data-edulog-ui="on"] .edulog-class-shortcuts > div { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr)); gap:16px; }
+html[data-edulog-ui="on"] .edulog-class-shortcuts a { display:flex; flex-direction:column; gap:12px; padding:20px; border:1px solid var(--edulog-line); border-radius:12px; background:#fff; color:#172033; text-decoration:none; }
+html[data-edulog-ui="on"] .edulog-class-shortcuts a:hover { border-color:var(--edulog-blue); background:#eff4ff; }
+html[data-edulog-ui="on"] .edulog-class-shortcuts span { font-size:13px; color:var(--edulog-blue); }
+html[data-edulog-ui="on"] .sidebar a { border-radius:8px; }
+html[data-edulog-ui="on"] .content h2 { font-size:24px; font-weight:700; line-height:1.4; margin-bottom:20px; }
+html[data-edulog-ui="on"] .content .card { border:1px solid var(--edulog-line); border-radius:12px; box-shadow:none; overflow:visible; margin-bottom:16px; }
+html[data-edulog-ui="on"] .content .card-header { background:#fff; padding:16px 20px; border-bottom:1px solid var(--edulog-line); }
+html[data-edulog-ui="on"] .content .card-body { padding:20px; }
+html[data-edulog-ui="on"] .content .nav-tabs { gap:8px; padding-bottom:8px; border-bottom:1px solid var(--edulog-line); }
+html[data-edulog-ui="on"] .content .nav-link { border-radius:8px; }
+html[data-edulog-ui="on"] .content .nav-link.active { background:#eaf0ff; color:var(--edulog-blue); border-color:transparent; font-weight:700; }
+html[data-edulog-ui="on"] .content table { background:#fff; border-color:var(--edulog-line); font-size:14px; }
+html[data-edulog-ui="on"] .content th { background:#f1f5f9; color:#334155; font-weight:700; padding:12px; }
+html[data-edulog-ui="on"] .content td { padding:12px; vertical-align:middle; border-color:var(--edulog-line); }
+html[data-edulog-ui="on"] .content tr:hover > td { background-color:#f8fafc; }
+html[data-edulog-ui="on"] #students-table thead th { position:sticky; top:0; z-index:2; }
+html[data-edulog-ui="on"] #students-table th:first-child,
+html[data-edulog-ui="on"] #students-table td:first-child { position:sticky; left:0; z-index:1; background:#fff; min-width:140px; }
+html[data-edulog-ui="on"] #students-table thead th:first-child { z-index:3; background:#f1f5f9; }
+html[data-edulog-ui="on"] .content .table-responsive { max-height:70vh; border:1px solid var(--edulog-line); border-radius:10px; }
+html[data-edulog-ui="on"] [data-edulog-report-region] { overflow-x:auto; }
+html[data-edulog-ui="on"] [data-edulog-week-selected] { background:#eff4ff !important; box-shadow:inset 0 2px var(--edulog-blue); }
+html[data-edulog-ui="on"] [data-edulog-filtered] { display:none !important; }
+html[data-edulog-ui="on"] .edulog-table-tools { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:16px 0; padding:14px; background:white; border:1px solid var(--edulog-line); border-radius:10px; }
+html[data-edulog-ui="on"] .edulog-table-tools label { display:flex; align-items:center; gap:10px; margin:0; font-weight:600; }
+html[data-edulog-ui="on"] .edulog-table-tools input { width:240px; max-width:100%; padding:10px 12px; border:1px solid #94a3b8; border-radius:8px; background:#fff; }
+html[data-edulog-ui="on"] .edulog-table-tools [role="status"] { color:#475569; font-size:13px; }
+html[data-edulog-ui="on"] .edulog-week-tools { display:flex; flex-wrap:wrap; gap:8px; margin-left:auto; }
+html[data-edulog-ui="on"] [data-edulog-owned] button { min-height:44px; border:1px solid #cbd5e1; border-radius:8px; padding:8px 12px; background:#fff; color:#334155; font:inherit; cursor:pointer; }
+html[data-edulog-ui="on"] .edulog-week-tools button[aria-pressed="true"] { background:var(--edulog-blue); border-color:var(--edulog-blue); color:white; }
+html[data-edulog-ui="on"] [data-edulog-expand] { display:none; }
+html[data-edulog-ui="on"] :is(a,button,input,select,textarea):focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
+html[data-edulog-ui="on"] .content :is(input,select,textarea) { font-size:14px; }
+@media (max-width:991px) {
+ html[data-edulog-ui="on"] #page-body > .sidebar { display:none !important; width:100%; max-width:none; position:static; padding:calc(var(--edulog-toolbar-height,64px) + 12px) 16px 16px; }
+ html[data-edulog-ui="on"][data-edulog-nav-open] #page-body > .sidebar { display:block !important; }
+ html[data-edulog-ui="on"] #page-body > .content { width:100%; margin-left:0; padding:calc(var(--edulog-toolbar-height,64px) + 20px) 16px 28px; }
+ html[data-edulog-ui="on"][data-edulog-nav-open] #page-body > .content { padding-top:20px; }
+ html[data-edulog-ui="on"] #nav-teacher { display:block !important; }
+ html[data-edulog-ui="on"] #nav-teacher .navbar-collapse { display:block !important; }
+ html[data-edulog-ui="on"] [data-edulog-week-cell]:not([data-edulog-week-selected]) { display:none; }
+}
+@media (max-width:600px) {
+ html[data-edulog-ui="on"] .content h2 { font-size:20px; }
+ html[data-edulog-ui="on"] .edulog-table-tools label { width:100%; flex-wrap:wrap; }
+ html[data-edulog-ui="on"] .edulog-table-tools input { width:100%; }
+ html[data-edulog-ui="on"] #students-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+ html[data-edulog-ui="on"] #students-table tbody,
+ html[data-edulog-ui="on"] #students-table tr,
+ html[data-edulog-ui="on"] #students-table td { display:block; width:100%; position:static !important; }
+ html[data-edulog-ui="on"] #students-table tr { border-bottom:8px solid #f4f6fa; }
+ html[data-edulog-ui="on"] #students-table td::before { content:attr(data-edulog-label); display:block; font-size:12px; font-weight:700; color:#475569; }
+ html[data-edulog-ui="on"] #students-table tr:not([data-edulog-expanded]) [data-edulog-extra] { display:none; }
+ html[data-edulog-ui="on"] [data-edulog-expand] { display:inline-block; float:right; min-height:44px; border:1px solid #cbd5e1; border-radius:8px; background:white; color:var(--edulog-blue); padding:8px; }
+}
+@media (prefers-reduced-motion:reduce) { html[data-edulog-ui="on"] * { scroll-behavior:auto !important; transition:none !important; } }

@@ -1,21 +1,24 @@
-:root { color-scheme: light; font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color: #172033; background: #f8fafc; }
-* { box-sizing: border-box; }
-body { width: 340px; margin: 0; }
-main { padding: 18px; }
-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
-.mark { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 12px; background: #1e40af; color: white; font-weight: 800; }
-h1, p { margin: 0; }
-h1 { font-size: 17px; line-height: 1.25; }
-header p { color: #64748b; font-size: 12px; }
-label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; }
-input { width: 100%; min-height: 42px; border: 1px solid #cbd5e1; border-radius: 9px; padding: 8px 10px; color: inherit; background: white; }
-input:focus-visible, button:focus-visible { outline: 3px solid #60a5fa; outline-offset: 2px; }
-.hint { margin: 6px 0 12px; color: #64748b; font-size: 12px; }
-button { width: 100%; min-height: 42px; margin-top: 10px; border: 0; border-radius: 9px; background: #1e40af; color: white; font: inherit; font-weight: 700; cursor: pointer; }
-button:hover { background: #1d4ed8; }
-button.secondary { border: 1px solid #cbd5e1; background: white; color: #334155; }
-button.secondary:hover { background: #f1f5f9; }
-.connection { margin-top: 12px; color: #334155; font-size: 12px; overflow-wrap: anywhere; }
-#status { min-height: 22px; margin-top: 10px; color: #334155; font-size: 12px; }
-footer { margin-top: 8px; border-top: 1px solid #e2e8f0; padding-top: 12px; color: #64748b; font-size: 11px; }
-.hidden { display: none; }
+:root { color-scheme:light; font:14px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif; background:#f4f6fa; color:#172033; }
+* { box-sizing:border-box; } [hidden] { display:none !important; }
+body { width:360px; margin:0; max-height:580px; overflow:auto; }
+main { padding:18px; } header { display:flex; gap:12px; align-items:center; margin-bottom:18px; }
+.mark { display:grid; place-items:center; width:42px; height:42px; border-radius:12px; background:#1e40af; color:white; font-weight:800; }
+h1,h2,p { margin:0; } h1 { font-size:18px; line-height:1.4; } h2 { font-size:15px; margin-bottom:12px; } header p { color:#475569; font-size:12px; }
+.card { background:white; border:1px solid #dbe3ee; border-radius:12px; padding:16px; margin:12px 0; }
+.switch { display:flex; gap:12px; align-items:center; justify-content:space-between; min-height:44px; font-weight:700; }
+.switch small { display:block; font-weight:400; font-size:12px; color:#475569; }
+.switch input { width:22px; height:22px; flex-shrink:0; accent-color:#1e40af; }
+.hint { color:#475569; font-size:12px; margin-top:8px; } .badge { display:inline-block; font-weight:700; font-size:13px; border-radius:8px; padding:5px 9px; background:#eef2f6; color:#334155; }
+.badge[data-tone="success"] { background:#e8f7ef; color:#166534; } .badge[data-tone="warning"] { background:#fff3df; color:#92400e; }
+dl { margin:12px 0 0; } dl>div { margin:8px 0; } dt { color:#475569; font-size:12px; } dd { margin:2px 0 0; overflow-wrap:anywhere; font-size:13px; }
+label:not(.switch) { display:block; font-weight:600; font-size:13px; margin-bottom:6px; }
+#instance { width:100%; min-height:44px; padding:10px; border:1px solid #94a3b8; border-radius:8px; color:inherit; font:inherit; }
+button { width:100%; min-height:44px; margin-top:10px; border:1px solid #1e40af; border-radius:8px; padding:9px 12px; background:#1e40af; color:white; font:inherit; font-weight:600; cursor:pointer; }
+button:hover { background:#1d4ed8; } button:disabled { cursor:wait; opacity:.65; }
+button.secondary { background:white; color:#334155; border-color:#cbd5e1; } button.secondary:hover { background:#f1f5f9; }
+button.text-button { color:#1e40af; background:transparent; border-color:transparent; }
+:is(input,button,summary):focus-visible { outline:3px solid #2563eb; outline-offset:3px; }
+.feature { display:flex; flex-direction:column; gap:3px; padding:10px 0; border-top:1px solid #e2e8f0; } .feature strong { font-size:13px; } .feature span { font-size:12px; color:#475569; }
+#status { margin:10px 0; overflow-wrap:anywhere; font-size:13px; } #status[data-error="true"] { color:#b91c1c; }
+summary { cursor:pointer; min-height:44px; display:flex; align-items:center; font-size:13px; } #diagnostic-text { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; color:#475569; }
+footer { margin-top:12px; color:#475569; font-size:12px; }
