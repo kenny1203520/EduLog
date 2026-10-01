@@ -12,7 +12,8 @@ h1,h2,p { margin:0; } h1 { font-size:18px; line-height:1.4; } h2 { font-size:15p
 .badge[data-tone="success"] { background:#e8f7ef; color:#166534; } .badge[data-tone="warning"] { background:#fff3df; color:#92400e; }
 dl { margin:12px 0 0; } dl>div { margin:8px 0; } dt { color:#475569; font-size:12px; } dd { margin:2px 0 0; overflow-wrap:anywhere; font-size:13px; }
 label:not(.switch) { display:block; font-weight:600; font-size:13px; margin-bottom:6px; }
-#instance { width:100%; min-height:44px; padding:10px; border:1px solid #94a3b8; border-radius:8px; color:inherit; font:inherit; }
+#instance,#device-name { width:100%; min-height:44px; padding:10px; border:1px solid #94a3b8; border-radius:8px; color:inherit; font:inherit; }
+.device-label { margin-top:16px; } #device-value { overflow-wrap:anywhere; }
 button { width:100%; min-height:44px; margin-top:10px; border:1px solid #1e40af; border-radius:8px; padding:9px 12px; background:#1e40af; color:white; font:inherit; font-weight:600; cursor:pointer; }
 button:hover { background:#1d4ed8; } button:disabled { cursor:wait; opacity:.65; }
 button.secondary { background:white; color:#334155; border-color:#cbd5e1; } button.secondary:hover { background:#f1f5f9; }

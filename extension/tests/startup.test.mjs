@@ -18,7 +18,7 @@ function start(path = '/courses/dt/101') {
   const mount = (name = 'class') => {
     const source = new JSDOM(read(`fixtures/${name}.html`))
     doc.body.innerHTML = source.window.document.body.innerHTML; source.window.close()
-    for (const file of ['connection-ui.js', 'adapters/orange-apple-workflows.js', 'content.js']) w.eval(read(`../${file}`))
+    for (const file of ['connection-ui.js', 'integration-ui.js', 'adapters/orange-apple-workflows.js', 'content.js']) w.eval(read(`../${file}`))
   }
   return { dom, w, doc, answer, reject, mount, expire: () => deadline?.(), messages: () => messages }
 }

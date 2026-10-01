@@ -32,13 +32,19 @@ for (const [browserName, executablePath] of executables) {
       await page.evaluate(state => {
         window.chrome = {
           storage: { local: { get: async () => ({ edulogExtension: { origin: 'http://localhost:5173', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString() } : null } }) } },
-          runtime: { sendMessage: async data => data.type === 'get-ui-preferences' ? { enabled: true } : { status: state, origin: 'http://localhost:5173', settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: new Date().toISOString() } },
+          runtime: { sendMessage: async data => data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: '教室筆電', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: true } : { status: state, deviceName: '教室筆電 · Chrome', origin: 'http://localhost:5173', settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: new Date().toISOString() } },
         }
       }, state)
-      for (const file of ['runtime-bridge.js', 'connection-ui.js', 'popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
+      for (const file of ['runtime-bridge.js', 'connection-ui.js', 'integration-ui.js', 'popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
       await page.locator(`[data-state="${state}"]`).waitFor()
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} popup overflow`)
       await page.screenshot({ path: join(output, `${browserName}-popup-${state}.png`), fullPage: true })
+      const flow = page.locator('.edulog-flow').first()
+      await flow.locator('summary').focus()
+      await page.keyboard.press('Enter')
+      assert.equal(await flow.evaluate(element => element.open), true)
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} expanded integration overflow`)
+      if (state === 'connected') await page.screenshot({ path: join(output, `${browserName}-popup-integration-expanded.png`), fullPage: true })
       console.log(`${browserName} popup ${state}: passed`)
       await page.close()
     }
@@ -58,6 +64,7 @@ for (const [browserName, executablePath] of executables) {
       await page.addScriptTag({ content: read('../runtime-bridge.js') })
       await page.addScriptTag({ content: read('../bootstrap.js') })
       await page.addScriptTag({ content: read('../connection-ui.js') })
+      await page.addScriptTag({ content: read('../integration-ui.js') })
       await page.addScriptTag({ content: read('../content.js') })
       await page.locator('html[data-edulog-ui=on]').waitFor()
       assert.equal(await page.locator('#edulog-extension-root').count(), 1)
@@ -138,12 +145,12 @@ for (const [browserName, executablePath] of executables) {
       await page.screenshot({ path: join(output, `${browserName}-${name}-${width}.png`), fullPage: true })
       // Verify keyboard focus and unchanged native form state on toggle.
       if (name === 'class') await page.locator('textarea').fill('未送出的內容')
-      const toggle = page.getByRole('button', { name: '切回原站' })
+      const toggle = page.getByRole('button', { name: '使用原站主題' })
       await toggle.focus(); await page.keyboard.press('Enter')
       assert.equal(await page.locator('html[data-edulog-ui]').count(), 0)
       if (name === 'class') assert.equal(await page.locator('textarea').inputValue(), '未送出的內容')
       if (name === 'profile-edit') assert.equal(await page.locator('#employee_skill').inputValue(),'保留的個人資料草稿')
-      await page.getByRole('button', { name: '啟用 UI 改善' }).press('Enter')
+      await page.getByRole('button', { name: '套用清晰主題' }).press('Enter')
       await page.locator('html[data-edulog-ui=on]').waitFor()
       if (name === 'class') {
         await page.evaluate(() => { chrome.runtime.sendMessage = () => { throw new Error('Extension context invalidated.') } })

@@ -69,7 +69,7 @@ test('report details preserve native handlers and selected target date without i
 test('secondary modal updates preserve focused draft and do not duplicate controls', async () => {
   const dom=fixture('class','/courses/dt/101'),w=dom.window,doc=w.document
   w.chrome={runtime:{sendMessage:async()=>({enabled:true}),onMessage:{addListener(){}}}}
-  for(const file of ['runtime-bridge.js','connection-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
+  for(const file of ['runtime-bridge.js','connection-ui.js', 'integration-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
   await wait(); doc.querySelector('#remote_modal').insertAdjacentHTML('beforeend',read('fixtures/secondary-modals.html')); await wait()
   const field=doc.querySelector('#admissions_teacher_comment'); field.value='draft';field.focus();field.setSelectionRange(1,3)
   const note=doc.querySelector('.edulog-dialog-context')
@@ -84,7 +84,7 @@ test('report cell replacement restores disclosures without rebuilding page contr
   const dom=fixture('reports','/courses/dt/101/lesson_reports'),w=dom.window,doc=w.document
   Object.defineProperty(w,'innerWidth',{value:390,writable:true})
   w.chrome={runtime:{sendMessage:async()=>({enabled:true}),onMessage:{addListener(){}}}}
-  for(const file of ['runtime-bridge.js','connection-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
+  for(const file of ['runtime-bridge.js','connection-ui.js', 'integration-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
   await wait(); const search=doc.querySelector('[data-edulog-search=reports]')
   const cell=doc.querySelector('#reports tbody tr').cells[1]; cell.textContent='更新課程';await wait()
   assert.equal(doc.querySelector('[data-edulog-search=reports]'),search)
@@ -96,7 +96,7 @@ test('report cell replacement restores disclosures without rebuilding page contr
 test('password disclosure and focused native draft survive UI switching', async () => {
   const dom=fixture('profile-edit','/my/101/edit'),w=dom.window,doc=w.document
   w.chrome={runtime:{sendMessage:async()=>({enabled:true}),onMessage:{addListener(){}}}}
-  for(const file of ['runtime-bridge.js','connection-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
+  for(const file of ['runtime-bridge.js','connection-ui.js', 'integration-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
   await wait();const field=doc.querySelector('#employee_password');field.closest('details').open=true;await wait()
   field.value='synthetic-only';field.focus()
   doc.querySelector('#edulog-extension-root').shadowRoot.querySelector('.toggle').click();await wait()
@@ -196,7 +196,7 @@ test('report grouping preserves form identity, values, handlers and native ratin
 test('dynamic report modal does not recreate page filters; switching keeps draft focus', async () => {
   const dom = fixture('class','/courses/dt/101'), w = dom.window, doc = w.document
   w.chrome = { runtime: { sendMessage: async data => ({ enabled: data.enabled ?? true }), onMessage: { addListener() {} } } }
-  for (const file of ['runtime-bridge.js','connection-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
+  for (const file of ['runtime-bridge.js','connection-ui.js', 'integration-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
   await wait()
   const search = doc.querySelector('[data-edulog-search=students]')
   const remote = doc.querySelector('#remote_modal'); remote.insertAdjacentHTML('beforeend', read('fixtures/report-modal.html'))
@@ -239,7 +239,7 @@ test('history refresh preserves focused date filter without selection-range erro
   const dom = fixture('history', '/dt_admissions/301'), w = dom.window, doc = w.document, errors = []
   w.addEventListener('error', event => errors.push(event.error))
   w.chrome = { runtime: { sendMessage: async () => ({ enabled: true }), onMessage: { addListener() {} } } }
-  for (const file of ['runtime-bridge.js', 'connection-ui.js', 'bootstrap.js', 'content.js']) w.eval(read(`../${file}`))
+  for (const file of ['runtime-bridge.js', 'connection-ui.js', 'integration-ui.js', 'bootstrap.js', 'content.js']) w.eval(read(`../${file}`))
   await wait()
   const date = doc.querySelector('input[type=date]'); date.value = '2026-09-20'; date.dispatchEvent(new w.Event('input')); date.focus()
   doc.querySelector('tbody').append(doc.querySelector('tbody tr').cloneNode(true))
@@ -306,7 +306,7 @@ test('calendar status is scoped to selected region, suppressing stale prompt', (
 test('native cell update preserves search identity and modal draft/caret', async () => {
   const dom = fixture('class','/courses/dt/101'), w = dom.window, doc = w.document
   w.chrome = { runtime: { sendMessage: async () => ({enabled:true}), onMessage: {addListener(){}} } }
-  for (const file of ['runtime-bridge.js','connection-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
+  for (const file of ['runtime-bridge.js','connection-ui.js', 'integration-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
   await wait()
   doc.querySelector('#remote_modal').insertAdjacentHTML('beforeend', read('fixtures/report-modal.html')); await wait()
   const search = doc.querySelector('[data-edulog-search=students]'), section = doc.querySelector('.edulog-form-section'), field = doc.querySelector('#lesson_report_feedback')

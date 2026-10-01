@@ -71,15 +71,15 @@
       button:hover{background:#eff4ff}button:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
       .bar{display:flex;gap:12px;align-items:center;min-height:64px;padding:8px 20px;background:white;border-bottom:1px solid #dbe3ee;box-shadow:0 2px 8px #1720330a}
       strong{color:#1e40af}.title{flex:1}.toggle{color:#1e40af;font-weight:600}.menu{display:none}
-      .panel{margin:8px 16px 0 auto;padding:18px;max-width:400px;background:white;border:1px solid #dbe3ee;border-radius:12px;box-shadow:0 12px 32px #17203320}
+      .panel{margin:8px 16px 0 auto;padding:18px;max-width:400px;max-height:calc(100dvh - 96px);overflow:auto;overscroll-behavior:contain;background:white;border:1px solid #dbe3ee;border-radius:12px;box-shadow:0 12px 32px #17203320}
       .panel[hidden]{display:none}p{margin:8px 0;color:#475569}.panel button{margin-top:8px}.note{font-size:13px}
       :host([data-enabled="false"]){inset:auto 16px 20px auto}.bar{border-radius:0}
       :host([data-enabled="false"]) .bar{padding:6px;border:1px solid #dbe3ee;border-radius:12px}
       :host([data-enabled="false"]) .bar>:not(.toggle){display:none}
       @media(max-width:991px){.menu{display:block}.bar{padding:8px 12px;gap:8px}.title{font-size:13px}}
-      @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{margin:8px;max-width:calc(100vw - 16px)}}
+      @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{margin:8px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 152px)}}
     </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="integration" type="button" aria-expanded="false">EduLog 功能</button><button class="toggle" type="button"></button></div>
-    <section class="panel" aria-label="EduLog 整合功能" hidden><strong>EduLog 連線與整合</strong><p class="status" role="status" aria-live="polite"></p><p class="note">UI 改善不需要配對。教學資料匯入與報告預填尚未啟用；原站的報告操作可照常使用。</p><button class="settings" type="button">開啟整合設定</button></section>`
+    <section class="panel" aria-label="EduLog 整合功能" hidden><strong>EduLog 連線與整合</strong><p class="status" role="status" aria-live="polite"></p><p class="note">清晰主題不需要配對。下方可查看教學整合的規劃流程；原站的報告操作可照常使用。</p><button class="settings" type="button">開啟整合設定</button></section>`
     root.querySelector('.title').textContent = page.title
     const banner = document.createElement('div')
     banner.className = 'notice'
@@ -88,7 +88,8 @@
     banner.textContent = notice
     banner.hidden = !notice
     root.querySelector('.bar').after(banner)
-    root.querySelector('.toggle').textContent = enabled ? '切回原站' : '啟用 UI 改善'
+    root.querySelector('.toggle').textContent = enabled ? globalThis.edulogIntegrationUi.theme.original : globalThis.edulogIntegrationUi.theme.apply
+    root.querySelector('.toggle').title = enabled ? '目前使用 EduLog 清晰主題' : '套用 EduLog 清晰主題'
     root.querySelector('.toggle').addEventListener('click', async () => {
       enabled = !enabled
       revision++
@@ -97,7 +98,7 @@
       try {
         const result = await message({ type: 'set-ui-preferences', enabled })
         if (result?.error) throw new Error('偏好設定暫時無法儲存。')
-      } catch (error) { showNotice(`${error.message} UI 切換僅作用於當頁，偏好未儲存。`) }
+      } catch (error) { showNotice(`${error.message} 主題切換僅作用於當頁，偏好未儲存。`) }
     })
     root.querySelector('.menu').addEventListener('click', event => {
       const open = document.documentElement.toggleAttribute('data-edulog-nav-open')
@@ -112,7 +113,12 @@
     const detail = document.createElement('p')
     diagnostics.append(summary, detail)
     panel.append(diagnostics)
-    root.querySelector('.note').textContent = 'UI 改善不需要配對。資料匯入：目前版本尚未支援。報告預填：目前版本尚未支援。原站報告操作可照常使用。'
+    root.querySelector('.note').textContent = '清晰主題無須配對；教學整合將連接你設定的 EduLog。'
+    const features = document.createElement('section')
+    features.setAttribute('aria-label', '教學整合規劃')
+    panel.append(features)
+    const featureUi = globalThis.edulogIntegrationUi.mount(features)
+    featureUi.update('not-connected')
     const retry = document.createElement('button')
     retry.type = 'button'; retry.textContent = '重新檢查'; retry.hidden = true
     panel.append(retry)
@@ -124,6 +130,7 @@
         const result = await message({ type: 'get-edulog-integration-status' })
         if (!host?.isConnected || host.shadowRoot !== root) return
         const state = globalThis.edulogConnectionUi.describe(result?.status)
+        featureUi.update(result?.status)
         status.textContent = `${state.label}：${state.detail}${result?.origin ? ` ${result.origin}` : ''}${result?.lastVerifiedAt ? ` 最近驗證：${new Date(result.lastVerifiedAt).toLocaleString()}` : ''}`
         diagnostics.hidden = !result?.diagnostic
         detail.textContent = result?.diagnostic ? [result.diagnostic.code, result.diagnostic.message, result.diagnostic.requestId ? `請求編號：${result.diagnostic.requestId}` : ''].filter(Boolean).join(' — ') : ''
@@ -131,7 +138,7 @@
         root.querySelector('.settings').hidden = result?.status !== 'connected'
         root.querySelector('.settings').disabled = !result?.settingsUrl
       } catch (error) {
-        status.textContent = bridge.invalidated ? '通訊已停止；本頁 UI 與原站操作仍可使用。' : error.message
+        status.textContent = bridge.invalidated ? '通訊已停止；清晰主題與原站操作仍可使用。' : error.message
         retry.hidden = bridge.invalidated
       } finally { retry.disabled = false }
     }
@@ -317,7 +324,7 @@
   void initial.then(prefs => {
     needsPreference = prefs?.reason === 'unknown'
     if (request === revision) enabled = boot?.expired ? false : prefs?.enabled !== false
-    if (!enabled && !bridge.invalidated && (boot?.expired || ['timeout', 'unavailable'].includes(prefs?.reason))) showNotice('未能及時讀取 UI 偏好，已保留原站。可在當頁啟用 UI 改善。')
+    if (!enabled && !bridge.invalidated && (boot?.expired || ['timeout', 'unavailable'].includes(prefs?.reason))) showNotice('未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。')
     initialized = true
     try { sync() } finally { boot?.release() }
   })

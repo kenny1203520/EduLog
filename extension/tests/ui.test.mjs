@@ -22,6 +22,7 @@ function start(dom, enabled = true) {
   dom.window.eval(read('../runtime-bridge.js'))
   dom.window.eval(read('../bootstrap.js'))
   dom.window.eval(read('../connection-ui.js'))
+  dom.window.eval(read('../integration-ui.js'))
   dom.window.eval(contentCode)
   return { messages, listeners }
 }

@@ -3,6 +3,16 @@ const presentation = globalThis.edulogConnectionUi
 const ui = id => document.getElementById(id)
 const STORAGE_KEY = 'edulogExtension'
 let settings = {}, connection = { status: 'checking' }, busy = false, editing = false, generation = 0, expirationTimer
+const featureUi = globalThis.edulogIntegrationUi.mount(ui('feature-list'))
+let installation
+const installationReady = bridge.send({ type: 'get-edulog-installation' }).then(value => {
+  if (!value?.installation_id) throw new Error('無法辨識瀏覽器安裝，請重新開啟擴充套件。')
+  installation = value
+  if (!ui('device-name').value) ui('device-name').value = value.device_name
+  return value
+})
+// The promise is awaited again at pairing; this catch prevents startup rejection.
+void installationReady.catch(error => notice(error.message, true))
 
 function normalizeInstance(value) {
   const url = new URL(value.trim())
@@ -55,14 +65,15 @@ function render() {
   ui('retry').disabled = busy
   ui('change').hidden = editing || !settings.origin || !['connected', 'unavailable', 'forbidden', 'pending'].includes(state)
   ui('change').disabled = busy
-  ui('feature-list').hidden = state !== 'connected'
-  const features = presentation.features(connection.capabilities)
-  for (const [index, element] of [...ui('feature-list').querySelectorAll('.feature span')].entries()) element.textContent = features[index].detail
+  featureUi.update(state)
+  ui('device-row').hidden = !connection.deviceName
+  ui('device-value').textContent = connection.deviceName || ''
   ui('server-form').hidden = !editing && !['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(state)
   ui('form-title').textContent = editing ? '變更伺服器' : '連接你的 EduLog'
   ui('pair').textContent = busy ? '處理中…' : editing ? '連接新的伺服器' : ['expired', 'revoked', 'pairing-expired'].includes(state) ? '重新連接 EduLog' : '連接 EduLog'
   ui('pair').disabled = busy || state === 'checking'
   ui('instance').disabled = busy
+  ui('device-name').disabled = busy
   ui('cancel').hidden = !editing; ui('cancel').disabled = busy
   ui('change-hint').hidden = !editing
   ui('pending-card').hidden = state !== 'pending' || editing
@@ -83,6 +94,7 @@ async function verify() {
     if (current !== generation) return
     if (result?.status === 'stale') { connection.status = 'unavailable'; render(); return }
     settings = stored
+    if (!editing && (result?.deviceName || stored.connection?.device_name)) ui('device-name').value = result?.deviceName || stored.connection.device_name
     connection = result?.status ? result : { status: 'unavailable', origin: stored.origin }
     if (!editing) ui('instance').value = settings.origin || ''
     diagnostic(connection.diagnostic)
@@ -101,10 +113,13 @@ async function startPairing() {
     const permission = bridge.call(() => chrome.permissions.request({ origins: [`${origin}/*`] }))
     busy = true; ++generation; notice(); diagnostic(null); render()
     if (!await permission) throw new Error('需要允許擴充套件連接此 EduLog 網址。')
+    await installationReady
+    const deviceName = ui('device-name').value.trim()
+    if (!deviceName || deviceName.length > 80) { ui('device-name').focus(); throw new Error('請輸入 1–80 字的瀏覽器連線名稱。') }
     const old = await readSettings()
     const verifier = Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, '0')).join('')
     const challenge = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))), byte => byte.toString(16).padStart(2, '0')).join('')
-    const response = await fetch(`${origin}/api/extension/pair-requests`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ code_challenge: challenge }), signal: AbortSignal.timeout(15000) })
+    const response = await fetch(`${origin}/api/extension/pair-requests`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...installation, device_name: deviceName, code_challenge: challenge }), signal: AbortSignal.timeout(15000) })
     const body = await response.json().catch(() => null)
     if (!response.ok) throw apiError(body, response)
     const authorizeUrl = browserUrl(body.data.authorize_url)
@@ -136,7 +151,7 @@ ui('server-form').addEventListener('submit', event => { event.preventDefault(); 
 ui('finish').addEventListener('click', () => { void finishPairing() })
 ui('retry').addEventListener('click', () => { void verify() })
 ui('change').addEventListener('click', () => { editing = true; ui('instance').value = settings.origin || ''; notice(); render(); ui('instance').focus() })
-ui('cancel').addEventListener('click', () => { editing = false; ui('instance').value = settings.origin || ''; notice(); render() })
+ui('cancel').addEventListener('click', () => { editing = false; ui('instance').value = settings.origin || ''; ui('device-name').value = connection.deviceName || installation?.device_name || ''; notice(); render() })
 ui('open-approval').addEventListener('click', async () => {
   try {
     const pending = (await readSettings()).pending
@@ -156,7 +171,7 @@ const uiToggle = ui('ui-enabled')
 void bridge.send({ type: 'get-ui-preferences' }).then(prefs => {
   if (prefs?.error) throw new Error('無法讀取 UI 偏好。')
   uiToggle.checked = prefs?.enabled !== false
-  ui('ui-status').textContent = uiToggle.checked ? '已啟用，支援頁面會自動改善。' : '目前使用原站介面。'
+  ui('ui-status').textContent = uiToggle.checked ? '已套用清晰主題，支援頁面會自動使用此風格。' : '目前使用原站主題。'
 }).catch(error => { ui('ui-status').textContent = error.message })
 uiToggle.addEventListener('change', async () => {
   uiToggle.disabled = true
@@ -164,7 +179,7 @@ uiToggle.addEventListener('change', async () => {
     const result = await bridge.send({ type: 'set-ui-preferences', enabled: uiToggle.checked })
     if (result?.error) throw new Error('設定未儲存，請再試一次。')
     uiToggle.checked = result?.enabled !== false
-    ui('ui-status').textContent = uiToggle.checked ? 'UI 改善已啟用，已同步開啟中的支援頁面。' : '已切回原站介面。'
+    ui('ui-status').textContent = uiToggle.checked ? '已套用清晰主題，已同步開啟中的支援頁面。' : '已使用原站主題。'
   } catch (error) { uiToggle.checked = !uiToggle.checked; ui('ui-status').textContent = error.message }
   finally { uiToggle.disabled = false }
 })
