@@ -1,4 +1,5 @@
 import './adapters/orange-apple.js'
+import './installation.js'
 
 chrome.runtime.onInstalled.addListener(() => {
   // Do not expose extension credentials to page content scripts.
@@ -46,15 +47,30 @@ async function getIntegrationStatus() {
         requestId: typeof error?.request_id === 'string' ? error.request_id.slice(0, 120) : null,
       } }
     }
-    const data = body?.data
+    let data = body?.data
     if (!data || typeof data.user_id !== 'string') throw new Error('API 回應格式不正確。')
+    if (data.connection && data.connection.installation_id === null) {
+      const installation = await globalThis.edulogInstallation.load()
+      const current = (await chrome.storage.local.get('edulogExtension')).edulogExtension
+      if (current?.origin !== edulogExtension.origin || current?.token !== edulogExtension.token) return { status: 'stale' }
+      const adopted = await fetch(`${edulogExtension.origin}/api/extension/v1/installation`, {
+        method: 'PATCH', headers: { authorization: `Bearer ${edulogExtension.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify(installation), cache: 'no-store', credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(15000),
+      })
+      if (!adopted.ok) throw new Error('無法更新瀏覽器安裝資訊，請重新配對或稍後再試。')
+      const refreshed = await fetch(`${edulogExtension.origin}/api/extension/v1/me`, { headers: { authorization: `Bearer ${edulogExtension.token}` }, cache: 'no-store', credentials: 'omit', redirect: 'error', signal: AbortSignal.timeout(15000) })
+      if (!refreshed.ok) throw new Error('更新後無法驗證連線。')
+      data = (await refreshed.json()).data
+      if (!data || typeof data.user_id !== 'string') throw new Error('API 回應格式不正確。')
+    }
     const settingsUrl = validSettingsUrl(data.settings_url) || metadata.settingsUrl
     const lastVerifiedAt = new Date().toISOString()
     const current = (await chrome.storage.local.get('edulogExtension')).edulogExtension
     if (current?.origin !== edulogExtension.origin || current?.token !== edulogExtension.token) return { status: 'stale' }
-    await chrome.storage.local.set({ edulogExtension: { ...current, settingsUrl, lastVerifiedAt } })
+    await chrome.storage.local.set({ edulogExtension: { ...current, settingsUrl, lastVerifiedAt, connection: data.connection } })
     return {
       ...metadata, status: 'connected', settingsUrl, lastVerifiedAt,
+      deviceName: data.connection?.device_name || null,
       capabilities: {
         teaching_data_import: data?.capabilities?.teaching_data_import === true,
         report_prefill: data?.capabilities?.report_prefill === true,
@@ -65,6 +81,10 @@ async function getIntegrationStatus() {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const fromPopup = sender.id === chrome.runtime.id && sender.url?.startsWith(`chrome-extension://${chrome.runtime.id}/`)
+  if (fromPopup && message?.type === 'get-edulog-installation') {
+    void globalThis.edulogInstallation.load().then(sendResponse, () => sendResponse({ error: 'INSTALLATION_UNAVAILABLE' }))
+    return true
+  }
   if ((fromPopup || isTeachingPage(sender.url)) && ['get-ui-preferences', 'set-ui-preferences'].includes(message?.type)) {
     void (async () => {
       const key = 'edulogUiPreferences'

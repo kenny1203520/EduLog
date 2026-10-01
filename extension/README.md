@@ -1,5 +1,21 @@
 # EduLog Teaching Systems extension
 
+## Clear theme and connection management (0.1.0)
+
+The interface style is **EduLog 清晰主題** (EduLog Clear theme). Use **套用清晰主題** to apply it and **使用原站主題** to return to the supported website's style. It remains available without pairing.
+
+The popup and site integration panel include expandable **教學資料匯入** and **報告預填** flow cards. They describe the planned selection, review, conflict and manual-submit steps. Both are explicitly marked unavailable; these cards do not extract data, write records, prefill forms or enable API capabilities.
+
+Before running this API version, apply migration **1000117** after **1000116**, restart the API/web services and reload the unpacked extension. The manifest remains **0.1.0**. Existing paired tokens can be adopted when that browser rechecks its connection; other unidentified legacy rows remain intact.
+
+Each browser profile generates a random UUID in extension-local storage. This is an installation identifier, not a hardware identifier or fingerprint. Browser/OS labels are coarse descriptive metadata; users can name the connection during pairing or rename it in EduLog. Same-installation pairing atomically replaces earlier tokens for that user and extension origin. Other installations and unidentified legacy tokens are preserved. Clearing extension storage or reinstalling creates a new installation identity.
+
+Legacy adoption cannot supersede an already active known-installation authorization. It fails safely if another pairing has won; stale background verification does not overwrite newly saved pairing data. Reconnect from the current popup if a legacy credential cannot be adopted.
+
+The web settings list refreshes every two seconds while a pairing request is pending/approved, every ten seconds otherwise, and immediately when the tab regains focus/visibility. Polling pauses in hidden tabs. Approval keeps the request visible until claim completes. Background refreshes retain rows and typed names; failures offer a manual refresh. Revocation requires confirmation showing the name and short connection ID.
+
+Verification uses synthetic fixtures only. Run the isolated database test with `node supabase/tests/web_extension_installations.mjs <pglite/dist/index.js>`, or run `web_extension_installations.sql` against a disposable PostgreSQL database after applying the migrations. The web fixture is available at `/tests/fixtures/extension-connections.html` on a temporary Vite server at port 5199; `app/tests/extension-connections-browser.mjs <playwright/index.mjs> <screenshots-directory>` tests its layout and native dialog keyboard behavior in isolated Chrome/Edge profiles.
+
 This directory contains the Manifest V3 Chrome and Edge extension source. Load it as an unpacked extension from `chrome://extensions` / `edge://extensions` while developing.
 
 The extension connects to a self-hosted EduLog system. The user enters that server's origin and grants access only to that origin. Configure its `API_EXTENSION_ALLOWED_ORIGINS` with the exact `chrome-extension://<id>` origin before pairing. Production servers must use HTTPS; localhost is allowed for development.

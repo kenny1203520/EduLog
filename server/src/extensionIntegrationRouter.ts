@@ -7,8 +7,20 @@ import type { SupabaseClients } from './supabase.js'
 import { requireAuth, csrfProtection } from './auth.js'
 import { ApiError, mapDatabaseError } from './errors.js'
 
-const pairStartBody = z.object({ code_challenge: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
-const pairClaimBody = z.object({ code_verifier: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
+const installationShape = {
+  installation_id: z.string().uuid(), device_name: z.string().trim().min(1).max(80),
+  browser_name: z.string().trim().min(1).max(40), platform_name: z.string().trim().min(1).max(40),
+  extension_version: z.string().trim().min(1).max(40),
+}
+export const installationBody = z.object(installationShape).strict()
+export const pairStartBody = z.object({ code_challenge: z.string().regex(/^[a-f0-9]{64}$/), ...installationBody.partial().shape }).strict().refine(
+  value => Object.keys(installationShape).every(key => value[key as keyof typeof installationShape] === undefined) || Object.keys(installationShape).every(key => value[key as keyof typeof installationShape] !== undefined),
+  { message: 'Installation metadata must be supplied together' },
+)
+export const pairClaimBody = z.object({ code_verifier: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
+export const connectionNameBody = z.object({ device_name: installationShape.device_name }).strict()
+const nameBody = z.object({ device_name: installationShape.device_name.optional() }).strict()
+const tokenFields = 'id,extension_origin,installation_id,device_name,browser_name,platform_name,extension_version,created_at,last_used_at,expires_at,revoked_at'
 const uuid = z.string().uuid()
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
@@ -21,6 +33,11 @@ function envelope(req: Request, data: unknown) {
 
 function hash(value: string) {
   return crypto.createHash('sha256').update(value).digest('hex')
+}
+
+function integrationError(error: { message: string; code?: string }) {
+  const statuses: Record<string, number> = { PAIRING_REQUEST_EXPIRED: 404, PAIRING_ALREADY_CLAIMED: 409, PAIRING_NOT_APPROVED: 409, PAIRING_PROOF_INVALID: 401, EXTENSION_AUTH_INVALID: 401, INSTALLATION_MISMATCH: 409, INSTALLATION_ALREADY_AUTHORIZED: 409 }
+  return statuses[error.message] ? new ApiError(statuses[error.message]!, error.message, error.message) : mapDatabaseError(error)
 }
 
 export function buildExtensionSettingsUrl(webBaseUrl: string) {
@@ -54,15 +71,21 @@ function requireExtensionToken(adminClient: SupabaseClient, config: ApiConfig) {
       const bearer = req.header('authorization')?.match(/^Bearer\s+([a-f0-9]{64})$/i)?.[1]
       if (!bearer) throw new ApiError(401, 'EXTENSION_AUTH_REQUIRED', 'Extension authorization is required')
       const result = await adminClient.from('web_extension_tokens')
-        .select('id,user_id,extension_origin,expires_at,revoked_at')
+        .select('id,user_id,extension_origin,installation_id,device_name,browser_name,platform_name,extension_version,last_used_at,expires_at,revoked_at')
         .eq('token_hash', hash(bearer)).is('revoked_at', null).gt('expires_at', new Date().toISOString()).maybeSingle()
       if (result.error) throw mapDatabaseError(result.error)
       if (!result.data) throw new ApiError(401, 'EXTENSION_AUTH_INVALID', 'Extension authorization is invalid or expired')
       if (!allowedExtensionOrigin(config, result.data.extension_origin) || (origin && result.data.extension_origin !== origin)) {
         throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
       }
-      req.extensionPrincipal = { tokenId: result.data.id, userId: result.data.user_id, extensionOrigin: result.data.extension_origin }
-      void adminClient.from('web_extension_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', result.data.id)
+      req.extensionPrincipal = { tokenId: result.data.id, userId: result.data.user_id, extensionOrigin: result.data.extension_origin, connection: {
+        installation_id: result.data.installation_id ?? null, device_name: result.data.device_name ?? null,
+        browser_name: result.data.browser_name ?? null, platform_name: result.data.platform_name ?? null, extension_version: result.data.extension_version ?? null,
+      } }
+      // Supabase builders are lazy thenables; a fire-and-forget builder never executes.
+      if (!result.data.last_used_at || Date.now() - new Date(result.data.last_used_at).getTime() >= 60_000) {
+        await adminClient.from('web_extension_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', result.data.id)
+      }
       next()
     } catch (error) { next(error) }
   }
@@ -78,7 +101,7 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
     const origin = req.header('origin')
     if (!allowedExtensionOrigin(config, origin)) throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
     const input = pairStartBody.parse(req.body)
-    const created = await admin.from('web_extension_pairing_requests').insert({ extension_origin: origin, code_challenge: input.code_challenge }).select('id,expires_at').single()
+    const created = await admin.from('web_extension_pairing_requests').insert({ extension_origin: origin, ...input }).select('id,expires_at').single()
     if (created.error) throw mapDatabaseError(created.error)
     return res.status(201).json(envelope(req, { id: created.data.id, authorize_url: buildExtensionApprovalUrl(config.EDULOG_WEB_BASE_URL, created.data.id), expires_at: created.data.expires_at }))
   }))
@@ -99,30 +122,20 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
     const origin = req.header('origin')
     if (!allowedExtensionOrigin(config, origin)) throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
     const input = pairClaimBody.parse(req.body)
-    const selected = await admin.from('web_extension_pairing_requests').select('id,user_id,status,extension_origin,code_challenge,expires_at').eq('id', id).maybeSingle()
-    if (selected.error) throw mapDatabaseError(selected.error)
-    const request = selected.data
-    if (!request || request.extension_origin !== origin || request.expires_at <= new Date().toISOString()) throw new ApiError(404, 'PAIRING_REQUEST_EXPIRED', 'Pairing request was not found or expired')
-    if (request.status !== 'approved' || !request.user_id) throw new ApiError(409, 'PAIRING_NOT_APPROVED', 'Approve this pairing request in EduLog first')
-    if (hash(input.code_verifier) !== request.code_challenge) throw new ApiError(401, 'PAIRING_PROOF_INVALID', 'Pairing proof is invalid')
     const token = crypto.randomBytes(32).toString('hex')
-    const inserted = await admin.from('web_extension_tokens').insert({ user_id: request.user_id, extension_origin: origin, token_hash: hash(token) }).select('id,expires_at').single()
-    if (inserted.error) throw mapDatabaseError(inserted.error)
-    const consumed = await admin.from('web_extension_pairing_requests').update({ status: 'claimed', claimed_at: new Date().toISOString() }).eq('id', id).eq('status', 'approved').select('id').maybeSingle()
-    if (consumed.error || !consumed.data) {
-      await admin.from('web_extension_tokens').delete().eq('id', inserted.data.id)
-      if (consumed.error) throw mapDatabaseError(consumed.error)
-      throw new ApiError(409, 'PAIRING_ALREADY_CLAIMED', 'Pairing request has already been claimed')
-    }
-    return res.json(envelope(req, { token, token_id: inserted.data.id, expires_at: inserted.data.expires_at }))
+    const claimed = await admin.rpc('claim_web_extension_pairing', { p_request_id: id, p_origin: origin, p_verifier_hash: hash(input.code_verifier), p_token_hash: hash(token) }).single()
+    if (claimed.error) throw integrationError(claimed.error)
+    const issued = z.object({ token_id: uuid, expires_at: z.string() }).parse(claimed.data)
+    return res.json(envelope(req, { token, token_id: issued.token_id, expires_at: issued.expires_at }))
   }))
 
   router.post('/pair-requests/:id/approve', csrfProtection, requireAuth(clients, config), wrap(async (req, res) => {
     const id = uuid.parse(req.params.id)
+    const input = nameBody.parse(req.body)
     const selected = await admin.from('web_extension_pairing_requests').select('id,status,expires_at,extension_origin').eq('id', id).maybeSingle()
     if (selected.error) throw mapDatabaseError(selected.error)
     if (!selected.data || selected.data.expires_at <= new Date().toISOString() || selected.data.status !== 'pending') throw new ApiError(404, 'PAIRING_REQUEST_EXPIRED', 'Pairing request was not found or expired')
-    const result = await admin.from('web_extension_pairing_requests').update({ user_id: req.user!.id, status: 'approved', approved_at: new Date().toISOString() }).eq('id', id).eq('status', 'pending').select('id,extension_origin,expires_at').maybeSingle()
+    const result = await admin.from('web_extension_pairing_requests').update({ user_id: req.user!.id, status: 'approved', approved_at: new Date().toISOString(), ...input }).eq('id', id).eq('status', 'pending').select('id,extension_origin,expires_at').maybeSingle()
     if (result.error) throw mapDatabaseError(result.error)
     if (!result.data) throw new ApiError(409, 'PAIRING_ALREADY_APPROVED', 'Pairing request has already been approved')
     return res.json(envelope(req, { approved: true, extension_origin: result.data.extension_origin, expires_at: result.data.expires_at }))
@@ -130,16 +143,26 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
 
   router.get('/pair-requests/:id/approval', requireAuth(clients, config), wrap(async (req, res) => {
     const id = uuid.parse(req.params.id)
-    const result = await admin.from('web_extension_pairing_requests').select('id,status,extension_origin,expires_at').eq('id', id).maybeSingle()
+    const result = await admin.from('web_extension_pairing_requests').select('id,user_id,status,extension_origin,expires_at,installation_id,device_name,browser_name,platform_name,token_id').eq('id', id).maybeSingle()
     if (result.error) throw mapDatabaseError(result.error)
-    if (!result.data || result.data.expires_at <= new Date().toISOString() || !['pending', 'approved'].includes(result.data.status)) throw new ApiError(404, 'PAIRING_REQUEST_EXPIRED', 'Pairing request was not found or expired')
-    return res.json(envelope(req, { id: result.data.id, status: result.data.status, extension_origin: result.data.extension_origin, expires_at: result.data.expires_at }))
+    if (!result.data || (result.data.user_id && result.data.user_id !== req.user!.id) || !['pending', 'approved', 'claimed'].includes(result.data.status) || (result.data.status !== 'claimed' && result.data.expires_at <= new Date().toISOString())) throw new ApiError(404, 'PAIRING_REQUEST_EXPIRED', 'Pairing request was not found or expired')
+    const { user_id: _userId, ...approval } = result.data
+    return res.json(envelope(req, approval))
   }))
 
   router.get('/tokens', requireAuth(clients, config), wrap(async (req, res) => {
-    const result = await admin.from('web_extension_tokens').select('id,extension_origin,created_at,last_used_at,expires_at,revoked_at').eq('user_id', req.user!.id).order('created_at', { ascending: false }).limit(50)
+    const result = await admin.from('web_extension_tokens').select(tokenFields).eq('user_id', req.user!.id).is('revoked_at', null).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100)
     if (result.error) throw mapDatabaseError(result.error)
     return res.json(envelope(req, result.data ?? []))
+  }))
+
+  router.patch('/tokens/:id', csrfProtection, requireAuth(clients, config), wrap(async (req, res) => {
+    const id = uuid.parse(req.params.id)
+    const input = connectionNameBody.parse(req.body)
+    const result = await admin.from('web_extension_tokens').update(input).eq('id', id).eq('user_id', req.user!.id).is('revoked_at', null).gt('expires_at', new Date().toISOString()).select(tokenFields).maybeSingle()
+    if (result.error) throw mapDatabaseError(result.error)
+    if (!result.data) throw new ApiError(404, 'EXTENSION_TOKEN_NOT_FOUND', 'Extension connection was not found')
+    return res.json(envelope(req, result.data))
   }))
 
   router.delete('/tokens/:id', csrfProtection, requireAuth(clients, config), wrap(async (req, res) => {
@@ -154,6 +177,8 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
   extensionApi.use(requireExtensionToken(admin, config))
   extensionApi.get('/me', wrap(async (req, res) => res.json(envelope(req, {
     user_id: req.extensionPrincipal!.userId,
+    token_id: req.extensionPrincipal!.tokenId,
+    connection: req.extensionPrincipal!.connection,
     settings_url: buildExtensionSettingsUrl(config.EDULOG_WEB_BASE_URL),
     capabilities: {
       connection_management: true,
@@ -161,6 +186,12 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
       report_prefill: false,
     },
   }))))
+  extensionApi.patch('/installation', wrap(async (req, res) => {
+    const input = installationBody.parse(req.body)
+    const result = await admin.rpc('bind_web_extension_installation', { p_token_id: req.extensionPrincipal!.tokenId, ...Object.fromEntries(Object.entries(input).map(([key, value]) => [`p_${key}`, value])) })
+    if (result.error) throw integrationError(result.error)
+    return res.json(envelope(req, { bound: true }))
+  }))
   router.use('/v1', extensionApi)
   return router
 }

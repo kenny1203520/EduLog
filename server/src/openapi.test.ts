@@ -182,11 +182,12 @@ describe('generated API contract', () => {
 
   it('documents cookie authentication for protected operations', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined> }
-    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/auth/csrf', 'GET /api/healthz', 'GET /api/openapi.json'])
+    const publicOperations = new Set(['POST /api/auth/login', 'POST /api/auth/refresh', 'POST /api/auth/logout', 'GET /api/auth/csrf', 'GET /api/healthz', 'GET /api/openapi.json', 'POST /api/extension/pair-requests', 'GET /api/extension/pair-requests/{id}', 'POST /api/extension/pair-requests/{id}/claim'])
     for (const [path, pathItem] of Object.entries(spec.paths)) {
       for (const [method, operation] of Object.entries(pathItem ?? {})) {
         if (!operation || !operation.operationId || operation['x-websocket']) continue
         if (publicOperations.has(`${method.toUpperCase()} ${path}`)) continue
+        if (path.startsWith('/api/extension/v1/')) { expect(operation.security).toEqual([{ extensionToken: [] }]); continue }
         expect(operation.security, `${method.toUpperCase()} ${path}`).toEqual([{ cookieAuth: [] }])
       }
     }
