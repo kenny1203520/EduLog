@@ -11,7 +11,7 @@ for (const failure of ['sync', 'async', 'listener']) test(`invalidated ${failure
   let calls = 0
   const fail = () => { throw new Error('Extension context invalidated.') }
   w.chrome = { runtime: { sendMessage() { calls++; return failure === 'async' ? Promise.reject(new Error('Extension context invalidated.')) : fail() }, onMessage: { addListener() { if (failure === 'listener') fail() } } } }
-  for (const file of ['runtime-bridge.js', 'connection-ui.js', 'adapters/orange-apple.js', 'content.js']) w.eval(read(`../${file}`))
+  for (const file of ['runtime-bridge.js', 'connection-ui.js', 'adapters/orange-apple-workflows.js', 'adapters/orange-apple.js', 'bootstrap.js', 'content.js']) w.eval(read(`../${file}`))
   await wait()
   const draft = w.document.querySelector('textarea')
   draft.value = 'unsaved draft'
@@ -27,7 +27,7 @@ for (const failure of ['sync', 'async', 'listener']) test(`invalidated ${failure
   root().querySelector('.settings').click(); await wait()
   assert.equal(calls, before)
   assert.equal(root().querySelectorAll('.notice').length, 1)
-  assert.equal(w.document.documentElement.dataset.edulogUi, 'on')
+  assert.equal(w.document.documentElement.dataset.edulogUi, undefined)
   dom.window.close()
 })
 

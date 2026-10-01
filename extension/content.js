@@ -3,8 +3,33 @@
   const adapter = globalThis.edulogSiteAdapter
   if (!adapter?.matchesHost(location.hostname)) return
   globalThis.edulogPageController = true
-  let enabled = true, enhancement, host, suspended = false, timer, resizeObserver, heightState
+  const boot = globalThis.edulogUiBoot
+  let enabled = false, enhancement, host, suspended = false, timer, resizeObserver, heightState
+  let initialized = false, revision = 0, navigation = 0, needsPreference = false
+  let preferenceVisit = null
   let view = {}, lastPath = location.pathname
+  const pageViews = new Map()
+  const scrollState = () => [...document.querySelectorAll('[data-edulog-scroll]')].map((element, index) => ({ key: element.dataset.edulogScroll, index, left: element.scrollLeft, top: element.scrollTop }))
+  function rememberPosition() {
+    const active = document.activeElement
+    view.cachedFocus = active && active !== document.body ? {
+      id: active.id, search: active.dataset.edulogSearch,
+      cursor: typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null,
+    } : null
+    view.cachedScrolls = scrollState()
+  }
+  let dialogEnhancement
+  function syncDialog() {
+    if (suspended) return
+    if (enabled && enhancement && dialogEnhancement?.isCurrent?.()) return
+    observer.disconnect()
+    try {
+    const active = document.activeElement
+    dialogEnhancement?.restore(); dialogEnhancement = null
+    if (enabled && enhancement) dialogEnhancement = adapter.enhanceDialogs?.(document, view)
+    if (active?.isConnected && active !== document.body) active.focus({ preventScroll: true })
+    } finally { observer.observe(document.documentElement, { childList: true, subtree: true }) }
+  }
   const bridge = globalThis.edulogRuntime
   const message = data => bridge.send(data)
   let notice = ''
@@ -14,10 +39,13 @@
     if (element) { element.textContent = text; element.hidden = !text }
   }
 
-  function teardown() {
-    clearTimeout(timer)
+  function teardown(keepDialog = false, keepToolbar = false) {
+    cancelFrame(timer)
+    timer = null
+    if (!keepDialog) { dialogEnhancement?.restore(); dialogEnhancement = null }
     enhancement?.restore()
     enhancement = null
+    if (keepToolbar) return
     host?.remove()
     host = null
     resizeObserver?.disconnect()
@@ -63,6 +91,8 @@
     root.querySelector('.toggle').textContent = enabled ? '切回原站' : '啟用 UI 改善'
     root.querySelector('.toggle').addEventListener('click', async () => {
       enabled = !enabled
+      revision++
+      boot?.remember(enabled)
       sync()
       try {
         const result = await message({ type: 'set-ui-preferences', enabled })
@@ -92,6 +122,7 @@
       retry.disabled = true
       try {
         const result = await message({ type: 'get-edulog-integration-status' })
+        if (!host?.isConnected || host.shadowRoot !== root) return
         const state = globalThis.edulogConnectionUi.describe(result?.status)
         status.textContent = `${state.label}：${state.detail}${result?.origin ? ` ${result.origin}` : ''}${result?.lastVerifiedAt ? ` 最近驗證：${new Date(result.lastVerifiedAt).toLocaleString()}` : ''}`
         diagnostics.hidden = !result?.diagnostic
@@ -131,45 +162,163 @@
       }
     }
   }
-  function sync() {
-    if (suspended) return
+  function sync(force = true) {
+    if (suspended || !initialized) return
+    observer.disconnect()
+    try {
+    if (!force && enabled && lastPath === location.pathname && enhancement?.isCurrent()) { enhancement.refresh(); syncDialog(); return }
     const active = document.activeElement
     const search = active?.dataset.edulogSearch
-    const cursor = search ? [active.selectionStart, active.selectionEnd] : null
+    const cursor = search && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null
     const toolbarFocus = host?.shadowRoot.activeElement?.className
-    teardown()
-    if (lastPath !== location.pathname) { view = {}; lastPath = location.pathname }
+    const nativeCursor = typeof active?.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null
+    const scrolls = scrollState()
+    const pageScroll = [window.scrollX, window.scrollY]
+    const keepToolbar = lastPath === location.pathname && host?.isConnected && host.dataset.enabled === String(enabled)
+    teardown(enabled && lastPath === location.pathname && dialogEnhancement?.isCurrent?.(), keepToolbar)
+    if (lastPath !== location.pathname) {
+      pageViews.set(lastPath, view)
+      view = pageViews.get(location.pathname) || {}; lastPath = location.pathname
+    }
     const page = adapter.matchPage(location.pathname)
-    if (!page || !document.querySelector('#page-body > .content')) return
-    if (enabled) enhancement = adapter.enhancePage(document, view)
-    toolbar(page)
+    if (!page || !document.querySelector('#page-body > .content')) { boot?.mode(false); teardown(); return }
+    if (enabled) enhancement = adapter.enhancePage(document, view, Boolean(boot))
+    if (enabled && !enhancement) { boot?.mode(false); teardown(); return }
+    boot?.mode(enabled, page)
+    if (!host?.isConnected) toolbar(page)
+    syncDialog()
     if (search) {
       const input = document.querySelector(`[data-edulog-search="${search}"]`)
       input?.focus({ preventScroll: true })
       if (input && cursor) input.setSelectionRange(...cursor)
     } else if (['toggle', 'menu', 'integration'].includes(toolbarFocus)) {
       host.shadowRoot.querySelector(`.${toolbarFocus}`)?.focus({ preventScroll: true })
+    } else if (active?.isConnected && active !== document.body) {
+      active.focus({ preventScroll: true })
+      if (nativeCursor) active.setSelectionRange(...nativeCursor)
+    } else if (view.cachedFocus) {
+      const saved = view.cachedFocus
+      const target = saved.search ? document.querySelector(`[data-edulog-search="${saved.search}"]`) : saved.id ? document.getElementById(saved.id) : null
+      if (target && (!target.closest('.modal') || target.closest('.modal.show'))) {
+        target.focus({ preventScroll: true })
+        if (saved.cursor && typeof target.setSelectionRange === 'function') target.setSelectionRange(...saved.cursor)
+      }
     }
+    const currentScrolls = [...document.querySelectorAll('[data-edulog-scroll]')]
+    for (const saved of scrolls.length ? scrolls : view.cachedScrolls || []) {
+      const element = currentScrolls[saved.index]
+      if (element?.dataset.edulogScroll === saved.key) { element.scrollLeft = saved.left; element.scrollTop = saved.top }
+    }
+    if (window.scrollX !== pageScroll[0] || window.scrollY !== pageScroll[1]) window.scrollTo(...pageScroll)
+    } finally { observer.observe(document.documentElement, { childList: true, subtree: true }) }
   }
-  function schedule() { clearTimeout(timer); timer = setTimeout(sync, 80) }
+  const frame = callback => typeof requestAnimationFrame === 'function' ? requestAnimationFrame(callback) : setTimeout(callback, 0)
+  const cancelFrame = id => typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(id) : clearTimeout(id)
+  function schedule() {
+    if (timer != null) return
+    timer = frame(() => { timer = null; sync(false) })
+  }
   const observer = new MutationObserver(records => {
-    const nativeChange = records.some(record => {
+    if (records.some(record => {
       const target = record.target.nodeType === 1 ? record.target : record.target.parentElement
       if (target?.closest('[data-edulog-owned]')) return false
+      return target?.closest('.modal,#remote_modal') || [...record.addedNodes, ...record.removedNodes].some(n => n.nodeType === 1 && n.matches('.modal,#remote_modal'))
+    })) schedule()
+    const nativeChange = records.some(record => {
+      const target = record.target.nodeType === 1 ? record.target : record.target.parentElement
+      if (target?.closest('.modal,#remote_modal')) return false
+      if (target?.hasAttribute('data-edulog-owned')) return false
       const changed = [...record.addedNodes, ...record.removedNodes]
       if (!target?.closest('#page-body') && !changed.some(node => node.nodeType === 1 && (node.id === 'page-body' || node.querySelector('#page-body')))) return false
-      return changed.some(node => node.nodeType !== 1 || !node.hasAttribute('data-edulog-owned'))
+      return changed.some(node => node.nodeType !== 1 || (!node.hasAttribute('data-edulog-owned') && !node.matches('.modal,#remote_modal')))
     })
     if (nativeChange) schedule()
   })
   observer.observe(document.documentElement, { childList: true, subtree: true })
-  for (const event of ['turbo:before-cache', 'turbo:before-render']) document.addEventListener(event, () => { suspended = true; teardown() })
-  for (const event of ['turbo:load', 'turbo:render', 'turbo:frame-load']) document.addEventListener(event, () => { suspended = false; schedule() })
-  window.addEventListener('popstate', schedule)
-  bridge.onInvalidated(() => showNotice('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。'))
+  function resume() {
+    suspended = false
+    // An initially unknown route cannot request preferences. Read them once
+    // it navigates into a supported route, while the new content is gated.
+    if (needsPreference && adapter.matchPage(location.pathname)) {
+      needsPreference = false
+      const request = revision, visit = navigation
+      preferenceVisit = visit
+      let expired = false
+      boot?.wait(() => { expired = true; preferenceVisit = null; sync(false) })
+      void message({ type: 'get-ui-preferences' }).then(prefs => {
+        if (request !== revision || visit !== navigation) return
+        boot?.remember(prefs?.enabled !== false && !prefs?.error)
+        if (expired) return
+        preferenceVisit = null
+        enabled = boot ? boot.preferred : prefs?.enabled !== false
+        try { sync(false) } finally { boot?.release() }
+      }).catch(() => { if (visit === navigation) { preferenceVisit = null; try { sync(false) } finally { boot?.release() } } })
+      return
+    }
+    if (preferenceVisit === navigation) return
+    try { sync(false) } finally { boot?.release() }
+  }
+  function pending() {
+    if (enabled) boot?.wait(() => { navigation++; resume() })
+  }
+  document.addEventListener('turbo:visit', () => {
+    navigation++
+    if (preferenceVisit !== null) { preferenceVisit = null; needsPreference = true; boot?.release() }
+    if (initialized && boot) enabled = boot.preferred
+    pending()
+  })
+  document.addEventListener('turbo:before-cache', () => {
+    rememberPosition()
+    pending(); suspended = true
+    // Turbo clones the native body on a later event-loop tick. Do not reapply
+    // until its renderer runs; the document mode remains active throughout.
+    observer.disconnect(); teardown(); boot?.cleanSnapshot()
+  })
+  for (const eventName of ['turbo:before-render', 'turbo:before-frame-render']) document.addEventListener(eventName, event => {
+    const original = event.detail?.render
+    if (typeof original !== 'function') return
+    const visit = navigation
+    if (eventName === 'turbo:before-render') { pending(); suspended = true }
+    event.detail.render = async function (...args) {
+      try {
+        const result = await original.apply(this, args)
+        if (visit === navigation) {
+          if (eventName === 'turbo:before-frame-render') { if (!suspended) sync(false) }
+          else resume()
+        }
+        return result
+      } catch (error) {
+        if (visit === navigation && eventName === 'turbo:before-render') { suspended = false; boot?.release(); schedule() }
+        throw error
+      }
+    }
+  })
+  for (const event of ['turbo:load', 'turbo:render', 'turbo:frame-load']) document.addEventListener(event, resume)
+  document.addEventListener('turbo:fetch-request-error', () => { navigation++; resume() })
+  window.addEventListener('popstate', () => { navigation++; pending(); schedule() })
+  // Native Bootstrap tabs update classes rather than replacing content.
+  document.addEventListener('shown.bs.tab', event => {
+    if (adapter.matchPage(location.pathname)?.kind === 'calendar') schedule()
+  })
+  document.addEventListener('click', event => {
+    if (adapter.matchPage(location.pathname)?.kind === 'calendar' && event.target.closest('.region-title,[id*="weekday-"][id$="-tab"]')) schedule()
+  })
+  bridge.onInvalidated(() => {
+    boot?.release()
+    if (suspended) { navigation++; suspended = false; schedule() }
+    showNotice('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。')
+  })
   bridge.listen(data => {
-    if (data?.type === 'ui-preferences-changed') { enabled = data.enabled !== false; sync() }
+    if (data?.type === 'ui-preferences-changed') { revision++; enabled = data.enabled !== false; boot?.remember(enabled); sync() }
   })
   // UI is independent of pairing and backend availability.
-  void message({ type: 'get-ui-preferences' }).then(prefs => { enabled = prefs?.enabled !== false; sync() }).catch(sync)
+  const request = revision
+  const initial = boot?.ready || message({ type: 'get-ui-preferences' }).catch(() => ({ enabled: false }))
+  void initial.then(prefs => {
+    needsPreference = prefs?.reason === 'unknown'
+    if (request === revision) enabled = boot?.expired ? false : prefs?.enabled !== false
+    if (!enabled && !bridge.invalidated && (boot?.expired || ['timeout', 'unavailable'].includes(prefs?.reason))) showNotice('未能及時讀取 UI 偏好，已保留原站。可在當頁啟用 UI 改善。')
+    initialized = true
+    try { sync() } finally { boot?.release() }
+  })
 })()

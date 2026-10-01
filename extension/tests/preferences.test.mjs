@@ -31,8 +31,9 @@ test('UI preference defaults on without pairing and persists only non-secret set
   const response = await w.send({ type: 'set-ui-preferences', enabled: false }, w.popup)
   assert.equal(response.enabled, false)
   assert.equal((await w.send({ type: 'get-ui-preferences' }, w.site)).enabled, false)
-  assert.equal(w.broadcasts.length, 1)
+  assert.equal(w.broadcasts.length, 2)
   assert.equal(w.broadcasts[0].tab, 1)
+  assert.equal(w.broadcasts[1].tab, 2)
   assert.equal(JSON.stringify(w.storage.edulogUiPreferences), '{"orange-apple":{"enabled":false}}')
 })
 
@@ -73,7 +74,7 @@ test('late verification cannot overwrite a newer pairing', async () => {
 })
 test('rejects untrusted/unknown pages and never exposes tokens to content scripts', async () => {
   const w = worker()
-  for (const url of ['https://untrusted.example/', 'https://corp.orangeapple.co/my', 'http://corp.orangeapple.co/']) {
+  for (const url of ['https://untrusted.example/', 'https://corp.orangeapple.co/unknown', 'http://corp.orangeapple.co/']) {
     assert.equal(w.listener({ type: 'set-ui-preferences', enabled: false }, { url }, () => assert.fail('Unexpected response')), undefined)
   }
   const result = await w.send({ type: 'set-ui-preferences', enabled: true }, w.site)

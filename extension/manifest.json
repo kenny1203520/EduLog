@@ -18,9 +18,14 @@
   "content_scripts": [
     {
       "matches": ["https://corp.orangeapple.co/*"],
-      "js": ["runtime-bridge.js", "connection-ui.js", "adapters/orange-apple.js", "content.js"],
+      "js": ["runtime-bridge.js", "adapters/orange-apple.js", "bootstrap.js"],
       "css": ["adapters/orange-apple.css"],
-      "run_at": "document_idle"
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://corp.orangeapple.co/*"],
+      "js": ["connection-ui.js", "adapters/orange-apple-workflows.js", "content.js"],
+      "run_at": "document_end"
     }
   ]
 }

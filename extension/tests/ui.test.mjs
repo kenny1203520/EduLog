@@ -9,6 +9,7 @@ const contentCode = read('../content.js')
 const wait = () => new Promise(resolve => setTimeout(resolve, 140))
 function fixture(name, path) {
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only' })
+  dom.window.eval(read('../adapters/orange-apple-workflows.js'))
   dom.window.eval(adapterCode)
   return dom
 }
@@ -19,6 +20,7 @@ function start(dom, enabled = true) {
     onMessage: { addListener: fn => listeners.push(fn) },
   } }
   dom.window.eval(read('../runtime-bridge.js'))
+  dom.window.eval(read('../bootstrap.js'))
   dom.window.eval(read('../connection-ui.js'))
   dom.window.eval(contentCode)
   return { messages, listeners }
@@ -64,12 +66,12 @@ test('filters rows without changing the source hidden state and supports mobile 
 })
 test('week selection preserves the source statuses and report links', () => {
   const dom = fixture('reports', '/courses/dt/101/lesson_reports'), doc = dom.window.document
-  const source = doc.querySelector('#reports').textContent
+  const source = [...doc.querySelectorAll('#reports tr')].map(row=>[...row.cells].slice(3).map(cell=>cell.textContent.replace('記錄','課堂記錄')))
   const enhanced = dom.window.edulogSiteAdapter.enhancePage(doc)
   assert.equal(doc.querySelector('.edulog-week-tools [aria-pressed=true]').dataset.week, '4')
   doc.querySelector('.edulog-week-tools button').click()
   assert.equal(doc.querySelector('.edulog-week-tools [aria-pressed=true]').dataset.week, '3')
-  assert.equal(doc.querySelector('#reports').textContent, source)
+  assert.deepEqual([...doc.querySelectorAll('#reports tr')].map(row=>[...row.cells].slice(3).map(cell=>cell.textContent)), source)
   enhanced.restore(); dom.window.close()
 })
 test('standalone UI works without pairing and homepage shortcuts use source class links', async () => {
@@ -110,15 +112,17 @@ test('saved opt-out keeps the original UI and unrelated native overlays do not r
 })
 test('Turbo caching, source row updates and navigation remain reversible', async () => {
   const dom = fixture('reports', '/courses/dt/101/lesson_reports'), doc = dom.window.document
+  const newSourceRow = doc.querySelector('#reports tbody tr').cloneNode(true)
   start(dom); await wait()
   const table = doc.querySelector('#reports')
-  table.tBodies[0].append(table.tBodies[0].rows[0].cloneNode(true))
+  table.tBodies[0].append(newSourceRow)
   await wait()
   assert.equal(doc.querySelectorAll('.edulog-table-tools').length, 1)
   assert.match(doc.querySelector('.edulog-table-tools [role=status]').textContent, /3 \/ 3/)
   doc.dispatchEvent(new dom.window.Event('turbo:before-cache'))
   assert.equal(doc.querySelector('#edulog-extension-root'), null)
-  assert.equal(doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  assert.equal(doc.documentElement.dataset.edulogUi, 'on')
+  assert.equal(doc.documentElement.hasAttribute('data-edulog-pending'), true)
   doc.dispatchEvent(new dom.window.Event('turbo:load')); await wait()
   assert.equal(doc.querySelectorAll('.edulog-table-tools').length, 1)
   dom.window.history.pushState({}, '', '/my')
