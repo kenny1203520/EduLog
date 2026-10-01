@@ -23,11 +23,16 @@ function hash(value: string) {
   return crypto.createHash('sha256').update(value).digest('hex')
 }
 
-export function buildExtensionApprovalUrl(webBaseUrl: string, pairingRequestId: string) {
+export function buildExtensionSettingsUrl(webBaseUrl: string) {
   const url = new URL(webBaseUrl)
   const basePath = url.pathname.replace(/\/+$/, '')
   url.pathname = `${basePath}/dashboard/settings`
   url.searchParams.set('tab', 'integrations')
+  return url.toString()
+}
+
+export function buildExtensionApprovalUrl(webBaseUrl: string, pairingRequestId: string) {
+  const url = new URL(buildExtensionSettingsUrl(webBaseUrl))
   url.searchParams.set('extension_pair', pairingRequestId)
   return url.toString()
 }
@@ -41,14 +46,21 @@ function requireExtensionToken(adminClient: SupabaseClient, config: ApiConfig) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const origin = req.header('origin')
-      if (!allowedExtensionOrigin(config, origin)) throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
+      // Browser extension fetches may omit Origin on credentialed GETs even
+      // though the same extension sent Origin during pairing. When present,
+      // still require an exact match; when absent, validate the token's bound
+      // extension origin against the server allowlist below.
+      if (origin && !allowedExtensionOrigin(config, origin)) throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
       const bearer = req.header('authorization')?.match(/^Bearer\s+([a-f0-9]{64})$/i)?.[1]
       if (!bearer) throw new ApiError(401, 'EXTENSION_AUTH_REQUIRED', 'Extension authorization is required')
       const result = await adminClient.from('web_extension_tokens')
         .select('id,user_id,extension_origin,expires_at,revoked_at')
-        .eq('token_hash', hash(bearer)).eq('extension_origin', origin).is('revoked_at', null).gt('expires_at', new Date().toISOString()).maybeSingle()
+        .eq('token_hash', hash(bearer)).is('revoked_at', null).gt('expires_at', new Date().toISOString()).maybeSingle()
       if (result.error) throw mapDatabaseError(result.error)
       if (!result.data) throw new ApiError(401, 'EXTENSION_AUTH_INVALID', 'Extension authorization is invalid or expired')
+      if (!allowedExtensionOrigin(config, result.data.extension_origin) || (origin && result.data.extension_origin !== origin)) {
+        throw new ApiError(403, 'EXTENSION_ORIGIN_FORBIDDEN', 'This extension origin is not enabled')
+      }
       req.extensionPrincipal = { tokenId: result.data.id, userId: result.data.user_id, extensionOrigin: result.data.extension_origin }
       void adminClient.from('web_extension_tokens').update({ last_used_at: new Date().toISOString() }).eq('id', result.data.id)
       next()
@@ -142,6 +154,7 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
   extensionApi.use(requireExtensionToken(admin, config))
   extensionApi.get('/me', wrap(async (req, res) => res.json(envelope(req, {
     user_id: req.extensionPrincipal!.userId,
+    settings_url: buildExtensionSettingsUrl(config.EDULOG_WEB_BASE_URL),
     capabilities: {
       connection_management: true,
       teaching_data_import: false,

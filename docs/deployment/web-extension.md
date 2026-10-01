@@ -4,7 +4,7 @@ The extension source is in `extension/` and uses Manifest V3 for Chromium browse
 
 ## EduLog server setup
 
-Set `API_EXTENSION_ALLOWED_ORIGINS` to a comma-separated list of exact origins in the form `chrome-extension://<32-character-extension-id>`. Do not use wildcard origins. During unpacked development, read the generated ID from the browser's extension management page and add that exact origin. Published Chrome and Edge packages may have different IDs and need separate entries.
+Set `API_EXTENSION_ALLOWED_ORIGINS` to a comma-separated list of exact origins in the form `chrome-extension://<32-character-extension-id>`. Do not use wildcard origins. During unpacked development, use the current extension ID shown by its popup or the browser's extension management page, then restart the API so it loads the updated allowlist. Published Chrome and Edge packages may have different IDs and need separate entries.
 
 The API uses this list for CORS and pairing-origin checks. Keep the regular `API_ALLOWED_ORIGINS` configuration for EduLog web clients. The extension connects to a self-hosted EduLog system; production instances must use HTTPS, while HTTP is accepted only for localhost development.
 
@@ -16,4 +16,6 @@ The extension creates a ten-minute PKCE pairing request and opens EduLog's integ
 
 ## Supported site adapter status
 
-The shared extension UI and connection flow use teaching-system terminology. Site-specific host and route matching lives in `extension/adapters/`; the initial adapter and manifest host match currently support `corp.orangeapple.co`. Add other systems as separate adapters with narrowly scoped host matches. The current adapter displays a non-invasive placeholder and does not scrape or write page data until sanitized student, course, classroom/session, report form, and successful-submit samples are supplied. The extension must not be treated as ready to replace teaching pages, import data, or prefill reports until the sample-backed adapter and live browser checks are complete.
+The shared extension UI and connection flow use teaching-system terminology. Site-specific host and route matching lives in `extension/adapters/`; the initial adapter and manifest host match currently support `corp.orangeapple.co`. Add other systems as separate adapters with narrowly scoped host matches. UI improvements are automatic and independent of EduLog pairing: the teacher overview, class workspace and report grid have scoped styling, local search and responsive controls. Both the popup and page toolbar can switch back to the original UI without discarding native form input. Unknown pages remain original. Reload the unpacked extension and refresh existing tabs after an update.
+
+Import and report prefill remain disabled until their dedicated routes and sample-backed form adapters are implemented. UI improvements do not upload teaching data, submit native forms or infer report completion from lesson activation. Additional teaching-page, report-editing and successful-submit samples are required for the remaining integration work and real-site acceptance.

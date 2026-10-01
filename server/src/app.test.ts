@@ -42,10 +42,14 @@ describe('Express API boundary', () => {
   it('serves extension preflight only for configured extension ids', async () => {
     const extensionOrigin = `chrome-extension://${'b'.repeat(32)}`
     const app = createApp({ ...env, API_EXTENSION_ALLOWED_ORIGINS: extensionOrigin })
-    const allowed = await request(app).options('/api/extension/pair-requests').set('Origin', extensionOrigin).set('Access-Control-Request-Method', 'POST')
+    const allowed = await request(app).options('/api/extension/v1/me')
+      .set('Origin', extensionOrigin)
+      .set('Access-Control-Request-Method', 'GET')
+      .set('Access-Control-Request-Headers', 'authorization')
     const denied = await request(app).options('/api/extension/pair-requests').set('Origin', `chrome-extension://${'c'.repeat(32)}`).set('Access-Control-Request-Method', 'POST')
     expect(allowed.status).toBe(204)
     expect(allowed.headers['access-control-allow-origin']).toBe(extensionOrigin)
+    expect(allowed.headers['access-control-allow-headers'].toLowerCase().split(/,\s*/)).toContain('authorization')
     expect(denied.status).toBe(403)
   })
 
