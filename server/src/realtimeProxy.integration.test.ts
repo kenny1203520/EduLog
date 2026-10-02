@@ -107,6 +107,7 @@ describe('realtime proxy upgrade-to-join flow', () => {
       NODE_ENV: 'test',
       EDULOG_WEB_BASE_URL: 'http://localhost:4173',
       API_ALLOWED_ORIGINS: '',
+      API_EXTENSION_ALLOWED_ORIGINS: '',
       SUPABASE_REALTIME_URL: `ws://127.0.0.1:${upstreamPort}/socket/websocket`,
       SUPABASE_ANON_KEY: 'test-anon-key',
     } as ApiConfig

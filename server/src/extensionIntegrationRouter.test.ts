@@ -33,7 +33,7 @@ describe('extension pairing authorization URL', () => {
     }
     query.insert.mockReturnValue(query)
     query.select.mockReturnValue(query)
-    const adminClient = { from: vi.fn(() => query) } as unknown as SupabaseClient
+    const adminClient = { from: vi.fn(() => query), rpc: vi.fn().mockResolvedValue({ data: { workspace_version: 1 }, error: null }) } as unknown as SupabaseClient
     const clients = { adminClient, publicClient: {} as SupabaseClient } as SupabaseClients
     const loadedConfig = loadConfig({
       NODE_ENV: 'test',
@@ -66,7 +66,7 @@ describe('extension token origin validation', () => {
   const tokenId = '5a03e0a7-a3d0-4db5-9aaf-6eea5402074a'
   const userId = 'b4cf6d4f-cc29-41db-9601-8c20cb8a3cde'
 
-  function createTokenApp(allowedOrigins = extensionOrigin, tokenOrigin = extensionOrigin) {
+  function createTokenApp(allowedOrigins = extensionOrigin, tokenOrigin = extensionOrigin, rpc = vi.fn().mockResolvedValue({ data: { workspace_version: 1 }, error: null })) {
     const query = {
       select: vi.fn(),
       eq: vi.fn(),
@@ -79,7 +79,7 @@ describe('extension token origin validation', () => {
       update: vi.fn(),
     }
     for (const method of [query.select, query.eq, query.is, query.gt, query.update]) method.mockReturnValue(query)
-    const adminClient = { from: vi.fn(() => query) } as unknown as SupabaseClient
+    const adminClient = { from: vi.fn(() => query), rpc } as unknown as SupabaseClient
     const clients = { adminClient, publicClient: {} as SupabaseClient } as SupabaseClients
     const config = loadConfig({
       NODE_ENV: 'test',
@@ -105,6 +105,14 @@ describe('extension token origin validation', () => {
     expect(response.body.data.user_id).toBe(userId)
     expect(response.body.data.settings_url).toBe('http://localhost:5173/dashboard/settings?tab=integrations')
     expect(query.eq).toHaveBeenCalledWith('token_hash', crypto.createHash('sha256').update(token).digest('hex'))
+  })
+
+  it('reports catalog capability only when migration 1000119 is available', async () => {
+    const rpc = vi.fn((name: string) => Promise.resolve({ data: name === 'web_extension_catalog' ? { catalog_version: 1 } : { workspace_version: 1 }, error: null }))
+    const { app } = createTokenApp(extensionOrigin, extensionOrigin, rpc)
+    const response = await request(app).get('/api/extension/v1/me').set('Authorization', `Bearer ${token}`)
+    expect(response.body.data.capabilities).toMatchObject({ teaching_data_import: true, report_prefill: true, catalog_v1: true })
+    expect(rpc).toHaveBeenCalledWith('web_extension_catalog', expect.objectContaining({ p_operation: 'capabilities' }))
   })
 
   it('still rejects a present Origin that differs from the token binding', async () => {

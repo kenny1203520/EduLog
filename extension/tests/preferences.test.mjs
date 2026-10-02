@@ -9,7 +9,7 @@ function worker(fetchImpl = async () => { throw new Error('offline') }) {
   let listener
   const id = 'a'.repeat(32)
   const chrome = {
-    runtime: { id, getManifest: () => ({ version: '0.1.0' }), onInstalled: { addListener() {} }, onMessage: { addListener(fn) { listener = fn } } },
+    runtime: { id, getURL: path => `chrome-extension://${id}/${path}`, getManifest: () => ({ version: '0.1.0' }), onInstalled: { addListener() {} }, onMessage: { addListener(fn) { listener = fn } } },
     storage: { local: { get: async key => ({ [key]: storage[key] }), set: async items => Object.assign(storage, items), setAccessLevel: async () => {} } },
     tabs: {
       query: async () => [{ id: 1, url: 'https://corp.orangeapple.co/' }, { id: 2, url: 'https://corp.orangeapple.co/my' }, { id: 3, url: 'https://untrusted.example/' }],
@@ -17,7 +17,7 @@ function worker(fetchImpl = async () => { throw new Error('offline') }) {
       create: async options => opened.push(options),
     },
   }
-  const context = vm.createContext({ chrome, URL, AbortSignal, fetch: fetchImpl, crypto: { randomUUID: () => '11111111-1111-4111-8111-111111111111' }, navigator: { platform: 'Win32', userAgent: 'Chrome' } })
+  const context = vm.createContext({ chrome, URL, AbortSignal, fetch: fetchImpl, installWorkspaceBroker() {}, crypto: { randomUUID: () => '11111111-1111-4111-8111-111111111111' }, navigator: { platform: 'Win32', userAgent: 'Chrome' } })
   const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
   vm.runInContext(read('../adapters/orange-apple.js'), context)
   vm.runInContext(read('../installation.js'), context)
