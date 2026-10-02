@@ -2,12 +2,12 @@
 
 ## 啟用
 
-1. 依專案既有部署流程依序套用 `1000116`、`1000117`、`1000118_web_extension_workspace.sql` 、`1000119_extension_catalog.sql` 與 **`1000120_extension_mapping_memory.sql`**。不修改已部署的 1000118／1000119；新增 migration 不會自動套用到現有資料庫。
+1. 依專案既有部署流程依序套用 `1000116`、`1000117`、`1000118_web_extension_workspace.sql`、`1000119_extension_catalog.sql`、`1000120_extension_mapping_memory.sql` 與 **`1000121_extension_reconciliation.sql`**。不修改已部署 migration；新增 migration 不會自動套用到現有資料庫。
 2. 更新並重新啟動 API。`API_EXTENSION_ALLOWED_ORIGINS` 必須包含目前擴充套件的精確 origin；`EDULOG_WEB_BASE_URL` 必須填瀏覽器可開啟的前端位址，可包含自訂端口與路徑前綴。
 3. 更新原有側載資料夾並在 Chrome／Edge 重新載入。先儲存網站草稿，再重新整理已開啟的來源分頁。
 4. 在 popup 重新檢查連線。從 popup 或網站工具列開啟「教學資料匯入」「報告預填」；完整操作在擴充套件工作分頁進行。
 
-只連接使用者指定的自架 EduLog。缺少 1000118 時匯入／預填能力未就緒；缺少 1000119 時目錄服務未就緒；缺少 1000120 時工作台會要求升級智慧對應服務。清晰主題不受影響。
+只連接使用者指定的自架 EduLog。缺少 1000118 時匯入／預填能力未就緒；缺少 1000119 時目錄服務未就緒；缺少 1000120 時工作台會要求升級智慧對應服務；缺少 1000121 時不提供學生跨班核對，也不允許省略核對直接建立既有學生的新報名。清晰主題不受影響。
 
 ## 工作台載入行為
 
@@ -80,13 +80,13 @@ node extension/tests/workspace-browser-check.mjs <playwright/index.mjs>
 node extension/tests/mapping-memory-browser-check.mjs <playwright/index.mjs>
 ```
 
-PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.mjs` 實際執行 1000118–1000120，涵蓋 SQL 編譯、授權、版本、冪等、原生報告生命週期及交易回滾；測試不會修改正式資料庫。此次已通過隔離執行。正式啟用前須在目標資料庫依序套用 migration，確認 `catalog_v1`、`multi_course_import` 與 `mapping_memory` 為 true。
+PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.mjs` 實際執行 1000118–1000121，涵蓋 SQL 編譯、授權、版本、冪等、原生報告生命週期及交易回滾；測試不會修改正式資料庫。此次已通過隔離執行。正式啟用前須在目標資料庫依序套用 migration，確認 `catalog_v1`、`multi_course_import`、`mapping_memory`、`student_enrollment_catalog` 與 `enrollment_reconciliation` 為 true。
 
 瀏覽器測試涵蓋 Chrome／Edge 的 360、390、768、1024、1440px、人工對應／恢復、差異、預填保留、待確認紀錄、整頁溢出與原生 IndexedDB。桌面實際 200% 縮放、完整鍵盤焦點流程及真實側載讀寫仍須另行驗收。
 
 ## 1000120 API 相容性
 
-### 清單式工作台更新（0.1.0）
+### 先前清單式工作台更新（0.1.0，1000120）
 
 重新載入擴充套件，保存原站草稿後再刷新來源頁；關閉並重新開啟工作台，以載入新的清單／單筆編輯模組。既有工作與對應可續用。本次不新增 API、migration 或權限，沿用部署至 1000120 的伺服器。
 
@@ -101,3 +101,18 @@ PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.m
 - `/catalog/confirm` 批次保存／修改／清除明確確認的對應，各批最多 50 筆。帶入 `expected_revision` 與目標 `versions`；一筆失敗會回滾整批。
 - 報告摘要可依報名、學生及課程縮小範圍。既有 ID 查詢及 `/context` 保留；不改變人工送出及待確認的規則。
 - 側載包：`EduLog-Teaching-Tools-0.1.0-mapping-memory.zip`，包含 runtime、本文件及 1000118–1000120，排除測試、來源 HTML、瀏覽器資料及憑證。
+
+## 1000121 報名核對與班級時段
+
+- 班級名單依表頭讀取姓名、年級、課程與報名日期。付款狀態不作為報名狀態，預計開課日期不作為報名日期。每筆來源報名保留自己的學生／課程；同名、同年級不會共享身份。
+- 舊工作請使用「補讀來源資料」。既有選擇、原文及捲動位置保留；身份改變或可靠 ID 消失後須重新確認，既有记憶與 EduLog 資料不刪除。
+- `/catalog?resource=enrollments&student_id=...` 可查學生所有可讀報名；仍支援班級／課程篩選與至多 50 筆游標。至少指定學生或班級，逐筆檢查報名讀取權限。
+- `GET /api/extension/v1/enrollments/:id/reconciliation` 回傳目前報名、可讀單次調課紀錄、日期、有效目標及分頁。整合憑證沒有轉班、調課或搬移報告的寫入端點；沒有調課紀錄不代表沒有轉班。
+- 工作台先排列符合的既有報名，也顯示其他班級／課程與時段差異。前往 EduLog 既有報名頁處理後，返回並按「重新核對此筆」。單筆差異不改變整個工作的目標班級。
+- 新建須先查完此學生報名並勾選獨立報名確認；存在符合的既有報名時不能重複新建。可「保留 EduLog 並略過此筆」，其他報名仍能繼續，略過項目的相關報告不寫入。
+- 選擇既有報名的報告後，預覽會重新讀取相關調課紀錄；已調出的來源課次、非有效目標、缺少可靠日期或核對失敗的報告保留待處理。
+- 班級目錄與解析包含 `schedule_mode`、`schedule_rules`、`time_zone`；顯示週六、週日 `0`、多組、每月及指定日期排程。匯入寫入沿用既有完整週間排程契約，不推算其他排程或覆寫既有設定。
+
+目前側載包：`EduLog-Teaching-Tools-0.1.0-reconciliation.zip`。包含 `extension/` runtime、部署與驗收文件、1000118–1000121；API 原始碼須由專案一併部署。現有資料庫只需依已套用版本補上後續 migration，不重跑舊 migration。更新 API、重新載入擴充套件並強制重新檢查連線，才能取得新能力。
+
+本輪驗收詳見 `extension/tests/ACCEPTANCE.md`：合成資料的瀏覽器與 PGlite 檢查已通過；實際 Chrome／Edge 側載、桌面原生 200% 縮放及指定測試資料的讀寫仍待驗收。實站報告不自動提交。
