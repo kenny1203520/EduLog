@@ -37,6 +37,14 @@ test('real name spans and course spans enrich duplicate admissions; absolute act
   const {api,doc,dom}=adapter(html);const s=api.extractClass(doc,'/courses/dt/11'),students=s.records.filter(r=>r.kind==='student'),admissions=s.records.filter(r=>r.kind==='enrollment')
   assert.equal(students.length,1);assert.equal(students[0].data.name,'學生甲');assert.equal(admissions.length,2);assert.equal(admissions[0].student_source_id,'101');assert.equal(admissions[0].sourceCourseLabel,'課程甲');assert.equal(admissions[1].sourceCourseLabel,'課程乙');assert.equal(s.issues.length,0);assert.deepEqual(Array.from(s.admissionPaths),['/dt_admissions/301','/dt_admissions/302']);dom.window.close()
 })
+test('direct cell text is identifiable, duplicate evidence merges and action/contact secrets are excluded',()=>{
+  const html=`<div id="page-body"><div class="content"><h2>測試班級</h2><table id="students-table"><tbody><tr><td>學生甲<a href="/admissions/comments/301/edit_teacher"></a><button>備註按鈕</button><div class="admission-comment-box">秘密備註</div></td><td>課程甲<div class="dropdown">選單操作</div></td><td>電話秘密</td></tr></tbody></table><table id="reports"><tbody><tr><td><span>學生甲</span><a href="/students/101/accounts">帳號操作</a><a href="/dt_admissions/301">完整紀錄</a></td><td><span>課程甲</span></td><td><a href="/dt_admissions/301/reports/401/edit">2026/10/02 記錄操作</a></td></tr><tr><td>未知學生<a href="/dt_admissions/302">完整紀錄</a></td><td>未知課程<button>操作</button></td></tr></tbody></table><input type="hidden" value="登入秘密"></div></div>`
+  const {api,doc,dom}=adapter(html),s=api.extractClass(doc,'/courses/dt/11'),r=s.records.find(r=>r.kind==='enrollment'&&r.source_id==='301')
+  assert.equal(r.sourceStudentName,'學生甲');assert.equal(r.sourceCourseLabel,'課程甲');assert.equal(r.student_source_id,'101');assert.equal(r.sourceEvidence.length,2)
+  const unknown=s.records.find(r=>r.kind==='enrollment'&&r.source_id==='302');assert.equal(unknown.sourceStudentName,'未知學生');assert.equal(unknown.sourceCourseLabel,'未知課程');assert.equal(unknown.student_source_id,null)
+  const evidence=JSON.stringify(s.records.map(r=>r.sourceEvidence));for(const word of ['秘密','帳號操作','完整紀錄','記錄操作','選單操作','備註按鈕'])assert.equal(evidence.includes(word),false,word)
+  dom.window.close()
+})
 test('prefill requires current form fingerprint, explicit overwrite and internal opt-in; never submits or confirms', async () => {
   const { api, doc, dom } = adapter(readFileSync(new URL('fixtures/report-modal.html', import.meta.url), 'utf8'))
   const target = await api.readForm(doc), form = doc.querySelector('form'), feedback = doc.querySelector('#lesson_report_feedback')
