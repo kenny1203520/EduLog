@@ -15,6 +15,7 @@
   }
   function createScope(doc) {
     const changes = new Map(), added = [], listeners = [], moves = [], texts = new Map()
+    let restored = false
     return {
       text(node, value) { if (!node || node.textContent === value) return; if (!texts.has(node)) texts.set(node, [...node.childNodes]); node.textContent = value },
       mark(node, name, value = '') {
@@ -33,13 +34,33 @@
         node.before(anchor); moves.push({ node, anchor }); destination.append(node)
       },
       restore() {
+        if (restored) return
+        restored = true
         for (const remove of listeners) remove()
-        for (const { node, anchor } of moves.reverse()) { if (anchor.parentNode) anchor.replaceWith(node) }
-        for (const node of added) node.remove()
+        for (const { node, anchor } of [...moves].reverse()) {
+          // A native update may have removed the moved field but left our anchor.
+          if (anchor.isConnected && !node.isConnected) anchor.remove()
+          else if (anchor.parentNode) anchor.replaceWith(node)
+        }
+        for (const node of [...added].reverse()) {
+          // Keep native replacements inserted inside an extension wrapper.
+          if (node.isConnected) {
+            const preserve = container => {
+              for (const child of [...container.children]) {
+                if (child.hasAttribute('data-edulog-owned')) preserve(child)
+                else node.before(child)
+              }
+            }
+            preserve(node)
+          }
+          node.remove()
+        }
         for (const [node, children] of texts) node.replaceChildren(...children)
         for (const [node, attrs] of changes) for (const [name, old] of attrs) {
           if (old === null) node.removeAttribute(name); else node.setAttribute(name, old)
         }
+        listeners.length = moves.length = added.length = 0
+        changes.clear(); texts.clear()
       },
     }
   }
@@ -47,10 +68,13 @@
     const page = matchPage(doc.location.pathname)
     const content = doc.querySelector('#page-body > .content')
     if (!page || !content || /沒有存取權限|無權限|Access denied/i.test([...content.querySelectorAll('h1,h2')].map(h => h.textContent).join(' '))) return null
-    if (page.kind === 'hours' && !content.querySelector('form select[name=year]')) return null
+    const hoursForm = page.kind === 'hours' ? [...content.querySelectorAll('form')].find(form => ['year', 'month'].every(name => form.querySelector(`select[name=${name}]`)?.form === form)) : null
+    if (page.kind === 'hours' && !hoursForm) return null
+    const hoursInputs = hoursForm && ['year', 'month'].map(name => hoursForm.querySelector(`select[name=${name}]`))
     if (page.kind === 'profile' && (!content.querySelector('h1') || !content.querySelector('a[href^="/my/"][href$="/edit"]'))) return null
     if (page.kind === 'profile-edit' && !content.querySelector('form[action^="/my/"] .form-inputs')) return null
     const scope = createScope(doc)
+    try {
     const { mark, listen, element } = scope
     const added = { push: node => scope.add(node) }
     function controls(table, label) {
@@ -197,17 +221,31 @@
     return {
       page,
       isCurrent() {
-        return doc.querySelector('#page-body > .content') === content && sourceTables.length === content.querySelectorAll('table').length && shape.every(({ table, rows }) => table.isConnected && table.rows.length === rows)
+        return doc.querySelector('#page-body > .content') === content && (!hoursInputs || hoursInputs.every(input => input.form === hoursForm && hoursForm.contains(input) && hoursForm.querySelector(`select[name=${input.name}]`) === input)) && sourceTables.length === content.querySelectorAll('table').length && shape.every(({ table, rows }) => table.isConnected && table.rows.length === rows)
       },
-      refresh() { refreshStudents(); refreshReports(); workflow?.refresh() },
+      refresh() {
+        try { refreshStudents(); refreshReports(); workflow?.refresh() }
+        catch (error) { scope.restore(); throw error }
+      },
       restore: scope.restore,
     }
+    } catch (error) { scope.restore(); throw error }
   }
   globalThis.edulogSiteAdapter = Object.freeze({
     id: 'orange-apple', matchesHost: host => host === 'corp.orangeapple.co',
     matchesTeachingPage: path => Boolean(matchPage(path)), matchPage, enhancePage,
-    enhanceDialog: (doc, view) => globalThis.edulogSiteWorkflows?.enhanceDialog(doc, view, createScope(doc)),
-    enhanceDialogs: (doc, view) => globalThis.edulogSiteWorkflows?.enhanceDialogs(doc, view, createScope),
+    enhanceDialog(doc, view) {
+      const scope = createScope(doc)
+      try { return globalThis.edulogSiteWorkflows?.enhanceDialog(doc, view, scope) }
+      catch (error) { scope.restore(); throw error }
+    },
+    enhanceDialogs(doc, view) {
+      const scopes = []
+      try { return globalThis.edulogSiteWorkflows?.enhanceDialogs(doc, view, document => {
+        const scope = createScope(document); scopes.push(scope); return scope
+      }) }
+      catch (error) { for (const scope of scopes.reverse()) scope.restore(); throw error }
+    },
     readContext: doc => ({ ...matchPage(doc.location.pathname), sourcePath: doc.location.pathname }),
   })
 })()

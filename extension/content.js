@@ -7,6 +7,7 @@
   let enabled = false, enhancement, host, suspended = false, timer, resizeObserver, heightState
   let initialized = false, revision = 0, navigation = 0, needsPreference = false
   let preferenceVisit = null
+  let failedPath = null
   let view = {}, lastPath = location.pathname
   const pageViews = new Map()
   const scrollState = () => [...document.querySelectorAll('[data-edulog-scroll]')].map((element, index) => ({ key: element.dataset.edulogScroll, index, left: element.scrollLeft, top: element.scrollTop }))
@@ -73,7 +74,7 @@
       strong{color:#1e40af}.title{flex:1}.toggle{color:#1e40af;font-weight:600}.menu{display:none}
       .panel{margin:8px 16px 0 auto;padding:18px;max-width:400px;max-height:calc(100dvh - 96px);overflow:auto;overscroll-behavior:contain;background:white;border:1px solid #dbe3ee;border-radius:12px;box-shadow:0 12px 32px #17203320}
       .panel[hidden]{display:none}p{margin:8px 0;color:#475569}.panel button{margin-top:8px}.note{font-size:13px}
-      :host([data-enabled="false"]){inset:auto 16px 20px auto}.bar{border-radius:0}
+      :host([data-enabled="false"]){inset:auto 16px 20px auto;max-width:calc(100vw - 32px)}.bar{border-radius:0}
       :host([data-enabled="false"]) .bar{padding:6px;border:1px solid #dbe3ee;border-radius:12px}
       :host([data-enabled="false"]) .bar>:not(.toggle){display:none}
       @media(max-width:991px){.menu{display:block}.bar{padding:8px 12px;gap:8px}.title{font-size:13px}}
@@ -93,8 +94,11 @@
     root.querySelector('.toggle').addEventListener('click', async () => {
       enabled = !enabled
       revision++
-      boot?.remember(enabled)
+      failedPath = null
+      showNotice('')
       sync()
+      if (failedPath) return // A failed application must not overwrite the saved preference.
+      boot?.remember(enabled)
       try {
         const result = await message({ type: 'set-ui-preferences', enabled })
         if (result?.error) throw new Error('偏好設定暫時無法儲存。')
@@ -130,7 +134,7 @@
         const result = await message({ type: 'get-edulog-integration-status' })
         if (!host?.isConnected || host.shadowRoot !== root) return
         const state = globalThis.edulogConnectionUi.describe(result?.status)
-        featureUi.update(result?.status)
+        featureUi.update(result)
         status.textContent = `${state.label}：${state.detail}${result?.origin ? ` ${result.origin}` : ''}${result?.lastVerifiedAt ? ` 最近驗證：${new Date(result.lastVerifiedAt).toLocaleString()}` : ''}`
         diagnostics.hidden = !result?.diagnostic
         detail.textContent = result?.diagnostic ? [result.diagnostic.code, result.diagnostic.message, result.diagnostic.requestId ? `請求編號：${result.diagnostic.requestId}` : ''].filter(Boolean).join(' — ') : ''
@@ -171,16 +175,19 @@
   }
   function sync(force = true) {
     if (suspended || !initialized) return
+    if (failedPath && failedPath !== location.pathname) {
+      failedPath = null; enabled = boot?.preferred ?? enabled; showNotice('')
+    }
     observer.disconnect()
+    const active = document.activeElement
+    const nativeCursor = typeof active?.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null
+    const pageScroll = [window.scrollX, window.scrollY]
     try {
     if (!force && enabled && lastPath === location.pathname && enhancement?.isCurrent()) { enhancement.refresh(); syncDialog(); return }
-    const active = document.activeElement
     const search = active?.dataset.edulogSearch
     const cursor = search && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null
     const toolbarFocus = host?.shadowRoot.activeElement?.className
-    const nativeCursor = typeof active?.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null
     const scrolls = scrollState()
-    const pageScroll = [window.scrollX, window.scrollY]
     const keepToolbar = lastPath === location.pathname && host?.isConnected && host.dataset.enabled === String(enabled)
     teardown(enabled && lastPath === location.pathname && dialogEnhancement?.isCurrent?.(), keepToolbar)
     if (lastPath !== location.pathname) {
@@ -217,6 +224,21 @@
       if (element?.dataset.edulogScroll === saved.key) { element.scrollLeft = saved.left; element.scrollTop = saved.top }
     }
     if (window.scrollX !== pageScroll[0] || window.scrollY !== pageScroll[1]) window.scrollTo(...pageScroll)
+    } catch {
+      observer.disconnect()
+      failedPath = location.pathname
+      enabled = false
+      teardown()
+      boot?.mode(false)
+      boot?.release()
+      showNotice('本頁清晰主題暫時無法套用，已使用原站主題。可重新套用或重新整理。')
+      const page = adapter.matchPage(location.pathname)
+      if (page && document.body) toolbar(page)
+      if (active?.isConnected && active !== document.body) {
+        active.focus({ preventScroll: true })
+        if (nativeCursor) active.setSelectionRange(...nativeCursor)
+      }
+      if (window.scrollX !== pageScroll[0] || window.scrollY !== pageScroll[1]) window.scrollTo(...pageScroll)
     } finally { observer.observe(document.documentElement, { childList: true, subtree: true }) }
   }
   const frame = callback => typeof requestAnimationFrame === 'function' ? requestAnimationFrame(callback) : setTimeout(callback, 0)
@@ -270,6 +292,7 @@
   }
   document.addEventListener('turbo:visit', () => {
     navigation++
+    if (failedPath) { failedPath = null; showNotice('') }
     if (preferenceVisit !== null) { preferenceVisit = null; needsPreference = true; boot?.release() }
     if (initialized && boot) enabled = boot.preferred
     pending()
@@ -316,7 +339,7 @@
     showNotice('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。')
   })
   bridge.listen(data => {
-    if (data?.type === 'ui-preferences-changed') { revision++; enabled = data.enabled !== false; boot?.remember(enabled); sync() }
+    if (data?.type === 'ui-preferences-changed') { revision++; failedPath = null; showNotice(''); enabled = data.enabled !== false; boot?.remember(enabled); sync() }
   })
   // UI is independent of pairing and backend availability.
   const request = revision

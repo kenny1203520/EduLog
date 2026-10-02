@@ -8,7 +8,7 @@
     ], note: '只匯入目前帳號可見的教學資料，不包含額外聯絡、地址或證件資料。' },
     { id: 'prefill', title: '報告預填', summary: '將 EduLog 報告帶入支援網站的原生表單。', steps: [
       ['選擇目標學生與課次', '使用已匯入對應，或人工配對並記住結果。'],
-      ['選擇 EduLog 報告', '分辨草稿與已完成報告，確認學生和日期。'],
+      ['選擇 EduLog 報告', '查看報告完整性，確認學生和日期。課程完成狀況另行呈現。'],
       ['檢查欄位對照', '逐項確認出席、進度、評量、評語及內部紀錄；未知欄位不猜測。'],
       ['預填後人工送出', '你在原站檢查並送出；取得成功訊號與報告網址後才回寫紀錄。'],
     ], note: '預填不等於送出；無法確認網站成功時，會維持待確認狀態。' },
@@ -26,24 +26,38 @@
         const summary = doc.createElement('summary')
         const heading = doc.createElement('span'); heading.className = 'edulog-flow-heading'
         const title = doc.createElement('strong'); title.className = 'edulog-flow-title'; title.textContent = flow.title
-        const badge = doc.createElement('span'); badge.className = 'edulog-flow-state'; badge.textContent = '尚未開放'
+        const badge = doc.createElement('span'); badge.className = 'edulog-flow-state'; badge.textContent = '需要連線'
         heading.append(title, badge)
         const description = doc.createElement('span'); description.className = 'edulog-flow-description'; description.textContent = flow.summary
         const availability = doc.createElement('span'); availability.className = 'edulog-flow-availability'
-        const expand = doc.createElement('span'); expand.className = 'edulog-flow-expand'; expand.textContent = '查看規劃流程'
+        const expand = doc.createElement('span'); expand.className = 'edulog-flow-expand'; expand.textContent = '查看操作流程'
         summary.append(heading, description, availability, expand)
         const body = doc.createElement('div'); body.className = 'edulog-flow-body'
-        const disclaimer = doc.createElement('p'); disclaimer.textContent = '以下為規劃中的操作流程；目前版本不會讀取、匯入或預填教學資料。'
+        const disclaimer = doc.createElement('p'); disclaimer.textContent = '完整選擇、欄位對照及差異確認會在整合工作台完成。'
         const list = doc.createElement('ol')
         for (const [label, text] of flow.steps) {
           const item = doc.createElement('li'), name = doc.createElement('strong'), detail = doc.createElement('span')
           name.textContent = label; detail.textContent = text; item.append(name, detail); list.append(item)
         }
         const note = doc.createElement('p'); note.textContent = flow.note
-        body.append(disclaimer, list, note); details.append(summary, body); container.append(details)
+        const open = doc.createElement('button'); open.type = 'button'; open.textContent = `開啟${flow.title}`; open.dataset.flow = flow.id
+        open.addEventListener('click', async () => {
+          open.disabled = true
+          try { const result = await globalThis.edulogRuntime.send({ type: 'open-integration-workspace', flow: flow.id }); if (!result?.opened) throw new Error(result?.error?.message || '無法開啟整合工作台。') }
+          catch (error) { availability.textContent = error.message }
+          finally { open.disabled = false }
+        })
+        body.append(disclaimer, list, note, open); details.append(summary, body); container.append(details)
       }
-      return { update(status) {
-        for (const element of container.querySelectorAll('.edulog-flow-availability')) element.textContent = status === 'connected' ? 'EduLog 已連線，功能建置中。' : '功能建置中；開放後需先連線 EduLog。'
+      return { update(value) {
+        const status = typeof value === 'string' ? value : value?.status
+        for (const card of container.querySelectorAll('.edulog-flow')) {
+          const button = card.querySelector('button'), key = button.dataset.flow === 'import' ? 'teaching_data_import' : 'report_prefill'
+          const ready = status === 'connected' && value?.capabilities?.[key] === true
+          card.querySelector('.edulog-flow-state').textContent = ready ? '可開啟工作台' : status === 'connected' ? '伺服器尚未支援' : '需要連線'
+          card.querySelector('.edulog-flow-availability').textContent = ready ? button.dataset.flow === 'import' ? '目前班級匯入；未辨識資料會列為需處理。' : '已驗證欄位可預填；人工送出後維持待確認。' : status === 'connected' ? '請更新 EduLog API 與整合資料庫 migration。' : '先連接你的 EduLog，工作台會引導你完成配對。'
+          button.textContent = ready ? `開啟${button.dataset.flow === 'import' ? '教學資料匯入' : '報告預填'}` : '開啟整合工作台'
+        }
       } }
     },
   })

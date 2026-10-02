@@ -83,13 +83,19 @@
     const { mark, element, listen, move } = scope
     for (const button of content.querySelectorAll('.btn,button,input[type=submit],.nav-link')) mark(button, 'data-edulog-action', '')
     if (page.kind === 'hours') {
-      const form = [...content.querySelectorAll('form')].find(f => f.querySelector('select[name=year]') && f.querySelector('select[name=month]'))
+      const form = [...content.querySelectorAll('form')].find(f => ['year', 'month'].every(name => f.querySelector(`select[name=${name}]`)?.form === f))
       if (form) {
         mark(form, 'data-edulog-hours-filter', '')
         for (const [name, label] of [['year','年份'],['month','月份']]) {
           const input = form.querySelector(`select[name=${name}]`)
+          if (!input || input.form !== form || !form.contains(input)) throw new Error('Hours filter changed while applying the theme')
           mark(input, 'aria-label', label)
-          const wrapper = element('label', label); form.insertBefore(scope.add(wrapper), input); move(input, wrapper)
+          // Native inputs can be nested in Bootstrap columns or already labelled.
+          // Insert beside the actual input, without replacing it or nesting labels.
+          if (!input.labels?.length && !input.closest('label')) {
+            const wrapper = scope.add(element('label', label))
+            input.before(wrapper); move(input, wrapper)
+          }
         }
         const summary = region(scope, '', 'edulog-page-context')
         const year = form.querySelector('[name=year]').selectedOptions[0]?.textContent || ''

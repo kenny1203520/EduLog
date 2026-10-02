@@ -19,9 +19,9 @@
     features(capabilities = {}) {
       // Server capability alone cannot enable a feature without a form adapter.
       return [
-        { label: '教學資料匯入', serverEnabled: capabilities.teaching_data_import === true, available: false },
-        { label: '報告預填', serverEnabled: capabilities.report_prefill === true, available: false },
-      ].map(feature => ({ ...feature, detail: '目前版本尚未支援' }))
+        { label: '教學資料匯入', serverEnabled: capabilities.teaching_data_import === true, available: capabilities.teaching_data_import === true },
+        { label: '報告預填', serverEnabled: capabilities.report_prefill === true, available: capabilities.report_prefill === true },
+      ].map(feature => ({ ...feature, detail: feature.available ? '可在整合工作台操作；未驗證資料需人工處理' : '伺服器尚未支援' }))
     },
   })
 })()

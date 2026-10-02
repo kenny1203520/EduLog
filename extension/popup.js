@@ -4,6 +4,11 @@ const ui = id => document.getElementById(id)
 const STORAGE_KEY = 'edulogExtension'
 let settings = {}, connection = { status: 'checking' }, busy = false, editing = false, generation = 0, expirationTimer
 const featureUi = globalThis.edulogIntegrationUi.mount(ui('feature-list'))
+const workButton = document.createElement('button'); workButton.type = 'button'; workButton.textContent = '開啟工作紀錄'; ui('feature-list').append(workButton)
+workButton.addEventListener('click', async () => {
+  try { const result = await bridge.send({ type: 'open-integration-workspace', flow: 'work' }); if (!result?.opened) throw new Error(result?.error?.message || '無法開啟工作紀錄。') }
+  catch (error) { showError(error) }
+})
 let installation
 const installationReady = bridge.send({ type: 'get-edulog-installation' }).then(value => {
   if (!value?.installation_id) throw new Error('無法辨識瀏覽器安裝，請重新開啟擴充套件。')
@@ -65,7 +70,8 @@ function render() {
   ui('retry').disabled = busy
   ui('change').hidden = editing || !settings.origin || !['connected', 'unavailable', 'forbidden', 'pending'].includes(state)
   ui('change').disabled = busy
-  featureUi.update(state)
+  featureUi.update(connection)
+  workButton.hidden = state !== 'connected'
   ui('device-row').hidden = !connection.deviceName
   ui('device-value').textContent = connection.deviceName || ''
   ui('server-form').hidden = !editing && !['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(state)
@@ -85,12 +91,12 @@ function render() {
     expirationTimer = setTimeout(() => { connection = { ...connection, status: 'pairing-expired' }; render() }, Math.max(0, expires.getTime() - Date.now()))
   }
 }
-async function verify() {
+async function verify(force = false) {
   const current = ++generation
   connection = { ...connection, status: 'checking' }; notice(); diagnostic(null); render()
   try {
     const stored = await readSettings()
-    const result = await bridge.send({ type: 'get-edulog-integration-status' })
+    const result = await bridge.send({ type: 'get-edulog-integration-status', force })
     if (current !== generation) return
     if (result?.status === 'stale') { connection.status = 'unavailable'; render(); return }
     settings = stored
@@ -104,6 +110,9 @@ async function verify() {
     showError(error)
   }
   if (current === generation) render()
+  if (connection.status === 'connected') {
+    try { const summary = await bridge.send({ type: 'get-integration-work-summary' }); if (current === generation && summary?.count != null) workButton.textContent = summary.count ? `工作紀錄 · ${summary.count} 個未完成工作` : '開啟工作紀錄' } catch { /* Connection remains usable when the summary is temporarily unavailable. */ }
+  }
 }
 async function startPairing() {
   if (busy) return
@@ -149,7 +158,7 @@ async function finishPairing() {
 }
 ui('server-form').addEventListener('submit', event => { event.preventDefault(); void startPairing() })
 ui('finish').addEventListener('click', () => { void finishPairing() })
-ui('retry').addEventListener('click', () => { void verify() })
+ui('retry').addEventListener('click', () => { void verify(true) })
 ui('change').addEventListener('click', () => { editing = true; ui('instance').value = settings.origin || ''; notice(); render(); ui('instance').focus() })
 ui('cancel').addEventListener('click', () => { editing = false; ui('instance').value = settings.origin || ''; ui('device-name').value = connection.deviceName || installation?.device_name || ''; notice(); render() })
 ui('open-approval').addEventListener('click', async () => {
