@@ -13,6 +13,14 @@ function appWith(data: unknown, error: unknown = null) {
   return { app, rpc }
 }
 describe('workspace API contract', () => {
+  it('provides bounded readonly reconciliation without a transfer mutation route', async()=>{
+    const {app,rpc}=appWith({enrollment:{id},transfers:[],next_cursor:null})
+    const res=await request(app).get(`/api/extension/v1/enrollments/${id}/reconciliation?limit=50`).set('Authorization',`Bearer ${'a'.repeat(64)}`)
+    expect(res.status).toBe(200);expect(rpc.mock.calls[0][0]).toBe('web_extension_catalog');expect(rpc.mock.calls[0][1]).toMatchObject({p_operation:'reconcile',p_input:{enrollment_id:id,limit:50}})
+    expect((await request(app).get(`/api/extension/v1/enrollments/${id}/reconciliation?limit=51`)).status).toBe(400)
+    expect((await request(app).post(`/api/extension/v1/enrollments/${id}/transfers/class`).send({})).status).toBe(404)
+    expect((await request(app).get('/api/extension/v1/catalog?resource=enrollments&student_id='+id).set('Authorization',`Bearer ${'a'.repeat(64)}`)).status).toBe(200)
+  })
   it('supports per-admission courses, legacy jobs and bounded explicit memory confirmation', async()=>{
     const base={source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:id,class_session_id:id}
     expect(importJob.safeParse({...base,course_ids:[id]}).success).toBe(true)

@@ -65,6 +65,7 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   const reply = (req: Request, res: Response, data: unknown) => res.json({ data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
   router.get('/context', wrap(async (req, res) => reply(req, res, await run(req, 'context', { offset: z.coerce.number().int().min(0).max(100000).parse(req.query.offset ?? 0) }))))
   router.get('/catalog', wrap(async (req, res) => reply(req, res, await run(req, 'catalog', catalogQuery.parse(req.query), 'web_extension_catalog'))))
+  router.get('/enrollments/:id/reconciliation', wrap(async (req, res) => reply(req, res, await run(req, 'reconcile', { enrollment_id: uuid.parse(req.params.id), ...z.object({ cursor, limit: z.coerce.number().int().min(1).max(50).default(50) }).strict().parse(req.query) }, 'web_extension_catalog'))))
   router.post('/catalog/resolve', wrap(async (req, res) => reply(req, res, await run(req, 'resolve', catalogResolve.parse(req.body), 'web_extension_catalog'))))
   router.post('/catalog/confirm', wrap(async (req, res) => reply(req, res, await run(req, 'memory-confirm', memoryConfirmation.parse(req.body), 'web_extension_catalog'))))
   router.get('/reports', wrap(async (req, res) => {
