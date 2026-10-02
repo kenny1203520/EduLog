@@ -45,6 +45,15 @@ test('direct cell text is identifiable, duplicate evidence merges and action/con
   const evidence=JSON.stringify(s.records.map(r=>r.sourceEvidence));for(const word of ['秘密','帳號操作','完整紀錄','記錄操作','選單操作','備註按鈕'])assert.equal(evidence.includes(word),false,word)
   dom.window.close()
 })
+test('actual roster headers distinguish grade, per-admission courses and registration dates',()=>{
+  const html=`<div id="page-body"><div class="content"><h2>測試班</h2><table id="students-table"><tbody><tr><th>勾選</th><th>姓名</th><th>年級</th><th>課程</th><th>訂單狀態</th><th>報名時間</th></tr>
+  ${[['301','甲課程'],['302','乙課程']].map(([id,course])=>`<tr><td><input type="checkbox"></td><td>學生甲<a class="admission-comment" href="/admissions/comments/${id}/edit_teacher"></a><a href="/students/101/accounts">帳號</a></td><td>高二</td><td>${course}<div>未完成</div></td><td>已付款</td><td>2026/08/22 21:07<div>預計開課日期 2026/11/29</div></td></tr>`).join('')}
+  <tr><td></td><td>學生乙<a class="admission-comment" href="/admissions/comments/303/edit_teacher"></a></td><td>高二</td><td>丙課程</td><td>已付款</td><td><div>預計開課日期 2026/11/29</div></td></tr></tbody></table></div></div>`
+  const {api,doc,dom}=adapter(html),snapshot=api.extractClass(doc,'/courses/dt/11'),rows=snapshot.records.filter(r=>r.kind==='enrollment')
+  assert.deepEqual(Array.from(rows,r=>r.sourceCourseLabel),['甲課程','乙課程','丙課程']);assert.equal(snapshot.records.filter(r=>r.kind==='student').length,1)
+  assert.equal(rows[0].sourceGrade,'高二');assert.equal(rows[0].data.start_date,'2026-08-22');assert.equal(rows[0].data.status,undefined);assert.equal(rows[2].data.start_date,undefined)
+  assert.equal(rows[0].sourceEvidence[0].fields.find(f=>f.key==='course_name').label,'課程');assert.equal(snapshot.extractionVersion,2);dom.window.close()
+})
 test('prefill requires current form fingerprint, explicit overwrite and internal opt-in; never submits or confirms', async () => {
   const { api, doc, dom } = adapter(readFileSync(new URL('fixtures/report-modal.html', import.meta.url), 'utf8'))
   const target = await api.readForm(doc), form = doc.querySelector('form'), feedback = doc.querySelector('#lesson_report_feedback')

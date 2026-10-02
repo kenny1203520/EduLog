@@ -36,16 +36,18 @@ export function installWorkspaceBroker(getStatus) {
       ])
     } finally { clearTimeout(verificationTimer) }
     const operations = {
+      reconcile: ['GET', `/enrollments/${message.enrollmentId}/reconciliation`],
       context: ['GET', '/context'], catalog: ['GET', '/catalog'], resolve: ['POST', '/catalog/resolve'], confirm: ['POST', '/catalog/confirm'], reports: ['GET', '/reports'], work: ['GET', '/work'], map: ['POST', '/source-links'],
       job: ['POST', '/imports'], preview: ['POST', `/imports/${message.jobId}/preview`], apply: ['POST', `/imports/${message.jobId}/apply`],
       'job-status': ['PATCH', `/imports/${message.jobId}`], push: ['POST', '/report-pushes'],
     }
+    if (message.operation === 'reconcile' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || '')) fail('報名識別碼不正確。')
     if (!operations[message.operation] || (['preview', 'apply', 'job-status'].includes(message.operation) && !/^[a-f0-9-]{36}$/.test(message.jobId))) fail('工作操作不正確。')
     const [method, path] = operations[message.operation], url = new URL(`${bound.instance}/api/extension/v1${path}`)
     if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary'].includes(key) || String(value).length > 100) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
     const payload = method === 'GET' ? undefined : JSON.stringify(message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
-    const readOnly = ['context','catalog','resolve','reports','work'].includes(message.operation)
+    const readOnly = ['context','catalog','resolve','reports','work','reconcile'].includes(message.operation)
     if (readOnly && message.requestId && !/^[a-f0-9-]{36}$/i.test(message.requestId)) fail('查詢識別碼不正確。')
     const remaining = 30000 - (Date.now() - startedAt)
     if (remaining <= 0) { const error = new Error('連線驗證與 API 查詢超過 30 秒。'); error.code = 'API_TIMEOUT'; throw error }

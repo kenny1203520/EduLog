@@ -13,20 +13,31 @@ function mock() {
   const save=()=>{localStorage.setItem('syntheticMemories',JSON.stringify(memories));localStorage.setItem('syntheticLinks',JSON.stringify(links));localStorage.setItem('syntheticEnrollments',JSON.stringify(enrollments))}
   const catalog={classrooms:[{id:id(1),name:'教室',target_version:version}],courses:[{id:id(2),display_name:'課程 A',subject:'程式',stage:'初階',target_version:version},{id:id(12),display_name:'課程 B',subject:'程式',stage:'進階',target_version:version}],class_sessions:[{id:id(3),name:'同班多課程',classroom_id:id(1),course_ids:[id(2)],start_date:'2026-01-01',day_of_week:5,start_time:'09:00:00',end_time:'10:00:00',target_version:version}],students:[{id:id(4),name:'同名學生',target_version:version,relationships:[{class_name:'舊班甲',course_name:'課程 A'}]},{id:id(14),name:'同名學生',target_version:version,relationships:[{class_name:'舊班乙',course_name:'課程 B'}]}],enrollments,occurrences:[],report_targets:[]}
   const snapshot={sourceOrigin:origin,sourcePath:'/courses/dt/11',classId:'11',title:'同班多課程',issues:[],admissionPaths:[],records:[{kind:'student',source_id:'101',data:{name:'同名學生'}},{kind:'student',source_id:'102',data:{name:'同名學生'}},...[['301','101','課程 A'],['302','102','課程 A'],['303',null,new URL(location.href).searchParams.has('changed')?'來源已改課程':'課程 B'],['304','101','課程 B']].map(([source_id,student_source_id,sourceCourseLabel])=>({kind:'enrollment',source_id,student_source_id,sourceStudentName:'同名學生',sourceCourseLabel,data:{external_link:`${origin}/dt_admissions/${source_id}`}}))]}
+  if(new URL(location.href).searchParams.has('reconciliation')){
+    snapshot.records.push({kind:'report',source_id:'501',enrollment_source_id:'302',date:'2026-10-01',data:{content:'測試教學文字',external_link:`${origin}/dt_admissions/302/reports/501`}})
+    catalog.occurrences.push({id:id(52),class_session_id:id(3),occurrence_date:'2026-10-01'})
+    catalog.report_targets.push({id:id(53),enrollment_id:id(45),class_occurrence_id:id(52)})
+  }
   for(const r of snapshot.records.filter(r=>r.kind==='enrollment'))r.sourceEvidence=[{sourcePath:snapshot.sourcePath,table:'reports',row:Number(r.source_id)-300,capturedAt:'2026-10-02T00:00:00Z',fields:[{key:'student_name',label:'學生',text:r.sourceStudentName},{key:'course_name',label:'課程',text:r.sourceCourseLabel}]}]
   const upsert=(arr,row,key)=>{const i=arr.findIndex(r=>key(r)===key(row));if(i<0)arr.push(row);else arr[i]=row}
+  window.testCatalog=catalog;window.testSnapshot=snapshot;window.syntheticTransfers=[]
   window.testCalls=[];window.chrome={runtime:{sendMessage:async m=>{
     window.testCalls.push(m)
-    if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true}},tabs:[{id:10,title:'來源班級',path:snapshot.sourcePath}]}}
-    if(m.type==='workspace-source')return{data:m.action==='context'?{sourceOrigin:origin,sourcePath:snapshot.sourcePath,classId:'11',title:snapshot.title}:snapshot}
+    if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true,student_enrollment_catalog:true,enrollment_reconciliation:true}},tabs:[{id:10,title:'來源班級',path:snapshot.sourcePath}]}}
+    if(m.type==='workspace-source')return{data:m.action==='context'?{sourceOrigin:origin,sourcePath:snapshot.sourcePath,classId:'11',title:snapshot.title}:structuredClone(snapshot)}
     if(m.type==='workspace-store'){if(m.action==='list')return{data:[...store.values()]};if(m.action==='get')return{data:store.get(m.id)};const w=structuredClone(m.work);w.updatedAt=Date.now();store.set(w.id,w);return{data:w}}
     if(m.type==='workspace-check-source')return{data:{closed:false}}
     if(m.type==='workspace-api'){
       if(m.operation==='catalog'){
         if(m.query.resource==='students')await new Promise(resolve=>setTimeout(resolve,window.studentDelay||0))
+        if(m.query.resource==='enrollments'){
+          await new Promise(resolve=>setTimeout(resolve,window.enrollmentDelay||0));if(window.enrollmentFailure){window.enrollmentFailure=false;return{error:{code:'API_NETWORK_ERROR',message:'報名查詢失敗，請重試。'}}}
+          return{data:{items:catalog.enrollments.filter(e=>(!m.query.student_id||e.student_id===m.query.student_id)&&(!m.query.course_id||e.course_id===m.query.course_id)&&(!m.query.class_session_id||e.class_session_id===m.query.class_session_id)),next_cursor:null}}
+        }
         if(m.query.resource==='permissions')return{data:m.query.class_session_id?{session:{class_update:true,enrollment_create:true,student_create:true}}:{course_create:true,classroom:{class_create:true,student_create:true,enrollment_create:true}}}
         return{data:{items:catalog[m.query.resource]||[],next_cursor:null}}
       }
+      if(m.operation==='reconcile')return{data:{enrollment:catalog.enrollments.find(e=>e.id===m.enrollmentId),transfers:window.syntheticTransfers,next_cursor:null,note:'僅提供可讀取的單次調課紀錄；未推算转班歷史。'}}
       if(m.operation==='resolve'){
         const ls=links.filter(l=>m.body.source_refs.some(r=>r.source_kind===l.source_kind&&r.source_id===l.source_id))
         const ms=memories.filter(l=>m.body.memory_refs?.some(r=>r.kind===l.kind&&r.key===l.key)).map(l=>({...l,valid:!m.body.memory_refs?.find(r=>r.kind===l.kind&&r.key===l.key)?.source_identity||m.body.memory_refs.find(r=>r.kind===l.kind&&r.key===l.key).source_identity===l.source_identity,suggestion:l.kind==='course_rule'&&l.source_class_id!==m.body.source_class_id}))
@@ -55,7 +66,7 @@ try{
     try{for(const width of(process.argv.includes('--focused')?[390,1440]:[360,390,768,1024,1440,720])){
       const context=await browser.newContext({viewport:{width,height:900},deviceScaleFactor:width===720?2:1}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(mock)
       const collect=async()=>{await page.locator('#read-history').uncheck();await page.locator('#collect').click();await page.locator('#mapping').waitFor({state:'visible'})}
-      await page.goto(`${base}/workspace.html?source=10`);await collect()
+      await page.goto(`${base}/workspace.html?source=10${process.argv.includes('--reconciliation')?'&reconciliation=1':''}`);await collect()
       assert.equal(await page.evaluate(()=>testCalls.some(m=>m.operation==='context')),false)
       await page.locator('#classroom').selectOption(id(1));await page.locator('#class-session').selectOption(id(3));await page.locator('#remember-destination').click();await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已保存'))
       const choose=async(section,index)=>{
@@ -64,6 +75,52 @@ try{
         await page.locator('#mapping-filter').selectOption('all')
         await page.locator('#mapping-items button:visible').nth(index).click()
         await page.waitForFunction(()=>!document.querySelector('#mapping-editor-pane [aria-busy="true"]'))
+      }
+      if(process.argv.includes('--reconciliation')) {
+        await page.evaluate(()=>{
+          const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,c=window.testCatalog
+          c.class_sessions[0].day_of_week=6
+          c.class_sessions.push({...c.class_sessions[0],id:id(23),day_of_week:0,start_time:'14:00:00',end_time:'16:00:00'})
+          c.enrollments.push({id:id(44),student_id:id(4),course_id:id(2),class_session_id:id(23),start_date:'2026-01-01',status:'regular',course_name:'課程 A',class_session:c.class_sessions[1]}, {id:id(45),student_id:id(14),course_id:id(2),class_session_id:id(3),start_date:'2026-01-01',status:'regular',class_session:c.class_sessions[0]})
+        })
+        await page.locator('#classroom').selectOption(id(1));await page.locator('#class-session').selectOption(id(3))
+        assert.match(await page.locator('#class-session option:checked').textContent(),/週六 09:00–10:00/)
+        assert.match(await page.locator(`#class-session option[value="${id(23)}"]`).textContent(),/週日 14:00–16:00/)
+        await choose('admissions',0);await page.locator('#student-101').selectOption(id(4));await page.locator('#enrollment-course-301').selectOption(id(2))
+        const row=page.locator('.mapping-row:visible'),query=page.locator('#more-enrollments-301')
+        await page.evaluate(()=>window.enrollmentFailure=true);await query.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await page.locator('#enrollment-status-301').textContent(),/查詢失敗/)
+        await query.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
+        assert.match(await row.locator('.enrollment-results').textContent(),/班級不一致/);assert.match(await row.locator('.enrollment-results').textContent(),/週日 14:00–16:00/)
+        assert.equal(await row.getByRole('button',{name:'使用符合的既有報名',exact:true}).count(),0)
+        const crossQuery=await page.evaluate(()=>testCalls.filter(m=>m.operation==='catalog'&&m.query.student_id).at(-1).query);assert.equal(crossQuery.class_session_id,undefined);assert.equal(crossQuery.course_id,undefined)
+        assert.equal(await page.locator('#class-session').inputValue(),id(3),'an individual mismatch never changes the work class')
+        assert.equal(await row.getByRole('link',{name:'前往 EduLog 核對／處理異動（新分頁）'}).getAttribute('href'),`https://web.example:8443/edulog/dashboard/reports/${id(44)}`)
+        await row.getByRole('button',{name:'核對此報名的調課紀錄',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.enrollment-results').textContent(),/不能據此判定未曾轉班/)
+        await page.locator('#mapping-workbench').scrollIntoViewIfNeeded();await page.locator('#mapping-editor-pane').evaluate(n=>n.scrollTop=0)
+        await page.screenshot({path:new URL(`${name}-${width}-enrollment-review.png`,output).pathname.replace(/^\//,'')})
+        await page.locator('#enrollment-301').selectOption('new');await row.locator('.mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/勾選確認/)
+        // Synthetic mutation represents a user finishing the transfer in EduLog.
+        await page.evaluate(()=>{testCatalog.enrollments[0].class_session_id=testCatalog.class_sessions[0].id;testCatalog.enrollments[0].class_session=testCatalog.class_sessions[0]})
+        await row.getByRole('button',{name:'重新核對此筆',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
+        await row.getByRole('button',{name:'使用符合的既有報名',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.equal(await page.locator('#enrollment-301').inputValue(),id(44))
+        await row.locator('.mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已記住/)
+        await row.locator('.mapping-more>summary').click();await row.getByRole('button',{name:'保留 EduLog 並略過此筆',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('[data-row-state]').textContent(),/已略過/)
+        await choose('admissions',1);await page.locator('#student-102').selectOption(id(14));await page.locator('#enrollment-course-302').selectOption(id(2));await page.locator('#more-enrollments-302').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
+        await page.locator('.mapping-row:visible').getByRole('button',{name:'使用符合的既有報名',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));await page.locator('.mapping-row:visible .mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
+        await page.evaluate(()=>testSnapshot.records.find(r=>r.kind==='enrollment'&&r.source_id==='301').student_source_id=null)
+        await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
+        await choose('admissions',0);assert.match(await page.locator('.mapping-row:visible').textContent(),/無學生 ID/)
+        await choose('admissions',1);assert.equal(await page.locator('#student-102').inputValue(),id(14),'source reread preserves unaffected choices')
+        await page.locator('.report-mapping-section>summary').click()
+        await page.locator('#occurrence-2026-10-01').selectOption(id(52));await page.locator('#more-reports-501').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
+        await page.locator('#report-501').selectOption(id(53))
+        await page.evaluate(()=>{const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;syntheticTransfers.push({source_occurrence_id:id(52),source_date:'2026-10-01',source_class_session_id:id(3),target_occurrence_id:id(54),target_date:'2026-10-02',target_class_session_id:id(23),is_effective_target:true})})
+        await page.locator('#preview').click();await page.locator('#preview-section').waitFor({state:'visible'})
+        const written=await page.evaluate(()=>testCalls.find(m=>m.operation==='preview').body.rows);assert.equal(written.some(r=>r.source_id==='301'),false);assert.equal(written.some(r=>r.source_id==='302'),true);assert.equal(written.some(r=>r.source_id==='501'),false,'a transferred source lesson is not imported even with a remembered enrollment')
+        assert.equal(await page.evaluate(()=>testCalls.some(m=>m.operation?.includes('transfer'))),false)
+        assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[])
+        await page.screenshot({path:new URL(`${name}-${width}-reconciliation.png`,output).pathname.replace(/^\//,'')})
+        console.log(`PASS ${name} ${width}: cross-class results, weekend identity, error/retry, external correction/recheck, no duplicate default, per-row skip and no transfer writes`);await context.close();continue
       }
       for(const [i,target]of[[0,id(2)],[1,id(12)]]){
         await choose('courses',i);await page.locator(`#source-course-${i}`).selectOption(target)
@@ -83,7 +140,7 @@ try{
         const row=page.locator('.mapping-row').filter({has:page.locator(`#enrollment-${admission}`)})
         if(width===390&&index===0){await page.evaluate(()=>window.studentDelay=700);const search=page.locator(`#student-search-${admission}`);await search.focus();await search.fill('先查詢');await page.waitForFunction(()=>document.querySelector('.mapping-row[aria-busy]'));assert.equal(await search.isDisabled(),false);await search.fill('同名學生');assert.equal(await search.evaluate(n=>document.activeElement===n),true);await page.waitForFunction(()=>testCalls.filter(m=>m.operation==='catalog'&&m.query.search==='同名學生').length>=2&&!document.querySelector('.mapping-row[aria-busy]'));assert.equal(await search.inputValue(),'同名學生');await page.evaluate(()=>window.studentDelay=0)}
         if(admission==='303')assert.equal(await page.locator(`#${studentControl} option[value=new]`).count(),0)
-        await page.locator(`#${studentControl}`).selectOption(target);await page.locator(`#enrollment-${admission}`).selectOption('new');await page.locator(`#start-${admission}`).fill('2026-01-01');await page.locator(`#status-${admission}`).selectOption('regular')
+        await page.locator(`#${studentControl}`).selectOption(target);if(await page.locator(`#more-enrollments-${admission}`).isEnabled())await page.locator(`#more-enrollments-${admission}`).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));await page.locator(`#enrollment-${admission}`).selectOption('new');await page.locator(`#review-${admission}`).check();await page.locator(`#start-${admission}`).fill('2026-01-01');await page.locator(`#status-${admission}`).selectOption('regular')
         const link=row.getByRole('link',{name:'查看 EduLog 學生（新分頁）'});assert.equal(await link.getAttribute('href'),`https://web.example:8443/edulog/dashboard/student/${target}`);assert.equal(await link.getAttribute('rel'),'noopener noreferrer')
         assert.equal(await row.getByRole('link',{name:'查看原站報名（新分頁）'}).getAttribute('href'),`https://corp.orangeapple.co/dt_admissions/${admission}`)
         await row.locator('.source-evidence>summary').click();assert.match(await row.locator('.source-evidence').textContent(),/同名學生/);await row.locator('.source-evidence>summary').click()

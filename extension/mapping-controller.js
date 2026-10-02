@@ -1,5 +1,5 @@
 import { createMappingView, evidenceDetails } from './mapping-view.js'
-import { enrollmentLabel, enrollmentStatuses, mergeEvidence, sourceUrl } from './mapping-presentation.js'
+import { enrollmentLabel, enrollmentStatuses, mergeEvidence, sourceUrl, frontendUrl, scheduleLabel, sessionLabel, enrollmentDifferences, legacyCourse, reportMatchesReconciliation } from './mapping-presentation.js'
 import { courseIdentity, admissionIdentity, groupCourses, rankCandidates } from './mapping-core.js'
 const $ = id => document.getElementById(id)
 const el = (tag,text,cls) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls; return n }
@@ -11,6 +11,11 @@ export function createMappingController(hooks) {
   const api=guard(hooks.api),catalog=guard(hooks.catalog)
   let groups=[],memories=[],cards=new Map(),confirmed=new Map(),courseConfirmed=new Map(),studentIds=new Map(),cursors=new Map(),candidates=new Map(),enrollmentCursors=new Map(),reportCursors=new Map()
   let mounting=false, localPanel=null, courseOverrides=new Set()
+  const reconciliationChecks=new Map(), querySequences=new Map()
+  const capable=()=>hooks.capabilities?.()?.student_enrollment_catalog === true
+  const skipped=r=>work().skippedAdmissions?.includes(r.source_id)
+  const rowKey=r=>`${studentSelect(r)?.value}:${$(`enrollment-course-${r.source_id}`)?.value}:${$('class-session').value}:${admissionIdentity(r)}`
+  function feedbackFor(panel,b){return b?.dataset.enrollmentAction ? panel.querySelector('[data-enrollment-status]') : panel.querySelector('.mapping-feedback')}
   const view=createMappingView({work,context:ctx,settingsUrl:()=>hooks.settingsUrl?.(),changed:dirty,queryStudent:r=>{
     const originalWork=work(),panel=cards.get(r.source_id)
     const query=()=>{if(work()!==originalWork||!panel?.isConnected||panel.hidden||candidates.get(r.source_id)?.length)return;if(localPanel){setTimeout(query,300);return}void localTask(()=>studentPage(r,true),panel.querySelector('[data-query-student]'))}
@@ -32,7 +37,7 @@ export function createMappingController(hooks) {
     const panel=b?.closest('.course-group,.mapping-row')
     if(!panel)return run(action,{label:'正在查詢對應資料'})
     if(localPanel){const feedback=panel.querySelector('.mapping-feedback');if(panel!==localPanel&&feedback){feedback.dataset.state='loading';feedback.textContent='另一筆對應正在處理，完成後可再操作此項目。'}return}
-    const activeWork=work(),n=panel.querySelector('.mapping-feedback'),original=b.textContent,writing=/^(確認|清除)/.test(original)
+    const activeWork=work(),n=feedbackFor(panel,b),original=b.textContent,writing=/^(確認|清除)/.test(original)
     localPanel=panel;panel.setAttribute('aria-busy','true');b.setAttribute('aria-disabled','true');b.textContent=/^確認/.test(original)?'正在保存…':'正在處理…'
     const peers=[...document.querySelectorAll('.mapping-row')].filter(p=>panel.classList.contains('course-group')&&p.dataset.courseKey===panel.dataset.courseKey||panel.dataset.studentKey&&p.dataset.studentKey===panel.dataset.studentKey)
     const locked=writing?[...new Set([...panel.querySelectorAll('input,select,textarea'),...peers.flatMap(p=>[...p.querySelectorAll('input,select,textarea')]),...['classroom','class-session','source-tab','collect','preview','repreview','reload-memories','reread-source','remember-destination','forget-session','forget-classroom'].map($)])].filter(Boolean).map(node=>[node,node.disabled]):[];locked.forEach(([node])=>node.disabled=true)
@@ -40,7 +45,7 @@ export function createMappingController(hooks) {
     const timer=setTimeout(()=>{if(n)n.textContent='回應較慢，仍在等待 EduLog。請保留目前工作。'},10000)
     try {await action();if(activeWork===work()&&n?.dataset.state==='loading'){n.dataset.state='complete';n.textContent='操作完成；目前選擇已保留。'}}
     catch(error){if(activeWork===work()){const unknown=['API_TIMEOUT','API_NETWORK_ERROR'].includes(error.code)&&/^確認/.test(original);if(unknown)panel.dataset.saveUnknown='true';if(n){n.dataset.state=unknown?'unknown':'error';n.textContent=unknown?'保存結果尚未確認。請使用「重新檢查對應記憶」核對，勿重複保存。':error.message}panel.dataset.failed='true'}}
-    finally {clearTimeout(timer);locked.forEach(([node,disabled])=>{if(node.isConnected)node.disabled=disabled});b.removeAttribute('aria-disabled');b.textContent=original;panel.removeAttribute('aria-busy');localPanel=null;if(activeWork===work())view.refresh()}
+    finally {clearTimeout(timer);locked.forEach(([node,disabled])=>{if(node.isConnected)node.disabled=disabled});b.removeAttribute('aria-disabled');b.textContent=original;panel.removeAttribute('aria-busy');localPanel=null;if(activeWork===work()){update();view.refresh()}}
   }
   function button(parent,label,action) {const b=el('button',label);b.type='button';b.dataset.originalLabel=label;b.addEventListener('click',()=>void localTask(action,b));parent.append(b);return b}
   function dirty() { $('mapping').dispatchEvent(new Event('input',{bubbles:true})) }
@@ -69,11 +74,11 @@ export function createMappingController(hooks) {
     for(const r of work().snapshot.records.filter(r=>r.kind==='enrollment')) {
       const card=cards.get(r.source_id);if(!card)continue
       const memo=memory('admission',r.source_id),student=studentSelect(r)?.value,course=$(`enrollment-course-${r.source_id}`)?.value
-      const invalid=memo?.valid===false
+      const invalid=memo?.valid===false||legacyCourse(r,work().snapshot)||r.sourceIdentityChanged
       const kept=confirmed.get(r.source_id)===signature(r)&&student&&course&&$('class-session').value
-      const status=invalid&&!kept?'invalid':kept?'remembered':link('student',r.student_source_id)?.reason==='external_link'||link('enrollment',r.source_id)?.reason==='external_link'?'identity':!r.sourceStudentName||courseIdentity(r).startsWith('missing:')?'missing':'pending'
-      card.dataset.state=status;count[status]++
-      const text={remembered:'已記住並核對目前關係',identity:'原站連結一致；請確認此報名的學生與課程',pending:'待確認；名稱相同仍需人工核對',missing:'需補資料；請核對原站學生與課程',invalid:'對應已失效或來源課程已改變；請重新確認'}[status]
+      const status=skipped(r)?'skipped':invalid&&!kept?'invalid':kept?'remembered':link('student',r.student_source_id)?.reason==='external_link'||link('enrollment',r.source_id)?.reason==='external_link'?'identity':!r.sourceStudentName||courseIdentity(r).startsWith('missing:')?'missing':'pending'
+      card.dataset.state=status;if(status in count)count[status]++
+      const text={skipped:'保留 EduLog；此筆與相關報告已略過',remembered:'已記住並核對目前關係',identity:'原站連結一致；請確認此報名的學生與課程',pending:'待確認；名稱相同仍需人工核對',missing:'需補資料；請核對原站學生與課程',invalid:'對應已失效或來源課程已改變；請補讀或重新核對'}[status]
       card.querySelector('[data-row-state]').textContent=text
     }
     $('mapping-summary').textContent=`已沿用 ${count.remembered} · 可靠識別 ${count.identity} · 待確認 ${count.pending} · 需補資料 ${count.missing} · 失效 ${count.invalid}`
@@ -110,6 +115,7 @@ export function createMappingController(hooks) {
     })
   }
   async function confirmCourse(g) {
+    if(g.rows.some(r=>legacyCourse(r,work().snapshot)))throw new Error('舊工作可能把年級當成課程，請先補讀來源資料。')
     const target=selectedCourse(g);if(!target||$(`source-course-${groups.indexOf(g)}`).value==='new')throw new Error('新建課程會於匯入交易完成時記住；請先補齊新課程欄位。')
     const kind=g.sourceId?'course':'course_rule',key=g.sourceId||g.key
     if(g.key.startsWith('missing:'))throw new Error('原站課程未辨識，不能保存名稱規則；請先補齊可靠來源資料。')
@@ -123,10 +129,11 @@ export function createMappingController(hooks) {
   async function confirmRow(row) {
     const student=studentSelect(row).value,course=$(`enrollment-course-${row.source_id}`).value,enrollment=$(`enrollment-${row.source_id}`).value,session=$('class-session').value
     if(!student||!course||!session)throw new Error('請先選擇此報名的學生、課程及目標班級。')
+    assertReconciled(row)
     if(student==='new'||session==='new'||courseRows().some(r=>r.target_id===course))throw new Error('新建資料的記憶會與匯入同交易保存；請先檢查差異。')
     const items=[{kind:'admission',key:row.source_id,source_identity:admissionIdentity(row),student_id:student,course_id:course,class_session_id:session,...(enrollment&&enrollment!=='new'?{target_id:enrollment}:{}),expected_revision:revision('admission',row.source_id)}]
     if(row.student_source_id)items.push({kind:'student',key:row.student_source_id,target_id:student,expected_revision:revision('student',row.student_source_id)})
-    await confirm(items);confirmed.set(row.source_id,signature(row));cards.get(row.source_id).open=true;summary();dirty()
+    await confirm(items);row.sourceIdentityChanged=false;work().skippedAdmissions=(work().skippedAdmissions||[]).filter(id=>id!==row.source_id);confirmed.set(row.source_id,signature(row));cards.get(row.source_id).open=true;summary();dirty()
     notice('已記住此報名；來源與目標關係已核對。')
   }
   async function destination() {
@@ -134,7 +141,7 @@ export function createMappingController(hooks) {
     if(!room){ctx().class_sessions=[];return}
     ctx().permissions=await catalog('permissions',{classroom_id:room})
     const page=await catalog('class_sessions',{classroom_id:room});ctx().class_sessions=[...new Map([...ctx().class_sessions.filter(s=>s.classroom_id===room),...page.items||[]].map(s=>[s.id,s])).values()]
-    fill($('class-session'),ctx().class_sessions,s=>s.name,'選擇目標班級',ctx().permissions.classroom?.class_create?'建立新班級…':null)
+    fill($('class-session'),ctx().class_sessions,sessionLabel,'選擇目標班級',ctx().permissions.classroom?.class_create?'建立新班級…':null)
     if([...$('class-session').options].some(o=>o.value===previous))$('class-session').value=previous
     $('more-sessions').hidden=!page.next_cursor;$('more-sessions').dataset.cursor=page.next_cursor||''
     await hooks.loadMappingCourses(true);refreshCourses();$('new-session').hidden=$('class-session').value!=='new'
@@ -147,6 +154,7 @@ export function createMappingController(hooks) {
     update()
   }
   async function scoped() {
+    reconciliationChecks.clear();enrollmentCursors.clear()
     const session=$('class-session').value
     if(!session||session==='new'){ctx().enrollments=[];ctx().occurrences=[];ctx().report_targets=[];update();return}
     const p=await catalog('permissions',{class_session_id:session});ctx().permissions.session=p.session
@@ -167,14 +175,77 @@ export function createMappingController(hooks) {
     fill(s,rankCandidates(candidates.get(key),row.sourceStudentName),c=>`${c.name} · #${c.id.slice(0,8)}`,'略過此報名的學生',row.student_source_id&&createAllowed('student')?'建立獨立學生':null)
     update()
   }
-  async function enrollmentPage(row) {
+  function assertReconciled(row) {
+    if(skipped(row))throw new Error('此筆已略過；請先恢復對應。')
+    if(legacyCourse(row,work().snapshot))throw new Error('此工作可能把年級當成課程，請先補讀來源資料。')
+    if((row.sourceCourseConflict||row.sourceIdentityChanged)&&!$(`review-${row.source_id}`)?.checked)throw new Error('來源課程或身份有差異，請核對原文並勾選確認。')
+    const value=$(`enrollment-${row.source_id}`).value,student=studentSelect(row).value,course=$(`enrollment-course-${row.source_id}`).value,session=$('class-session').value
+    const target=ctx().enrollments.find(e=>e.id===value)
+    if(target&&enrollmentDifferences(target,{student,course,session}).length)throw new Error('既有報名的學生、班級或課程不一致。請前往 EduLog 核對異動，再重新核對此筆，或略過。')
+    if(value&&value!=='new'&&!target)throw new Error('既有報名資料未核對，請重新查詢。')
+    if(value==='new') {
+      if(student!=='new'&&!capable())throw new Error('請升級 EduLog 至 1000121，以查詢學生所有可讀取報名，避免重複建立。')
+      if(student!=='new'&&(!reconciliationChecks.has(student)||enrollmentCursors.get(student)!==''))throw new Error('請先查完此學生的既有報名，再確認是否需要新建。')
+      if(ctx().enrollments.some(e=>e.student_id===student&&e.class_session_id===session&&e.course_id===course))throw new Error('已有符合的報名，請選用既有報名。')
+      if(!$(`review-${row.source_id}`)?.checked)throw new Error('請核對兩邊資料並勾選確認需要建立獨立報名。')
+    }
+  }
+  function enrollmentLink(parent,label,id) {
+    const url=frontendUrl(hooks.settingsUrl?.(),`/dashboard/reports/${id}`)
+    if(!url){parent.append(el('p','尚未取得可靠前端網址，請重新檢查連線。','hint'));return}
+    const a=el('a',`${label} ↗`,'mapping-link');a.href=url;a.target='_blank';a.rel='noopener noreferrer';a.setAttribute('aria-label',`${label}（新分頁）`);parent.append(a)
+  }
+  function renderEnrollmentCandidates(row) {
+    const box=$(`enrollment-results-${row.source_id}`);if(!box)return
+    const student=studentSelect(row).value,course=$(`enrollment-course-${row.source_id}`).value,session=$('class-session').value
+    const rows=ctx().enrollments.filter(e=>e.student_id===student).sort((a,b)=>enrollmentDifferences(a,{student,course,session}).length-enrollmentDifferences(b,{student,course,session}).length||a.id.localeCompare(b.id))
+    const key=JSON.stringify([student,course,session,rows,work().reconciliation?.[row.source_id]])
+    if(box.dataset.signature===key)return
+    const active=document.activeElement,activeId=box.contains(active)?active.id:null
+    box.dataset.signature=key;box.replaceChildren()
+    for(const e of rows) {
+      const differences=enrollmentDifferences(e,{student,course,session}),card=el('section',undefined,'enrollment-candidate')
+      card.append(el('strong',`${e.course_name||ctx().courses.find(c=>c.id===e.course_id)?.display_name||'課程資料未提供'} · ${enrollmentLabel(e)}`),el('p',e.class_session?sessionLabel(e.class_session):`班級 #${e.class_session_id.slice(0,8)} · 時段待核對`,'hint'),el('p',differences.length?`${differences.join('、')}；尚無法確認原因，請核對轉班、單次調課或登記差異。`:'符合目前學生、班級與課程。',differences.length?'mapping-warning':'hint'))
+      enrollmentLink(card,'前往 EduLog 核對／處理異動',e.id)
+      const details=work().reconciliation?.[row.source_id]?.[e.id]
+      if(details) {
+        card.append(el('p',details.note||'以下為可讀取的單次調課紀錄。','hint'))
+        for(const t of details.transfers||[])card.append(el('p',`${t.cancelled_at?'已取消':t.is_effective_target?'目前有效的單次調課':'後續已有調課'}：${t.source_class_session?.name||'來源班級'} ${t.source_date} → ${t.target_class_session?.name||'目標班級'} ${t.target_date}`,'hint'))
+        if(!(details.transfers||[]).length)card.append(el('p','沒有可讀取的單次調課紀錄；不能據此判定未曾轉班。','hint'))
+      }
+      if(!differences.length){const use=button(card,'使用符合的既有報名',()=>{const choice=$(`enrollment-${row.source_id}`);choice.value=e.id;choice.dispatchEvent(new Event('change',{bubbles:true}));notice('已選用符合的既有報名，請核對並確認此筆。')});use.dataset.enrollmentAction='true';use.id=`use-${row.source_id}-${e.id}`}
+      if(hooks.capabilities?.()?.enrollment_reconciliation){const check=button(card,details?.next_cursor?'載入更多調課紀錄':'核對此報名的調課紀錄',()=>reconcileEnrollment(row,e.id,Boolean(details?.next_cursor)));check.dataset.enrollmentAction='true';check.id=`reconcile-${row.source_id}-${e.id}`}
+      box.append(card)
+    }
+    if(activeId)$(activeId)?.focus({preventScroll:true})
+  }
+  async function reconcileEnrollment(row,enrollmentId,more=false) {
+    const key=rowKey(row),sequence=(querySequences.get(row.source_id)||0)+1;querySequences.set(row.source_id,sequence)
+    const previous=work().reconciliation?.[row.source_id]?.[enrollmentId]
+    const p=await api('reconcile',undefined,{enrollmentId,query:{limit:50,...(more&&previous?.next_cursor?{cursor:previous.next_cursor}:{})}})
+    if(key!==rowKey(row)||sequence!==querySequences.get(row.source_id))return
+    ctx().enrollments=[...ctx().enrollments.filter(e=>e.id!==enrollmentId),p.enrollment]
+    work().reconciliation||={};work().reconciliation[row.source_id]||={};work().reconciliation[row.source_id][enrollmentId]={...p,transfers:more?[...previous.transfers,...p.transfers]:p.transfers}
+    confirmed.delete(row.source_id);update();summary();dirty();const n=$(`enrollment-status-${row.source_id}`);n.textContent='已重新讀取目前報名與可讀取的調課紀錄，請核對差異。';n.dataset.state='complete'
+  }
+  async function enrollmentPage(row,reset=false) {
     const student=studentSelect(row)?.value,course=$(`enrollment-course-${row.source_id}`)?.value,session=$('class-session').value
-    if(!student||student==='new'||!course||!session||session==='new')throw new Error('請先選擇既有學生、課程與班級，再查詢既有報名。')
-    const key=`${session}:${student}:${course}`,p=await catalog('enrollments',{class_session_id:session,student_id:student,course_id:course,cursor:enrollmentCursors.get(key)||undefined})
-    enrollmentCursors.set(key,p.next_cursor||'');ctx().enrollments=[...new Map([...ctx().enrollments,...p.items||[]].map(e=>[e.id,e])).values()];update();notice(p.items?.length?`已載入 ${p.items.length} 筆既有報名${p.next_cursor?'；可再次載入更多':'，已到清單結尾'}。`:'此學生與課程沒有更多可讀取的報名。')
+    if(!student||student==='new')throw new Error('請先選擇既有學生，再查詢既有報名。')
+    if(!capable()&&(!course||!session||session==='new'))throw new Error('伺服器尚未支援學生跨班查詢；請升級至 1000121。')
+    const key=capable()?student:`${session}:${student}:${course}`,selection=rowKey(row),sequence=(querySequences.get(row.source_id)||0)+1;querySequences.set(row.source_id,sequence)
+    if(reset)enrollmentCursors.delete(key)
+    const p=await catalog('enrollments',{student_id:student,...(capable()?{}:{class_session_id:session,course_id:course}),cursor:enrollmentCursors.get(key)||undefined})
+    if(selection!==rowKey(row)||sequence!==querySequences.get(row.source_id))return
+    enrollmentCursors.set(key,p.next_cursor||'');ctx().enrollments=[...new Map([...(reset?ctx().enrollments.filter(e=>e.student_id!==student):ctx().enrollments),...p.items||[]].map(e=>[e.id,e])).values()];reconciliationChecks.set(student,true);update();summary();dirty()
+    const n=$(`enrollment-status-${row.source_id}`),total=ctx().enrollments.filter(e=>e.student_id===student).length
+    n.textContent=capable()?`已讀取 ${total} 筆可存取報名${p.next_cursor?'；可載入更多':'，已到清單結尾'}。${total?'請核對班級、課程與異動情況。':'沒有可讀取的報名，不代表其他權限範圍沒有資料。'}`:'目前班級／課程查詢完成；跨班查詢與異動核對需要升級 EduLog 至 1000121。';n.dataset.state='complete'
   }
   function update() {
     if(!work()?.snapshot)return
+    const session=ctx().class_sessions.find(s=>s.id===$('class-session').value)
+    let sessionInfo=$('session-selection-info')
+    if(!sessionInfo){sessionInfo=el('div',undefined,'session-selection-info');sessionInfo.id='session-selection-info';$('class-session').after(sessionInfo)}
+    const sessionKey=JSON.stringify(session)+hooks.settingsUrl?.();if(sessionInfo.dataset.signature!==sessionKey){sessionInfo.dataset.signature=sessionKey;sessionInfo.replaceChildren();if(session){sessionInfo.append(el('p',`${session.name} · ${scheduleLabel(session)} · ${session.time_zone||'時區未提供'}`,'hint'));const url=frontendUrl(hooks.settingsUrl?.(),`/dashboard/classrooms/session/${session.id}`);if(url){const a=el('a','查看 EduLog 班級 ↗','mapping-link');a.href=url;a.target='_blank';a.rel='noopener noreferrer';sessionInfo.append(a)}}}
     for(const r of work().snapshot.records.filter(r=>r.kind==='enrollment')) {
       const student=studentSelect(r);if(!student)continue
       fill(student,candidates.get(r.source_id)||[],c=>`${c.name} · #${c.id.slice(0,8)}`,'略過此報名的學生',r.student_source_id&&createAllowed('student')?'建立獨立學生':null)
@@ -185,14 +256,20 @@ export function createMappingController(hooks) {
       if(!oldCourse&&target)course.value=target
       const enrollment=$(`enrollment-${r.source_id}`),saved=memory('admission',r.source_id)
       const matches=ctx().enrollments.filter(e=>e.student_id===student.value&&e.course_id===course.value&&e.class_session_id===$('class-session').value)
-      fill(enrollment,matches,enrollmentLabel,'略過此報名',createAllowed('enrollment')?'建立新報名':null)
+      const retained=ctx().enrollments.find(e=>e.id===(enrollment.value||saved?.target_id||link('enrollment',r.source_id)?.target_id))
+      const options=retained&&!matches.some(e=>e.id===retained.id)?[...matches,retained]:matches
+      fill(enrollment,options,e=>`${enrollmentDifferences(e,{student:student.value,course:course.value,session:$('class-session').value}).length?'差異待核對 · ':''}${enrollmentLabel(e)}`,'請選擇既有報名或明確新建',createAllowed('enrollment')?'建立新報名（需核對）':null)
       const existing=ctx().enrollments.find(e=>e.id===enrollment.value)
-      const more=$(`more-enrollments-${r.source_id}`),queryKey=`${$('class-session').value}:${student.value}:${course.value}`
-      if(more){more.disabled=enrollmentCursors.has(queryKey)&&!enrollmentCursors.get(queryKey);more.textContent=more.disabled?'既有報名已載入完畢':'查詢既有報名／載入更多'}
+      const more=$(`more-enrollments-${r.source_id}`),queryKey=capable()?student.value:`${$('class-session').value}:${student.value}:${course.value}`
+      if(more&&!more.hasAttribute('aria-disabled')){more.disabled=!student.value||student.value==='new'||enrollmentCursors.has(queryKey)&&!enrollmentCursors.get(queryKey);more.textContent=enrollmentCursors.has(queryKey)?enrollmentCursors.get(queryKey)?'載入更多既有報名':'既有報名已查詢完畢':'查詢既有報名'}
       if(existing&&enrollment.dataset.lastSelected!==existing.id){$(`start-${r.source_id}`).value=existing.start_date||'';$(`status-${r.source_id}`).value=existing.status||'';enrollment.dataset.lastSelected=existing.id}
       if(saved?.valid&&saved.class_session_id===$('class-session').value&&saved.student_id===student.value&&saved.course_id===course.value&&!enrollment.value) {
         if(saved.target_id)enrollment.value=saved.target_id
       }
+      const error=$(`mapping-error-${r.source_id}`),differences=existing?enrollmentDifferences(existing,{student:student.value,course:course.value,session:$('class-session').value}):[]
+      if(differences.length||legacyCourse(r,work().snapshot)||r.sourceIdentityChanged){confirmed.delete(r.source_id);if(error){error.dataset.reconciliation='true';error.textContent=legacyCourse(r,work().snapshot)?'舊工作可能把年級當成課程，請補讀來源資料。':differences.length?`${differences.join('、')}；請核對或略過，不會自動轉班或改寫課程。`:'來源身份已改變，請重新確認。'}}
+      else if(error?.dataset.reconciliation){error.textContent='';delete error.dataset.reconciliation}
+      renderEnrollmentCandidates(r)
     }
     for(const r of work().snapshot.records.filter(r=>r.kind==='report'&&r.date&&r.data.content)) {
       const occurrence=$(`occurrence-${r.date}`),report=$(`report-${r.source_id}`)
@@ -206,7 +283,7 @@ export function createMappingController(hooks) {
   }
   function courseRowsSafe(){return groups.filter(g=>$(`source-course-${groups.indexOf(g)}`)?.value==='new').map(g=>({id:newCourseId(g),display_name:g.label,subject:'新建課程',stage:''}))}
   async function mount() {
-    mounting=true;courseOverrides=new Set(work().mappingView?.courseOverrides||[]);groups=groupCourses(work().snapshot.records);cards=new Map();confirmed=new Map();courseConfirmed=new Map();studentIds=new Map();cursors=new Map();candidates=new Map();enrollmentCursors=new Map();reportCursors=new Map()
+    mounting=true;reconciliationChecks.clear();querySequences.clear();courseOverrides=new Set(work().mappingView?.courseOverrides||[]);groups=groupCourses(work().snapshot.records);cards=new Map();confirmed=new Map();courseConfirmed=new Map();studentIds=new Map();cursors=new Map();candidates=new Map();enrollmentCursors=new Map();reportCursors=new Map()
     await resolve(work().snapshot.records);await hooks.loadClassrooms(false)
     const rememberedSession=ctx().class_sessions.find(s=>s.id===link('class_session',work().snapshot.classId)?.target_id),room=memory('classroom',work().snapshot.classId)
     $('classroom').value=work().uiState?.find(s=>s.id==='classroom')?.value||rememberedSession?.classroom_id||room?.target_id||''
@@ -216,7 +293,7 @@ export function createMappingController(hooks) {
     for(const [i,g]of groups.entries()) {
       const c=el('details',undefined,'course-group');c.id=`course-group-${i}`;c.dataset.courseKey=g.key;c.open=true;c.append(el('summary',`${g.label} · ${g.rows.length} 筆報名`))
       const s=select(c,'EduLog 課程',`source-course-${i}`,ctx().courses,courseName,'選擇目標課程',!g.key.startsWith('missing:')&&ctx().permissions.course_create?'建立新課程…':null)
-      const memo=g.sourceId?link('course',g.sourceId):memory('course_rule',g.key),hint=el('p',memo?.valid!==false&&memo?.target_id?'已記住本班課程對應':'待確認；名稱相同只提供建議','mapping-reason');hint.id=`course-state-${i}`;c.append(hint)
+      const memo=g.rows.some(r=>legacyCourse(r,work().snapshot))?null:g.sourceId?link('course',g.sourceId):memory('course_rule',g.key),hint=el('p',memo?.valid!==false&&memo?.target_id?'已記住本班課程對應':'待確認；名稱相同只提供建議','mapping-reason');hint.id=`course-state-${i}`;c.append(hint)
       if(memo?.valid!==false&&memo?.target_id){s.value=memo.target_id;courseConfirmed.set(g.key,memo.target_id);c.open=false;c.querySelector('summary').textContent+= ' · 已記住'}
       const cross=memories.find(m=>m.kind==='course_rule'&&m.key===g.key&&m.suggestion&&m.valid)
       if(cross)c.append(el('p',`其他班級曾選：${courseName(ctx().courses.find(c=>c.id===cross.target_id)||{})}；本班需重新確認。`,'hint'))
@@ -230,7 +307,7 @@ export function createMappingController(hooks) {
     for(const r of work().snapshot.records.filter(r=>r.kind==='enrollment')) {
       const c=el('details',undefined,'row-card mapping-row');c.dataset.courseKey=courseIdentity(r);c.dataset.studentKey=r.student_source_id||'';c.open=true;cards.set(r.source_id,c)
       const heading=el('summary',`${r.sourceStudentName||work().snapshot.records.find(s=>s.kind==='student'&&s.source_id===r.student_source_id)?.data.name||'姓名尚未辨識'} · ${r.sourceCourseLabel||'課程未辨識'} · 報名 ${r.source_id}`),reason=el('p',undefined,'mapping-reason');reason.dataset.rowState='';c.append(heading,reason)
-      const columns=el('div',undefined,'mapping-comparison'),left=el('div'),right=el('div');left.append(el('h3','來源'),el('p',`學生：${r.sourceStudentName||'未辨識'} · ${r.student_source_id?'ID '+r.student_source_id:'無學生 ID；只記住本筆報名'}`),el('p',`課程：${r.sourceCourseLabel||'未辨識'}`));right.append(el('h3','EduLog'));columns.append(left,right);c.append(columns)
+      const columns=el('div',undefined,'mapping-comparison'),left=el('div'),right=el('div');left.append(el('h3','來源'),el('p',`學生：${r.sourceStudentName||'未辨識'} · ${r.student_source_id?'ID '+r.student_source_id:'無學生 ID；只記住本筆報名'}`),el('p',`課程：${r.sourceCourseLabel||'未辨識'}`));if(r.sourceGrade)left.append(el('p',`年級：${r.sourceGrade}`,'hint'));if(r.sourceCourseConflict)left.append(el('p','名單與報告中的課程資料不一致，請展開原文核對。','mapping-warning'));right.append(el('h3','EduLog'));columns.append(left,right);c.append(columns)
       const studentId=r.student_source_id&&!seenStudents.has(r.student_source_id)?`student-${r.student_source_id}`:`student-for-${r.source_id}`;seenStudents.add(r.student_source_id);studentIds.set(r.source_id,studentId)
       const memo=memory('admission',r.source_id),existing=ctx().enrollments.find(e=>e.id===link('enrollment',r.source_id)?.target_id)
       const selectedStudent=work().uiState?.find(s=>s.id===studentId)?.value||(memo?.valid&&memo.class_session_id===$('class-session').value?memo.student_id:existing?.student_id||link('student',r.student_source_id)?.target_id)
@@ -240,18 +317,29 @@ export function createMappingController(hooks) {
       let timer;const queryWhenReady=()=>{if(!c.isConnected)return;if(localPanel){timer=setTimeout(queryWhenReady,300);return}void localTask(()=>studentPage(r,true),c.querySelector('[data-query-student]'))};search.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(queryWhenReady,300)})
       const cs=select(right,'此筆報名的課程',`enrollment-course-${r.source_id}`,ctx().courses,courseName,'請確認目標課程');cs.value=memo?.valid?memo.course_id:existing?.course_id||''
       const es=select(right,'既有／新建報名',`enrollment-${r.source_id}`,ctx().enrollments,e=>e.id.slice(0,8),'略過此報名',createAllowed('enrollment')?'建立新報名':null);es.value=memo?.valid?memo.target_id||'':existing?.id||''
-      button(right,'查詢既有報名／載入更多',()=>enrollmentPage(r)).id=`more-enrollments-${r.source_id}`
+      const queryButton=button(right,'查詢既有報名',()=>enrollmentPage(r));queryButton.id=`more-enrollments-${r.source_id}`;queryButton.dataset.enrollmentAction='true'
+      const recheck=button(right,'重新核對此筆',async()=>{
+        const selection=rowKey(r)
+        await enrollmentPage(r,true)
+        if(selection!==rowKey(r))return
+        const target=memory('admission',r.source_id)?.target_id||link('enrollment',r.source_id)?.target_id||$(`enrollment-${r.source_id}`).value
+        if(target&&target!=='new'&&hooks.capabilities?.()?.enrollment_reconciliation)await reconcileEnrollment(r,target)
+      });recheck.dataset.enrollmentAction='true'
+      const queryStatus=el('p',capable()?'查詢範圍：此學生所有可存取報名，包含其他班級與課程。':'目前僅查詢所選班級與課程；跨班查詢需升級 EduLog 至 1000121。','enrollment-query-status');queryStatus.id=`enrollment-status-${r.source_id}`;queryStatus.dataset.enrollmentStatus='';queryStatus.setAttribute('role','status');queryStatus.setAttribute('aria-live','polite');right.append(queryStatus)
+      const results=el('div',undefined,'enrollment-results');results.id=`enrollment-results-${r.source_id}`;right.append(results)
+      const reviewLabel=el('label',undefined,'mapping-review'),review=el('input');review.type='checkbox';review.id=`review-${r.source_id}`;review.name=review.id;reviewLabel.htmlFor=review.id;reviewLabel.append(review,el('span','已核對來源與 EduLog 差異；若新建，確認需要獨立報名。'));right.append(reviewLabel)
       input(right,'報名開始日期',`start-${r.source_id}`,'date',existing?.start_date||r.data.start_date||'')
       const status=select(right,'報名狀態',`status-${r.source_id}`,Object.entries(enrollmentStatuses).map(([id,name])=>({id,name})),r=>r.name,'請確認狀態');status.value=existing?.status||r.data.status||''
       const error=el('p',undefined,'mapping-error');error.id=`mapping-error-${r.source_id}`;error.setAttribute('role','status');right.append(error)
       button(right,'確認並記住此報名',async()=>{error.textContent='';try{await confirmRow(r)}catch(e){error.textContent=e.message;throw e}})
       button(right,'修改對應',async()=>{confirmed.delete(r.source_id);c.open=true;s.focus();summary()})
-      button(right,'略過此報名',async()=>{s.value='';es.value='';confirmed.delete(r.source_id);summary();dirty()})
+      button(right,'保留 EduLog 並略過此筆',async()=>{work().skippedAdmissions=[...new Set([...(work().skippedAdmissions||[]),r.source_id])];confirmed.delete(r.source_id);summary();dirty();notice('已略過此筆及相關報告；既有資料與選擇保留。')})
+      button(right,'恢復此筆對應',async()=>{work().skippedAdmissions=(work().skippedAdmissions||[]).filter(id=>id!==r.source_id);summary();dirty();notice('此筆已恢復，請核對後確認。')})
       button(right,'清除此報名記憶',async()=>{if(!await forget([{kind:'admission',key:r.source_id,expected_revision:revision('admission',r.source_id)}]))return;confirmed.delete(r.source_id);summary();dirty()})
       if(r.student_source_id)button(right,'清除此學生 ID 對應',async()=>{if(!await forget([{kind:'student',key:r.student_source_id,expected_revision:revision('student',r.student_source_id)}]))return;notice('學生 ID 對應已清除；各筆已確認的報名記憶仍保留。');dirty()})
-      for(const control of [s,cs,es])control.addEventListener('change',()=>{if(control===cs){courseOverrides.add(r.source_id);work().mappingView={...work().mappingView,courseOverrides:[...courseOverrides]}}confirmed.delete(r.source_id);if(control===s&&r.student_source_id)for(const peer of work().snapshot.records.filter(p=>p.kind==='enrollment'&&p.student_source_id===r.student_source_id&&p.source_id!==r.source_id)){const other=studentSelect(peer);if(other&&other.value!==s.value){candidates.set(peer.source_id,candidates.get(r.source_id)||[]);fill(other,candidates.get(peer.source_id),c=>`${c.name} · ${c.id.slice(0,8)}`,'略過此報名的學生',createAllowed('student')?'建立獨立學生':null);other.value=s.value;confirmed.delete(peer.source_id)}}update();dirty()})
+      for(const control of [s,cs,es])control.addEventListener('change',()=>{review.checked=false;querySequences.set(r.source_id,(querySequences.get(r.source_id)||0)+1);if(control===s)es.value='';if(control===cs){courseOverrides.add(r.source_id);work().mappingView={...work().mappingView,courseOverrides:[...courseOverrides]}}confirmed.delete(r.source_id);if(control===s&&r.student_source_id)for(const peer of work().snapshot.records.filter(p=>p.kind==='enrollment'&&p.student_source_id===r.student_source_id&&p.source_id!==r.source_id)){const other=studentSelect(peer);if(other&&other.value!==s.value){candidates.set(peer.source_id,candidates.get(r.source_id)||[]);fill(other,candidates.get(peer.source_id),c=>`${c.name} · ${c.id.slice(0,8)}`,'略過此報名的學生',createAllowed('student')?'建立獨立學生':null);other.value=s.value;confirmed.delete(peer.source_id)}}update();dirty()})
       $('student-mappings').append(c)
-      if(memo?.valid&&memo.class_session_id===$('class-session').value){confirmed.set(r.source_id,signature(r));c.open=false}
+      if(memo?.valid&&memo.class_session_id===$('class-session').value&&!r.sourceIdentityChanged&&!legacyCourse(r,work().snapshot)){confirmed.set(r.source_id,signature(r));c.open=false}
       // Candidate data is fetched only when its row is opened or explicitly searched.
       button(right,'查詢學生候選',()=>studentPage(r,true)).dataset.queryStudent=''
       if(!r.student_source_id)left.append(el('p','可以選擇既有學生；不能僅依姓名建立或合併學生。','hint'))
@@ -275,12 +363,48 @@ export function createMappingController(hooks) {
     await confirm([{kind:'classroom',key:work().snapshot.classId,target_id:room,expected_revision:revision('classroom',work().snapshot.classId)},{kind:'class_session',key:work().snapshot.classId,target_id:session,expected_revision:revision('class_session',work().snapshot.classId)}]);dirty()
   }
   function validateRow(r) {
+    if(skipped(r))return false
     const s=studentSelect(r)?.value,c=$(`enrollment-course-${r.source_id}`)?.value
     if(!s||!c)return false
+    try{assertReconciled(r)}catch(error){$(`mapping-error-${r.source_id}`).textContent=error.message;return false}
     if(s!=='new'&&$('class-session').value!=='new'&&!courseRowsSafe().some(t=>t.id===c)&&confirmed.get(r.source_id)!==signature(r)) {
       const e=$(`mapping-error-${r.source_id}`);e.textContent='請先確認並記住此報名的學生與課程。';view.revealRow(r);studentSelect(r).focus({preventScroll:true});throw new Error(`${r.sourceStudentName||'報名 '+r.source_id} 的對應尚未確認。`)
     }
     return true
+  }
+  async function verifyReportRelationships() {
+    if(!hooks.capabilities?.()?.enrollment_reconciliation)return
+    const loaded=new Map()
+    for(const report of work().snapshot.records.filter(r=>r.kind==='report'&&r.date&&r.data.content&&r.date>=work().dateFrom&&r.date<=work().dateTo)) {
+      const row=work().snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===report.enrollment_source_id),id=$(`enrollment-${report.enrollment_source_id}`)?.value
+      if(!row||skipped(row)||!id||id==='new'||!$(`report-${report.source_id}`)?.value||!$(`occurrence-${report.date}`)?.value)continue
+      if(!loaded.has(id)) {
+        try{
+          let data,cursor;const seen=new Set(),transfers=[]
+          do {
+            if(cursor&&seen.has(cursor))throw new Error('調課目錄的分頁游標重複，請重新核對。')
+            if(cursor)seen.add(cursor)
+            data=await api('reconcile',undefined,{enrollmentId:id,query:{limit:50,...(cursor?{cursor}:{})}})
+            transfers.push(...data.transfers||[]);cursor=data.next_cursor
+            const n=$(`enrollment-status-${row.source_id}`);n.textContent=`正在核對相關課次，已讀取 ${transfers.length} 筆調課紀錄。`
+          }while(cursor)
+          loaded.set(id,{...data,transfers})
+        }
+        catch(error){if(error.code==='READ_CANCELLED')throw error;loaded.set(id,{error:error.message,transfers:[]})}
+      }
+      const data=loaded.get(id)
+      work().reconciliation||={};work().reconciliation[row.source_id]||={};work().reconciliation[row.source_id][id]=data
+      if(data.enrollment)ctx().enrollments=[...ctx().enrollments.filter(e=>e.id!==id),data.enrollment]
+      if(data.error){const n=$(`enrollment-status-${row.source_id}`);n.dataset.state='error';n.textContent=`課次核對失敗：${data.error}。相關報告暫不匯入，請重新核對此筆。`}
+    }
+    update();dirty()
+  }
+  function validateReport(row,enrollmentId,occurrenceId) {
+    const choice=$(`enrollment-${row.enrollment_source_id}`)?.value
+    if(choice==='new')return true
+    const details=work().reconciliation?.[row.enrollment_source_id]?.[enrollmentId]
+    if(!hooks.capabilities?.()?.enrollment_reconciliation&&!details)return true
+    return reportMatchesReconciliation(details,{occurrenceId,date:row.date,sessionId:$('class-session').value})
   }
   $('mapping-filter').addEventListener('change',applyFilter)
   $('reload-memories').addEventListener('click',()=>void run(async()=>{await resolve(work().snapshot.records);document.querySelectorAll('[data-save-unknown]').forEach(p=>{delete p.dataset.saveUnknown;const n=p.querySelector('.mapping-feedback');n.dataset.state='complete';n.textContent='已重新核對伺服器記憶，請確認目前對應狀態。'});for(const r of work().snapshot.records.filter(r=>r.kind==='enrollment')){const m=memory('admission',r.source_id);if(m?.valid&&m.student_id===studentSelect(r)?.value&&m.course_id===$(`enrollment-course-${r.source_id}`).value&&m.class_session_id===$('class-session').value)confirmed.set(r.source_id,signature(r));else confirmed.delete(r.source_id)}for(const [i,g]of groups.entries()){const m=g.sourceId?link('course',g.sourceId):memory('course_rule',g.key);if(m?.valid!==false&&m?.target_id===selectedCourse(g)){courseConfirmed.set(g.key,m.target_id);$(`course-state-${i}`).textContent='已記住；目標與權限已重新核對。'}else{courseConfirmed.delete(g.key);$(`course-state-${i}`).textContent='待確認；請重新核對目標。'}}update();dirty();notice('已重新檢查记憶與關係，欄位與目前項目保留。')},{readOnly:true,label:'正在重新檢查對應記憶'}))
@@ -293,10 +417,12 @@ export function createMappingController(hooks) {
     for(const old of work().snapshot.records){
       const incoming=fresh.records.find(r=>r.kind===old.kind&&r.source_id===old.source_id);if(!incoming)continue
       const before=old.kind==='enrollment'?admissionIdentity(old):null
-      const fields=Object.fromEntries(Object.entries(incoming).filter(([key,value])=>!['data','sourceEvidence'].includes(key)&&value!==null&&value!==undefined&&value!==''))
+      const identities=['student_source_id','source_course_id','sourceCourseLabel','sourceStudentName']
+      const fields=Object.fromEntries(Object.entries(incoming).filter(([key,value])=>!['data','sourceEvidence'].includes(key)&&(identities.includes(key)||value!==null&&value!==undefined&&value!=='')))
       Object.assign(old,fields,{data:{...old.data,...incoming.data},sourceEvidence:mergeEvidence(old.sourceEvidence||[],incoming.sourceEvidence||[])})
-      if(before&&before!==admissionIdentity(old))changedIdentities++
+      if(before&&before!==admissionIdentity(old)){old.sourceIdentityChanged=true;const review=$(`review-${old.source_id}`);if(review)review.checked=false;changedIdentities++}
     }
+    work().snapshot.extractionVersion=fresh.extractionVersion
     const ids=new Set(work().snapshot.records.filter(r=>r.kind==='enrollment').map(r=>r.student_source_id));for(const s of fresh.records.filter(r=>r.kind==='student'&&ids.has(r.source_id)))if(!work().snapshot.records.some(r=>r.kind==='student'&&r.source_id===s.source_id))work().snapshot.records.push(s)
     const choices=[...$('mapping').querySelectorAll('input,select,textarea')].filter(n=>n.id&&!/^(source-course|subject|stage)-/.test(n.id)).map(n=>({id:n.id,value:n.value,checked:n.checked})),seen=new Set()
     for(const [i,g]of groupCourses(work().snapshot.records).entries()){const previous=courseChoices.get(g.key);if(previous)for(const key of ['value','subject','stage'])choices.push({id:key==='value'?`source-course-${i}`:`${key}-${i}`,value:previous[key]})}
@@ -305,6 +431,6 @@ export function createMappingController(hooks) {
   },{readOnly:true,label:'正在補讀來源摘要與原文'}))
   for(const [id,kind]of[['forget-session','class_session'],['forget-classroom','classroom']])$(id).addEventListener('click',()=>void run(async()=>{if(!await forget([{kind,key:work().snapshot.classId,expected_revision:revision(kind,work().snapshot.classId)}]))return;dirty()},{label:'正在清除對應記憶'}))
   $('remember-destination').addEventListener('click',()=>void run(confirmDestination,{label:'正在保存教室與班級對應'}))
-  $('more-sessions').addEventListener('click',()=>void run(async()=>{const old=$('class-session').value,p=await catalog('class_sessions',{classroom_id:$('classroom').value,cursor:$('more-sessions').dataset.cursor});ctx().class_sessions.push(...p.items||[]);fill($('class-session'),ctx().class_sessions,s=>s.name,'選擇目標班級',ctx().permissions.classroom?.class_create?'建立新班級…':null);$('class-session').value=old;$('more-sessions').hidden=!p.next_cursor;$('more-sessions').dataset.cursor=p.next_cursor||''},{readOnly:true,label:'正在載入更多班級'}))
-  return {mount,resolve,destination,scoped,update,refreshCourses,courseRows,studentSelect,validateRow,selectedCourseIds:()=>[...new Set(work().snapshot.records.filter(r=>r.kind==='enrollment'&&studentSelect(r)?.value).map(r=>$(`enrollment-course-${r.source_id}`)?.value).filter(Boolean))]}
+  $('more-sessions').addEventListener('click',()=>void run(async()=>{const old=$('class-session').value,p=await catalog('class_sessions',{classroom_id:$('classroom').value,cursor:$('more-sessions').dataset.cursor});ctx().class_sessions.push(...p.items||[]);fill($('class-session'),ctx().class_sessions,sessionLabel,'選擇目標班級',ctx().permissions.classroom?.class_create?'建立新班級…':null);$('class-session').value=old;$('more-sessions').hidden=!p.next_cursor;$('more-sessions').dataset.cursor=p.next_cursor||''},{readOnly:true,label:'正在載入更多班級'}))
+  return {mount,resolve,destination,scoped,update,refreshCourses,courseRows,studentSelect,validateRow,validateReport,verifyReportRelationships,selectedCourseIds:()=>[...new Set(work().snapshot.records.filter(r=>r.kind==='enrollment'&&!skipped(r)&&studentSelect(r)?.value).map(r=>$(`enrollment-course-${r.source_id}`)?.value).filter(Boolean))]}
 }

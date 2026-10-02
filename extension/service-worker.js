@@ -87,6 +87,8 @@ async function verifyIntegrationStatus() {
         catalog_v1: data?.capabilities?.catalog_v1 === true,
         multi_course_import: data?.capabilities?.multi_course_import === true,
         mapping_memory: data?.capabilities?.mapping_memory === true,
+        student_enrollment_catalog: data?.capabilities?.student_enrollment_catalog === true,
+        enrollment_reconciliation: data?.capabilities?.enrollment_reconciliation === true,
       },
     }
   } catch (error) { return { ...metadata, status: 'unavailable', diagnostic: { code: 'CONNECTION_UNAVAILABLE', message: error?.message || '無法連接伺服器。' } } }

@@ -3,6 +3,7 @@ import { admissionIdentity, mergeRecords } from './mapping-core.js'
 import { labels, splitBatches, plainText, suggestedValue } from './workspace-model.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
 let frontendSettingsUrl = null
+let integrationCapabilities = {}
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
 const wizardMax = { import: 1, prefill: 1 }
 const params = new URLSearchParams(location.search)
@@ -14,7 +15,7 @@ async function send(message) {
   if (response?.error) { const e = new Error(response.error.code === 'VERSION_CONFLICT' ? '對應或目標已變更。請按「重新檢查對應記憶」，核對後再確認。' : response.error.message || '無法完成操作。'); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; throw e }
   return response?.data
 }
-const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','reports','work'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
+const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','reports','work','reconcile'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
 const source = (action, extra = {}) => send({ type: 'workspace-source', action, tabId: Number($('source-tab').value), sourcePath: selectedPath, requestId: activeReadId || undefined, ...extra })
 async function save() {
   const current = work
@@ -131,7 +132,7 @@ async function loadMappingCourses(reset = false) {
   if (typeof mappingController !== 'undefined') mappingController.refreshCourses()
 }
 async function initialize() {
-  const data = await send({ type: 'workspace-init' }); binding = data.binding; frontendSettingsUrl = data.status.settingsUrl; tabs = data.tabs
+  const data = await send({ type: 'workspace-init' }); binding = data.binding; integrationCapabilities = data.status.capabilities || {}; frontendSettingsUrl = data.status.settingsUrl; tabs = data.tabs
   batchBytes = data.status.limits?.batchBytes ?? 180000
   if (!data.status.capabilities?.mapping_memory || !data.status.capabilities?.multi_course_import) {
     $('connect-title').textContent='智慧對應服務尚未就緒'; $('connect-detail').textContent='請更新 EduLog API 並套用 1000120 migration，再重新驗證。舊工作檢查點保留。'; show('connect'); $('workspace').hidden=true; return
@@ -167,7 +168,7 @@ async function changeSource() {
 function linked(kind, id) { const row = context.source_links.find(l => l.source_origin === 'https://corp.orangeapple.co' && l.source_kind === kind && l.source_id === id); return row?.valid === false ? undefined : row?.edulog_id || row?.target_id }
 function idFor(kind, id) { const key = `${kind}:${id}`; return linked(kind, id) || (work.ids[key] ||= crypto.randomUUID()) }
 function labelledInput(parent, title, type, id, value = '') { const label = node('label', title), input = node('input'); input.type = type; input.id = id; input.value = value; label.htmlFor = id; parent.append(label, input); return input }
-const mappingController = createMappingController({ settingsUrl: () => frontendSettingsUrl, rereadSource: () => source('collect'),state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses})
+const mappingController = createMappingController({ capabilities: () => integrationCapabilities, settingsUrl: () => frontendSettingsUrl, rereadSource: () => source('collect'),state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses})
 async function mappingView() {
   $('operation-title').textContent='正在解析已確認的對應';
   await mappingController.mount(); show('mapping'); stage('import','preview'); $('mapping').scrollIntoView({block:'start'})
@@ -198,13 +199,14 @@ async function collectHistory() {
   } catch (error) { work.status = 'paused-extraction'; work.collectionError = error.message; await save() }
 }
 function prepareRows() {
-  const courseIds = mappingController.selectedCourseIds(), courseId = courseIds[0]
+  const eligible = new Set(work.snapshot.records.filter(r=>r.kind==='enrollment'&&mappingController.validateRow(r)).map(r=>r.source_id))
+  const courseIds = [...new Set(work.snapshot.records.filter(r=>eligible.has(r.source_id)&&r.kind==='enrollment').map(r=>$(`enrollment-course-${r.source_id}`).value))], courseId = courseIds[0]
   const sessionId = $('class-session').value === 'new' ? idFor('class_session', work.snapshot.classId) : $('class-session').value
   if (!$('classroom').value || !courseId || !sessionId) throw new Error('請選擇目標教室、班級及各筆報名的課程。')
   const rows = [], needs = []
   if (work.history && work.history.next < work.history.paths.length) needs.push(`尚有 ${work.history.paths.length - work.history.next} 份來源紀錄未完成擷取。`)
   const add = (kind, sourceId, targetId, data) => rows.push({ source_id: sourceId, target_id: targetId, overwrite: [], record: { kind, data } })
-  rows.push(...mappingController.courseRows())
+  rows.push(...mappingController.courseRows().filter(r=>courseIds.includes(r.target_id)))
   const session = context.class_sessions.find(s => s.id === sessionId)
   let schedule
   if ($('class-session').value === 'new') {
@@ -219,7 +221,7 @@ function prepareRows() {
   add('class_session', work.snapshot.classId, sessionId, { ...schedule, classroom_id: $('classroom').value, course_ids: [...new Set([...(session?.course_ids || []), ...courseIds])], time_zone: 'Asia/Taipei', external_link: `https://corp.orangeapple.co/courses/dt/${work.snapshot.classId}` })
   const enrollments = new Map(), addedStudents = new Set()
   for (const r of work.snapshot.records.filter(r=>r.kind==='enrollment')) {
-    if(!mappingController.validateRow(r)){needs.push(`報名 ${r.source_id}（${r.sourceStudentName||'姓名未辨識'}）已略過或缺少學生／課程。`);continue}
+    if(!eligible.has(r.source_id)){needs.push(`報名 ${r.source_id}（${r.sourceStudentName||'姓名未辨識'}）已略過、尚有差異或缺少學生／課程；相關報告未匯入。`);continue}
     const studentChoice=mappingController.studentSelect(r).value, start=$(`start-${r.source_id}`)?.value,status=$(`status-${r.source_id}`)?.value,choice=$(`enrollment-${r.source_id}`)?.value,chosenCourse=$(`enrollment-course-${r.source_id}`)?.value
     if(!start||!status||!choice){needs.push(`報名 ${r.source_id} 缺少報名對應、日期或狀態。`);continue}
     if(studentChoice==='new'&&!r.student_source_id){needs.push(`報名 ${r.source_id} 缺少可靠學生 ID；不能建立新學生。`);continue}
@@ -240,6 +242,7 @@ function prepareRows() {
     const occurrenceChoice = $(`occurrence-${r.date}`)?.value, reportChoice = $(`report-${r.source_id}`)?.value
     if (!occurrenceChoice || !reportChoice) { needs.push(`報告 ${r.source_id} 尚未確認課次與報告對應。`); continue }
     const chosenOccurrence = occurrenceChoice === 'new' ? occurrenceId : occurrenceChoice
+    if(!mappingController.validateReport(r,enrollments.get(r.enrollment_source_id),chosenOccurrence)){needs.push(`報告 ${r.source_id} 的課次與單次調課紀錄不一致或紀錄尚未讀完，請前往 EduLog 核對。`);continue}
     if (!dates.has(r.date)) { dates.add(r.date); add('occurrence', occurrenceSource, chosenOccurrence, { class_session_id: sessionId, occurrence_date: r.date, original_start_time: schedule.start_time, original_end_time: schedule.end_time, time_zone: 'Asia/Taipei' }) }
     add('report', r.source_id, reportChoice === 'new' ? idFor('report', r.source_id) : reportChoice, { enrollment_id: enrollments.get(r.enrollment_source_id), class_occurrence_id: chosenOccurrence, content: r.data.content, external_link: r.data.external_link })
     needs.push(`報告 ${r.source_id} 只匯入已驗證文字；教材、評量及進度仍需處理。`)
@@ -252,6 +255,7 @@ async function preview(reuse = false) {
   if (!reuse) {
     if (work.jobId && !work.done) await api('job-status', { status: 'cancelled' }, { jobId: work.jobId })
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
+    await mappingController.verifyReportRelationships()
     work.batches = splitBatches(prepareRows(), batchBytes); work.done = 0
     const job = await api('job', { source_origin: work.snapshot.sourceOrigin, source_class_id: work.snapshot.classId, date_from: work.dateFrom, date_to: work.dateTo, ...work.destination }); work.jobId = job.id
   }

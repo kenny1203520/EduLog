@@ -1,7 +1,7 @@
 import { sourceName, sourceUrl, frontendUrl, shortId, displayDate, statusLabel, mergeEvidence } from './mapping-presentation.js'
 const $ = id => document.getElementById(id)
 const node = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n }
-const stateNames = { remembered: '已記住', identity: '可靠識別', pending: '待確認', missing: '需補資料', invalid: '已失效' }
+const stateNames = { skipped: '已略過', remembered: '已記住', identity: '可靠識別', pending: '待確認', missing: '需補資料', invalid: '已失效' }
 export function evidenceDetails(records) {
   const details = node('details', undefined, 'source-evidence')
   details.append(node('summary', '擷取原文'))
@@ -28,7 +28,7 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
   const save = () => { if (work()) work().mappingView = { section, selected, mobileEditor, search: $('mapping-search').value, scrolls, listScrolls, listWindows, sections, courseOverrides: work().mappingView?.courseOverrides || [] }; changed() }
   function visible(entry) {
     const filter = $('mapping-filter').value, search = $('mapping-search').value.trim().toLocaleLowerCase('zh-TW')
-    return entry.section === section && (pinCurrent && entry.key === selected || (!search || `${entry.title} ${entry.subtitle}`.toLocaleLowerCase('zh-TW').includes(search)) && (filter === 'all' || filter === 'pending' && entry.status !== 'remembered' || filter === entry.status))
+    return entry.section === section && (pinCurrent && entry.key === selected || (!search || `${entry.title} ${entry.subtitle}`.toLocaleLowerCase('zh-TW').includes(search)) && (filter === 'all' || filter === 'pending' && !['remembered','skipped'].includes(entry.status) || filter === entry.status))
   }
   function choose(key, user = false) {
     if (viewport.matches && !mobileEditor) listWindows[section] = window.scrollY
@@ -52,7 +52,7 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
     more.append(node('summary', '更多操作'))
     for (const b of [...panel.querySelectorAll('button')]) {
       if (/^確認並記住/.test(b.textContent)) { b.classList.add('primary'); actions.append(b) }
-      else if (/^(修改|略過|清除)/.test(b.textContent)) more.append(b)
+      else if (/^(修改|略過|清除|保留 EduLog|恢復此筆)/.test(b.textContent)) more.append(b)
     }
     panel.append(evidenceDetails(records))
     const feedback = node('div', '核對來源與目標後，確認並記住此對應。', 'mapping-feedback'); feedback.setAttribute('role', 'status'); feedback.setAttribute('aria-live', 'polite'); feedback.setAttribute('aria-atomic', 'true'); panel.append(feedback)

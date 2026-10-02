@@ -37,6 +37,13 @@ test('catalog and filtered report routes allow only bounded query fields', async
   const forbidden = await b.send({ type:'workspace-api',operation:'catalog',binding:b.binding,query:{resource:'students',admin:true} })
   assert.match(forbidden.error.message,/查詢格式/)
 })
+test('reconciliation uses a fixed readonly route and rejects path injection or site senders',async()=>{
+  const b=broker(),enrollmentId='00000000-0000-4000-8000-000000000001'
+  await b.send({type:'workspace-api',operation:'reconcile',binding:b.binding,enrollmentId,query:{limit:50}})
+  assert.equal(b.calls[0].url,`http://localhost:3000/api/extension/v1/enrollments/${enrollmentId}/reconciliation?limit=50`);assert.equal(b.calls[0].method,'GET')
+  assert.match((await b.send({type:'workspace-api',operation:'reconcile',binding:b.binding,enrollmentId:'../../users'})).error.message,/識別碼/)
+  assert.equal(await b.send({type:'workspace-api',operation:'reconcile',binding:b.binding,enrollmentId},b.site),undefined)
+})
 test('a user cancellation aborts only the matching read request', async () => {
   const b = broker((_url, options) => new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted')), { once:true })))
   const requestId = '11111111-1111-4111-8111-111111111111'

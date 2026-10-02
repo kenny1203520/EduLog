@@ -90,8 +90,16 @@
     return { sourcePath: path(sourcePath), table: row.closest('table')?.id || '學習紀錄', row: [...row.parentElement.children].indexOf(row) + 1, capturedAt: new Date().toISOString(), fields: values.map(([key,label,value]) => ({ key,label,text: String(value || '').slice(0, key === 'content' ? 10000 : 512) })) }
   }
   function fieldLabel(cell, fallback) {
-    const header = cell?.closest('table')?.querySelectorAll('thead tr:last-child th')[cell.cellIndex]
+    const header = headerCells(cell?.closest('table'))[cell?.cellIndex]
     return cellText(header) || fallback
+  }
+  function headerCells(table) {
+    return [...(table?.rows || [])].find(r => r.querySelector('th') && [...r.cells].some(c => /^(姓名|學生)$/.test(cellText(c))))?.cells || []
+  }
+  function teachingCell(row, labels) {
+    const headers = [...headerCells(row.closest('table'))]
+    const index = headers.findIndex(c => labels.includes(cellText(c)))
+    return index >= 0 ? row.cells[index] : null
   }
   function mergeEvidence(...arrays) {
     const map = new Map()
@@ -108,17 +116,25 @@
       if (!admission) continue
       const student = rowLinks.find(a => /^\/students\/\d+(?:\/(?:accounts|teachers_comment))?$/.test(a.path))?.path.match(/^\/students\/(\d+)/)?.[1]
       // Read only the site's name/course text nodes, never action/status text.
-      const nameCell = row.querySelector('td:has(.admission-comment), td:has(a[href*="/students/"])') || row.cells[0]
+      const nameCell = teachingCell(row, ['姓名', '學生']) || row.querySelector('td:has(.admission-comment), td:has(a[href*="/students/"])') || row.cells[0]
       const name = cellText(nameCell?.querySelector(':scope > span:not(.badge), .student-name')) || cellText(rowLinks.find(a => /^\/students\/\d+$/.test(a.path))?.node) || cellText(rowLinks.find(a => /^\/admissions\/comments\//.test(a.path))?.node) || cellText(nameCell)
-      const courseCell = nameCell?.nextElementSibling
+      // Roster: 姓名 → 年級 → 課程. Reports: 學生 → 課程. Never infer a
+      // roster course from adjacency when the site's headers are present.
+      const headers = headerCells(row.closest('table'))
+      const courseCell = teachingCell(row, ['課程', '課程名稱']) || (!headers.length ? nameCell?.nextElementSibling : null)
+      const gradeCell = teachingCell(row, ['年級']), dateCell = teachingCell(row, ['報名時間', '報名日期'])
       const courseLink = links(courseCell || row).find(a => /^\/courses\/(?!dt\/)\d+$/.test(a.path))
       const courseLabel = cellText(courseCell?.querySelector(':scope > span:not(.badge), .course-name')) || cellText(courseLink?.node) || cellText(courseCell)
-      const sourceEvidence = [evidence(row, sourcePath, [['student_name',fieldLabel(nameCell,'姓名原文'),name],['course_name',fieldLabel(courseCell,'課程原文'),courseLabel],['student_id','來源學生 ID',student],['admission_id','來源報名 ID',admission]])]
+      const sourceEvidence = [evidence(row, sourcePath, [['student_name',fieldLabel(nameCell,'姓名原文'),name],['course_name',fieldLabel(courseCell,'課程原文'),courseLabel],['grade','年級',cellText(gradeCell)],['admission_date','報名日期原文',cellText(dateCell)],['student_id','來源學生 ID',student],['admission_id','來源報名 ID',admission]])]
       let enrollment = admissions.get(admission)
-      if (!enrollment) { enrollment = { kind: 'enrollment', source_id: admission, student_source_id: null, sourceStudentName: '', sourceCourseLabel: '', source_course_id: null, data: { external_link: `${ORIGIN}/dt_admissions/${admission}` }, needs: ['報名日期', '報名狀態'] }; admissions.set(admission, enrollment); records.push(enrollment) }
+      if (!enrollment) { enrollment = { kind: 'enrollment', source_id: admission, student_source_id: null, sourceStudentName: '', sourceCourseLabel: '', source_course_id: null, sourceCourseConflict: false, data: { external_link: `${ORIGIN}/dt_admissions/${admission}` }, needs: ['報名日期', '報名狀態'] }; admissions.set(admission, enrollment); records.push(enrollment) }
       enrollment.sourceEvidence = mergeEvidence(enrollment.sourceEvidence || [], sourceEvidence)
       if (student) enrollment.student_source_id = student
       if (name) enrollment.sourceStudentName = name
+      if (gradeCell) enrollment.sourceGrade = cellText(gradeCell)
+      const admissionDate = fullDate(cellText(dateCell))
+      if (admissionDate) { enrollment.data.start_date = admissionDate; enrollment.needs = enrollment.needs.filter(n => n !== '報名日期') }
+      if (enrollment.sourceCourseLabel && courseLabel && enrollment.sourceCourseLabel !== courseLabel) enrollment.sourceCourseConflict = true
       if (courseLabel) enrollment.sourceCourseLabel = courseLabel
       if (courseLink) enrollment.source_course_id = courseLink.path.split('/').pop()
       if (enrollment.student_source_id && enrollment.sourceStudentName) {
@@ -136,7 +152,7 @@
       }
     }
     for (const r of admissions.values()) if (!r.student_source_id) issues.push({ kind: 'enrollment', source_id: r.source_id, reason: `${r.sourceStudentName || '姓名尚未辨識'}：缺少可靠學生 ID，可指定既有學生；不能新建學生。` })
-    return { sourceOrigin: ORIGIN, sourcePath: path(sourcePath), classId, title, records, issues, admissionPaths: [...admissions.keys()].map(id => `/dt_admissions/${id}`), completeness: 'partial', note: '只列出目前可辨識資料；日期、教材、時段及未取得內容需確認。' }
+    return { extractionVersion: 2, sourceOrigin: ORIGIN, sourcePath: path(sourcePath), classId, title, records, issues, admissionPaths: [...admissions.keys()].map(id => `/dt_admissions/${id}`), completeness: 'partial', note: '只列出目前可辨識資料；日期、教材、時段及未取得內容需確認。' }
   }
   function extractHistory(doc, admissionId) {
     const results = []
@@ -170,7 +186,7 @@
       for (const record of richer.records) {
         const previous = snapshot.records.find(r => r.kind === record.kind && r.source_id === record.source_id)
         if (!previous) snapshot.records.push(record)
-        else { for (const [key, value] of Object.entries(record)) if (value != null && value !== '') previous[key] = key === 'data' ? { ...previous.data, ...value } : key === 'sourceEvidence' ? mergeEvidence(previous.sourceEvidence || [], value) : value }
+        else { if (previous.sourceCourseLabel && record.sourceCourseLabel && previous.sourceCourseLabel !== record.sourceCourseLabel) previous.sourceCourseConflict = true; for (const [key, value] of Object.entries(record)) if (value != null && value !== '') previous[key] = key === 'sourceCourseConflict' ? previous[key] || value : key === 'data' ? { ...previous.data, ...value } : key === 'sourceEvidence' ? mergeEvidence(previous.sourceEvidence || [], value) : value }
       }
       snapshot.admissionPaths = [...new Set([...snapshot.admissionPaths, ...richer.admissionPaths])]
     }
