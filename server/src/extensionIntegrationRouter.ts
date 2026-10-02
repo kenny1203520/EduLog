@@ -6,6 +6,7 @@ import type { ApiConfig } from './config.js'
 import type { SupabaseClients } from './supabase.js'
 import { requireAuth, csrfProtection } from './auth.js'
 import { ApiError, mapDatabaseError } from './errors.js'
+import { createExtensionWorkspaceRouter } from './extensionWorkspaceRouter.js'
 
 const installationShape = {
   installation_id: z.string().uuid(), device_name: z.string().trim().min(1).max(80),
@@ -175,23 +176,42 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
 
   const extensionApi = Router()
   extensionApi.use(requireExtensionToken(admin, config))
-  extensionApi.get('/me', wrap(async (req, res) => res.json(envelope(req, {
-    user_id: req.extensionPrincipal!.userId,
-    token_id: req.extensionPrincipal!.tokenId,
-    connection: req.extensionPrincipal!.connection,
-    settings_url: buildExtensionSettingsUrl(config.EDULOG_WEB_BASE_URL),
-    capabilities: {
-      connection_management: true,
-      teaching_data_import: false,
-      report_prefill: false,
-    },
-  }))))
+  extensionApi.get('/me', wrap(async (req, res) => {
+    const tokenHash = hash(req.header('authorization')!.replace(/^Bearer\s+/i, ''))
+    const [readiness, catalog] = await Promise.all([
+      admin.rpc('web_extension_workspace', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
+      admin.rpc('web_extension_catalog', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
+    ])
+    const ready = !readiness.error && readiness.data?.workspace_version === 1
+    return res.json(envelope(req, {
+      user_id: req.extensionPrincipal!.userId,
+      token_id: req.extensionPrincipal!.tokenId,
+      connection: req.extensionPrincipal!.connection,
+      settings_url: buildExtensionSettingsUrl(config.EDULOG_WEB_BASE_URL),
+      capabilities: {
+        connection_management: true,
+        teaching_data_import: ready,
+        report_prefill: ready,
+        catalog_v1: !catalog.error && catalog.data?.catalog_version === 1,
+        multi_course_import: !catalog.error && catalog.data?.multi_course_import === true,
+        mapping_memory: !catalog.error && catalog.data?.mapping_memory === true,
+      },
+      integration_limits: { batch_records: 50, batch_bytes: extensionBatchBytes(config.API_BODY_LIMIT) },
+    }))
+  }))
   extensionApi.patch('/installation', wrap(async (req, res) => {
     const input = installationBody.parse(req.body)
     const result = await admin.rpc('bind_web_extension_installation', { p_token_id: req.extensionPrincipal!.tokenId, ...Object.fromEntries(Object.entries(input).map(([key, value]) => [`p_${key}`, value])) })
     if (result.error) throw integrationError(result.error)
     return res.json(envelope(req, { bound: true }))
   }))
+  extensionApi.use(createExtensionWorkspaceRouter(admin))
   router.use('/v1', extensionApi)
   return router
+}
+
+export function extensionBatchBytes(bodyLimit: string) {
+  const match = bodyLimit.trim().match(/^(\d+(?:\.\d+)?)\s*(b|kb|mb|gb)?$/i)
+  const bytes = match ? Number(match[1]) * ({ b: 1, kb: 1024, mb: 1048576, gb: 1073741824 }[match[2]?.toLowerCase() || 'b'] || 1) : 200000
+  return Math.max(0, Math.min(180000, Math.floor(bytes) - 1024))
 }
