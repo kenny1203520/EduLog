@@ -87,6 +87,7 @@ try {
       await page.goto(`http://127.0.0.1:${port}/workspace.html?source=10`); await page.locator('#workspace').waitFor({state:'visible'})
       await page.locator('#read-history').uncheck(); await page.locator('#collect').click(); await page.locator('#mapping').waitFor({state:'visible'})
       await page.locator('#classroom').selectOption('00000000-0000-4000-8000-000000000001'); await page.locator('#class-session').selectOption('00000000-0000-4000-8000-000000000003')
+      await page.locator('[data-mapping-section=admissions]').click(); await page.locator('#mapping-items button:visible').first().click()
       await page.locator('#student-101').selectOption('new'); await page.locator('#enrollment-301').selectOption('new'); await page.locator('#enrollment-course-301').selectOption('00000000-0000-4000-8000-000000000002'); await page.locator('#start-301').fill('2026-01-01'); await page.locator('#status-301').selectOption('regular')
       if (width === 390) {
         await page.waitForFunction(() => testCalls.some(m => m.type === 'workspace-store' && m.work?.uiState?.find(s => s.id === 'status-301' && s.value === 'regular')))

@@ -2,6 +2,7 @@ import { createMappingController } from './mapping-controller.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
 import { labels, splitBatches, plainText, suggestedValue } from './workspace-model.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
+let frontendSettingsUrl = null
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
 const wizardMax = { import: 1, prefill: 1 }
 const params = new URLSearchParams(location.search)
@@ -20,14 +21,17 @@ async function save() {
   current.revision = (current.revision || 0) + 1
   const revision = current.revision
   const stored = await send({ type: 'workspace-store', action: 'put', work: current })
-  if (work === current && work.revision === revision) { work = stored; unsaved = false }
+  if (work === current && work.revision === revision) {
+    for (const key of Object.keys(current)) if (!Object.hasOwn(stored, key)) delete current[key]
+    Object.assign(current, stored); unsaved = false
+  }
 }
 function captureMappingChoices() {
   work.uiState = [...$('mapping').querySelectorAll('input,select,textarea')].filter(e => e.id).map(e => ({ id: e.id, value: e.value, checked: e.checked }))
 }
 function show(id) { $(id).hidden = false }
 function stage(view, primary) {
-  $(`${view}-view`).querySelectorAll('.primary').forEach(b => b.classList.remove('primary')); $(primary)?.classList.add('primary')
+  $(`${view}-view`).querySelectorAll('.primary').forEach(b => { if (!b.closest('.mapping-workbench')) b.classList.remove('primary') }); $(primary)?.classList.add('primary')
   const step = view === 'import' ? ({ collect: 1, preview: 2, repreview: 3, apply: 3, pause: 4, resume: 4, 'cancel-work': 4 }[primary] || 1) : ({ 'read-form': 1, compare: 2, prefill: 3, 'return-source': 4 }[primary] || 1)
   wizardMax[view] = Math.max(wizardMax[view] || 1, step)
   document.querySelectorAll(`[data-wizard-step^="${view}-"]`).forEach(item => {
@@ -127,7 +131,7 @@ async function loadMappingCourses(reset = false) {
   if (typeof mappingController !== 'undefined') mappingController.refreshCourses()
 }
 async function initialize() {
-  const data = await send({ type: 'workspace-init' }); binding = data.binding; tabs = data.tabs
+  const data = await send({ type: 'workspace-init' }); binding = data.binding; frontendSettingsUrl = data.status.settingsUrl; tabs = data.tabs
   batchBytes = data.status.limits?.batchBytes ?? 180000
   if (!data.status.capabilities?.mapping_memory || !data.status.capabilities?.multi_course_import) {
     $('connect-title').textContent='智慧對應服務尚未就緒'; $('connect-detail').textContent='請更新 EduLog API 並套用 1000120 migration，再重新驗證。舊工作檢查點保留。'; show('connect'); $('workspace').hidden=true; return
@@ -163,7 +167,7 @@ async function changeSource() {
 function linked(kind, id) { const row = context.source_links.find(l => l.source_origin === 'https://corp.orangeapple.co' && l.source_kind === kind && l.source_id === id); return row?.valid === false ? undefined : row?.edulog_id || row?.target_id }
 function idFor(kind, id) { const key = `${kind}:${id}`; return linked(kind, id) || (work.ids[key] ||= crypto.randomUUID()) }
 function labelledInput(parent, title, type, id, value = '') { const label = node('label', title), input = node('input'); input.type = type; input.id = id; input.value = value; label.htmlFor = id; parent.append(label, input); return input }
-const mappingController = createMappingController({state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses})
+const mappingController = createMappingController({ settingsUrl: () => frontendSettingsUrl, rereadSource: () => source('collect'),state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses})
 async function mappingView() {
   $('operation-title').textContent='正在解析已確認的對應';
   await mappingController.mount(); show('mapping'); stage('import','preview'); $('mapping').scrollIntoView({block:'start'})

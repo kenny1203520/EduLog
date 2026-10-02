@@ -77,6 +77,27 @@
     if (after.formId !== before.formId || operations.some(({ item }) => after.fields.find(f => f.key === item.key)?.value !== item.value)) throw new Error('原生欄位已變更，請檢查已套用內容，不會自動重試。')
     return { status: 'pending_confirmation', applied: operations.length, target: after }
   }
+
+  // Read only verified teaching cells; remove actions, popovers and injected UI.
+  function cellText(node) {
+    if (!node) return ''
+    const copy = node.cloneNode(true)
+    copy.querySelectorAll('script,style,svg,button,input,select,textarea,div,.dropdown,.badge,.admission-comment-box,.tooltip,.popover,.status,[role="tooltip"],[data-edulog-owned]').forEach(n => n.remove())
+    copy.querySelectorAll('a').forEach(n => { if (!/^\/(?:students|courses)\/\d+$/.test(path(n.getAttribute('href')))) n.remove() })
+    return text(copy)
+  }
+  function evidence(row, sourcePath, values) {
+    return { sourcePath: path(sourcePath), table: row.closest('table')?.id || '學習紀錄', row: [...row.parentElement.children].indexOf(row) + 1, capturedAt: new Date().toISOString(), fields: values.map(([key,label,value]) => ({ key,label,text: String(value || '').slice(0, key === 'content' ? 10000 : 512) })) }
+  }
+  function fieldLabel(cell, fallback) {
+    const header = cell?.closest('table')?.querySelectorAll('thead tr:last-child th')[cell.cellIndex]
+    return cellText(header) || fallback
+  }
+  function mergeEvidence(...arrays) {
+    const map = new Map()
+    for (const e of arrays.flat().filter(Boolean)) { const key = `${e.sourcePath}:${e.table}:${e.row}`, old = map.get(key); map.set(key, { ...old, ...e, fields: [...new Map([...(old?.fields || []), ...e.fields].map(f => [f.key,f])).values()] }) }
+    return [...map.values()]
+  }
   function extractClass(doc, sourcePath) {
     const classId = path(sourcePath).match(/^\/courses\/dt\/(\d+)(?:\/lesson[-_]reports)?$/)?.[1]
     if (!classId || !doc.querySelector('#page-body > .content')) throw new Error('此頁無法辨識班級，請從班級工作區開始。')
@@ -88,27 +109,30 @@
       const student = rowLinks.find(a => /^\/students\/\d+(?:\/(?:accounts|teachers_comment))?$/.test(a.path))?.path.match(/^\/students\/(\d+)/)?.[1]
       // Read only the site's name/course text nodes, never action/status text.
       const nameCell = row.querySelector('td:has(.admission-comment), td:has(a[href*="/students/"])') || row.cells[0]
-      const name = text(nameCell?.querySelector(':scope > span:not(.badge), .student-name')) || text(rowLinks.find(a => /^\/students\/\d+$/.test(a.path))?.node) || text(rowLinks.find(a => /^\/admissions\/comments\//.test(a.path))?.node)
+      const name = cellText(nameCell?.querySelector(':scope > span:not(.badge), .student-name')) || cellText(rowLinks.find(a => /^\/students\/\d+$/.test(a.path))?.node) || cellText(rowLinks.find(a => /^\/admissions\/comments\//.test(a.path))?.node) || cellText(nameCell)
       const courseCell = nameCell?.nextElementSibling
       const courseLink = links(courseCell || row).find(a => /^\/courses\/(?!dt\/)\d+$/.test(a.path))
-      const courseLabel = text(courseCell?.querySelector(':scope > span:not(.badge), .course-name')) || text(courseLink?.node)
+      const courseLabel = cellText(courseCell?.querySelector(':scope > span:not(.badge), .course-name')) || cellText(courseLink?.node) || cellText(courseCell)
+      const sourceEvidence = [evidence(row, sourcePath, [['student_name',fieldLabel(nameCell,'姓名原文'),name],['course_name',fieldLabel(courseCell,'課程原文'),courseLabel],['student_id','來源學生 ID',student],['admission_id','來源報名 ID',admission]])]
       let enrollment = admissions.get(admission)
       if (!enrollment) { enrollment = { kind: 'enrollment', source_id: admission, student_source_id: null, sourceStudentName: '', sourceCourseLabel: '', source_course_id: null, data: { external_link: `${ORIGIN}/dt_admissions/${admission}` }, needs: ['報名日期', '報名狀態'] }; admissions.set(admission, enrollment); records.push(enrollment) }
+      enrollment.sourceEvidence = mergeEvidence(enrollment.sourceEvidence || [], sourceEvidence)
       if (student) enrollment.student_source_id = student
       if (name) enrollment.sourceStudentName = name
       if (courseLabel) enrollment.sourceCourseLabel = courseLabel
       if (courseLink) enrollment.source_course_id = courseLink.path.split('/').pop()
       if (enrollment.student_source_id && enrollment.sourceStudentName) {
         const id = enrollment.student_source_id
-        if (!students.has(id)) { const record = { kind: 'student', source_id: id, data: { name: enrollment.sourceStudentName, external_link: `${ORIGIN}/students/${id}` } }; students.set(id, record); records.push(record) }
-        else students.get(id).data.name = enrollment.sourceStudentName
+        if (!students.has(id)) { const record = { kind: 'student', source_id: id, data: { name: enrollment.sourceStudentName, external_link: `${ORIGIN}/students/${id}` }, sourceEvidence }; students.set(id, record); records.push(record) }
+        else { students.get(id).data.name = enrollment.sourceStudentName; students.get(id).sourceEvidence = mergeEvidence(students.get(id).sourceEvidence || [], sourceEvidence) }
       }
       for (const link of rowLinks.filter(a => /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(a.path))) {
         const date = fullDate(text(link.node.closest('td'))) || fullDate(link.node.getAttribute('data-date'))
         const reportId = link.path.match(/reports\/(\d+)/)[1]
         if (reportIds.has(reportId)) continue
         reportIds.add(reportId)
-        records.push({ kind: 'report', source_id: reportId, enrollment_source_id: admission, date, data: { external_link: `${ORIGIN}${link.path.replace(/\/edit$/, '')}` }, needs: ['既有報告內容', ...(date ? [] : ['完整課次日期'])] })
+        const dateText = text(link.node.closest('td')).match(/\b20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}/)?.[0] || (date ? link.node.getAttribute('data-date') : '')
+        records.push({ kind: 'report', source_id: reportId, enrollment_source_id: admission, date, sourceEvidence: [evidence(row, sourcePath, [['admission_id','來源報名 ID',admission],['report_id','來源報告 ID',reportId],['date','課次日期原文',dateText]])], data: { external_link: `${ORIGIN}${link.path.replace(/\/edit$/, '')}` }, needs: ['既有報告內容', ...(date ? [] : ['完整課次日期'])] })
       }
     }
     for (const r of admissions.values()) if (!r.student_source_id) issues.push({ kind: 'enrollment', source_id: r.source_id, reason: `${r.sourceStudentName || '姓名尚未辨識'}：缺少可靠學生 ID，可指定既有學生；不能新建學生。` })
@@ -126,7 +150,7 @@
       const reportId = ref.path.match(/reports\/(\d+)/)[1]
       const contentNode = [...row.querySelectorAll('p')].find(p => /^評語[：:]/.test(text(p)))
       const content = contentNode?.textContent.trim().replace(/^評語[：:]\s*/, '').slice(0, 10000)
-      results.push({ kind: 'report', source_id: reportId, enrollment_source_id: admissionId, date, data: { ...(content ? { content } : {}), external_link: `${ORIGIN}${ref.path.replace(/\/edit$/, '')}` }, needs: content ? ['教材／評量欄位未驗證'] : ['既有報告內容'] })
+      results.push({ kind: 'report', source_id: reportId, enrollment_source_id: admissionId, date, sourceEvidence: [evidence(row, `/dt_admissions/${admissionId}`, [['admission_id','來源報名 ID',admissionId],['report_id','來源報告 ID',reportId],['date','課次日期原文',text(cells[1])],['content','學習表現原文',content]])], data: { ...(content ? { content } : {}), external_link: `${ORIGIN}${ref.path.replace(/\/edit$/, '')}` }, needs: content ? ['教材／評量欄位未驗證'] : ['既有報告內容'] })
     }
     return results
   }
@@ -146,7 +170,7 @@
       for (const record of richer.records) {
         const previous = snapshot.records.find(r => r.kind === record.kind && r.source_id === record.source_id)
         if (!previous) snapshot.records.push(record)
-        else { for (const [key, value] of Object.entries(record)) if (value != null && value !== '') previous[key] = key === 'data' ? { ...previous.data, ...value } : value }
+        else { for (const [key, value] of Object.entries(record)) if (value != null && value !== '') previous[key] = key === 'data' ? { ...previous.data, ...value } : key === 'sourceEvidence' ? mergeEvidence(previous.sourceEvidence || [], value) : value }
       }
       snapshot.admissionPaths = [...new Set([...snapshot.admissionPaths, ...richer.admissionPaths])]
     }
@@ -154,7 +178,7 @@
       if (doc.location.pathname !== initialPath) throw new Error('來源頁已導覽，工作已暫停。')
       try {
         const records = extractHistory(await readPath(sourcePath), sourcePath.split('/').pop())
-        for (const record of records) { const index = snapshot.records.findIndex(r => r.kind === record.kind && r.source_id === record.source_id); if (index < 0) snapshot.records.push(record); else snapshot.records[index] = record }
+        for (const record of records) { const index = snapshot.records.findIndex(r => r.kind === record.kind && r.source_id === record.source_id); if (index < 0) snapshot.records.push(record); else snapshot.records[index] = { ...record, sourceEvidence: mergeEvidence(snapshot.records[index].sourceEvidence || [], record.sourceEvidence || []) } }
       } catch (error) { snapshot.issues.push({ kind: 'report', source_id: sourcePath.split('/').pop(), reason: error.message }) }
     }
     return snapshot

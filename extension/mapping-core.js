@@ -1,3 +1,4 @@
+import { mergeEvidence } from './mapping-presentation.js'
 // Source labels are rules, never source IDs. Unknown labels remain admission-specific.
 export function courseIdentity(row) {
   if (row.source_course_id) return `id:${row.source_course_id}`
@@ -23,7 +24,7 @@ export function mergeRecords(existing, incoming) {
   for (const row of incoming) {
     const key = `${row.kind}:${row.source_id}`, old = records.get(key)
     if (!old) records.set(key,row)
-    else records.set(key, { ...old, ...Object.fromEntries(Object.entries(row).filter(([,v]) => v != null && v !== '')), data: { ...old.data, ...row.data } })
+    else records.set(key, { ...old, ...Object.fromEntries(Object.entries(row).filter(([,v]) => v != null && v !== '')), data: { ...old.data, ...row.data }, sourceEvidence: mergeEvidence(old.sourceEvidence || [], row.sourceEvidence || []) })
   }
   return [...records.values()]
 }
