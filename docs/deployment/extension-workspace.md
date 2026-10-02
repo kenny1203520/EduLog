@@ -86,6 +86,16 @@ PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.m
 
 ## 1000120 API 相容性
 
+### 清單式工作台更新（0.1.0）
+
+重新載入擴充套件，保存原站草稿後再刷新來源頁；關閉並重新開啟工作台，以載入新的清單／單筆編輯模組。既有工作與對應可續用。本次不新增 API、migration 或權限，沿用部署至 1000120 的伺服器。
+
+來源原文預設收合，僅保存允許的教學欄位、來源路徑／表格／列位置及擷取時間，不傳入匯入 API。舊工作可用「補讀來源資料」更新相同來源 ID；身份改變時重新確認。完成、取消或七天後依既有規則清除。
+
+保存結果尚未確認時，先按「重新檢查對應記憶」核對伺服器，不直接重複確認。EduLog 查看連結由 `settings_url` 推導前端基底；請設定實際前端位址，包含必要端口與路徑前綴，無法取得時重新檢查連線。
+
+本次側載包：`EduLog-Teaching-Tools-0.1.0-mapping-workbench.zip`。包含 runtime、README 與部署文件，排除測試、來源 HTML 與憑證。
+
 - 新工作使用 `course_ids`（最多 10 門），每筆報名使用自己的 `course_id`。單門 `course_id` 舊契約與既有批次檢查點保留；舊工作仍可續傳。
 - `/catalog/resolve` 支援 source refs、target refs 及 memory refs，各最多 50 筆，回傳完整來源身份、有效性、記憶 revision、目標 version 及受權限限制的關係。
 - `/catalog/confirm` 批次保存／修改／清除明確確認的對應，各批最多 50 筆。帶入 `expected_revision` 與目標 `versions`；一筆失敗會回滾整批。
