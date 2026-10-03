@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $extensionRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $repositoryRoot = (Resolve-Path (Join-Path $extensionRoot '..')).Path
 $distributionRoot = Join-Path $extensionRoot 'dist'
-$packageName = 'EduLog-Teaching-Tools-0.1.0-import-verification'
+$packageName = 'EduLog-Teaching-Tools-0.1.0-report-assistant'
 $archivePath = Join-Path $distributionRoot "$packageName.zip"
 $temporaryRoot = [System.IO.Path]::GetTempPath()
 $stagingPath = Join-Path $temporaryRoot "edulog-package-$([guid]::NewGuid().ToString('N'))"
@@ -27,7 +27,29 @@ try {
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
-    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'supabase/migrations/1000122_extension_import_verification.sql') -Destination $migrationPath
+    foreach ($migration in @(
+        '1000118_web_extension_workspace.sql',
+        '1000119_extension_catalog.sql',
+        '1000120_extension_mapping_memory.sql',
+        '1000121_extension_reconciliation.sql',
+        '1000122_extension_import_verification.sql',
+        '1000123_extension_report_candidates.sql'
+    )) {
+        Copy-Item -LiteralPath (Join-Path $repositoryRoot "supabase/migrations/$migration") -Destination $migrationPath
+    }
+
+    $manifest = Get-Content -LiteralPath (Join-Path $stagingPath 'manifest.json') -Raw | ConvertFrom-Json
+    if ($manifest.version -ne '0.1.0') { throw 'The prerelease extension must remain at version 0.1.0.' }
+    $entryFiles = @($manifest.background.service_worker, $manifest.action.default_popup)
+    foreach ($contentScript in $manifest.content_scripts) {
+        $entryFiles += @($contentScript.js)
+        $entryFiles += @($contentScript.css)
+    }
+    foreach ($entryFile in $entryFiles) {
+        if ($entryFile -and -not (Test-Path -LiteralPath (Join-Path $stagingPath $entryFile) -PathType Leaf)) {
+            throw "Missing extension entry file: $entryFile"
+        }
+    }
 
     Compress-Archive -Path (Join-Path $stagingPath '*') -DestinationPath $archivePath -Force
 }
