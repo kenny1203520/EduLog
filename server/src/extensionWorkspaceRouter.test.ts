@@ -3,13 +3,15 @@ import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createExtensionWorkspaceRouter, importBatch, pendingPush, importJob, memoryConfirmation } from './extensionWorkspaceRouter.js'
+import { errorHandler } from './errors.js'
 const id = '00000000-0000-4000-8000-000000000001'
 const row = { source_id: '101', target_id: id, overwrite: [], record: { kind: 'student', data: { name: 'Test A' } } }
-function appWith(data: unknown, error: unknown = null) {
+function appWith(data: unknown, error: unknown = null, productionErrors = false) {
   const rpc = vi.fn().mockResolvedValue({ data, error }), app = express(); app.use(express.json())
   app.use((req, _res, next) => { req.extensionPrincipal = { userId: id, tokenId: id, extensionOrigin: `chrome-extension://${'a'.repeat(32)}`, connection: {} as never }; next() })
   app.use('/api/extension/v1', createExtensionWorkspaceRouter({ rpc } as unknown as SupabaseClient))
-  app.use((error: { status?: number; code?: string; message: string }, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(error.status || 400).json({ error: { code: error.code, message: error.message } }))
+  if (productionErrors) app.use(errorHandler)
+  else app.use((error: { status?: number; code?: string; message: string }, _req: express.Request, res: express.Response, _next: express.NextFunction) => res.status(error.status || 400).json({ error: { code: error.code, message: error.message } }))
   return { app, rpc }
 }
 describe('workspace API contract', () => {
@@ -33,12 +35,36 @@ describe('workspace API contract', () => {
     const {app,rpc}=appWith({items:[]});const res=await request(app).post('/api/extension/v1/catalog/confirm').set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
     expect(res.status).toBe(200);expect(rpc.mock.calls[0][0]).toBe('web_extension_catalog');expect(rpc.mock.calls[0][1].p_operation).toBe('memory-confirm')
   })
+  it('exposes verified import checkpoints and only finalizes with a unique batch key list', async()=>{
+    const {app,rpc}=appWith({job:{id,status:'complete'},batches:[],roster_date:'2026-10-03',roster:{enrollments:[]}})
+    const info=await request(app).get(`/api/extension/v1/imports/${id}?roster_date=2026-10-03`).set('Authorization',`Bearer ${'a'.repeat(64)}`)
+    expect(info.status).toBe(200);expect(rpc.mock.calls[0][0]).toBe('web_extension_import_info');expect(rpc.mock.calls[0][1].p_input).toEqual({job_id:id,roster_date:'2026-10-03'})
+    const complete=await request(app).post(`/api/extension/v1/imports/${id}/complete`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send({expected_batch_keys:[id]})
+    expect(complete.status).toBe(200);expect(rpc.mock.calls[1][0]).toBe('web_extension_finalize_import');expect(rpc.mock.calls[1][1].p_input).toEqual({job_id:id,expected_batch_keys:[id]})
+    expect((await request(app).post(`/api/extension/v1/imports/${id}/complete`).send({expected_batch_keys:[id,id]})).status).toBe(400)
+    expect((await request(app).patch(`/api/extension/v1/imports/${id}`).send({status:'complete'})).status).toBe(400)
+  })
   it('rejects oversized, duplicate, sensitive or forged actor payloads', () => {
     expect(importBatch.safeParse({ key: id, rows: Array.from({ length: 51 }, () => row) }).success).toBe(false)
     expect(importBatch.safeParse({ key: id, rows: [row, row] }).success).toBe(false)
     expect(importBatch.safeParse({ key: id, rows: [{ ...row, record: { kind: 'student', data: { name: 'A', phone: 'sensitive' } } }] }).success).toBe(false)
     expect(importBatch.safeParse({ key: id, rows: [row], user_id: id }).success).toBe(false)
     expect(pendingPush.safeParse({ status: 'confirmed' }).success).toBe(false)
+  })
+  it('accepts extension-built reversed dependencies and still rejects duplicate source identities', async () => {
+    const modelUrl = new URL('../../extension/workspace-model.js', import.meta.url)
+    const { splitBatches } = await import(modelUrl.href)
+    const enrollment = { source_id: '277332', target_id: '00000000-0000-4000-8000-000000000002', overwrite: [], record: { kind: 'enrollment', data: { student_id: id, course_id: id, class_session_id: id, classroom_id: id, status: 'regular', start_date: '2026-01-01', time_zone: 'Asia/Taipei' } } }
+    const batches = splitBatches([enrollment, row, structuredClone(enrollment)])
+    expect(batches).toHaveLength(1); expect(batches[0].rows).toHaveLength(2)
+    expect(importBatch.safeParse(batches[0]).success).toBe(true)
+    expect(importBatch.safeParse({ ...batches[0], rows: [enrollment, row, enrollment] }).success).toBe(false)
+    const { app, rpc } = appWith({ rows: [], counts: {} })
+    const response = await request(app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization', `Bearer ${'a'.repeat(64)}`).send(batches[0])
+    expect(response.status).toBe(200);expect(rpc).toHaveBeenCalledTimes(1)
+    const strict = appWith({}, null, true)
+    const duplicate = await request(strict.app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization', `Bearer ${'a'.repeat(64)}`).send({ ...batches[0], rows: [enrollment, row, enrollment] })
+    expect(duplicate.status).toBe(422);expect(duplicate.body.error).toMatchObject({ code: 'VALIDATION_FAILED', fields: { request: ['Duplicate source IDs'] } });expect(strict.rpc).not.toHaveBeenCalled()
   })
   it('derives credential proof and fingerprints on the server, and invokes only the trusted RPC', async () => {
     const { app, rpc } = appWith({ rows: [], counts: {} })

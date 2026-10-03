@@ -26,7 +26,8 @@ export const importBatch = z.object({ key: z.string().uuid(), rows: z.array(impo
 export const importJob = z.object({ source_origin: source, source_class_id: text, date_from: date, date_to: date, classroom_id: uuid, course_id: uuid.optional(), course_ids: z.array(uuid).min(1).max(10).optional(), class_session_id: uuid }).strict().refine(v => v.date_from <= v.date_to, 'Invalid date range').refine(v => Boolean(v.course_id || v.course_ids?.length), 'Select courses').refine(v => !v.course_ids || new Set(v.course_ids).size === v.course_ids.length && (!v.course_id || v.course_ids.includes(v.course_id)), 'Invalid course selection')
 export const pendingPush = z.object({ report_id: uuid, report_version: z.number().int().min(1), source_origin: source, source_report_url: url, source_id: text, target_fingerprint: z.string().regex(/^[a-f0-9]{64}$/), idempotency_key: z.string().uuid() }).strict()
 export const sourceMapping = z.object({ source_origin: source, source_kind: z.enum(['student', 'course', 'class_session', 'enrollment', 'occurrence', 'report']), source_id: text, target_id: uuid }).strict()
-export const jobStatus = z.object({ status: z.enum(['paused', 'applying', 'cancelled', 'complete']) }).strict()
+export const jobStatus = z.object({ status: z.enum(['paused', 'applying', 'cancelled']) }).strict()
+const completeImport = z.object({ expected_batch_keys: z.array(z.string().uuid()).min(1).max(1000) }).strict().refine(value => new Set(value.expected_batch_keys).size === value.expected_batch_keys.length, 'Duplicate batch keys')
 const catalogResource = z.enum(['classrooms', 'courses', 'class_sessions', 'students', 'enrollments', 'occurrences', 'report_targets', 'lessons', 'permissions'])
 const cursor = z.string().max(80).regex(/^[0-9a-f-]{36}$|^\d{4}-\d{2}-\d{2}\|[0-9a-f-]{36}$/i).optional()
 export const catalogQuery = z.object({
@@ -51,7 +52,7 @@ export const memoryConfirmation = z.object({
 }).strict()
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => void fn(req, res).catch(next)
 function databaseError(error: { message: string; code?: string }) {
-  const statuses: Record<string, number> = { EXTENSION_AUTH_INVALID: 401, PERMISSION_DENIED: 403, NOT_FOUND: 404, PREVIEW_STALE: 409, SOURCE_MAPPING_CONFLICT: 409, VERSION_CONFLICT: 409, JOB_STOPPED: 409, IDEMPOTENCY_CONFLICT: 409, INVALID_REFERENCE: 422, INVALID_IMPORT: 422 }
+  const statuses: Record<string, number> = { EXTENSION_AUTH_INVALID: 401, PERMISSION_DENIED: 403, NOT_FOUND: 404, PREVIEW_STALE: 409, SOURCE_MAPPING_CONFLICT: 409, VERSION_CONFLICT: 409, JOB_STOPPED: 409, IDEMPOTENCY_CONFLICT: 409, IMPORT_BATCHES_INCOMPLETE: 409, INVALID_REFERENCE: 422, INVALID_IMPORT: 422 }
   return statuses[error.message] ? new ApiError(statuses[error.message]!, error.message, error.message) : mapDatabaseError(error)
 }
 export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
@@ -65,6 +66,7 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   const reply = (req: Request, res: Response, data: unknown) => res.json({ data, meta: {}, request_id: req.requestId, trace_id: req.traceId })
   router.get('/context', wrap(async (req, res) => reply(req, res, await run(req, 'context', { offset: z.coerce.number().int().min(0).max(100000).parse(req.query.offset ?? 0) }))))
   router.get('/catalog', wrap(async (req, res) => reply(req, res, await run(req, 'catalog', catalogQuery.parse(req.query), 'web_extension_catalog'))))
+  router.get('/enrollments/:id', wrap(async (req, res) => reply(req, res, await run(req, 'enrollment-info', { enrollment_id: uuid.parse(req.params.id) }, 'web_extension_enrollment_info'))))
   router.get('/enrollments/:id/reconciliation', wrap(async (req, res) => reply(req, res, await run(req, 'reconcile', { enrollment_id: uuid.parse(req.params.id), ...z.object({ cursor, limit: z.coerce.number().int().min(1).max(50).default(50) }).strict().parse(req.query) }, 'web_extension_catalog'))))
   router.post('/catalog/resolve', wrap(async (req, res) => reply(req, res, await run(req, 'resolve', catalogResolve.parse(req.body), 'web_extension_catalog'))))
   router.post('/catalog/confirm', wrap(async (req, res) => reply(req, res, await run(req, 'memory-confirm', memoryConfirmation.parse(req.body), 'web_extension_catalog'))))
@@ -91,6 +93,14 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   }))
   router.post('/source-links', wrap(async (req, res) => reply(req, res, await run(req, 'map', sourceMapping.parse(req.body)))))
   router.post('/imports', wrap(async (req, res) => reply(req, res, await run(req, 'job', importJob.parse(req.body)))))
+  router.get('/imports/:id', wrap(async (req, res) => {
+    const input = z.object({ job_id: uuid, roster_date: date.optional() }).strict().parse({ ...req.query, job_id: req.params.id })
+    reply(req, res, await run(req, 'info', input, 'web_extension_import_info'))
+  }))
+  router.post('/imports/:id/complete', wrap(async (req, res) => {
+    const input = completeImport.parse(req.body)
+    reply(req, res, await run(req, 'complete', { job_id: uuid.parse(req.params.id), ...input }, 'web_extension_finalize_import'))
+  }))
   for (const action of ['preview', 'apply'] as const) router.post(`/imports/:id/${action}`, wrap(async (req, res) => {
     const batch = importBatch.parse(req.body)
     const rows = batch.rows.map(row => ({ ...row, source_fingerprint: crypto.createHash('sha256').update(JSON.stringify({ source_id: row.source_id, record: row.record })).digest('hex') }))

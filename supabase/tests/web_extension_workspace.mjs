@@ -16,6 +16,18 @@ async function rpcCatalog(operation, input) {
   await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
   return (await db.query('SELECT public.web_extension_catalog($1,$2,$3,$4) AS data', [token,'a'.repeat(64),operation,JSON.stringify(input)])).rows[0].data
 }
+async function rpcImportInfo(input) {
+  await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
+  return (await db.query('SELECT public.web_extension_import_info($1,$2,$3,$4) AS data', [token,'a'.repeat(64),'info',JSON.stringify(input)])).rows[0].data
+}
+async function rpcFinalize(input) {
+  await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
+  return (await db.query('SELECT public.web_extension_finalize_import($1,$2,$3,$4) AS data', [token,'a'.repeat(64),'complete',JSON.stringify(input)])).rows[0].data
+}
+async function rpcEnrollmentInfo(input) {
+  await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
+  return (await db.query('SELECT public.web_extension_enrollment_info($1,$2,$3,$4) AS data', [token,'a'.repeat(64),'enrollment-info',JSON.stringify(input)])).rows[0].data
+}
 try {
   await db.exec(readFileSync(new URL('postgres_bootstrap.sql', import.meta.url), 'utf8'))
   await db.exec('CREATE FUNCTION public.uuid_generate_v4() RETURNS uuid LANGUAGE sql AS $$ SELECT gen_random_uuid() $$;')
@@ -48,11 +60,19 @@ try {
   await db.exec(read('1000120_extension_mapping_memory.sql'))
   await db.exec(read('1000030_single_lesson_transfers.sql').split('CREATE OR REPLACE FUNCTION')[0])
   await db.exec(read('1000121_extension_reconciliation.sql'))
+  await db.exec(`CREATE FUNCTION public.get_class_session_workspace(uuid,date) RETURNS jsonb LANGUAGE sql STABLE AS $$
+    SELECT jsonb_build_object('session',jsonb_build_object('id',$1),'enrollments',COALESCE((
+      SELECT jsonb_agg(jsonb_build_object('id',e.id,'class_session_id',e.class_session_id,'status',e.status,'start_date',e.start_date))
+      FROM public.enrollments e WHERE e.class_session_id=$1 AND e.start_date<=$2 AND e.status IN ('regular','completed')
+    ),'[]'::jsonb),'teachers','[]'::jsonb)
+  $$;`)
+  await db.exec(read('1000122_extension_import_verification.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
   const batch = { job_id:job.id,key:id(20),fingerprint:'b'.repeat(64),rows:[{source_id:'101',target_id:student,overwrite:[],record:{kind:'student',data:{name:'Deidentified A'}}}] }
   assert.equal((await rpc('preview',batch)).rows[0].status,'added')
+  await assert.rejects(rpcFinalize({job_id:job.id,expected_batch_keys:[batch.key]}),/IMPORT_BATCHES_INCOMPLETE/)
   assert.equal((await rpc('apply',batch)).applied,1)
   assert.equal((await rpc('apply',batch)).applied,1)
   assert.equal((await db.query('SELECT count(*)::int AS n FROM public.students')).rows[0].n,1)
@@ -72,9 +92,17 @@ try {
   const partial = {...batch,key:id(23),fingerprint:'e'.repeat(64),rows:[{source_id:'102',target_id:id(11),overwrite:[],record:{kind:'student',data:{name:'B'}}},{source_id:'201',target_id:id(12),overwrite:[],record:{kind:'enrollment',data:{student_id:id(11),course_id:course,classroom_id:room,class_session_id:id(99),status:'regular',start_date:'2026-01-01',time_zone:'Asia/Taipei'}}}]}
   await rpc('preview',partial); await assert.rejects(rpc('apply',partial),/INVALID_REFERENCE/)
   assert.equal((await db.query('SELECT count(*)::int AS n FROM public.students')).rows[0].n,1)
+  const verifiedJob = await rpc('job',{...destination,source_class_id:'13'})
+  const verifiedBatch = {job_id:verifiedJob.id,key:id(890),fingerprint:'7'.repeat(64),rows:[{source_id:'verified-1',target_id:id(900),overwrite:[],record:{kind:'student',data:{name:'Verified student'}}}]}
+  await rpc('preview',verifiedBatch);await rpc('apply',verifiedBatch)
+  const finalized = await rpcFinalize({job_id:verifiedJob.id,expected_batch_keys:[verifiedBatch.key]})
+  assert.equal(finalized.verified,true);assert.equal(finalized.applied_rows,1)
+  const verifiedInfo = await rpcImportInfo({job_id:verifiedJob.id,roster_date:'2026-10-03'})
+  assert.equal(verifiedInfo.job.status,'complete');assert.equal(verifiedInfo.batches[0].status,'applied');assert.equal(verifiedInfo.roster.enrollments.length,0)
   const enrollment = id(30), occurrence = id(31), report = id(32)
   await db.exec(`INSERT INTO public.enrollments(id,student_id,course_id,classroom_id,class_session_id,user_id) VALUES('${enrollment}','${student}','${course}','${room}','${session}','${actor}'); INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date) VALUES('${occurrence}','${session}','2026-10-02'); INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,content) VALUES('${report}','${enrollment}','${occurrence}','Report');`)
   const push = {report_id:report,report_version:1,source_origin:destination.source_origin,source_report_url:'https://corp.orangeapple.co/dt_admissions/301/reports/401',source_id:'401',target_fingerprint:'f'.repeat(64),idempotency_key:id(40)}
+  const enrollmentInfo = await rpcEnrollmentInfo({enrollment_id:enrollment});assert.equal(enrollmentInfo.student_id,student);assert.equal(enrollmentInfo.class_session_id,session)
   assert.equal((await rpc('pending-push',push)).status,'pending_confirmation')
   await rpc('pending-push',push)
   assert.equal((await db.query('SELECT count(*)::int AS n FROM public.web_extension_report_pushes')).rows[0].n,1)
