@@ -24,7 +24,8 @@
     },
     {
       "matches": ["https://corp.orangeapple.co/*"],
-      "js": ["connection-ui.js", "integration-ui.js", "adapters/orange-apple-workflows.js", "adapters/orange-apple-integration.js", "editor-prefill.js", "content.js"],
+      "js": ["source-date.js", "connection-ui.js", "integration-ui.js", "adapters/orange-apple-workflows.js", "adapters/orange-apple-integration.js", "editor-prefill.js", "content.js"],
+      "css": ["editor-prefill.css"],
       "run_at": "document_end"
     }
   ]

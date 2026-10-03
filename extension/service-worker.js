@@ -89,6 +89,7 @@ async function verifyIntegrationStatus() {
         mapping_memory: data?.capabilities?.mapping_memory === true,
         student_enrollment_catalog: data?.capabilities?.student_enrollment_catalog === true,
         enrollment_reconciliation: data?.capabilities?.enrollment_reconciliation === true,
+        nearest_report_candidates: data?.capabilities?.nearest_report_candidates === true,
       },
     }
   } catch (error) { return { ...metadata, status: 'unavailable', diagnostic: { code: 'CONNECTION_UNAVAILABLE', message: error?.message || '無法連接伺服器。' } } }

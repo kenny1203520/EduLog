@@ -2,12 +2,14 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
-function broker(fetchImpl, getStatus = async () => ({ status: 'connected' }), timers = {}) {
+import {webcrypto} from 'node:crypto'
+function broker(fetchImpl, getStatus = async () => ({ status: 'connected' }), timers = {}, sourceHandler) {
   const id = 'a'.repeat(32), binding = { instance: 'http://localhost:3000', userId: 'user-A' }, settings = { origin: binding.instance, userId: binding.userId, token: 'trusted-secret' }
   const calls = [], tabs = [{ id: 1, url: 'https://corp.orangeapple.co/courses/dt/11', title: 'Class' }], rows = new Map(); let listener, changed
   const chrome = { runtime: { id, getURL: p => `chrome-extension://${id}/${p}`, onMessage: { addListener: fn => { listener = fn } } }, storage: { local: { get: async () => ({ edulogExtension: settings }) }, onChanged: { addListener: fn => { changed = fn } } }, tabs: { query: async () => tabs, get: async n => { if (!tabs.find(t => t.id === n)) throw new Error('closed'); return tabs.find(t => t.id === n) }, create: async t => calls.push(t), update: async () => {}, sendMessage: async (n, m) => { calls.push({ tab: n, ...m }); return { data: { classId: '11' } } } } }
   const workStore = { purge: async () => {}, list: async b => [...rows.values()].filter(r => r.instance === b.instance && r.userId === b.userId), get: async (n, b) => { const r = rows.get(n); return r?.instance === b.instance && r?.userId === b.userId ? r : null }, put: async (r, b) => { rows.set(r.id, { ...r, ...b }); return rows.get(r.id) } }
-  const context = vm.createContext({ chrome, workStore, URL, AbortSignal, AbortController, TextEncoder, setTimeout: timers.setTimeout || setTimeout, clearTimeout: timers.clearTimeout || clearTimeout, getStatus, fetch: fetchImpl || (async (url, options) => { calls.push({ url, ...options }); return { ok: true, headers: { get: () => null }, json: async () => ({ data: {} }) } }), edulogSiteAdapter: { matchesTeachingPage: p => /^\/courses\/dt\/\d+$/.test(p) } })
+  if(sourceHandler)chrome.tabs.sendMessage=async(n,m)=>{calls.push({tab:n,...m});return sourceHandler(m)}
+  const context = vm.createContext({ chrome, workStore, crypto:webcrypto, Intl, URL, AbortSignal, AbortController, TextEncoder, setTimeout: timers.setTimeout || setTimeout, clearTimeout: timers.clearTimeout || clearTimeout, getStatus, fetch: fetchImpl || (async (url, options) => { calls.push({ url, ...options }); return { ok: true, headers: { get: () => null }, json: async () => ({ data: {} }) } }), edulogSiteAdapter: { matchesTeachingPage: p => /^\/courses\/dt\/\d+$/.test(p) } })
   vm.runInContext(readFileSync(new URL('../workspace-broker.js', import.meta.url), 'utf8').replace(/^import[^\n]*\n/gm, '').replace('export function', 'function') + '\ninstallWorkspaceBroker(getStatus)', context)
   const trusted = { id, url: `chrome-extension://${id}/workspace.html?flow=import` }, site = { id, url: tabs[0].url, tab: tabs[0] }
   return { send: (m, s = trusted) => new Promise(resolve => { const result = listener(m, s, resolve); if (!result) resolve(undefined) }), binding, calls, settings, tabs, rows, changed, site, trusted }
@@ -86,4 +88,31 @@ test('closing a source preserves collected work, navigation rejects further matc
   assert.equal((await b.send({type:'workspace-check-source',binding:b.binding,tabId:1,sourcePath:'/courses/dt/11'})).data.closed,true)
   b.tabs.push({id:1,url:'https://corp.orangeapple.co/courses/dt/12'})
   assert.match((await b.send({type:'workspace-check-source',binding:b.binding,tabId:1,sourcePath:'/courses/dt/11'})).error.message,/已導覽/)
+})
+test('inline candidates use authoritative student/course across enrollments and preserve scoped pagination',async()=>{
+  const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,queries=[]
+  const form={formId:'f1',fingerprint:'hash',admissionId:'301',reportId:'401',date:'2024-06-15'}
+  const b=broker(async url=>{const u=new URL(url);queries.push(u);const data=u.pathname.endsWith('/resolve')?{memories:[{valid:true,target_id:id(1),student_id:id(2),course_id:id(3)}]}:u.pathname.includes('/enrollments/')?{student_id:id(2),course_id:id(3)}:{reports:[],next_cursor:null};return{ok:true,json:async()=>({data})}},async()=>({status:'connected',capabilities:{nearest_report_candidates:true}}),{},async()=>({data:form}))
+  const cursor=`n1|${'a'.repeat(32)}|2|0|2024-06-13|${id(4)}`
+  const reply=await b.send({type:'integration-inline-prefill',operation:'candidates',formId:'f1',fingerprint:'hash',query:{group:'same-course',cursor}},b.site)
+  assert.equal(reply.data.anchor_date,'2024-06-15');const query=queries.at(-1).searchParams
+  assert.equal(query.get('sort'),'nearest');assert.equal(query.get('student_id'),id(2));assert.equal(query.get('course_id'),id(3));assert.equal(query.has('enrollment_id'),false);assert.equal(query.get('cursor'),cursor)
+  await b.send({type:'integration-inline-prefill',operation:'candidates',query:{group:'other-course'}},b.site)
+  assert.equal(queries.at(-1).searchParams.get('exclude_course_id'),id(3))
+  assert.equal(JSON.stringify(b.calls).includes('trusted-secret'),false)
+  const stale=await b.send({type:'integration-inline-prefill',operation:'candidates',formId:'another',query:{group:'same-course'}},b.site);assert.match(stale.error.message,/已變更/)
+})
+test('temporary target answers are permission checked; templates with unknown date cannot apply',async()=>{
+  const id='00000000-0000-4000-8000-000000000001',form={formId:'f1',fingerprint:'hash',admissionId:'301',reportId:'401',date:null}
+  let supplementSent=false
+  const b=broker(async url=>({ok:false,status:403,json:async()=>({error:{code:'PERMISSION_DENIED',message:'No access'}})}),undefined,{},async m=>{if(m.type==='integration-supplement')supplementSent=true;return{data:form}})
+  const reply=await b.send({type:'integration-inline-prefill',operation:'supplement',input:{enrollmentId:id}},b.site)
+  assert.equal(reply.error.code,'PERMISSION_DENIED');assert.equal(supplementSent,false)
+  const old=await b.send({type:'integration-inline-prefill',operation:'candidates',query:{group:'same-course'}},b.site);assert.match(old.error.message,/1000123/)
+})
+test('temporary enrollment answers cannot be reused across EduLog instances',async()=>{
+  const id='00000000-0000-4000-8000-000000000001',form={formId:'f1',fingerprint:'hash',admissionId:'301',reportId:'401',date:'2024-10-04',supplement:{enrollmentId:id,binding:{instance:'https://other.example',userId:'other'}}}
+  const b=broker(async()=>({ok:true,json:async()=>({data:{memories:[],source_links:[]}})}),async()=>({status:'connected',capabilities:{nearest_report_candidates:true}}),{},async()=>({data:form}))
+  const reply=await b.send({type:'integration-inline-prefill',operation:'candidates',query:{group:'same-course'}},b.site)
+  assert.match(reply.error.message,/確認目標學生/);assert.equal(b.calls.some(c=>c.url?.includes('/enrollments/')),false)
 })

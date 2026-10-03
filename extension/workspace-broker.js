@@ -50,7 +50,7 @@ export function installWorkspaceBroker(getStatus) {
     if (message.operation === 'reconcile' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || '')) fail('報名識別碼不正確。')
     if (!operations[message.operation] || (['preview', 'apply', 'job-status', 'import-info', 'complete'].includes(message.operation) && !/^[a-f0-9-]{36}$/.test(message.jobId)) || (message.operation === 'enrollment-info' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || ''))) fail('工作操作不正確。')
     const [method, path] = operations[message.operation], url = new URL(`${bound.instance}/api/extension/v1${path}`)
-    if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date'].includes(key) || String(value).length > 100) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
+    if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
     const payload = method === 'GET' ? undefined : JSON.stringify(message.operation === 'complete' ? message.body : message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
     const readOnly = ['context','catalog','resolve','reports','work','reconcile','import-info'].includes(message.operation)
@@ -71,6 +71,20 @@ export function installWorkspaceBroker(getStatus) {
     if (!response.ok) return { error: { code: response.status === 429 ? 'RATE_LIMITED' : body?.error?.code || `HTTP_${response.status}`, message: body?.error?.message || 'API 無法完成操作。', fields: validationFields(body?.error?.fields), requestId: body?.error?.request_id, retryAfter: response.status === 429 ? Math.max(1, Math.min(3600, Number(response.headers?.get?.('retry-after')) || 0)) || null : null } }
     if (!body || !Object.hasOwn(body, 'data')) { const invalid = new Error('API 回應格式無法確認，請先檢查批次檢查點。'); invalid.code = 'API_RESPONSE_INVALID'; throw invalid }
     return { data: body?.data }
+  }
+  async function inlineTarget(form,bound) {
+    const call=async message=>{const result=await api({...message,binding:{instance:bound.instance,userId:bound.userId}});if(result.error){const error=new Error(result.error.message);Object.assign(error,result.error);throw error}return result.data}
+    const resolved=await call({operation:'resolve',body:{source_refs:[{source_kind:'enrollment',source_id:form.admissionId}],target_refs:[],memory_refs:[{kind:'admission',key:form.admissionId}]}})
+    const memory=(resolved?.memories||[]).find(row=>row.valid&&!row.suggestion)
+    const link=(resolved?.source_links||[]).find(row=>row.valid!==false)
+    const manual=form.supplement?.binding?.instance===bound.instance&&form.supplement.binding.userId===bound.userId?form.supplement.enrollmentId:null
+    const enrollmentId=manual||memory?.target_id||link?.target_id
+    if(!enrollmentId)return null
+    const enrollment=await call({operation:'enrollment-info',enrollmentId})
+    if(!enrollment?.student_id || !enrollment.course_id)return null
+    // Never let a stale remembered relationship override the current target.
+    if(!manual && memory && (memory.student_id&&memory.student_id!==enrollment.student_id || memory.course_id&&memory.course_id!==enrollment.course_id))return null
+    return {enrollmentId,studentId:enrollment.student_id,studentName:enrollment.student_name,courseId:enrollment.course_id,courseName:enrollment.course_name,classSessionId:enrollment.class_session_id,className:enrollment.class_name,userConfirmed:Boolean(manual)}
   }
   chrome.runtime.onMessage.addListener((message, sender, respond) => {
     if (message?.type === 'get-integration-work-summary' && sender.id === chrome.runtime.id && sender.url === chrome.runtime.getURL('popup.html')) {
@@ -97,27 +111,44 @@ export function installWorkspaceBroker(getStatus) {
         const bound = await binding()
         const formResponse = await chrome.tabs.sendMessage(tab.id, { type: 'integration-form', expectedPath: new URL(tab.url).pathname })
         if (formResponse?.error || !formResponse?.data) fail(formResponse?.error?.message || '原站報告表單已關閉，請重新開啟。')
-        const form = formResponse.data
+        let form = formResponse.data
         if (!/^[0-9]+$/.test(form.admissionId || '') || !/^[0-9]+$/.test(form.reportId || '') || (message.formId && message.formId !== form.formId) || (message.fingerprint && message.fingerprint !== form.fingerprint)) fail('原站報告表單已變更，請重新讀取。')
         const operation = message.operation
+        const call=async details=>{const reply=await api({...details,binding:{instance:bound.instance,userId:bound.userId}});if(reply.error){const error=new Error(reply.error.message);Object.assign(error,reply.error);throw error}return reply.data}
+        if(operation==='supplement'){
+          const input=message.input||{}
+          if(input.enrollmentId){const enrollment=await call({operation:'enrollment-info',enrollmentId:input.enrollmentId});if(!enrollment?.student_id||!enrollment?.course_id)fail('此報名關係已無法確認，請重新選擇。')}
+          const reply=await chrome.tabs.sendMessage(tab.id,{type:'integration-supplement',expectedPath:new URL(tab.url).pathname,input:{formId:form.formId,fingerprint:form.fingerprint,date:input.date,enrollmentId:input.enrollmentId,binding:{instance:bound.instance,userId:bound.userId},conflictAcknowledged:input.conflictAcknowledged===true,clear:input.clear===true}})
+          if(reply?.error||!reply?.data)fail(reply?.error?.message||'補充資訊未保存。')
+          return {form:reply.data}
+        }
+        if(operation==='identity-search'){
+          const query=message.query||{}
+          if(query.resource==='enrollments'&&!query.student_id)fail('請先選擇學生。')
+          if(!['students','enrollments'].includes(query.resource))fail('身份查詢格式不正確。')
+          return call({operation:'catalog',query:{resource:query.resource,search:query.search||undefined,student_id:query.student_id||undefined,cursor:query.cursor||undefined,limit:50}})
+        }
         if (operation === 'lookup') {
-          const resolveReply = await api({ operation: 'resolve', binding: { instance: bound.instance, userId: bound.userId }, body: {
-            source_refs: [{ source_kind: 'enrollment', source_id: form.admissionId }], target_refs: [],
-            memory_refs: [{ kind: 'admission', key: form.admissionId }],
-          } })
-          const resolved = resolveReply.data || {}
-          const memory = (resolved.memories || []).find(row => row.valid && !row.suggestion)
-          const link = (resolved.source_links || []).find(row => row.valid !== false)
-          const enrollmentId = memory?.target_id || link?.target_id || null
-          if (!enrollmentId) return { connected: true, form, target: null, reports: [], reason: '尚無有效來源報名對應；請先在匯入工作台確認報名。' }
-          const enrollmentReply = await api({ operation: 'enrollment-info', binding: { instance: bound.instance, userId: bound.userId }, enrollmentId })
-          const enrollment = enrollmentReply.data
-          const studentId = memory?.student_id || enrollment?.student_id || null
-          if (!form.date) return { connected: true, form, target: { enrollmentId, studentId, studentName:enrollment?.student_name, courseId:enrollment?.course_id, courseName:enrollment?.course_name, classSessionId:enrollment?.class_session_id, className:enrollment?.class_name }, reports: [], reason: '原站表單日期不完整，無法自動比對報告。' }
-          const reportReply = await api({ operation: 'reports', binding: { instance: bound.instance, userId: bound.userId }, query: {
-            summary: 'true', enrollment_id: enrollmentId, date_from: form.date, date_to: form.date, limit: 50,
-          } })
-          return { connected: true, form, target: { enrollmentId, studentId, studentName:enrollment?.student_name, courseId:enrollment?.course_id, courseName:enrollment?.course_name, classSessionId:enrollment?.class_session_id, className:enrollment?.class_name }, reports: reportReply.data?.reports || [], reason: '' }
+          if(form.supplement?.enrollmentId&&(form.supplement.binding?.instance!==bound.instance||form.supplement.binding?.userId!==bound.userId)){
+            const reply=await chrome.tabs.sendMessage(tab.id,{type:'integration-supplement',expectedPath:new URL(tab.url).pathname,input:{formId:form.formId,fingerprint:form.fingerprint,clearEnrollment:true}})
+            if(reply?.error||!reply?.data)fail('EduLog 連線已變更，請重新確認當次報名。')
+            form=reply.data
+          }
+          let dateReadError=''
+          if(!form.date){try{const reply=await chrome.tabs.sendMessage(tab.id,{type:'integration-resolve-date',expectedPath:new URL(tab.url).pathname});if(reply?.data?.formId!==form.formId)fail(reply?.error?.message||'來源表單已改變。');form=reply.data}catch(error){dateReadError=error.message}}
+          const target=await inlineTarget(form,bound)
+          const data=target&&form.date?await call({operation:'reports',query:{summary:'true',enrollment_id:target.enrollmentId,date_from:form.date,date_to:form.date,limit:50,...(bound.status.capabilities?.nearest_report_candidates?{sort:'nearest',anchor_date:form.date}:{})}}):{reports:[]}
+          return {connected:true,form,target,reports:data.reports||[],next_cursor:data.next_cursor||null,settingsUrl:bound.status.settingsUrl,capabilities:bound.status.capabilities,reason:!target?'尚無有效報名對應；可選擇既有學生與報名，或人工選取範本。':!form.date?form.dateInfo?.reason||dateReadError||'請確認完整上課日期。':''}
+        }
+        if(operation==='candidates'){
+          if(bound.status.capabilities?.nearest_report_candidates!==true)fail('請將 EduLog 伺服器升級至 1000123，才能使用依目標日期排序的報告候選。')
+          const target=await inlineTarget(form,bound), query=message.query||{}
+          if(!target)fail('請先確認目標學生與報名；仍可使用其他學生搜尋。')
+          if(!['same-course','other-course','exact'].includes(query.group))fail('候選分組格式不正確。')
+          if(query.group==='exact'&&!form.date)fail('請先確認完整上課日期。')
+          const anchor=form.date||new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+          const result=await call({operation:'reports',query:{summary:'true',limit:50,student_id:target.studentId,sort:'nearest',anchor_date:anchor,cursor:query.cursor||undefined,...(query.group==='other-course'?{exclude_course_id:target.courseId}:{course_id:target.courseId}),...(query.group==='exact'?{enrollment_id:target.enrollmentId,date_from:form.date,date_to:form.date}:{})}})
+          return {...result,anchor_date:anchor,anchorConfirmed:Boolean(form.date)}
         }
         if (operation === 'search') {
           const query = message.query || {}
@@ -128,12 +159,16 @@ export function installWorkspaceBroker(getStatus) {
             ...(query.course_id ? { course_id: String(query.course_id) } : {}),
             ...(query.date_from ? { date_from: String(query.date_from) } : {}),
             ...(query.date_to ? { date_to: String(query.date_to) } : {}),
+            ...(query.cursor ? {cursor:String(query.cursor)} : {}),
+            ...(bound.status.capabilities?.nearest_report_candidates ? {sort:'nearest',anchor_date:form.date||new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())} : {}),
           } })
+          if(result.error){const error=new Error(result.error.message);Object.assign(error,result.error);throw error}
           return { reports: result.data?.reports || [], next_cursor: result.data?.next_cursor || null }
         }
         if (operation === 'detail') {
           if (!/^[a-f0-9-]{36}$/i.test(message.reportId || '')) fail('報告識別碼不正確。')
           const result = await api({ operation: 'reports', binding: { instance: bound.instance, userId: bound.userId }, query: { id: message.reportId, summary: 'false' } })
+          if(result.error){const error=new Error(result.error.message);Object.assign(error,result.error);throw error}
           return result.data?.reports?.[0] || null
         }
         if (operation !== 'apply') fail('預填操作不正確。')
@@ -142,8 +177,10 @@ export function installWorkspaceBroker(getStatus) {
         const full = await api({ operation: 'reports', binding: { instance: bound.instance, userId: bound.userId }, query: { id: input.reportId, summary: 'false' } })
         const report = full.data?.reports?.[0]
         if (!report || report.version !== input.version) fail('EduLog 報告已更新，請重新查詢並核對。')
-        const sameTarget = input.targetEnrollmentId && report.enrollment_id === input.targetEnrollmentId && report.occurrence_date === form.date
-        const identityMismatch = !input.targetEnrollmentId || report.enrollment_id !== input.targetEnrollmentId || report.occurrence_date !== form.date
+        if(!form.date || form.dateInfo?.conflict && form.dateInfo?.basis!=='user_confirmed')fail('請先確認完整且無矛盾的上課日期。')
+        const target=await inlineTarget(form,bound)
+        const sameTarget = target && !target.userConfirmed && report.enrollment_id === target.enrollmentId && report.occurrence_date === form.date
+        const identityMismatch = !target || report.enrollment_id !== target.enrollmentId || report.occurrence_date !== form.date
         if (identityMismatch && input.identityConfirmed !== true) fail('此報告與原站學生、報名或日期不同；請在面板確認範本用途後再套用。')
         const workId = crypto.randomUUID()
         const row = { id: workId, type: 'prefill', status: 'applying', sourceTab: tab.id, sourcePath: new URL(tab.url).pathname,
