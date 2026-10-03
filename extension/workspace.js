@@ -1,6 +1,6 @@
 import { createMappingController } from './mapping-controller.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
-import { labels, splitBatches, plainText, suggestedValue } from './workspace-model.js'
+import { labels, splitBatches, validateBatches, workspaceErrorMessage, plainText, suggestedValue } from './workspace-model.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
@@ -12,10 +12,10 @@ const node = (tag, text, className) => { const n = document.createElement(tag); 
 function notice(message = '', error = false) { $('notice').textContent = message; $('notice').dataset.error = String(error) }
 async function send(message) {
   const response = await bridge.send({ ...message, binding })
-  if (response?.error) { const e = new Error(response.error.code === 'VERSION_CONFLICT' ? '對應或目標已變更。請按「重新檢查對應記憶」，核對後再確認。' : response.error.message || '無法完成操作。'); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; throw e }
+  if (response?.error) { const e = new Error(workspaceErrorMessage(response.error)); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; e.fields = response.error.fields; e.rawMessage = response.error.message; throw e }
   return response?.data
 }
-const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','reports','work','reconcile'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
+const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','reports','work','reconcile','import-info'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
 const source = (action, extra = {}) => send({ type: 'workspace-source', action, tabId: Number($('source-tab').value), sourcePath: selectedPath, requestId: activeReadId || undefined, ...extra })
 async function save() {
   const current = work
@@ -99,8 +99,8 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
     else if (error.code === 'RATE_LIMITED') { $('operation-title').textContent = '伺服器暫時限制查詢'; $('operation-detail').textContent = error.retryAfter ? `請於 ${error.retryAfter} 秒後手動重試。` : '請稍後手動重試。' }
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
-    notice(error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : error.message, true)
-    $('diagnostic').textContent = [error.code || 'WORK_FAILED', error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
+    notice(error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : '目前輸入與對應仍保留，請依上方說明處理後重試。', true)
+    $('diagnostic').textContent = [error.code || 'WORK_FAILED', error.rawMessage, ...Object.entries(error.fields || {}).flatMap(([key, messages]) => messages.map(message => `${key}：${message}`)), error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
   } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; $('apply').disabled = !previewResults.length || work?.previewDirty === true; finishRead() }
 }
 function options(select, rows, label, placeholder, extra) {
@@ -182,7 +182,7 @@ async function collect() {
   if (!$('date-from').value || !$('date-to').value || $('date-from').value > $('date-to').value) throw new Error('請確認有效日期範圍。')
   const snapshot = await source('collect')
   if (!snapshot?.classId || snapshot.sourcePath !== selectedPath) throw new Error('目前來源不是可辨識的班級頁。請切換到班級頁後再擷取。')
-  work = { id: crypto.randomUUID(), type: 'import', status: 'collected', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, title: snapshot.title, snapshot, ids: {}, dateFrom: $('date-from').value, dateTo: $('date-to').value, done: 0 }
+  work = { id: crypto.randomUUID(), type: 'import', status: 'collected', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, title: snapshot.title, snapshot, ids: {}, dateFrom: $('date-from').value, dateTo: $('date-to').value, includeInternalNotes: $('include-internal-notes').checked, done: 0 }
   if ($('read-history').checked) work.history = { paths: snapshot.admissionPaths, next: 0 }
   await save(); if (work.history) await collectHistory()
   await mappingView(); notice(`已擷取 ${work.snapshot.records.length} 筆可辨識資料。缺少欄位仍需確認。${work.status === 'paused-extraction' ? '擷取中斷，可從工作紀錄繼續。' : ''}`)
@@ -199,7 +199,9 @@ async function collectHistory() {
   } catch (error) { work.status = 'paused-extraction'; work.collectionError = error.message; await save() }
 }
 function prepareRows() {
+  work.includeInternalNotes = $('include-internal-notes').checked
   const eligible = new Set(work.snapshot.records.filter(r=>r.kind==='enrollment'&&mappingController.validateRow(r)).map(r=>r.source_id))
+  if (!eligible.size) throw new Error('目前沒有可匯入的報名。請查看各筆核對提示，完成既有報名查詢與對應後再產生差異。')
   const courseIds = [...new Set(work.snapshot.records.filter(r=>eligible.has(r.source_id)&&r.kind==='enrollment').map(r=>$(`enrollment-course-${r.source_id}`).value))], courseId = courseIds[0]
   const sessionId = $('class-session').value === 'new' ? idFor('class_session', work.snapshot.classId) : $('class-session').value
   if (!$('classroom').value || !courseId || !sessionId) throw new Error('請選擇目標教室、班級及各筆報名的課程。')
@@ -219,7 +221,8 @@ function prepareRows() {
   }
   if(session&&courseIds.some(id=>!session.course_ids.includes(id))&&!context.permissions.session?.class_update)throw new Error('此班級缺少所選課程，且你沒有修改班級權限。請改選可上課程或請管理員處理。')
   add('class_session', work.snapshot.classId, sessionId, { ...schedule, classroom_id: $('classroom').value, course_ids: [...new Set([...(session?.course_ids || []), ...courseIds])], time_zone: 'Asia/Taipei', external_link: `https://corp.orangeapple.co/courses/dt/${work.snapshot.classId}` })
-  const enrollments = new Map(), addedStudents = new Set()
+  const enrollments = new Map(), enrollmentCourses = new Map(), addedStudents = new Set()
+  work.sourceRosterEntries = []
   for (const r of work.snapshot.records.filter(r=>r.kind==='enrollment')) {
     if(!eligible.has(r.source_id)){needs.push(`報名 ${r.source_id}（${r.sourceStudentName||'姓名未辨識'}）已略過、尚有差異或缺少學生／課程；相關報告未匯入。`);continue}
     const studentChoice=mappingController.studentSelect(r).value, start=$(`start-${r.source_id}`)?.value,status=$(`status-${r.source_id}`)?.value,choice=$(`enrollment-${r.source_id}`)?.value,chosenCourse=$(`enrollment-course-${r.source_id}`)?.value
@@ -230,22 +233,33 @@ function prepareRows() {
       const sourceStudent=work.snapshot.records.find(s=>s.kind==='student'&&s.source_id===r.student_source_id)
       if(sourceStudent){add('student',r.student_source_id,studentId,sourceStudent.data);addedStudents.add(r.student_source_id)}
     }
-    const id=choice==='new'?idFor('enrollment',r.source_id):choice;enrollments.set(r.source_id,id)
+    const id=choice==='new'?idFor('enrollment',r.source_id):choice;enrollments.set(r.source_id,id); enrollmentCourses.set(r.source_id,chosenCourse)
+    work.sourceRosterEntries.push({ id, start_date: start, status })
     add('enrollment',r.source_id,id,{student_id:studentId,course_id:chosenCourse,class_session_id:sessionId,classroom_id:$('classroom').value,status,start_date:start,time_zone:'Asia/Taipei',external_link:r.data.external_link})
     rows.at(-1).source_identity=admissionIdentity(r)
   }
   const dates = new Set()
   for (const r of work.snapshot.records.filter(r => r.kind === 'report')) {
-    if (!r.date || !r.data.content || !enrollments.has(r.enrollment_source_id)) { needs.push(`報告 ${r.source_id} 缺少完整日期、已驗證內容或報名對應。`); continue }
+    if (!r.date || !enrollments.has(r.enrollment_source_id)) { needs.push(`報告 ${r.source_id} 缺少完整日期或報名對應。`); continue }
     if (r.date < work.dateFrom || r.date > work.dateTo) continue
     const occurrenceSource = `${work.snapshot.classId}:${r.date}`, occurrenceId = idFor('occurrence', occurrenceSource)
     const occurrenceChoice = $(`occurrence-${r.date}`)?.value, reportChoice = $(`report-${r.source_id}`)?.value
     if (!occurrenceChoice || !reportChoice) { needs.push(`報告 ${r.source_id} 尚未確認課次與報告對應。`); continue }
     const chosenOccurrence = occurrenceChoice === 'new' ? occurrenceId : occurrenceChoice
     if(!mappingController.validateReport(r,enrollments.get(r.enrollment_source_id),chosenOccurrence)){needs.push(`報告 ${r.source_id} 的課次與單次調課紀錄不一致或紀錄尚未讀完，請前往 EduLog 核對。`);continue}
+    const mappedLesson = r.sourceLessonLabel ? context.lessons.filter(lesson => lesson.course_id === enrollmentCourses.get(r.enrollment_source_id) && lesson.title.trim().toLocaleLowerCase() === r.sourceLessonLabel.trim().toLocaleLowerCase()) : []
+    const reportData = { enrollment_id: enrollments.get(r.enrollment_source_id), class_occurrence_id: chosenOccurrence, external_link: r.data.external_link }
+    for (const key of ['content','contact_notes','attendance_status','absence_reason','is_completed','class_participation','classroom_behavior']) if (r.data[key] !== undefined && r.data[key] !== '') reportData[key] = r.data[key]
+    if (work.includeInternalNotes && r.sourceInternalNotes) reportData.class_notes = r.sourceInternalNotes
+    if (!Object.keys(reportData).some(key => !['enrollment_id','class_occurrence_id','external_link'].includes(key))) {
+      needs.push(`報告 ${r.source_id} 沒有可匯入的教學欄位；只保留來源編輯連結，未建立空白報告。`)
+      continue
+    }
     if (!dates.has(r.date)) { dates.add(r.date); add('occurrence', occurrenceSource, chosenOccurrence, { class_session_id: sessionId, occurrence_date: r.date, original_start_time: schedule.start_time, original_end_time: schedule.end_time, time_zone: 'Asia/Taipei' }) }
-    add('report', r.source_id, reportChoice === 'new' ? idFor('report', r.source_id) : reportChoice, { enrollment_id: enrollments.get(r.enrollment_source_id), class_occurrence_id: chosenOccurrence, content: r.data.content, external_link: r.data.external_link })
-    needs.push(`報告 ${r.source_id} 只匯入已驗證文字；教材、評量及進度仍需處理。`)
+    if (mappedLesson.length === 1) reportData.lesson_id = mappedLesson[0].id
+    else if (r.sourceLessonLabel) needs.push(`報告 ${r.source_id} 的教材「${r.sourceLessonLabel}」在目標課程找不到唯一同名教材，請人工核對。`)
+    if (r.sourceEvidence?.some(e=>e.fields?.some(f=>['章節起點','章節終點'].includes(f.label)))) needs.push(`報告 ${r.source_id} 的章節進度尚未對應至 EduLog 進度。`)
+    add('report', r.source_id, reportChoice === 'new' ? idFor('report', r.source_id) : reportChoice, reportData)
   }
   work.destination = { classroom_id: $('classroom').value, course_ids: courseIds, class_session_id: sessionId }; work.needs = needs
   return rows
@@ -253,16 +267,22 @@ function prepareRows() {
 async function preview(reuse = false) {
   if (!work || work.type !== 'import') throw new Error('請先擷取目前班級。')
   if (!reuse) {
-    if (work.jobId && !work.done) await api('job-status', { status: 'cancelled' }, { jobId: work.jobId })
+    if (work.jobId && (work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status))) throw new Error('此工作已有寫入或待確認檢查點。請使用「檢查並續傳」核對原批次，不能重新建立工作。')
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
     await mappingController.verifyReportRelationships()
-    work.batches = splitBatches(prepareRows(), batchBytes); work.done = 0
-    const job = await api('job', { source_origin: work.snapshot.sourceOrigin, source_class_id: work.snapshot.classId, date_from: work.dateFrom, date_to: work.dateTo, ...work.destination }); work.jobId = job.id
+    const batches = splitBatches(prepareRows(), batchBytes)
+    if (!batches.length) throw new Error('沒有可產生差異的資料，請先核對來源與目標。')
+    work.previewDirty = true; previewResults = []; $('apply').disabled = true
+    if (work.jobId) await api('job-status', { status: 'cancelled' }, { jobId: work.jobId })
+    const job = await api('job', { source_origin: work.snapshot.sourceOrigin, source_class_id: work.snapshot.classId, date_from: work.dateFrom, date_to: work.dateTo, ...work.destination })
+    work.batches = batches; work.done = 0; work.jobId = job.id; work.batchCount = batches.length; work.previewDirty = true
+    await save()
   }
+  validateBatches(work.batches)
   previewResults = []
   for (let i = work.done || 0; i < work.batches.length; i++) {
     const result = await api('preview', work.batches[i], { jobId: work.jobId })
-    if (result.applied != null) { work.done = i + 1; await save() }
+    if (result.applied != null) { work.done = i + 1; work.appliedBatchKeys = [...new Set([...(work.appliedBatchKeys || []), work.batches[i].key])]; await save() }
     else previewResults.push({ ...result, batchIndex: i })
   }
   work.status = 'previewed'; work.previewDirty = false; work.mappingDirty = false; work.batchCount = work.batches.length; await save(); renderDifferences(); notice('差異已更新，請檢查後確認匯入。')
@@ -286,9 +306,45 @@ function renderDifferences() {
     }
     $('diff-list').append(details)
   }))
+  work.batchSummaries ||= {}
+  for (const result of previewResults) work.batchSummaries[work.batches[result.batchIndex].key] = summarizeImportRows(result.rows || [])
   $('counts').textContent = [...Object.entries(totals).map(([k, v]) => `${labels[k]} ${v}`), `需處理 ${work.needs.length}`].join(' · ')
   if (work.needs.length) { const d = node('details'); d.append(node('summary', `查看 ${work.needs.length} 項需處理資料`)); work.needs.forEach(text => d.append(node('p', text))); $('diff-list').append(d) }
   show('preview-section'); stage('import', 'apply'); $('apply').disabled = false
+}
+function summarizeImportRows(rows) {
+  const result = {}
+  for (const row of rows) {
+    result[row.kind] ||= {}
+    result[row.kind][row.status] = (result[row.kind][row.status] || 0) + 1
+  }
+  return result
+}
+function mergeImportSummary(target, next) {
+  for (const [kind, states] of Object.entries(next || {})) for (const [state, count] of Object.entries(states || {})) {
+    target[kind] ||= {}; target[kind][state] = (target[kind][state] || 0) + count
+  }
+  return target
+}
+function renderImportOutcome() {
+  const host = $('import-outcome'); host.replaceChildren(); host.hidden = false
+  const title = node('h3', work.status === 'complete' ? '匯入批次已核驗完成' : '本次匯入尚有資料待處理')
+  host.append(title)
+  const totals = {}
+  for (const key of work.appliedBatchKeys || []) mergeImportSummary(totals, work.batchSummaries?.[key])
+  for (const kind of ['student','enrollment','occurrence','report']) {
+    const states = totals[kind]
+    if (!states) continue
+    const text = [`新增 ${states.added || 0}`,`更新 ${states.updated || 0}`,`無變更 ${states.unchanged || 0}`,`保留 EduLog ${states.conflict || 0}`].join(' · ')
+    host.append(node('p', `${labels[kind]}：${text}`))
+  }
+  if (!Object.keys(totals).length && work.done) host.append(node('p','此工作由舊版擴充套件建立，沒有保留逐類結果；可查詢伺服器批次與有效名單。','hint'))
+  if (work.needs?.length) host.append(node('p', `另有 ${work.needs.length} 項未匯入或需處理；批次完成不代表來源資料已全部同步。`, 'hint'))
+  if (work.rosterVerification) {
+    const v = work.rosterVerification
+    host.append(node('p', `${v.date} 有效名單核對：EduLog ${v.actual} 人；來源應有 ${v.expected} 人；缺少 ${v.missing.length} 人；其他 ${v.extra.length} 人。`))
+    if (v.missing.length || v.extra.length) host.append(node('p', `名單有差異：${[...v.missing.map(id=>`缺少 ${id.slice(0,8)}`),...v.extra.map(id=>`EduLog 另有 ${id.slice(0,8)}`)].join('、')}`, 'hint'))
+  } else if (work.rosterCheckError) host.append(node('p',`有效名單核對暫時失敗：${work.rosterCheckError}。可在工作紀錄重新查詢。`,'hint'))
 }
 function displayValue(key, value) {
   if (value == null) return '—'
@@ -306,8 +362,38 @@ function progress() {
   $('operation-status').hidden = false
   $('operation-status').dataset.state = work.status === 'applying' ? 'loading' : ['failed','outcome_unknown'].includes(work.status) ? 'error' : 'complete'
   $('operation-title').textContent = ({ applying:'正在寫入匯入批次', paused:'匯入已暫停', failed:'匯入部分失敗', outcome_unknown:'寫入結果尚未確認', complete:'匯入批次已完成', cancelled:'已取消剩餘批次' })[work.status] || '匯入進度'
-  $('operation-detail').textContent = `成功寫入 ${work.done || 0} / ${work.batchCount || 0} 批；${work.needs?.length || 0} 筆需處理。取消不會撤回已完成批次。`
+  $('operation-detail').textContent = `已核對 ${work.done || 0} / ${work.batchCount || 0} 批；${work.needs?.length || 0} 筆需處理。取消不會撤回已完成批次。`
   $('operation-progress').hidden = !work.batchCount; $('operation-progress').max = work.batchCount || 1; $('operation-progress').value = work.done || 0
+  if (work.status === 'complete' || work.status === 'partial_complete') renderImportOutcome()
+}
+function taipeiToday() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  return `${parts.find(p=>p.type==='year').value}-${parts.find(p=>p.type==='month').value}-${parts.find(p=>p.type==='day').value}`
+}
+async function finalizeImport() {
+  const keys = work.batches.map(batch => batch.key)
+  const completed = await api('complete', { expected_batch_keys: keys }, { jobId: work.jobId })
+  work.status = completed.verified === true ? 'complete' : 'partial_complete'
+  work.appliedBatchKeys = keys
+  try {
+    const info = await api('import-info', undefined, { jobId: work.jobId, query: { roster_date: taipeiToday() } })
+    const roster = info.roster?.enrollments || []
+    const sessionId = work.destination?.class_session_id
+    const expected = [...new Set((work.sourceRosterEntries || []).filter(row => row.start_date <= info.roster_date && ['regular','completed'].includes(row.status)).map(row => row.id))]
+    const actual = [...new Set(roster.filter(row => !sessionId || row.class_session_id === sessionId).map(row => row.id))]
+    work.rosterVerification = { date: info.roster_date, expected: expected.length, actual: actual.length, missing: expected.filter(id => !actual.includes(id)), extra: actual.filter(id => !expected.includes(id)) }
+    work.serverImportSummary = {
+      status: info.job?.status,
+      batchCount: info.batches?.length || 0,
+      appliedRows: (info.batches || []).reduce((sum, batch) => sum + (batch.applied || 0), 0),
+      kinds: (info.batches || []).reduce((sum, batch) => mergeImportSummary(sum, batch.counts || {}), {}),
+    }
+  } catch (error) {
+    work.rosterVerification = null
+    work.rosterCheckError = error.message
+  }
+  delete work.sourceRosterEntries
+  await save(); progress()
 }
 async function apply() {
   if (work.previewDirty || !work.jobId) throw new Error('請先更新差異。')
@@ -324,12 +410,21 @@ async function apply() {
       // the chosen class. Collected data may resume without a closed source tab.
       const sourceCheck = await send({ type: 'workspace-check-source', tabId: work.sourceTab, sourcePath: work.sourcePath })
       if (sourceCheck.closed && !work.batches?.[i]?.rows?.length) throw new Error('來源分頁已關閉且此批尚未完整擷取。請重新開啟相同班級頁後再續傳。')
-      await api('apply', work.batches[i], { jobId: work.jobId }); work.done = i + 1; await save(); progress()
+      await api('apply', work.batches[i], { jobId: work.jobId })
+      const previewBatch = previewResults.find(result => result.batchIndex === i)
+      if (previewBatch) {
+        const summary = {}
+        for (const row of previewBatch.rows || []) { summary[row.kind] ||= {}; summary[row.kind][row.status] = (summary[row.kind][row.status] || 0) + 1 }
+        work.batchSummaries ||= {}; work.batchSummaries[work.batches[i].key] = summary
+      }
+      work.done = i + 1; await save(); progress()
     }
     const finished = work.done === work.batches.length
-    work.status = finished ? 'complete' : cancelRequested ? 'cancelled' : 'paused'; await api('job-status', { status: work.status }, { jobId: work.jobId }); await save(); progress()
+    work.status = finished ? 'applying' : cancelRequested ? 'cancelled' : 'paused'
+    if (finished) await finalizeImport()
+    else { await api('job-status', { status: work.status }, { jobId: work.jobId }); await save(); progress() }
     if (finished || cancelRequested) { previewResults = []; $('mapping').hidden = true; $('preview-section').hidden = true; $('pause').hidden = true; $('cancel-work').hidden = true; stage('import', 'cancel-work') }
-    notice(finished ? `已處理全部可匯入批次。仍有 ${work.needs.length} 項需處理；未標示為完整匯入。` : cancelRequested ? '已取消剩餘工作，成功寫入的資料保留。' : '工作已暫停，成功批次保留。')
+    notice(finished ? `已核對 ${work.batchCount} 個匯入批次；${work.needs.length} 項仍需處理，請查看名單核對結果。` : cancelRequested ? '已取消剩餘工作，成功寫入的資料保留。' : '工作已暫停，成功批次保留。')
   } catch (error) { work.status = ['API_TIMEOUT','API_NETWORK_ERROR','API_RESPONSE_INVALID'].includes(error.code) || /^HTTP_5/.test(error.code || '') ? 'outcome_unknown' : 'failed'; await save(); progress(); throw error }
 }
 async function resumeImport() {
@@ -337,8 +432,7 @@ async function resumeImport() {
   if (work.status === 'outcome_unknown' || work.status === 'applying' || work.status === 'failed') {
     await preview(true)
     if ((work.done || 0) >= (work.batchCount || work.batches?.length || 0)) {
-      await api('job-status', { status: 'complete' }, { jobId: work.jobId }); work.status = 'complete'; await save(); progress()
-      notice('檢查點確認所有批次都已完成；未重複寫入。'); return
+      await finalizeImport(); notice('伺服器檢查點確認所有批次均已提交；名單核對結果已更新。'); return
     }
     notice('已使用原冪等鍵檢查未確認批次。檢視差異後，再按「確認並分批匯入」。')
     return
@@ -421,23 +515,30 @@ async function prefill() {
   notice(`已套用 ${result.applied} 個欄位，未送出表單。請返回網站檢查。`)
 }
 async function loadWork() {
-  const local = await send({ type: 'workspace-store', action: 'list' }), remote = await api('work')
+  const [localResult, remoteResult] = await Promise.allSettled([send({ type: 'workspace-store', action: 'list' }), api('work')])
+  const local = localResult.status === 'fulfilled' ? localResult.value : null
+  const remote = remoteResult.status === 'fulfilled' ? remoteResult.value : null
   $('work-list').replaceChildren()
-  for (const row of local.sort((a, b) => b.updatedAt - a.updatedAt)) {
+  if (!local) {
+    const card = node('article', undefined, 'card'); card.append(node('h2', '本機工作暫時無法讀取'), node('p', '工作資料庫連線已中斷。請重新整理以重新開啟連線；已儲存的工作資料不會因這次讀取失敗而刪除。', 'hint'))
+    const retry = node('button', '重試讀取本機工作'); retry.addEventListener('click', () => void runLatest(loadWork, { label: '正在重新開啟本機工作資料庫' })); card.append(retry); $('work-list').append(card)
+  }
+  for (const row of (local || []).sort((a, b) => b.updatedAt - a.updatedAt)) {
     const card = node('article', undefined, 'card'); const statusText = ({ applying:'寫入中', paused:'已暫停', failed:'部分失敗', outcome_unknown:'結果尚未確認', complete:'已完成', cancelled:'已取消剩餘批次', collected:'已擷取，待確認對應', collecting:'擷取中', 'paused-extraction':'擷取已暫停', reviewing:'待檢查欄位', pending_confirmation:'待人工送出／待確認' })[row.status] || '狀態需確認'; card.append(node('h2', row.title || row.id), node('p', `${row.type === 'import' ? '教學資料匯入' : '報告預填'} · ${statusText} · ${new Date(row.updatedAt).toLocaleString()}`))
     if (row.type === 'import' && row.batches && !['complete','cancelled'].includes(row.status)) {
       const resume = node('button', '檢查並續傳'); resume.addEventListener('click', () => void run(async () => {
         work = row; $('source-tab').value = String(row.sourceTab); selectedPath = row.sourcePath; flow('import')
-        if (row.done === row.batches.length) { await api('job-status', { status: 'complete' }, { jobId: row.jobId }); work.status = 'complete'; await save(); progress(); notice('已恢復完成檢查點；未重複寫入。'); return }
+        if (row.done === row.batches.length) { await finalizeImport(); notice('已恢復完成檢查點；伺服器批次與名單核對已更新。'); return }
         if (row.status === 'outcome_unknown' || row.status === 'applying' || row.status === 'failed') { await resumeImport(); return }
         if (row.status === 'paused') await api('job-status', { status: 'applying' }, { jobId: row.jobId }); await preview(true); progress(); notice('檢查剩餘批次後，按確認匯入或續傳。')
       })); card.append(resume)
     }
-    if (row.type === 'import' && row.snapshot && !row.batches) {
+    if (row.type === 'import' && row.snapshot && (!row.batches || !row.done && ['collected','previewed'].includes(row.status))) {
       const resume = node('button', row.history?.next < row.history?.paths.length ? '繼續擷取／確認對應' : '繼續確認對應')
       resume.addEventListener('click', () => void run(async () => {
         const chosen = Number($('source-tab').value) || row.sourceTab
         $('source-tab').value = String(chosen); selectedPath = tabs.find(t => t.id === chosen)?.path || row.sourcePath
+        $('include-internal-notes').checked = row.includeInternalNotes === true
         const c = await source('context'); if (c.classId !== row.snapshot.classId) throw new Error('請先選擇同一來源班級的分頁。')
         work = { ...row, sourceTab: chosen, sourcePath: selectedPath }; await save()
         flow('import'); if (row.history) await collectHistory(); await mappingView(); notice('已恢復來源資料，請確認對應。')
@@ -449,10 +550,23 @@ async function loadWork() {
     if (row.type === 'prefill' && row.status === 'applying') card.append(node('p', '上次套用回應中斷，請到原站確認內容。不會自動重複套用。'))
     $('work-list').append(card)
   }
-  if (!local.length) $('work-list').append(node('p', '此瀏覽器沒有未完成工作。'))
+  if (local && !local.length) $('work-list').append(node('p', '此瀏覽器沒有未完成工作。'))
+  if (!remote) {
+    const remoteError = node('article', undefined, 'card'); remoteError.append(node('h2', 'EduLog 工作紀錄暫時無法載入'), node('p', '本機續傳資料仍可查看。請確認連線後重試伺服器紀錄。', 'hint'))
+    const retryRemote = node('button', '重試載入 EduLog 紀錄'); retryRemote.addEventListener('click', () => void runLatest(loadWork, { label: '正在重新載入 EduLog 工作紀錄' })); remoteError.append(retryRemote); $('work-list').append(remoteError)
+    notice('工作紀錄部分載入失敗；本機與伺服器資料分開保留。', true); return
+  }
   const d = node('details'); d.append(node('summary', `EduLog 紀錄：${remote.imports.length} 個匯入／${remote.pushes.length} 個預填`))
   const statusText = status => ({ queued:'排隊中', collecting:'擷取中', previewed:'待確認差異', applying:'匯入中', paused:'已暫停', failed:'部分失敗', outcome_unknown:'結果尚未確認', complete:'已完成', cancelled:'已取消剩餘批次', pending_confirmation:'待人工確認', confirmed:'已確認' })[status] || '狀態待確認'
-  remote.imports.forEach(r => d.append(node('p', `班級 ${r.source_class_id || '—'} · ${statusText(r.status)} · 已處理 ${r.counts.applied || 0} 筆`)))
+  remote.imports.forEach(r => {
+    const item=node('div',undefined,'row-card'); item.append(node('p',`來源班級 ${r.source_class_id || '—'} · ${statusText(r.status)} · 批次內已處理 ${r.counts.applied || 0} 筆`))
+    const inspect=node('button','查詢批次與有效名單');inspect.type='button';inspect.addEventListener('click',()=>void runLatest(async()=>{
+      const info=await api('import-info',undefined,{jobId:r.id,query:{roster_date:taipeiToday()}}), roster=info.roster?.enrollments||[]
+      const panel=node('div',undefined,'hint');panel.append(node('p',`伺服器狀態：${statusText(info.job?.status)} · ${info.batches?.length||0} 個批次 · 核對日期 ${info.roster_date}`),node('p',`有效名單：${roster.length} 筆。批次筆數是已處理資料列，不代表名單或報告筆數。`))
+      for(const batch of info.batches||[])panel.append(node('p',`批次 ${batch.key.slice(0,8)} · ${batch.status==='applied'?'已提交':'尚未提交'} · ${batch.applied} 筆`))
+      item.append(panel);inspect.disabled=true;notice('已讀取伺服器批次檢查點與目標班級有效名單。')
+    },{label:'正在核對伺服器批次與班級名單'}));item.append(inspect);d.append(item)
+  })
   remote.pushes.forEach(r => d.append(node('p', `報告 ${r.report_id.slice(0, 8)} · ${r.status === 'confirmed' ? '已確認' : '待人工送出／待確認'}`)))
   $('work-list').append(d); notice('工作紀錄已更新。')
 }

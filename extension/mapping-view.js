@@ -24,13 +24,15 @@ function addLink(parent, label, url) {
 }
 export function createMappingView({ work, context, settingsUrl, changed, queryStudent }) {
   let entries = [], section = 'courses', selected = '', pinCurrent = true, mobileEditor = false, scrolls = {}, listScrolls = {}, listWindows = {}, sections = {}, restoredWork = ''
+  const buttons = new Map()
   const viewport = matchMedia('(max-width: 768px)')
-  const save = () => { if (work()) work().mappingView = { section, selected, mobileEditor, search: $('mapping-search').value, scrolls, listScrolls, listWindows, sections, courseOverrides: work().mappingView?.courseOverrides || [] }; changed() }
+  const save = () => { if (work()) work().mappingView = { section, selected, mobileEditor, search: $('mapping-search').value, filter: $('mapping-filter').value, scrolls, listScrolls, listWindows, sections, courseOverrides: work().mappingView?.courseOverrides || [] }; changed() }
   function visible(entry) {
     const filter = $('mapping-filter').value, search = $('mapping-search').value.trim().toLocaleLowerCase('zh-TW')
     return entry.section === section && (pinCurrent && entry.key === selected || (!search || `${entry.title} ${entry.subtitle}`.toLocaleLowerCase('zh-TW').includes(search)) && (filter === 'all' || filter === 'pending' && !['remembered','skipped'].includes(entry.status) || filter === entry.status))
   }
   function choose(key, user = false) {
+    if (key && !entries.some(e => e.key === key && e.section === section)) key = ''
     if (viewport.matches && !mobileEditor) listWindows[section] = window.scrollY
     if (selected) scrolls[selected] = $('mapping-editor-pane').scrollTop
     selected = key; pinCurrent = true; mobileEditor = Boolean(key)
@@ -61,9 +63,11 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
   }
   function mount(groups, cards) {
     const previousEntry = entries.find(e => e.key === selected), sameWork = restoredWork === work().id
+    if (sameWork && selected) scrolls[selected] = $('mapping-editor-pane').scrollTop
+    const editorScroll = sameWork ? $('mapping-editor-pane').scrollTop : 0, listScroll = sameWork ? $('mapping-items').scrollTop : 0
     entries = []
     const old = work().mappingView || {}
-    if (restoredWork !== work().id) { section = old.section || 'courses'; selected = old.selected || ''; mobileEditor = old.mobileEditor || false; scrolls = old.scrolls || {}; listScrolls = old.listScrolls || {}; listWindows = old.listWindows || {}; sections = old.sections || {}; $('mapping-search').value = old.search || ''; restoredWork = work().id }
+    if (!sameWork) { buttons.clear(); pinCurrent = true; section = ['courses','admissions'].includes(old.section) ? old.section : 'courses'; selected = old.selected || ''; mobileEditor = old.mobileEditor || false; scrolls = old.scrolls || {}; listScrolls = old.listScrolls || {}; listWindows = old.listWindows || {}; sections = old.sections || {}; $('mapping-search').value = old.search || ''; $('mapping-filter').value = old.filter || sections[section]?.filter || 'pending'; restoredWork = work().id }
     for (const [i, g] of groups.entries()) {
       const panel = $(`course-group-${i}`); arrange(panel, g.rows)
       const brief = node('section', undefined, 'source-brief'); brief.append(node('h3', '來源課程'), node('p', g.label), node('p', `${g.rows.length} 筆報名 · ${g.sourceId ? '課程 ID ' + g.sourceId : '依本班來源名稱確認'}`, 'hint'))
@@ -79,10 +83,13 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
       const target = node('div', undefined, 'selected-target'); panel.querySelector('.mapping-comparison > div:last-child').append(target)
       entries.push({ key: `admission:${row.source_id}`, section: 'admissions', title: sourceName(row), subtitle: `${row.sourceCourseLabel || '來源課程待核對'} · 報名 #${row.source_id}`, panel, row })
     }
+    if (!entries.some(e => e.key === selected && e.section === section)) selected = sameWork && previousEntry?.group ? entries.find(e => e.section === section && e.group?.rows.some(r => previousEntry.group.rows.some(old => old.source_id === r.source_id)))?.key || '' : ''
+    if (!selected) mobileEditor = false
     refresh()
-    if (!entries.some(e => e.key === selected)) selected = sameWork && previousEntry?.group ? entries.find(e => e.group?.rows.some(r => previousEntry.group.rows.some(old => old.source_id === r.source_id)))?.key || '' : ''
-    if (!selected && !viewport.matches) choose(entries.find(e => e.section === section && e.status !== 'remembered')?.key || entries.find(e => e.section === section)?.key || '')
+    if (!selected && !viewport.matches) choose(entries.find(e => visible(e))?.key || '')
     refresh()
+    $('mapping-editor-pane').scrollTop = selected === previousEntry?.key && sameWork ? editorScroll : scrolls[selected] || 0
+    $('mapping-items').scrollTop = sameWork ? listScroll : listScrolls[section] || 0
   }
   function targetSummary(entry) {
     const box = entry.panel.querySelector('.selected-target'); if (!box) return
@@ -108,12 +115,16 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
     if (!parts.length) box.append(node('p', '選定既有目標後可查看詳細資料；新建目標於建立後才能開啟。', 'hint'))
   }
   function refresh() {
-    if (!entries.length) return
+    if (selected && !entries.some(e => e.key === selected && e.section === section)) { selected = ''; mobileEditor = false }
+    const list = $('mapping-items'), keys = new Set(entries.map(e => e.key))
+    for (const [key, button] of buttons) if (!keys.has(key)) { button.remove(); buttons.delete(key) }
+    for (const button of [...list.children]) if (buttons.get(button.dataset.entryKey) !== button) button.remove()
     for (const e of entries) {
       e.status = e.row ? e.panel.dataset.state : $(`course-state-${e.index}`).textContent.startsWith('已記住') ? 'remembered' : e.group.key.startsWith('missing:') ? 'missing' : 'pending'
-      e.panel.hidden = e.key !== selected; if (!e.panel.hidden) e.panel.open = true
+      e.panel.hidden = e.section !== section || e.key !== selected; if (!e.panel.hidden) e.panel.open = true
       const primary=e.panel.querySelector('.mapping-actions>.primary');if(primary&&!e.panel.hasAttribute('aria-busy')){const unknown=e.panel.dataset.saveUnknown==='true';primary.textContent=unknown?'請先核對保存結果':e.status==='remembered'?'已記住此對應':primary.dataset.originalLabel;primary.setAttribute('aria-disabled',String(unknown||e.status==='remembered'))}
-      if (!e.button) { const b = node('button', undefined, 'mapping-list-item'); b.type = 'button'; b.addEventListener('click', () => choose(e.key, true)); e.button = b }
+      if (!buttons.has(e.key)) { const b = node('button', undefined, 'mapping-list-item'); b.type = 'button'; b.dataset.entryKey = e.key; b.addEventListener('click', () => choose(b.dataset.entryKey, true)); buttons.set(e.key, b) }
+      e.button = buttons.get(e.key)
       const selectedTarget = e.row ? e.panel.querySelector('select[id^="student-"]') : $(`source-course-${e.index}`)
       let targetLabel = selectedTarget?.value && selectedTarget.value !== 'new' ? selectedTarget.selectedOptions[0]?.textContent : ''
       if (e.row && targetLabel) { const course = context().courses.find(c => c.id === $(`enrollment-course-${e.row.source_id}`).value); if (course) targetLabel += ` ／ ${course.display_name || course.subject}` }
@@ -122,10 +133,10 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
       if (e.button.dataset.content !== content) { e.button.dataset.content = content; e.button.replaceChildren(node('strong', e.title), node('span', e.subtitle), node('small', stateNames[e.status], `state-${e.status}`)); if (e.status === 'remembered' && targetLabel) e.button.append(node('small', `→ ${targetLabel}`)); else if (missing.length) e.button.append(node('small', missing.join(' · '))) }
       e.button.setAttribute('aria-current', e.key === selected ? 'true' : 'false'); e.button.hidden = !visible(e); targetSummary(e)
     }
-    const list = $('mapping-items')
     // Stable nodes and order keep the active item, focus and scroll position.
-    for (const e of entries) if (e.button.parentNode !== list) list.append(e.button)
-    const active = entries.find(e => e.key === selected)
+    let next = list.firstElementChild
+    for (const e of entries) { if (e.button !== next) list.insertBefore(e.button, next); next = e.button.nextElementSibling }
+    const active = entries.find(e => e.key === selected && e.section === section)
     $('mapping-editor-title').textContent = active?.title || '從清單選擇要核對的資料'
     $('mapping-editor-subtitle').textContent = active?.subtitle || '每次核對一筆，已保存的對應可再次使用。'
     $('mapping-empty').hidden = Boolean(active)
@@ -136,13 +147,17 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
   for (const b of document.querySelectorAll('[data-mapping-section]')) b.addEventListener('click', () => {
     if (section === b.dataset.mappingSection) return
     listScrolls[section] = $('mapping-items').scrollTop
+    if (selected) scrolls[selected] = $('mapping-editor-pane').scrollTop
     sections[section] = { selected, search: $('mapping-search').value, filter: $('mapping-filter').value }
     section = b.dataset.mappingSection
     const previous = sections[section] || {}
-    selected = previous.selected || ''; mobileEditor = false
+    selected = ''; pinCurrent = true; mobileEditor = false
     $('mapping-search').value = previous.search || ''; $('mapping-filter').value = previous.filter || 'pending'
+    refresh()
+    const restored = entries.find(e => e.key === previous.selected && e.section === section)
+    if (restored || !viewport.matches) choose(restored?.key || entries.find(e => visible(e))?.key || '')
+    if (viewport.matches) mobileEditor = false
     refresh(); $('mapping-items').scrollTop = listScrolls[section] || 0
-    if (!viewport.matches) choose(selected || entries.find(e => e.section === section && visible(e))?.key || '')
     save()
   })
   $('mapping-search').addEventListener('input', () => { pinCurrent = false; refresh(); save() })

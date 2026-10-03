@@ -25,10 +25,14 @@
   const forms = new WeakMap()
   async function digest(value) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))))].map(b => b.toString(16).padStart(2, '0')).join('') }
   function getForm(doc) {
-    return [...doc.querySelectorAll('.modal.show form, #remote_modal form')].find(form => /^\/dt_admissions\/\d+\/reports\/\d+$/.test(path(form.getAttribute('action')))) || null
+    const currentPath = path(doc.location?.pathname || '')
+    return [...doc.querySelectorAll('.modal.show form, #remote_modal form, form')].find(form => {
+      const action = path(form.getAttribute('action'))
+      return /^\/dt_admissions\/\d+\/reports\/\d+$/.test(action) && (form.closest('.modal.show') || form.closest('#remote_modal') || /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(currentPath))
+    }) || null
   }
-  async function readForm(doc) {
-    const form = getForm(doc)
+  async function readForm(doc, targetForm = getForm(doc)) {
+    const form = targetForm
     if (!form) throw new Error('請先在原站開啟學生的「記錄」編輯視窗。')
     const action = path(form.getAttribute('action')), ids = action.match(/^\/dt_admissions\/(\d+)\/reports\/(\d+)$/)
     if (!forms.has(form)) forms.set(form, crypto.randomUUID())
@@ -42,7 +46,7 @@
       }]
     })
     const target = { formId: forms.get(form), action, admissionId: ids[1], reportId: ids[2], title: text(form.closest('.modal')?.querySelector('.modal-title')), date: fullDate(text(form.closest('.modal')?.querySelector('.modal-title'))), fields: values }
-    return { ...target, fingerprint: await digest(target), sourceReportUrl: `${ORIGIN}${action}` }
+    return { ...target, fingerprint: await digest(target), sourceReportUrl: `${ORIGIN}${action}/edit` }
   }
   async function applyForm(doc, input) {
     const before = await readForm(doc)
@@ -148,7 +152,7 @@
         if (reportIds.has(reportId)) continue
         reportIds.add(reportId)
         const dateText = text(link.node.closest('td')).match(/\b20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}/)?.[0] || (date ? link.node.getAttribute('data-date') : '')
-        records.push({ kind: 'report', source_id: reportId, enrollment_source_id: admission, date, sourceEvidence: [evidence(row, sourcePath, [['admission_id','來源報名 ID',admission],['report_id','來源報告 ID',reportId],['date','課次日期原文',dateText]])], data: { external_link: `${ORIGIN}${link.path.replace(/\/edit$/, '')}` }, needs: ['既有報告內容', ...(date ? [] : ['完整課次日期'])] })
+        records.push({ kind: 'report', source_id: reportId, enrollment_source_id: admission, date, sourceEvidence: [evidence(row, sourcePath, [['admission_id','來源報名 ID',admission],['report_id','來源報告 ID',reportId],['date','課次日期原文',dateText]])], data: { external_link: `${ORIGIN}${link.path}` }, needs: ['既有報告欄位', ...(date ? [] : ['完整課次日期'])] })
       }
     }
     for (const r of admissions.values()) if (!r.student_source_id) issues.push({ kind: 'enrollment', source_id: r.source_id, reason: `${r.sourceStudentName || '姓名尚未辨識'}：缺少可靠學生 ID，可指定既有學生；不能新建學生。` })
@@ -166,12 +170,12 @@
       const reportId = ref.path.match(/reports\/(\d+)/)[1]
       const contentNode = [...row.querySelectorAll('p')].find(p => /^評語[：:]/.test(text(p)))
       const content = contentNode?.textContent.trim().replace(/^評語[：:]\s*/, '').slice(0, 10000)
-      results.push({ kind: 'report', source_id: reportId, enrollment_source_id: admissionId, date, sourceEvidence: [evidence(row, `/dt_admissions/${admissionId}`, [['admission_id','來源報名 ID',admissionId],['report_id','來源報告 ID',reportId],['date','課次日期原文',text(cells[1])],['content','學習表現原文',content]])], data: { ...(content ? { content } : {}), external_link: `${ORIGIN}${ref.path.replace(/\/edit$/, '')}` }, needs: content ? ['教材／評量欄位未驗證'] : ['既有報告內容'] })
+      results.push({ kind: 'report', source_id: reportId, enrollment_source_id: admissionId, date, sourceEvidence: [evidence(row, `/dt_admissions/${admissionId}`, [['admission_id','來源報名 ID',admissionId],['report_id','來源報告 ID',reportId],['date','課次日期原文',text(cells[1])],['content','學習表現原文',content]])], data: { ...(content ? { content } : {}), external_link: ref.path.endsWith('/edit') ? `${ORIGIN}${ref.path}` : `${ORIGIN}/dt_admissions/${admissionId}/reports/${reportId}/edit` }, needs: ['待讀取已儲存報告欄位'] })
     }
     return results
   }
   async function readPath(sourcePath) {
-    if (!/^\/(?:courses\/dt\/\d+(?:\/lesson[-_]reports)?|dt_admissions\/\d+)$/.test(sourcePath)) throw new Error('來源路徑尚未驗證。')
+    if (!/^\/(?:courses\/dt\/\d+(?:\/lesson[-_]reports)?|dt_admissions\/\d+|dt_admissions\/\d+\/reports\/\d+\/edit)$/.test(sourcePath)) throw new Error('來源路徑尚未驗證。')
     const response = await fetch(`${ORIGIN}${sourcePath}`, { credentials: 'same-origin', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { Accept: 'text/html' } })
     if (!response.ok || !response.headers.get('content-type')?.includes('text/html')) throw new Error('來源頁暫時無法讀取或權限不足。')
     const html = await response.text()
@@ -194,24 +198,61 @@
       if (doc.location.pathname !== initialPath) throw new Error('來源頁已導覽，工作已暫停。')
       try {
         const records = extractHistory(await readPath(sourcePath), sourcePath.split('/').pop())
-        for (const record of records) { const index = snapshot.records.findIndex(r => r.kind === record.kind && r.source_id === record.source_id); if (index < 0) snapshot.records.push(record); else snapshot.records[index] = { ...record, sourceEvidence: mergeEvidence(snapshot.records[index].sourceEvidence || [], record.sourceEvidence || []) } }
+        for (const record of records) {
+          try {
+            const editPath = path(record.data.external_link)
+            const saved = await readForm(await readPath(editPath))
+            const field = key => saved.fields.find(item => item.key === key)
+            const value = key => field(key)?.value || ''
+            const optionLabel = key => { const item=field(key); return item?.options.find(option=>option.value===item.value)?.label || '' }
+            const attendance = optionLabel('attendance_status')
+            const completion = optionLabel('is_completed')
+            const attendanceValue = /不出席|缺席|未到課|absent/i.test(attendance) ? 'absent' : /^(出席|到課|present)$/i.test(attendance.trim()) ? 'present' : ''
+            const completionValue = /未完成|未結課|否|no|incomplete/i.test(completion) ? false : /^(完成|已完成|已結課|是|yes|completed)$/i.test(completion.trim()) ? true : undefined
+            const rating = key => { const n=Number(value(key)); return Number.isInteger(n)&&n>=2&&n<=10&&n%2===0?n/2:null }
+            const sourceLesson = optionLabel('lesson_id')
+            record.data = {
+              ...record.data,
+              ...(value('content') ? { content: value('content') } : {}),
+              ...(value('contact_notes') ? { contact_notes: value('contact_notes') } : {}),
+              ...(attendanceValue ? { attendance_status: attendanceValue } : {}),
+              ...(value('absence_reason') ? { absence_reason: value('absence_reason').slice(0,64) } : {}),
+              ...(completionValue !== undefined ? { is_completed: completionValue } : {}),
+              ...(rating('class_participation') != null ? { class_participation: rating('class_participation') } : {}),
+              ...(rating('classroom_behavior') != null ? { classroom_behavior: rating('classroom_behavior') } : {}),
+            }
+            if (attendance && !attendanceValue) record.needs.push(`來源出席選項「${attendance.slice(0,80)}」尚未對應。`)
+            if (completion && completionValue === undefined) record.needs.push(`來源完成選項「${completion.slice(0,80)}」尚未對應。`)
+            if (value('class_notes')) record.sourceInternalNotes = value('class_notes').slice(0,10000)
+            if (sourceLesson) record.sourceLessonLabel = sourceLesson
+            record.needs = record.needs.filter(reason => reason !== '待讀取已儲存報告欄位')
+            const values = saved.fields.map(item => ({ key:item.key,label:item.label,text:item.type==='select' ? item.options.find(option=>option.value===item.value)?.label || item.value : item.value })).filter(item => item.text)
+            if (values.length) record.sourceEvidence = mergeEvidence(record.sourceEvidence || [], [{ sourcePath:editPath,table:'已儲存報告欄位',row:1,capturedAt:new Date().toISOString(),fields:values }])
+            if (value('progress_start') || value('progress_end') || value('lesson_id')) record.needs.push('教材與章節進度需確認對應')
+            if (!record.data.content && !record.data.attendance_status && !record.data.is_completed && record.data.class_participation == null && record.data.classroom_behavior == null && !record.data.contact_notes) record.needs.push('來源報告沒有已驗證的可匯入欄位')
+          } catch (error) { record.needs = [...new Set([...(record.needs || []), `無法讀取來源編輯欄位：${error.message}`])] }
+          const index = snapshot.records.findIndex(r => r.kind === record.kind && r.source_id === record.source_id)
+          if (index < 0) snapshot.records.push(record)
+          else snapshot.records[index] = { ...snapshot.records[index], ...record, sourceEvidence: mergeEvidence(snapshot.records[index].sourceEvidence || [], record.sourceEvidence || []) }
+        }
       } catch (error) { snapshot.issues.push({ kind: 'report', source_id: sourcePath.split('/').pop(), reason: error.message }) }
     }
     return snapshot
   }
-  globalThis.edulogSourceIntegration = Object.freeze({ origin: ORIGIN, extractClass, extractHistory, collect, readForm, applyForm, digest,
+  globalThis.edulogSourceIntegration = Object.freeze({ origin: ORIGIN, extractClass, extractHistory, collect, readForm, getForm, applyForm, digest,
     async readHistory(sourcePath) { if (!/^\/dt_admissions\/\d+$/.test(sourcePath)) throw new Error('來源路徑尚未驗證。'); return extractHistory(await readPath(sourcePath), sourcePath.split('/').pop()) },
     context(doc) { const p = doc.location.pathname; return { sourceOrigin: ORIGIN, sourcePath: p, classId: p.match(/^\/courses\/dt\/(\d+)/)?.[1] || null, title: text(doc.querySelector('#page-body > .content h2')), reportOpen: Boolean(getForm(doc)) } },
     capabilities: { current_class_import: true, report_prefill: true, all_classes_import: false, submission_confirmation: false },
   })
   if (globalThis.edulogRuntime && typeof document !== 'undefined') globalThis.edulogRuntime.listen((message, sender, respond) => {
-    if (sender.id !== chrome.runtime.id || !['integration-context', 'integration-collect', 'integration-history', 'integration-form', 'integration-apply'].includes(message?.type)) return
+    if (sender.id !== chrome.runtime.id || !['integration-context', 'integration-collect', 'integration-history', 'integration-form', 'integration-apply', 'integration-apply-inline'].includes(message?.type)) return
     const run = async () => {
       if (message.expectedPath && message.expectedPath !== location.pathname) throw new Error('來源分頁已變更，請重新選擇來源。')
       if (message.type === 'integration-context') return globalThis.edulogSourceIntegration.context(document)
       if (message.type === 'integration-collect') return collect(document, { history: message.history === true })
       if (message.type === 'integration-history') return globalThis.edulogSourceIntegration.readHistory(message.historyPath)
       if (message.type === 'integration-form') return readForm(document)
+      if (message.type === 'integration-apply-inline') return applyForm(document, message.input)
       return applyForm(document, message.input)
     }
     const response = value => { try { respond(value) } catch { /* An updated extension cannot receive this response. Native content is retained. */ } }

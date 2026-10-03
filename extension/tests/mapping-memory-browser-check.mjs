@@ -51,7 +51,11 @@ function mock() {
         for(const row of m.body.items){const key=r=>`${r.kind}:${r.key}:${r.kind==='course_rule'?r.source_class_id:''}`;if(row.action==='clear'){memories=memories.filter(r=>key(r)!==key({...row,source_class_id:m.body.source_class_id}));continue}upsert(memories,{...row,source_class_id:m.body.source_class_id,revision:crypto.randomUUID(),valid:true},key);if(['student','class_session','course'].includes(row.kind))upsert(links,{source_origin:origin,source_kind:row.kind,source_id:row.key,target_id:row.target_id,valid:true,reason:'remembered',revision:crypto.randomUUID()},r=>`${r.source_kind}:${r.source_id}`)}save();return{data:{items:m.body.items.map(r=>({kind:r.kind,key:r.key,revision:memories.find(l=>l.kind===r.kind&&l.key===r.key)?.revision}))}}
       }
       if(m.operation==='job')return{data:{id:id(9)}}
-      if(m.operation==='preview')return{data:{rows:m.body.rows.map(r=>({kind:r.record.kind,source_id:r.source_id,target_id:r.target_id,status:r.record.kind==='class_session'?(r.overwrite.includes('course_ids')?'updated':'conflict'):'added',before:r.record.kind==='class_session'?{...r.record.data,course_ids:[id(2)]}:{},after:r.record.data}))}}
+      if(m.operation==='preview'){
+        if(new Set(m.body.rows.map(r=>`${r.record.kind}:${r.source_id}`)).size!==m.body.rows.length)return{error:{code:'VALIDATION_FAILED',message:'The request is invalid',fields:{request:['Duplicate source IDs']},requestId:'edulog-synthetic-duplicate'}}
+        if(window.previewFailure){window.previewFailure=false;return{error:{code:'VALIDATION_FAILED',message:'The request is invalid',fields:{request:['Duplicate source IDs']},requestId:'edulog-synthetic-duplicate'}}}
+        return{data:{rows:m.body.rows.map(r=>({kind:r.record.kind,source_id:r.source_id,target_id:r.target_id,status:r.record.kind==='class_session'?(r.overwrite.includes('course_ids')?'updated':'conflict'):'added',before:r.record.kind==='class_session'?{...r.record.data,course_ids:[id(2)]}:{},after:r.record.data}))}}
+      }
       if(m.operation==='apply'){for(const r of m.body.rows){if(r.record.kind==='enrollment'){catalog.enrollments.push({...r.record.data,id:r.target_id,target_version:version});upsert(memories,{kind:'admission',key:r.source_id,source_class_id:'11',source_identity:r.source_identity,target_id:r.target_id,student_id:r.record.data.student_id,course_id:r.record.data.course_id,class_session_id:r.record.data.class_session_id,revision:crypto.randomUUID(),valid:true},r=>`${r.kind}:${r.key}`)}if(r.record.kind==='class_session')catalog.class_sessions[0].course_ids=r.record.data.course_ids}enrollments=catalog.enrollments;save();return{data:{applied:m.body.rows.length}}}
       if(m.operation==='work')return{data:{imports:[],pushes:[]}}
       return{data:{}}
@@ -161,7 +165,34 @@ try{
       }
       if(width<=768){await page.locator('#mapping-back').click();await page.locator('#mapping-search').fill('304');await page.locator('#mapping-items button[aria-current=true]').click();await page.locator('#mapping-back').click();assert.equal(await page.locator('#mapping-search').inputValue(),'304');await page.locator('#mapping-search').fill('');await page.locator('#mapping-items button[aria-current=true]').click()}
       await page.locator('#mapping-workbench').scrollIntoViewIfNeeded();await page.locator('#mapping-editor-pane').evaluate(n=>n.scrollTop=0);await page.screenshot({path:new URL(`${name}-${width}-mapping.png`,output).pathname.replace(/^\//,'')})
-      await page.locator('#preview').click();await page.locator('#preview-section').waitFor({state:'visible'})
+      // Remount twice and alternate tabs: no stale buttons or cross-tab editor.
+      for(let repeat=0;repeat<2;repeat++){
+        await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
+        assert.equal(await page.locator('#mapping-items button').count(),6)
+        assert.equal(await page.evaluate(()=>new Set([...document.querySelectorAll('#mapping-items button')].map(b=>b.dataset.entryKey)).size),6)
+        for(const [section,count]of[['courses',2],['admissions',4]]){
+          await choose(section,0);assert.equal(await page.evaluate(()=>[...document.querySelectorAll('#mapping-items button')].filter(b=>!b.hidden).length),count)
+          const prefix=section==='courses'?'course:':'admission:'
+          assert.equal(await page.evaluate(prefix=>[...document.querySelectorAll('#mapping-items button')].filter(b=>!b.hidden).every(b=>b.dataset.entryKey.startsWith(prefix)),prefix),true)
+          assert.equal(await page.locator(section==='courses'?'.mapping-row:visible':'.course-group:visible').count(),0)
+        }
+      }
+      for(const [index,admission]of[[0,'301'],[1,'302'],[2,'303'],[3,'304']]){
+        await choose('admissions',index)
+        assert.equal(await page.locator(`#start-${admission}`).inputValue(),'2026-01-01')
+        assert.match(await page.locator('.mapping-row:visible [data-row-state]').textContent(),/已記住/)
+        // Remount invalidates readonly lookup checkpoints; refresh them before
+        // creating admissions without asking the user to save mappings again.
+        if(await page.locator(`#more-enrollments-${admission}`).isEnabled())await page.locator(`#more-enrollments-${admission}`).click()
+        await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
+      }
+      if(width===390){
+        await page.evaluate(()=>window.previewFailure=true);await page.locator('#preview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
+        assert.match(await page.locator('#operation-detail').textContent(),/重複來源 ID/)
+        assert.match(await page.locator('#diagnostic').textContent(),/Duplicate source IDs/);assert.match(await page.locator('#diagnostic').textContent(),/edulog-synthetic-duplicate/)
+        assert.equal(await page.locator('#start-301').inputValue(),'2026-01-01');assert.equal(await page.locator('#apply').isDisabled(),true)
+      }
+      await page.locator('#preview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await page.locator('#preview-section').isVisible(),true,await page.locator('#operation-detail').textContent())
       const job=await page.evaluate(()=>testCalls.find(m=>m.operation==='job').body);assert.deepEqual(job.course_ids.sort(),[id(2),id(12)].sort());assert.equal('course_id'in job,false)
       const batch=await page.evaluate(()=>testCalls.find(m=>m.operation==='preview').body.rows.filter(r=>r.record.kind==='enrollment'));assert.equal(batch.length,4);assert.equal(batch.find(r=>r.source_id==='301').record.data.student_id,id(4));assert.equal(batch.find(r=>r.source_id==='302').record.data.student_id,id(14));assert.equal(batch.find(r=>r.source_id==='303').record.data.course_id,id(12))
       const change=page.getByText('我確認追加選定課程到班級可上課程（保留原有課程與排程）',{exact:true});await change.locator('..').locator('input').check();await page.locator('#repreview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
@@ -172,6 +203,7 @@ try{
       assert.match(await page.locator('#enrollment-301 option:checked').textContent(),/正式/)
       assert.equal(await page.locator('.mapping-row:visible').getByRole('link',{name:'查看 EduLog 報名與報告（新分頁）'}).getAttribute('href').then(h=>h.startsWith('https://web.example:8443/edulog/dashboard/reports/')),true)
       const selected=await page.locator('#student-101').inputValue();await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await page.locator('#student-101').inputValue(),selected)
+      assert.equal(await page.locator('#mapping-items button').count(),6)
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[])
       await page.goto(`${base}/workspace.html?source=10&changed=1`);await collect();assert.match(await page.locator('#mapping-summary').textContent(),/失效 1/)
       console.log(`PASS ${name} ${width}: master/detail, focus/scroll, inline failure, targeted revisions, evidence, safe frontend links, multilingual statuses, multi-course reuse and supplement`);await context.close()

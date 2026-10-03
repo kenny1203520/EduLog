@@ -339,7 +339,7 @@ export function createMappingController(hooks) {
       if(r.student_source_id)button(right,'清除此學生 ID 對應',async()=>{if(!await forget([{kind:'student',key:r.student_source_id,expected_revision:revision('student',r.student_source_id)}]))return;notice('學生 ID 對應已清除；各筆已確認的報名記憶仍保留。');dirty()})
       for(const control of [s,cs,es])control.addEventListener('change',()=>{review.checked=false;querySequences.set(r.source_id,(querySequences.get(r.source_id)||0)+1);if(control===s)es.value='';if(control===cs){courseOverrides.add(r.source_id);work().mappingView={...work().mappingView,courseOverrides:[...courseOverrides]}}confirmed.delete(r.source_id);if(control===s&&r.student_source_id)for(const peer of work().snapshot.records.filter(p=>p.kind==='enrollment'&&p.student_source_id===r.student_source_id&&p.source_id!==r.source_id)){const other=studentSelect(peer);if(other&&other.value!==s.value){candidates.set(peer.source_id,candidates.get(r.source_id)||[]);fill(other,candidates.get(peer.source_id),c=>`${c.name} · ${c.id.slice(0,8)}`,'略過此報名的學生',createAllowed('student')?'建立獨立學生':null);other.value=s.value;confirmed.delete(peer.source_id)}}update();dirty()})
       $('student-mappings').append(c)
-      if(memo?.valid&&memo.class_session_id===$('class-session').value&&!r.sourceIdentityChanged&&!legacyCourse(r,work().snapshot)){confirmed.set(r.source_id,signature(r));c.open=false}
+      if(memo?.valid&&memo.class_session_id===$('class-session').value&&!r.sourceIdentityChanged&&!legacyCourse(r,work().snapshot))c.open=false
       // Candidate data is fetched only when its row is opened or explicitly searched.
       button(right,'查詢學生候選',()=>studentPage(r,true)).dataset.queryStudent=''
       if(!r.student_source_id)left.append(el('p','可以選擇既有學生；不能僅依姓名建立或合併學生。','hint'))
@@ -355,6 +355,12 @@ export function createMappingController(hooks) {
     update()
     for(const saved of work().uiState||[]){const n=$(saved.id);if(n?.closest('#mapping')){n.value=saved.value;if(n.type==='checkbox')n.checked=saved.checked}}
     for(const [i]of groups.entries())$(`new-course-fields-${i}`).hidden=$(`source-course-${i}`).value!=='new'
+    // Compare remembered relationships only after restoring the user's choices.
+    // Otherwise a temporary empty enrollment option produces a stale signature.
+    for(const r of work().snapshot.records.filter(r=>r.kind==='enrollment')){
+      const memo=memory('admission',r.source_id),selected=$(`enrollment-${r.source_id}`).value
+      if(memo?.valid&&!r.sourceIdentityChanged&&!legacyCourse(r,work().snapshot)&&memo.student_id===studentSelect(r).value&&memo.course_id===$(`enrollment-course-${r.source_id}`).value&&memo.class_session_id===$('class-session').value&&(memo.target_id?memo.target_id===selected:selected==='new'))confirmed.set(r.source_id,signature(r))
+    }
     update();summary();$('mapping-filter').value=work().uiState?.find(s=>s.id==='mapping-filter')?.value||'pending';mounting=false;view.mount(groups,cards);applyFilter()
   }
   async function confirmDestination() {

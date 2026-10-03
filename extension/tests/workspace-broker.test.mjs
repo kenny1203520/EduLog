@@ -37,6 +37,12 @@ test('catalog and filtered report routes allow only bounded query fields', async
   const forbidden = await b.send({ type:'workspace-api',operation:'catalog',binding:b.binding,query:{resource:'students',admin:true} })
   assert.match(forbidden.error.message,/查詢格式/)
 })
+test('validation fields and request IDs reach the workspace with bounded text-only diagnostics',async()=>{
+  const b=broker(async()=>({ok:false,status:422,json:async()=>({error:{code:'VALIDATION_FAILED',message:'The request is invalid',request_id:'edulog-test',fields:{request:['Duplicate source IDs',null,{secret:'not text'}],invalid:'not an array',large:['x'.repeat(1000)]}}})}))
+  const result=await b.send({type:'workspace-api',operation:'preview',jobId:'00000000-0000-4000-8000-000000000001',body:{rows:[]},binding:b.binding})
+  assert.equal(result.error.code,'VALIDATION_FAILED');assert.equal(result.error.requestId,'edulog-test')
+  assert.deepEqual(JSON.parse(JSON.stringify(result.error.fields)),{request:['Duplicate source IDs'],large:['x'.repeat(500)]})
+})
 test('reconciliation uses a fixed readonly route and rejects path injection or site senders',async()=>{
   const b=broker(),enrollmentId='00000000-0000-4000-8000-000000000001'
   await b.send({type:'workspace-api',operation:'reconcile',binding:b.binding,enrollmentId,query:{limit:50}})

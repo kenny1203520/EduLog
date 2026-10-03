@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { webcrypto } from 'node:crypto'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
-import { splitBatches, suggestedValue, plainText } from '../workspace-model.js'
+import { splitBatches, validateBatches, workspaceErrorMessage, suggestedValue, plainText } from '../workspace-model.js'
 function adapter(html, pathname = '/courses/dt/11') {
   const dom = new JSDOM(html, { url: `https://corp.orangeapple.co${pathname}`, runScripts: 'outside-only' })
   Object.defineProperty(dom.window, 'crypto', { value: webcrypto }); dom.window.TextEncoder = TextEncoder
@@ -92,4 +92,50 @@ test('batch count and payload limits, verified rating options and plain paragrap
   assert.equal(suggestedValue({ key: 'class_participation', options: [{ value: '9' }] }, { class_participation: 4.5 }), '9')
   assert.equal(suggestedValue({ key: 'class_participation', options: [{ value: '8' }] }, { class_participation: 4.5 }), '')
   const { dom, doc } = adapter(''); assert.equal(plainText('<p>甲</p><p>乙</p><script>bad</script>', doc), '甲\n乙'); dom.window.close()
+})
+test('order-independent student dependencies never reuse an earlier enrollment', () => {
+  const student = {source_id:'s1',target_id:'target-s1',overwrite:[],record:{kind:'student',data:{name:'合成學生'}}}
+  const enrollment = n => ({source_id:`e${n}`,target_id:`target-e${n}`,overwrite:[],record:{kind:'enrollment',data:{student_id:'target-s1',course_id:`course${n}`}}})
+  const first = enrollment(1), second = enrollment(2)
+  for (const rows of [[first,student,second],[second,first,student],[student,first,second]]) {
+    const batches = splitBatches([...Array.from({length:49},(_,n)=>({n})),...rows])
+    assert.deepEqual(batches.map(b=>b.rows.length),[49,3])
+    assert.equal(batches.flatMap(b=>b.rows).filter(r=>r===first).length,1)
+    assert.equal(batches.flatMap(b=>b.rows).filter(r=>r===second).length,1)
+    assert.equal(batches[1].rows[0],student)
+    validateBatches(batches)
+  }
+})
+test('attachment-shaped mixed admissions normalize to 24 unique rows without merging courses', () => {
+  const students = Array.from({length:11},(_,n)=>({source_id:`s${n}`,target_id:`student${n}`,overwrite:[],record:{kind:'student',data:{name:`合成學生 ${n}`}}}))
+  const admissions = Array.from({length:12},(_,n)=>({source_id:String(277332+n),target_id:`admission${n}`,overwrite:[],record:{kind:'enrollment',data:{student_id:`student${n%11}`,course_id:`course${n%3}`}}}))
+  const rows = [{source_id:'6332',target_id:'class',overwrite:[],record:{kind:'class_session',data:{name:'合成班級'}}},admissions[0],...students,...admissions]
+  assert.equal(rows.length,25)
+  const batches=splitBatches(rows),flat=batches.flatMap(b=>b.rows)
+  assert.equal(flat.length,24);assert.equal(flat.filter(r=>r.record.kind==='enrollment').length,12)
+  for(const student of students)assert.ok(batches.some(b=>b.rows.includes(student)&&b.rows.some(r=>r.record.kind==='enrollment'&&r.record.data.student_id===student.target_id)))
+  assert.equal(new Set(flat.map(r=>`${r.record.kind}:${r.source_id}`)).size,24)
+})
+test('identical duplicates collapse, conflicting identities stop, and saved checkpoints are only validated', () => {
+  const row={source_id:'101',target_id:'student',overwrite:[],record:{kind:'student',data:{name:'測試'}}}
+  const same={record:{data:{name:'測試'},kind:'student'},overwrite:[],target_id:'student',source_id:'101'}
+  const other={...row,record:{kind:'course',data:{subject:'程式'}}}
+  assert.equal(splitBatches([row,same,other]).flatMap(b=>b.rows).length,2)
+  assert.throws(()=>splitBatches([row,{...row,target_id:'another'}]),e=>e.code==='SOURCE_ID_CONFLICT'&&/學生來源 ID 101/.test(e.message))
+  const saved=[{key:'checkpoint1',rows:[row]},{key:'checkpoint2',rows:[same]}],before=JSON.stringify(saved)
+  assert.throws(()=>validateBatches(saved),e=>e.code==='DUPLICATE_SOURCE_IDS')
+  assert.equal(JSON.stringify(saved),before)
+})
+test('student dependency groups respect complete request byte limits', () => {
+  const student={source_id:'s1',target_id:'s1',record:{kind:'student',data:{name:'合成'}}},enrollment={source_id:'e1',target_id:'e1',record:{kind:'enrollment',data:{student_id:'s1'}}}
+  const envelope=rows=>new TextEncoder().encode(JSON.stringify({key:'0'.repeat(36),rows})).byteLength
+  assert.throws(()=>splitBatches([enrollment,student],envelope([student,enrollment])-1),/學生／報名組合/)
+  const batches=splitBatches([enrollment,student],envelope([student,enrollment]))
+  assert.equal(batches.length,1);assert.equal(envelope(batches[0].rows),envelope([student,enrollment]))
+})
+test('validation errors have Chinese guidance while original details remain available', () => {
+  const error={code:'VALIDATION_FAILED',message:'The request is invalid',fields:{request:['Duplicate source IDs']}}
+  assert.match(workspaceErrorMessage(error),/重複來源 ID/)
+  assert.match(workspaceErrorMessage({...error,fields:{request:['Unrecognized key']}}),/未通過驗證/)
+  assert.equal(error.fields.request[0],'Duplicate source IDs')
 })
