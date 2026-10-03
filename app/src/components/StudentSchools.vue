@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'vue-toastification'
 import { StudentService } from '@/services/student/StudentService'
+import type { StudentSchoolDTO } from '@/models/Student'
 import { useStudentStore } from '@/stores/useStudentStore'
 import { copyToClipboard as copyToClipboardUtil } from '@/utils/clipboard'
 import BaseDropdown from '@/components/common/BaseDropdown.vue'
@@ -13,7 +14,7 @@ import { DateUtils } from '@/utils/DateUtils'
 
 const props = defineProps<{
     studentId: string
-    schools: any[]
+    schools: StudentSchoolDTO[]
 }>()
 
 const { t } = useI18n()
@@ -83,9 +84,19 @@ async function addSchool() {
     }
 }
 
-function startEditSchool(school: any) {
+function startEditSchool(school: StudentSchoolDTO) {
+    if (!school.id) return
     editingSchoolId.value = school.id
-    editSchoolForm.value = { ...school, time_zone: school.time_zone || preferences.timeZone }
+    editSchoolForm.value = {
+        name: school.name,
+        status: school.status ?? '',
+        grade: school.grade ?? '',
+        class: school.class ?? '',
+        start_date: school.start_date ?? '',
+        end_date: school.end_date ?? '',
+        time_zone: school.time_zone || preferences.timeZone,
+        school_student_id: school.school_student_id ?? ''
+    }
 }
 
 function cancelEditSchool() {
@@ -162,7 +173,7 @@ async function copyToClipboard(text: string) {
     }
 }
 
-function formatSchoolDate(date: string | undefined, timeZone?: string) {
+function formatSchoolDate(date: string | null | undefined, timeZone?: string | null) {
     return date ? DateUtils.displayDate(date, preferences.locale, timeZone || preferences.timeZone) : ''
 }
 </script>

@@ -16,15 +16,22 @@ export interface StudentSchoolDTO {
   id?: string
   name: string
   status?: string
-  start_date?: string // YYYY-MM-DD
-  end_date?: string // YYYY-MM-DD or empty/null for Present
-  time_zone?: string
-  grade?: string // e.g. "Year 1" (Required if status is Enrolled)
-  class?: string // e.g. "Class A"
-  school_student_id?: string // 学号
+  start_date?: string | null // YYYY-MM-DD
+  end_date?: string | null // YYYY-MM-DD or null for Present
+  time_zone?: string | null
+  grade?: string | null // e.g. "Year 1" (Required if status is Enrolled)
+  class?: string | null // e.g. "Class A"
+  school_student_id?: string | null // 学号
   created_at?: string
   updated_at?: string
 }
+
+/** Writable school fields only; record IDs and timestamps belong to the response. */
+export type StudentSchoolUpdate = Partial<Pick<StudentSchoolDTO,
+  'name' | 'status' | 'grade' | 'class' | 'school_student_id' | 'start_date' | 'end_date' | 'time_zone'
+>> & { student_id?: string }
+
+export type StudentSchoolCreate = StudentSchoolUpdate & { student_id: string; name: string }
 
 /** Safe current-school projection returned by the student Page APIs. */
 export interface StudentSchoolSummaryDTO {

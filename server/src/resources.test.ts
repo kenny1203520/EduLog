@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest'
 import { resources, resourceSchemas } from './resources.js'
 
 describe('student API resource boundaries', () => {
+  it('accepts nullable school dates while retaining strict write validation', () => {
+    const schemas = resourceSchemas['student-schools']
+    const create = { student_id: 'ffe5b8ab-4657-4977-b6c9-3320da82046f', name: '高中', status: 'enrolled', grade: '高一', start_date: '2026-09-01', end_date: null }
+    expect(schemas.createSchema!.parse(create)).toEqual(create)
+    expect(schemas.updateSchema!.parse({ end_date: null })).toEqual({ end_date: null })
+    expect(schemas.updateSchema!.parse({ name: '國中' })).toEqual({ name: '國中' })
+    for (const schema of [schemas.createSchema!, schemas.updateSchema!]) {
+      const base = schema === schemas.createSchema ? create : {}
+      for (const end_date of ['', 'invalid', '2026/06/30']) {
+        expect(schema.safeParse({ ...base, end_date }).success).toBe(false)
+      }
+      for (const field of ['id', 'created_at', 'updated_at']) {
+        expect(schema.safeParse({ ...base, [field]: 'readonly' }).success).toBe(false)
+      }
+    }
+  })
+
   it('returns report-only links and nullable scores in report list projections', () => {
     expect(resources.reports.listFields).toEqual(expect.arrayContaining([
       'external_link', 'class_participation', 'classroom_behavior',

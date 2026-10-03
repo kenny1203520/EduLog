@@ -1,6 +1,11 @@
 name: database-integration
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
   workflow_dispatch:
   pull_request:
     paths:
@@ -36,6 +41,8 @@ jobs:
       PGDATABASE: edulog_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - name: Bootstrap Supabase-compatible schemas
         run: psql -v ON_ERROR_STOP=1 -f supabase/tests/postgres_bootstrap.sql
       - name: Clean-install migration and RLS gate

@@ -107,7 +107,7 @@ common_locations() {
     include $headers_include;
   }
 
-  api_location
+$(api_location)
 
   location / {
     try_files \$uri \$uri/ /index.html;
