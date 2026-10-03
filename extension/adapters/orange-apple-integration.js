@@ -3,12 +3,23 @@
   const text = node => node?.textContent?.trim().replace(/\s+/g, ' ').slice(0, 256) || ''
   const path = value => { try { const u = new URL(value, ORIGIN); return u.origin === ORIGIN ? u.pathname : '' } catch { return '' } }
   const links = node => [...node.querySelectorAll('a[href]')].map(a => ({ path: path(a.getAttribute('href')), node: a }))
-  const fullDate = value => {
-    const match = value?.match(/\b(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})/)
-    if (!match) return null
-    const result = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`
-    return new Date(`${result}T00:00:00Z`).toISOString().slice(0, 10) === result ? result : null
+  const dates = globalThis.edulogSourceDate
+  const fullDate = value => dates.parse(value).date
+  const contexts = new Map(), answers = new Map()
+  function captureEntry(event) {
+    const link=event.target.closest?.('a[href]'), action=path(link?.getAttribute('href')).replace(/\/edit$/,'')
+    if (!/^\/dt_admissions\/\d+\/reports\/\d+$/.test(action)) return
+    const cell=link.closest('td'), row=cell?.parentElement, table=cell?.closest('table')
+    const header=table && [...table.rows].find(r=>r.querySelector('th'))?.cells[cell.cellIndex]
+    const rangeText=text(row && teachingCell(row,['課程','課程名稱'])) || text(row?.cells[1])
+    const range=[...rangeText.matchAll(/\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}(?:日)?/g)].map(m=>m[0])
+    const entryValues=[link.getAttribute('data-date')||'',text(header),text(cell).slice(0,256)], ranges=range.length===2?[range]:[]
+    const previous=contexts.get(action)
+    const unchanged=previous && JSON.stringify(previous.entryValues||previous.values)===JSON.stringify(entryValues) && JSON.stringify(previous.ranges)===JSON.stringify(ranges)
+    contexts.set(action,unchanged?{...previous,sourcePath:location.pathname}:{values:entryValues,entryValues,ranges,sourcePath:location.pathname})
+    if(contexts.size>100){const key=contexts.keys().next().value;contexts.delete(key);answers.delete(key)}
   }
+  document.addEventListener('click',captureEntry,true)
   const fields = [
     ['attendance_status', '出席', 'select[name="dt_admission_lesson_report[attendance_status]"]'],
     ['absence_reason', '不出席原因', '#lesson_report_reason'],
@@ -45,8 +56,39 @@
         options: radio ? nodes.map(n => ({ value: n.value, label: `${Number(n.value) / 2} 星`, disabled: n.disabled })) : first.tagName === 'SELECT' ? [...first.options].map(o => ({ value: o.value, label: text(o), disabled: o.disabled })) : [],
       }]
     })
-    const target = { formId: forms.get(form), action, admissionId: ids[1], reportId: ids[2], title: text(form.closest('.modal')?.querySelector('.modal-title')), date: fullDate(text(form.closest('.modal')?.querySelector('.modal-title'))), fields: values }
+    const title=text(form.closest('.modal')?.querySelector('.modal-title'))
+    const context=contexts.get(action) || {values:[],ranges:[]}
+    const evidence=[title,...context.values]
+    const dateInfo=dates.resolve(evidence,context.ranges)
+    const evidenceKey=JSON.stringify({evidence,ranges:context.ranges,history:context.history||null})
+    let supplement=answers.get(action)
+    if(supplement?.evidenceKey!==evidenceKey){answers.delete(action);supplement=null}
+    const target = { formId: forms.get(form), action, admissionId: ids[1], reportId: ids[2], title, date: supplement?.date || dateInfo.date, dateInfo:{...dateInfo,raw:evidence.filter(Boolean),basis:supplement?.date?'user_confirmed':dateInfo.basis}, supplement:supplement?{date:supplement.date||null,enrollmentId:supplement.enrollmentId||null,binding:supplement.binding||null,label:'使用者確認'}:null, fields: values }
     return { ...target, fingerprint: await digest(target), sourceReportUrl: `${ORIGIN}${action}/edit` }
+  }
+  async function supplementForm(doc,input) {
+    const before=await readForm(doc)
+    if(before.formId!==input.formId || before.fingerprint!==input.fingerprint)throw new Error('表單或來源證據已改變，請重新核對。')
+    const context=contexts.get(before.action)||{values:[],ranges:[]}
+    const evidence=[before.title,...context.values], evidenceKey=JSON.stringify({evidence,ranges:context.ranges,history:context.history||null})
+    if(input.clear){answers.delete(before.action);return readForm(doc)}
+    if(input.clearEnrollment){const saved=answers.get(before.action);if(saved){delete saved.enrollmentId;delete saved.binding;if(!saved.date)answers.delete(before.action)}return readForm(doc)}
+    if(input.date && (!dates.parse(input.date).date || dates.parse(input.date).date!==input.date))throw new Error('請選擇有效的完整上課日期。')
+    if(input.date && before.dateInfo.conflict && input.conflictAcknowledged!==true)throw new Error('請先確認已核對矛盾的來源日期。')
+    if(input.enrollmentId && !/^[a-f0-9-]{36}$/i.test(input.enrollmentId))throw new Error('報名識別碼格式不正確。')
+    answers.set(before.action,{...answers.get(before.action),evidenceKey,...(input.date?{date:input.date}:{}),...(input.enrollmentId?{enrollmentId:input.enrollmentId,binding:input.binding||null}:{})})
+    return readForm(doc)
+  }
+  async function resolveFormDate(doc) {
+    const before=await readForm(doc), nativeForm=getForm(doc)
+    if(before.date)return before
+    if(!contexts.has(before.action))contexts.set(before.action,{values:[],ranges:[]})
+    const records=extractHistory(await readPath(`/dt_admissions/${before.admissionId}`),before.admissionId)
+    if(getForm(doc)!==nativeForm || (await readForm(doc)).fingerprint!==before.fingerprint)throw new Error('來源表單已改變，歷史日期回應已忽略。')
+    const matches=records.filter(r=>r.source_id===before.reportId)
+    const context=contexts.get(before.action)
+    if(matches.length){context.entryValues||=context.values;const historyDates=[...new Set(matches.map(r=>r.date))];context.values=[...context.entryValues,...historyDates];context.history=historyDates.join('|')}
+    return readForm(doc)
   }
   async function applyForm(doc, input) {
     const before = await readForm(doc)
@@ -239,19 +281,21 @@
     }
     return snapshot
   }
-  globalThis.edulogSourceIntegration = Object.freeze({ origin: ORIGIN, extractClass, extractHistory, collect, readForm, getForm, applyForm, digest,
+  globalThis.edulogSourceIntegration = Object.freeze({ origin: ORIGIN, extractClass, extractHistory, collect, readForm, getForm, applyForm, digest, supplementForm, resolveFormDate,
     async readHistory(sourcePath) { if (!/^\/dt_admissions\/\d+$/.test(sourcePath)) throw new Error('來源路徑尚未驗證。'); return extractHistory(await readPath(sourcePath), sourcePath.split('/').pop()) },
     context(doc) { const p = doc.location.pathname; return { sourceOrigin: ORIGIN, sourcePath: p, classId: p.match(/^\/courses\/dt\/(\d+)/)?.[1] || null, title: text(doc.querySelector('#page-body > .content h2')), reportOpen: Boolean(getForm(doc)) } },
     capabilities: { current_class_import: true, report_prefill: true, all_classes_import: false, submission_confirmation: false },
   })
   if (globalThis.edulogRuntime && typeof document !== 'undefined') globalThis.edulogRuntime.listen((message, sender, respond) => {
-    if (sender.id !== chrome.runtime.id || !['integration-context', 'integration-collect', 'integration-history', 'integration-form', 'integration-apply', 'integration-apply-inline'].includes(message?.type)) return
+    if (sender.id !== chrome.runtime.id || !['integration-context', 'integration-collect', 'integration-history', 'integration-form', 'integration-supplement', 'integration-resolve-date', 'integration-apply', 'integration-apply-inline'].includes(message?.type)) return
     const run = async () => {
       if (message.expectedPath && message.expectedPath !== location.pathname) throw new Error('來源分頁已變更，請重新選擇來源。')
       if (message.type === 'integration-context') return globalThis.edulogSourceIntegration.context(document)
       if (message.type === 'integration-collect') return collect(document, { history: message.history === true })
       if (message.type === 'integration-history') return globalThis.edulogSourceIntegration.readHistory(message.historyPath)
       if (message.type === 'integration-form') return readForm(document)
+      if (message.type === 'integration-supplement') return supplementForm(document,message.input)
+      if (message.type === 'integration-resolve-date') return resolveFormDate(document)
       if (message.type === 'integration-apply-inline') return applyForm(document, message.input)
       return applyForm(document, message.input)
     }

@@ -7,6 +7,7 @@ import { splitBatches, validateBatches, workspaceErrorMessage, suggestedValue, p
 function adapter(html, pathname = '/courses/dt/11') {
   const dom = new JSDOM(html, { url: `https://corp.orangeapple.co${pathname}`, runScripts: 'outside-only' })
   Object.defineProperty(dom.window, 'crypto', { value: webcrypto }); dom.window.TextEncoder = TextEncoder
+  dom.window.eval(readFileSync(new URL('../source-date.js', import.meta.url), 'utf8'))
   dom.window.eval(readFileSync(new URL('../adapters/orange-apple-integration.js', import.meta.url), 'utf8'))
   return { dom, doc: dom.window.document, api: dom.window.edulogSourceIntegration }
 }
@@ -14,6 +15,34 @@ const source = `<div id="page-body"><div class="content"><h2>測試班級</h2><t
 <tr><td><a href="/admissions/comments/301/edit_teacher">同名學生</a><a href="/students/101/accounts">帳號</a><a href="/dt_admissions/301">紀錄</a></td><td><a href="/dt_admissions/301/reports/401/edit">已啟用</a></td></tr>
 <tr><td><a href="/admissions/comments/302/edit_teacher">同名學生</a><a href="/students/102/accounts">帳號</a><a href="/dt_admissions/302">紀錄</a></td><td><a href="/dt_admissions/302/reports/402/edit">2026/10/02</a></td></tr>
 <tr><td><a href="/admissions/comments/303/edit_teacher">無 ID 學生</a></td></tr></tbody></table><input type="hidden" name="csrf_token" value="secret"><p>聯絡資料不擷取</p></div></div>`
+test('report date answers survive reopen with unchanged history evidence, but expire on new evidence', async()=>{
+  const fixture=readFileSync(new URL('fixtures/report-modal.html',import.meta.url),'utf8')
+  const html=`<table id="reports"><tr><th>學生</th><th>課程</th><th>本週(10/04)</th></tr><tr><td>學生甲</td><td>課程甲</td><td><a href="/dt_admissions/301/reports/401/edit">記錄</a></td></tr></table>${fixture}`
+  const {api,doc,dom}=adapter(html)
+  const entry=doc.querySelector('#reports a');entry.addEventListener('click',e=>e.preventDefault());entry.click()
+  dom.window.AbortSignal.timeout=()=>undefined
+  dom.window.fetch=async()=>({ok:true,url:'https://corp.orangeapple.co/dt_admissions/301',headers:{get:()=> 'text/html'},text:async()=>`<div id="page-body"><div class="content"><table><tr><td>1</td><td>2024年10月4日</td><td><a href="/dt_admissions/301/reports/401/edit">記錄</a></td></tr><tr><td>2</td><td>2026/10/04</td><td><a href="/dt_admissions/301/reports/402/edit">其他報告</a></td></tr></table></div></div>`})
+  const historical=await api.resolveFormDate(doc);assert.equal(historical.date,'2024-10-04','only the same report ID may supply the year')
+  await api.supplementForm(doc,{formId:historical.formId,fingerprint:historical.fingerprint,date:'2024-10-04'})
+  const oldForm=doc.querySelector('form');oldForm.closest('.modal').remove();doc.body.insertAdjacentHTML('beforeend',fixture);entry.click()
+  const reopened=await api.readForm(doc);assert.notEqual(reopened.formId,historical.formId);assert.equal(reopened.dateInfo.basis,'user_confirmed');assert.equal(reopened.date,'2024-10-04')
+  doc.querySelector('#reports th:last-child').textContent='本週(10/05)';entry.click()
+  const changed=await api.readForm(doc);assert.equal(changed.supplement,null);assert.equal(changed.date,null)
+  dom.window.close()
+})
+test('ambiguous years and conflicting source evidence require explicit date confirmation without native edits',async()=>{
+  const fixture=readFileSync(new URL('fixtures/report-modal.html',import.meta.url),'utf8')
+  const {api,doc,dom}=adapter(`<table id="reports"><tr><th>學生</th><th>課程</th><th>本週(10/04)</th></tr><tr><td>學生甲</td><td>課程甲 (2024/09/01 - 2026/12/01)</td><td><a href="/dt_admissions/301/reports/401/edit">記錄</a></td></tr></table>${fixture}`)
+  const entry=doc.querySelector('#reports a');entry.addEventListener('click',e=>e.preventDefault());entry.click()
+  let form=await api.readForm(doc);assert.equal(form.date,null)
+  const before=doc.querySelector('#lesson_report_feedback').value
+  await assert.rejects(api.supplementForm(doc,{formId:form.formId,fingerprint:form.fingerprint,date:'2025-02-29'}),/有效/)
+  doc.querySelector('.modal-title').textContent='學生甲 · 2024.10.05';form=await api.readForm(doc);assert.equal(form.dateInfo.conflict,true)
+  await assert.rejects(api.supplementForm(doc,{formId:form.formId,fingerprint:form.fingerprint,date:'2024-10-04'}),/矛盾/)
+  const answered=await api.supplementForm(doc,{formId:form.formId,fingerprint:form.fingerprint,date:'2024-10-04',conflictAcknowledged:true})
+  assert.equal(answered.dateInfo.basis,'user_confirmed');assert.equal(answered.dateInfo.conflict,true);assert.equal(doc.querySelector('#lesson_report_feedback').value,before)
+  dom.window.close()
+})
 test('source capture requires reliable identity, keeps same names distinct and never invents dates/content', () => {
   const { api, dom, doc } = adapter(source), snapshot = api.extractClass(doc, '/courses/dt/11')
   assert.equal(snapshot.records.filter(r => r.kind === 'student').length, 2)
