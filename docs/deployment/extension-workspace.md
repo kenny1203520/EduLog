@@ -2,7 +2,7 @@
 
 ## 啟用
 
-1. 依專案既有部署流程依序套用 `1000116`、`1000117`、`1000118_web_extension_workspace.sql`、`1000119_extension_catalog.sql`、`1000120_extension_mapping_memory.sql` 與 **`1000121_extension_reconciliation.sql`**。不修改已部署 migration；新增 migration 不會自動套用到現有資料庫。
+1. 依專案既有部署流程依序套用 `1000116`、`1000117`、`1000118_web_extension_workspace.sql`、`1000119_extension_catalog.sql`、`1000120_extension_mapping_memory.sql`、`1000121_extension_reconciliation.sql` 與 **`1000122_extension_import_verification.sql`**。不修改已部署 migration；新增 migration 不會自動套用到現有資料庫。
 2. 更新並重新啟動 API。`API_EXTENSION_ALLOWED_ORIGINS` 必須包含目前擴充套件的精確 origin；`EDULOG_WEB_BASE_URL` 必須填瀏覽器可開啟的前端位址，可包含自訂端口與路徑前綴。
 3. 更新原有側載資料夾並在 Chrome／Edge 重新載入。先儲存網站草稿，再重新整理已開啟的來源分頁。
 4. 在 popup 重新檢查連線。從 popup 或網站工具列開啟「教學資料匯入」「報告預填」；完整操作在擴充套件工作分頁進行。
@@ -80,7 +80,7 @@ node extension/tests/workspace-browser-check.mjs <playwright/index.mjs>
 node extension/tests/mapping-memory-browser-check.mjs <playwright/index.mjs>
 ```
 
-PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.mjs` 實際執行 1000118–1000121，涵蓋 SQL 編譯、授權、版本、冪等、原生報告生命週期及交易回滾；測試不會修改正式資料庫。此次已通過隔離執行。正式啟用前須在目標資料庫依序套用 migration，確認 `catalog_v1`、`multi_course_import`、`mapping_memory`、`student_enrollment_catalog` 與 `enrollment_reconciliation` 為 true。
+PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.mjs` 實際執行 1000118–1000122，涵蓋 SQL 編譯、授權、版本、冪等、有效名單、完成核驗、原生報告生命週期及交易回滾；測試不會修改正式資料庫。此次已通過隔離執行。正式啟用前須在目標資料庫依序套用 migration，確認 `catalog_v1`、`multi_course_import`、`mapping_memory`、`student_enrollment_catalog` 與 `enrollment_reconciliation` 為 true。
 
 瀏覽器測試涵蓋 Chrome／Edge 的 360、390、768、1024、1440px、人工對應／恢復、差異、預填保留、待確認紀錄、整頁溢出與原生 IndexedDB。桌面實際 200% 縮放、完整鍵盤焦點流程及真實側載讀寫仍須另行驗收。
 
@@ -113,6 +113,18 @@ PGlite 已加入 server 的開發依賴與 lockfile。`web_extension_workspace.m
 - 選擇既有報名的報告後，預覽會重新讀取相關調課紀錄；已調出的來源課次、非有效目標、缺少可靠日期或核對失敗的報告保留待處理。
 - 班級目錄與解析包含 `schedule_mode`、`schedule_rules`、`time_zone`；顯示週六、週日 `0`、多組、每月及指定日期排程。匯入寫入沿用既有完整週間排程契約，不推算其他排程或覆寫既有設定。
 
-目前側載包：`EduLog-Teaching-Tools-0.1.0-reconciliation.zip`。包含 `extension/` runtime、部署與驗收文件、1000118–1000121；API 原始碼須由專案一併部署。現有資料庫只需依已套用版本補上後續 migration，不重跑舊 migration。更新 API、重新載入擴充套件並強制重新檢查連線，才能取得新能力。
+目前側載包：`EduLog-Teaching-Tools-0.1.0-import-verification.zip`。包含 `extension/` runtime、部署與驗收文件、1000118–1000122；API 原始碼須由專案一併部署。現有資料庫只需依已套用版本補上後續 migration，不重跑舊 migration。更新 API、重新載入擴充套件並強制重新檢查連線，才能取得新能力。
 
 本輪驗收詳見 `extension/tests/ACCEPTANCE.md`：合成資料的瀏覽器與 PGlite 檢查已通過；實際 Chrome／Edge 側載、桌面原生 200% 縮放及指定測試資料的讀寫仍待驗收。實站報告不自動提交。
+
+## 1000122 匯入結果、有效名單與報告預填
+
+舊的 `PATCH /imports/:id {status: "complete"}` 僅變更工作狀態，不能證明名單已同步。新版擴充套件改用 `POST /imports/:id/complete` 核驗預期批次的冪等檢查點，再由 `GET /imports/:id` 讀取完成狀態、分類結果和有效名單；工作台按學生、報名、課次、報告分列新增、更新、無變更、略過、待處理和失敗。完成請求只在預期批次都已套用時成功，舊工作的狀態仍可讀但會標示核驗完整程度。不同或未確認的名單關係不會被強制改寫，也不會刪除 EduLog 既有報名。
+
+班級有效名單核對使用所選日期與班級時區。報告只在存在已驗證教學欄位及可靠的學生、報名、課次、日期關係時寫入；可信的來源 `/edit` 連結存到報告連結欄位。欄位衝突與不同既有連結須在匯入差異頁明確確認。
+
+已辨識的原站報告編輯器內會出現隔離樣式面板。它先依記憶中的報名和日期查詢唯一報告，提供預覽；沒有唯一結果時可搜尋可存取報告作為範本。逐欄保留非空原站值，覆寫和內部紀錄都需分別明確確認。套用前重新核對原生表單指紋與 EduLog 報告版本，保留原站欄位與事件，不點擊確認欄或提交按鈕。送出仍由教師在原站人工完成。
+
+本機工作紀錄與伺服器紀錄獨立載入；其中一方故障時，另一方仍可顯示。IndexedDB 關閉或版本變更時清除失效連線快取，交易開始前最多重新開啟一次；已開始的寫入不重播。更新時重新載入側載擴充套件，刷新既有來源分頁前先保存原站草稿，再重新驗證配對。
+
+PGlite 已隔離執行 1000118–1000122，覆蓋完整批次核驗、權限、有效名單、冪等及 rollback。Chrome／Edge 的匯入與工作紀錄 mock 流程於 360–1440px 通過。Chrome 內嵌面板已確認自動查詢唯一報告並呈現欄位預設；完整逐欄套用、送出防護及 Edge 編輯器嵌入流程尚未完成自動瀏覽器驗收。跨瀏覽器側載及指定測試資料的實站操作仍待驗收；設計上由教師在原站人工送出。
