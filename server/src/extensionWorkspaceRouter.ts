@@ -76,13 +76,17 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
     const courseId = req.query.course_id === undefined ? null : uuid.parse(req.query.course_id)
     const enrollmentId = req.query.enrollment_id === undefined ? null : uuid.parse(req.query.enrollment_id)
     const studentId = req.query.student_id === undefined ? null : uuid.parse(req.query.student_id)
+    const sort = z.enum(['nearest','newest']).default('newest').parse(req.query.sort)
+    const anchor = req.query.anchor_date === undefined ? null : date.parse(req.query.anchor_date)
+    const exclude = req.query.exclude_course_id === undefined ? null : uuid.parse(req.query.exclude_course_id)
+    if (sort === 'nearest' && !anchor) throw new ApiError(400, 'ANCHOR_DATE_REQUIRED', 'Nearest report sorting requires an anchor date')
     const from = req.query.date_from === undefined ? null : date.parse(req.query.date_from)
     const to = req.query.date_to === undefined ? null : date.parse(req.query.date_to)
     if (from && to && from > to) throw new ApiError(400, 'INVALID_DATE_RANGE', 'Invalid report date range')
     const limit = req.query.limit === undefined ? 50 : z.coerce.number().int().min(1).max(50).parse(req.query.limit)
-    const next = cursor.parse(req.query.cursor) ?? null
+    const next = (sort === 'nearest' ? z.string().max(160).regex(/^n1\|[a-f0-9]{32}\|\d+\|[01]\|\d{4}-\d{2}-\d{2}\|[a-f0-9-]{36}$/i).optional() : cursor).parse(req.query.cursor) ?? null
     const id = req.query.id === undefined ? null : uuid.parse(req.query.id)
-    const data = await run(req, 'reports', { offset: z.coerce.number().int().min(0).max(100000).parse(req.query.offset ?? 0), report_id: id, summary, search, course_id: courseId, enrollment_id: enrollmentId, student_id: studentId, date_from: from, date_to: to, cursor: next, limit, detail: Boolean(id) }, req.query.summary !== undefined || req.query.cursor !== undefined || req.query.limit !== undefined || req.query.search !== undefined || req.query.student_id !== undefined || req.query.enrollment_id !== undefined || req.query.course_id !== undefined || req.query.date_from !== undefined || req.query.date_to !== undefined ? 'web_extension_catalog' : 'web_extension_workspace')
+    const data = await run(req, 'reports', { offset: z.coerce.number().int().min(0).max(100000).parse(req.query.offset ?? 0), report_id: id, summary, search, course_id: courseId, enrollment_id: enrollmentId, student_id: studentId, date_from: from, date_to: to, cursor: next, limit, detail: Boolean(id), sort: id ? 'newest' : sort, anchor_date: anchor, exclude_course_id: exclude }, req.query.sort !== undefined || req.query.exclude_course_id !== undefined || req.query.summary !== undefined || req.query.cursor !== undefined || req.query.limit !== undefined || req.query.search !== undefined || req.query.student_id !== undefined || req.query.enrollment_id !== undefined || req.query.course_id !== undefined || req.query.date_from !== undefined || req.query.date_to !== undefined ? 'web_extension_catalog' : 'web_extension_workspace')
     const reports = (data.reports ?? []).map((row: Record<string, unknown>) => {
       const completeness = reportMissingFlags(row as Parameters<typeof reportMissingFlags>[0])
       if (!summary || id) return { ...row, completeness }

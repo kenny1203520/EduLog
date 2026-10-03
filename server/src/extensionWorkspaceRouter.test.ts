@@ -100,6 +100,14 @@ describe('workspace API contract', () => {
     expect(response.body.data.reports[0]).not.toHaveProperty('content')
     expect(response.body.data.reports[0]).not.toHaveProperty('contact_notes')
   })
+  it('accepts nearest report filters and a scoped cursor, requiring a valid anchor',async()=>{
+    const {app,rpc}=appWith({reports:[],next_cursor:null}),cursor=`n1|${'a'.repeat(32)}|2|0|2024-06-13|${id}`
+    const response=await request(app).get(`/api/extension/v1/reports?summary=true&sort=nearest&anchor_date=2024-06-15&student_id=${id}&exclude_course_id=${id}&cursor=${encodeURIComponent(cursor)}`).set('Authorization',`Bearer ${'a'.repeat(64)}`)
+    expect(response.status).toBe(200);expect(rpc.mock.calls[0][0]).toBe('web_extension_catalog');expect(rpc.mock.calls[0][1].p_input).toMatchObject({sort:'nearest',anchor_date:'2024-06-15',exclude_course_id:id,student_id:id,cursor})
+    expect((await request(app).get('/api/extension/v1/reports?sort=nearest').set('Authorization',`Bearer ${'a'.repeat(64)}`)).status).toBe(400)
+    expect((await request(app).get('/api/extension/v1/reports?sort=nearest&anchor_date=2023-02-29').set('Authorization',`Bearer ${'a'.repeat(64)}`)).status).toBe(400)
+    expect((await request(app).get(`/api/extension/v1/reports?sort=nearest&anchor_date=2024-06-15&limit=51`).set('Authorization',`Bearer ${'a'.repeat(64)}`)).status).toBe(400)
+  })
   it('returns stale preview and permission errors without raw database details', async () => {
     for (const [message, status] of [['PREVIEW_STALE', 409], ['PERMISSION_DENIED', 403], ['EXTENSION_AUTH_INVALID', 401]] as const) {
       const { app } = appWith(null, { message }); const response = await request(app).get('/api/extension/v1/context').set('Authorization', `Bearer ${'a'.repeat(64)}`)
