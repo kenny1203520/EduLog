@@ -67,6 +67,7 @@ try {
     ),'[]'::jsonb),'teachers','[]'::jsonb)
   $$;`)
   await db.exec(read('1000122_extension_import_verification.sql'))
+  await db.exec(read('1000123_extension_report_candidates.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -258,6 +259,26 @@ try {
   await assert.rejects(rpcCatalog('reconcile',{enrollment_id:weekendEnrollment}),/PERMISSION_DENIED/);await db.exec('DELETE FROM public.denied_permissions')
   assert.equal((await db.query('SELECT class_session_id FROM public.enrollments WHERE id=$1',[weekendEnrollment])).rows[0].class_session_id,weekendSession)
   console.log('PASS: 1000121 student-scoped paging, read-only reconciliation, transfer visibility, weekend schedules and actor authorization')
+  assert.equal((await rpcCatalog('capabilities',{})).nearest_report_candidates,true)
+  // Include old dates beyond the newest 50: sorting must happen in PostgreSQL.
+  const anchor='2024-06-15', nearestInput={student_id:student,course_id:course,sort:'nearest',anchor_date:anchor,limit:3}
+  await db.exec(`INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date) SELECT ('10000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'${session}',DATE '2024-06-14'+n FROM generate_series(0,60) n;
+    INSERT INTO public.occurrence_reports(id,enrollment_id,class_occurrence_id,content) SELECT ('20000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'${enrollment}',('10000000-0000-4000-8000-'||lpad(n::text,12,'0'))::uuid,'Historical sample' FROM generate_series(0,60) n;`)
+  const near=await rpcCatalog('reports',nearestInput)
+  assert.deepEqual(near.reports.map(r=>r.occurrence_date),['2024-06-15','2024-06-14','2024-06-16'])
+  assert.deepEqual(near.reports.map(r=>r.date_difference),[0,-1,1]);assert.ok(near.next_cursor)
+  assert.ok(near.reports.every(r=>r.class_name==='Test class'))
+  const nextNear=await rpcCatalog('reports',{...nearestInput,cursor:near.next_cursor})
+  assert.equal(nextNear.reports[0].occurrence_date,'2024-06-17');assert.ok(nextNear.reports.every(r=>!near.reports.some(a=>a.id===r.id)))
+  await assert.rejects(rpcCatalog('reports',{...nearestInput,anchor_date:'2024-06-16',cursor:near.next_cursor}),/INVALID_IMPORT/)
+  await assert.rejects(rpcCatalog('reports',{...nearestInput,course_id:nextCourse,cursor:near.next_cursor}),/INVALID_IMPORT/)
+  const seen=new Set();let pageCursor=null
+  do {const page=await rpcCatalog('reports',{...nearestInput,limit:50,cursor:pageCursor});for(const r of page.reports){assert.ok(!seen.has(r.id));seen.add(r.id)}pageCursor=page.next_cursor} while(pageCursor)
+  assert.ok(seen.size>50)
+  const otherCourse=await rpcCatalog('reports',{student_id:student,exclude_course_id:course,sort:'nearest',anchor_date:anchor});assert.ok(otherCourse.reports.every(r=>r.course_id!==course))
+  await db.exec("INSERT INTO public.denied_permissions VALUES('teaching.reports.read')")
+  assert.equal((await rpcCatalog('reports',nearestInput)).reports.length,0);await db.exec('DELETE FROM public.denied_permissions')
+  console.log('PASS: 1000123 nearest ordering before pagination, past-first ties, filter-bound cursors, >50 reports, permission checks and capability')
   await rpc('job-status',{job_id:job.id,status:'paused'}); await assert.rejects(rpc('preview',update),/JOB_STOPPED/)
   await db.exec(`UPDATE public.web_extension_tokens SET revoked_at=now() WHERE id='${token}'`)
   await assert.rejects(rpc('context',{}),/EXTENSION_AUTH_INVALID/)
