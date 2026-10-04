@@ -371,7 +371,58 @@ try {
   await db.exec('DELETE FROM public.denied_permissions')
   const protectedData={...historyData,source_key:'evidence:unsafe',source_fields:[{key:'password',label:'password',text:'blocked'}]}
   await assert.rejects(rpc('preview',{...historyBatch,key:id(207),fingerprint:'3'.repeat(64),rows:[{...historyBatch.rows[0],target_id:id(208),record:{kind:'history_report',data:protectedData}}]}),/INVALID_IMPORT/)
+  // Effective routing reads the transferred day, never rewrites enrollment.
+  const route=await historyRpc('route',{enrollment_id:weekendEnrollment,dates:['2026-10-03','2026-10-04']})
+  assert.ok(route.items.some(o=>o.id===targetOccurrence&&o.occurrence_date==='2026-10-04'))
+  assert.equal((await db.query('SELECT class_session_id FROM public.enrollments WHERE id=$1',[weekendEnrollment])).rows[0].class_session_id,weekendSession)
+  const supersededRoute=await historyRpc('route',{enrollment_id:crossEnrollment,dates:['2026-10-09','2026-10-10']})
+  assert.ok(!supersededRoute.items.some(o=>o.id===chainedTarget));assert.ok(supersededRoute.items.some(o=>o.id===chainedFinal))
+  const supersededRoster=await rpcImportInfo({job_id:job.id,roster_date:'2026-10-09'})
+  assert.ok(!supersededRoster.roster.enrollments.some(e=>e.id===crossEnrollment),'a superseded incoming transfer is absent from the date roster')
+  const finalRoster=await rpcImportInfo({job_id:job.id,roster_date:'2026-10-10'})
+  assert.ok(finalRoster.roster.enrollments.some(e=>e.id===crossEnrollment),'the final effective transfer remains in its actual lesson date roster')
+  // Same-batch evidence ambiguity is rejected before any history is saved.
+  const ambiguousRows=[1,2].map(n=>({source_id:`history:ambiguous-${n}`,target_id:id(220+n),overwrite:[],record:{kind:'history_report',data:{...historyData,report_date:'2024-06-17',source_key:`evidence:ambiguous-${n}`}}}))
+  await assert.rejects(rpc('preview',{...historyBatch,key:id(220),rows:ambiguousRows}),/HISTORY_IDENTITY_AMBIGUOUS/)
+  // Server-side nearest ordering and filter-bound cursors include >50 archives.
+  await db.query(`INSERT INTO public.enrollment_history_reports(user_id,enrollment_id,report_date,source_origin,source_admission_id,source_key,identity_status) SELECT $1,$2,DATE '2024-06-14'+n,$3,'6332','evidence:paged-'||n,'evidence_only' FROM generate_series(0,60) n`,[actor,enrollment,origin])
+  const nearestHistory={enrollment_id:enrollment,unlinked_only:true,sort:'nearest',anchor_date:'2024-06-15',limit:3}
+  const page=await historyRpc('list',nearestHistory);assert.deepEqual(page.items.map(h=>h.report_date),['2024-06-15','2024-06-14','2024-06-16'])
+  const next=await historyRpc('list',{...nearestHistory,cursor:page.next_cursor});assert.equal(next.items[0].report_date,'2024-06-17')
+  await assert.rejects(historyRpc('list',{...nearestHistory,anchor_date:'2024-06-16',cursor:page.next_cursor}),/INVALID_CURSOR/)
+  const archivedIds=new Set();let archiveCursor
+  do{const p=await historyRpc('list',{...nearestHistory,limit:50,cursor:archiveCursor});for(const h of p.items){assert.ok(!archivedIds.has(h.id));archivedIds.add(h.id)}archiveCursor=p.next_cursor}while(archiveCursor)
+  assert.equal(archivedIds.size,61)
+  // Version/lifecycle failures leave both the archive link and report unchanged.
+  const rollbackHistory=(await historyRpc('list',{...nearestHistory,limit:50})).items.find(h=>h.report_date==='2024-06-16')
+  const rollbackOccurrence=(await historyRpc('candidates',{history_id:rollbackHistory.id})).items[0]
+  const rollbackBind={history_id:rollbackHistory.id,class_occurrence_id:rollbackOccurrence.id,history_version:1,key:id(230),overwrite:[],include_internal:false}
+  await historyRpc('bind-preview',rollbackBind)
+  await db.query('UPDATE public.occurrence_reports SET version=version+1 WHERE class_occurrence_id=$1 AND enrollment_id=$2',[rollbackOccurrence.id,enrollment])
+  await assert.rejects(historyRpc('bind-apply',rollbackBind),/PREVIEW_STALE/)
+  assert.equal((await historyRpc('detail',{id:rollbackHistory.id})).linked_report_id,null)
+  await db.exec("INSERT INTO public.denied_permissions VALUES('teaching.reports.update')")
+  await assert.rejects(historyRpc('bind-preview',{...rollbackBind,key:id(231)}),/PERMISSION_DENIED/)
+  await db.exec('DELETE FROM public.denied_permissions')
   // The source day may be outside the requested target interval (10/03 -> 10/04).
+  const saturday=id(240),sunday=id(241),octoberArchive=id(244)
+  await db.exec(`INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,original_start_time,original_end_time) VALUES('${saturday}','${weekendSession}','2026-10-03','14:00','16:00'),('${sunday}','${session}','2026-10-04','09:00','10:00');
+    INSERT INTO public.single_lesson_transfers(id,enrollment_id,source_occurrence_id,target_occurrence_id,created_by) VALUES('${id(242)}','${crossEnrollment}','${saturday}','${sunday}','${actor}');
+    INSERT INTO public.web_extension_mapping_memory(user_id,source_origin,kind,source_key,target_id,student_id,course_id,class_session_id) VALUES('${actor}','${origin}','admission','6333','${crossEnrollment}','${student}','${course}','${weekendSession}')`)
+  const octoberData={...historyData,enrollment_id:crossEnrollment,source_admission_id:'6333',source_key:'evidence:october',report_date:'2026-10-04',attendance_status:'present',content:'Transfer lesson'}
+  const octoberBatch={...historyBatch,key:id(243),fingerprint:'6'.repeat(64),rows:[{source_id:'history:october',target_id:octoberArchive,overwrite:[],record:{kind:'history_report',data:octoberData}}]}
+  await rpc('preview',octoberBatch);await rpc('apply',octoberBatch)
+  const octoberRoute=await historyRpc('route',{enrollment_id:crossEnrollment,dates:['2026-10-03','2026-10-04']});assert.ok(octoberRoute.items.some(o=>o.id===sunday));assert.ok(!octoberRoute.items.some(o=>o.id===saturday))
+  const octoberBind={history_id:octoberArchive,class_occurrence_id:sunday,history_version:1,key:id(245),overwrite:[],include_internal:false}
+  await historyRpc('bind-preview',octoberBind)
+  await db.exec(`CREATE FUNCTION public.test_history_rollback() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'TEST_ROLLBACK'; END $$;
+    CREATE TRIGGER test_history_rollback BEFORE UPDATE ON public.enrollment_history_reports FOR EACH ROW WHEN (NEW.id='${octoberArchive}'::uuid) EXECUTE FUNCTION public.test_history_rollback();`)
+  await assert.rejects(historyRpc('bind-apply',octoberBind),/TEST_ROLLBACK/)
+  assert.equal((await db.query('SELECT count(*)::int n FROM public.occurrence_reports WHERE enrollment_id=$1 AND class_occurrence_id=$2',[crossEnrollment,sunday])).rows[0].n,0)
+  assert.equal((await historyRpc('detail',{id:octoberArchive})).linked_report_id,null)
+  await db.exec('DROP TRIGGER test_history_rollback ON public.enrollment_history_reports; DROP FUNCTION public.test_history_rollback()')
+  assert.equal((await historyRpc('bind-apply',octoberBind)).classification,'added')
+  assert.equal((await db.query('SELECT class_session_id FROM public.enrollments WHERE id=$1',[crossEnrollment])).rows[0].class_session_id,weekendSession)
   const narrowJob=await rpc('job',{...destination,date_from:'2026-10-04',date_to:'2026-10-04',class_session_id:weekendSession})
   const narrowBatch={job_id:narrowJob.id,key:id(209),fingerprint:'4'.repeat(64),rows:[{source_id:'target-date-report',target_id:id(210),overwrite:[],record:{kind:'report',data:{enrollment_id:weekendEnrollment,class_occurrence_id:targetOccurrence,attendance_status:'present'}}}]}
   await rpc('preview',narrowBatch);await rpc('apply',narrowBatch)

@@ -394,7 +394,7 @@ export function createMappingController(hooks) {
     if(ids.length){const resolved=await api('resolve',{source_refs:[],target_refs:ids.map(id=>({kind:'lessons',id}))});ingest(resolved)}
   }
   async function resolveFieldRules(){
-    const records=work().snapshot.records.filter(r=>r.kind==='report'&&!r.sourceSkipped&&r.source_id&&r.date&&r.date>=work().dateFrom&&r.date<=work().dateTo),references=new Map(),key=(f,course)=>`${course}:${f.key}:${globalThis.edulogFieldMappings.signature(f)}`
+    const records=work().snapshot.records.filter(r=>r.kind==='report'&&!r.sourceSkipped&&r.date&&r.date>=work().dateFrom&&r.date<=work().dateTo),references=new Map(),key=(f,course)=>`${course}:${f.key}:${globalThis.edulogFieldMappings.signature(f)}`
     for(const record of records){const course=$(`enrollment-course-${record.enrollment_source_id}`)?.value;record.fieldRuleScope=course;record.fieldRules=[];if(!course||course==='new')continue;for(const field of record.sourceFields||[])if(field.type!=='text'&&!field.internal)references.set(key(field,course),{field_key:field.key,course_id:course,options_signature:globalThis.edulogFieldMappings.signature(field)})}
     const items=[...references.values()],rules=[]
     if(hooks.capabilities?.()?.field_mapping_memory)for(let i=0;i<items.length;i+=50){const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:items.slice(i,i+50)});rules.push(...response.items||[])}
@@ -407,13 +407,13 @@ export function createMappingController(hooks) {
     if(!room||!session||session==='new')throw new Error('新班級的對應會隨建立保存；既有班級請先選擇教室與班級。')
     await confirm([{kind:'classroom',key:work().snapshot.classId,target_id:room,expected_revision:revision('classroom',work().snapshot.classId)},{kind:'class_session',key:work().snapshot.classId,target_id:session,expected_revision:revision('class_session',work().snapshot.classId)}]);dirty()
   }
-  function validateRow(r) {
+  function validateRow(r,quiet=false) {
     if(skipped(r))return false
     const s=studentSelect(r)?.value,c=$(`enrollment-course-${r.source_id}`)?.value
     if(!s||!c)return false
     try{assertReconciled(r)}catch(error){$(`mapping-error-${r.source_id}`).textContent=error.message;return false}
     if(s!=='new'&&$('class-session').value!=='new'&&!courseRowsSafe().some(t=>t.id===c)&&confirmed.get(r.source_id)!==signature(r)) {
-      const e=$(`mapping-error-${r.source_id}`);e.textContent='請先確認並記住此報名的學生與課程。';view.revealRow(r);studentSelect(r).focus({preventScroll:true});throw new Error(`${r.sourceStudentName||'報名 '+r.source_id} 的對應尚未確認。`)
+      const e=$(`mapping-error-${r.source_id}`);e.textContent='請先確認並記住此報名的學生與課程。';if(quiet)return false;view.revealRow(r);studentSelect(r).focus({preventScroll:true});throw new Error(`${r.sourceStudentName||'報名 '+r.source_id} 的對應尚未確認。`)
     }
     return true
   }

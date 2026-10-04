@@ -15,6 +15,28 @@ function appWith(data: unknown, error: unknown = null, productionErrors = false)
   return { app, rpc }
 }
 describe('workspace API contract', () => {
+  it('routes bounded effective dates and versioned history binding without forged actors',async()=>{
+    const {app,rpc}=appWith({items:[],next_cursor:null})
+    const body={enrollment_id:id,dates:['2026-10-03','2026-10-04'],limit:50}
+    expect((await request(app).post('/api/extension/v1/history-reports/route').set('Authorization','Bearer test').send(body)).status).toBe(200)
+    expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'route',p_input:body})
+    for(const invalid of [{...body,dates:Array(51).fill('2026-10-04')},{...body,dates:['2026-02-30']},{...body,user_id:id}])expect((await request(app).post('/api/extension/v1/history-reports/route').send(invalid)).status).toBe(400)
+    const binding={key:id,class_occurrence_id:id,history_version:1,overwrite:['content'],include_internal:false}
+    expect((await request(app).post(`/api/extension/v1/history-reports/${id}/bind/preview`).set('Authorization','Bearer test').send(binding)).status).toBe(200)
+    expect(rpc.mock.calls.at(-1)![1]).toMatchObject({p_operation:'bind-preview',p_input:{...binding,history_id:id}})
+    expect((await request(app).post(`/api/extension/v1/history-reports/${id}/bind/apply`).send({...binding,history_version:0})).status).toBe(400)
+  })
+  it('bounds history evidence, retains half stars and accepts scoped nearest pagination',async()=>{
+    const data={enrollment_id:id,report_date:'2026-10-04',source_origin:'https://corp.orangeapple.co',source_admission_id:'301',source_key:'evidence:hash',identity_status:'evidence_only',source_fields:[],class_participation:4.5,source_evidence:[{source_path:'/dt_admissions/301',table:'歷史紀錄',row:1,captured_at:'2026-10-05T00:00:00Z'}]}
+    const batch=(extra:object)=>({key:id,rows:[{...row,record:{kind:'history_report',data:{...data,...extra}}}]})
+    expect(importBatch.safeParse(batch({})).success).toBe(true)
+    expect(importBatch.safeParse(batch({class_participation:4.25})).success).toBe(false)
+    expect(importBatch.safeParse(batch({source_evidence:[{...data.source_evidence[0],html:'forbidden'}]})).success).toBe(false)
+    const {app,rpc}=appWith({items:[]}),cursor=`h1|${'a'.repeat(32)}|2026-10-04|${id}`
+    expect((await request(app).get(`/api/extension/v1/history-reports?student_id=${id}&sort=nearest&anchor_date=2026-10-04&cursor=${encodeURIComponent(cursor)}`).set('Authorization','Bearer test')).status).toBe(200)
+    expect(rpc.mock.calls[0]![1].p_input.cursor).toBe(cursor)
+    expect((await request(app).get(`/api/extension/v1/history-reports?student_id=${id}&sort=nearest`)).status).toBe(400)
+  })
   it('accepts history without a fabricated report identity and rejects private fields',async()=>{
     const history={...row,record:{kind:'history_report',data:{enrollment_id:id,report_date:'2026-10-04',source_origin:'https://corp.orangeapple.co',source_admission_id:'6332',source_key:'evidence:hash',identity_status:'evidence_only',source_fields:[{key:'content',label:'評語',text:''}],class_participation:0,is_completed:false}}}
     expect(importBatch.safeParse({key:id,rows:[history]}).success).toBe(true)

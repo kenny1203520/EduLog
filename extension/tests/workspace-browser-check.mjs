@@ -23,7 +23,7 @@ const mock = () => {
   const report = {id:id(5),version:1,student_name:'測試學生 A',course_name:'測試課程',occurrence_date:'2026-10-02',updated_at:'2026-10-02T00:00:00Z',content:'EduLog 評語',attendance_status:'present',is_completed:true,class_notes:'內部文字',completeness:{isMissing:true}}
   window.testCalls=[]; window.appliedRows=[]; window.chrome={runtime:{sendMessage:async m=>{
     window.testCalls.push(m)
-    if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true}},tabs:new URL(location.href).searchParams.has('empty')?[]:[{id:10,title:'測試班級',path:'/courses/dt/11',url:'https://corp.orangeapple.co/courses/dt/11'}]}}
+    if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true,enrollment_history_reports:true,per_occurrence_report_routing:true}},tabs:new URL(location.href).searchParams.has('empty')?[]:[{id:10,title:'測試班級',path:'/courses/dt/11',url:'https://corp.orangeapple.co/courses/dt/11'}]}}
     if(m.type==='workspace-store'){ if(m.action==='list')return{data:[...store.values()]};if(m.action==='get')return{data:store.get(m.id)};let w=structuredClone(m.work);if(['complete','cancelled'].includes(w.status)){delete w.snapshot;delete w.batches}w.updatedAt=Date.now();store.set(w.id,w);return{data:w} }
     if(m.type==='workspace-check-source')return{data:{closed:false}}
     if(m.type==='workspace-cancel-read')return{data:true}

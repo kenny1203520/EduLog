@@ -40,7 +40,7 @@ export function installWorkspaceBroker(getStatus) {
       ])
     } finally { clearTimeout(verificationTimer) }
     const operations = {
-      'history-list':['GET','/history-reports'], 'history-detail':['GET',`/history-reports/${message.historyId}`],
+      'history-list':['GET','/history-reports'], 'history-route':['POST','/history-reports/route'], 'history-detail':['GET',`/history-reports/${message.historyId}`],
       'history-candidates':['GET',`/history-reports/${message.historyId}/candidates`],
       'history-bind-preview':['POST',`/history-reports/${message.historyId}/bind/preview`], 'history-bind-apply':['POST',`/history-reports/${message.historyId}/bind/apply`],
       reconcile: ['GET', `/enrollments/${message.enrollmentId}/reconciliation`],
@@ -57,7 +57,7 @@ export function installWorkspaceBroker(getStatus) {
     if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id','source_admission_id','unlinked_only'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
     const payload = method === 'GET' ? undefined : JSON.stringify(message.operation === 'complete' ? message.body : message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
-    const readOnly = ['history-list','history-detail','history-candidates','context','catalog','resolve','field-resolve','reports','work','reconcile','import-info'].includes(message.operation)
+    const readOnly = ['history-list','history-route','history-detail','history-candidates','context','catalog','resolve','field-resolve','reports','work','reconcile','import-info'].includes(message.operation)
     if (readOnly && message.requestId && !/^[a-f0-9-]{36}$/i.test(message.requestId)) fail('查詢識別碼不正確。')
     const remaining = 30000 - (Date.now() - startedAt)
     if (remaining <= 0) { const error = new Error('連線驗證與 API 查詢超過 30 秒。'); error.code = 'API_TIMEOUT'; throw error }
@@ -150,7 +150,7 @@ export function installWorkspaceBroker(getStatus) {
           if(!target)fail('請先確認目標學生與報名；仍可使用其他學生搜尋。')
           if(query.group==='history'){
             if(!bound.status.capabilities?.enrollment_history_reports)fail('請升級 EduLog 至 1000126，才能讀取已保存歷史範本。')
-            const data=await call({operation:'history-list',query:{student_id:target.studentId,course_id:target.courseId,unlinked_only:'true',limit:50,cursor:query.cursor||undefined}})
+            const data=await call({operation:'history-list',query:{student_id:target.studentId,course_id:target.courseId,sort:'nearest',anchor_date:form.date||new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),unlinked_only:'true',limit:50,cursor:query.cursor||undefined}})
             return {reports:data.items.map(r=>({...r,occurrence_date:r.report_date,template_only:true})),next_cursor:data.next_cursor}
           }
           if(!['same-course','other-course','exact'].includes(query.group))fail('候選分組格式不正確。')

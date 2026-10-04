@@ -3,14 +3,38 @@ import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
 import { splitBatches, validateBatches } from '../workspace-model.js'
+import { bindingStillMatches } from '../history-sync.js'
 
 // Exercise the real preview orchestration with isolated API/storage effects.
 const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
-const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderDifferences('))
+const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
+const bindingScript=script.slice(script.indexOf('async function applyHistoryBindings('),script.indexOf('async function apply()'))
+function bindingFixture() {
+ const plan={historyId:'history',itemKey:'301:report:401',expectedFields:{content:'confirmed'},occurrence:{id:'occurrence',report:{version:1}},body:{key:'original-key',class_occurrence_id:'occurrence',overwrite:[]},status:'pending'},calls=[],saved=[]
+ const context=vm.createContext({work:{historyBindings:[plan],needs:[]},generation:1,bindingStillMatches,save:async()=>saved.push(structuredClone(context.work)),api:async(operation,body)=>{
+  calls.push({operation,body:structuredClone(body)})
+  if(operation==='history-detail')return{version:4,content:'confirmed'}
+  if(operation==='history-bind-preview')return{report_version:context.reportVersion??1}
+  if(context.late)context.generation++
+  if(context.fail){context.fail=false;const error=new Error('network');error.code='API_NETWORK_ERROR';throw error}
+  return{classification:'updated',status:'linked'}
+ }})
+ vm.runInContext(bindingScript,context);return{plan,calls,saved,context,apply:()=>context.applyHistoryBindings()}
+}
+test('lost binding response retries the exact saved key and body without creating another preview',async()=>{
+ const f=bindingFixture();f.context.fail=true;await assert.rejects(f.apply(),e=>e.code==='API_NETWORK_ERROR');assert.equal(f.plan.status,'previewed');await f.apply()
+ const writes=f.calls.filter(c=>c.operation==='history-bind-apply');assert.deepEqual(writes[0].body,writes[1].body);assert.equal(writes[0].body.key,'original-key');assert.equal(writes[0].body.history_version,4);assert.equal(f.calls.filter(c=>c.operation==='history-bind-preview').length,1);assert.equal(f.plan.status,'done')
+})
+test('changed report version preserves saved history and requires rechecking instead of binding',async()=>{
+ const f=bindingFixture();f.context.reportVersion=2;await f.apply();assert.equal(f.plan.status,'blocked');assert.equal(f.context.work.needs.length,1);assert.equal(f.calls.some(c=>c.operation==='history-bind-apply'),false)
+})
+test('a late binding response cannot update a changed work context',async()=>{
+ const f=bindingFixture();f.context.late=true;await assert.rejects(f.apply(),e=>e.code==='API_RESPONSE_INVALID');assert.equal(f.plan.status,'previewed');assert.equal(f.plan.result,undefined);assert.equal(f.saved.length,1)
+})
 const row = n => ({source_id:String(n),target_id:`target-${n}`,overwrite:[],record:{kind:'course',data:{subject:'合成課程',stage:'初階'}}})
 function previewFixture(work, rows) {
   const calls=[],saved=[],controls={apply:{disabled:false}}
-  const context=vm.createContext({work,rows,splitBatches,validateBatches,batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
+  const context=vm.createContext({work,rows,splitBatches,validateBatches,integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
     calls.push({operation,body:structuredClone(body),extra})
     if(operation==='job')return{id:'new-job'}
     if(operation==='preview'){
@@ -23,6 +47,9 @@ function previewFixture(work, rows) {
   return {context,calls,saved,controls,preview:reuse=>context.preview(reuse)}
 }
 const work = () => ({id:'local-work',type:'import',status:'collected',done:0,jobId:'old-job',batches:[{key:'old-key',rows:[row(1)]}],snapshot:{sourceOrigin:'https://corp.orangeapple.co',classId:'11'},destination:{course_ids:['course']},uiState:[{id:'student',value:'kept'}]})
+test('no new data produces a review summary without cancelling or creating a server job',async()=>{
+ const current=work(),original=structuredClone(current),f=previewFixture(current,[]);await f.preview(false);assert.deepEqual(current,original);assert.deepEqual(f.calls,[{operation:'empty-summary'}]);assert.equal(f.saved.length,0)
+})
 
 test('invalid local rows never cancel the old job, replace its preview, or create a new one',async()=>{
   const current=work(),original=structuredClone(current),f=previewFixture(current,[row(1),{...row(1),target_id:'conflict'}])

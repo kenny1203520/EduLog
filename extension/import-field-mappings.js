@@ -8,6 +8,7 @@ export function mappedReport(record, courseId, lessons = []) {
   const choices = record.fieldChoices?.courseId === courseId ? record.fieldChoices.fields || {} : {}
   let start, end
   for (const field of record.sourceFields || []) {
+    if (!['lesson_id','is_completed','progress_start','progress_end','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes'].includes(field.key)) continue
     if (field.internal || field.type === 'text') continue
     delete data[field.key]
     if (field.disabled) continue
@@ -15,8 +16,6 @@ export function mappedReport(record, courseId, lessons = []) {
     const choice = choices[field.key]
     let value = choice?.signature === m.signature(field) && choice.sourceValue === field.value ? choice.value : m.canonical(field, rules)
     if (field.key === 'lesson_id') {
-      const exact = lessons.filter(l => l.course_id === courseId && l.title.trim() === record.sourceLessonLabel?.trim())
-      if (value === undefined && exact.length === 1) value = exact[0].id
       if (value !== undefined && !lessons.some(l => l.id === value && l.course_id === courseId)) value = undefined
     }
     if (field.key.startsWith('progress_') && value === undefined) {
@@ -36,10 +35,9 @@ export function mappedReport(record, courseId, lessons = []) {
     if (!start || !end || start > end) needs.push('請確認有效的章節起點與終點')
     else data.progress_letter = start === end ? start : `${start}-${end}`
   }
-  if (!(record.sourceFields || []).length && record.sourceLessonLabel) {
-    const exact = lessons.filter(l => l.course_id === courseId && l.title.trim() === record.sourceLessonLabel.trim())
-    if (exact.length === 1) data.lesson_id = exact[0].id
-    else needs.push('教材尚未確認對應；請補讀來源編輯頁')
+  if(record.historyLessonCourse===courseId&&lessons.some(l=>l.id===record.historyLessonId&&l.course_id===courseId))data.lesson_id=record.historyLessonId
+  if (!data.lesson_id && record.sourceLessonLabel && !(record.sourceFields||[]).some(f=>f.key==='lesson_id')) {
+    needs.push('教材尚未確認對應；請選擇已核對的 EduLog 教材')
   }
   return { data, needs }
 }
@@ -82,6 +80,10 @@ export function attachImportFields(parent, record, hooks) {
       function build() {
         if (!current()) return
         controls?.remove(); controls = make('div'); editor.append(controls)
+        if(record.sourceLessonLabel&&!(record.sourceFields||[]).some(f=>f.key==='lesson_id')) {
+          const label=make('label',`教材原文：${record.sourceLessonLabel}`),select=make('select');select.add(new Option('請確認 EduLog 教材',''));for(const lesson of hooks.lessons().filter(l=>l.course_id===courseId))select.add(new Option(lesson.title,lesson.id));select.value=record.historyLessonCourse===courseId?record.historyLessonId||'':'';label.append(select);controls.append(label)
+          select.addEventListener('change',()=>{if(!current())return;record.historyLessonId=select.value;record.historyLessonCourse=courseId;hooks.changed()})
+        }
         record.fieldChoices ||= { courseId, fields: {} }
         if (record.fieldChoices.courseId !== courseId) record.fieldChoices = { courseId, fields: {} }
         for (const field of record.sourceFields || []) {

@@ -1,5 +1,13 @@
 import './field-mappings.js'
-export const labels = { student: '學生', course: '課程', class_session: '班級', enrollment: '報名', occurrence: '課次', report: '報告', added: '新增', updated: '更新', unchanged: '無變更', conflict: '保留 EduLog', needs: '需處理' }
+export const labels = { student: '學生', course: '課程', class_session: '班級', enrollment: '報名', occurrence: '課次', history_report: '歷史報告', report: '課次報告', added: '新增', updated: '更新', unchanged: '無變更', conflict: '保留 EduLog', needs: '需處理' }
+/** Start a new reconciliation without altering the committed job or its keys. */
+export function retryHistoryWork(previous) {
+  const next=structuredClone(previous)
+  for(const key of ['jobId','batches','batchCount','appliedBatchKeys','batchSummaries','serverImportSummary','historyBindings','historySummary','needs','rosterChecks','rosterVerification','rosterCheckError','revision','updatedAt'])delete next[key]
+  Object.assign(next,{id:crypto.randomUUID(),parentWorkId:previous.id,status:'collected',done:0,previewDirty:true})
+  if(next.history)next.history={paths:next.snapshot.admissionPaths||next.history.paths,next:0}
+  return next
+}
 const rowIdentity = row => row.record?.kind && row.source_id != null ? `${row.record.kind}:${row.source_id}` : null
 const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)
 function duplicateError(row) {

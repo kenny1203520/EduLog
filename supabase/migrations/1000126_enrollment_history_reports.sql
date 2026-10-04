@@ -12,10 +12,11 @@ CREATE TABLE public.enrollment_history_reports (
   source_key text NOT NULL CHECK(length(source_key) BETWEEN 1 AND 256),
   identity_status text NOT NULL CHECK(identity_status IN ('verified','evidence_only')),
   source_fields jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(source_fields)='array' AND octet_length(source_fields::text)<=64000),
+  source_evidence jsonb NOT NULL DEFAULT '[]' CHECK(jsonb_typeof(source_evidence)='array' AND octet_length(source_evidence::text)<=16000),
   lesson_id uuid REFERENCES public.lessons(id), is_completed boolean, progress_letter text,
   attendance_status text CHECK(attendance_status IN ('present','absent','pending')),
-  absence_reason text, class_participation numeric CHECK(class_participation BETWEEN 0 AND 5),
-  classroom_behavior numeric CHECK(classroom_behavior BETWEEN 0 AND 5),
+  absence_reason text, class_participation numeric CHECK(class_participation BETWEEN 0 AND 5 AND mod(class_participation,0.5)=0),
+  classroom_behavior numeric CHECK(classroom_behavior BETWEEN 0 AND 5 AND mod(classroom_behavior,0.5)=0),
   content text, contact_notes text, class_notes text, external_link text,
   linked_report_id uuid REFERENCES public.occurrence_reports(id) ON DELETE SET NULL,
   version integer NOT NULL DEFAULT 1, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
@@ -30,6 +31,17 @@ CREATE POLICY enrollment_history_read ON public.enrollment_history_reports FOR S
   USING(public.can_access_enrollment(enrollment_id,'teaching.enrollments.read') AND public.can_access_enrollment(enrollment_id,'teaching.reports.read'));
 ALTER TABLE public.web_extension_import_jobs ADD COLUMN report_session_ids uuid[];
 
+-- The native roster includes incoming transfers. A later active transfer must
+-- also remove an earlier incoming target from historical binding eligibility.
+CREATE FUNCTION public.history_occurrence_eligible(p_enrollment uuid,p_occurrence uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+ SELECT EXISTS(SELECT 1 FROM public.get_effective_occurrence_enrollment_ids(p_occurrence) e WHERE e.enrollment_id=p_enrollment)
+ AND NOT EXISTS(SELECT 1 FROM public.single_lesson_transfers t WHERE t.enrollment_id=p_enrollment AND t.source_occurrence_id=p_occurrence AND t.cancelled_at IS NULL)
+ AND EXISTS(SELECT 1 FROM public.class_occurrences o JOIN public.enrollments e ON e.id=p_enrollment WHERE o.id=p_occurrence AND o.status<>'cancelled'
+   AND (o.class_session_id=e.class_session_id OR EXISTS(SELECT 1 FROM public.single_lesson_transfers t JOIN public.class_occurrences source ON source.id=t.source_occurrence_id WHERE t.enrollment_id=e.id AND t.target_occurrence_id=o.id AND t.cancelled_at IS NULL AND source.status<>'cancelled')));
+$$;
+REVOKE ALL ON FUNCTION public.history_occurrence_eligible(uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
+
 CREATE FUNCTION public.validate_enrollment_history(p_data jsonb,p_row jsonb,p_job public.web_extension_import_jobs,p_batch jsonb) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 DECLARE e public.enrollments; existing public.enrollment_history_reports;
@@ -37,7 +49,7 @@ BEGIN
   SELECT * INTO e FROM public.enrollments WHERE id=(p_data->>'enrollment_id')::uuid;
   IF e.id IS NULL THEN
     -- New enrollments must be created earlier in this same dependency-ordered batch.
-    IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_batch->'rows') x WHERE x->'record'->>'kind'='enrollment' AND x->>'target_id'=p_data->>'enrollment_id') THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
+    IF NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_batch->'rows') x WHERE x->'record'->>'kind'='enrollment' AND x->>'target_id'=p_data->>'enrollment_id' AND x->>'source_id'=p_data->>'source_admission_id' AND (NOT p_data ? 'lesson_id' OR EXISTS(SELECT 1 FROM public.lessons l WHERE l.id=(p_data->>'lesson_id')::uuid AND l.course_id=(x->'record'->'data'->>'course_id')::uuid))) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
     IF NOT public.has_api_permission(auth.uid(),'teaching.reports.create',p_job.classroom_id,p_job.class_session_id) THEN RAISE EXCEPTION 'PERMISSION_DENIED'; END IF;
   ELSE
     IF NOT public.can_access_enrollment(e.id,'teaching.enrollments.read') OR NOT public.can_access_enrollment(e.id,'teaching.reports.read') THEN RAISE EXCEPTION 'PERMISSION_DENIED'; END IF;
@@ -47,15 +59,18 @@ BEGIN
       AND NOT EXISTS(SELECT 1 FROM public.web_extension_source_links l WHERE l.user_id=auth.uid() AND l.source_origin=p_job.source_origin AND l.source_kind='enrollment' AND l.source_id=p_data->>'source_admission_id' AND l.edulog_id=e.id)
       AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_batch->'rows') x WHERE x->'record'->>'kind'='enrollment' AND x->>'target_id'=e.id::text AND x->>'source_id'=p_data->>'source_admission_id') THEN RAISE EXCEPTION 'SOURCE_MAPPING_CONFLICT'; END IF;
   END IF;
+  IF p_data ? 'source_evidence' AND (jsonb_typeof(p_data->'source_evidence') IS DISTINCT FROM 'array' OR jsonb_array_length(p_data->'source_evidence')>50 OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_data->'source_evidence') f WHERE f->>'source_path' !~ '^/(dt_admissions/[0-9]+(/reports/[0-9]+/edit)?|courses/dt/[0-9]+)$' OR EXISTS(SELECT 1 FROM jsonb_object_keys(f) k WHERE k NOT IN ('source_path','table','row','captured_at')))) THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
   IF p_data->>'source_origin' IS DISTINCT FROM p_job.source_origin OR (p_data->>'report_date')::date NOT BETWEEN p_job.date_from AND p_job.date_to
     OR jsonb_typeof(p_data->'source_fields') IS DISTINCT FROM 'array' OR jsonb_array_length(p_data->'source_fields')>50
     OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_data->'source_fields') f WHERE f->>'key' NOT IN ('attendance_status','absence_reason','lesson_id','progress_start','progress_end','is_completed','class_participation','classroom_behavior','content','contact_notes','class_notes','sourceLessonLabel','progress_letter') OR EXISTS(SELECT 1 FROM jsonb_object_keys(f) k WHERE k NOT IN ('key','label','text')))
+    OR (p_data->>'identity_status'='evidence_only' AND (p_data->>'source_report_id' IS NOT NULL OR p_data->>'external_link' IS NOT NULL))
     OR (p_data->>'identity_status'='verified' AND (p_data->>'source_report_id' IS NULL OR p_data->>'external_link' IS DISTINCT FROM 'https://corp.orangeapple.co/dt_admissions/'||(p_data->>'source_admission_id')||'/reports/'||(p_data->>'source_report_id')||'/edit')) THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
   IF EXISTS(SELECT 1 FROM public.enrollment_history_reports h WHERE h.enrollment_id=(p_data->>'enrollment_id')::uuid AND h.source_origin=p_data->>'source_origin' AND h.source_admission_id=p_data->>'source_admission_id' AND h.source_key=p_data->>'source_key' AND h.id<>(p_row->>'target_id')::uuid) THEN RAISE EXCEPTION 'SOURCE_MAPPING_CONFLICT'; END IF;
   SELECT * INTO existing FROM public.enrollment_history_reports WHERE id=(p_row->>'target_id')::uuid;
-  IF existing.linked_report_id IS NOT NULL AND EXISTS(SELECT 1 FROM jsonb_each(p_data) d WHERE d.key NOT IN ('source_fields') AND to_jsonb(existing)->d.key IS DISTINCT FROM d.value) THEN RAISE EXCEPTION 'HISTORY_ALREADY_LINKED'; END IF;
-  IF existing.id IS NULL AND p_data->>'identity_status'='evidence_only' AND NOT COALESCE((p_row->>'reviewed_duplicate')::boolean,false)
-    AND EXISTS(SELECT 1 FROM public.enrollment_history_reports h WHERE h.enrollment_id=(p_data->>'enrollment_id')::uuid AND h.source_admission_id=p_data->>'source_admission_id' AND h.report_date=(p_data->>'report_date')::date) THEN RAISE EXCEPTION 'HISTORY_IDENTITY_AMBIGUOUS'; END IF;
+  IF existing.linked_report_id IS NOT NULL AND EXISTS(SELECT 1 FROM jsonb_each(p_data) d WHERE d.key NOT IN ('source_fields','source_evidence') AND to_jsonb(existing)->d.key IS DISTINCT FROM d.value) THEN RAISE EXCEPTION 'HISTORY_ALREADY_LINKED'; END IF;
+  IF existing.id IS NULL AND NOT COALESCE((p_row->>'reviewed_duplicate')::boolean,false)
+    AND (EXISTS(SELECT 1 FROM public.enrollment_history_reports h WHERE h.enrollment_id=(p_data->>'enrollment_id')::uuid AND h.source_admission_id=p_data->>'source_admission_id' AND h.report_date=(p_data->>'report_date')::date AND (p_data->>'identity_status'='evidence_only' OR h.identity_status='evidence_only'))
+    OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_batch->'rows') x WHERE x->'record'->>'kind'='history_report' AND x->>'target_id'<>p_row->>'target_id' AND x->'record'->'data'->>'enrollment_id'=p_data->>'enrollment_id' AND x->'record'->'data'->>'report_date'=p_data->>'report_date' AND (p_data->>'identity_status'='evidence_only' OR x->'record'->'data'->>'identity_status'='evidence_only'))) THEN RAISE EXCEPTION 'HISTORY_IDENTITY_AMBIGUOUS'; END IF;
 END $$;
 REVOKE ALL ON FUNCTION public.validate_enrollment_history(jsonb,jsonb,public.web_extension_import_jobs,jsonb) FROM PUBLIC,anon,authenticated,service_role;
 
@@ -211,7 +226,7 @@ BEGIN
       WHEN 'class_session' THEN ARRAY['name','classroom_id','course_ids','start_date','day_of_week','start_time','end_time','time_zone','external_link']
       WHEN 'enrollment' THEN ARRAY['student_id','course_id','class_session_id','classroom_id','status','start_date','time_zone','external_link']
       WHEN 'occurrence' THEN ARRAY['class_session_id','occurrence_date','original_start_time','original_end_time','time_zone']
-      WHEN 'report' THEN ARRAY['enrollment_id','class_occurrence_id','lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link'] WHEN 'history_report' THEN ARRAY['enrollment_id','report_date','source_origin','source_admission_id','source_report_id','source_key','identity_status','source_fields','lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link'] END;
+      WHEN 'report' THEN ARRAY['enrollment_id','class_occurrence_id','lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link'] WHEN 'history_report' THEN ARRAY['enrollment_id','report_date','source_origin','source_admission_id','source_report_id','source_key','identity_status','source_fields','source_evidence','lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link'] END;
     IF v_allowed IS NULL OR jsonb_typeof(v_data)<>'object' OR EXISTS(SELECT 1 FROM jsonb_object_keys(v_data) k WHERE NOT k=ANY(v_allowed)) THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
     SELECT * INTO v_link FROM public.web_extension_source_links WHERE user_id=v_user AND source_origin=v_job.source_origin AND source_kind=v_kind AND source_id=v_row->>'source_id' FOR UPDATE;
     IF v_link.id IS NOT NULL AND v_link.edulog_id<>v_id THEN RAISE EXCEPTION 'SOURCE_MAPPING_CONFLICT'; END IF;
@@ -316,10 +331,10 @@ BEGIN
         ELSE IF v_patch<>'{}' THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF; END IF;
       ELSIF v_kind='history_report' THEN
         IF v_current IS NULL THEN
-          INSERT INTO public.enrollment_history_reports SELECT (jsonb_populate_record(NULL::public.enrollment_history_reports,v_data||jsonb_build_object('id',v_id,'user_id',v_user,'version',1,'created_at',now(),'updated_at',now()))).*;
+          INSERT INTO public.enrollment_history_reports SELECT (jsonb_populate_record(NULL::public.enrollment_history_reports,jsonb_build_object('source_evidence','[]'::jsonb)||v_data||jsonb_build_object('id',v_id,'user_id',v_user,'version',1,'created_at',now(),'updated_at',now()))).*;
         ELSE
           v_patch:=v_patch||jsonb_build_object('version',(v_current->>'version')::integer+1,'updated_at',now());
-          UPDATE public.enrollment_history_reports h SET (lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,content,contact_notes,class_notes,external_link,source_fields,version,updated_at)=(SELECT x.lesson_id,x.is_completed,x.progress_letter,x.attendance_status,x.absence_reason,x.class_participation,x.classroom_behavior,x.content,x.contact_notes,x.class_notes,x.external_link,x.source_fields,x.version,x.updated_at FROM jsonb_populate_record(h,v_patch) x) WHERE h.id=v_id;
+          UPDATE public.enrollment_history_reports h SET (lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,content,contact_notes,class_notes,external_link,source_fields,source_evidence,version,updated_at)=(SELECT x.lesson_id,x.is_completed,x.progress_letter,x.attendance_status,x.absence_reason,x.class_participation,x.classroom_behavior,x.content,x.contact_notes,x.class_notes,x.external_link,x.source_fields,x.source_evidence,x.version,x.updated_at FROM jsonb_populate_record(h,v_patch) x) WHERE h.id=v_id;
         END IF;
       ELSIF v_kind='report' THEN
         
@@ -383,7 +398,7 @@ CREATE OR REPLACE FUNCTION public.web_extension_import_info(
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
-  v_user uuid; v_job public.web_extension_import_jobs; v_date date;
+  v_session uuid; v_user uuid; v_job public.web_extension_import_jobs; v_date date;
 BEGIN
   IF auth.role() IS DISTINCT FROM 'service_role' OR p_operation <> 'info' THEN
     RAISE EXCEPTION 'SERVICE_ROLE_REQUIRED';
@@ -401,6 +416,8 @@ BEGIN
   IF NOT public.can_access_classroom(v_job.classroom_id,'teaching.classrooms.read') THEN RAISE EXCEPTION 'PERMISSION_DENIED'; END IF;
   v_date := COALESCE((p_input->>'roster_date')::date, (now() AT TIME ZONE 'Asia/Taipei')::date);
 
+  v_session:=COALESCE((p_input->>'class_session_id')::uuid,v_job.class_session_id);
+  IF NOT v_session=ANY(COALESCE(v_job.report_session_ids,ARRAY[v_job.class_session_id])) OR NOT public.can_access_class_session(v_session,'teaching.occurrences.read') THEN RAISE EXCEPTION 'PERMISSION_DENIED'; END IF;
   RETURN jsonb_build_object(
     'job', jsonb_build_object('id',v_job.id,'status',v_job.status,'source_class_id',v_job.source_class_id,
       'classroom_id',v_job.classroom_id,'class_session_id',v_job.class_session_id,
@@ -409,7 +426,7 @@ BEGIN
       'applied',COALESCE((b.result->>'applied')::integer,0),'classifications',COALESCE(b.result->'classifications','{}'::jsonb),'counts',COALESCE(b.result->'counts','{}'::jsonb)) ORDER BY b.created_at,b.batch_key)
       FROM public.web_extension_import_batches b WHERE b.job_id=v_job.id),'[]'::jsonb),
     'roster_date',v_date,
-    'roster', public.get_class_session_workspace(v_job.class_session_id,v_date)
+    'roster', jsonb_build_object('class_session_id',v_session,'enrollments',COALESCE((SELECT jsonb_agg(x.row) FROM (SELECT DISTINCT jsonb_build_object('id',e.id,'student_id',s.id,'student_name',s.name,'course_id',c.id,'course_name',c.display_name,'class_session_id',o.class_session_id) row FROM public.class_occurrences o CROSS JOIN LATERAL public.get_effective_occurrence_enrollment_ids(o.id) roster JOIN public.enrollments e ON e.id=roster.enrollment_id JOIN public.students s ON s.id=e.student_id JOIN public.courses c ON c.id=e.course_id WHERE o.class_session_id=v_session AND o.occurrence_date=v_date AND public.history_occurrence_eligible(e.id,o.id) AND public.can_access_enrollment(e.id,'teaching.enrollments.read') AND public.can_access_student(s.id,'teaching.students.read')) x),'[]'))
   );
 END $$;
 
@@ -426,12 +443,27 @@ REVOKE ALL ON public.enrollment_history_bindings FROM PUBLIC,anon,authenticated,
 CREATE FUNCTION public.enrollment_history_access(p_operation text,p_input jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
 #variable_conflict use_column
-DECLARE h public.enrollment_history_reports; o public.class_occurrences; r public.occurrence_reports;
+DECLARE h public.enrollment_history_reports; o public.class_occurrences; r public.occurrence_reports; v_enrollment public.enrollments;
  b public.enrollment_history_bindings; v_items jsonb:='[]'; v_rows jsonb:='[]'; v_patch jsonb; v_conflicts jsonb;
  v_row jsonb; v_context jsonb; v_id uuid; v_limit integer:=LEAST(50,GREATEST(1,COALESCE((p_input->>'limit')::integer,50)));
- v_cursor date; v_cursor_id uuid; v_fingerprint text; v_report uuid; v_version integer;
+ v_cursor date; v_cursor_id uuid; v_scope text; v_fingerprint text; v_report uuid; v_version integer;
 BEGIN
  IF auth.uid() IS NULL THEN RAISE EXCEPTION 'PERMISSION_DENIED'; END IF;
+ IF p_operation='route' THEN
+   IF jsonb_typeof(p_input->'dates') IS DISTINCT FROM 'array' OR jsonb_array_length(p_input->'dates') NOT BETWEEN 1 AND 50 THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
+   IF NOT public.can_access_enrollment((p_input->>'enrollment_id')::uuid,'teaching.enrollments.read') OR NOT public.can_access_enrollment((p_input->>'enrollment_id')::uuid,'teaching.reports.read') THEN RAISE EXCEPTION 'PERMISSION_DENIED'; END IF;
+   SELECT COALESCE(jsonb_agg(x.row ORDER BY x.id),'[]') INTO v_items FROM (
+    SELECT o.id,jsonb_build_object('id',o.id,'class_session_id',o.class_session_id,'occurrence_date',o.occurrence_date,'class_name',s.name,'start_time',o.original_start_time,'end_time',o.original_end_time,'enrollment',public.web_extension_target('enrollment',(p_input->>'enrollment_id')::uuid),'report',CASE WHEN public.can_access_report(r.id,'teaching.reports.read') THEN to_jsonb(r)-'user_id' END,'can_write',CASE WHEN r.id IS NULL THEN public.can_create_occurrence_report((p_input->>'enrollment_id')::uuid,o.id) ELSE public.can_access_report(r.id,'teaching.reports.read') AND public.can_mutate_occurrence_report(r.id,'teaching.reports.update') END) row
+    FROM public.class_occurrences o JOIN public.class_sessions s ON s.id=o.class_session_id
+    LEFT JOIN public.occurrence_reports r ON r.class_occurrence_id=o.id AND r.enrollment_id=(p_input->>'enrollment_id')::uuid
+    WHERE o.occurrence_date IN (SELECT value::date FROM jsonb_array_elements_text(p_input->'dates')) AND o.status<>'cancelled'
+      AND public.can_access_class_session(s.id,'teaching.occurrences.read') AND public.can_access_class_session(s.id,'teaching.class_sessions.read')
+      AND public.history_occurrence_eligible((p_input->>'enrollment_id')::uuid,o.id)
+      AND (p_input->>'cursor' IS NULL OR o.id>(p_input->>'cursor')::uuid)
+    ORDER BY o.id LIMIT v_limit+1
+   ) x;
+   RETURN jsonb_build_object('items',CASE WHEN jsonb_array_length(v_items)>v_limit THEN v_items-v_limit ELSE v_items END,'next_cursor',CASE WHEN jsonb_array_length(v_items)>v_limit THEN v_items->(v_limit-1)->>'id' END);
+ END IF;
  IF p_operation IN ('list','detail') THEN
    IF p_operation='detail' THEN
      SELECT * INTO h FROM public.enrollment_history_reports WHERE id=(p_input->>'id')::uuid;
@@ -440,12 +472,20 @@ BEGIN
      RETURN to_jsonb(h)-'user_id';
    END IF;
    IF p_input->>'enrollment_id' IS NULL AND p_input->>'student_id' IS NULL THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
-   IF p_input->>'cursor' IS NOT NULL THEN
-     v_cursor:=split_part(p_input->>'cursor','|',1)::date; v_cursor_id:=split_part(p_input->>'cursor','|',2)::uuid;
+   IF p_input->>'sort'='nearest' THEN
+     IF p_input->>'anchor_date' IS NULL THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
+     v_scope:=md5(jsonb_build_array(p_input->>'enrollment_id',p_input->>'student_id',p_input->>'course_id',p_input->>'source_admission_id',p_input->>'unlinked_only',p_input->>'date_from',p_input->>'date_to',p_input->>'anchor_date')::text);
    END IF;
-   SELECT COALESCE(jsonb_agg(x.row ORDER BY x.report_date DESC,x.id DESC),'[]') INTO v_items FROM (
-     SELECT h.id,h.report_date,(to_jsonb(h)-'user_id')||jsonb_build_object('kind','history_report','template_only',true,'student_id',e.student_id,'student_name',s.name,'course_id',e.course_id,'course_name',COALESCE(c.display_name,c.subject),'class_name',cs.name) row
+   IF p_input->>'cursor' IS NOT NULL THEN
+     IF p_input->>'sort'='nearest' THEN
+       IF split_part(p_input->>'cursor','|',1)<>'h1' OR split_part(p_input->>'cursor','|',2)<>v_scope THEN RAISE EXCEPTION 'INVALID_CURSOR'; END IF;
+       v_cursor:=split_part(p_input->>'cursor','|',3)::date;v_cursor_id:=split_part(p_input->>'cursor','|',4)::uuid;
+     ELSE v_cursor:=split_part(p_input->>'cursor','|',1)::date; v_cursor_id:=split_part(p_input->>'cursor','|',2)::uuid; END IF;
+   END IF;
+   SELECT COALESCE(jsonb_agg(x.row ORDER BY x.distance,x.nearest_date,x.nearest_id,x.report_date DESC,x.id DESC),'[]') INTO v_items FROM (
+     SELECT h.id,h.report_date,CASE WHEN p_input->>'sort'='nearest' THEN abs(h.report_date-(p_input->>'anchor_date')::date) ELSE 0 END distance,CASE WHEN p_input->>'sort'='nearest' THEN h.report_date END nearest_date,CASE WHEN p_input->>'sort'='nearest' THEN h.id END nearest_id,(to_jsonb(h)-'user_id')||jsonb_build_object('kind','history_report','template_only',true,'date_difference',h.report_date-(p_input->>'anchor_date')::date,'student_id',e.student_id,'student_name',s.name,'course_id',e.course_id,'course_name',COALESCE(c.display_name,c.subject),'lesson_name',l.title,'class_name',cs.name) row
      FROM public.enrollment_history_reports h JOIN public.enrollments e ON e.id=h.enrollment_id JOIN public.students s ON s.id=e.student_id JOIN public.courses c ON c.id=e.course_id JOIN public.class_sessions cs ON cs.id=e.class_session_id
+     LEFT JOIN public.lessons l ON l.id=h.lesson_id
      WHERE (p_input->>'enrollment_id' IS NULL OR h.enrollment_id=(p_input->>'enrollment_id')::uuid)
        AND (p_input->>'student_id' IS NULL OR e.student_id=(p_input->>'student_id')::uuid)
        AND (p_input->>'course_id' IS NULL OR e.course_id=(p_input->>'course_id')::uuid)
@@ -453,12 +493,12 @@ BEGIN
        AND (p_input->>'source_admission_id' IS NULL OR h.source_admission_id=p_input->>'source_admission_id')
        AND (p_input->>'date_from' IS NULL OR h.report_date>=(p_input->>'date_from')::date)
        AND (p_input->>'date_to' IS NULL OR h.report_date<=(p_input->>'date_to')::date)
-       AND (v_cursor IS NULL OR (h.report_date,h.id)<(v_cursor,v_cursor_id))
+       AND (v_cursor IS NULL OR CASE WHEN p_input->>'sort'='nearest' THEN (abs(h.report_date-(p_input->>'anchor_date')::date),h.report_date,h.id)>(abs(v_cursor-(p_input->>'anchor_date')::date),v_cursor,v_cursor_id) ELSE (h.report_date,h.id)<(v_cursor,v_cursor_id) END)
        AND public.can_access_enrollment(e.id,'teaching.enrollments.read') AND public.can_access_enrollment(e.id,'teaching.reports.read')
        AND public.can_access_student(e.student_id,'teaching.students.read') AND public.can_access_class_session(cs.id,'teaching.class_sessions.read')
-     ORDER BY h.report_date DESC,h.id DESC LIMIT v_limit+1
+     ORDER BY distance,nearest_date,nearest_id,h.report_date DESC,h.id DESC LIMIT v_limit+1
    ) x;
-   RETURN jsonb_build_object('items',CASE WHEN jsonb_array_length(v_items)>v_limit THEN v_items-(v_limit) ELSE v_items END,'next_cursor',CASE WHEN jsonb_array_length(v_items)>v_limit THEN (v_items->(v_limit-1)->>'report_date')||'|'||(v_items->(v_limit-1)->>'id') END);
+   RETURN jsonb_build_object('items',CASE WHEN jsonb_array_length(v_items)>v_limit THEN v_items-(v_limit) ELSE v_items END,'next_cursor',CASE WHEN jsonb_array_length(v_items)>v_limit THEN CASE WHEN v_scope IS NOT NULL THEN 'h1|'||v_scope||'|' ELSE '' END||(v_items->(v_limit-1)->>'report_date')||'|'||(v_items->(v_limit-1)->>'id') END);
  END IF;
  SELECT * INTO h FROM public.enrollment_history_reports WHERE id=(p_input->>'history_id')::uuid FOR UPDATE;
  IF h.id IS NULL THEN RAISE EXCEPTION 'NOT_FOUND'; END IF;
@@ -468,13 +508,16 @@ BEGIN
     SELECT o.id,jsonb_build_object('id',o.id,'class_session_id',o.class_session_id,'occurrence_date',o.occurrence_date,'class_name',s.name,'start_time',o.original_start_time,'end_time',o.original_end_time) row
     FROM public.class_occurrences o JOIN public.class_sessions s ON s.id=o.class_session_id
     WHERE o.occurrence_date=h.report_date AND o.status<>'cancelled' AND public.can_access_class_session(s.id,'teaching.occurrences.read')
-      AND EXISTS(SELECT 1 FROM public.get_effective_occurrence_enrollment_ids(o.id) e WHERE e.enrollment_id=h.enrollment_id)
+      AND public.history_occurrence_eligible(h.enrollment_id,o.id)
       AND (p_input->>'cursor' IS NULL OR o.id>(p_input->>'cursor')::uuid)
     ORDER BY o.id LIMIT v_limit+1
    ) x;
    RETURN jsonb_build_object('items',CASE WHEN jsonb_array_length(v_items)>v_limit THEN v_items-v_limit ELSE v_items END,'next_cursor',CASE WHEN jsonb_array_length(v_items)>v_limit THEN v_items->(v_limit-1)->>'id' END);
  END IF;
  IF p_operation NOT IN ('bind-preview','bind-apply') THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
+ IF COALESCE((p_input->>'history_version')::integer,0)<1 OR p_input->>'key' IS NULL THEN RAISE EXCEPTION 'INVALID_IMPORT'; END IF;
+ SELECT * INTO v_enrollment FROM public.enrollments WHERE id=h.enrollment_id FOR SHARE;
+ IF h.lesson_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.lessons WHERE id=h.lesson_id AND course_id=v_enrollment.course_id) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
  -- Replay checks precede mutable version checks. A lost response can safely be recovered.
  v_fingerprint:=md5(p_input::text);
  SELECT * INTO b FROM public.enrollment_history_bindings WHERE user_id=auth.uid() AND operation_key=(p_input->>'key')::uuid FOR UPDATE;
@@ -482,7 +525,7 @@ BEGIN
  IF b.result IS NOT NULL THEN RETURN b.result; END IF;
  SELECT * INTO o FROM public.class_occurrences WHERE id=(p_input->>'class_occurrence_id')::uuid FOR UPDATE;
  IF o.id IS NULL OR o.occurrence_date<>h.report_date OR o.status='cancelled'
-   OR NOT EXISTS(SELECT 1 FROM public.get_effective_occurrence_enrollment_ids(o.id) e WHERE e.enrollment_id=h.enrollment_id) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
+   OR NOT public.history_occurrence_eligible(h.enrollment_id,o.id) THEN RAISE EXCEPTION 'INVALID_REFERENCE'; END IF;
  IF NOT public.can_access_class_session(o.class_session_id,'teaching.occurrences.read') THEN RAISE EXCEPTION 'PERMISSION_DENIED'; END IF;
  IF h.version<>(p_input->>'history_version')::integer THEN RAISE EXCEPTION 'VERSION_CONFLICT'; END IF;
  SELECT * INTO r FROM public.occurrence_reports WHERE enrollment_id=h.enrollment_id AND class_occurrence_id=o.id FOR UPDATE;
@@ -518,7 +561,7 @@ BEGIN
  IF v_patch ? 'class_notes' THEN v_patch:=v_patch||jsonb_build_object('class_notes_document',NULL); END IF;
  IF v_patch<>'{}' THEN PERFORM public.apply_occurrence_report_lifecycle(r.id,r.version,v_patch,auth.uid(),'update'); END IF;
  UPDATE public.enrollment_history_reports SET linked_report_id=r.id,version=version+1,updated_at=now() WHERE id=h.id;
- v_context:=jsonb_build_object('history_id',h.id,'report_id',r.id,'status','linked','preserved_fields',v_conflicts);
+ v_context:=jsonb_build_object('history_id',h.id,'report_id',r.id,'status','linked','classification',CASE WHEN b.preview->>'report_id' IS NULL THEN 'added' WHEN v_patch='{}' THEN 'unchanged' ELSE 'updated' END,'preserved_fields',COALESCE((SELECT jsonb_agg(x) FROM jsonb_array_elements(v_conflicts) x WHERE NOT COALESCE(p_input->'overwrite','[]') ? (x->>'field')),'[]'));
  UPDATE public.enrollment_history_bindings SET result=v_context WHERE user_id=auth.uid() AND operation_key=(p_input->>'key')::uuid;
  RETURN v_context;
 END $$;
