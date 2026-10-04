@@ -59,7 +59,7 @@ export const workStore = {
   async put(row, binding) {
     if (!row || typeof row.id !== 'string' || row.id.length > 80 || JSON.stringify(row).length > 4_000_000) throw new Error('工作資料格式或大小不正確。')
     const value = { ...row, ...binding, updatedAt: Date.now(), expiresAt: Math.min(row.expiresAt || Infinity, Date.now() + 7 * 86400000) }
-    if (['complete', 'cancelled'].includes(value.status)) { delete value.snapshot; delete value.batches; delete value.sourceRosterEntries; delete value.sourceEvidence; delete value.form; delete value.report; delete value.prefill; delete value.uiState; delete value.mappingView; delete value.reconciliation; delete value.skippedAdmissions }
+    if (['complete', 'cancelled'].includes(value.status)) { delete value.snapshot; delete value.batches; delete value.history; delete value.sourceRosterEntries; delete value.sourceEvidence; delete value.form; delete value.report; delete value.prefill; delete value.uiState; delete value.mappingView; delete value.reconciliation; delete value.skippedAdmissions }
     if (value.status === 'pending_confirmation') { delete value.form; delete value.prefill }
     return transaction('readwrite', async store => {
       const current = await request(store.get(value.id))

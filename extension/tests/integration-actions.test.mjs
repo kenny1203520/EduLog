@@ -8,6 +8,7 @@ function adapter(html, pathname = '/courses/dt/11') {
   const dom = new JSDOM(html, { url: `https://corp.orangeapple.co${pathname}`, runScripts: 'outside-only' })
   Object.defineProperty(dom.window, 'crypto', { value: webcrypto }); dom.window.TextEncoder = TextEncoder
   dom.window.eval(readFileSync(new URL('../source-date.js', import.meta.url), 'utf8'))
+  dom.window.eval(readFileSync(new URL('../field-mappings.js', import.meta.url), 'utf8'))
   dom.window.eval(readFileSync(new URL('../adapters/orange-apple-integration.js', import.meta.url), 'utf8'))
   return { dom, doc: dom.window.document, api: dom.window.edulogSourceIntegration }
 }
@@ -56,10 +57,10 @@ test('source capture requires reliable identity, keeps same names distinct and n
   assert.throws(() => api.extractClass(doc, '/students/101'), /無法辨識/)
   dom.window.close()
 })
-test('history extraction retains paragraphs only with explicit report identity and full date', () => {
+test('history extraction retains complete and incomplete evidence without inventing dates', () => {
   const html = `<div id="page-body"><div class="content"><table><tbody><tr><td>1</td><td>2026/10/02</td><td><a href="/dt_admissions/301/reports/401/edit">記錄</a><p>評語：第一段\n第二段</p></td></tr><tr><td>2</td><td>10/03</td><td><a href="/dt_admissions/301/reports/402/edit">記錄</a></td></tr></tbody></table></div></div>`
   const { api, doc, dom } = adapter(html); const rows = api.extractHistory(doc, '301')
-  assert.equal(rows.length, 1); assert.equal(rows[0].data.content, '第一段\n第二段'); assert.equal(api.extractHistory(doc, '999').length, 0); dom.window.close()
+  assert.equal(rows.length, 2); assert.equal(rows[0].data.content, '第一段\n第二段'); assert.equal(rows[1].date,null); assert.equal(api.extractHistory(doc, '999').length, 0); dom.window.close()
 })
 test('real name spans and course spans enrich duplicate admissions; absolute action URLs are excluded',()=>{
   const html=`<div id="page-body"><div class="content"><h2>班級</h2><table id="students-table"><tbody><tr><td><span>學生甲</span><a href="/admissions/comments/301/edit_teacher"></a></td><td><span>課程甲</span><div class="text-danger">行政提示</div></td></tr></tbody></table><table id="reports"><tbody><tr><td><span>學生甲</span><a class="admission-comment" href="https://corp.orangeapple.co/admissions/comments/301/edit_teacher"></a><a href="https://corp.orangeapple.co/students/101/accounts">帳號</a><a href="/dt_admissions/301">完整紀錄</a></td><td><span>課程甲</span><div>未完成</div></td></tr><tr><td><span>學生甲</span><a href="/students/101/accounts">帳號</a><a href="/dt_admissions/302">完整紀錄</a></td><td><span>課程乙</span></td></tr></tbody></table></div></div>`
@@ -110,6 +111,14 @@ test('dependent native select events are dispatched; validation rejects disabled
   await api.applyForm(doc, { ...base, fields: [{ key: 'attendance_status', value: 'absent' }] }); assert.equal(events, 1); assert.equal(doc.querySelector('#lesson_report_reason').disabled, false)
   dom.window.close()
 })
+test('native option changes stop partial apply and report the fields already changed',async()=>{
+ const {api,doc,dom}=adapter(readFileSync(new URL('fixtures/report-modal.html',import.meta.url),'utf8'))
+ const target=await api.readForm(doc),attendance=doc.querySelector('#lesson_report_attendance_status'),completion=doc.querySelector('#dt_admission_lesson_report_completion_status')
+ const option=[...completion.options].find(o=>o.value&&!o.disabled);assert.ok(option)
+ attendance.addEventListener('change',()=>completion.replaceChildren())
+ await assert.rejects(api.applyForm(doc,{formId:target.formId,reportId:target.reportId,fingerprint:target.fingerprint,fields:[{key:'is_completed',value:option.value},{key:'attendance_status',value:'attended'}]}),error=>{assert.equal(error.code,'SOURCE_PARTIAL_APPLY');assert.deepEqual(Array.from(error.appliedFields),['attendance_status']);return true})
+ assert.equal(attendance.value,'attended');assert.equal(doc.querySelector('input[type=checkbox]').checked,false);dom.window.close()
+})
 test('batch count and payload limits, verified rating options and plain paragraphs', () => {
   assert.deepEqual(splitBatches(Array.from({ length: 121 }, (_, n) => ({ n }))).map(b => b.rows.length), [50, 50, 21])
   assert.throws(() => splitBatches([{ data: 'x'.repeat(200000) }]), /單筆/)
@@ -118,8 +127,8 @@ test('batch count and payload limits, verified rating options and plain paragrap
   const grouped = splitBatches([...Array.from({ length: 49 }, (_, n) => ({ n })), student, enrollment])
   assert.deepEqual(grouped.map(b => b.rows.length), [49, 2])
   assert.deepEqual(grouped[1].rows, [student, enrollment])
-  assert.equal(suggestedValue({ key: 'class_participation', options: [{ value: '9' }] }, { class_participation: 4.5 }), '9')
-  assert.equal(suggestedValue({ key: 'class_participation', options: [{ value: '8' }] }, { class_participation: 4.5 }), '')
+  assert.equal(suggestedValue({ key: 'class_participation', type:'radio', options: [{ value: '9' }] }, { class_participation: 4.5 }), '9')
+  assert.equal(suggestedValue({ key: 'class_participation', type:'radio', options: [{ value: '8' }] }, { class_participation: 4.5 }), '')
   const { dom, doc } = adapter(''); assert.equal(plainText('<p>甲</p><p>乙</p><script>bad</script>', doc), '甲\n乙'); dom.window.close()
 })
 test('order-independent student dependencies never reuse an earlier enrollment', () => {

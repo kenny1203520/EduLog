@@ -67,7 +67,7 @@ try {
       const checks = await storagePage.evaluate(async () => {
         const { workStore } = await import('/work-store.js'), owner = { instance: 'https://test.invalid', userId: 'user-a' }, other = { ...owner, userId: 'user-b' }
         const results = [], check = (name, value) => results.push({ name, passed: !!value })
-        const row = { id: 'storage-test', revision: 2, status: 'paused', snapshot: { records: ['private'] }, batches: [1], form: { value: 'draft' }, prefill: { value: 'draft' }, report: { id: 'test' }, uiState: [1] }
+        const row = { id: 'storage-test', revision: 2, status: 'paused', history: {checkpoints:{private:{records:['private']}}}, snapshot: { records: ['private'] }, batches: [1], form: { value: 'draft' }, prefill: { value: 'draft' }, report: { id: 'test' }, uiState: [1] }
         const saved = await workStore.put(row, owner)
         check('seven-day expiry', saved.expiresAt <= Date.now() + 7 * 86400000)
         check('wrong user isolated', await workStore.get(row.id, other) === null && (await workStore.list(other)).length === 0)
@@ -76,9 +76,9 @@ try {
         check('late revision ignored', (await workStore.put({ ...saved, revision: 1, status: 'complete' }, owner)).status === 'paused')
         const done = await workStore.put({ ...saved, revision: 3, status: 'complete', expiresAt: saved.expiresAt + 86400000 }, owner)
         check('expiry cannot extend', done.expiresAt === saved.expiresAt)
-        check('completed payload cleared', ['snapshot','batches','sourceRosterEntries','form','prefill','report','uiState'].every(key => !(key in done)))
+        check('completed payload cleared', ['history','snapshot','batches','sourceRosterEntries','form','prefill','report','uiState'].every(key => !(key in done)))
         const cancelled = await workStore.put({ ...row, id: 'cancelled', status: 'cancelled' }, owner)
-        check('cancelled payload cleared', !cancelled.snapshot && !cancelled.form)
+        check('cancelled payload cleared', !cancelled.snapshot && !cancelled.form && !cancelled.history)
         const pending = await workStore.put({ ...row, id: 'pending', status: 'pending_confirmation', push: { id: 'metadata' } }, owner)
         check('pending native form cleared', !pending.form && !pending.prefill && pending.push.id === 'metadata')
         await workStore.put({ id: 'expired', status: 'paused', expiresAt: Date.now() - 1 }, owner)
@@ -124,7 +124,7 @@ try {
           const Observer=globalThis.MutationObserver;globalThis.editorObserverCalls=0
           globalThis.MutationObserver=class extends Observer{constructor(callback){super((records,observer)=>{globalThis.editorObserverCalls++;if(globalThis.editorObserverCalls>20){observer.disconnect();globalThis.editorObserverLoop=true;return}callback(records,observer)})}}
         })
-        await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/editor-prefill.js`})
+        await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/field-mappings.js`});await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/field-mapping-ui.js`});await editorPage.addScriptTag({url:`http://127.0.0.1:${port}/editor-prefill.js`})
         try { await editorPage.waitForFunction(()=>document.querySelector('aside[data-edulog-owned]')?.shadowRoot?.querySelector('[role=status]')?.textContent.includes('原站表單不會自動送出'),undefined,{timeout:5000}) }
         catch { throw new Error(`${name} ${width}: editor did not settle; errors=${JSON.stringify(editorErrors)}`) }
         assert.equal(await editorPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name} ${width}: embedded editor overflow`)

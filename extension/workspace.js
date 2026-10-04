@@ -1,3 +1,4 @@
+import { readHistoryWork } from './history-reader.js'
 import './field-mapping-ui.js'
 import { createMappingController } from './mapping-controller.js'
 import { mappedReport } from './import-field-mappings.js'
@@ -188,18 +189,38 @@ async function collect() {
   work = { id: crypto.randomUUID(), type: 'import', status: 'collected', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, title: snapshot.title, snapshot, ids: {}, dateFrom: $('date-from').value, dateTo: $('date-to').value, includeInternalNotes: $('include-internal-notes').checked, done: 0 }
   if ($('read-history').checked) work.history = { paths: snapshot.admissionPaths, next: 0 }
   await save(); if (work.history) await collectHistory()
-  await mappingView(); notice(`已擷取 ${work.snapshot.records.length} 筆可辨識資料。缺少欄位仍需確認。${work.status === 'paused-extraction' ? '擷取中斷，可從工作紀錄繼續。' : ''}`)
+  await mappingView();renderHistoryIssues(); notice(`已擷取 ${work.snapshot.records.length} 筆可辨識資料。缺少欄位仍需確認。${work.status === 'paused-extraction' ? '擷取中斷，可從工作紀錄繼續。' : ''}`)
 }
-async function collectHistory() {
-  paused = false; work.status = 'collecting'; await save()
-  try {
-    while (work.history.next < work.history.paths.length && !paused) {
-      const records = await source('history', { workId: work.id, historyPath: work.history.paths[work.history.next] })
-      work.snapshot.records = mergeRecords(work.snapshot.records,records)
-      work.history.next++; await save(); notice(`已擷取 ${work.history.next} / ${work.history.paths.length} 份學習紀錄。`)
-    }
-    work.status = paused ? 'paused-extraction' : 'collected'; await save()
-  } catch (error) { work.status = 'paused-extraction'; work.collectionError = error.message; await save() }
+async function collectHistory(retryPath) {
+  paused=false
+  const owner=work, epoch=activeReadGeneration, sourceEpoch=generation
+  await readHistoryWork(owner,{current:()=>owner===work&&epoch===activeReadGeneration&&sourceEpoch===generation,paused:()=>paused,save,source,merge:mergeRecords,progress:message=>{$('operation-detail').textContent=message;notice(message)}},retryPath)
+  if(owner===work)renderHistoryIssues()
+}
+function renderHistoryIssues(){
+  const box=$('history-issues');box.replaceChildren();const issues=work?.history?.issues||[]
+  if(!issues.length)return
+  box.append(node('h3',`歷史報告待處理 · ${issues.filter(r=>!r.skipped).length} 筆`),node('p','已取得的資料保留。請補足、重試，或明確略過；略過後結果會標示部分完成。','hint'))
+  for(const item of issues){
+    const card=node('div',undefined,'history-issue');box.append(card)
+    const admission=work.snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===item.enrollment_source_id)
+    card.append(node('strong',`${admission?.sourceStudentName||'來源報名 #'+(item.enrollment_source_id||item.admissionPath?.split('/').pop())} · ${item.date||item.dateRaw||'日期待確認'}${item.source_id?' · 報告 #'+item.source_id:''}`),node('p',item.reason||item.needs?.join('；')||'來源資訊不足'))
+    if(item.sourceEvidence){const details=node('details');details.append(node('summary','查看已擷取的教學原文'));for(const evidence of item.sourceEvidence)for(const f of evidence.fields||[])details.append(node('p',`${f.label}：${f.text||'未取得'}`));card.append(details)}
+    const original=node('a','查看原站學生完整紀錄 ↗');original.href=`https://corp.orangeapple.co${item.admissionPath||'/dt_admissions/'+item.enrollment_source_id}`;original.target='_blank';original.rel='noopener noreferrer';card.append(original)
+    let url,date
+    if(!item.listFailed){url=labelledInput(card,'原站報告編輯連結','url',`history-link-${item.evidenceKey}`,item.data?.external_link||'');date=labelledInput(card,'完整上課日期（缺少年份時請確認）','date',`history-date-${item.evidenceKey}`,item.date||'');url.autocomplete=date.autocomplete='off'}
+    const status=node('p',item.skipped?'已略過；不會建立此報告。':'尚未完成擷取','hint');status.setAttribute('aria-live','polite');card.append(status)
+    const retry=node('button',item.listFailed?'重試此生歷史紀錄':'補足並重新讀取'),skip=node('button',item.skipped?'取消略過':'略過此筆');retry.type=skip.type='button';card.append(retry,skip)
+    skip.addEventListener('click',()=>void run(async()=>{item.skipped=!item.skipped;const record=work.snapshot.records.find(r=>r.kind==='report'&&r.source_id&&r.source_id===item.source_id);if(record)record.sourceSkipped=item.skipped;await save();skip.textContent=item.skipped?'取消略過':'略過此筆';status.textContent=item.skipped?'已略過；其他資料可繼續匯入。':'待處理，請補足或重試。'},{label:'正在保存略過選擇'}))
+    retry.addEventListener('click',async()=>{
+      if(retry.disabled)return;const owner=work, epoch=generation;retry.disabled=skip.disabled=true;if(url)url.disabled=date.disabled=true;status.textContent='正在讀取並核對來源…'
+      try{
+        if(item.listFailed){await collectHistory(item.admissionPath);if(owner!==work||epoch!==generation)return;mappingController.appendReports()}
+        else{const updated=await source('history-report',{workId:work.id,historyPath:`/dt_admissions/${item.enrollment_source_id}`,input:{reportId:item.source_id,evidenceKey:item.evidenceKey,editUrl:url.value,confirmedDate:date.value||undefined}});if(owner!==work||epoch!==generation)return;if(!updated.date)throw new Error('請確認完整日期後再重新讀取。');const index=work.snapshot.records.findIndex(r=>r.kind==='report'&&r.source_id===updated.source_id);if(index>=0)Object.assign(work.snapshot.records[index],updated);else work.snapshot.records.push(updated);work.history.issues=work.history.issues.filter(r=>r!==item);await save();mappingController.appendReports();status.textContent='已讀取並驗證報告；請核對教材與欄位映射。';url.disabled=date.disabled=retry.disabled=skip.disabled=true;card.dataset.complete='true'}
+      }catch(e){if(owner===work)status.textContent=`讀取未完成：${e.message} 目前選擇保留。`}
+      finally{if(retry.isConnected&&!card.dataset.complete){retry.disabled=skip.disabled=false;if(url)url.disabled=date.disabled=false}}
+    })
+  }
 }
 function prepareRows() {
   work.includeInternalNotes = $('include-internal-notes').checked
@@ -209,6 +230,7 @@ function prepareRows() {
   const sessionId = $('class-session').value === 'new' ? idFor('class_session', work.snapshot.classId) : $('class-session').value
   if (!$('classroom').value || !courseId || !sessionId) throw new Error('請選擇目標教室、班級及各筆報名的課程。')
   const rows = [], needs = []
+  for(const issue of work.history?.issues||[])if(!issue.skipped)needs.push(`歷史紀錄 ${issue.source_id||issue.enrollment_source_id||issue.admissionPath} 尚未核對，未匯入。`)
   if (work.history && work.history.next < work.history.paths.length) needs.push(`尚有 ${work.history.paths.length - work.history.next} 份來源紀錄未完成擷取。`)
   const add = (kind, sourceId, targetId, data) => rows.push({ source_id: sourceId, target_id: targetId, overwrite: [], record: { kind, data } })
   rows.push(...mappingController.courseRows().filter(r=>courseIds.includes(r.target_id)))
@@ -243,6 +265,8 @@ function prepareRows() {
   }
   const dates = new Set()
   for (const r of work.snapshot.records.filter(r => r.kind === 'report')) {
+    if(r.sourceSkipped)continue
+    if(!r.source_id||r.identityUnverified||r.sourceReadStatus==='failed'){needs.push(`來源報告 ${r.source_id||r.enrollment_source_id} 未完成可靠擷取，暫不匯入。`);continue}
     if (!r.date || !enrollments.has(r.enrollment_source_id)) { needs.push(`報告 ${r.source_id} 缺少完整日期或報名對應。`); continue }
     if (r.date < work.dateFrom || r.date > work.dateTo) continue
     const occurrenceSource = `${work.snapshot.classId}:${r.date}`, occurrenceId = idFor('occurrence', occurrenceSource)
@@ -330,7 +354,7 @@ function mergeImportSummary(target, next) {
 }
 function renderImportOutcome() {
   const host = $('import-outcome'); host.replaceChildren(); host.hidden = false
-  const title = node('h3', work.status === 'complete' ? '匯入批次已核驗完成' : '本次匯入尚有資料待處理')
+  const title = node('h3', work.status === 'complete' ? '匯入批次已核驗完成' : '部分完成：已寫入資料保留，另有待處理或略過資料')
   host.append(title)
   const totals = {}
   for (const key of work.appliedBatchKeys || []) mergeImportSummary(totals, work.batchSummaries?.[key])
@@ -342,6 +366,8 @@ function renderImportOutcome() {
   }
   if (!Object.keys(totals).length && work.done) host.append(node('p','此工作由舊版擴充套件建立，沒有保留逐類結果；可查詢伺服器批次與有效名單。','hint'))
   if (work.needs?.length) host.append(node('p', `另有 ${work.needs.length} 項未匯入或需處理；批次完成不代表來源資料已全部同步。`, 'hint'))
+  const skippedHistory=(work.history?.issues||[]).filter(r=>r.skipped).length
+  if(skippedHistory)host.append(node('p',`歷史報告明確略過 ${skippedHistory} 筆；未建立這些報告。`,'hint'))
   if (work.rosterVerification) {
     const v = work.rosterVerification
     host.append(node('p', `${v.date} 有效名單核對：EduLog ${v.actual} 人；來源應有 ${v.expected} 人；缺少 ${v.missing.length} 人；其他 ${v.extra.length} 人。`))
@@ -375,7 +401,7 @@ function taipeiToday() {
 async function finalizeImport() {
   const keys = work.batches.map(batch => batch.key)
   const completed = await api('complete', { expected_batch_keys: keys }, { jobId: work.jobId })
-  work.status = completed.verified === true ? 'complete' : 'partial_complete'
+  work.status = completed.verified === true && !work.needs?.length && !(work.history?.issues||[]).length ? 'complete' : 'partial_complete'
   work.appliedBatchKeys = keys
   try {
     const info = await api('import-info', undefined, { jobId: work.jobId, query: { roster_date: taipeiToday() } })
@@ -544,7 +570,7 @@ async function loadWork() {
         $('include-internal-notes').checked = row.includeInternalNotes === true
         const c = await source('context'); if (c.classId !== row.snapshot.classId) throw new Error('請先選擇同一來源班級的分頁。')
         work = { ...row, sourceTab: chosen, sourcePath: selectedPath }; await save()
-        flow('import'); if (row.history) await collectHistory(); await mappingView(); notice('已恢復來源資料，請確認對應。')
+        flow('import'); if (row.history) await collectHistory(); await mappingView();renderHistoryIssues(); notice('已恢復來源資料，請確認對應。')
       })); card.append(resume)
     }
     if (row.type === 'prefill' && row.push && !row.pushRecorded) {

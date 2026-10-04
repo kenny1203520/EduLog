@@ -1,6 +1,6 @@
 import { workStore } from './work-store.js'
 const supported = url => { try { const u = new URL(url); return u.origin === 'https://corp.orangeapple.co' && globalThis.edulogSiteAdapter.matchesTeachingPage(u.pathname) } catch { return false } }
-const fail = message => { throw new Error(message) }
+const fail = (message, code) => { const error=new Error(message);if(code)error.code=code;throw error }
 function validationFields(fields) {
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return undefined
   return Object.fromEntries(Object.entries(fields).slice(0, 20).filter(([, values]) => Array.isArray(values)).map(([key, values]) => [key.slice(0, 100), values.filter(value => typeof value === 'string').slice(0, 10).map(value => value.slice(0, 500))]))
@@ -25,8 +25,8 @@ export function installWorkspaceBroker(getStatus) {
   async function source(message) {
     if (!Number.isInteger(message.tabId)) fail('請選擇來源分頁。')
     let tab
-    try { tab = await chrome.tabs.get(message.tabId) } catch { fail('來源分頁已關閉。請重新開啟支援網站並選取新的來源分頁。') }
-    if (!supported(tab.url) || (message.sourcePath && new URL(tab.url).pathname !== message.sourcePath)) fail('來源分頁已關閉或導覽，請重新選擇來源。')
+    try { tab = await chrome.tabs.get(message.tabId) } catch { fail('來源分頁已關閉。請重新開啟支援網站並選取新的來源分頁。','SOURCE_CLOSED') }
+    if (!supported(tab.url) || (message.sourcePath && new URL(tab.url).pathname !== message.sourcePath)) fail('來源分頁已關閉或導覽，請重新選擇來源。','SOURCE_CHANGED')
     return tab
   }
   async function api(message) {
@@ -202,7 +202,7 @@ export function installWorkspaceBroker(getStatus) {
         await workStore.put(row, { instance: bound.instance, userId: bound.userId })
         const applied = await chrome.tabs.sendMessage(tab.id, { type: 'integration-apply-inline', expectedPath: new URL(tab.url).pathname,
           input: { formId: form.formId, reportId: form.reportId, fingerprint: form.fingerprint, fields: input.fields } })
-        if (applied?.error || !applied?.data) fail(applied?.error?.message || '原站表單套用結果尚未確認；請檢查目前編輯器，不要重複套用。')
+        if (applied?.error || !applied?.data) {const error=new Error(applied?.error?.message || '原站表單套用結果尚未確認；請檢查目前編輯器，不要重複套用。');error.code=applied?.error?.code;error.appliedFields=applied?.error?.appliedFields;throw error}
         row.status = 'pending_confirmation'; row.appliedCount = applied.data.applied
         if (sameTarget) row.push = { report_id: report.id, report_version: report.version, source_origin: 'https://corp.orangeapple.co', source_report_url: form.sourceReportUrl,
           source_id: form.reportId, target_fingerprint: applied.data.target.fingerprint, idempotency_key: workId }
@@ -213,7 +213,7 @@ export function installWorkspaceBroker(getStatus) {
           catch { /* The source is already prefilled; history can retry the pending record without applying again. */ }
         }
         return { applied: applied.data.applied, pendingConfirmation: true, matchingTarget: Boolean(sameTarget), recordSaved: true }
-      })().then(data => respond({ data }), error => respond({ error: { code: error.code || 'INLINE_PREFILL_FAILED', message: error.message || '預填無法完成。', requestId: error.requestId } }))
+      })().then(data => respond({ data }), error => respond({ error: { code: error.code || 'INLINE_PREFILL_FAILED', message: error.message || '預填無法完成。', requestId: error.requestId, appliedFields:error.appliedFields } }))
       return true
     }
     if (!trusted(sender) || !message?.type?.startsWith('workspace-')) return
@@ -239,34 +239,37 @@ export function installWorkspaceBroker(getStatus) {
       }
       if (message.type === 'workspace-source') {
         const tab = await source(message)
-        const types = { context: 'integration-context', collect: 'integration-collect', history: 'integration-history', form: 'integration-form', apply: 'integration-apply' }
+        const types = { context: 'integration-context', collect: 'integration-collect', history: 'integration-history', 'history-report':'integration-history-report', form: 'integration-form', apply: 'integration-apply' }
         if (!types[message.action]) fail('來源操作不正確。')
         if (message.action === 'apply' && (!message.input || JSON.stringify(message.input).length > 100000)) fail('預填資料格式不正確。')
         if (message.action === 'apply') {
           const row = await workStore.get(message.workId, owner)
           if (!row || row.type !== 'prefill' || row.status !== 'applying' || row.sourceTab !== tab.id || row.sourcePath !== new URL(tab.url).pathname || row.form?.formId !== message.input.formId || row.form?.fingerprint !== message.input.fingerprint) fail('預填目標不屬於此工作。')
         }
-        if (message.action === 'history') {
+        if (['history','history-report'].includes(message.action)) {
           const row = await workStore.get(message.workId, owner)
           if (!row || row.sourceTab !== tab.id || row.sourcePath !== new URL(tab.url).pathname || !row.snapshot?.admissionPaths?.includes(message.historyPath)) fail('來源紀錄不屬於此工作。')
+          if(message.action==='history-report'){const input=message.input||{},record=[...row.snapshot.records,...row.history?.queue||[],...Object.values(row.history?.checkpoints||{}).flatMap(c=>c.records||[]),...row.history?.issues||[]].find(r=>r.kind==='report'&&r.enrollment_source_id===message.historyPath.split('/').pop()&&(input.evidenceKey?r.evidenceKey===input.evidenceKey:r.source_id===input.reportId));if(!record)fail('來源報告不屬於此工作。');if(input.editUrl&&String(input.editUrl).length>2048)fail('來源連結過長。');message.input={record,editUrl:input.editUrl,confirmedDate:input.confirmedDate}}
         }
-        let response
-        try { response = await chrome.tabs.sendMessage(tab.id, { type: types[message.action], expectedPath: new URL(tab.url).pathname, history: false, historyPath: message.historyPath, input: message.input }) }
-        catch (error) { if (/receiving end does not exist|could not establish connection/i.test(error.message || '')) fail('來源分頁的擴充套件腳本不存在或已過期。請重新載入擴充套件並刷新來源分頁後重試。'); throw error }
+        let response,sourceTimer
+        try { response = await Promise.race([chrome.tabs.sendMessage(tab.id, { type: types[message.action], expectedPath: new URL(tab.url).pathname, history: false, historyPath: message.historyPath, input: message.input }),new Promise((_,reject)=>{sourceTimer=setTimeout(()=>reject(Object.assign(new Error('讀取來源超過 30 秒；檢查點保留，請稍後重試。'),{code:'SOURCE_READ_TIMEOUT'})),30000)})]) }
+        catch (error) { if (/receiving end does not exist|could not establish connection/i.test(error.message || '')) fail('來源分頁的擴充套件腳本不存在或已過期。請重新載入擴充套件並刷新來源分頁後重試。','SOURCE_SCRIPT_UNAVAILABLE'); throw error }
+        finally{clearTimeout(sourceTimer)}
+        if(!response||response.data===undefined&&!response.error)fail('來源腳本尚不支援此操作。請重新載入擴充套件，保存草稿後刷新來源分頁。','SOURCE_SCRIPT_UNAVAILABLE')
         if (message.requestId && cancelledReads.has(message.requestId)) { cancelledReads.delete(message.requestId); const cancelled = new Error('唯讀查詢已取消。'); cancelled.code = 'READ_CANCELLED'; throw cancelled }
-        const after = await chrome.tabs.get(tab.id)
-        if (after.url !== tab.url) fail('來源分頁已導覽，工作已停止。')
+        let after;try{after=await chrome.tabs.get(tab.id)}catch{fail('來源分頁已關閉，工作已暫停。','SOURCE_CLOSED')}
+        if (after.url !== tab.url) fail('來源分頁已導覽，工作已停止。','SOURCE_CHANGED')
         return response
       }
       if (message.type === 'workspace-check-source') {
         let tab
         try { tab = await chrome.tabs.get(message.tabId) } catch { return { data: { closed: true } } }
-        if (!supported(tab.url) || new URL(tab.url).pathname !== message.sourcePath) fail('來源分頁已導覽，工作已停止。')
+        if (!supported(tab.url) || new URL(tab.url).pathname !== message.sourcePath) fail('來源分頁已導覽，工作已停止。','SOURCE_CHANGED')
         return { data: { closed: false } }
       }
       if (message.type === 'workspace-return') { const tab = await source(message); await chrome.tabs.update(tab.id, { active: true }); return { data: true } }
       fail('工作操作尚未支援。')
-    })().then(respond, error => respond({ error: { code: error.code || 'WORKSPACE_FAILED', message: error.message || '無法完成工作。', requestId: error.requestId, retryAfter: error.retryAfter } }))
+    })().then(respond, error => respond({ error: { code: error.code || 'WORKSPACE_FAILED', message: error.message || '無法完成工作。', requestId: error.requestId, retryAfter: error.retryAfter, fields: error.fields } }))
     return true
   })
 }
