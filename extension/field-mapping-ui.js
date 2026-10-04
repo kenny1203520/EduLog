@@ -12,7 +12,7 @@
     return []
   }
   function attach(parent,field,report,rules,options) {
-    if(field.type==='text')return
+    if(field.type==='text'||field.key==='learning_status')return
     const doc=parent.ownerDocument,m=globalThis.edulogFieldMappings,box=make(doc,'details'),summary=make(doc,'summary','欄位映射：查看／修改記憶');box.className='field-mapping-memory';box.append(summary)
     const feedback=make(doc,'p');feedback.className='field-mapping-status';feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite')
     if(!options.enabled){feedback.textContent=options.reason||'升級 EduLog 至 1000124 並確認報名後，可跨裝置記住映射。';box.append(feedback);parent.append(box);return}

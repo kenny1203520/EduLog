@@ -15,6 +15,10 @@ export function mappedReport(record, courseId, lessons = []) {
     if (m.empty(field.value)) continue
     const choice = choices[field.key]
     let value = choice?.signature === m.signature(field) && choice.sourceValue === field.value ? choice.value : m.canonical(field, rules)
+    if (field.key === 'lesson_id' && field.type === 'stage') {
+      const sequence=Number(String(field.value).match(/^lesson:(\d+)$/)?.[1])
+      if(Number.isInteger(sequence)){const matches=lessons.filter(l=>l.course_id===courseId&&Number(l.sequence)===sequence);if(value!==undefined&&!matches.some(l=>l.id===value))value=undefined;if(value===undefined&&matches.length===1)value=matches[0].id;if(value===undefined&&matches.length>1)needs.push(`來源 Lesson ${sequence} 在此課程有多個教材候選，請選擇。`);if(value===undefined&&!matches.length)needs.push(`此課程沒有序號 ${sequence} 的教材，請核對課程或手動對應。`)}
+    }
     if (field.key === 'lesson_id') {
       if (value !== undefined && !lessons.some(l => l.id === value && l.course_id === courseId)) value = undefined
     }
@@ -36,7 +40,7 @@ export function mappedReport(record, courseId, lessons = []) {
     else data.progress_letter = start === end ? start : `${start}-${end}`
   }
   if(record.historyLessonCourse===courseId&&lessons.some(l=>l.id===record.historyLessonId&&l.course_id===courseId))data.lesson_id=record.historyLessonId
-  if (!data.lesson_id && record.sourceLessonLabel && !(record.sourceFields||[]).some(f=>f.key==='lesson_id')) {
+    if (!data.lesson_id && record.sourceLessonLabel && !(record.sourceFields||[]).some(f=>f.key==='lesson_id'&&f.type==='stage')) {
     needs.push('教材尚未確認對應；請選擇已核對的 EduLog 教材')
   }
   return { data, needs }
@@ -44,7 +48,8 @@ export function mappedReport(record, courseId, lessons = []) {
 
 export function attachImportFields(parent, record, hooks) {
   const doc = parent.ownerDocument, make = (tag, text) => { const n = doc.createElement(tag); if (text !== undefined) n.textContent = text; return n }
-  const details = make('details'), summary = make('summary', `報告 #${record.source_id}：核對教學欄位與映射`)
+  const reportLabel=record.source_id?`報告 #${record.source_id}`:`${record.sourceStudentName||`來源報名 #${record.enrollment_source_id}`} · ${record.date||record.dateRaw||`堂次 ${record.sourceSessionOrdinal||'未辨識'}`}`
+  const details = make('details'), summary = make('summary', `${reportLabel}：核對教學欄位與映射`)
   const load = make('button', '讀取此報告的欄位映射'), status = make('p')
   details.className = 'import-field-review'; load.type = 'button'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite')
   details.append(summary, status, load); parent.append(details)
@@ -80,7 +85,7 @@ export function attachImportFields(parent, record, hooks) {
       function build() {
         if (!current()) return
         controls?.remove(); controls = make('div'); editor.append(controls)
-        if(record.sourceLessonLabel&&!(record.sourceFields||[]).some(f=>f.key==='lesson_id')) {
+        if(record.sourceLessonLabel&&!(record.sourceFields||[]).some(f=>f.key==='lesson_id'&&f.type==='stage')) {
           const label=make('label',`教材原文：${record.sourceLessonLabel}`),select=make('select');select.add(new Option('請確認 EduLog 教材',''));for(const lesson of hooks.lessons().filter(l=>l.course_id===courseId))select.add(new Option(lesson.title,lesson.id));select.value=record.historyLessonCourse===courseId?record.historyLessonId||'':'';label.append(select);controls.append(label)
           select.addEventListener('change',()=>{if(!current())return;record.historyLessonId=select.value;record.historyLessonCourse=courseId;hooks.changed()})
         }

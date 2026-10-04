@@ -402,6 +402,17 @@ export function createMappingController(hooks) {
     for(const record of records){record.fieldRules=rules.filter(rule=>rule.course_id===record.fieldRuleScope);for(const rule of record.fieldRules)if(rule.field_key==='lesson_id'&&rule.valid!==false)lessonIds.add(rule.canonical_value);if(record.fieldChoices?.courseId===record.fieldRuleScope&&record.fieldChoices.fields?.lesson_id)lessonIds.add(record.fieldChoices.fields.lesson_id.value)}
     const ids=[...lessonIds];for(let i=0;i<ids.length;i+=50)ingest(await api('resolve',{source_refs:[],target_refs:ids.slice(i,i+50).map(id=>({kind:'lessons',id}))}))
   }
+  async function resolveReportFieldRules(record,courseId){
+    record.fieldRuleScope=courseId;record.fieldRules=[]
+    if(!courseId||courseId==='new')return
+    const fields=(record.sourceFields||[]).filter(f=>f.type!=='text'&&!f.internal&&f.key!=='learning_status'),items=[...new Map(fields.map(f=>[`${courseId}:${f.key}:${globalThis.edulogFieldMappings.signature(f)}`,{field_key:f.key,course_id:courseId,options_signature:globalThis.edulogFieldMappings.signature(f)}])).values()],rules=[]
+    if(hooks.capabilities?.()?.field_mapping_memory)for(let i=0;i<items.length;i+=50){const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:items.slice(i,i+50)});rules.push(...response.items||[])}
+    record.fieldRules=rules
+    const lessonIds=new Set(rules.filter(r=>r.field_key==='lesson_id'&&r.valid!==false).map(r=>r.canonical_value))
+    if(record.fieldChoices?.courseId===courseId&&record.fieldChoices.fields?.lesson_id)lessonIds.add(record.fieldChoices.fields.lesson_id.value)
+    const ids=[...lessonIds];for(let i=0;i<ids.length;i+=50)ingest(await api('resolve',{source_refs:[],target_refs:ids.slice(i,i+50).map(id=>({kind:'lessons',id}))}))
+    return rules
+  }
   async function confirmDestination() {
     const room=$('classroom').value,session=$('class-session').value
     if(!room||!session||session==='new')throw new Error('新班級的對應會隨建立保存；既有班級請先選擇教室與班級。')
@@ -482,5 +493,5 @@ export function createMappingController(hooks) {
   for(const [id,kind]of[['forget-session','class_session'],['forget-classroom','classroom']])$(id).addEventListener('click',()=>void run(async()=>{if(!await forget([{kind,key:work().snapshot.classId,expected_revision:revision(kind,work().snapshot.classId)}]))return;dirty()},{label:'正在清除對應記憶'}))
   $('remember-destination').addEventListener('click',()=>void run(confirmDestination,{label:'正在保存教室與班級對應'}))
   $('more-sessions').addEventListener('click',()=>void run(async()=>{const old=$('class-session').value,p=await catalog('class_sessions',{classroom_id:$('classroom').value,cursor:$('more-sessions').dataset.cursor});ctx().class_sessions.push(...p.items||[]);fill($('class-session'),ctx().class_sessions,sessionLabel,'選擇目標班級',ctx().permissions.classroom?.class_create?'建立新班級…':null);$('class-session').value=old;$('more-sessions').hidden=!p.next_cursor;$('more-sessions').dataset.cursor=p.next_cursor||''},{readOnly:true,label:'正在載入更多班級'}))
-  return {resolveFieldRules,appendReports,mount,resolve,destination,scoped,update,refreshCourses,courseRows,studentSelect,validateRow,validateReport,verifyReportRelationships,selectedCourseIds:()=>[...new Set(work().snapshot.records.filter(r=>r.kind==='enrollment'&&!skipped(r)&&studentSelect(r)?.value).map(r=>$(`enrollment-course-${r.source_id}`)?.value).filter(Boolean))]}
+  return {resolveFieldRules,resolveReportFieldRules,appendReports,mount,resolve,destination,scoped,update,refreshCourses,courseRows,studentSelect,validateRow,validateReport,verifyReportRelationships,selectedCourseIds:()=>[...new Set(work().snapshot.records.filter(r=>r.kind==='enrollment'&&!skipped(r)&&studentSelect(r)?.value).map(r=>$(`enrollment-course-${r.source_id}`)?.value).filter(Boolean))]}
 }

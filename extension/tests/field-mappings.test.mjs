@@ -32,3 +32,23 @@ test('progress must preserve both endpoints and native option limits',()=>{
  const record={data:{},sourceFields:[select('progress_start','a',[['a','A']]),select('progress_end','b',[['b','B']])]}
  assert.equal(mappedReport(record,'course').data.progress_letter,'A-B');record.sourceFields[1].options[0].label='未知章節';assert.ok(mappedReport(record,'course').needs.length)
 })
+
+test('learning status round-trips as a separate class note marker without inferring prose',()=>{
+ const value=m.composeClassNotes('on_track','原有內部筆記')
+ assert.match(value,/\[corp\.learning_status:on_track\]/)
+ assert.deepEqual(m.splitClassNotes(value),{status:'on_track',rawStatus:'能跟上進度',notes:'原有內部筆記',marked:true,invalid:false})
+ assert.equal(m.splitClassNotes('學生能跟上進度，這週完成 Lesson 1。').status,null)
+ assert.equal(m.splitClassNotes('[corp.learning_status:on_track]\n其他文字\n[/corp.learning_status]').invalid,true)
+ assert.equal(m.splitClassNotes(`${value}\n\n${value}`).invalid,true)
+ assert.equal(m.composeClassNotes(null,'',''), '')
+})
+
+test('lesson stages auto-map only to one lesson with the same sequence in the confirmed course',()=>{
+ const record={data:{},sourceLessonLabel:'Lesson 2',sourceFields:[{key:'lesson_id',label:'最新課程階段',type:'stage',value:'lesson:2',options:[{value:'lesson:2',label:'Lesson 2',disabled:false}]}]}
+ const lessons=[{id:'a',course_id:'courseA',sequence:1},{id:'b',course_id:'courseA',sequence:2},{id:'other',course_id:'courseB',sequence:2}]
+ assert.equal(mappedReport(record,'courseA',lessons).data.lesson_id,'b')
+ assert.deepEqual(mappedReport(record,'courseA',lessons).needs,[])
+ assert.equal(mappedReport(record,'courseB',lessons).data.lesson_id,'other')
+ lessons.push({id:'duplicate',course_id:'courseA',sequence:2})
+ assert.ok(mappedReport(record,'courseA',lessons).needs.some(reason=>reason.includes('多個教材候選')))
+})

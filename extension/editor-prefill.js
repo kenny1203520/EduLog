@@ -174,7 +174,7 @@
     if(target)box.append(make('p',`目前原站目標：${target.studentName||`學生 ${target.studentId?.slice(0,8)||'待確認'}`} · ${target.className||'班級名稱未提供'} · ${target.courseName||'課程名稱未提供'} · 報名 ${target.enrollmentId.slice(0,8)} · ${form.date||'日期待確認'}`,'muted'))
     const currentFormId=form.formId;const fields=make('div')
     const draftKey=`${form.action||form.reportId}:${selected.id}:${selected.version}`,draft=drafts.get(draftKey)||{}
-    const sections=new Map([['attendance_status','出席'],['absence_reason','出席'],['lesson_id','課程與進度'],['is_completed','課程與進度'],['progress_start','課程與進度'],['progress_end','課程與進度'],['class_participation','課堂評量'],['classroom_behavior','課堂評量'],['content','評語與聯絡'],['contact_notes','評語與聯絡'],['class_notes','內部紀錄']]),fieldsets=new Map()
+    const sections=new Map([['attendance_status','出席'],['absence_reason','出席'],['lesson_id','課程與進度'],['is_completed','課程與進度'],['progress_start','課程與進度'],['progress_end','課程與進度'],['class_participation','課堂評量'],['classroom_behavior','課堂評量'],['content','評語與聯絡'],['contact_notes','評語與聯絡'],['learning_status','學習狀態'],['class_notes','內部紀錄']]),fieldsets=new Map()
     for(const sourceField of form.fields){
       const consistent=globalThis.edulogFieldMappings.equal(sourceField,selected,fieldRules);const card=make('div',undefined,'field'),label=make('label',undefined,'check'),check=make('input');check.type='checkbox';check.disabled=sourceField.disabled||sourceField.internal||consistent;check.checked=!sourceField.disabled&&!sourceField.internal&&!sourceField.value&&Boolean(suggestion(sourceField,selected));
       label.append(check,make('span',`套用${sourceField.label}${sourceField.internal?'（內部紀錄，預設不套用）':''}`));card.append(label)

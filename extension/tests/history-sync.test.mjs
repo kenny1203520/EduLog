@@ -34,6 +34,12 @@ test('unread, changed linked and conflicting duplicate data cannot be silently i
  assert.equal(plan([record()],[linked])[0].category,'linked')
  assert.equal(plan([record({data:{content:'changed'}})],[linked])[0].category,'needs')
 })
+test('list/editor disagreements wait for explicit confirmation before course-report binding',()=>{
+ const conflict={key:'content',label:'學習表現',listValue:'舊列表',editValue:'已儲存內容'}
+ assert.equal(plan([record({sourceFieldConflicts:[conflict]})])[0].category,'needs')
+ const [confirmed]=plan([record({sourceFieldConflicts:[conflict],sourceConflictAcknowledged:true})])
+ assert.equal(confirmed.category,'bind');assert.equal(confirmed.data.content,'')
+})
 test('same-day ambiguous identities and two sources for one occurrence require review',()=>{
  const unknown=record({source_id:null,historyKey:'evidence:first',identityUnverified:true})
  assert.ok(plan([unknown,{...unknown,historyKey:'evidence:second'}]).every(i=>i.category==='needs'))
