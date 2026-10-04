@@ -71,6 +71,7 @@ try {
   await db.exec(read('1000123_extension_report_candidates.sql'))
   await db.exec(read('1000124_extension_field_mappings.sql'))
   await db.exec(read('1000125_extension_transferred_occurrence_import.sql'))
+  await db.exec(read('1000126_enrollment_history_reports.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -343,6 +344,38 @@ try {
   await fieldRpc('confirm',[{...changedOptions,source_value:'attended',action:'clear',expected_revision:savedRule.revision}])
   assert.equal((await fieldRpc('resolve',[field])).items.length,0)
   console.log('PASS: 1000124 executable migration; cross-device/account/course isolation, stale options, half stars/false/zero, revisions, clear, permissions and atomic rollback')
+  async function historyRpc(operation,input) {
+    await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
+    return (await db.query('SELECT public.web_extension_history($1,$2,$3,$4) data',[token,'a'.repeat(64),operation,JSON.stringify(input)])).rows[0].data
+  }
+  await db.exec(`INSERT INTO public.web_extension_mapping_memory(user_id,source_origin,kind,source_key,target_id,student_id,course_id,class_session_id) VALUES('${actor}','${origin}','admission','6332','${enrollment}','${student}','${course}','${session}')`)
+  const historical=id(201),historyJob=await rpc('job',{...destination,date_from:'2024-01-01',report_session_ids:[session,weekendSession]})
+  const historyData={enrollment_id:enrollment,report_date:'2024-06-15',source_origin:origin,source_admission_id:'6332',source_key:'evidence:sample',identity_status:'evidence_only',source_fields:[{key:'content',label:'評語',text:''}],content:'',is_completed:false,class_participation:0,classroom_behavior:4.5}
+  const historyBatch={job_id:historyJob.id,key:id(202),fingerprint:'1'.repeat(64),rows:[{source_id:'history:evidence:sample',target_id:historical,overwrite:[],record:{kind:'history_report',data:historyData}}]}
+  assert.equal((await rpc('preview',historyBatch)).rows[0].status,'added')
+  const historyResult=await rpc('apply',historyBatch);assert.equal(historyResult.classifications.history_report.added,1)
+  assert.deepEqual(await rpc('apply',historyBatch),historyResult)
+  const archive=await historyRpc('detail',{id:historical});assert.equal(archive.class_participation,0);assert.equal(archive.is_completed,false);assert.equal(archive.classroom_behavior,4.5)
+  assert.equal((await historyRpc('list',{student_id:student})).items.length,1)
+  const ambiguity={...historyBatch,key:id(203),fingerprint:'2'.repeat(64),rows:[{...historyBatch.rows[0],target_id:id(204),source_id:'history:different',record:{kind:'history_report',data:{...historyData,source_key:'evidence:different',content:'Changed'}}}]}
+  await assert.rejects(rpc('preview',ambiguity),/HISTORY_IDENTITY_AMBIGUOUS/)
+  await db.query("UPDATE public.enrollments SET start_date='2024-01-01',status='regular' WHERE id=$1",[enrollment])
+  const candidates=await historyRpc('candidates',{history_id:historical});assert.ok(candidates.items.some(o=>o.occurrence_date==='2024-06-15'))
+  const binding={history_id:historical,class_occurrence_id:candidates.items[0].id,history_version:1,key:id(205),overwrite:[],include_internal:false}
+  await historyRpc('bind-preview',binding)
+  const bound=await historyRpc('bind-apply',binding);assert.equal(bound.status,'linked');assert.deepEqual(await historyRpc('bind-apply',binding),bound)
+  assert.equal((await historyRpc('list',{enrollment_id:enrollment,unlinked_only:true})).items.length,0)
+  await assert.rejects(historyRpc('bind-preview',{...binding,key:id(206)}),/VERSION_CONFLICT/)
+  await db.exec("INSERT INTO public.denied_permissions VALUES('teaching.reports.read')")
+  await assert.rejects(historyRpc('detail',{id:historical}),/PERMISSION_DENIED/);assert.equal((await historyRpc('list',{student_id:student})).items.length,0)
+  await db.exec('DELETE FROM public.denied_permissions')
+  const protectedData={...historyData,source_key:'evidence:unsafe',source_fields:[{key:'password',label:'password',text:'blocked'}]}
+  await assert.rejects(rpc('preview',{...historyBatch,key:id(207),fingerprint:'3'.repeat(64),rows:[{...historyBatch.rows[0],target_id:id(208),record:{kind:'history_report',data:protectedData}}]}),/INVALID_IMPORT/)
+  // The source day may be outside the requested target interval (10/03 -> 10/04).
+  const narrowJob=await rpc('job',{...destination,date_from:'2026-10-04',date_to:'2026-10-04',class_session_id:weekendSession})
+  const narrowBatch={job_id:narrowJob.id,key:id(209),fingerprint:'4'.repeat(64),rows:[{source_id:'target-date-report',target_id:id(210),overwrite:[],record:{kind:'report',data:{enrollment_id:weekendEnrollment,class_occurrence_id:targetOccurrence,attendance_status:'present'}}}]}
+  await rpc('preview',narrowBatch);await rpc('apply',narrowBatch)
+  console.log('PASS: 1000126 durable evidence-only history, false/zero/half stars, source whitelist, ambiguity, classifications, versioned binding/replay, permissions and narrow transfer date')
   await rpc('job-status',{job_id:job.id,status:'paused'}); await assert.rejects(rpc('preview',update),/JOB_STOPPED/)
   await db.exec(`UPDATE public.web_extension_tokens SET revoked_at=now() WHERE id='${token}'`)
   await assert.rejects(rpc('context',{}),/EXTENSION_AUTH_INVALID/)

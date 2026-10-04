@@ -8,6 +8,7 @@ export const allowedRpcs = [
   'get_single_lesson_transfer_history',
   'get_effective_single_lesson_transfer_targets',
   'resolve_user_permission',
+  'enrollment_history_access',
 ] as const
 
 export type AllowedRpc = (typeof allowedRpcs)[number]

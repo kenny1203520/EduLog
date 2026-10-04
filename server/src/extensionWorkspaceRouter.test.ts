@@ -15,6 +15,16 @@ function appWith(data: unknown, error: unknown = null, productionErrors = false)
   return { app, rpc }
 }
 describe('workspace API contract', () => {
+  it('accepts history without a fabricated report identity and rejects private fields',async()=>{
+    const history={...row,record:{kind:'history_report',data:{enrollment_id:id,report_date:'2026-10-04',source_origin:'https://corp.orangeapple.co',source_admission_id:'6332',source_key:'evidence:hash',identity_status:'evidence_only',source_fields:[{key:'content',label:'評語',text:''}],class_participation:0,is_completed:false}}}
+    expect(importBatch.safeParse({key:id,rows:[history]}).success).toBe(true)
+    expect(importBatch.safeParse({key:id,rows:[{...history,record:{...history.record,data:{...history.record.data,password:'forbidden'}}}]}).success).toBe(false)
+    const {app,rpc}=appWith({items:[]})
+    const response=await request(app).get(`/api/extension/v1/history-reports?student_id=${id}`).set('Authorization','Bearer test')
+    expect(response.status).toBe(200);expect(rpc.mock.calls[0]![0]).toBe('web_extension_history')
+    const invalid=await request(app).get('/api/extension/v1/history-reports?limit=51').set('Authorization','Bearer test')
+    expect(invalid.status).toBe(400);expect(rpc).toHaveBeenCalledTimes(1)
+  })
   it('bounds and isolates field memory RPCs from identity confirmation and forged actors',async()=>{
     const item={field_key:'attendance_status',course_id:id,options_signature:JSON.stringify([['attended','出席',false]])}
     const body={source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:[item]}
