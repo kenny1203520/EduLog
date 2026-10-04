@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $extensionRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $repositoryRoot = (Resolve-Path (Join-Path $extensionRoot '..')).Path
 $distributionRoot = Join-Path $extensionRoot 'dist'
-$packageName = 'EduLog-Teaching-Tools-0.1.0-report-assistant'
+$packageName = 'EduLog-Teaching-Tools-0.1.0-field-mappings-history'
 $archivePath = Join-Path $distributionRoot "$packageName.zip"
 $temporaryRoot = [System.IO.Path]::GetTempPath()
 $stagingPath = Join-Path $temporaryRoot "edulog-package-$([guid]::NewGuid().ToString('N'))"
@@ -33,7 +33,8 @@ try {
         '1000120_extension_mapping_memory.sql',
         '1000121_extension_reconciliation.sql',
         '1000122_extension_import_verification.sql',
-        '1000123_extension_report_candidates.sql'
+        '1000123_extension_report_candidates.sql',
+        '1000124_extension_field_mappings.sql'
     )) {
         Copy-Item -LiteralPath (Join-Path $repositoryRoot "supabase/migrations/$migration") -Destination $migrationPath
     }
@@ -48,6 +49,18 @@ try {
     foreach ($entryFile in $entryFiles) {
         if ($entryFile -and -not (Test-Path -LiteralPath (Join-Path $stagingPath $entryFile) -PathType Leaf)) {
             throw "Missing extension entry file: $entryFile"
+        }
+    }
+
+    # Check local module and HTML dependencies, including non-manifest workspace modules.
+    $dependencyPattern = '(?:\b(?:from|import)\s*["'']|\b(?:src|href)=["''])(\.?\.?/[^"'']+|[^"'':]+\.(?:js|css))["'']'
+    foreach ($sourceFile in (Get-ChildItem -LiteralPath $stagingPath -File -Recurse | Where-Object { $_.Extension -in @('.js','.html') })) {
+        $sourceText = Get-Content -LiteralPath $sourceFile.FullName -Raw
+        foreach ($reference in [regex]::Matches($sourceText, $dependencyPattern)) {
+            $dependency = [System.IO.Path]::GetFullPath((Join-Path $sourceFile.DirectoryName $reference.Groups[1].Value))
+            if (-not $dependency.StartsWith($stagingPath + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $dependency -PathType Leaf)) {
+                throw "Missing or out-of-package dependency in $($sourceFile.Name): $($reference.Groups[1].Value)"
+            }
         }
     }
 
