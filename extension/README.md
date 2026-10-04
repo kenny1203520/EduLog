@@ -116,6 +116,14 @@ Inside the native report editor, the isolated **EduLog 報告預覽** panel sear
 
 Apply **1000122_extension_import_verification.sql** after 1000121, restart the API, reload the extension and recheck the pairing. Automated checks use synthetic browser forms and isolated database fixtures only; this does not replace user verification on the selected test class, actual Chrome/Edge side-loading, native 200% zoom or manual website report submission.
 
+## One-time transfers and report imports (1000125)
+
+An existing enrollment may be explicitly mapped to a source admission when the student and course match, even if its saved class session differs. This confirms only the source-to-enrollment identity: it does not change the enrollment's class, course, student, or schedule. The mapping remembers the enrollment's current relationship version and must be reviewed again if that relationship changes.
+
+Reports for a different class session remain blocked unless the selected report date has a readable, effective, non-cancelled single-lesson transfer into the selected session and the enrollment is on that session's effective roster for that date. Cancelled, superseded, missing, date-mismatched, or inaccessible transfer evidence blocks the report. The import does not move the enrollment or create a duplicate enrollment for the transferred lesson. Older servers remain safe and block this case with an upgrade message.
+
+Apply **1000125_extension_transferred_occurrence_import.sql** after 1000124, restart the API, update/reload the extension, and recheck the connection. The `transferred_occurrence_import` capability is available only when the new workspace migration is installed. Run `npm run test:extension-db --prefix server` for the isolated migration, permission, roster, transfer, idempotency and rollback checks. Actual Chrome/Edge sideloading, production RBAC and live transfer records remain separate acceptance steps; the website report is still submitted manually.
+
 ## Date questions and responsive report assistant (1000123)
 
 The native report editor now keeps its own form on the left and the isolated EduLog assistant on the right at widths of at least 1200px (56/44, dialog max 1440px). Narrower windows switch between the existing panes without replacing controls, events or drafts. The native close control and source target summary remain visible. Collapsing the assistant restores the original layout.

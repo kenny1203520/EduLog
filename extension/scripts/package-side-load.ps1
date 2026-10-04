@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $extensionRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $repositoryRoot = (Resolve-Path (Join-Path $extensionRoot '..')).Path
 $distributionRoot = Join-Path $extensionRoot 'dist'
-$packageName = 'EduLog-Teaching-Tools-0.1.0-unfilled-rating-editor-fix'
+$packageName = 'EduLog-Teaching-Tools-0.1.0-transferred-occurrence-import'
 $archivePath = Join-Path $distributionRoot "$packageName.zip"
 $temporaryRoot = [System.IO.Path]::GetTempPath()
 $stagingPath = Join-Path $temporaryRoot "edulog-package-$([guid]::NewGuid().ToString('N'))"
@@ -23,7 +23,9 @@ try {
     $docsPath = Join-Path $stagingPath 'docs/deployment'
     New-Item -ItemType Directory -Path $docsPath -Force | Out-Null
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs/deployment/extension-workspace.md') -Destination $docsPath
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs/deployment/extension-transferred-occurrence.md') -Destination $docsPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-1000125.md') -Destination $stagingPath
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
@@ -34,7 +36,8 @@ try {
         '1000121_extension_reconciliation.sql',
         '1000122_extension_import_verification.sql',
         '1000123_extension_report_candidates.sql',
-        '1000124_extension_field_mappings.sql'
+        '1000124_extension_field_mappings.sql',
+        '1000125_extension_transferred_occurrence_import.sql'
     )) {
         Copy-Item -LiteralPath (Join-Path $repositoryRoot "supabase/migrations/$migration") -Destination $migrationPath
     }
