@@ -6,7 +6,7 @@ import { retryHistoryWork } from '../workspace-model.js'
 const source=readFileSync(new URL('../history-workbench.js',import.meta.url),'utf8').replace('export function','function')
 function fixture() {
  const dom=new JSDOM('<section id="history-workbench"><input id="history-search"><select id="history-filter"><option value="needs">待處理</option><option value="all">全部</option></select><div id="history-items"></div><div id="history-editor"><button id="history-back">返回</button><div id="history-detail"></div></div><p id="history-empty"></p><p id="history-sync-summary"></p></section>',{runScripts:'outside-only'})
- const w=dom.window;w.scrollTo=()=>{};w.currentWork={id:'work'};w.eval(source+';window.view=createHistoryWorkbench({work:()=>currentWork,changed:()=>{},recheck:()=>{},labels:{},fields:()=>{}})')
+ const w=dom.window;w.scrollTo=()=>{};w.currentWork={id:'work'};w.hookCounts={changed:0,uiChanged:0,recheck:0};w.eval(source+';window.view=createHistoryWorkbench({work:()=>currentWork,changed:()=>{hookCounts.changed++;window.view?.refreshEditor()},uiChanged:()=>hookCounts.uiChanged++,recheck:()=>hookCounts.recheck++,labels:{},fields:()=>{}})')
  const item=(key,extra={})=>({key,record:{enrollment_source_id:key,date:'2026-10-04'},target:{id:'enrollment',name:'測試學生'},category:'needs',reason:'日期核對',...extra})
  return {w,dom,item,$:id=>w.document.getElementById(id)}
 }
@@ -24,4 +24,18 @@ test('restore validates item identity, retains per-work scroll and preserves dra
 test('repair uses a new job while preserving confirmed choices and original checkpoints',()=>{
  const previous={id:'original',jobId:'server-job',status:'partial_complete',done:1,revision:4,batches:[{key:'submitted'}],appliedBatchKeys:['submitted'],ids:{enrollment:'kept'},snapshot:{admissionPaths:['/dt_admissions/301'],records:[{historyOnly:true}]},history:{paths:['/dt_admissions/301'],next:1,checkpoints:{completed:true}},uiState:[{id:'enrollment-301',value:'confirmed'}]}
  const before=structuredClone(previous),next=retryHistoryWork(previous);assert.deepEqual(previous,before);assert.notEqual(next.id,previous.id);assert.equal(next.parentWorkId,previous.id);assert.equal(next.jobId,undefined);assert.equal(next.batches,undefined);assert.equal(next.done,0);assert.equal(next.history.next,0);assert.deepEqual(next.uiState,previous.uiState);assert.deepEqual(next.ids,previous.ids)
+})
+
+test('search and filter changes persist UI state without marking import data dirty',()=>{
+ const {w,dom,item,$}=fixture();w.view.render([item('301')]);$('history-search').value='name';$('history-search').dispatchEvent(new w.Event('input',{bubbles:true}));$('history-filter').value='all';$('history-filter').dispatchEvent(new w.Event('change',{bubbles:true}))
+ assert.equal(w.hookCounts.uiChanged,2);assert.equal(w.hookCounts.changed,0);assert.equal(w.hookCounts.recheck,0);assert.equal(w.currentWork.historyUI.search,'name');assert.equal(w.currentWork.historyUI.filter,'all');dom.window.close()
+})
+
+test('list editor conflict acknowledgement updates local state without a full recheck',()=>{
+ const {w,dom,item,$}=fixture(),row=item('301',{record:{enrollment_source_id:'301',date:'2026-10-04',sourceFieldConflicts:[{key:'content',label:'評語',listValue:'清單內容',editValue:'報告頁內容'}]}});w.currentWork.historyUI={selected:'301'};w.view.render([row]);const acknowledgement=[...$('history-detail').querySelectorAll('.source-conflicts button')][0];assert.ok(acknowledgement);acknowledgement.click()
+ assert.equal(row.record.sourceConflictAcknowledged,true);assert.equal(w.hookCounts.changed,1);assert.equal(w.hookCounts.recheck,0);assert.match($('history-detail').textContent,/已確認/);dom.window.close()
+})
+
+test('narrow view keeps list and editor states and returns focus to the selected row',()=>{
+ const {w,dom,item,$}=fixture();w.view.render([item('301')]);const row=$('history-items').firstChild;row.click();assert.equal($('history-workbench').dataset.mobileView,'editor');assert.equal(w.currentWork.historyUI.selected,'301');$('history-back').click();assert.equal($('history-workbench').dataset.mobileView,'list');assert.equal(w.document.activeElement,row);dom.window.close()
 })

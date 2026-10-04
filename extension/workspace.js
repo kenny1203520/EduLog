@@ -13,7 +13,7 @@ let integrationCapabilities = {}
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
 const wizardMax = { import: 1, prefill: 1 }
 const params = new URLSearchParams(location.search)
-const fieldLabels = { report_date: '上課日期', source_fields: '允許的教學原文', source_evidence: '來源位置', identity_status: '來源身份', source_key: '來源紀錄識別', name: '名稱', subject: '科目', stage: '階段', display_name: '課程名稱', external_link: '原站連結', classroom_id: '教室', course_ids: '班級可上課程', student_id: '學生', course_id: '課程', class_session_id: '班級', enrollment_id: '報名', class_occurrence_id: '課次', start_date: '開始日期', day_of_week: '星期', start_time: '開始時間', end_time: '結束時間', original_start_time: '課次開始時間', original_end_time: '課次結束時間', occurrence_date: '課次日期', time_zone: '時區', status: '報名狀態', content: '學習表現', is_completed: '課程完成狀況', progress_letter: '章節進度', attendance_status: '出席', absence_reason: '缺席原因', lesson_id: '教材', class_participation: '課程參與', classroom_behavior: '課堂表現', contact_notes: '聯絡欄', class_notes: '內部紀錄' }
+const fieldLabels = { report_date: '上課日期', source_fields: '允許的教學原文', source_evidence: '來源位置', identity_status: '來源身份', source_key: '來源紀錄識別', name: '名稱', subject: '科目', stage: '階段', display_name: '課程名稱', external_link: '原站連結', classroom_id: '教室', course_ids: '班級可上課程', student_id: '學生', course_id: '課程', class_session_id: '班級', enrollment_id: '報名', class_occurrence_id: '課次', start_date: '開始日期', day_of_week: '星期', start_time: '開始時間', end_time: '結束時間', original_start_time: '課次開始時間', original_end_time: '課次結束時間', occurrence_date: '課次日期', time_zone: '時區', status: '報名狀態', content: '學習表現', is_completed: '課程完成狀況', progress_letter: '章節進度', attendance_status: '出席', absence_reason: '缺席原因', lesson_id: '教材', class_participation: '課程參與', classroom_behavior: '課堂秩序', contact_notes: '聯絡欄', class_notes: '內部紀錄' }
 const node = (tag, text, className) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (className) n.className = className; return n }
 function notice(message = '', error = false) { $('notice').textContent = message; $('notice').dataset.error = String(error) }
 async function send(message) {
@@ -153,6 +153,7 @@ async function initialize() {
   $('connect').hidden = true; show('workspace')
   options($('source-tab'), tabs, t => `${t.title || '支援網站'} · ${t.path}`, '選擇支援網站分頁')
   if (tabs.some(t => t.id === Number(params.get('source')))) $('source-tab').value = params.get('source')
+  loadedLessonCourses.clear(); lessonCatalogLoads.clear()
   context = { classrooms: [], courses: [], class_sessions: [], students: [], enrollments: [], occurrences: [], report_targets: [], lessons: [], source_links: [], permissions: {} }
   if ($('source-tab').value) await changeSource()
   else { $('source-label').textContent = '尚未選擇來源；請先開啟支援網站的班級頁或報告表單，再選取分頁。'; $('collect').disabled = true; $('read-form').disabled = true; notice('連線已驗證。尚未選取來源分頁；匯入與預填入口暫不可用。') }
@@ -175,8 +176,22 @@ function linked(kind, id) { const row = context.source_links.find(l => l.source_
 function idFor(kind, id) { const key = `${kind}:${id}`; return linked(kind, id) || (work.ids[key] ||= crypto.randomUUID()) }
 function labelledInput(parent, title, type, id, value = '') { const label = node('label', title), input = node('input'); input.type = type; input.id = id; input.value = value; label.htmlFor = id; parent.append(label, input); return input }
 const mappingController = createMappingController({ capabilities: () => integrationCapabilities, settingsUrl: () => frontendSettingsUrl, rereadSource: () => source('collect'),state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses})
-let historyPlan = [], historyCheckSequence = 0
-const historyView=createHistoryWorkbench({work:()=>work,labels:fieldLabels,changed:()=>{if(work){work.previewDirty=true;void save().catch(e=>notice(e.message,true))}},recheck:()=>void runLatest(async()=>{await refreshHistoryPlan();historyView.refreshEditor()},{label:'正在逐日核對有效課次'}),fields:(host,item)=>attachImportFields(host,item.record,{work:()=>work,courseId:()=>item.target?.courseId,resolve:()=>mappingController.resolveFieldRules(),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,changed:()=>{work.previewDirty=true;void save()}})})
+let historyPlan = [], historyCheckSequence = 0, historyLocalSequence = 0, historyArchives = new Map(), historyRoutes = new Map()
+const loadedLessonCourses=new Set(),lessonCatalogLoads=new Map()
+function historyOptions(){return {dateFrom:work?.dateFrom,dateTo:work?.dateTo,includeInternal:$('include-internal-notes').checked,lessons:context?.lessons||[]}}
+function updateHistoryPlanLocal(){if(!work?.snapshot)return;historyPlan=planHistory(work.snapshot.records,historyTargets(),historyArchives,historyRoutes,historyOptions());historyView.refreshEditor(historyPlan)}
+function scheduleHistoryPlanForCurrentMapping(){
+  if(!work?.snapshot)return
+  const owner=work,epoch=generation,sequence=++historyLocalSequence
+  const courseIds=[...new Set([...historyTargets().values()].map(target=>target.courseId).filter(id=>id&&id!=='new'))]
+  void Promise.all(courseIds.map(id=>ensureLessonCatalog(id))).then(()=>{
+    if(owner!==work||epoch!==generation||sequence!==historyLocalSequence)return
+    updateHistoryPlanLocal()
+  }).catch(error=>{if(owner===work&&epoch===generation&&sequence===historyLocalSequence)notice(`課程教材目錄尚未載入，請重新核對後重試。${error.message}`,true)})
+}
+function historyWorkChanged(){if(!work)return;work.previewDirty=true;updateHistoryPlanLocal();void save().catch(e=>notice(e.message,true))}
+function historyUiChanged(){if(work)void save().catch(e=>notice(e.message,true))}
+const historyView=createHistoryWorkbench({work:()=>work,labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:()=>void runLatest(async()=>{await refreshHistoryPlan();historyView.refreshEditor(historyPlan)},{label:'正在逐日核對有效課次'}),fields:(host,item)=>attachImportFields(host,item.record,{work:()=>work,courseId:()=>item.target?.courseId,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,changed:historyWorkChanged})})
 function historyTargets() {
   const targets=new Map()
   for(const r of work.snapshot.records.filter(r=>r.kind==='enrollment'&&mappingController.validateRow(r,true))) {
@@ -191,6 +206,8 @@ async function refreshHistoryPlan() {
   const owner=work,epoch=generation,sequence=++historyCheckSequence,targets=historyTargets(),archives=new Map(),routes=new Map()
   const current=()=>owner===work&&epoch===generation&&sequence===historyCheckSequence
   $('history-sync-summary').textContent='正在核對歷史與有效名單；既有選擇保留…'
+  const lessonCourses=new Set(owner.snapshot.records.filter(r=>r.kind==='report'&&(r.sourceFields||[]).some(f=>f.key==='lesson_id'&&f.type==='stage')).map(r=>targets.get(r.enrollment_source_id)?.courseId).filter(id=>id&&id!=='new'))
+  for(const courseId of lessonCourses){await ensureLessonCatalog(courseId);if(!current())return}
   if(integrationCapabilities.enrollment_history_reports) {
     for(const [admission,target] of targets) {
       if(target.isNew)continue
@@ -203,9 +220,19 @@ async function refreshHistoryPlan() {
     }
   }
   if(!current())return
-  historyPlan=planHistory(owner.snapshot.records,targets,archives,routes,{dateFrom:owner.dateFrom,dateTo:owner.dateTo,includeInternal:$('include-internal-notes').checked,lessons:context.lessons})
+  historyArchives=archives;historyRoutes=routes
+  historyPlan=planHistory(owner.snapshot.records,targets,archives,routes,historyOptions())
   historyView.render(historyPlan)
   if(!integrationCapabilities.enrollment_history_reports)$('history-sync-summary').textContent='請將 EduLog 升級至 1000126，才能保存完整歷史及逐堂綁定。原工作檢查點保留。'
+}
+async function ensureLessonCatalog(courseId){
+  if(loadedLessonCourses.has(courseId))return
+  if(lessonCatalogLoads.has(courseId))return lessonCatalogLoads.get(courseId)
+  const owner=context,epoch=generation
+  const current=()=>context===owner&&generation===epoch
+  const pending=(async()=>{let cursor,seen=new Set(),pages=0;do{const page=await catalog('lessons',{course_id:courseId,cursor});if(!current())return;if(page.next_cursor&&seen.has(page.next_cursor))throw new Error('教材目錄分頁未前進，請重新核對。');if(page.next_cursor)seen.add(page.next_cursor);owner.lessons=[...new Map([...owner.lessons,...(page.items||[])].map(row=>[row.id,row])).values()];cursor=page.next_cursor||undefined;if(++pages>100)throw new Error('教材目錄超過安全讀取上限，請縮小範圍後重試。')}while(cursor);loadedLessonCourses.add(courseId)})()
+  lessonCatalogLoads.set(courseId,pending)
+  try{return await pending}finally{if(lessonCatalogLoads.get(courseId)===pending)lessonCatalogLoads.delete(courseId)}
 }
 async function mappingView() {
   $('operation-title').textContent='正在解析已確認的對應';
@@ -592,7 +619,7 @@ async function compare() {
   if (!report.full) { const full = (await api('reports', undefined, { query: { id: report.id } })).reports[0]; if (!full) throw new Error('找不到所選報告，請重新載入摘要。'); report = { ...full, full: true } }
   if (report.occurrence_date !== $('target-date').value) throw new Error('EduLog 報告日期與原站課次不一致，請重新選擇。')
   const current = await source('form'); if (current.fingerprint !== form.fingerprint) throw new Error('原站內容已变更，請重新讀取表單。')
-  fieldRules=[];if(integrationCapabilities.field_mapping_memory&&form.targetCourseId){const result=await api('field-resolve',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:form.fields.filter(f=>f.type!=='text').map(f=>({field_key:f.key,course_id:form.targetCourseId,options_signature:globalThis.edulogFieldMappings.signature(f)}))});fieldRules=result.items||[]}
+  fieldRules=[];if(integrationCapabilities.field_mapping_memory&&form.targetCourseId){const result=await api('field-resolve',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:form.fields.filter(f=>f.type!=='text'&&f.key!=='learning_status').map(f=>({field_key:f.key,course_id:form.targetCourseId,options_signature:globalThis.edulogFieldMappings.signature(f)}))});fieldRules=result.items||[]}
   $('fields').replaceChildren()
   $('report-completeness').textContent = `${report.student_name} · ${report.occurrence_date} · ${report.completeness?.isMissing ? '未齊備：缺漏欄位請人工補齊' : '已齊備'}；課程${report.is_completed ? '已完成' : '未完成'}。`
   for (const field of form.fields) {
@@ -722,13 +749,17 @@ $('more-reports').addEventListener('click', () => void runLatest(async () => { c
 const today = new Date(), yearAgo = new Date(today); yearAgo.setFullYear(today.getFullYear() - 1)
 $('date-from').value = yearAgo.toISOString().slice(0, 10); $('date-to').value = today.toISOString().slice(0, 10)
 $('all-history').addEventListener('change',()=>{for(const id of ['date-from','date-to'])$(id).disabled=$('all-history').checked})
+$('include-internal-notes').addEventListener('change',()=>{if(!work)return;work.includeInternalNotes=$('include-internal-notes').checked;historyWorkChanged()})
 $('check-history').addEventListener('click',()=>void runLatest(refreshHistoryPlan,{label:'正在重新核對完整歷史'}))
 bridge.onInvalidated(() => { paused = true; ++generation; notice('擴充套件已更新，請重新開啟工作分頁；已保存檢查點可續傳。', true) })
 document.querySelectorAll('input,select,textarea').forEach(input => { if (!input.name) input.name = input.id; input.autocomplete = 'off' })
 document.addEventListener('input', event => {
   if (!work || !event.target.closest('#mapping')) return
+  if (event.target.closest('#history-workbench')) return
+  if (!event.target.closest('.mapping-row,.course-group')) return
   unsaved = true; work.mappingDirty = true; work.previewDirty = true; $('apply').disabled = true
   work.revision = (work.revision || 0) + 1
+  scheduleHistoryPlanForCurrentMapping()
   clearTimeout(editTimer)
   const editingId = work.id
   editTimer = setTimeout(() => {
@@ -736,6 +767,10 @@ document.addEventListener('input', event => {
     captureMappingChoices()
     void save().catch(() => { unsaved = true; notice('對應選擇尚未儲存，請保留此分頁並重試。', true) })
   }, 250)
+})
+document.addEventListener('change', event => {
+  if (!work || !event.target.closest('#mapping') || event.target.closest('#history-workbench') || !event.target.closest('.mapping-row,.course-group')) return
+  scheduleHistoryPlanForCurrentMapping()
 })
 window.addEventListener('beforeunload', event => { if (unsaved || busy) { event.preventDefault(); event.returnValue = '' } })
 void run(async () => { try { await initialize() } catch (error) { show('connect'); $('workspace').hidden = true; throw error } }, { label: '正在驗證連線與檢查工作台能力', readOnly: true })

@@ -3,7 +3,7 @@ const stateLabels = {bind:'可綁定課次',history:'先存歷史',needs:'需要
 export function createHistoryWorkbench(hooks) {
   const $ = id => document.getElementById(id), make = (tag,text) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; return n }
   const buttons = new Map(); let items=[], selected='', owner, editorKey=''
-  function changed() { hooks.changed(); render(items) }
+  function changed() { hooks.changed() }
   function open(item) {
     const host=$('history-detail');host.replaceChildren();editorKey=item.key
     const r=item.record, title=make('h3',`${item.target?.name||r.sourceStudentName||'來源報名 #'+r.enrollment_source_id} · ${r.date||r.dateRaw||'日期待確認'}`)
@@ -13,6 +13,13 @@ export function createHistoryWorkbench(hooks) {
     for(const e of r.sourceEvidence||[]) { evidence.append(make('p',`${e.sourcePath} · ${e.table} · 第 ${e.row} 列`)); for(const f of e.fields||[])evidence.append(make('p',`${f.label}：${f.text??''}`)) }
     if(!r.sourceEvidence?.length)evidence.append(make('p','此工作尚未保留擷取原文，可補讀來源資料。'))
     host.append(evidence)
+    if(r.sourceFieldConflicts?.length){
+      const section=make('section'),title=make('h4','列表與已儲存報告頁內容不同'),help=make('p','請查看兩邊內容。確認後會採用已儲存報告編輯頁的值；重讀可更新證據，略過不會寫入這筆。');section.className='source-conflicts';section.append(title,help)
+      for(const conflict of r.sourceFieldConflicts){const row=make('div');row.append(make('strong',conflict.label),make('p',`歷史列表：${conflict.listValue||'空白'}`),make('p',`已儲存報告頁：${conflict.editValue||'空白'}`));section.append(row)}
+      if(r.sourceConflictAcknowledged)section.append(make('p','已確認採用已儲存報告編輯頁內容。','field-mapping-status'))
+      else{const confirm=make('button','核對後採用已儲存報告頁內容');confirm.type='button';confirm.onclick=()=>{r.sourceConflictAcknowledged=true;hooks.changed()};section.append(confirm)}
+      host.append(section)
+    }
     if(!r.date||r.sourceDateConflict) {
       const label=make('label','需要您確認：完整上課日期'),date=make('input'); date.type='date';date.value=r.userConfirmedDate||r.date||'';label.append(date)
       const confirm=make('button','確認日期，保留原文並重新核對');confirm.type='button'
@@ -47,7 +54,7 @@ export function createHistoryWorkbench(hooks) {
     let visible=0
     for(const item of items) {
       let b=buttons.get(item.key)
-      if(!b){b=make('button');b.type='button';b.className='mapping-list-item';b.onclick=()=>{const current=items.find(i=>i.key===b.dataset.key);if(!current)return;selected=current.key;editorKey='';render(items);$('history-workbench').dataset.mobileView='editor';hooks.changed()};b.dataset.key=item.key;buttons.set(item.key,b);$('history-items').append(b)}
+      if(!b){b=make('button');b.type='button';b.className='mapping-list-item';b.onclick=()=>{const current=items.find(i=>i.key===b.dataset.key);if(!current)return;selected=current.key;editorKey='';render(items);$('history-workbench').dataset.mobileView='editor';hooks.uiChanged?.()};b.dataset.key=item.key;buttons.set(item.key,b);$('history-items').append(b)}
       const r=item.record,text=`${item.target?.name||r.sourceStudentName||''} ${item.target?.courseName||''} ${r.date||r.dateRaw||''} ${r.enrollment_source_id}`
       b.hidden=item.key!==selected&&((filter!=='all'&&filter!==item.category)||!text.toLowerCase().includes(query));if(!b.hidden)visible++
       b.replaceChildren(make('strong',item.target?.name||r.sourceStudentName||`來源報名 #${r.enrollment_source_id}`),make('span',`${r.date||r.dateRaw||'日期待確認'} · ${item.target?.courseName||'課程待確認'}`),make('span',stateLabels[item.category]));b.setAttribute('aria-current',String(item.key===selected))
@@ -58,8 +65,8 @@ export function createHistoryWorkbench(hooks) {
     if(restored){$('history-items').scrollTop=restored.listScroll||0;$('history-editor').scrollTop=restored.editorScroll||0}
     if(work)work.historyUI={selected,search:$('history-search').value,filter:$('history-filter').value,listScroll:$('history-items').scrollTop,editorScroll:$('history-editor').scrollTop}
   }
-  for(const id of ['history-search','history-filter'])$(id).addEventListener(id.endsWith('search')?'input':'change',()=>{selected='';render(items);hooks.changed()})
+  for(const id of ['history-search','history-filter'])$(id).addEventListener(id.endsWith('search')?'input':'change',()=>{selected='';render(items);hooks.uiChanged?.()})
   $('history-back').onclick=()=>{$('history-workbench').dataset.mobileView='list';buttons.get(selected)?.focus({preventScroll:true})}
   for(const id of ['history-items','history-editor'])$(id).addEventListener('scroll',()=>{if(owner?.historyUI)owner.historyUI[id==='history-items'?'listScroll':'editorScroll']=$(id).scrollTop})
-  return {render,refreshEditor:()=>{const pane=$('history-editor'),position=pane.scrollTop,page=window.scrollY,key=document.activeElement?.dataset.focusKey,expanded=new Set([...pane.querySelectorAll('details[open]')].map(d=>d.querySelector('summary')?.textContent));editorKey='';render(items);for(const detail of pane.querySelectorAll('details'))if(expanded.has(detail.querySelector('summary')?.textContent))detail.open=true;pane.scrollTop=position;window.scrollTo(0,page);if(key)[...pane.querySelectorAll('[data-focus-key]')].find(c=>c.dataset.focusKey===key)?.focus({preventScroll:true})},items:()=>items}
+  return {render,refreshEditor:(next=items)=>{const pane=$('history-editor'),position=pane.scrollTop,page=window.scrollY,key=document.activeElement?.dataset.focusKey,expanded=new Set([...pane.querySelectorAll('details[open]')].map(d=>d.querySelector('summary')?.textContent));editorKey='';render(next);for(const detail of pane.querySelectorAll('details'))if(expanded.has(detail.querySelector('summary')?.textContent))detail.open=true;pane.scrollTop=position;window.scrollTo(0,page);if(key)[...pane.querySelectorAll('[data-focus-key]')].find(c=>c.dataset.focusKey===key)?.focus({preventScroll:true})},items:()=>items}
 }
