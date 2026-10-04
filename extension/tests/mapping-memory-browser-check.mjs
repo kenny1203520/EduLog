@@ -67,7 +67,7 @@ const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`
 try{
   for(const [name,executablePath]of[['chrome','C:/Program Files/Google/Chrome/Application/chrome.exe'],['edge','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']]){
     const browser=await chromium.launch({executablePath,headless:true})
-    try{for(const width of(process.argv.includes('--focused')?[390,1440]:[360,390,768,1024,1440,720])){
+    try{for(const width of(process.argv.includes('--focused')?[390,1440]:[360,390,768,1024,1200,1440,1920,720])){
       const context=await browser.newContext({viewport:{width,height:900},deviceScaleFactor:width===720?2:1}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.addInitScript(mock)
       const collect=async()=>{await page.locator('#read-history').uncheck();await page.locator('#collect').click();await page.locator('#mapping').waitFor({state:'visible'})}
       await page.goto(`${base}/workspace.html?source=10${process.argv.includes('--reconciliation')?'&reconciliation=1':''}`);await collect()
@@ -196,7 +196,7 @@ try{
       const job=await page.evaluate(()=>testCalls.find(m=>m.operation==='job').body);assert.deepEqual(job.course_ids.sort(),[id(2),id(12)].sort());assert.equal('course_id'in job,false)
       const batch=await page.evaluate(()=>testCalls.find(m=>m.operation==='preview').body.rows.filter(r=>r.record.kind==='enrollment'));assert.equal(batch.length,4);assert.equal(batch.find(r=>r.source_id==='301').record.data.student_id,id(4));assert.equal(batch.find(r=>r.source_id==='302').record.data.student_id,id(14));assert.equal(batch.find(r=>r.source_id==='303').record.data.course_id,id(12))
       const change=page.getByText('我確認追加選定課程到班級可上課程（保留原有課程與排程）',{exact:true});await change.locator('..').locator('input').check();await page.locator('#repreview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
-      await page.locator('#apply').click();await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('全部可匯入'))
+      await page.locator('#apply').click();await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已核對'))
       assert.equal(await page.evaluate(()=>JSON.stringify(testCalls.filter(m=>['preview','apply'].includes(m.operation))).includes('sourceEvidence')),false,'original evidence never enters API writes')
       await page.reload();await collect();assert.match(await page.locator('#mapping-summary').textContent(),/已沿用 4/)
       await page.locator('#mapping-filter').selectOption('all');await choose('admissions',0);assert.equal(await page.locator('#student-101').inputValue(),id(4))
@@ -205,6 +205,15 @@ try{
       const selected=await page.locator('#student-101').inputValue();await page.locator('#reread-source').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await page.locator('#student-101').inputValue(),selected)
       assert.equal(await page.locator('#mapping-items button').count(),6)
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);assert.deepEqual(errors,[])
+      if(width===1440){
+        await page.setViewportSize({width,height:480});await choose('admissions',0)
+        const pane=page.locator('#mapping-editor-pane');await pane.evaluate(n=>n.scrollTop=n.scrollHeight)
+        const geometry=await pane.evaluate(n=>({client:n.clientHeight,scroll:n.scrollHeight,height:n.getBoundingClientRect().height}))
+        assert.ok(geometry.client>100&&geometry.height<481&&geometry.scroll>geometry.client,`short workspace scrolls ${JSON.stringify(geometry)}`)
+        const action=pane.locator('.mapping-row:visible .mapping-actions>.primary');await action.scrollIntoViewIfNeeded();await action.focus()
+        assert.equal(await action.evaluate(n=>{const r=n.getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight}),true,'short viewport final action and focus are visible')
+        assert.equal(await page.locator('#start-301').inputValue(),'2026-01-01');await page.setViewportSize({width,height:900})
+      }
       await page.goto(`${base}/workspace.html?source=10&changed=1`);await collect();assert.match(await page.locator('#mapping-summary').textContent(),/失效 1/)
       console.log(`PASS ${name} ${width}: master/detail, focus/scroll, inline failure, targeted revisions, evidence, safe frontend links, multilingual statuses, multi-course reuse and supplement`);await context.close()
     }}finally{await browser.close()}

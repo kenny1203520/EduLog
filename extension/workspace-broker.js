@@ -43,7 +43,7 @@ export function installWorkspaceBroker(getStatus) {
       reconcile: ['GET', `/enrollments/${message.enrollmentId}/reconciliation`],
       'import-info': ['GET', `/imports/${message.jobId}`], complete: ['POST', `/imports/${message.jobId}/complete`],
       'enrollment-info': ['GET', `/enrollments/${message.enrollmentId}`],
-      context: ['GET', '/context'], catalog: ['GET', '/catalog'], resolve: ['POST', '/catalog/resolve'], confirm: ['POST', '/catalog/confirm'], reports: ['GET', '/reports'], work: ['GET', '/work'], map: ['POST', '/source-links'],
+      'field-resolve':['POST','/field-mappings/resolve'], 'field-confirm':['POST','/field-mappings/confirm'], context: ['GET', '/context'], catalog: ['GET', '/catalog'], resolve: ['POST', '/catalog/resolve'], confirm: ['POST', '/catalog/confirm'], reports: ['GET', '/reports'], work: ['GET', '/work'], map: ['POST', '/source-links'],
       job: ['POST', '/imports'], preview: ['POST', `/imports/${message.jobId}/preview`], apply: ['POST', `/imports/${message.jobId}/apply`],
       'job-status': ['PATCH', `/imports/${message.jobId}`], push: ['POST', '/report-pushes'],
     }
@@ -53,7 +53,7 @@ export function installWorkspaceBroker(getStatus) {
     if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
     const payload = method === 'GET' ? undefined : JSON.stringify(message.operation === 'complete' ? message.body : message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
-    const readOnly = ['context','catalog','resolve','reports','work','reconcile','import-info'].includes(message.operation)
+    const readOnly = ['context','catalog','resolve','field-resolve','reports','work','reconcile','import-info'].includes(message.operation)
     if (readOnly && message.requestId && !/^[a-f0-9-]{36}$/i.test(message.requestId)) fail('查詢識別碼不正確。')
     const remaining = 30000 - (Date.now() - startedAt)
     if (remaining <= 0) { const error = new Error('連線驗證與 API 查詢超過 30 秒。'); error.code = 'API_TIMEOUT'; throw error }
@@ -164,6 +164,20 @@ export function installWorkspaceBroker(getStatus) {
           } })
           if(result.error){const error=new Error(result.error.message);Object.assign(error,result.error);throw error}
           return { reports: result.data?.reports || [], next_cursor: result.data?.next_cursor || null }
+        }
+        if (['field-resolve','field-confirm'].includes(operation)) {
+          if(bound.status.capabilities?.field_mapping_memory!==true)fail('請升級 EduLog 至 1000124，才能跨裝置保存欄位映射。')
+          const target=await inlineTarget(form,bound)
+          if(!target)fail('請先確認有效報名，才能保存課程範圍的映射。')
+          const items=operation==='field-resolve'?form.fields.filter(f=>f.type!=='text').map(f=>({field_key:f.key,options_signature:JSON.stringify(f.options.map(o=>[String(o.value),o.label,Boolean(o.disabled)]))})):message.items
+          if(!Array.isArray(items)||!items.length||items.length>50)fail('欄位映射格式不正確。')
+          const safe=items.map(item=>{
+            const field=form.fields.find(f=>f.key===item.field_key&&f.type!=='text')
+            const signature=field&&JSON.stringify(field.options.map(o=>[String(o.value),o.label,Boolean(o.disabled)]))
+            if(!field||signature!==item.options_signature||operation==='field-confirm'&&item.action!=='clear'&&(field.disabled||!field.options.some(o=>o.value===item.source_value&&!o.disabled)))fail('原站欄位選項已變更，請重新核對。')
+            return {field_key:field.key,options_signature:signature,course_id:target.courseId,class_session_id:target.classSessionId,...(operation==='field-confirm'?{action:item.action,source_value:item.source_value,canonical_value:item.canonical_value,expected_revision:item.expected_revision}: {})}
+          })
+          return call({operation,body:{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:safe}})
         }
         if (operation === 'detail') {
           if (!/^[a-f0-9-]{36}$/i.test(message.reportId || '')) fail('報告識別碼不正確。')

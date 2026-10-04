@@ -1,3 +1,4 @@
+import './field-mappings.js'
 export const labels = { student: '學生', course: '課程', class_session: '班級', enrollment: '報名', occurrence: '課次', report: '報告', added: '新增', updated: '更新', unchanged: '無變更', conflict: '保留 EduLog', needs: '需處理' }
 const rowIdentity = row => row.record?.kind && row.source_id != null ? `${row.record.kind}:${row.source_id}` : null
 const canonical = value => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item) ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)
@@ -70,12 +71,6 @@ export function plainText(value, doc = document) {
   template.content.querySelectorAll('p,div,li,h1,h2,h3,br').forEach(n => n.append(doc.createTextNode('\n')))
   return template.content.textContent.replace(/\n{3,}/g, '\n\n').trim()
 }
-export function suggestedValue(field, report) {
-  const value = report[field.key]
-  if (field.type === 'text') return typeof value === 'string' ? value : ''
-  if (field.key === 'attendance_status') return field.options.find(o => o.label === ({ present: '出席', absent: '不出席' })[value])?.value || ''
-  // Rating conversion is only used when the native option is present. The user
-  // still reviews it before applying; lesson IDs never match by label alone.
-  if (['class_participation', 'classroom_behavior'].includes(field.key) && Number.isFinite(value)) return field.options.find(o => Number(o.value) === value * 2 && /^[1-9]$|^10$/.test(o.value))?.value || ''
-  return ''
+export function suggestedValue(field, report, rules = []) {
+  return globalThis.edulogFieldMappings.suggest(field,report,rules)
 }

@@ -5,6 +5,7 @@
   const adapter = globalThis.edulogSourceIntegration
   let host = null, root = null, form = null, target = null, report = null, generation = 0, observer
   let nativeForm, layout, anchor, modal, settingsUrl, capabilities = {}, saving = false, suspended = false, containers = []
+  let fieldRules=[]
   let resizeHandler, paneScroll={native:0,assistant:0}
   const groups = new Map(), drafts = new Map()
   function formContext(){if(!modal)return;const header=modal.querySelector('.modal-header');if(!header)return;let context=header.querySelector('.edulog-prefill-context');if(!context){context=make('p',undefined,'edulog-prefill-context');context.dataset.edulogOwned='';context.setAttribute('aria-live','polite');header.append(context)}context.textContent=`原站目標：${target?.studentName||form?.title||'學生待確認'} · ${form?.date||'日期待確認'} · ${target?.courseName||'課程待確認'}${report?` ｜ EduLog ${report.occurrence_date}${report.occurrence_date!==form?.date||report.enrollment_id!==target?.enrollmentId?'（範本）':''}`:''}`}
@@ -129,21 +130,15 @@
     input.addEventListener('input',()=>{serial++;clearTimeout(timer);timer=setTimeout(()=>void run(false),300)});button.addEventListener('click',()=>void run(false));more.addEventListener('click',()=>void run(true));parent.append(details)
   }
   function suggestion(field, selected) {
-    const value=selected[field.key]
-    if(field.type==='text')return typeof value==='string'?safeText(value):''
-    if(field.key==='attendance_status'){
-      const label=value==='present'?'出席':value==='absent'?'不出席':value==='pending'?'待確認':''
-      return field.options.find(option=>option.label.trim()===label)?.value||''
+    const value=globalThis.edulogFieldMappings.suggest(field,selected,fieldRules)
+    return field.type==='text'?safeText(value):value
+  }
+  async function loadFieldRules(serial){
+    fieldRules=[]
+    if(target&&capabilities.field_mapping_memory){
+      try{const data=await request('field-resolve');if(serial===generation)fieldRules=data.items||[]}
+      catch(e){if(serial===generation)status(`欄位記憶暫時無法讀取：${e.message} 可先核對已驗證建議。`,true)}
     }
-    if(['class_participation','classroom_behavior'].includes(field.key)&&Number.isFinite(value))return field.options.find(option=>Number(option.value)===value*2)?.value||''
-    if(field.key==='is_completed'){
-      if(typeof value!=='boolean')return ''
-      const pattern=value?/^(?:完整完成|已完成|完成|已結課|是|yes|completed)$/i:/^(?:未完成|尚未完成|未結課|否|no|incomplete)$/i
-      return field.options.find(option=>pattern.test(option.label.trim()))?.value||''
-    }
-    if(field.key==='lesson_id'&&selected.lesson_name){const matches=field.options.filter(o=>o.label.trim()===selected.lesson_name.trim());return matches.length===1?matches[0].value:''}
-    if(['progress_start','progress_end'].includes(field.key)&&typeof selected.progress_letter==='string'){const parts=selected.progress_letter.split('-'),label=field.key==='progress_start'?parts[0]:parts.at(-1);return field.options.find(o=>o.label.trim()===label)?.value||''}
-    return ''
   }
   async function selectReport(item) {
     if(saving)return
@@ -152,7 +147,7 @@
       const full=await request('detail',{reportId:item.id})
       if(serial!==generation||!host?.isConnected)return
       if(!full)throw new Error('所選報告已無法讀取，請重新搜尋。')
-      report=full;formContext();renderFields(full);for(const key of groups.keys())paintGroup(key)
+      await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return;report=full;formContext();renderFields(full);for(const key of groups.keys())paintGroup(key)
     }catch(error){if(serial===generation){if(/連接並驗證|請先連接/.test(error.message))root.querySelector('.connect').hidden=false;status(error.message,true)}}
   }
   function renderFields(selected) {
@@ -167,14 +162,14 @@
     if(selected.external_link)verifiedLink(identity,'查看原站報告連結',selected.external_link)
     box.append(identity)
     if(target)box.append(make('p',`目前原站目標：${target.studentName||`學生 ${target.studentId?.slice(0,8)||'待確認'}`} · ${target.className||'班級名稱未提供'} · ${target.courseName||'課程名稱未提供'} · 報名 ${target.enrollmentId.slice(0,8)} · ${form.date||'日期待確認'}`,'muted'))
-    const fields=make('div')
+    const currentFormId=form.formId;const fields=make('div')
     const draftKey=`${form.action||form.reportId}:${selected.id}:${selected.version}`,draft=drafts.get(draftKey)||{}
     const sections=new Map([['attendance_status','出席'],['absence_reason','出席'],['lesson_id','課程與進度'],['is_completed','課程與進度'],['progress_start','課程與進度'],['progress_end','課程與進度'],['class_participation','課堂評量'],['classroom_behavior','課堂評量'],['content','評語與聯絡'],['contact_notes','評語與聯絡'],['class_notes','內部紀錄']]),fieldsets=new Map()
     for(const sourceField of form.fields){
-      const card=make('div',undefined,'field'),label=make('label',undefined,'check'),check=make('input');check.type='checkbox';check.disabled=sourceField.disabled||sourceField.internal;check.checked=!sourceField.disabled&&!sourceField.internal&&!sourceField.value&&Boolean(suggestion(sourceField,selected));
+      const consistent=globalThis.edulogFieldMappings.equal(sourceField,selected,fieldRules);const card=make('div',undefined,'field'),label=make('label',undefined,'check'),check=make('input');check.type='checkbox';check.disabled=sourceField.disabled||sourceField.internal||consistent;check.checked=!sourceField.disabled&&!sourceField.internal&&!sourceField.value&&Boolean(suggestion(sourceField,selected));
       label.append(check,make('span',`套用${sourceField.label}${sourceField.internal?'（內部紀錄，預設不套用）':''}`));card.append(label)
       const comparison=make('div',undefined,'comparison');comparison.append(make('small',`原站目前：\n${sourceField.options?.find(option=>option.value===sourceField.value)?.label||sourceField.value||'空白'}`))
-      const sourceReportValue=sourceField.key==='lesson_id'?contextLesson(selected):sourceField.key==='is_completed'?typeof selected.is_completed==='boolean'?(selected.is_completed?'課程已完成':'課程未完成'):'未填寫':sourceField.key==='progress_start'||sourceField.key==='progress_end'?selected.progress_letter||'未填章節':selected[sourceField.key]
+      const sourceReportValue=globalThis.edulogFieldMappings.display(sourceField,selected)
       comparison.append(make('small',`EduLog：\n${sourceReportValue==null||sourceReportValue===''?'未填寫':safeText(String(sourceReportValue))}`));card.append(comparison)
       const input=make(sourceField.type==='text'?'textarea':'select');input.dataset.value='';input.dataset.key=sourceField.key;input.disabled=sourceField.disabled
       input.name=`edulog-prefill-${sourceField.key}`;input.autocomplete='off'
@@ -182,9 +177,11 @@
       const valueLabel=make('label',`預填${sourceField.label}`);valueLabel.append(input);card.append(valueLabel)
       if(sourceField.type!=='text'&&!suggestion(sourceField,selected))card.append(make('p',sourceField.key==='lesson_id'?'需要您確認教材：原站選項未能唯一對應，請核對來源原文及實際選項。':'需要您確認選項：EduLog 值缺漏或無已驗證對應，請選擇實際原站選項。','help'))
       if(sourceField.disabled)card.append(make('p','原站欄位目前停用，請先在原站完成連動操作，再重新核對。','help'))
-      if(sourceField.value){const overwriteLabel=make('label',undefined,'check'),overwrite=make('input');overwrite.type='checkbox';overwrite.dataset.overwrite='';overwriteLabel.append(overwrite,make('span','我確認覆寫目前原站內容'));card.append(overwriteLabel)}
+      if(consistent)card.append(make('p','內容一致，保留原站；不需覆寫。','field-mapping-status'))
+      if(sourceField.value&&!consistent){const overwriteLabel=make('label',undefined,'check'),overwrite=make('input');overwrite.type='checkbox';overwrite.dataset.overwrite='';overwriteLabel.append(overwrite,make('span','我確認覆寫目前原站內容'));card.append(overwriteLabel)}
       check.dataset.include=''
-      if(draft[sourceField.key]){input.value=draft[sourceField.key].value;check.checked=!sourceField.disabled&&draft[sourceField.key].include;const overwrite=card.querySelector('[data-overwrite]');if(overwrite)overwrite.checked=draft[sourceField.key].overwrite}
+      if(draft[sourceField.key]){input.value=draft[sourceField.key].value;check.checked=!sourceField.disabled&&!consistent&&draft[sourceField.key].include;const overwrite=card.querySelector('[data-overwrite]');if(overwrite)overwrite.checked=draft[sourceField.key].overwrite}
+      globalThis.edulogFieldMappingUI?.attach(card,sourceField,selected,fieldRules,{enabled:capabilities.field_mapping_memory&&Boolean(target),sourceValue:input.value,confirm:item=>request('field-confirm',{items:[item]}),isCurrent:()=>report===selected&&form.formId===currentFormId,changed:()=>{if(!check.checked){input.value=suggestion(sourceField,selected);update()} }});
       const group=sections.get(sourceField.key)||'其他欄位';if(!fieldsets.has(group)){const set=make('details',undefined,'field-group');set.open=fieldsets.size===0;set.append(make('summary',group));fields.append(set);fieldsets.set(group,set)}fieldsets.get(group).append(card)
     }
     const matchConfirm=make('label',undefined,'check'),confirm=make('input');confirm.type='checkbox';confirm.dataset.mismatch='';confirm.hidden=!mismatch;matchConfirm.append(confirm,make('span','我已核對，確認使用其他學生或日期的報告作為範本'));if(mismatch)box.append(matchConfirm)
@@ -213,7 +210,7 @@
     const fields=[]
     for(const card of root.querySelectorAll('.field')){
       const include=card.querySelector('[data-include]'),control=card.querySelector('[data-value]'),overwrite=card.querySelector('[data-overwrite]'),definition=form.fields.find(field=>field.key===control?.dataset.key)
-      if(!include?.checked||!definition||definition.disabled)continue
+      if(!include?.checked||!definition||definition.disabled||definition.value===control.value)continue
       if(definition.internal&&!root.querySelector('[data-internal]')?.checked){status('內部紀錄需要另外確認。',true);return}
       if(definition.value&&definition.value!==control.value&&!overwrite?.checked){status(`「${definition.label}」已有原站內容，請確認是否覆寫。`,true);return}
       if(definition.type!=='text'&&!definition.options.some(option=>option.value===control.value&&!option.disabled)){status(`請人工選擇有效的「${definition.label}」原站選項。`,true);return}
@@ -228,7 +225,7 @@
     const outcome=make('details');outcome.append(make('summary','4 · 查看已套用欄位（待人工送出）'))
     for(const item of fields){const actual=after.fields.find(f=>f.key===item.key);outcome.append(make('p',`${actual?.label||item.key}：${actual?.value===item.value?'已確認套用':'請在原站核對結果'} · ${actual?.options?.find(o=>o.value===actual.value)?.label||actual?.value||'空白'}`))}
     outcome.append(action('切換至原站表單檢查',()=>setView('native')));root.querySelector('.fields-result').append(outcome);button.dataset.applied='true';button.textContent='已套用；請檢查原站'
-    } catch(error){if(serial===generation)status(error.message,true)}finally{saving=false;if(button.isConnected&&!button.dataset.applied)button.disabled=false}
+    } catch(error){if(serial===generation){status(error.message,true);if(error.appliedFields?.length){const after=await adapter.readForm(document);if(serial!==generation||!host?.isConnected)return;const result=make('details');result.open=true;result.append(make('summary','部分套用：請檢查原站並重新核對'));for(const key of error.appliedFields){const actual=after.fields.find(f=>f.key===key);result.append(make('p',`${actual?.label||key} · 原站目前：${actual?.options?.find(o=>o.value===actual.value)?.label||actual?.value||'空白'}`))}result.append(action('查看原站表單',()=>setView('native')));root.querySelector('.fields-result').append(result);button.dataset.applied='true';button.textContent='部分套用；請重新核對'}}}finally{saving=false;if(button.isConnected&&!button.dataset.applied)button.disabled=false}
   }
   async function lookup(){
     if(saving)return
@@ -243,6 +240,7 @@
       if(serial!==generation||!host?.isConnected)return
       form=result.form;target=result.target;settingsUrl=result.settingsUrl;capabilities=result.capabilities||{};root.querySelector('.target').textContent=`${target?.studentName||form.title||'原站報告'} · ${form.date||'日期待確認'}${form.supplement?' · 使用者確認':''}`;questionUI()
       formContext()
+      await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return
       if(!result.connected){root.querySelector('.connect').hidden=false;status('請先連接 EduLog，配對完成後再重新核對。',true);renderList([]);return}
       root.querySelector('.connect').hidden=true
       if(result.reason)status(result.reason,!target)

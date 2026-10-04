@@ -10,7 +10,7 @@ const previewScript = script.slice(script.indexOf('async function preview('), sc
 const row = n => ({source_id:String(n),target_id:`target-${n}`,overwrite:[],record:{kind:'course',data:{subject:'合成課程',stage:'初階'}}})
 function previewFixture(work, rows) {
   const calls=[],saved=[],controls={apply:{disabled:false}}
-  const context=vm.createContext({work,rows,splitBatches,validateBatches,batchBytes:180000,previewResults:[{old:true}],mappingController:{verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
+  const context=vm.createContext({work,rows,splitBatches,validateBatches,batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
     calls.push({operation,body:structuredClone(body),extra})
     if(operation==='job')return{id:'new-job'}
     if(operation==='preview'){

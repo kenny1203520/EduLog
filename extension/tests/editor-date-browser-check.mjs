@@ -19,7 +19,7 @@ try{
   try{
    for(const width of [360,390,768,1024,1200,1440,1920]){
     const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
-    await page.goto(url);await page.addStyleTag({content:'.modal{z-index:1050}'});await page.addScriptTag({url:new URL('/source-date.js',url).href});await page.addScriptTag({url:new URL('/adapters/orange-apple-integration.js',url).href})
+    await page.goto(url);await page.addStyleTag({content:'.modal{z-index:1050}'});await page.addScriptTag({url:new URL('/source-date.js',url).href});await page.addScriptTag({url:new URL('/field-mappings.js',url).href});await page.addScriptTag({url:new URL('/field-mapping-ui.js',url).href});await page.addScriptTag({url:new URL('/adapters/orange-apple-integration.js',url).href})
     await page.evaluate(()=>{
      const a=document.querySelector('#reports a');a.addEventListener('click',e=>e.preventDefault());a.click()
      window.originalForm=document.querySelector('form');window.originalForm.sentinel='native';window.submitCount=0;window.editorCalls=[];window.editorDelayed=[];window.delayDetails=false
@@ -43,13 +43,16 @@ try{
     })
     await page.addScriptTag({url:new URL('/editor-prefill.js',url).href})
     const helper=page.locator('aside[data-edulog-owned]'),shadow=selector=>helper.locator(selector)
+    if(width<1200){await page.locator('.edulog-editor-native').waitFor({state:'visible'});await page.locator('button[data-view=assistant]').click()}
+    const openGroups=()=>helper.evaluate(n=>n.shadowRoot.querySelectorAll('.field-group').forEach(d=>d.open=true))
     await shadow('.question input[type=date]').waitFor({state:'visible'})
     await shadow('.choice').first().waitFor({state:'visible'})
     assert.equal(await shadow('.target').textContent().then(t=>t.includes('日期待確認')),true)
-    await shadow('.choice').first().click();await shadow('[data-key=content]').waitFor({state:'visible'})
+    await shadow('.choice').first().click();await shadow('[data-key=content]').waitFor({state:'attached'});await openGroups();await shadow('[data-key=content]').waitFor({state:'visible'})
     assert.equal(await shadow('.fields-result .primary').isDisabled(),true,'date answer gates apply but not preview')
     if(!await shadow('.question input[type=date]').isVisible())await shadow('.questions summary').first().click();await shadow('.question input[type=date]').fill('2026-10-04');await shadow('.question .primary').click()
     await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('.target').textContent.includes('2026-10-04'))
+    await openGroups()
     await shadow('[data-key=content]').waitFor({state:'visible'})
     assert.equal(await shadow('[data-key=is_completed]').inputValue(),'not_done','false must not match completed option')
     assert.equal(await shadow('[data-key=content]').inputValue(),'第一段\n第二段')
@@ -65,10 +68,13 @@ try{
     // RWD switches retain actual native nodes and separate scroll positions.
     await shadow('[data-key=content]').fill('助手草稿\n保留段落');await shadow('[data-key=content]').evaluate(n=>n.focus())
     const beforeScroll=await helper.evaluate(n=>{n.scrollTop=120;return n.scrollTop})
+    await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
     await page.setViewportSize({width:width>=1200?390:1440,height:900})
+    if(width>=1200)await page.locator('button[data-view=assistant]').click()
+    await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
     assert.equal(await page.evaluate(()=>originalForm===document.querySelector('form')&&originalForm.sentinel==='native'),true)
     assert.equal(await shadow('[data-key=content]').inputValue(),'助手草稿\n保留段落')
-    assert.ok(Math.abs(await helper.evaluate(n=>n.scrollTop)-beforeScroll)<=1)
+    assert.ok(Math.abs(await helper.evaluate(n=>n.scrollTop)-beforeScroll)<=1,JSON.stringify({beforeScroll,after:await helper.evaluate(n=>({scroll:n.scrollTop,height:n.offsetHeight,view:n.parentElement.dataset.view,focused:n.shadowRoot.activeElement?.dataset.key}))}))
     await page.setViewportSize({width,height:900})
     // Recheck retains selected report, draft text, focus/caret and both scroll regions.
     await shadow('[data-key=content]').evaluate(n=>{n.focus();n.setSelectionRange(2,4)})
@@ -77,9 +83,10 @@ try{
     await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('[data-key=content]')?.value==='助手草稿\n保留段落'&&document.querySelector('aside').shadowRoot.activeElement?.dataset.key==='content')
     const restored=await helper.evaluate(n=>({scroll:n.scrollTop,start:n.shadowRoot.activeElement.selectionStart,end:n.shadowRoot.activeElement.selectionEnd}))
     assert.deepEqual(restored,recheck)
+    await openGroups()
     if(width===390){
       await page.evaluate(()=>{delayDetails=true;const root=document.querySelector('aside').shadowRoot,buttons=[...root.querySelectorAll('.result .choice')];buttons[1].click();buttons[0].click()})
-      await page.waitForFunction(()=>editorDelayed.length===2);await page.evaluate(()=>editorDelayed[1]());await shadow('[data-key=content]').waitFor({state:'visible'});await page.evaluate(()=>{editorDelayed[0]();delayDetails=false})
+      await page.waitForFunction(()=>editorDelayed.length===2);await page.evaluate(()=>editorDelayed[1]());await shadow('[data-key=content]').waitFor({state:'attached'});await openGroups();await page.evaluate(()=>{editorDelayed[0]();delayDetails=false})
       await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('.fields-result .report').textContent.includes('2026-10-03'))
       assert.equal(await shadow('[data-key=content]').inputValue(),'助手草稿\n保留段落','late response cannot replace selected report or draft')
     }
@@ -97,6 +104,20 @@ try{
     assert.equal(await page.evaluate(()=>originalForm===document.querySelector('form')),true)
     await helper.evaluate(n=>[...n.shadowRoot.querySelectorAll('header button')].find(b=>b.textContent==='展開 EduLog 助手').click())
     assert.equal(await shadow('[data-key=content]').inputValue(),'助手草稿\n保留段落','collapse cannot rebuild drafts')
+    // Theme changes must never own or remove the assistant's structural layout.
+    for(const theme of ['off','on']){
+      await page.evaluate(value=>document.documentElement.dataset.edulogUi=value,theme)
+      await page.setViewportSize({width,height:480});await openGroups()
+      await helper.evaluate(n=>n.scrollTop=n.scrollHeight)
+      const bottom=await helper.evaluate(n=>{const r=n.getBoundingClientRect();return{bottom:r.bottom,height:r.height,scroll:n.scrollHeight,client:n.clientHeight}})
+      assert.ok(bottom.bottom<=481&&bottom.client>150&&bottom.scroll>bottom.client,`${theme}: short viewport remains scrollable ${JSON.stringify(bottom)}`)
+      const native=page.locator('.edulog-editor-native');if(width<1200)await page.locator('button[data-view=native]').click()
+      await native.evaluate(n=>n.scrollTop=n.scrollHeight)
+      const submit=page.locator('input[type=submit]');await submit.scrollIntoViewIfNeeded();assert.equal(await submit.isVisible(),true)
+      assert.equal(await page.evaluate(()=>originalForm===document.querySelector('form')),true)
+      if(width<1200)await page.locator('button[data-view=assistant]').click()
+    }
+    await page.setViewportSize({width,height:900})
     // Native focus/keyboard operation remains inside the existing modal.
     await page.evaluate(()=>{document.dispatchEvent(new Event('turbo:before-cache'))})
     assert.equal(await page.evaluate(()=>originalForm===document.querySelector('form')&&document.querySelectorAll('.edulog-editor-layout,[data-edulog-prefill-container]').length===0&&Boolean(originalForm.closest('.report-body'))),true)

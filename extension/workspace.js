@@ -1,7 +1,10 @@
+import './field-mapping-ui.js'
 import { createMappingController } from './mapping-controller.js'
+import { mappedReport } from './import-field-mappings.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
 import { labels, splitBatches, validateBatches, workspaceErrorMessage, plainText, suggestedValue } from './workspace-model.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
+let fieldRules=[]
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
@@ -15,7 +18,7 @@ async function send(message) {
   if (response?.error) { const e = new Error(workspaceErrorMessage(response.error)); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; e.fields = response.error.fields; e.rawMessage = response.error.message; throw e }
   return response?.data
 }
-const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','reports','work','reconcile','import-info'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
+const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','reports','work','reconcile','import-info'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
 const source = (action, extra = {}) => send({ type: 'workspace-source', action, tabId: Number($('source-tab').value), sourcePath: selectedPath, requestId: activeReadId || undefined, ...extra })
 async function save() {
   const current = work
@@ -247,18 +250,16 @@ function prepareRows() {
     if (!occurrenceChoice || !reportChoice) { needs.push(`報告 ${r.source_id} 尚未確認課次與報告對應。`); continue }
     const chosenOccurrence = occurrenceChoice === 'new' ? occurrenceId : occurrenceChoice
     if(!mappingController.validateReport(r,enrollments.get(r.enrollment_source_id),chosenOccurrence)){needs.push(`報告 ${r.source_id} 的課次與單次調課紀錄不一致或紀錄尚未讀完，請前往 EduLog 核對。`);continue}
-    const mappedLesson = r.sourceLessonLabel ? context.lessons.filter(lesson => lesson.course_id === enrollmentCourses.get(r.enrollment_source_id) && lesson.title.trim().toLocaleLowerCase() === r.sourceLessonLabel.trim().toLocaleLowerCase()) : []
+    const mapped = mappedReport(r,enrollmentCourses.get(r.enrollment_source_id),context.lessons)
+    if(mapped.needs.length){needs.push(`報告 ${r.source_id}：${mapped.needs.join('；')}，暫不匯入此報告。`);continue}
     const reportData = { enrollment_id: enrollments.get(r.enrollment_source_id), class_occurrence_id: chosenOccurrence, external_link: r.data.external_link }
-    for (const key of ['content','contact_notes','attendance_status','absence_reason','is_completed','class_participation','classroom_behavior']) if (r.data[key] !== undefined && r.data[key] !== '') reportData[key] = r.data[key]
+    for (const key of ['content','contact_notes','attendance_status','absence_reason','is_completed','class_participation','classroom_behavior','lesson_id','progress_letter']) if (mapped.data[key] !== undefined && mapped.data[key] !== '') reportData[key] = mapped.data[key]
     if (work.includeInternalNotes && r.sourceInternalNotes) reportData.class_notes = r.sourceInternalNotes
     if (!Object.keys(reportData).some(key => !['enrollment_id','class_occurrence_id','external_link'].includes(key))) {
       needs.push(`報告 ${r.source_id} 沒有可匯入的教學欄位；只保留來源編輯連結，未建立空白報告。`)
       continue
     }
     if (!dates.has(r.date)) { dates.add(r.date); add('occurrence', occurrenceSource, chosenOccurrence, { class_session_id: sessionId, occurrence_date: r.date, original_start_time: schedule.start_time, original_end_time: schedule.end_time, time_zone: 'Asia/Taipei' }) }
-    if (mappedLesson.length === 1) reportData.lesson_id = mappedLesson[0].id
-    else if (r.sourceLessonLabel) needs.push(`報告 ${r.source_id} 的教材「${r.sourceLessonLabel}」在目標課程找不到唯一同名教材，請人工核對。`)
-    if (r.sourceEvidence?.some(e=>e.fields?.some(f=>['章節起點','章節終點'].includes(f.label)))) needs.push(`報告 ${r.source_id} 的章節進度尚未對應至 EduLog 進度。`)
     add('report', r.source_id, reportChoice === 'new' ? idFor('report', r.source_id) : reportChoice, reportData)
   }
   work.destination = { classroom_id: $('classroom').value, course_ids: courseIds, class_session_id: sessionId }; work.needs = needs
@@ -269,6 +270,7 @@ async function preview(reuse = false) {
   if (!reuse) {
     if (work.jobId && (work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status))) throw new Error('此工作已有寫入或待確認檢查點。請使用「檢查並續傳」核對原批次，不能重新建立工作。')
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
+    await mappingController.resolveFieldRules()
     await mappingController.verifyReportRelationships()
     const batches = splitBatches(prepareRows(), batchBytes)
     if (!batches.length) throw new Error('沒有可產生差異的資料，請先核對來源與目標。')
@@ -476,26 +478,27 @@ async function compare() {
   if (!report.full) { const full = (await api('reports', undefined, { query: { id: report.id } })).reports[0]; if (!full) throw new Error('找不到所選報告，請重新載入摘要。'); report = { ...full, full: true } }
   if (report.occurrence_date !== $('target-date').value) throw new Error('EduLog 報告日期與原站課次不一致，請重新選擇。')
   const current = await source('form'); if (current.fingerprint !== form.fingerprint) throw new Error('原站內容已变更，請重新讀取表單。')
+  fieldRules=[];if(integrationCapabilities.field_mapping_memory&&form.targetCourseId){const result=await api('field-resolve',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:form.fields.filter(f=>f.type!=='text').map(f=>({field_key:f.key,course_id:form.targetCourseId,options_signature:globalThis.edulogFieldMappings.signature(f)}))});fieldRules=result.items||[]}
   $('fields').replaceChildren()
   $('report-completeness').textContent = `${report.student_name} · ${report.occurrence_date} · ${report.completeness?.isMissing ? '未齊備：缺漏欄位請人工補齊' : '已齊備'}；課程${report.is_completed ? '已完成' : '未完成'}。`
   for (const field of form.fields) {
     const card = node('div', undefined, 'field'); card.dataset.key = field.key
     const label = node('label', undefined, 'check'), check = node('input'); check.type = 'checkbox'; check.dataset.include = ''; check.disabled = field.disabled
-    const suggested = suggestedValue(field, report)
+    const suggested = suggestedValue(field, report,fieldRules),consistent=globalThis.edulogFieldMappings.equal(field,report,fieldRules)
+    check.disabled=field.disabled||consistent
     check.checked = !field.internal && !field.value && Boolean(suggested) && !field.disabled; label.append(check, node('span', `套用${field.label}${field.internal ? '（給內部看的）' : ''}`)); card.append(label)
     card.append(node('p', `原站目前：${field.options.find(o => o.value === field.value)?.label || field.value || '空白'}`, 'hint'))
     const lesson = context.lessons.find(l => l.id === report.lesson_id)
-    const original = field.key === 'lesson_id' ? lesson?.title || (report.lesson_id ? '教材未載入，請先在 EduLog 確認' : '未填教材')
-      : field.key === 'is_completed' ? report.is_completed ? '課程已完成' : '課程未完成'
-      : field.key.startsWith('progress_') ? report.progress_letter || '未填章節'
-      : report[field.key] == null || report[field.key] === '' ? '未填寫' : String(report[field.key])
+    const original=globalThis.edulogFieldMappings.display(field,{...report,lesson_name:report.lesson_name||lesson?.title})
     card.append(node('p', `EduLog：${original}`, 'hint'))
     const input = node(field.type === 'text' ? 'textarea' : 'select'); input.id = `field-${field.key}`; input.dataset.value = ''; input.disabled = field.disabled
     if (field.type !== 'text') { input.append(new Option('請人工確認選項', '')); field.options.filter(o => !o.disabled && o.value).forEach(o => input.append(new Option(o.label || o.value, o.value))) }
     input.value = field.type === 'text' ? plainText(suggested) : suggested
     const valueLabel = node('label', `確認${field.label}值`); valueLabel.htmlFor = input.id; card.append(valueLabel, input)
     if (!suggested && field.type !== 'text') card.append(node('p', '未建立可靠選項對應。請依 EduLog 報告人工選擇原站選項。', 'hint'))
-    if (field.value) { const overwriteLabel = node('label', undefined, 'check'), overwrite = node('input'); overwrite.type = 'checkbox'; overwrite.dataset.overwrite = ''; overwriteLabel.append(overwrite, node('span', '我確認覆寫此欄原站內容')); card.append(overwriteLabel) }
+    if(consistent)card.append(node('p','內容一致，保留原站；不需覆寫。','field-mapping-status'))
+    if (field.value&&!consistent) { const overwriteLabel = node('label', undefined, 'check'), overwrite = node('input'); overwrite.type = 'checkbox'; overwrite.dataset.overwrite = ''; overwriteLabel.append(overwrite, node('span', '我確認覆寫此欄原站內容')); card.append(overwriteLabel) }
+    const selectedReport=report,selectedWork=work;globalThis.edulogFieldMappingUI.attach(card,field,report,fieldRules,{enabled:integrationCapabilities.field_mapping_memory&&Boolean(form.targetCourseId),sourceValue:input.value,lessons:context.lessons,confirm:item=>api('field-confirm',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:[{...item,course_id:form.targetCourseId}]}),isCurrent:()=>report===selectedReport&&work===selectedWork,changed:()=>{if(!check.checked)input.value=suggestedValue(field,report,fieldRules)}});
     $('fields').append(card)
   }
   show('field-review'); stage('prefill', 'prefill'); notice('請逐欄核對，未勾選的欄位會保留原站內容。')

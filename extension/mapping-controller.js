@@ -1,6 +1,7 @@
 import { createMappingView, evidenceDetails } from './mapping-view.js'
 import { enrollmentLabel, enrollmentStatuses, mergeEvidence, sourceUrl, frontendUrl, scheduleLabel, sessionLabel, enrollmentDifferences, legacyCourse, reportMatchesReconciliation } from './mapping-presentation.js'
 import { courseIdentity, admissionIdentity, groupCourses, rankCandidates } from './mapping-core.js'
+import { attachImportFields } from './import-field-mappings.js'
 const $ = id => document.getElementById(id)
 const el = (tag,text,cls) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls; return n }
 const kinds={student:'students',course:'courses',classroom:'classrooms',class_session:'class_sessions',enrollment:'enrollments',occurrence:'occurrences',report:'report_targets'}
@@ -271,7 +272,7 @@ export function createMappingController(hooks) {
       else if(error?.dataset.reconciliation){error.textContent='';delete error.dataset.reconciliation}
       renderEnrollmentCandidates(r)
     }
-    for(const r of work().snapshot.records.filter(r=>r.kind==='report'&&r.date&&r.data.content)) {
+    for(const r of work().snapshot.records.filter(r=>r.kind==='report'&&r.source_id&&r.date&&!r.identityUnverified&&r.sourceReadStatus!=='failed')) {
       const occurrence=$(`occurrence-${r.date}`),report=$(`report-${r.source_id}`)
       if(occurrence){fill(occurrence,ctx().occurrences.filter(o=>o.class_session_id===$('class-session').value&&o.occurrence_date===r.date),o=>`${o.occurrence_date} · ${o.id.slice(0,8)}`,'略過此課次',createAllowed('occurrence')?'建立新課次':null);if(!occurrence.value)occurrence.value=link('occurrence',`${work().snapshot.classId}:${r.date}`)?.target_id||''}
       const e=$(`enrollment-${r.enrollment_source_id}`)?.value,o=occurrence?.value
@@ -344,14 +345,7 @@ export function createMappingController(hooks) {
       button(right,'查詢學生候選',()=>studentPage(r,true)).dataset.queryStudent=''
       if(!r.student_source_id)left.append(el('p','可以選擇既有學生；不能僅依姓名建立或合併學生。','hint'))
     }
-    const dates=new Set()
-    for(const r of work().snapshot.records.filter(r=>r.kind==='report'&&r.date&&r.data.content&&r.date>=work().dateFrom&&r.date<=work().dateTo)) {
-      if(!dates.has(r.date)){dates.add(r.date);const occurrence=select($('report-mappings'),`${r.date} 課次`,`occurrence-${r.date}`);occurrence.addEventListener('change',()=>{update();dirty()});button($('report-mappings'),`查詢 ${r.date} 的既有課次`,async()=>{const s=$('class-session').value;if(!s||s==='new')throw new Error('請先選擇既有班級。');const p=await catalog('occurrences',{class_session_id:s,date_from:r.date,date_to:r.date});ctx().occurrences=[...new Map([...ctx().occurrences,...p.items||[]].map(o=>[o.id,o])).values()];update();notice(`已查詢 ${r.date} 的既有課次。`)})}
-      $('report-mappings').append(evidenceDetails([r]))
-      const sourceReport=sourceUrl(work().snapshot.sourceOrigin,r.data.external_link);if(sourceReport){const a=el('a',`查看原站報告 #${r.source_id} ↗`,'mapping-link');a.href=sourceReport;a.target='_blank';a.rel='noopener noreferrer';$('report-mappings').append(a)}
-      select($('report-mappings'),`報告 ${r.source_id}`,`report-${r.source_id}`)
-      button($('report-mappings'),`查詢報告 ${r.source_id} 的既有對應／載入更多`,async()=>{const e=$(`enrollment-${r.enrollment_source_id}`)?.value,s=$('class-session').value,o=$(`occurrence-${r.date}`)?.value;if(!e||e==='new'||!s||s==='new'||!o||o==='new')throw new Error('請先確認既有報名與課次。');const key=`${e}:${o}`,p=await catalog('report_targets',{class_session_id:s,enrollment_id:e,class_occurrence_id:o,cursor:reportCursors.get(key)||undefined});reportCursors.set(key,p.next_cursor||'');ctx().report_targets=[...new Map([...ctx().report_targets,...p.items||[]].map(t=>[t.id,t])).values()];update();notice(p.next_cursor?'已載入報告候選，可繼續載入。':'已到報告候選清單結尾。')}).id=`more-reports-${r.source_id}`
-    }
+    appendReports()
     update()
     for(const saved of work().uiState||[]){const n=$(saved.id);if(n?.closest('#mapping')){n.value=saved.value;if(n.type==='checkbox')n.checked=saved.checked}}
     for(const [i]of groups.entries())$(`new-course-fields-${i}`).hidden=$(`source-course-${i}`).value!=='new'
@@ -362,6 +356,39 @@ export function createMappingController(hooks) {
       if(memo?.valid&&!r.sourceIdentityChanged&&!legacyCourse(r,work().snapshot)&&memo.student_id===studentSelect(r).value&&memo.course_id===$(`enrollment-course-${r.source_id}`).value&&memo.class_session_id===$('class-session').value&&(memo.target_id?memo.target_id===selected:selected==='new'))confirmed.set(r.source_id,signature(r))
     }
     update();summary();$('mapping-filter').value=work().uiState?.find(s=>s.id==='mapping-filter')?.value||'pending';mounting=false;view.mount(groups,cards);applyFilter()
+  }
+  function appendReports(){
+    const dates=new Set([...document.querySelectorAll('[id^=occurrence-]')].map(n=>n.id.slice('occurrence-'.length)))
+    for(const r of work().snapshot.records.filter(r=>r.kind==='report'&&r.source_id&&r.date&&!r.identityUnverified&&r.sourceReadStatus!=='failed'&&r.date>=work().dateFrom&&r.date<=work().dateTo)) {
+      if($(`report-${r.source_id}`))continue
+      if(!dates.has(r.date)){dates.add(r.date);const occurrence=select($('report-mappings'),`${r.date} 課次`,`occurrence-${r.date}`);occurrence.addEventListener('change',()=>{update();dirty()});button($('report-mappings'),`查詢 ${r.date} 的既有課次`,async()=>{const s=$('class-session').value;if(!s||s==='new')throw new Error('請先選擇既有班級。');const p=await catalog('occurrences',{class_session_id:s,date_from:r.date,date_to:r.date});ctx().occurrences=[...new Map([...ctx().occurrences,...p.items||[]].map(o=>[o.id,o])).values()];update();notice(`已查詢 ${r.date} 的既有課次。`)})}
+      $('report-mappings').append(evidenceDetails([r]))
+      const sourceReport=sourceUrl(work().snapshot.sourceOrigin,r.data.external_link);if(sourceReport){const a=el('a',`查看原站報告 #${r.source_id} ↗`,'mapping-link');a.href=sourceReport;a.target='_blank';a.rel='noopener noreferrer';$('report-mappings').append(a)}
+      select($('report-mappings'),`報告 ${r.source_id}`,`report-${r.source_id}`)
+      attachImportFields($('report-mappings'),r,{work,courseId:()=>$(`enrollment-course-${r.enrollment_source_id}`)?.value,resolve:resolveReportFields,api,catalog,capable:()=>hooks.capabilities?.()?.field_mapping_memory===true,lessons:()=>ctx().lessons,ingestLessons:rows=>{ctx().lessons=[...new Map([...ctx().lessons,...rows].map(l=>[l.id,l])).values()]},changed:dirty})
+      button($('report-mappings'),`查詢報告 ${r.source_id} 的既有對應／載入更多`,async()=>{const e=$(`enrollment-${r.enrollment_source_id}`)?.value,s=$('class-session').value,o=$(`occurrence-${r.date}`)?.value;if(!e||e==='new'||!s||s==='new'||!o||o==='new')throw new Error('請先確認既有報名與課次。');const key=`${e}:${o}`,p=await catalog('report_targets',{class_session_id:s,enrollment_id:e,class_occurrence_id:o,cursor:reportCursors.get(key)||undefined});reportCursors.set(key,p.next_cursor||'');ctx().report_targets=[...new Map([...ctx().report_targets,...p.items||[]].map(t=>[t.id,t])).values()];update();notice(p.next_cursor?'已載入報告候選，可繼續載入。':'已到報告候選清單結尾。')}).id=`more-reports-${r.source_id}`
+    }
+    update()
+  }
+  async function resolveReportFields(record,courseId){
+    record.fieldRules=[];record.fieldRuleScope=courseId
+    if(!hooks.capabilities?.()?.field_mapping_memory)return
+    const fields=(record.sourceFields||[]).filter(f=>f.type!=='text'&&!f.internal)
+    if(!fields.length)return
+    const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:fields.map(f=>({field_key:f.key,course_id:courseId,options_signature:globalThis.edulogFieldMappings.signature(f)}))})
+    record.fieldRules=response.items||[]
+    // Resolve only the remembered or chosen lesson IDs, never the full directory.
+    const ids=[...new Set([...record.fieldRules.filter(r=>r.field_key==='lesson_id'&&r.valid!==false).map(r=>r.canonical_value),...Object.entries(record.fieldChoices?.fields||{}).filter(([key])=>key==='lesson_id').map(([,v])=>v.value)])]
+    if(ids.length){const resolved=await api('resolve',{source_refs:[],target_refs:ids.map(id=>({kind:'lessons',id}))});ingest(resolved)}
+  }
+  async function resolveFieldRules(){
+    const records=work().snapshot.records.filter(r=>r.kind==='report'&&!r.sourceSkipped&&r.source_id&&r.date&&r.date>=work().dateFrom&&r.date<=work().dateTo),references=new Map(),key=(f,course)=>`${course}:${f.key}:${globalThis.edulogFieldMappings.signature(f)}`
+    for(const record of records){const course=$(`enrollment-course-${record.enrollment_source_id}`)?.value;record.fieldRuleScope=course;record.fieldRules=[];if(!course||course==='new')continue;for(const field of record.sourceFields||[])if(field.type!=='text'&&!field.internal)references.set(key(field,course),{field_key:field.key,course_id:course,options_signature:globalThis.edulogFieldMappings.signature(field)})}
+    const items=[...references.values()],rules=[]
+    if(hooks.capabilities?.()?.field_mapping_memory)for(let i=0;i<items.length;i+=50){const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:items.slice(i,i+50)});rules.push(...response.items||[])}
+    const lessonIds=new Set()
+    for(const record of records){record.fieldRules=rules.filter(rule=>rule.course_id===record.fieldRuleScope);for(const rule of record.fieldRules)if(rule.field_key==='lesson_id'&&rule.valid!==false)lessonIds.add(rule.canonical_value);if(record.fieldChoices?.courseId===record.fieldRuleScope&&record.fieldChoices.fields?.lesson_id)lessonIds.add(record.fieldChoices.fields.lesson_id.value)}
+    const ids=[...lessonIds];for(let i=0;i<ids.length;i+=50)ingest(await api('resolve',{source_refs:[],target_refs:ids.slice(i,i+50).map(id=>({kind:'lessons',id}))}))
   }
   async function confirmDestination() {
     const room=$('classroom').value,session=$('class-session').value
@@ -381,7 +408,7 @@ export function createMappingController(hooks) {
   async function verifyReportRelationships() {
     if(!hooks.capabilities?.()?.enrollment_reconciliation)return
     const loaded=new Map()
-    for(const report of work().snapshot.records.filter(r=>r.kind==='report'&&r.date&&r.data.content&&r.date>=work().dateFrom&&r.date<=work().dateTo)) {
+    for(const report of work().snapshot.records.filter(r=>r.kind==='report'&&r.source_id&&r.date&&!r.identityUnverified&&r.sourceReadStatus!=='failed'&&r.date>=work().dateFrom&&r.date<=work().dateTo)) {
       const row=work().snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===report.enrollment_source_id),id=$(`enrollment-${report.enrollment_source_id}`)?.value
       if(!row||skipped(row)||!id||id==='new'||!$(`report-${report.source_id}`)?.value||!$(`occurrence-${report.date}`)?.value)continue
       if(!loaded.has(id)) {
@@ -438,5 +465,5 @@ export function createMappingController(hooks) {
   for(const [id,kind]of[['forget-session','class_session'],['forget-classroom','classroom']])$(id).addEventListener('click',()=>void run(async()=>{if(!await forget([{kind,key:work().snapshot.classId,expected_revision:revision(kind,work().snapshot.classId)}]))return;dirty()},{label:'正在清除對應記憶'}))
   $('remember-destination').addEventListener('click',()=>void run(confirmDestination,{label:'正在保存教室與班級對應'}))
   $('more-sessions').addEventListener('click',()=>void run(async()=>{const old=$('class-session').value,p=await catalog('class_sessions',{classroom_id:$('classroom').value,cursor:$('more-sessions').dataset.cursor});ctx().class_sessions.push(...p.items||[]);fill($('class-session'),ctx().class_sessions,sessionLabel,'選擇目標班級',ctx().permissions.classroom?.class_create?'建立新班級…':null);$('class-session').value=old;$('more-sessions').hidden=!p.next_cursor;$('more-sessions').dataset.cursor=p.next_cursor||''},{readOnly:true,label:'正在載入更多班級'}))
-  return {mount,resolve,destination,scoped,update,refreshCourses,courseRows,studentSelect,validateRow,validateReport,verifyReportRelationships,selectedCourseIds:()=>[...new Set(work().snapshot.records.filter(r=>r.kind==='enrollment'&&!skipped(r)&&studentSelect(r)?.value).map(r=>$(`enrollment-course-${r.source_id}`)?.value).filter(Boolean))]}
+  return {resolveFieldRules,appendReports,mount,resolve,destination,scoped,update,refreshCourses,courseRows,studentSelect,validateRow,validateReport,verifyReportRelationships,selectedCourseIds:()=>[...new Set(work().snapshot.records.filter(r=>r.kind==='enrollment'&&!skipped(r)&&studentSelect(r)?.value).map(r=>$(`enrollment-course-${r.source_id}`)?.value).filter(Boolean))]}
 }
