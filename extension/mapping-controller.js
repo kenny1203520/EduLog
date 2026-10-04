@@ -169,7 +169,7 @@ export function createMappingController(hooks) {
     const p=await catalog('permissions',{class_session_id:session});ctx().permissions.session=p.session
     // Related choices are scoped to a single selected class and paginated by row.
     const [enrollments,occurrences]=await Promise.all([catalog('enrollments',{class_session_id:session}),catalog('occurrences',{class_session_id:session,date_from:work().dateFrom,date_to:work().dateTo})])
-    ctx().enrollments=[...new Map([...ctx().enrollments.filter(e=>e.class_session_id===session),...enrollments.items||[]].map(e=>[e.id,e])).values()];ctx().occurrences=occurrences.items||[]
+    ctx().enrollments=[...new Map([...ctx().enrollments,...enrollments.items||[]].map(e=>[e.id,e])).values()];ctx().occurrences=occurrences.items||[]
     const courses=ctx().class_sessions.find(s=>s.id===session)?.course_ids||[]
     if(courses.length)ingest(await api('resolve',{source_refs:[],target_refs:courses.map(id=>({kind:'courses',id}))}))
     update()
@@ -214,12 +214,13 @@ export function createMappingController(hooks) {
     box.dataset.signature=key;box.replaceChildren()
     for(const e of rows) {
       const differences=enrollmentDifferences(e,{student,course,session}),card=el('section',undefined,'enrollment-candidate')
-      card.append(el('strong',`${e.course_name||ctx().courses.find(c=>c.id===e.course_id)?.display_name||'課程資料未提供'} · ${enrollmentLabel(e)}`),el('p',e.class_session?sessionLabel(e.class_session):`班級 #${e.class_session_id.slice(0,8)} · 時段待核對`,'hint'),el('p',differences.length?`${differences.join('、')}；尚無法確認原因，請核對轉班、單次調課或登記差異。`:'符合目前學生、班級與課程。',differences.length?'mapping-warning':'hint'))
+      const compatible=canMapEnrollmentAcrossSession(e,{student,course})
+      card.append(el('strong',`${e.course_name||ctx().courses.find(c=>c.id===e.course_id)?.display_name||'課程資料未提供'} · ${enrollmentLabel(e)}`),el('p',e.class_session?sessionLabel(e.class_session):`班級 #${e.class_session_id.slice(0,8)} · 時段待核對`,'hint'),el('p',differences.length?compatible?'報名所屬班次不同；報名關係不變，依各堂日期核對。':`${differences.join('、')}；請核對或選擇其他報名。`:'符合目前學生、班級與課程。',differences.length?'mapping-warning':'hint'))
       enrollmentLink(card,'前往 EduLog 核對／處理異動',e.id)
       const details=work().reconciliation?.[row.source_id]?.[e.id]
       if(details) {
         card.append(el('p',details.note||'以下為可讀取的單次調課紀錄。','hint'))
-        for(const t of details.transfers||[])card.append(el('p',`${t.cancelled_at?'已取消':t.is_effective_target?'目前有效的單次調課':'後續已有調課'}：${t.source_class_session?.name||'來源班級'} ${t.source_date} → ${t.target_class_session?.name||'目標班級'} ${t.target_date}`,'hint'))
+        for(const t of details.transfers||[])card.append(el('p',`${t.cancelled_at?'已取消':t.is_effective_target?'目前有效的單次調課':'後續已有調課'}：${t.source_class_session?.name||'來源班級'} ${t.source_date} → ${t.target_class_session?.name||'目標班級'} ${t.target_date}${!t.cancelled_at&&t.is_effective_target&&t.target_class_session_id===session?' · 此日期適用目前班次':''}`,'hint'))
         if(!(details.transfers||[]).length)card.append(el('p','沒有可讀取的單次調課紀錄；不能據此判定未曾轉班。','hint'))
       }
       if(canMapEnrollmentAcrossSession(e,{student,course})){const use=button(card,differences.includes('班級不一致')?'使用此報名（逐堂核對）':'使用符合的既有報名',()=>{const choice=$(`enrollment-${row.source_id}`);choice.value=e.id;choice.dispatchEvent(new Event('change',{bubbles:true}));notice(differences.includes('班級不一致')?'已選擇原班次報名；報名關係不變，後續逐堂核對調課。':'已選擇既有報名；請核對並記住對應。')});use.dataset.enrollmentAction='true';use.id=`use-${row.source_id}-${e.id}`}
@@ -233,9 +234,11 @@ export function createMappingController(hooks) {
     const previous=work().reconciliation?.[row.source_id]?.[enrollmentId]
     const p=await api('reconcile',undefined,{enrollmentId,query:{limit:50,...(more&&previous?.next_cursor?{cursor:previous.next_cursor}:{})}})
     if(key!==rowKey(row)||sequence!==querySequences.get(row.source_id))return
+    const before=ctx().enrollments.find(e=>e.id===enrollmentId)
+    const relationshipChanged=before&&['student_id','course_id','class_session_id','target_version','version'].some(k=>before[k]!==p.enrollment[k])
     ctx().enrollments=[...ctx().enrollments.filter(e=>e.id!==enrollmentId),p.enrollment]
     work().reconciliation||={};work().reconciliation[row.source_id]||={};work().reconciliation[row.source_id][enrollmentId]={...p,transfers:more?[...previous.transfers,...p.transfers]:p.transfers}
-    confirmed.delete(row.source_id);update();summary();dirty();const n=$(`enrollment-status-${row.source_id}`);n.textContent='已重新讀取目前報名與可讀取的調課紀錄，請核對差異。';n.dataset.state='complete'
+    if(relationshipChanged)confirmed.delete(row.source_id);update();summary();dirty();const n=$(`enrollment-status-${row.source_id}`);n.textContent=relationshipChanged?'目標關係已改變，請重新確認。':'已重新核對報名與調課；有效的確認保留。';n.dataset.state='complete'
   }
   async function enrollmentPage(row,reset=false) {
     const student=studentSelect(row)?.value,course=$(`enrollment-course-${row.source_id}`)?.value,session=$('class-session').value
@@ -276,7 +279,8 @@ export function createMappingController(hooks) {
         if(saved.target_id)enrollment.value=saved.target_id
       }
       const error=$(`mapping-error-${r.source_id}`),differences=existing?enrollmentDifferences(existing,{student:student.value,course:course.value,session:$('class-session').value}):[]
-      if(differences.length||legacyCourse(r,work().snapshot)||r.sourceIdentityChanged){confirmed.delete(r.source_id);if(error){error.dataset.reconciliation='true';error.textContent=legacyCourse(r,work().snapshot)?'舊工作可能把年級當成課程，請補讀來源資料。':differences.length?`${differences.join('、')}；請核對或略過，不會自動轉班或改寫課程。`:'來源身份已改變，請重新確認。'}}
+      const incompatible=existing&&!canMapEnrollmentAcrossSession(existing,{student:student.value,course:course.value})
+      if(incompatible||legacyCourse(r,work().snapshot)||r.sourceIdentityChanged){confirmed.delete(r.source_id);if(error){error.dataset.reconciliation='true';error.textContent=legacyCourse(r,work().snapshot)?'舊工作可能把年級當成課程，請補讀來源資料。':incompatible?`${differences.join('、')}；請核對或略過，不會自動轉班或改寫課程。`:'來源身份已改變，請重新確認。'}}
       else if(error?.dataset.reconciliation){error.textContent='';delete error.dataset.reconciliation}
       renderEnrollmentCandidates(r)
     }
