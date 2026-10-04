@@ -28,7 +28,8 @@
     ['progress_start', '章節起點', '#dt_admission_lesson_report_start_from'],
     ['progress_end', '章節終點', '#dt_admission_lesson_report_end_to'],
     ['class_participation', '課程參與', 'input[type="radio"][name="admission_lesson_report[participation_rating]"]'],
-    ['classroom_behavior', '課堂表現', 'input[type="radio"][name="admission_lesson_report[behavior_rating]"]'],
+    ['classroom_behavior', '課堂秩序', 'input[type="radio"][name="admission_lesson_report[order_rating]"], input[type="radio"][name="admission_lesson_report[behavior_rating]"]'],
+    ['learning_status', '學習狀態', '#admission_lesson_report_learning_status'],
     ['content', '學習表現', '#lesson_report_feedback'],
     ['contact_notes', '聯絡欄', '#dt_admission_lesson_report_contact'],
     ['class_notes', '內部紀錄', '#lesson_report_comment'],
@@ -150,9 +151,48 @@
     const index = headers.findIndex(c => labels.includes(cellText(c)))
     return index >= 0 ? row.cells[index] : null
   }
+  function reportText(node) {
+    if (!node) return ''
+    const copy=node.cloneNode(true)
+    copy.querySelectorAll('script,style,svg,button,input,select,textarea,.dropdown,.badge,.admission-comment-box,.tooltip,.popover,.status,[role="tooltip"],[data-edulog-owned]').forEach(n=>n.remove())
+    return [...copy.querySelectorAll(':scope > p')].map(p=>p.textContent.trim()).filter(Boolean).join('\n') || copy.textContent.replace(/\u00a0/g,' ').replace(/[\t ]+/g,' ').trim()
+  }
+  function labeledValue(container, labelText) {
+    for (const label of container?.querySelectorAll('label,strong,b,dt')||[]) {
+      if (text(label).replace(/[：:]$/,'').trim()!==labelText) continue
+      const parent=label.parentElement
+      let value='',found=false
+      for (const child of parent.childNodes) {
+        if (child===label) { found=true; continue }
+        if (!found) continue
+        if (child.nodeType===1 && child.matches('label,strong,b,dt')) break
+        if (child.nodeType===1 && child.matches('p,span,dd')) value += `${value?'\n':''}${child.textContent.trim()}`
+        else if (child.nodeType===3) value+=child.textContent
+        else if (child.nodeType===1 && !child.matches('button,input,select,textarea,.dropdown,.badge,.admission-comment-box,.tooltip,.popover,.status,[role="tooltip"],[data-edulog-owned]')) value+=child.textContent
+      }
+      value=value.replace(/\u00a0/g,' ').replace(/^[\s：:]+|[\s]+$/g,'').trim()
+      if (value || found) return value.slice(0,10000)
+      const next=label.nextElementSibling
+      if(next&&['P','DD','SPAN'].includes(next.tagName))return next.textContent.trim().slice(0,10000)
+    }
+    const inline=[...(container?.querySelectorAll('p')||[])].find(node=>new RegExp(`^${labelText.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\$&')}[：:]`).test(node.textContent.trim()))
+    if(inline)return inline.textContent.trim().replace(/^[^：:]+[：:]\s*/,'').slice(0,10000)
+    return undefined
+  }
+  const completionValue=value=>/^(?:完整完成|已完成|完成|all_done|complete|completed)$/i.test(value.trim())?true:/^(?:尚未完成|未完成|not_all_done|incomplete)$/i.test(value.trim())?false:undefined
+  const lessonStage=value=>{const m=value.match(/(?:Lesson|L)\s*(\d+)/i);return m?Number(m[1]):undefined}
+  const learningStatusLabels={on_track:'能跟上進度',hard_to_follow:'跟不上進度 (太難)',distracted:'跟不上進度 (分心)'}
+  const markedLearningStatus=(status,notes='')=>{const label=learningStatusLabels[status];return label?`[corp.learning_status:${status}]\n${label}\n[/corp.learning_status]${notes?`\n\n${notes}`:''}`:notes}
+  function admissionCourse(doc) {
+    const item=[...doc.querySelectorAll('#admission-data li')].find(li=>/^課程名稱[：:]/.test(text(li)))
+    const raw=item?.textContent.replace(/^\s*課程名稱[：:]\s*/,'').trim()||''
+    const match=raw.match(/^(.*?)\s*\(([a-z][a-z0-9-]{1,63})\)\s*$/i)
+    return {sourceCourseName:(match?.[1]||raw).trim(),sourceCourseCode:match?.[2]?.toLowerCase()||null,sourceCourseLabel:raw||null}
+  }
+  function sourceCourseCode(label) { return label?.match(/\(([a-z][a-z0-9-]{1,63})\)\s*$/i)?.[1]?.toLowerCase()||null }
   function mergeEvidence(...arrays) {
     const map = new Map()
-    for (const e of arrays.flat().filter(Boolean)) { const key = `${e.sourcePath}:${e.table}:${e.row}`, old = map.get(key); map.set(key, { ...old, ...e, fields: [...new Map([...(old?.fields || []), ...e.fields].map(f => [f.key,f])).values()] }) }
+    for (const e of arrays.flat().filter(Boolean)) { const key = `${e.sourcePath}:${e.table}:${e.row}`, old = map.get(key); map.set(key, { ...old, ...e, fields: [...new Map([...(old?.fields || []), ...e.fields].map(f => [`${f.key}:${f.label}`,f])).values()] }) }
     return [...map.values()]
   }
   function extractClass(doc, sourcePath) {
@@ -174,9 +214,10 @@
       const gradeCell = teachingCell(row, ['年級']), dateCell = teachingCell(row, ['報名時間', '報名日期'])
       const courseLink = links(courseCell || row).find(a => /^\/courses\/(?!dt\/)\d+$/.test(a.path))
       const courseLabel = cellText(courseCell?.querySelector(':scope > span:not(.badge), .course-name')) || cellText(courseLink?.node) || cellText(courseCell)
+      const courseCode=sourceCourseCode(courseLabel)
       const sourceEvidence = [evidence(row, sourcePath, [['student_name',fieldLabel(nameCell,'姓名原文'),name],['course_name',fieldLabel(courseCell,'課程原文'),courseLabel],['grade','年級',cellText(gradeCell)],['admission_date','報名日期原文',cellText(dateCell)],['student_id','來源學生 ID',student],['admission_id','來源報名 ID',admission]])]
       let enrollment = admissions.get(admission)
-      if (!enrollment) { enrollment = { kind: 'enrollment', source_id: admission, student_source_id: null, sourceStudentName: '', sourceCourseLabel: '', source_course_id: null, sourceCourseConflict: false, data: { external_link: `${ORIGIN}/dt_admissions/${admission}` }, needs: ['報名日期', '報名狀態'] }; admissions.set(admission, enrollment); records.push(enrollment) }
+      if (!enrollment) { enrollment = { kind: 'enrollment', source_id: admission, student_source_id: null, sourceStudentName: '', sourceCourseLabel: '', source_course_id: null, sourceCourseCode:null, sourceCourseConflict: false, data: { external_link: `${ORIGIN}/dt_admissions/${admission}` }, needs: ['報名日期', '報名狀態'] }; admissions.set(admission, enrollment); records.push(enrollment) }
       enrollment.sourceEvidence = mergeEvidence(enrollment.sourceEvidence || [], sourceEvidence)
       if (student) enrollment.student_source_id = student
       if (name) enrollment.sourceStudentName = name
@@ -185,7 +226,9 @@
       if (admissionDate) { enrollment.data.start_date = admissionDate; enrollment.needs = enrollment.needs.filter(n => n !== '報名日期') }
       if (enrollment.sourceCourseLabel && courseLabel && enrollment.sourceCourseLabel !== courseLabel) enrollment.sourceCourseConflict = true
       if (courseLabel) enrollment.sourceCourseLabel = courseLabel
-      if (courseLink) enrollment.source_course_id = courseLink.path.split('/').pop()
+      if(courseCode&&enrollment.sourceCourseCode&&enrollment.sourceCourseCode!==courseCode)enrollment.sourceCourseConflict=true
+      if(courseCode){enrollment.sourceCourseCode=courseCode;enrollment.source_course_id=`code:${courseCode}`}
+      else if (courseLink&&!enrollment.sourceCourseCode) enrollment.source_course_id = courseLink.path.split('/').pop()
       if (enrollment.student_source_id && enrollment.sourceStudentName) {
         const id = enrollment.student_source_id
         if (!students.has(id)) { const record = { kind: 'student', source_id: id, data: { name: enrollment.sourceStudentName, external_link: `${ORIGIN}/students/${id}` }, sourceEvidence }; students.set(id, record); records.push(record) }
@@ -205,10 +248,11 @@
   }
   function extractHistory(doc, admissionId) {
     const results=[]
+    const course=admissionCourse(doc)
     for(const row of doc.querySelectorAll('#page-body > .content table tbody tr')){
       if(!row.querySelector('td'))continue
       const cells=[...row.cells],dateCell=teachingCell(row,['日期','上課日期','課次日期'])||(!headerCells(row.closest('table')).length?cells[1]:null)
-      const dateRaw=cellText(dateCell),date=fullDate(dateRaw)
+      const dateRaw=reportText(dateCell),date=fullDate(dateRaw)
       const ref=links(row).find(a=>new RegExp(`^/dt_admissions/${admissionId}/reports/\\d+(?:/edit)?$`).test(a.path))
       if(!ref&&links(row).some(a=>/^\/dt_admissions\/\d+\/reports\//.test(a.path)))continue
       // A single published report ID can be verified against its actual editor;
@@ -217,33 +261,29 @@
       const reportId=ref?.path.match(/reports\/(\d+)/)?.[1]||([...new Set(queryIds)].length===1?queryIds[0]:null)
       // The history page uses label + sibling paragraphs as well as table columns.
       // Never capture administrative cells or the whole evaluation container.
-      const labeled=(labels)=>{
-        for(const label of row.querySelectorAll('label,strong,b,dt')){
-          if(!labels.includes(text(label).replace(/[：:]$/,'')))continue
-          const next=label.nextElementSibling
-          if(next&&['P','DD','SPAN'].includes(next.tagName))return next.textContent.trim().slice(0,10000)
-        }
-        const p=[...row.querySelectorAll('p')].find(n=>labels.some(l=>n.textContent.trim().startsWith(l+'：')||n.textContent.trim().startsWith(l+':')))
-        return p?.textContent.trim().replace(/^[^：:]+[：:]\s*/,'').slice(0,10000)
-      }
+      const assessment=teachingCell(row,['學習評估'])||cells.find(c=>c.querySelector('label,strong,b')||/評語[：:]|學習表現[：:]|聯絡欄[：:]|紀錄[：:]|內部紀錄[：:]/.test(reportText(c)))
       const sourceFields=[],data={}
-      const descriptors=[['attendance_status',['出席狀況','出席狀態']],['is_completed',['課程進度','完成狀況']],['sourceLessonLabel',['最新課程階段','學習課程','教材']],['progress_letter',['進度細項','章節進度']],['class_participation',['課程參與','課程參與評分']],['classroom_behavior',['課堂秩序','課堂表現']],['content',['評語','學習表現']],['contact_notes',['聯絡欄']],['class_notes',['紀錄','內部紀錄']]]
-      for(const [key,labels] of descriptors){
-        const cell=teachingCell(row,labels),value=labeled(labels)??(cell?cellText(cell):undefined)
-        if(value===undefined)continue
-        const field={key,label:labels[0],type:'text',value,options:[{value,label:value,disabled:false}],internal:key==='class_notes',disabled:false}
-        sourceFields.push(field)
-        if(['content','contact_notes'].includes(key))data[key]=value
-        else if(['class_participation','classroom_behavior'].includes(key)&&/^(?:[0-4](?:\.5)?|5)(?:\s*星)?$/.test(value))data[key]=Number(value.replace(/\s*星$/,''))
-        else {const canonical=globalThis.edulogFieldMappings.canonical(field);if(canonical!==undefined)data[key]=canonical}
-        if(key==='progress_letter'){const match=value.match(/^(?:Section\s*)?([A-Z])\s*(?:(?:到|至|–|-)\s*(?:Section\s*)?([A-Z]))?$/);if(match)data.progress_letter=match[2]?`${match[1]}-${match[2]}`:match[1]}
-      }
-      if(!reportId&&!sourceFields.some(f=>f.value!==''&&!f.internal))continue
+      const field=(key,label,value,{internal=false,type='text',options=[{value,label:value,disabled:false}]}={})=>{if(value===undefined)return;sourceFields.push({key,label,type,value,options,internal,disabled:false})}
+      const setValue=(key,label,value,canonical,config)=>{field(key,label,value,config);if(canonical!==undefined)data[key]=canonical}
+      const attendance=teachingCell(row,['出席狀況','出席狀態']);if(attendance){const raw=reportText(attendance).split('\n')[0],canonical=/不出席|未出席|缺席/.test(raw)?'absent':/出席/.test(raw)?'present':undefined;setValue('attendance_status','出席狀況',raw,canonical,{type:'select',options:[{value:raw,label:raw,disabled:false}]})}
+      const progressCell=teachingCell(row,['課程進度']);const stageRaw=progressCell?reportText(progressCell):''
+      const stageLabel=labeledValue(assessment,'最新課程階段')??labeledValue(assessment,'學習課程')??labeledValue(assessment,'教材')
+      const stageSource=stageLabel||stageRaw,stageNumber=lessonStage(stageSource||'')
+      if(stageSource&&stageNumber!==undefined){const value=`lesson:${stageNumber}`;field('lesson_id','最新課程階段',value,{type:'stage',options:[{value,label:`Lesson ${stageNumber}`,disabled:false}]})}
+      const completionRaw=labeledValue(assessment,'課程進度')??labeledValue(assessment,'完成狀況');if(completionRaw!==undefined){const options=[{value:completionRaw,label:completionRaw,disabled:false}];field('is_completed','完成狀況',completionRaw,{type:'select',options});const complete=completionValue(completionRaw);if(complete!==undefined)data.is_completed=complete}
+      const rows=[...(assessment?.querySelectorAll(':scope > .row')||[])],scoreNodes=[...(rows[0]?.querySelectorAll(':scope > [class*="col-"] span')||[])],scores=scoreNodes.map(n=>n.textContent.trim());
+      for(const [i,key] of ['class_participation','classroom_behavior'].entries()){const label=i?'課堂秩序':'課程參與',raw=labeledValue(assessment,i?'課堂秩序':'課程參與評分')??(i?labeledValue(assessment,'課堂表現'):labeledValue(assessment,'課程參與'))??scores[i];if(i<2&&/^(?:[0-5](?:\.5)?)$/.test(raw||'')){const value=Number(raw);field(key,label,raw,{type:'score'});data[key]=value}}
+      const details=[['content','評語'],['contact_notes','聯絡欄']];for(const [key,label]of details){const value=labeledValue(assessment,label);if(value!==undefined){field(key,label,value);data[key]=value}}
+      const recordLabel=labeledValue(assessment,'紀錄')??labeledValue(assessment,'內部紀錄');
+      if(recordLabel!==undefined){const labelNode=[...(assessment?.querySelectorAll('label,strong,b,dt')||[])].find(n=>['紀錄','內部紀錄'].includes(text(n).replace(/[：:]$/,'')));let paragraphs=[];if(labelNode){for(let n=labelNode.nextElementSibling;n&&n.tagName==='P';n=n.nextElementSibling)paragraphs.push(n.textContent.trim())}if(!paragraphs.length)paragraphs=recordLabel.split('\n');const statusText=paragraphs[0]||'',statusEntry=Object.entries(learningStatusLabels).find(([,label])=>label===statusText),internalNotes=paragraphs.slice(1).join('\n');if(statusText){const known=statusEntry?.[0];field('class_notes','學習狀態原文',statusText,{internal:true});if(known)sourceFields.at(-1).learningStatus=known;else sourceFields.at(-1).unknownLearningStatus=true}if(internalNotes)field('class_notes','內部紀錄',internalNotes,{internal:true})}
+      const detailProgress=labeledValue(assessment,'進度細項')??labeledValue(assessment,'章節進度');if(detailProgress){field('progress_letter','進度細項',detailProgress);const m=detailProgress.match(/^(?:Section\s*)?([A-Z])\s*(?:(?:到|至|–|-)\s*(?:Section\s*)?([A-Z]))?$/);if(m)data.progress_letter=m[2]?`${m[1]}-${m[2]}`:m[1]}
+      if(!reportId&&!date&&!sourceFields.some(f=>f.value!==''))continue
       const editPath=reportId?`/dt_admissions/${admissionId}/reports/${reportId}/edit`:null
-      results.push({kind:'report',source_id:reportId,enrollment_source_id:admissionId,date,dateRaw,
+      const sessionCell=teachingCell(row,['堂次']);const sessionOrdinal=sessionCell?reportText(sessionCell).match(/\d+/)?.[0]||null:null
+      results.push({kind:'report',source_id:reportId,enrollment_source_id:admissionId,date,dateRaw,sourceSessionOrdinal:sessionOrdinal,sourceCourseName:course.sourceCourseName,sourceCourseCode:course.sourceCourseCode,sourceCourseLabel:course.sourceCourseLabel,sourceLessonSequence:stageNumber,
         evidenceKey:`${admissionId}:${row.rowIndex}`,identityUnverified:!ref,
-        sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','來源報名 ID',admissionId],['report_id','來源報告 ID',reportId],['date','課次日期原文',dateRaw],...sourceFields.map(f=>[f.key,f.label,f.value])])],
-        sourceFields,sourceLessonLabel:sourceFields.find(f=>f.key==='sourceLessonLabel')?.value,sourceInternalNotes:sourceFields.find(f=>f.internal)?.value||'',
+        sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','來源報名 ID',admissionId],['report_id','來源報告 ID',reportId],['course_name','來源課程名稱',course.sourceCourseName],['course_code','來源課程代碼',course.sourceCourseCode],['date','課次日期原文',dateRaw],...sourceFields.map(f=>[f.key,f.label,f.value])])],
+        sourceFields,sourceLessonLabel:stageLabel||stageRaw||undefined,sourceLessonSequence:lessonStage(stageLabel||stageRaw||''),sourceLearningStatus:sourceFields.find(f=>f.learningStatus)?.learningStatus||null,sourceLearningStatusRaw:sourceFields.find(f=>f.label==='學習狀態原文')?.value||'',sourceInternalNotes:sourceFields.filter(f=>f.internal&&!f.learningStatus).map(f=>f.value).join('\n'),
         data:{...data,...(editPath?{external_link:ORIGIN+editPath}:{})},sourceReadStatus:'list',
         needs:[...(!date?['完整上課日期待確認']:[]),...(reportId?['待讀取已儲存報告欄位']:[])]})
     }
@@ -266,9 +306,19 @@
     if(confirmedDate&&dateInfo.date&&confirmedDate!==dateInfo.date)throw new Error('確認日期與可靠來源日期不同，請先核對原站。')
     if(confirmedDate&&record.dateRaw){const checked=dates.resolve([record.dateRaw,confirmedDate],[]);if(checked.conflict)throw new Error('確認日期與來源月日不同。')}
     const date=confirmedDate||dateInfo.date||record.date||null
-    const data={...record.data,external_link:ORIGIN+editPath},needs=[]
+    const data={...record.data,external_link:ORIGIN+editPath},needs=[],sourceFieldConflicts=[]
+    let sourceLearningStatus=record.sourceLearningStatus||null,sourceLearningStatusRaw=record.sourceLearningStatusRaw||''
     for(const field of saved.fields){
+      if(field.key==='learning_status') {const known=Object.hasOwn(learningStatusLabels,field.value)?field.value:null,raw=known?'':field.options.find(o=>o.value===field.value)?.label||field.value;if(record.sourceFields.some(f=>f.label==='學習狀態原文')&&(known!==record.sourceLearningStatus||raw!==record.sourceLearningStatusRaw)){sourceFieldConflicts.push({key:field.key,label:'學習狀態',listValue:record.sourceLearningStatusRaw||'空白',editValue:raw||'空白'});needs.push('列表與報告編輯頁的學習狀態不同，請核對原站。')}sourceLearningStatus=known;sourceLearningStatusRaw=raw;continue}
       if(field.internal)continue
+      const listField=record.sourceFields.find(f=>f.key===field.key&&!f.internal)
+      if(listField){
+        const sourceValue=globalThis.edulogFieldMappings.canonical(listField),editorValue=globalThis.edulogFieldMappings.canonical(field)
+        let same=sourceValue!==undefined&&editorValue!==undefined&&sourceValue===editorValue
+        if(field.key==='lesson_id'&&record.sourceLessonSequence){const editorLabel=field.options.find(o=>o.value===field.value)?.label||'';same=lessonStage(editorLabel)===record.sourceLessonSequence}
+        if(!same&&(sourceValue===undefined||editorValue===undefined))same=String(listField.value??'').trim().replace(/\s+/g,' ')==String(field.options.find(o=>o.value===field.value)?.label||field.value||'').trim().replace(/\s+/g,' ')
+        if(!same){const conflict={key:field.key,label:field.label,listValue:listField.options?.find(o=>o.value===listField.value)?.label||String(listField.value??'空白'),editValue:field.options.find(o=>o.value===field.value)?.label||String(field.value||'空白')};sourceFieldConflicts.push(conflict);needs.push(`列表與報告編輯頁的「${field.label}」不同，請核對原站。`)}
+      }
       if(field.type==='text'){if(field.key==='content'||field.key==='contact_notes')data[field.key]=field.value;continue}
       delete data[field.key]
       const value=globalThis.edulogFieldMappings.canonical(field)
@@ -277,8 +327,14 @@
     }
     const lesson=saved.fields.find(f=>f.key==='lesson_id'),sourceLessonLabel=lesson?.options.find(o=>o.value===lesson.value)?.label
     const raw=saved.fields.map(f=>({key:f.key,label:f.label,text:f.options.find(o=>o.value===f.value)?.label||f.value})).filter(f=>f.text!==''&&f.text!==undefined)
-    return {...record,source_id:match[2],date,dateInfo:{...dateInfo,basis:confirmedDate?'user_confirmed':dateInfo.basis},identityUnverified:false,sourceReadStatus:'complete',sourceFields:saved.fields,
-      sourceLessonLabel,sourceInternalNotes:saved.fields.find(f=>f.internal)?.value||'',data,needs:[...(!date?['完整上課日期待確認']:[]),...needs],
+    const internalField=saved.fields.find(f=>f.key==='class_notes'),internalNotes=internalField?.value??record.sourceInternalNotes??''
+    if(internalField&&record.sourceFields.some(f=>f.label==='內部紀錄')&&internalNotes!==record.sourceInternalNotes){sourceFieldConflicts.push({key:'class_notes',label:'內部紀錄',listValue:record.sourceInternalNotes||'空白',editValue:internalNotes||'空白'});needs.push('列表與報告編輯頁的「內部紀錄」不同，請核對原站。')}
+    const mergedFields=[...record.sourceFields||[]]
+    for(const f of saved.fields.filter(f=>f.key!=='class_notes')){const i=mergedFields.findIndex(old=>old.key===f.key);if(i<0)mergedFields.push(f);else mergedFields[i]={...mergedFields[i],...f}}
+    for(const f of saved.fields.filter(f=>f.key==='class_notes')){const i=mergedFields.findIndex(old=>old.key==='class_notes'&&old.label==='內部紀錄');if(i<0)mergedFields.push(f);else mergedFields[i]={...mergedFields[i],...f}}
+    if(sourceLearningStatusRaw&&!sourceLearningStatus)needs.push('原站學習狀態無法辨識，請選擇原站實際選項。')
+    return {...record,source_id:match[2],date,dateInfo:{...dateInfo,basis:confirmedDate?'user_confirmed':dateInfo.basis},identityUnverified:false,sourceReadStatus:'complete',sourceFields:mergedFields,sourceFieldConflicts,
+      sourceLessonLabel,sourceLearningStatus,sourceLearningStatusRaw,sourceInternalNotes:internalNotes,data,needs:[...(!date?['完整上課日期待確認']:[]),...needs],
       sourceEvidence:mergeEvidence(record.sourceEvidence||[],[{sourcePath:editPath,table:'已儲存報告欄位',row:1,capturedAt:new Date().toISOString(),fields:raw}])}
   }
   async function readHistory(sourcePath,input={}) {

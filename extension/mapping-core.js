@@ -1,6 +1,7 @@
 import { mergeEvidence } from './mapping-presentation.js'
 // Source labels are rules, never source IDs. Unknown labels remain admission-specific.
 export function courseIdentity(row) {
+  if (row.sourceCourseCode) return `code:${row.sourceCourseCode}`
   if (row.source_course_id) return `id:${row.source_course_id}`
   const label = (row.sourceCourseLabel || '').trim().replace(/\s+/g, ' ')
   return label ? `label:${label}` : `missing:${row.source_id}`

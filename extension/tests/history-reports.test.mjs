@@ -16,7 +16,7 @@ const editor=(id,date)=>`<html><body><script>throw Error('never executed')</scri
 test('history reads each verified editor, even blank feedback, incomplete and zero-valued reports',async()=>{
  const {api,pages,calls,dom}=fixture();pages.set('/dt_admissions/301',table(row('401','2026/10/01','列表過時評語')+row('402','2026/10/02')+row('403','2020/01/01')));pages.set('/dt_admissions/301/reports/401/edit',editor('401','2026-10-01'));pages.set('/dt_admissions/301/reports/402/edit',editor('402','2026-10-02'))
  const records=await api.readHistory('/dt_admissions/301',{dateFrom:'2026-01-01',dateTo:'2026-12-31'})
- assert.equal(records.length,3);assert.equal(records[0].data.content,'','editor blank is authoritative over a stale list comment');assert.equal(records[0].data.is_completed,false);assert.equal(records[0].data.class_participation,4.5);assert.equal(records[0].data.classroom_behavior,0);assert.equal(records[1].sourceReadStatus,'complete');assert.equal(records[2].outsideRange,true)
+ assert.equal(records.length,3);assert.equal(records[0].data.content,'','editor blank is authoritative over a stale list comment');assert.ok(records[0].sourceFieldConflicts.some(f=>f.key==='content'&&f.listValue==='列表過時評語'&&f.editValue==='空白'));assert.equal(records[0].data.is_completed,false);assert.equal(records[0].data.class_participation,4.5);assert.equal(records[0].data.classroom_behavior,0);assert.equal(records[1].sourceReadStatus,'complete');assert.equal(records[2].outsideRange,true)
  assert.equal(calls.length,3);assert.equal(records[0].data.external_link,'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit');assert.equal(JSON.stringify(records).includes('FORBIDDEN_LOGIN_SECRET'),false);assert.equal(JSON.stringify(records).includes('<html>'),false);assert.ok(records[0].sourceEvidence.length>1);dom.window.close()
 })
 test('individual failures retain evidence and successful records; retry reads only the failed editor',async()=>{
@@ -49,4 +49,17 @@ test('full list teaching values survive without report IDs; exact evidence dedup
  assert.equal(records[0].data.content,'');assert.equal(records[0].data.class_participation,0);assert.equal(records[0].data.classroom_behavior,4.5);assert.equal(records[0].data.is_completed,false)
  assert.equal(records[0].sourceLessonLabel,'Lesson 13');assert.equal(JSON.stringify(records).includes('FORBIDDEN_ADMIN'),false)
  dom.window.close()
+})
+
+test('history keeps dates in wrapper divs and parses the real assessment columns separately',async()=>{
+ const {api,pages,dom}=fixture()
+ const html=`<div id="page-body"><div class="content"><div id="admission-data"><ul><li><strong>課程名稱：</strong>菁英_Python程式開發班(dt-python)</li></ul></div><table><thead><tr><th>堂次</th><th>日期</th><th>啟用進度</th><th>課程進度</th><th>出席狀況</th><th>學習評估</th><th>寄送時未填寫</th></tr></thead><tbody><tr><td>7</td><td><div class="text-success">2026-07-25</div></td><td>Lesson 1</td><td>L1</td><td>出席試聽</td><td><div class="row"><div class="col-sm-6"><span>5</span></div><div class="col-sm-6"><span>4.5</span></div></div><div class="row"><div class="col-sm-4"><strong>最新課程階段：</strong>&nbsp;Lesson&nbsp;1</div><div class="col-sm-4"><strong>課程進度：</strong>完整完成</div></div><label>評語：</label><p>第一段評語</p><p>第二段評語</p><label>聯絡欄：</label><p></p><label>紀錄：</label><p>能跟上進度</p><p>內部筆記第一段</p><p>內部筆記第二段</p></td><td><button>管理</button></td></tr></tbody></table></div></div>`
+ pages.set('/dt_admissions/301',html)
+ const [r]=await api.readHistory('/dt_admissions/301')
+ assert.equal(r.date,'2026-07-25');assert.equal(r.sourceSessionOrdinal,'7');assert.equal(r.sourceCourseName,'菁英_Python程式開發班');assert.equal(r.sourceCourseCode,'dt-python')
+ assert.equal(r.data.attendance_status,'present');assert.equal(r.data.class_participation,5);assert.equal(r.data.classroom_behavior,4.5);assert.equal(r.data.is_completed,true)
+ assert.equal(r.sourceLessonSequence,1);assert.equal(r.sourceFields.find(f=>f.key==='lesson_id').value,'lesson:1')
+ assert.equal(r.data.content,'第一段評語\n第二段評語');assert.equal(r.data.contact_notes,'')
+ assert.equal(r.sourceLearningStatus,'on_track');assert.equal(r.sourceLearningStatusRaw,'能跟上進度');assert.equal(r.sourceInternalNotes,'內部筆記第一段\n內部筆記第二段')
+ assert.equal(JSON.stringify(r).includes('管理'),false);dom.window.close()
 })

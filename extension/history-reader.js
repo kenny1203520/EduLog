@@ -22,6 +22,13 @@ export async function readHistoryWork(work, hooks, retryPath) {
       if(!checkpoint) {
         try {
           const records=await read('history',{historyPath})
+          const admissionId=historyPath.match(/^\/dt_admissions\/(\d+)$/)?.[1]
+          const enrollment=work.snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===admissionId)
+          for(const report of records)if(report.sourceCourseCode&&enrollment){
+            if(enrollment.sourceCourseCode&&enrollment.sourceCourseCode!==report.sourceCourseCode){enrollment.sourceCourseConflict=true;enrollment.sourceIdentityChanged=true}
+            else {enrollment.sourceCourseCode=report.sourceCourseCode;enrollment.sourceCourseLabel=report.sourceCourseLabel||enrollment.sourceCourseLabel;enrollment.source_course_id=`code:${report.sourceCourseCode}`}
+            const evidence=new Map([...(enrollment.sourceEvidence||[]),...(report.sourceEvidence||[])].map(item=>[`${item.sourcePath}:${item.table}:${item.row}`,item]));enrollment.sourceEvidence=[...evidence.values()]
+          }
           checkpoint=history.checkpoints[historyPath]={records,next:0}
           history.issues=history.issues.filter(r=>!(r.listFailed&&r.admissionPath===historyPath));await persist()
         } catch(error) {
