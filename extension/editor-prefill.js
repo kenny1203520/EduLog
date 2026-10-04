@@ -22,8 +22,16 @@
     return parsed.body.textContent.replace(/\n{3,}/g,'\n\n').trim()
   }
   async function request(operation, details = {}) {
-    const response = await globalThis.edulogRuntime.send({ type:'integration-inline-prefill', operation, formId:form?.formId, fingerprint:form?.fingerprint, ...details })
+    let timer
+    let response
+    try {
+      response = await Promise.race([
+        globalThis.edulogRuntime.send({ type:'integration-inline-prefill', operation, formId:form?.formId, fingerprint:form?.fingerprint, ...details }),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('EduLog 助手查詢超過 30 秒。請檢查連線後重新核對。')), 30000) }),
+      ])
+    } finally { clearTimeout(timer) }
     if (response?.error) { const error = new Error(response.error.message || 'EduLog 預填功能暫時無法使用。'); Object.assign(error,response.error); throw error }
+    if (!response || !Object.hasOwn(response, 'data')) throw new Error('擴充功能背景程序沒有回傳有效結果。請重新載入擴充功能並刷新此報告頁。')
     return response?.data
   }
   function status(message, error = false) {
@@ -238,6 +246,7 @@
       form=current
       const result=await request('lookup',{formId:form.formId,fingerprint:form.fingerprint})
       if(serial!==generation||!host?.isConnected)return
+      if(!result||!result.form||!Array.isArray(result.reports))throw new Error('EduLog 助手未取得完整報告資料。請確認此頁網址與報告表單後重新核對。')
       form=result.form;target=result.target;settingsUrl=result.settingsUrl;capabilities=result.capabilities||{};root.querySelector('.target').textContent=`${target?.studentName||form.title||'原站報告'} · ${form.date||'日期待確認'}${form.supplement?' · 使用者確認':''}`;questionUI()
       formContext()
       await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return

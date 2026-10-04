@@ -16,6 +16,15 @@ const source = `<div id="page-body"><div class="content"><h2>測試班級</h2><t
 <tr><td><a href="/admissions/comments/301/edit_teacher">同名學生</a><a href="/students/101/accounts">帳號</a><a href="/dt_admissions/301">紀錄</a></td><td><a href="/dt_admissions/301/reports/401/edit">已啟用</a></td></tr>
 <tr><td><a href="/admissions/comments/302/edit_teacher">同名學生</a><a href="/students/102/accounts">帳號</a><a href="/dt_admissions/302">紀錄</a></td><td><a href="/dt_admissions/302/reports/402/edit">2026/10/02</a></td></tr>
 <tr><td><a href="/admissions/comments/303/edit_teacher">無 ID 學生</a></td></tr></tbody></table><input type="hidden" name="csrf_token" value="secret"><p>聯絡資料不擷取</p></div></div>`
+test('standalone report edit URLs resolve their native form and expose prefill without class import', async()=>{
+  const html=readFileSync(new URL('fixtures/report-editor.html',import.meta.url),'utf8')
+  const {api,doc,dom}=adapter(html,'/dt_admissions/274452/reports/6558413/edit')
+  const form=await api.readForm(doc),context=api.context(doc)
+  assert.equal(form.admissionId,'274452');assert.equal(form.reportId,'6558413')
+  assert.equal(context.reportOpen,true);assert.equal(context.classId,null)
+  assert.equal(context.capabilities.report_prefill,true);assert.equal(context.capabilities.current_class_import,false)
+  dom.window.close()
+})
 test('report date answers survive reopen with unchanged history evidence, but expire on new evidence', async()=>{
   const fixture=readFileSync(new URL('fixtures/report-modal.html',import.meta.url),'utf8')
   const html=`<table id="reports"><tr><th>學生</th><th>課程</th><th>本週(10/04)</th></tr><tr><td>學生甲</td><td>課程甲</td><td><a href="/dt_admissions/301/reports/401/edit">記錄</a></td></tr></table>${fixture}`

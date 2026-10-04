@@ -302,7 +302,7 @@
   }
   globalThis.edulogSourceIntegration = Object.freeze({ origin: ORIGIN, extractClass, extractHistory, collect, readForm, getForm, applyForm, digest, supplementForm, resolveFormDate,
     readHistory, readReport,
-    context(doc) { const p = doc.location.pathname; return { sourceOrigin: ORIGIN, sourcePath: p, classId: p.match(/^\/courses\/dt\/(\d+)/)?.[1] || null, title: text(doc.querySelector('#page-body > .content h2')), reportOpen: Boolean(getForm(doc)) } },
+    context(doc) { const p = doc.location.pathname, page = globalThis.edulogSiteAdapter?.matchPage?.(p), classId = p.match(/^\/courses\/dt\/(\d+)/)?.[1] || null; return { sourceOrigin: ORIGIN, sourcePath: p, classId, title: text(doc.querySelector('#page-body > .content h2')) || page?.title || '', reportOpen: Boolean(getForm(doc)), capabilities: { current_class_import: Boolean(classId && page?.kind !== 'report-editor'), report_prefill: Boolean(getForm(doc) || page?.kind === 'report-editor') } } },
     capabilities: { current_class_import: true, report_prefill: true, all_classes_import: false, submission_confirmation: false },
   })
   if (globalThis.edulogRuntime && typeof document !== 'undefined') globalThis.edulogRuntime.listen((message, sender, respond) => {

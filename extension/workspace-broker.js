@@ -1,5 +1,5 @@
 import { workStore } from './work-store.js'
-const supported = url => { try { const u = new URL(url); return u.origin === 'https://corp.orangeapple.co' && globalThis.edulogSiteAdapter.matchesTeachingPage(u.pathname) } catch { return false } }
+const supported = url => { try { const u = new URL(url), adapter = globalThis.edulogSiteAdapter; return u.origin === 'https://corp.orangeapple.co' && Boolean(adapter.matchesIntegrationPage?.(u.pathname) ?? adapter.matchesTeachingPage(u.pathname)) } catch { return false } }
 const fail = (message, code) => { const error=new Error(message);if(code)error.code=code;throw error }
 function validationFields(fields) {
   if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return undefined
@@ -241,6 +241,10 @@ export function installWorkspaceBroker(getStatus) {
         const tab = await source(message)
         const types = { context: 'integration-context', collect: 'integration-collect', history: 'integration-history', 'history-report':'integration-history-report', form: 'integration-form', apply: 'integration-apply' }
         if (!types[message.action]) fail('來源操作不正確。')
+        const sourcePath = new URL(tab.url).pathname
+        const sourcePage = globalThis.edulogSiteAdapter.matchPage?.(sourcePath)
+        if (sourcePage?.kind === 'report-editor' && !['context','form','apply'].includes(message.action)) fail('獨立報告編輯頁只支援報告預填；請從班級頁啟動教學資料匯入。','IMPORT_SOURCE_UNAVAILABLE')
+        if (message.action === 'collect' && !globalThis.edulogSiteAdapter.matchesTeachingPage(sourcePath)) fail('此頁面不是可匯入的班級或教學資料頁。','IMPORT_SOURCE_UNAVAILABLE')
         if (message.action === 'apply' && (!message.input || JSON.stringify(message.input).length > 100000)) fail('預填資料格式不正確。')
         if (message.action === 'apply') {
           const row = await workStore.get(message.workId, owner)

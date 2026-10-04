@@ -9,7 +9,8 @@ function broker(fetchImpl, getStatus = async () => ({ status: 'connected' }), ti
   const chrome = { runtime: { id, getURL: p => `chrome-extension://${id}/${p}`, onMessage: { addListener: fn => { listener = fn } } }, storage: { local: { get: async () => ({ edulogExtension: settings }) }, onChanged: { addListener: fn => { changed = fn } } }, tabs: { query: async () => tabs, get: async n => { if (!tabs.find(t => t.id === n)) throw new Error('closed'); return tabs.find(t => t.id === n) }, create: async t => calls.push(t), update: async () => {}, sendMessage: async (n, m) => { calls.push({ tab: n, ...m }); return { data: { classId: '11' } } } } }
   const workStore = { purge: async () => {}, list: async b => [...rows.values()].filter(r => r.instance === b.instance && r.userId === b.userId), get: async (n, b) => { const r = rows.get(n); return r?.instance === b.instance && r?.userId === b.userId ? r : null }, put: async (r, b) => { rows.set(r.id, { ...r, ...b }); return rows.get(r.id) } }
   if(sourceHandler)chrome.tabs.sendMessage=async(n,m)=>{calls.push({tab:n,...m});return sourceHandler(m)}
-  const context = vm.createContext({ chrome, workStore, crypto:webcrypto, Intl, URL, AbortSignal, AbortController, TextEncoder, setTimeout: timers.setTimeout || setTimeout, clearTimeout: timers.clearTimeout || clearTimeout, getStatus, fetch: fetchImpl || (async (url, options) => { calls.push({ url, ...options }); return { ok: true, headers: { get: () => null }, json: async () => ({ data: {} }) } }), edulogSiteAdapter: { matchesTeachingPage: p => /^\/courses\/dt\/\d+$/.test(p) } })
+  const adapter = { matchesTeachingPage: p => /^\/courses\/dt\/\d+$/.test(p), matchesIntegrationPage: p => /^\/courses\/dt\/\d+$/.test(p) || /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(p), matchPage: p => /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(p) ? { kind:'report-editor' } : /^\/courses\/dt\/\d+$/.test(p) ? { kind:'class' } : null }
+  const context = vm.createContext({ chrome, workStore, crypto:webcrypto, Intl, URL, AbortSignal, AbortController, TextEncoder, setTimeout: timers.setTimeout || setTimeout, clearTimeout: timers.clearTimeout || clearTimeout, getStatus, fetch: fetchImpl || (async (url, options) => { calls.push({ url, ...options }); return { ok: true, headers: { get: () => null }, json: async () => ({ data: {} }) } }), edulogSiteAdapter: adapter })
   vm.runInContext(readFileSync(new URL('../workspace-broker.js', import.meta.url), 'utf8').replace(/^import[^\n]*\n/gm, '').replace('export function', 'function') + '\ninstallWorkspaceBroker(getStatus)', context)
   const trusted = { id, url: `chrome-extension://${id}/workspace.html?flow=import` }, site = { id, url: tabs[0].url, tab: tabs[0] }
   return { send: (m, s = trusted) => new Promise(resolve => { const result = listener(m, s, resolve); if (!result) resolve(undefined) }), binding, calls, settings, tabs, rows, changed, site, trusted }
@@ -31,6 +32,17 @@ test('fixed API routing keeps credentials in trusted worker; source messages car
   assert.equal(JSON.stringify(b.calls[1]).includes('trusted-secret'), false)
   assert.match((await b.send({ type: 'workspace-api', operation: '/api/users', binding: b.binding })).error.message, /不正確/)
   assert.match((await b.send({ type: 'workspace-source', action: 'context', binding: b.binding, tabId: 1, sourcePath: '/courses/dt/12' })).error.message, /已關閉或導覽/)
+})
+test('standalone report editor can serve prefill form reads but never class imports', async () => {
+  const b = broker()
+  const path = '/dt_admissions/274452/reports/6558413/edit'
+  b.tabs[0].url = b.site.url = b.site.tab.url = `https://corp.orangeapple.co${path}`
+  const form = await b.send({ type:'workspace-source', action:'form', binding:b.binding, tabId:1, sourcePath:path })
+  assert.ok(form.data)
+  const before = b.calls.length
+  const denied = await b.send({ type:'workspace-source', action:'collect', binding:b.binding, tabId:1, sourcePath:path })
+  assert.equal(denied.error.code,'IMPORT_SOURCE_UNAVAILABLE')
+  assert.equal(b.calls.length,before)
 })
 test('catalog and filtered report routes allow only bounded query fields', async () => {
   const b = broker()

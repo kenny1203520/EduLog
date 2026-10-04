@@ -11,7 +11,7 @@ function isTeachingPage(senderUrl) {
   try {
     const url = new URL(senderUrl)
     const adapter = globalThis.edulogSiteAdapter
-    return url.protocol === 'https:' && adapter?.matchesHost(url.hostname) && adapter.matchesTeachingPage(url.pathname)
+    return url.protocol === 'https:' && adapter?.matchesHost(url.hostname) && Boolean(adapter.matchesIntegrationPage?.(url.pathname) ?? adapter.matchesTeachingPage(url.pathname))
   } catch { return false }
 }
 
