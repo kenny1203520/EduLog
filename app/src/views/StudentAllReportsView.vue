@@ -15,6 +15,7 @@
             <p class="text-gray-500 mt-1">{{ $t('report.select_course_to_view') }}</p>
         </div>
 
+        <EnrollmentHistoryPanel v-if="route.params.id" :student-id="String(route.params.id)" />
         <!-- Loading State -->
         <div v-if="loading"
             class="flex flex-col items-center justify-center py-20 text-gray-500 bg-white rounded-2xl shadow-sm border border-gray-100">
@@ -90,6 +91,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Enrollment } from '@/models/Enrollment'
 import { PageApiService } from '@/services/api/PageApiService'
+import EnrollmentHistoryPanel from '@/components/reports/EnrollmentHistoryPanel.vue'
 
 const route = useRoute()
 const router = useRouter()

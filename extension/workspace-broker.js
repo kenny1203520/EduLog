@@ -40,6 +40,9 @@ export function installWorkspaceBroker(getStatus) {
       ])
     } finally { clearTimeout(verificationTimer) }
     const operations = {
+      'history-list':['GET','/history-reports'], 'history-detail':['GET',`/history-reports/${message.historyId}`],
+      'history-candidates':['GET',`/history-reports/${message.historyId}/candidates`],
+      'history-bind-preview':['POST',`/history-reports/${message.historyId}/bind/preview`], 'history-bind-apply':['POST',`/history-reports/${message.historyId}/bind/apply`],
       reconcile: ['GET', `/enrollments/${message.enrollmentId}/reconciliation`],
       'import-info': ['GET', `/imports/${message.jobId}`], complete: ['POST', `/imports/${message.jobId}/complete`],
       'enrollment-info': ['GET', `/enrollments/${message.enrollmentId}`],
@@ -48,12 +51,13 @@ export function installWorkspaceBroker(getStatus) {
       'job-status': ['PATCH', `/imports/${message.jobId}`], push: ['POST', '/report-pushes'],
     }
     if (message.operation === 'reconcile' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || '')) fail('報名識別碼不正確。')
+    if (['history-detail','history-candidates','history-bind-preview','history-bind-apply'].includes(message.operation) && !/^[a-f0-9-]{36}$/i.test(message.historyId||'')) fail('歷史報告識別碼不正確。')
     if (!operations[message.operation] || (['preview', 'apply', 'job-status', 'import-info', 'complete'].includes(message.operation) && !/^[a-f0-9-]{36}$/.test(message.jobId)) || (message.operation === 'enrollment-info' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || ''))) fail('工作操作不正確。')
     const [method, path] = operations[message.operation], url = new URL(`${bound.instance}/api/extension/v1${path}`)
-    if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
+    if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id','source_admission_id','unlinked_only'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
     const payload = method === 'GET' ? undefined : JSON.stringify(message.operation === 'complete' ? message.body : message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
-    const readOnly = ['context','catalog','resolve','field-resolve','reports','work','reconcile','import-info'].includes(message.operation)
+    const readOnly = ['history-list','history-detail','history-candidates','context','catalog','resolve','field-resolve','reports','work','reconcile','import-info'].includes(message.operation)
     if (readOnly && message.requestId && !/^[a-f0-9-]{36}$/i.test(message.requestId)) fail('查詢識別碼不正確。')
     const remaining = 30000 - (Date.now() - startedAt)
     if (remaining <= 0) { const error = new Error('連線驗證與 API 查詢超過 30 秒。'); error.code = 'API_TIMEOUT'; throw error }
@@ -144,6 +148,11 @@ export function installWorkspaceBroker(getStatus) {
           if(bound.status.capabilities?.nearest_report_candidates!==true)fail('請將 EduLog 伺服器升級至 1000123，才能使用依目標日期排序的報告候選。')
           const target=await inlineTarget(form,bound), query=message.query||{}
           if(!target)fail('請先確認目標學生與報名；仍可使用其他學生搜尋。')
+          if(query.group==='history'){
+            if(!bound.status.capabilities?.enrollment_history_reports)fail('請升級 EduLog 至 1000126，才能讀取已保存歷史範本。')
+            const data=await call({operation:'history-list',query:{student_id:target.studentId,course_id:target.courseId,unlinked_only:'true',limit:50,cursor:query.cursor||undefined}})
+            return {reports:data.items.map(r=>({...r,occurrence_date:r.report_date,template_only:true})),next_cursor:data.next_cursor}
+          }
           if(!['same-course','other-course','exact'].includes(query.group))fail('候選分組格式不正確。')
           if(query.group==='exact'&&!form.date)fail('請先確認完整上課日期。')
           const anchor=form.date||new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
@@ -181,6 +190,10 @@ export function installWorkspaceBroker(getStatus) {
         }
         if (operation === 'detail') {
           if (!/^[a-f0-9-]{36}$/i.test(message.reportId || '')) fail('報告識別碼不正確。')
+          if(message.kind==='history_report'){
+            const data=await call({operation:'history-detail',historyId:message.reportId})
+            return {...data,kind:'history_report',occurrence_date:data.report_date,template_only:true}
+          }
           const result = await api({ operation: 'reports', binding: { instance: bound.instance, userId: bound.userId }, query: { id: message.reportId, summary: 'false' } })
           if(result.error){const error=new Error(result.error.message);Object.assign(error,result.error);throw error}
           return result.data?.reports?.[0] || null
@@ -188,13 +201,15 @@ export function installWorkspaceBroker(getStatus) {
         if (operation !== 'apply') fail('預填操作不正確。')
         const input = message.input
         if (!input || !/^[a-f0-9-]{36}$/i.test(input.reportId || '') || !Array.isArray(input.fields) || input.fields.length > 20) fail('預填資料格式不正確。')
-        const full = await api({ operation: 'reports', binding: { instance: bound.instance, userId: bound.userId }, query: { id: input.reportId, summary: 'false' } })
-        const report = full.data?.reports?.[0]
+        const historyTemplate=input.kind==='history_report'
+        const full = await api(historyTemplate?{operation:'history-detail',historyId:input.reportId,binding:{instance:bound.instance,userId:bound.userId}}:{ operation: 'reports', binding: { instance: bound.instance, userId: bound.userId }, query: { id: input.reportId, summary: 'false' } })
+        if(full.error)fail(full.error.message)
+        const report = historyTemplate?{...full.data,occurrence_date:full.data?.report_date}:full.data?.reports?.[0]
         if (!report || report.version !== input.version) fail('EduLog 報告已更新，請重新查詢並核對。')
         if(!form.date || form.dateInfo?.conflict && form.dateInfo?.basis!=='user_confirmed')fail('請先確認完整且無矛盾的上課日期。')
         const target=await inlineTarget(form,bound)
-        const sameTarget = target && !target.userConfirmed && report.enrollment_id === target.enrollmentId && report.occurrence_date === form.date
-        const identityMismatch = !target || report.enrollment_id !== target.enrollmentId || report.occurrence_date !== form.date
+        const sameTarget = !historyTemplate && target && !target.userConfirmed && report.enrollment_id === target.enrollmentId && report.occurrence_date === form.date
+        const identityMismatch = historyTemplate || !target || report.enrollment_id !== target.enrollmentId || report.occurrence_date !== form.date
         if (identityMismatch && input.identityConfirmed !== true) fail('此報告與原站學生、報名或日期不同；請在面板確認範本用途後再套用。')
         const workId = crypto.randomUUID()
         const row = { id: workId, type: 'prefill', status: 'applying', sourceTab: tab.id, sourcePath: new URL(tab.url).pathname,

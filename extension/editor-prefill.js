@@ -122,6 +122,7 @@
     addGroup(box,'exact','當天相符',items,true)
     groups.get('exact').cursor=cursor;paintGroup('exact')
     if(target){addGroup(box,'same-course','同學生、同課程的其他報告',[],!items.length);addGroup(box,'other-course','同學生、其他課程',[],false);if(!items.length&&capabilities.nearest_report_candidates)void loadGroup('same-course')}
+    if(target&&capabilities.enrollment_history_reports)addGroup(box,'history','已保存的歷史紀錄（範本）',[],false)
     if(target&&!capabilities.nearest_report_candidates)box.append(make('p','請將伺服器升級至 1000123，才能使用依目標日排序的新版候選。','help'))
     renderSearch(box)
   }
@@ -152,16 +153,17 @@
     if(saving)return
     const serial=++generation;status('正在讀取所選報告內容…')
     try{
-      const full=await request('detail',{reportId:item.id})
+      let full=await request('detail',{reportId:item.id,kind:item.kind})
       if(serial!==generation||!host?.isConnected)return
       if(!full)throw new Error('所選報告已無法讀取，請重新搜尋。')
+      full={...item,...full}
       await loadFieldRules(serial);if(serial!==generation||!host?.isConnected)return;report=full;formContext();renderFields(full);for(const key of groups.keys())paintGroup(key)
     }catch(error){if(serial===generation){if(/連接並驗證|請先連接/.test(error.message))root.querySelector('.connect').hidden=false;status(error.message,true)}}
   }
   function renderFields(selected) {
     const box=root.querySelector('.fields-result');box.replaceChildren();root.querySelector('.review').hidden=false;root.querySelector('.review').open=true;root.querySelector('.candidates').open=false
     root.querySelector('.candidates summary').textContent=`2 · 已選擇報告 · ${selected.occurrence_date||'日期待確認'}`
-    const mismatch=!target||!form.date||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
+    const mismatch=selected.template_only||!target||!form.date||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
     const identity=make('div',undefined,'report');identity.append(make('strong',reportLabel(selected)))
     identity.append(make('p',mismatch?'範本的學生或日期與原站表單不同。套用前需勾選確認；只會複製欄位，不改變身份對應。':'學生與日期符合目前表單。'))
     if(selected.updated_at)identity.append(make('small',`EduLog 更新時間：${new Date(selected.updated_at).toLocaleString()}`))
@@ -213,7 +215,7 @@
     if(serial!==generation||!host?.isConnected)return
     if(current.formId!==form.formId||current.fingerprint!==form.fingerprint){status('原站表單內容已改變，請重新核對後再預填。',true);return}
     if(!form.date){status('請先確認完整上課日期。',true);return}
-    const identityMismatch=!target||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
+    const identityMismatch=selected.template_only||!target||Boolean(target.enrollmentId&&selected.enrollment_id!==target.enrollmentId)||(selected.student_id&&target.studentId&&selected.student_id!==target.studentId)||(form.date&&selected.occurrence_date!==form.date)
     if(identityMismatch&&!root.querySelector('[data-mismatch]')?.checked){status('請先確認範本學生或日期與目前表單不同。',true);return}
     const fields=[]
     for(const card of root.querySelectorAll('.field')){
@@ -226,7 +228,7 @@
     }
     if(!fields.length){status('請至少勾選一個要套用的欄位。',true);return}
     status('正在核對版本並套用欄位…')
-    const result=await request('apply',{input:{reportId:selected.id,version:selected.version,targetEnrollmentId:target?.enrollmentId||null,identityConfirmed:identityMismatch&&root.querySelector('[data-mismatch]')?.checked===true,fields}})
+    const result=await request('apply',{input:{reportId:selected.id,kind:selected.kind,version:selected.version,targetEnrollmentId:target?.enrollmentId||null,identityConfirmed:identityMismatch&&root.querySelector('[data-mismatch]')?.checked===true,fields}})
     if(serial!==generation||!host?.isConnected)return
     status(`已套用 ${result.applied} 個欄位，待人工送出。請檢查原生表單內容。${result.recordSaved===false?'本機工作紀錄暫時未保存，請勿重複套用。':''}`,result.recordSaved===false)
     const after=await adapter.readForm(document);if(serial!==generation||!host?.isConnected)return;form=after
