@@ -23,7 +23,7 @@ function mock() {
   window.testCatalog=catalog;window.testSnapshot=snapshot;window.syntheticTransfers=[]
   window.testCalls=[];window.chrome={runtime:{sendMessage:async m=>{
     window.testCalls.push(m)
-    if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true,student_enrollment_catalog:true,enrollment_reconciliation:true}},tabs:[{id:10,title:'來源班級',path:snapshot.sourcePath}]}}
+    if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',settingsUrl:'https://web.example:8443/edulog/dashboard/settings?tab=integrations',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true,student_enrollment_catalog:true,enrollment_reconciliation:true,transferred_occurrence_import:true}},tabs:[{id:10,title:'來源班級',path:snapshot.sourcePath}]}}
     if(m.type==='workspace-source')return{data:m.action==='context'?{sourceOrigin:origin,sourcePath:snapshot.sourcePath,classId:'11',title:snapshot.title}:structuredClone(snapshot)}
     if(m.type==='workspace-store'){if(m.action==='list')return{data:[...store.values()]};if(m.action==='get')return{data:store.get(m.id)};const w=structuredClone(m.work);w.updatedAt=Date.now();store.set(w.id,w);return{data:w}}
     if(m.type==='workspace-check-source')return{data:{closed:false}}
@@ -95,18 +95,17 @@ try{
         await page.evaluate(()=>window.enrollmentFailure=true);await query.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await page.locator('#enrollment-status-301').textContent(),/查詢失敗/)
         await query.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
         assert.match(await row.locator('.enrollment-results').textContent(),/班級不一致/);assert.match(await row.locator('.enrollment-results').textContent(),/週日 14:00–16:00/)
-        assert.equal(await row.getByRole('button',{name:'使用符合的既有報名',exact:true}).count(),0)
+        assert.equal(await row.getByRole('button',{name:'使用此報名（逐堂核對）',exact:true}).count(),1)
         const crossQuery=await page.evaluate(()=>testCalls.filter(m=>m.operation==='catalog'&&m.query.student_id).at(-1).query);assert.equal(crossQuery.class_session_id,undefined);assert.equal(crossQuery.course_id,undefined)
         assert.equal(await page.locator('#class-session').inputValue(),id(3),'an individual mismatch never changes the work class')
         assert.equal(await row.getByRole('link',{name:'前往 EduLog 核對／處理異動（新分頁）'}).getAttribute('href'),`https://web.example:8443/edulog/dashboard/reports/${id(44)}`)
         await row.getByRole('button',{name:'核對此報名的調課紀錄',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.enrollment-results').textContent(),/不能據此判定未曾轉班/)
         await page.locator('#mapping-workbench').scrollIntoViewIfNeeded();await page.locator('#mapping-editor-pane').evaluate(n=>n.scrollTop=0)
         await page.screenshot({path:new URL(`${name}-${width}-enrollment-review.png`,output).pathname.replace(/^\//,'')})
-        await page.locator('#enrollment-301').selectOption('new');await row.locator('.mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/勾選確認/)
-        // Synthetic mutation represents a user finishing the transfer in EduLog.
-        await page.evaluate(()=>{testCatalog.enrollments[0].class_session_id=testCatalog.class_sessions[0].id;testCatalog.enrollments[0].class_session=testCatalog.class_sessions[0]})
-        await row.getByRole('button',{name:'重新核對此筆',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))
-        await row.getByRole('button',{name:'使用符合的既有報名',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.equal(await page.locator('#enrollment-301').inputValue(),id(44))
+        await row.getByRole('button',{name:'使用此報名（逐堂核對）',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.equal(await page.locator('#enrollment-301').inputValue(),id(44))
+        await row.locator('.mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已記住/)
+        assert.equal(await page.locator('#class-session').inputValue(),id(3),'remembering a one-time cross-class enrollment must not change the selected work session')
+        assert.equal(await page.evaluate(()=>testCalls.filter(m=>m.operation==='confirm').at(-1).body.items.find(i=>i.kind==='admission').class_session_id),id(23),'memory stores the enrollment original session')
         await row.locator('.mapping-actions>.primary').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已記住/)
         await row.locator('.mapping-more>summary').click();await row.getByRole('button',{name:'保留 EduLog 並略過此筆',exact:true}).click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('[data-row-state]').textContent(),/已略過/)
         await choose('admissions',1);await page.locator('#student-102').selectOption(id(14));await page.locator('#enrollment-course-302').selectOption(id(2));await page.locator('#more-enrollments-302').click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'))

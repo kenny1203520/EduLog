@@ -27,12 +27,14 @@ test('connection verification coalesces concurrent checks and caches success bri
 })
 
 test('verified server capabilities reach the workspace without enabling unsupported servers',async()=>{
-  const upgraded=await worker({student_enrollment_catalog:true,enrollment_reconciliation:true}).send()
+  const upgraded=await worker({student_enrollment_catalog:true,enrollment_reconciliation:true,transferred_occurrence_import:true}).send()
   assert.equal(upgraded.capabilities.student_enrollment_catalog,true)
   assert.equal(upgraded.capabilities.enrollment_reconciliation,true)
+  assert.equal(upgraded.capabilities.transferred_occurrence_import,true)
   const legacy=await worker().send()
   assert.equal(legacy.capabilities.student_enrollment_catalog,false)
   assert.equal(legacy.capabilities.enrollment_reconciliation,false)
+  assert.equal(legacy.capabilities.transferred_occurrence_import,false)
   const malformed=await worker({student_enrollment_catalog:'true',enrollment_reconciliation:1}).send()
   assert.equal(malformed.capabilities.student_enrollment_catalog,false)
   assert.equal(malformed.capabilities.enrollment_reconciliation,false)

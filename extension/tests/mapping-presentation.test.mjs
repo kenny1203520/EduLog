@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {frontendUrl, sourceUrl, statusLabel, enrollmentLabel, displayDate, sourceName, mergeEvidence, scheduleLabel,sessionLabel,enrollmentDifferences,legacyCourse,reportMatchesReconciliation} from '../mapping-presentation.js'
+import {frontendUrl, sourceUrl, statusLabel, enrollmentLabel, displayDate, sourceName, mergeEvidence, scheduleLabel,sessionLabel,enrollmentDifferences,canMapEnrollmentAcrossSession,legacyCourse,reportMatchesReconciliation} from '../mapping-presentation.js'
 import {JSDOM} from '../../app/node_modules/jsdom/lib/api.js'
 import {evidenceDetails} from '../mapping-view.js'
 
@@ -41,6 +41,9 @@ test('weekend and multi-rule schedules distinguish same-name classes, including 
 })
 test('relationship mismatches and old grade evidence are identified without guessing a transfer',()=>{
   assert.deepEqual(enrollmentDifferences({student_id:'s',course_id:'c2',class_session_id:'other'},{student:'s',course:'c',session:'current'}),['班級不一致','課程不一致'])
+  assert.equal(canMapEnrollmentAcrossSession({student_id:'s',course_id:'c',class_session_id:'other'},{student:'s',course:'c'}),true)
+  assert.equal(canMapEnrollmentAcrossSession({student_id:'other',course_id:'c',class_session_id:'other'},{student:'s',course:'c'}),false)
+  assert.equal(canMapEnrollmentAcrossSession({student_id:'s',course_id:'other',class_session_id:'other'},{student:'s',course:'c'}),false)
   const row={sourceCourseLabel:'高二',sourceEvidence:[{fields:[{key:'course_name',label:'年級',text:'高二'}]}]}
   assert.equal(legacyCourse(row,{}),true);assert.equal(legacyCourse(row,{extractionVersion:2}),false)
 })

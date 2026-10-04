@@ -260,8 +260,14 @@ function prepareRows() {
     }
     const id=choice==='new'?idFor('enrollment',r.source_id):choice;enrollments.set(r.source_id,id); enrollmentCourses.set(r.source_id,chosenCourse)
     work.sourceRosterEntries.push({ id, start_date: start, status })
-    add('enrollment',r.source_id,id,{student_id:studentId,course_id:chosenCourse,class_session_id:sessionId,classroom_id:$('classroom').value,status,start_date:start,time_zone:'Asia/Taipei',external_link:r.data.external_link})
-    rows.at(-1).source_identity=admissionIdentity(r)
+    const existingEnrollment=studentChoice!=='new'&&choice!=='new'&&context.enrollments.find(e=>e.id===choice)
+    // A one-time transfer changes the occurrence roster, not the enrollment's
+    // class-session relation. Keep that relation intact and rely on the
+    // transfer-aware report validation below.
+    if(!existingEnrollment||existingEnrollment.class_session_id===sessionId) {
+      add('enrollment',r.source_id,id,{student_id:studentId,course_id:chosenCourse,class_session_id:sessionId,classroom_id:$('classroom').value,status,start_date:start,time_zone:'Asia/Taipei',external_link:r.data.external_link})
+      rows.at(-1).source_identity=admissionIdentity(r)
+    } else needs.push(`報名 ${r.source_id} 保留 EduLog 原班次；只在指定日期的有效調課及名單核對通過後匯入報告。`)
   }
   const dates = new Set()
   for (const r of work.snapshot.records.filter(r => r.kind === 'report')) {
@@ -273,7 +279,7 @@ function prepareRows() {
     const occurrenceChoice = $(`occurrence-${r.date}`)?.value, reportChoice = $(`report-${r.source_id}`)?.value
     if (!occurrenceChoice || !reportChoice) { needs.push(`報告 ${r.source_id} 尚未確認課次與報告對應。`); continue }
     const chosenOccurrence = occurrenceChoice === 'new' ? occurrenceId : occurrenceChoice
-    if(!mappingController.validateReport(r,enrollments.get(r.enrollment_source_id),chosenOccurrence)){needs.push(`報告 ${r.source_id} 的課次與單次調課紀錄不一致或紀錄尚未讀完，請前往 EduLog 核對。`);continue}
+    if(!mappingController.validateReport(r,enrollments.get(r.enrollment_source_id),chosenOccurrence)){const existing=context.enrollments.find(e=>e.id===enrollments.get(r.enrollment_source_id));const needsUpgrade=existing&&existing.class_session_id!==sessionId&&!integrationCapabilities.transferred_occurrence_import;needs.push(needsUpgrade?`報告 ${r.source_id} 使用跨班單次調課；請將 EduLog 伺服器升級至 1000125 後重新核對。`:`報告 ${r.source_id} 的有效調課、指定日期或名單不符，或調課紀錄尚未讀完，請前往 EduLog 核對。`);continue}
     const mapped = mappedReport(r,enrollmentCourses.get(r.enrollment_source_id),context.lessons)
     if(mapped.needs.length){needs.push(`報告 ${r.source_id}：${mapped.needs.join('；')}，暫不匯入此報告。`);continue}
     const reportData = { enrollment_id: enrollments.get(r.enrollment_source_id), class_occurrence_id: chosenOccurrence, external_link: r.data.external_link }

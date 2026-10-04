@@ -89,6 +89,7 @@ async function verifyIntegrationStatus() {
         mapping_memory: data?.capabilities?.mapping_memory === true,
         student_enrollment_catalog: data?.capabilities?.student_enrollment_catalog === true,
         enrollment_reconciliation: data?.capabilities?.enrollment_reconciliation === true,
+        transferred_occurrence_import: data?.capabilities?.transferred_occurrence_import === true,
         nearest_report_candidates: data?.capabilities?.nearest_report_candidates === true,
       },
     }

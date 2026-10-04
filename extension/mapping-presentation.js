@@ -48,6 +48,9 @@ export const sessionLabel = session => `${session.name} · ${scheduleLabel(sessi
 export function enrollmentDifferences(enrollment, { student, course, session }) {
   return [enrollment.student_id !== student && '學生不一致', enrollment.class_session_id !== session && '班級不一致', enrollment.course_id !== course && '課程不一致'].filter(Boolean)
 }
+export function canMapEnrollmentAcrossSession(enrollment, { student, course }) {
+  return Boolean(enrollment && enrollment.student_id === student && enrollment.course_id === course)
+}
 export function legacyCourse(row, snapshot) {
   return snapshot.extractionVersion !== 2 && (row.sourceEvidence?.some(e => e.fields?.some(f => f.key === 'course_name' && f.label === '年級')) || /^(?:[一二三四五六七八九十]+年級|[國高小大][一二三四五六])$/.test(row.sourceCourseLabel || ''))
 }
