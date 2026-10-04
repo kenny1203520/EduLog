@@ -51,6 +51,12 @@ export const memoryConfirmation = z.object({
   }).strict()).min(1).max(50),
 }).strict()
 const wrap = (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => void fn(req, res).catch(next)
+const mappingField = z.enum(['attendance_status','absence_reason','is_completed','class_participation','classroom_behavior','lesson_id','progress_start','progress_end'])
+const fieldReference = z.object({ field_key: mappingField, course_id: uuid.optional(), class_session_id: uuid.optional(), options_signature: z.string().min(2).max(16000).refine(value => {
+  try { const options = JSON.parse(value); return Array.isArray(options) && options.length <= 500 && options.every(o => Array.isArray(o) && o.length === 3 && typeof o[0] === 'string' && o[0].length <= 256 && typeof o[1] === 'string' && o[1].length <= 500 && typeof o[2] === 'boolean') } catch { return false }
+}) }).strict()
+export const fieldMappingResolve = z.object({ source_origin: source, adapter_version: z.literal('orange-apple-v1'), items: z.array(fieldReference).min(1).max(50) }).strict()
+export const fieldMappingConfirm = z.object({ source_origin: source, adapter_version: z.literal('orange-apple-v1'), items: z.array(fieldReference.extend({ source_value: z.string().min(1).max(256), action: z.enum(['confirm','clear']), expected_revision: uuid.nullable(), canonical_value: z.union([z.string().min(1).max(64),z.boolean(),z.number().min(0).max(5)]).optional() }).strict().refine(item => item.action === 'clear' || item.canonical_value !== undefined)).min(1).max(50) }).strict()
 function databaseError(error: { message: string; code?: string }) {
   const statuses: Record<string, number> = { EXTENSION_AUTH_INVALID: 401, PERMISSION_DENIED: 403, NOT_FOUND: 404, PREVIEW_STALE: 409, SOURCE_MAPPING_CONFLICT: 409, VERSION_CONFLICT: 409, JOB_STOPPED: 409, IDEMPOTENCY_CONFLICT: 409, IMPORT_BATCHES_INCOMPLETE: 409, INVALID_REFERENCE: 422, INVALID_IMPORT: 422 }
   return statuses[error.message] ? new ApiError(statuses[error.message]!, error.message, error.message) : mapDatabaseError(error)
@@ -70,6 +76,8 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   router.get('/enrollments/:id/reconciliation', wrap(async (req, res) => reply(req, res, await run(req, 'reconcile', { enrollment_id: uuid.parse(req.params.id), ...z.object({ cursor, limit: z.coerce.number().int().min(1).max(50).default(50) }).strict().parse(req.query) }, 'web_extension_catalog'))))
   router.post('/catalog/resolve', wrap(async (req, res) => reply(req, res, await run(req, 'resolve', catalogResolve.parse(req.body), 'web_extension_catalog'))))
   router.post('/catalog/confirm', wrap(async (req, res) => reply(req, res, await run(req, 'memory-confirm', memoryConfirmation.parse(req.body), 'web_extension_catalog'))))
+  router.post('/field-mappings/resolve', wrap(async (req, res) => reply(req, res, await run(req, 'resolve', fieldMappingResolve.parse(req.body), 'web_extension_field_mappings'))))
+  router.post('/field-mappings/confirm', wrap(async (req, res) => reply(req, res, await run(req, 'confirm', fieldMappingConfirm.parse(req.body), 'web_extension_field_mappings'))))
   router.get('/reports', wrap(async (req, res) => {
     const summary = z.enum(['true','false']).default('false').parse(req.query.summary) === 'true'
     const search = req.query.search === undefined ? null : z.string().trim().max(80).parse(req.query.search)

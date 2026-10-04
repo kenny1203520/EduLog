@@ -68,6 +68,7 @@ try {
   $$;`)
   await db.exec(read('1000122_extension_import_verification.sql'))
   await db.exec(read('1000123_extension_report_candidates.sql'))
+  await db.exec(read('1000124_extension_field_mappings.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -279,11 +280,44 @@ try {
   await db.exec("INSERT INTO public.denied_permissions VALUES('teaching.reports.read')")
   assert.equal((await rpcCatalog('reports',nearestInput)).reports.length,0);await db.exec('DELETE FROM public.denied_permissions')
   console.log('PASS: 1000123 nearest ordering before pagination, past-first ties, filter-bound cursors, >50 reports, permission checks and capability')
+  async function fieldRpc(operation,items=[],credential=token,hash='a'.repeat(64)) {
+    await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
+    return (await db.query('SELECT public.web_extension_field_mappings($1,$2,$3,$4) AS data',[credential,hash,operation,JSON.stringify({source_origin:origin,adapter_version:'orange-apple-v1',items})])).rows[0].data
+  }
+  assert.equal((await fieldRpc('capabilities')).field_mapping_memory,true)
+  const field={field_key:'attendance_status',course_id:course,options_signature:JSON.stringify([['attended','出席',false],['away','未出席',false]])}
+  const savedRule=(await fieldRpc('confirm',[{...field,source_value:'attended',canonical_value:'present',action:'confirm',expected_revision:null}])).items[0]
+  assert.equal(savedRule.canonical_value,'present');assert.ok(savedRule.revision);assert.equal(savedRule.user_id,undefined)
+  assert.equal((await fieldRpc('resolve',[field])).items[0].valid,true)
+  const deviceToken=id(180)
+  await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${deviceToken}','${actor}','chrome-extension://${'d'.repeat(32)}','${'d'.repeat(64)}')`)
+  assert.equal((await fieldRpc('resolve',[field],deviceToken,'d'.repeat(64))).items[0].revision,savedRule.revision,'same account on another device reuses the confirmed rule')
+  assert.equal((await fieldRpc('resolve',[field],otherToken,'c'.repeat(64))).items.length,0)
+  assert.equal((await fieldRpc('resolve',[{...field,course_id:nextCourse}])).items.length,0)
+  const changedOptions={...field,options_signature:JSON.stringify([['attended','來源選項已改變',false]])}
+  const stale=(await fieldRpc('resolve',[changedOptions])).items[0];assert.equal(stale.valid,false);assert.equal(stale.revision,savedRule.revision)
+  await assert.rejects(fieldRpc('confirm',[{...field,source_value:'attended',canonical_value:'absent',action:'confirm',expected_revision:null}]),/VERSION_CONFLICT/)
+  const boolField={field_key:'is_completed',course_id:course,options_signature:JSON.stringify([['no','未完成',false]])}
+  const halfField={field_key:'class_participation',course_id:course,options_signature:JSON.stringify([['9','4.5 星',false],['0','0 星',false]])}
+  await fieldRpc('confirm',[{...boolField,source_value:'no',canonical_value:false,action:'confirm',expected_revision:null},{...halfField,source_value:'9',canonical_value:4.5,action:'confirm',expected_revision:null},{...halfField,source_value:'0',canonical_value:0,action:'confirm',expected_revision:null}])
+  assert.equal((await fieldRpc('resolve',[boolField])).items[0].canonical_value,false)
+  assert.deepEqual((await fieldRpc('resolve',[halfField])).items.map(r=>r.canonical_value),[0,4.5])
+  await assert.rejects(fieldRpc('confirm',[{...halfField,source_value:'9',canonical_value:4.3,action:'confirm',expected_revision:(await fieldRpc('resolve',[halfField])).items[1].revision}]),/INVALID_IMPORT/)
+  await assert.rejects(fieldRpc('confirm',[{...field,source_value:'away',canonical_value:'absent',action:'confirm',expected_revision:null},{...boolField,source_value:'no',canonical_value:true,action:'confirm',expected_revision:null}]),/VERSION_CONFLICT/)
+  assert.equal((await fieldRpc('resolve',[field])).items.length,1,'late conflict rolls back earlier insertion')
+  await assert.rejects(fieldRpc('resolve',[{...field,options_signature:'[1]'}]),/INVALID_IMPORT/)
+  await db.exec("INSERT INTO public.denied_permissions VALUES('teaching.courses.read')")
+  await assert.rejects(fieldRpc('resolve',[field]),/PERMISSION_DENIED/);await db.exec('DELETE FROM public.denied_permissions')
+  await fieldRpc('confirm',[{...changedOptions,source_value:'attended',action:'clear',expected_revision:savedRule.revision}])
+  assert.equal((await fieldRpc('resolve',[field])).items.length,0)
+  console.log('PASS: 1000124 executable migration; cross-device/account/course isolation, stale options, half stars/false/zero, revisions, clear, permissions and atomic rollback')
   await rpc('job-status',{job_id:job.id,status:'paused'}); await assert.rejects(rpc('preview',update),/JOB_STOPPED/)
   await db.exec(`UPDATE public.web_extension_tokens SET revoked_at=now() WHERE id='${token}'`)
   await assert.rejects(rpc('context',{}),/EXTENSION_AUTH_INVALID/)
+  await assert.rejects(fieldRpc('resolve',[field]),/EXTENSION_AUTH_INVALID/)
   await db.exec("SET ROLE authenticated; SELECT set_config('request.jwt.claim.role','authenticated',false)")
   await assert.rejects(db.query('SELECT public.web_extension_workspace($1,$2,$3,$4)',[token,'a'.repeat(64),'context','{}']),/permission denied/)
+  await assert.rejects(db.query('SELECT public.web_extension_field_mappings($1,$2,$3,$4)',[token,'a'.repeat(64),'resolve','{}']),/permission denied/)
   console.log('PASS: workspace/catalog migrations; scoped keyset reads; resolve authorization; actor boundary; create/replay/conflict/versions; atomic rollback; pending pushes; private projections; paused/revoked/restricted roles')
 } catch (error) { console.error(error.message, error.where || '', error.position || ''); process.exitCode = 1 }
 finally { await db.close() }

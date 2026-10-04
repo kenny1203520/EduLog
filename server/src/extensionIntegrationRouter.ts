@@ -178,9 +178,10 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
   extensionApi.use(requireExtensionToken(admin, config))
   extensionApi.get('/me', wrap(async (req, res) => {
     const tokenHash = hash(req.header('authorization')!.replace(/^Bearer\s+/i, ''))
-    const [readiness, catalog] = await Promise.all([
+    const [readiness, catalog, fieldMappings] = await Promise.all([
       admin.rpc('web_extension_workspace', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
       admin.rpc('web_extension_catalog', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
+      admin.rpc('web_extension_field_mappings', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
     ])
     const ready = !readiness.error && readiness.data?.workspace_version === 1
     return res.json(envelope(req, {
@@ -190,6 +191,7 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
       settings_url: buildExtensionSettingsUrl(config.EDULOG_WEB_BASE_URL),
       capabilities: {
         connection_management: true,
+        field_mapping_memory: !fieldMappings.error && fieldMappings.data?.field_mapping_memory === true,
         teaching_data_import: ready,
         report_prefill: ready,
         catalog_v1: !catalog.error && catalog.data?.catalog_version === 1,

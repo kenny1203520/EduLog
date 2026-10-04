@@ -2,7 +2,7 @@ import express from 'express'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createExtensionWorkspaceRouter, importBatch, pendingPush, importJob, memoryConfirmation } from './extensionWorkspaceRouter.js'
+import { createExtensionWorkspaceRouter, importBatch, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm } from './extensionWorkspaceRouter.js'
 import { errorHandler } from './errors.js'
 const id = '00000000-0000-4000-8000-000000000001'
 const row = { source_id: '101', target_id: id, overwrite: [], record: { kind: 'student', data: { name: 'Test A' } } }
@@ -15,6 +15,21 @@ function appWith(data: unknown, error: unknown = null, productionErrors = false)
   return { app, rpc }
 }
 describe('workspace API contract', () => {
+  it('bounds and isolates field memory RPCs from identity confirmation and forged actors',async()=>{
+    const item={field_key:'attendance_status',course_id:id,options_signature:JSON.stringify([['attended','出席',false]])}
+    const body={source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:[item]}
+    expect(fieldMappingResolve.safeParse({...body,user_id:id}).success).toBe(false)
+    expect(fieldMappingResolve.safeParse({...body,items:Array(51).fill(item)}).success).toBe(false)
+    expect(fieldMappingResolve.safeParse({...body,items:[{...item,options_signature:'[1]'}]}).success).toBe(false)
+    expect(fieldMappingResolve.safeParse({...body,source_origin:'https://other.example'}).success).toBe(false)
+    expect(fieldMappingConfirm.safeParse({...body,items:[{...item,source_value:'attended',action:'confirm',expected_revision:null}]}).success).toBe(false)
+    const {app,rpc}=appWith({items:[]})
+    const resolved=await request(app).post('/api/extension/v1/field-mappings/resolve').set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(resolved.status).toBe(200);expect(rpc.mock.calls[0][0]).toBe('web_extension_field_mappings')
+    expect(rpc.mock.calls[0][1]).toMatchObject({p_operation:'resolve',p_token_id:id,p_input:body})
+    const result=await request(app).post('/api/extension/v1/field-mappings/confirm').set('Authorization',`Bearer ${'a'.repeat(64)}`).send({...body,items:[{...item,source_value:'attended',canonical_value:'present',action:'confirm',expected_revision:null}]})
+    expect(result.status).toBe(200);expect(rpc.mock.calls[1][1].p_operation).toBe('confirm')
+  })
   it('provides bounded readonly reconciliation without a transfer mutation route', async()=>{
     const {app,rpc}=appWith({enrollment:{id},transfers:[],next_cursor:null})
     const res=await request(app).get(`/api/extension/v1/enrollments/${id}/reconciliation?limit=50`).set('Authorization',`Bearer ${'a'.repeat(64)}`)
