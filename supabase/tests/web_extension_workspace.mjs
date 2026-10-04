@@ -59,6 +59,7 @@ try {
   await db.exec(read('1000119_extension_catalog.sql'))
   await db.exec(read('1000120_extension_mapping_memory.sql'))
   await db.exec(read('1000030_single_lesson_transfers.sql').split('CREATE OR REPLACE FUNCTION')[0])
+  await db.exec(read('1000030_single_lesson_transfers.sql').match(/CREATE OR REPLACE FUNCTION public\.get_effective_occurrence_enrollment_ids[\s\S]*?\$\$;/)[0])
   await db.exec(read('1000121_extension_reconciliation.sql'))
   await db.exec(`CREATE FUNCTION public.get_class_session_workspace(uuid,date) RETURNS jsonb LANGUAGE sql STABLE AS $$
     SELECT jsonb_build_object('session',jsonb_build_object('id',$1),'enrollments',COALESCE((
@@ -69,6 +70,7 @@ try {
   await db.exec(read('1000122_extension_import_verification.sql'))
   await db.exec(read('1000123_extension_report_candidates.sql'))
   await db.exec(read('1000124_extension_field_mappings.sql'))
+  await db.exec(read('1000125_extension_transferred_occurrence_import.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -226,6 +228,7 @@ try {
     INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,original_start_time,original_end_time) VALUES('${sourceOccurrence}','${session}','2026-10-03','09:00','10:00'),('${targetOccurrence}','${weekendSession}','2026-10-04','14:00','16:00');
     INSERT INTO public.single_lesson_transfers(id,enrollment_id,source_occurrence_id,target_occurrence_id,created_by) VALUES('${transfer}','${weekendEnrollment}','${sourceOccurrence}','${targetOccurrence}','${actor}');`)
   const capabilities=await rpcCatalog('capabilities',{});assert.equal(capabilities.student_enrollment_catalog,true);assert.equal(capabilities.enrollment_reconciliation,true)
+  assert.equal((await rpc('capabilities',{})).transferred_occurrence_import,true)
   const studentEnrollments=await rpcCatalog('catalog',{resource:'enrollments',student_id:student,limit:1})
   assert.equal(studentEnrollments.items.length,1);assert.ok(studentEnrollments.next_cursor)
   const nextStudentPage=await rpcCatalog('catalog',{resource:'enrollments',student_id:student,limit:1,cursor:studentEnrollments.next_cursor})
@@ -259,6 +262,35 @@ try {
   assert.equal((await rpcCatalog('catalog',{resource:'enrollments',student_id:student})).items.length,0)
   await assert.rejects(rpcCatalog('reconcile',{enrollment_id:weekendEnrollment}),/PERMISSION_DENIED/);await db.exec('DELETE FROM public.denied_permissions')
   assert.equal((await db.query('SELECT class_session_id FROM public.enrollments WHERE id=$1',[weekendEnrollment])).rows[0].class_session_id,weekendSession)
+  // A confirmed existing enrollment may stay in its original class while a
+  // report is imported into the selected class only through an effective
+  // single-lesson transfer and the date-specific roster.
+  const crossEnrollment=id(97),crossSourceOccurrence=id(98),crossTargetOccurrence=id(99),crossTransfer=id(100),crossReport=id(101)
+  await db.exec(`INSERT INTO public.enrollments(id,student_id,course_id,class_session_id,classroom_id,start_date,status,user_id) VALUES('${crossEnrollment}','${student}','${course}','${weekendSession}','${room}','2026-01-01','regular','${actor}');
+    INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,original_start_time,original_end_time) VALUES('${crossSourceOccurrence}','${weekendSession}','2026-10-05','14:00','16:00'),('${crossTargetOccurrence}','${session}','2026-10-05','09:00','10:00');
+    INSERT INTO public.single_lesson_transfers(id,enrollment_id,source_occurrence_id,target_occurrence_id,created_by) VALUES('${crossTransfer}','${crossEnrollment}','${crossSourceOccurrence}','${crossTargetOccurrence}','${actor}');`)
+  const crossTargetRefs=await resolveMemory('11',[],[],[{kind:'students',id:student},{kind:'courses',id:course},{kind:'class_sessions',id:weekendSession},{kind:'enrollments',id:crossEnrollment}])
+  const crossVersions=Object.fromEntries(crossTargetRefs.targets.map(t=>[t.id,t.target_version]))
+  await confirm([{kind:'admission',key:'cross-class-admission',action:'confirm',target_id:crossEnrollment,student_id:student,course_id:course,class_session_id:weekendSession,source_identity:'corp-admission:cross-class',expected_revision:null,versions:crossVersions}])
+  const crossMemory=(await resolveMemory('11',[{kind:'admission',key:'cross-class-admission',source_identity:'corp-admission:cross-class'}])).memories[0]
+  assert.equal(crossMemory.valid,true);assert.equal(crossMemory.class_session_id,weekendSession)
+  const crossBatch={job_id:job.id,key:id(102),fingerprint:'d'.repeat(64),rows:[{source_id:'cross-report-1',target_id:crossReport,overwrite:[],record:{kind:'report',data:{enrollment_id:crossEnrollment,class_occurrence_id:crossTargetOccurrence,attendance_status:'present'}}}]}
+  await rpc('preview',crossBatch);await rpc('apply',crossBatch)
+  assert.equal((await db.query('SELECT class_session_id FROM public.enrollments WHERE id=$1',[crossEnrollment])).rows[0].class_session_id,weekendSession,'report import does not rewrite the enrollment class')
+  assert.equal((await db.query('SELECT class_occurrence_id FROM public.occurrence_reports WHERE id=$1',[crossReport])).rows[0].class_occurrence_id,crossTargetOccurrence)
+  const invalidNoTransfer={...crossBatch,key:id(103),fingerprint:'f'.repeat(64),rows:[{...crossBatch.rows[0],source_id:'cross-report-no-transfer',target_id:id(104)}]}
+  await db.exec(`INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,original_start_time,original_end_time) VALUES('${id(105)}','${session}','2026-10-07','09:00','10:00')`)
+  await assert.rejects(rpc('preview',{...invalidNoTransfer,rows:[{...invalidNoTransfer.rows[0],record:{kind:'report',data:{enrollment_id:crossEnrollment,class_occurrence_id:id(105),attendance_status:'present'}}}]}),/INVALID_REFERENCE/,'cross-class report without a matching transfer must be rejected')
+  await db.exec(`UPDATE public.single_lesson_transfers SET cancelled_at=now() WHERE id='${crossTransfer}'; INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,original_start_time,original_end_time) VALUES('${id(106)}','${session}','2026-10-08','09:00','10:00')`)
+  await assert.rejects(rpc('preview',{...invalidNoTransfer,key:id(107),rows:[{...invalidNoTransfer.rows[0],target_id:id(108),record:{kind:'report',data:{enrollment_id:crossEnrollment,class_occurrence_id:id(106),attendance_status:'present'}}}]}),/INVALID_REFERENCE/,'cancelled transfer must be rejected')
+  const chainedSource=id(113),chainedTarget=id(112),chainedFinal=id(114)
+  await db.exec(`INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,original_start_time,original_end_time) VALUES('${chainedSource}','${weekendSession}','2026-10-09','14:00','16:00'),('${chainedTarget}','${session}','2026-10-09','09:00','10:00'),('${chainedFinal}','${session}','2026-10-10','09:00','10:00');
+    INSERT INTO public.single_lesson_transfers(id,enrollment_id,source_occurrence_id,target_occurrence_id,created_by) VALUES('${id(109)}','${crossEnrollment}','${chainedSource}','${chainedTarget}','${actor}'),('${id(115)}','${crossEnrollment}','${chainedTarget}','${chainedFinal}','${actor}');`)
+  await assert.rejects(rpc('preview',{...invalidNoTransfer,key:id(116),rows:[{...invalidNoTransfer.rows[0],target_id:id(117),record:{kind:'report',data:{enrollment_id:crossEnrollment,class_occurrence_id:chainedTarget,attendance_status:'present'}}}]}),/INVALID_REFERENCE/,'a superseded transfer target must be rejected')
+  await db.exec("INSERT INTO public.denied_permissions VALUES('teaching.enrollments.read')")
+  await assert.rejects(rpc('preview',{...invalidNoTransfer,key:id(110),rows:[{...invalidNoTransfer.rows[0],target_id:id(111),record:{kind:'report',data:{enrollment_id:crossEnrollment,class_occurrence_id:chainedFinal,attendance_status:'present'}}}]}),/PERMISSION_DENIED/)
+  await db.exec('DELETE FROM public.denied_permissions')
+  console.log('PASS: 1000125 explicit cross-class admission memory, immutable enrollment relation and effective transferred occurrence report import')
   console.log('PASS: 1000121 student-scoped paging, read-only reconciliation, transfer visibility, weekend schedules and actor authorization')
   assert.equal((await rpcCatalog('capabilities',{})).nearest_report_candidates,true)
   // Include old dates beyond the newest 50: sorting must happen in PostgreSQL.

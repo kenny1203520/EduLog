@@ -199,6 +199,7 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
         mapping_memory: !catalog.error && catalog.data?.mapping_memory === true,
         student_enrollment_catalog: !catalog.error && catalog.data?.student_enrollment_catalog === true,
         enrollment_reconciliation: !catalog.error && catalog.data?.enrollment_reconciliation === true,
+        transferred_occurrence_import: ready && readiness.data?.transferred_occurrence_import === true,
         nearest_report_candidates: !catalog.error && catalog.data?.nearest_report_candidates === true,
       },
       integration_limits: { batch_records: 50, batch_bytes: extensionBatchBytes(config.API_BODY_LIMIT) },

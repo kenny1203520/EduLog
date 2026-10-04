@@ -115,6 +115,29 @@ describe('extension token origin validation', () => {
     expect(rpc).toHaveBeenCalledWith('web_extension_catalog', expect.objectContaining({ p_operation: 'capabilities' }))
   })
 
+  it('reports transferred occurrence import only when migration 1000125 is available', async () => {
+    const rpc = vi.fn((name: string) => Promise.resolve({
+      data: name === 'web_extension_workspace'
+        ? { workspace_version: 1, transferred_occurrence_import: true }
+        : name === 'web_extension_catalog'
+          ? { catalog_version: 1 }
+          : { field_mapping_memory: true },
+      error: null,
+    }))
+    const { app } = createTokenApp(extensionOrigin, extensionOrigin, rpc)
+    const response = await request(app).get('/api/extension/v1/me').set('Authorization', `Bearer ${token}`)
+    expect(response.status).toBe(200)
+    expect(response.body.data.capabilities.transferred_occurrence_import).toBe(true)
+
+    const oldRpc = vi.fn((name: string) => Promise.resolve({
+      data: name === 'web_extension_catalog' ? { catalog_version: 1 } : { workspace_version: 1 },
+      error: null,
+    }))
+    const old = createTokenApp(extensionOrigin, extensionOrigin, oldRpc)
+    const oldResponse = await request(old.app).get('/api/extension/v1/me').set('Authorization', `Bearer ${token}`)
+    expect(oldResponse.body.data.capabilities.transferred_occurrence_import).toBe(false)
+  })
+
   it('still rejects a present Origin that differs from the token binding', async () => {
     const otherExtensionOrigin = `chrome-extension://${'b'.repeat(32)}`
     const { app } = createTokenApp(`${extensionOrigin},${otherExtensionOrigin}`)
