@@ -248,3 +248,40 @@ html[data-edulog-ui="on"] #lesson-report-modal :is(select,input):disabled { back
  html[data-edulog-ui="on"] #students-table [data-edulog-name] { position:static; }
  html[data-edulog-ui="on"] #reports :is(th,td) { padding:10px 8px; }
 }
+
+/* Keep the provider's native whole/half-star controls inside their own rating block. */
+html[data-edulog-ui="on"] #lesson-report-modal [data-edulog-rating-stars] {
+ position:relative!important; display:flow-root!important; float:none!important; clear:both;
+ width:max-content; max-width:100%; min-height:34px; margin:4px 0 8px; overflow:visible;
+}
+html[data-edulog-ui="on"] #lesson-report-modal [data-edulog-rating-stars] > label {
+ position:relative; line-height:1.2; white-space:nowrap;
+}
+html[data-edulog-ui="on"] #lesson-report-modal [data-edulog-rating-stars] > [data-edulog-rating-half] {
+ position:relative!important; inset:auto!important; float:right!important; overflow:visible;
+}
+html[data-edulog-ui="on"] #lesson-report-modal [data-edulog-rating-stars] > [data-edulog-rating-half]::before {
+ position:absolute!important; top:0!important; left:0!important; max-width:50%; overflow:hidden;
+}
+html[data-edulog-ui="on"] #lesson-report-modal .edulog-rating-control select { min-height:44px; }
+
+/* The unfilled-report page becomes labelled cards on narrow screens while
+   preserving the original rows, links and Turbo handlers. */
+@media(max-width:767px) {
+ html[data-edulog-ui="on"] #page-body > .content table[data-edulog-unfilled-current] { width:100%; table-layout:fixed; border:0; }
+ html[data-edulog-ui="on"] #page-body > .content table[data-edulog-unfilled-current] > thead { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+ html[data-edulog-ui="on"] #page-body > .content table[data-edulog-unfilled-current] tbody tr[data-edulog-unfilled-card] {
+  display:grid; grid-template-columns:minmax(0,1fr); gap:0; margin:0 0 12px; padding:8px 12px;
+  border:1px solid var(--edulog-line); border-radius:10px; background:#fff; box-shadow:0 1px 3px rgb(15 23 42 / 6%);
+ }
+ html[data-edulog-ui="on"] #page-body > .content table[data-edulog-unfilled-current] tbody td {
+  display:grid; grid-template-columns:minmax(7.5rem,34%) minmax(0,1fr); align-items:start; gap:12px;
+  width:auto; min-width:0; padding:9px 0; border:0; border-bottom:1px solid #eef2f7; text-align:left; overflow-wrap:anywhere;
+ }
+ html[data-edulog-ui="on"] #page-body > .content table[data-edulog-unfilled-current] tbody td:last-child { border-bottom:0; }
+ html[data-edulog-ui="on"] #page-body > .content table[data-edulog-unfilled-current] tbody td::before {
+  content:attr(data-edulog-label); color:#526176; font-size:14px; font-weight:650;
+ }
+ html[data-edulog-ui="on"] #page-body > .content table[data-edulog-unfilled-current] [data-edulog-unfilled-student] { font-weight:650; }
+ html[data-edulog-ui="on"] #page-body > .content table[data-edulog-unfilled-current] [data-edulog-unfilled-action] { min-height:44px; }
+}

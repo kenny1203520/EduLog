@@ -120,7 +120,7 @@ function fixture(name, path) {
   for (const file of ['adapters/orange-apple-workflows.js', 'adapters/orange-apple.js']) dom.window.eval(read(`../${file}`))
   return dom
 }
-for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['reports','/courses/dt/101/lesson_reports'],['classes','/courses/dt'],['history','/dt_admissions/301'],['calendar','/calendar'],['unfilled','/admissions/month_unfilled_report']]) {
+for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['reports','/courses/dt/101/lesson_reports'],['classes','/courses/dt'],['history','/dt_admissions/301'],['calendar','/calendar'],['unfilled','/admissions/month_unfilled_report'],['unfilled-current','/admissions/unfilled_report'],['report-editor','/dt_admissions/274452/reports/6558413/edit']]) {
   test(`${name}: enhancements restore exactly the original DOM`, () => {
     const dom = fixture(name, path), doc = dom.window.document
     const before = doc.documentElement.outerHTML
@@ -131,6 +131,16 @@ for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edi
     dom.window.close()
   })
 }
+test('standalone report editor is supported for prefill but excluded from teaching import', () => {
+  const dom = fixture('report-editor','/dt_admissions/274452/reports/6558413/edit')
+  const adapter = dom.window.edulogSiteAdapter
+  assert.equal(adapter.matchesIntegrationPage(dom.window.location.pathname), true)
+  assert.equal(adapter.matchesTeachingPage(dom.window.location.pathname), false)
+  assert.equal(adapter.matchPage(dom.window.location.pathname).kind, 'report-editor')
+  const enhanced = adapter.enhancePage(dom.window.document)
+  assert.equal(enhanced.page.kind, 'report-editor')
+  enhanced.restore(); dom.window.close()
+})
 test('class matrix spans map to the correct weekday and source time slot', () => {
   const dom = fixture('classes', '/courses/dt'), doc = dom.window.document
   const enhanced = dom.window.edulogSiteAdapter.enhancePage(doc)
@@ -165,6 +175,20 @@ test('empty monthly list does not imply reports were submitted', () => {
   assert.match(dom.window.document.querySelector('.edulog-empty').textContent, /沒有紀錄/)
   assert.equal(dom.window.document.querySelector('[aria-current=page]').textContent, '上月份')
   dom.window.close()
+})
+test('current unfilled list is searchable without losing original action links', () => {
+  const dom = fixture('unfilled-current','/admissions/unfilled_report'), doc = dom.window.document
+  const originalLink = doc.querySelector('tbody a[href*="student_id=301"]')
+  const enhanced = dom.window.edulogSiteAdapter.enhancePage(doc)
+  assert.equal(doc.querySelector('[data-edulog-page="unfilled-current"]') !== null, true)
+  assert.equal(doc.querySelectorAll('tbody tr[data-edulog-unfilled-card]').length, 2)
+  assert.equal(doc.querySelector('tbody tr td[data-edulog-label="目前節次"]')?.textContent.trim(), '週日第 1 時段 (10:00 ~ 12:00)')
+  assert.equal(doc.querySelector('tbody a[href*="student_id=301"]'), originalLink)
+  const search = doc.querySelector('[data-edulog-search="unfilledQuery"]')
+  search.value = '學生乙'; search.dispatchEvent(new dom.window.Event('input', { bubbles:true }))
+  assert.equal(doc.querySelectorAll('tbody tr:not([data-edulog-filtered])').length, 1)
+  assert.match(doc.querySelector('[role=status]').textContent, /顯示 1 \/ 2 筆/)
+  enhanced.restore(); dom.window.close()
 })
 test('report grouping preserves form identity, values, handlers and native rating payload', () => {
   const dom = fixture('class','/courses/dt/101'), doc = dom.window.document
@@ -257,12 +281,15 @@ test('full native rating range displays half stars without changing payload', ()
   for (let value = 1; value <= 8; value++) {
     const radio = doc.createElement('input'); radio.type = 'radio'; radio.name = 'admission_lesson_report[participation_rating]'; radio.value = String(value); rating.append(radio)
   }
+  const half = doc.createElement('label'); half.className = 'half'; half.textContent = '½'; rating.append(half)
   const dialog = dom.window.edulogSiteAdapter.enhanceDialog(doc, {})
+  assert.equal(rating.hasAttribute('data-edulog-rating-stars'), true)
+  assert.equal(half.hasAttribute('data-edulog-rating-half'), true)
   const select = doc.querySelector('.edulog-rating-control select')
   assert.equal(select.querySelector('option[value="9"]').textContent, '4.5 / 5 星')
   select.value = '9'; select.dispatchEvent(new dom.window.Event('change'))
   assert.equal(new dom.window.FormData(dialog.form).get('admission_lesson_report[participation_rating]'), '9')
-  dialog.restore(); dom.window.close()
+  dialog.restore(); assert.equal(rating.hasAttribute('data-edulog-rating-stars'), false); assert.equal(half.hasAttribute('data-edulog-rating-half'), false); dom.window.close()
 })
 
 test('source captions follow fields and rating control escapes inline container', () => {

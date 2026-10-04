@@ -8,6 +8,8 @@
     if (/^\/courses\/dt\/?$/.test(path)) return { kind: 'classes', title: '班級列表' }
     if (path === '/calendar') return { kind: 'calendar', title: '課程行事曆' }
     if (path === '/admissions/month_unfilled_report') return { kind: 'unfilled', title: '未填寫紀錄' }
+    if (path === '/admissions/unfilled_report') return { kind: 'unfilled-current', title: '補填課堂紀錄' }
+    if (/^\/dt_admissions\/\d+\/reports\/\d+\/edit\/?$/.test(path)) return { kind: 'report-editor', title: '課堂紀錄編輯' }
     if (/^\/dt_admissions\/\d+\/?$/.test(path)) return { kind: 'history', title: '學生學習紀錄' }
     if (/^\/courses\/dt\/\d+\/?$/.test(path)) return { kind: 'class', title: '班級工作區' }
     if (/^\/courses\/dt\/\d+\/lesson_reports\/?$/.test(path)) return { kind: 'reports', title: '課次報告' }
@@ -233,7 +235,8 @@
   }
   globalThis.edulogSiteAdapter = Object.freeze({
     id: 'orange-apple', matchesHost: host => host === 'corp.orangeapple.co',
-    matchesTeachingPage: path => Boolean(matchPage(path)), matchPage, enhancePage,
+    matchesTeachingPage: path => { const page = matchPage(path); return Boolean(page && page.kind !== 'report-editor') },
+    matchesIntegrationPage: path => Boolean(matchPage(path)), matchPage, enhancePage,
     enhanceDialog(doc, view) {
       const scope = createScope(doc)
       try { return globalThis.edulogSiteWorkflows?.enhanceDialog(doc, view, scope) }

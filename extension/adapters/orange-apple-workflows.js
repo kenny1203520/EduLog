@@ -296,15 +296,32 @@
         }
       }
     }
-    if (page.kind === 'unfilled') {
+    if (page.kind === 'unfilled' || page.kind === 'unfilled-current') {
+      const monthly = page.kind === 'unfilled'
       const heading = content.querySelector('h3')
       const title = region(scope, '', 'edulog-page-context')
-      title.append(element('strong', `目前檢視：${text(heading) || '原站選定月份'}`), element('p', '清單範圍以原站目前帳號及月份為準。'))
+      title.append(element('strong', monthly ? `目前檢視：${text(heading) || '原站選定月份'}` : '補填學生課堂紀錄'), element('p', monthly ? '清單範圍以原站目前帳號及月份為準。' : '顯示目前需要補填課堂紀錄的學生；節次差異依原站內容呈現，不推定為錯誤。'))
       content.prepend(title)
-      if (heading) mark(heading, 'data-edulog-duplicate-heading', '')
+      if (monthly && heading) mark(heading, 'data-edulog-duplicate-heading', '')
       const table = content.querySelector('table')
-      if (table) refreshers.push(filterTable(context, table, 'unfilledQuery', '未填寫課堂紀錄').refresh)
-      for (const a of content.querySelectorAll('a[href]')) if (/month_unfilled_report/.test(a.pathname)) {
+      if (table) {
+        if (!monthly) {
+          mark(table, 'data-edulog-unfilled-current', '')
+          const header = [...table.rows].find(row => [...row.cells].some(cell => /學生/.test(text(cell))))
+          const labels = [...(header?.cells || [])].map(cell => text(cell))
+          for (const row of table.rows) {
+            if (row === header || row.querySelector('th')) continue
+            mark(row, 'data-edulog-unfilled-card', '')
+            for (const [index, cell] of [...row.cells].entries()) {
+              mark(cell, 'data-edulog-label', labels[index] || ['學生','學習紀錄節次','目前節次','課堂紀錄'][index] || '')
+              if (index === 0) mark(cell, 'data-edulog-unfilled-student', '')
+              if (index === 3) for (const link of cell.querySelectorAll('a[href],button')) mark(link, 'data-edulog-unfilled-action', '')
+            }
+          }
+        }
+        refreshers.push(filterTable(context, table, 'unfilledQuery', monthly ? '未填寫課堂紀錄' : '搜尋補填清單').refresh)
+      }
+      if (monthly) for (const a of content.querySelectorAll('a[href]')) if (/month_unfilled_report/.test(a.pathname)) {
         const current = (new URL(a.href).searchParams.get('month') || '') === (new URL(doc.location.href).searchParams.get('month') || '')
         if (current) mark(a, 'aria-current', 'page')
       }
@@ -466,6 +483,8 @@
       const sync = () => { select.value = radios.find(n => n.checked)?.value || '' }
       sync(); wrapper.append(select)
       const rating = radios[0].closest('.rating') || radios[0].parentElement
+      mark(rating, 'data-edulog-rating-stars', '')
+      for (const half of rating.querySelectorAll('label.half,.half')) mark(half, 'data-edulog-rating-half', '')
       const column = rating.closest('.col-md-6,.col-md-4') || rating.parentElement
       column.append(wrapper)
       mark(column, 'data-edulog-rating-column', '')
