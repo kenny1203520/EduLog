@@ -60,4 +60,4 @@ PGlite 是 server lockfile 內的可重現依賴。瀏覽器腳本可接受 Play
 
 新增 migration **1000126_enrollment_history_reports.sql**；版本 **0.1.0**。
 
-側載包：`extension/dist/EduLog-Teaching-Tools-0.1.0-complete-history-sync.zip`，包含 runtime、部署說明、驗收紀錄及 1000118–1000126。封裝檢查 manifest、入口及本地 JS／HTML 相依。SQL／API／主站須依專案部署，不由 ZIP 自動更新伺服器。
+側載包：`extension/dist/EduLog-Teaching-Tools-0.1.0-history-field-reconciliation.zip`，包含 runtime、部署說明、驗收紀錄及 1000118–1000126。封裝檢查 manifest、入口及本地 JS／HTML 相依。SQL／API／主站須依專案部署，不由 ZIP 自動更新伺服器。

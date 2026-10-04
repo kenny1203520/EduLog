@@ -6,7 +6,7 @@
 
 1. 備份資料庫，依既有流程套用前置 migration 至 1000125，再新增 **1000126_enrollment_history_reports.sql**。沒有修改任何已部署 migration。SQL 以交易執行；側載 ZIP 不會自動執行 SQL。
 2. 同時部署本次 API 與主站程式碼，重新啟動 API。保留精確的 `API_EXTENSION_ALLOWED_ORIGINS`，並將 `EDULOG_WEB_BASE_URL` 設為可開啟的前端網址，包括自訂端口與路徑前綴。
-3. 解壓 `EduLog-Teaching-Tools-0.1.0-complete-history-sync.zip`，在 Chrome／Edge 更新原有未封裝擴充套件。先保存原站草稿，再刷新來源分頁。
+3. 解壓 `EduLog-Teaching-Tools-0.1.0-history-field-reconciliation.zip`，在 Chrome／Edge 更新原有未封裝擴充套件。先保存原站草稿，再刷新來源分頁。
 4. 在 popup 重新檢查連線；`GET /api/extension/v1/me` 的 workspace 能力須包含 `enrollment_history_reports`、`per_occurrence_report_routing`。manifest 維持 **0.1.0**。
 
 舊伺服器阻擋新的歷史同步並提供升級說明；舊匯入工作仍可使用原批次、冪等鍵與檢查點續傳。舊工作未提供 `report_session_ids` 時維持單班次限制。新版可帶最多 50 個已確認的報告目的班次；每個目的班次仍執行權限檢查。

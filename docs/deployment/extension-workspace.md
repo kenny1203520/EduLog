@@ -4,7 +4,7 @@
 
 部署至 **1000126**，並一起更新 API、主站與側載擴充套件。本版將已確認的允許教學原文與位置證據保存為伺服器 enrollment 歷史；下方 1000124 的本機限定說明屬於舊版。最新流程、權限、資料保留與回復說明見 [完整歷史同步部署](extension-enrollment-history.md)，驗收見 `extension/tests/ACCEPTANCE-1000126.md`。
 
-最新 ZIP：`extension/dist/EduLog-Teaching-Tools-0.1.0-complete-history-sync.zip`。老師確認摘要後，合法課次逐堂綁定，其餘先存歷史；不改寫報名關係、調課或自動送出原站表單。
+最新 ZIP：`extension/dist/EduLog-Teaching-Tools-0.1.0-history-field-reconciliation.zip`。老師確認摘要後，合法課次逐堂綁定，其餘先存歷史；不改寫報名關係、調課或自動送出原站表單。
 
 ## 1000124：介面精修、欄位映射與完整歷史擷取
 
