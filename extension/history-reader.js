@@ -12,6 +12,7 @@ export async function readHistoryWork(work, hooks, retryPath) {
   const persist=async()=>{assertCurrent();await hooks.save();assertCurrent()}
   const read=async(action,extra)=>{assertCurrent();const data=await hooks.source(action,{workId:work.id,...extra});assertCurrent();return data}
   const paths=retryPath?[retryPath]:history.paths.slice(history.next)
+  if(retryPath)delete history.checkpoints[retryPath]
   work.status='collecting';await persist()
   try {
     for(const historyPath of paths) {
@@ -40,8 +41,9 @@ export async function readHistoryWork(work, hooks, retryPath) {
           catch(error){if(interruptionCodes.has(error.code))throw error;incoming={...record,sourceReadStatus:'failed',needs:[error.message]}}
         }
         history.issues=history.issues.filter(r=>r.evidenceKey!==incoming.evidenceKey)
-        if(!incoming.source_id||!incoming.date||incoming.sourceReadStatus==='failed')history.issues.push(incoming)
-        if(incoming.source_id)work.snapshot.records=hooks.merge(work.snapshot.records,[incoming])
+        if(!incoming.date||incoming.sourceReadStatus==='failed')history.issues.push(incoming)
+        work.snapshot.records=hooks.merge(work.snapshot.records,[incoming])
+        if(!incoming.source_id)history.reportCount++
         checkpoint.next++;await persist()
         hooks.progress(`已讀取 ${history.reportCount} 份報告；已檢查 ${checkpoint.next}／${checkpoint.records.length} 筆本生歷史紀錄。`)
       }

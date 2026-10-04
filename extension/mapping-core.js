@@ -20,9 +20,10 @@ export function rankCandidates(rows, name, label = r => r.name) {
   return [...rows].sort((a,b) => Number(exact(label(b))) - Number(exact(label(a))) || String(label(a)).localeCompare(String(label(b)), 'zh-Hant') || a.id.localeCompare(b.id))
 }
 export function mergeRecords(existing, incoming) {
-  const records = new Map(existing.map(r => [`${r.kind}:${r.source_id}`, r]))
+  const identity=r=>`${r.kind}:${r.source_id||`${r.enrollment_source_id}:${r.historyKey||r.evidenceKey}`}`
+  const records = new Map(existing.map(r => [identity(r), r]))
   for (const row of incoming) {
-    const key = `${row.kind}:${row.source_id}`, old = records.get(key)
+    const key = identity(row), old = records.get(key)
     if (!old) records.set(key,row)
     else records.set(key, { ...old, ...Object.fromEntries(Object.entries(row).filter(([,v]) => v != null && v !== '')), data: { ...old.data, ...row.data }, sourceEvidence: mergeEvidence(old.sourceEvidence || [], row.sourceEvidence || []) })
   }

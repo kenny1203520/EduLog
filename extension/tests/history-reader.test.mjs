@@ -25,3 +25,13 @@ test('legacy checkpoints resume at the saved report index',async()=>{
  await readHistoryWork(work,{current:()=>true,paused:()=>false,save:async()=>{},progress:()=>{},merge:(a,b)=>[...a,...b],source:async(action,input)=>{calls.push(action==='history'?input.historyPath:input.input.reportId);return action==='history'?[]:record(input.input.reportId)}})
  assert.deepEqual(calls,['b','/dt_admissions/2']);assert.equal(work.history.queue,undefined);assert.equal(work.history.next,2)
 })
+
+test('evidence-only history is retained and explicit reread scans modified editors',async()=>{
+ const work=fixture();let version=1,listReads=0
+ const hooks={current:()=>true,paused:()=>false,save:async()=>{},progress:()=>{},merge:(a,b)=>[...a.filter(r=>r.evidenceKey!==b[0].evidenceKey),...b],source:async(action)=>{
+  if(action==='history'){listReads++;return[{...record(null),evidenceKey:'evidence:stable',historyKey:'evidence:stable',data:{content:String(version)}}]}
+  throw Error('no fabricated editor link')
+ }}
+ await readHistoryWork(work,hooks);assert.equal(work.snapshot.records.length,1);assert.equal(work.history.issues.length,0)
+ version=2;await readHistoryWork(work,hooks,'/dt_admissions/1');assert.equal(listReads,3);assert.equal(work.snapshot.records[0].data.content,'2')
+})

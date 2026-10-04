@@ -215,15 +215,37 @@
       // multiple IDs or row numbers never supply a permanent report identity.
       const queryIds=[...row.querySelectorAll('a[href]')].flatMap(a=>{try{const u=new URL(a.getAttribute('href'),ORIGIN);if(u.origin!==ORIGIN||u.pathname!=='/dt/admissions/lesson_reports/attendance_status')return [];const ids=u.searchParams.getAll('report_ids[]');return ids.length===1&&/^\d+$/.test(ids[0])?ids:[]}catch{return []}})
       const reportId=ref?.path.match(/reports\/(\d+)/)?.[1]||([...new Set(queryIds)].length===1?queryIds[0]:null)
-      const contentNode=[...row.querySelectorAll('p')].find(p=>/^評語[：:]/.test(text(p)))
-      const content=contentNode?.textContent.trim().replace(/^評語[：:]\s*/,'').slice(0,10000)
-      if(!reportId&&!dates.parse(dateRaw).month&&!content)continue
+      // The history page uses label + sibling paragraphs as well as table columns.
+      // Never capture administrative cells or the whole evaluation container.
+      const labeled=(labels)=>{
+        for(const label of row.querySelectorAll('label,strong,b,dt')){
+          if(!labels.includes(text(label).replace(/[：:]$/,'')))continue
+          const next=label.nextElementSibling
+          if(next&&['P','DD','SPAN'].includes(next.tagName))return next.textContent.trim().slice(0,10000)
+        }
+        const p=[...row.querySelectorAll('p')].find(n=>labels.some(l=>n.textContent.trim().startsWith(l+'：')||n.textContent.trim().startsWith(l+':')))
+        return p?.textContent.trim().replace(/^[^：:]+[：:]\s*/,'').slice(0,10000)
+      }
+      const sourceFields=[],data={}
+      const descriptors=[['attendance_status',['出席狀況','出席狀態']],['is_completed',['課程進度','完成狀況']],['sourceLessonLabel',['最新課程階段','學習課程','教材']],['progress_letter',['進度細項','章節進度']],['class_participation',['課程參與','課程參與評分']],['classroom_behavior',['課堂秩序','課堂表現']],['content',['評語','學習表現']],['contact_notes',['聯絡欄']],['class_notes',['紀錄','內部紀錄']]]
+      for(const [key,labels] of descriptors){
+        const cell=teachingCell(row,labels),value=labeled(labels)??(cell?cellText(cell):undefined)
+        if(value===undefined)continue
+        const field={key,label:labels[0],type:'text',value,options:[{value,label:value,disabled:false}],internal:key==='class_notes',disabled:false}
+        sourceFields.push(field)
+        if(['content','contact_notes'].includes(key))data[key]=value
+        else if(['class_participation','classroom_behavior'].includes(key)&&/^(?:[0-4](?:\.5)?|5)(?:\s*星)?$/.test(value))data[key]=Number(value.replace(/\s*星$/,''))
+        else {const canonical=globalThis.edulogFieldMappings.canonical(field);if(canonical!==undefined)data[key]=canonical}
+        if(key==='progress_letter'){const match=value.match(/^(?:Section\s*)?([A-Z])\s*(?:(?:到|至|–|-)\s*(?:Section\s*)?([A-Z]))?$/);if(match)data.progress_letter=match[2]?`${match[1]}-${match[2]}`:match[1]}
+      }
+      if(!reportId&&!sourceFields.some(f=>f.value!==''&&!f.internal))continue
       const editPath=reportId?`/dt_admissions/${admissionId}/reports/${reportId}/edit`:null
       results.push({kind:'report',source_id:reportId,enrollment_source_id:admissionId,date,dateRaw,
         evidenceKey:`${admissionId}:${row.rowIndex}`,identityUnverified:!ref,
-        sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','來源報名 ID',admissionId],['report_id','來源報告 ID',reportId],['date','课次日期原文',dateRaw],['content','學習表現原文',content]])],
-        data:{...(content?{content}:{}),...(editPath?{external_link:ORIGIN+editPath}:{})},
-        needs:[...(!date?['完整上課日期待確認']:[]),...(!reportId?['缺少可靠報告連結，請補上原站編輯連結']:['待讀取已儲存報告欄位'])]})
+        sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','來源報名 ID',admissionId],['report_id','來源報告 ID',reportId],['date','課次日期原文',dateRaw],...sourceFields.map(f=>[f.key,f.label,f.value])])],
+        sourceFields,sourceLessonLabel:sourceFields.find(f=>f.key==='sourceLessonLabel')?.value,sourceInternalNotes:sourceFields.find(f=>f.internal)?.value||'',
+        data:{...data,...(editPath?{external_link:ORIGIN+editPath}:{})},sourceReadStatus:'list',
+        needs:[...(!date?['完整上課日期待確認']:[]),...(reportId?['待讀取已儲存報告欄位']:[])]})
     }
     const unique=new Map()
     for(const record of results){const key=record.source_id?`report:${record.source_id}`:record.evidenceKey,old=unique.get(key);if(!old){unique.set(key,record);continue}old.sourceEvidence=mergeEvidence(old.sourceEvidence,record.sourceEvidence);old.historyDateValues=[...new Set([...(old.historyDateValues||[old.dateRaw]),record.dateRaw])];if(!old.data.content&&record.data.content)old.data.content=record.data.content}
@@ -261,7 +283,12 @@
   }
   async function readHistory(sourcePath,input={}) {
     if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw new Error('來源路徑尚未驗證。')
-    const records=extractHistory(await readPath(sourcePath),sourcePath.split('/').pop())
+    let records=extractHistory(await readPath(sourcePath),sourcePath.split('/').pop())
+    for(const record of records){
+      record.historyKey=record.source_id?`report:${record.source_id}`:`evidence:${await digest([record.enrollment_source_id,record.date||record.dateRaw,record.sourceFields.map(f=>[f.key,f.value])])}`
+      if(!record.source_id)record.evidenceKey=`${record.enrollment_source_id}:${record.historyKey}`
+    }
+    const unique=new Map();for(const record of records){const key=`${record.enrollment_source_id}:${record.historyKey}`,old=unique.get(key);if(old)old.sourceEvidence=mergeEvidence(old.sourceEvidence,record.sourceEvidence);else unique.set(key,record)}records=[...unique.values()]
     if(input.listOnly)return records
     for(let i=0;i<records.length;i++){
       const record=records[i]

@@ -39,3 +39,14 @@ test('history uses date headers rather than positional administrative columns',a
  const {api,pages,dom}=fixture();pages.set('/dt_admissions/301','<div id="page-body"><div class="content"><table><thead><tr><th>上課日期</th><th>行政項目</th><th>教學紀錄</th></tr></thead><tbody><tr><td>2026/10/01</td><td>2024/01/01</td><td><a href="/dt_admissions/301/reports/401/edit">編輯</a></td></tr></tbody></table></div></div>');pages.set('/dt_admissions/301/reports/401/edit',editor('401','2026-10-01'))
  const [r]=await api.readHistory('/dt_admissions/301');assert.equal(r.date,'2026-10-01');assert.equal(r.sourceReadStatus,'complete');dom.window.close()
 })
+
+test('full list teaching values survive without report IDs; exact evidence dedupes',async()=>{
+ const {api,pages,dom}=fixture()
+ const record='<tr><td>1</td><td>2026/10/04</td><td><label>評語：</label><p></p><label>聯絡欄：</label><p>保留\n段落</p><label>課程進度：</label><span>未完成</span><label>課程參與：</label><span>0</span><label>課堂表現：</label><span>4.5</span><label>最新課程階段：</label><span>Lesson 13</span></td><td>FORBIDDEN_ADMIN</td></tr>'
+ pages.set('/dt_admissions/301',table(record+record))
+ const records=await api.readHistory('/dt_admissions/301')
+ assert.equal(records.length,1);assert.equal(records[0].source_id,null);assert.match(records[0].historyKey,/^evidence:[a-f0-9]{64}$/)
+ assert.equal(records[0].data.content,'');assert.equal(records[0].data.class_participation,0);assert.equal(records[0].data.classroom_behavior,4.5);assert.equal(records[0].data.is_completed,false)
+ assert.equal(records[0].sourceLessonLabel,'Lesson 13');assert.equal(JSON.stringify(records).includes('FORBIDDEN_ADMIN'),false)
+ dom.window.close()
+})
