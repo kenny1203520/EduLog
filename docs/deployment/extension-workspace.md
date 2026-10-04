@@ -1,5 +1,11 @@
 # EduLog 0.1.0 整合工作分頁
 
+## 目前版本：1000126 完整歷史同步
+
+部署至 **1000126**，並一起更新 API、主站與側載擴充套件。本版將已確認的允許教學原文與位置證據保存為伺服器 enrollment 歷史；下方 1000124 的本機限定說明屬於舊版。最新流程、權限、資料保留與回復說明見 [完整歷史同步部署](extension-enrollment-history.md)，驗收見 `extension/tests/ACCEPTANCE-1000126.md`。
+
+最新 ZIP：`extension/dist/EduLog-Teaching-Tools-0.1.0-complete-history-sync.zip`。老師確認摘要後，合法課次逐堂綁定，其餘先存歷史；不改寫報名關係、調課或自動送出原站表單。
+
 ## 1000124：介面精修、欄位映射與完整歷史擷取
 
 已部署至 1000123 的資料庫只需補上 **1000124_extension_field_mappings.sql**，再更新並重啟 API。這次沒有修改或套用既有部署的 migration。重新載入側載擴充套件，先保存原站草稿再刷新來源分頁；在 popup 強制重新檢查連線，確認 `/me` 的 `field_mapping_memory` 為 true。舊伺服器仍可使用已驗證的語意建議，跨裝置記憶會提示升級。

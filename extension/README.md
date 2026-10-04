@@ -1,5 +1,17 @@
 # EduLog Teaching Systems extension
 
+## Current release: complete enrollment history (0.1.0 / 1000126)
+
+Deploy migrations through **1000126**, the API and web app together, then reload the extension and recheck pairing. Use `extension/dist/EduLog-Teaching-Tools-0.1.0-complete-history-sync.zip`. The manifest stays **0.1.0**. The latest deployment instructions are in `docs/deployment/extension-enrollment-history.md`; results and pending live checks are in `tests/ACCEPTANCE-1000126.md`.
+
+The workbench defaults to all readable admission history: read and validate, handle exceptions, review one synchronization summary, then view results. Confirmed same-student/course enrollment mappings remain valid across class differences. Each dated report is routed only to a legal effective occurrence; the enrollment relationship remains unchanged. Otherwise, the record is saved as durable enrollment history, including allowed teaching text and location evidence. Unknown dates, ambiguous same-day identities and nonempty overwrites require explicit review. Internal notes are separately selected.
+
+Saved history is available in the student's and enrollment's report pages and as explicitly selected assistant templates. Unbound history does not count toward rosters, attendance or unfilled reports. Linked history is not duplicated in report lists. Local drafts/checkpoints retain the seven-day and completion/cancellation cleanup rules; confirmed server history is durable and is not deleted when a local work is cancelled.
+
+New synchronization requires `enrollment_history_reports` and `per_occurrence_report_routing`. Legacy jobs retain their original batch keys and checkpoints. Date-specific roster results state when the source cannot prove a complete class roster. Production sideloading/RBAC/native zoom and Docker build remain pending; isolated tests are documented separately.
+
+The sections below document earlier capabilities and remain relevant to legacy jobs; their migration floors and local-only evidence descriptions are superseded by this release section.
+
 ## Clear theme and connection management (0.1.0)
 
 The interface style is **EduLog 清晰主題** (EduLog Clear theme). Use **套用清晰主題** to apply it and **使用原站主題** to return to the supported website's style. It remains available without pairing.
