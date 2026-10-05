@@ -1,4 +1,5 @@
 const en = {
+  '教材':'Lesson','完成狀況':'Completion','章節進度':'Chapter progress','出席狀態':'Attendance status','不出席原因':'Absence reason','課程參與':'Class participation','課堂秩序':'Classroom behavior','學習報告':'Learning report','聯絡欄':'Contact notes','內部紀錄':'Internal notes','報告連結':'Report link','來源':'Source','EduLog':'EduLog','刪除內容':'Removed content','新增內容':'Added content','同步欄位':'Fields to sync','設定往後預設；未勾選欄位保留在本機來源資料，不寫入新歷史或課次報告。身份、日期及必要關係固定核對。':'Set future defaults. Unchecked fields stay in the local source snapshot and are excluded from new history and occurrence reports. Identity, date, and required relationships are always checked.','記住為往後預設':'Remember as future defaults','本報告同步欄位 · 可單獨略過':'Fields for this report · can be skipped individually','同步此欄位':'Sync this field','批次核對差異':'Review differences in batches','按欄位查看來源與 EduLog 差異；決策只套用於本次工作，可再逐份調整。':'Review source and EduLog differences by field. Decisions apply to this work only and can be adjusted per report.','來源':'Source','EduLog':'EduLog','選擇批次處理方式':'Choose a batch action','採用來源內容':'Use source value','保留 EduLog':'Keep EduLog','不同步此欄位':'Do not sync this field','內容一致':'Values match','已記住同步欄位預設；可在本次工作或單份報告調整。':'Sync defaults saved. You can adjust this work or individual reports.','目前連線不支援跨裝置同步偏好；本次工作仍可調整欄位。':'This connection cannot save cross-device sync preferences. Fields can still be adjusted for this work.',
   'EduLog': 'EduLog', '整合工作台': 'Integration workspace', '清晰主題 · 0.1.0': 'Light theme · 0.1.0',
   '跳至工作內容': 'Skip to workspace', '整合工作': 'Workspace navigation', '教學資料匯入': 'Teaching data import', '報告預填': 'Report prefill', '工作紀錄': 'Work history',
   '目前工作情境': 'Current work', '來源網站／班級': 'Source site / class', '尚未選擇': 'Not selected', '目標 EduLog': 'EduLog destination', '正在驗證連線…': 'Checking connection…',
@@ -50,6 +51,13 @@ function translate(value){
     [/^已讀取 (\d+) 筆可存取報名，已到清單結尾。請核對班級、課程與異動情況。$/,'Loaded $1 accessible enrollments. End of list. Review classes, courses, and changes.'],
     [/^已讀取 (\d+) 筆可存取報名；可載入更多。沒有可讀取的報名，不代表其他權限範圍沒有資料。$/,'Loaded $1 accessible enrollments; more are available. Other permission scopes may contain data.'],
     [/^已沿用 (\d+) · 可靠識別 (\d+) · 待確認 (\d+) · 需補資料 (\d+) · 失效 (\d+)$/,'Reused $1 · reliably identified $2 · review needed $3 · missing data $4 · invalid $5'],
+    [/^批次核對差異 · (\d+) 份報告$/,'Batch review · $1 reports'],
+    [/^(.+) · (\d+) 份$/,'$1 · $2 reports'],
+    [/^套用至 (\d+) 份報告$/,'Apply to $1 reports'],
+    [/^已套用至 (\d+) 份報告；僅限本次工作。$/,'Applied to $1 reports for this work only.'],
+    [/^本次工作：(.+)(會同步|不同步)。尚未提交的差異已失效。$/,'This work: $1 will $2. The pending preview is stale.'],
+    [/^目前選擇：(.+)(會同步|不同步)。尚未提交的差異已失效。$/,'Current selection: $1 will $2. The pending preview is stale.'],
+    [/^同步偏好讀取失敗；使用本機預設，可重試保存。 (.*)$/,'Could not load sync preferences; local defaults are active. You can retry saving. $1'],
     [/^等待時間 ([\d.]+) 秒。$/,'Waited $1 seconds.'],
     [/^已等待 (\d+) 秒；仍在等待回應。可取消這次唯讀查詢後重試。$/,'Waiting for $1 seconds. You can cancel this read-only lookup and retry.'],
     [/^已等待 (\d+) 秒。可取消此唯讀查詢。$/,'Waiting for $1 seconds. You can cancel this read-only lookup.']
