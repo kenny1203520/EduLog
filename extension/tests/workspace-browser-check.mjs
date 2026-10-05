@@ -141,7 +141,7 @@ try {
         console.log(`PASS ${name} ${width}: embedded source-editor preview, per-field overwrite, internal-note opt-in and no auto-submit`)
         await editorPage.close()
       }
-      for (const width of ((editorOnly||inlineOnly)?[]:[360,390,768,1024,1440])) {
+      for (const width of ((editorOnly||inlineOnly)?[]:[360,390,768,1024,1200,1440,1920])) {
       const page = await browser.newPage({viewport:{width,height:900}}), errors=[]; page.on('pageerror',e=>errors.push(e.message)); await page.addInitScript(mock)
       await page.goto(`http://127.0.0.1:${port}/workspace.html?source=10`); await page.locator('#workspace').waitFor({state:'visible'})
       await page.locator('#read-history').uncheck(); await page.locator('#collect').click(); await page.locator('#mapping').waitFor({state:'visible'})

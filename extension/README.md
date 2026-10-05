@@ -1,8 +1,10 @@
 # EduLog Teaching Systems extension
 
-## Current release: complete enrollment history (0.1.0 / 1000126)
+## Current workspace build: student review and localization (0.1.0)
 
-Deploy migrations through **1000126**, the API and web app together, then reload the extension and recheck pairing. Use `extension/dist/EduLog-Teaching-Tools-0.1.0-complete-history-sync.zip`. The manifest stays **0.1.0**. The latest deployment instructions are in `docs/deployment/extension-enrollment-history.md`; results and pending live checks are in `tests/ACCEPTANCE-1000126.md`.
+This update adds student-level history grouping, temporary exact-name groups when source student IDs are missing, explicit admission splitting, course/material review before enrollment confirmation, and Traditional Chinese/English workspace localization. It reuses the current API, database and import contract; **no new migration or endpoint is required**. Use `extension/dist/EduLog-Teaching-Tools-0.1.0-student-review-i18n.zip`, reload the extension and recheck pairing. The manifest stays **0.1.0**. Automated results and pending live checks are in `tests/ACCEPTANCE-student-review-i18n.md`.
+
+The interface follows verified server capabilities. If a capability is unavailable, the affected operation stays blocked and the workspace offers a connection recheck or diagnostics without displaying migration-number prompts. Source names, course labels and report evidence remain in their original language when the workspace language changes.
 
 The workbench defaults to all readable admission history: read and validate, handle exceptions, review one synchronization summary, then view results. Confirmed same-student/course enrollment mappings remain valid across class differences. Each dated report is routed only to a legal effective occurrence; the enrollment relationship remains unchanged. Otherwise, the record is saved as durable enrollment history, including allowed teaching text and location evidence. Unknown dates, ambiguous same-day identities and nonempty overwrites require explicit review. Internal notes are separately selected.
 
