@@ -6,7 +6,9 @@ import { historyIdentity, planHistory, teachingFields, bindingStillMatches } fro
 import { createHistoryWorkbench } from './history-workbench.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
 import { labels, splitBatches, validateBatches, workspaceErrorMessage, plainText, suggestedValue, retryHistoryWork } from './workspace-model.js'
+import { initWorkspaceI18n } from './workspace-i18n.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
+initWorkspaceI18n()
 let fieldRules=[]
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
@@ -110,6 +112,7 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
   } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; $('apply').disabled = !previewResults.length || work?.previewDirty === true; finishRead() }
 }
 function options(select, rows, label, placeholder, extra) {
+  select.dataset.sourceRawOptions='true'
   select.replaceChildren(new Option(placeholder, ''))
   rows.forEach(row => select.add(new Option(label(row), row.id)))
   if (extra) select.add(new Option(extra, 'new'))
@@ -141,13 +144,13 @@ async function initialize() {
   const data = await send({ type: 'workspace-init' }); binding = data.binding; integrationCapabilities = data.status.capabilities || {}; frontendSettingsUrl = data.status.settingsUrl; tabs = data.tabs
   batchBytes = data.status.limits?.batchBytes ?? 180000
   if (!data.status.capabilities?.mapping_memory || !data.status.capabilities?.multi_course_import) {
-    $('connect-title').textContent='智慧對應服務尚未就緒'; $('connect-detail').textContent='請更新 EduLog API 並套用 1000120 migration，再重新驗證。舊工作檢查點保留。'; show('connect'); $('workspace').hidden=true; return
+    $('connect-title').textContent='對應服務尚未就緒'; $('connect-detail').textContent='目前連線未提供工作台所需的對應功能。請重新驗證連線；已保存的工作與檢查點會保留。'; show('connect'); $('workspace').hidden=true; return
   }
   if (!data.status.capabilities?.catalog_v1) {
-    $('connect-title').textContent = 'EduLog 目錄服務尚未就緒'; $('connect-detail').textContent = '請在 EduLog API 套用 1000119 migration，再重新驗證。現有工作不會被清除。'; show('connect'); $('workspace').hidden = true; return
+    $('connect-title').textContent = 'EduLog 目錄服務尚未就緒'; $('connect-detail').textContent = '目前連線未提供目錄功能。請重新驗證連線；已保存的工作會保留。'; show('connect'); $('workspace').hidden = true; return
   }
   if (!data.status.capabilities?.teaching_data_import || !data.status.capabilities?.report_prefill) {
-    $('connect-title').textContent = '伺服器整合尚未就緒'; $('connect-detail').textContent = '請更新 EduLog API 並套用 1000118 migration，再重新驗證。'; show('connect'); $('workspace').hidden = true; return
+    $('connect-title').textContent = '伺服器整合尚未就緒'; $('connect-detail').textContent = '目前連線未提供教學資料功能。請重新驗證連線或檢查診斷資訊。'; show('connect'); $('workspace').hidden = true; return
   }
   $('instance-label').textContent = binding.instance
   $('connect').hidden = true; show('workspace')
@@ -175,7 +178,14 @@ async function changeSource() {
 function linked(kind, id) { const row = context.source_links.find(l => l.source_origin === 'https://corp.orangeapple.co' && l.source_kind === kind && l.source_id === id); return row?.valid === false ? undefined : row?.edulog_id || row?.target_id }
 function idFor(kind, id) { const key = `${kind}:${id}`; return linked(kind, id) || (work.ids[key] ||= crypto.randomUUID()) }
 function labelledInput(parent, title, type, id, value = '') { const label = node('label', title), input = node('input'); input.type = type; input.id = id; input.value = value; label.htmlFor = id; parent.append(label, input); return input }
-const mappingController = createMappingController({ capabilities: () => integrationCapabilities, settingsUrl: () => frontendSettingsUrl, rereadSource: () => source('collect'),state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses})
+function markMappingChanged(){
+  if(!work)return
+  unsaved=true;work.mappingDirty=true;work.previewDirty=true;$('apply').disabled=true
+  work.revision=(work.revision||0)+1;scheduleHistoryPlanForCurrentMapping()
+  clearTimeout(editTimer);const editingId=work.id
+  editTimer=setTimeout(()=>{if(work?.id!==editingId||busy)return;captureMappingChoices();void save().catch(()=>{unsaved=true;notice('對應選擇尚未儲存，請保留此分頁並重試。',true)})},250)
+}
+const mappingController = createMappingController({ capabilities: () => integrationCapabilities, settingsUrl: () => frontendSettingsUrl, rereadSource: () => source('collect'),state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses,mappingChanged:markMappingChanged})
 let historyPlan = [], historyCheckSequence = 0, historyLocalSequence = 0, historyArchives = new Map(), historyRoutes = new Map()
 const loadedLessonCourses=new Set(),lessonCatalogLoads=new Map()
 function historyOptions(){return {dateFrom:work?.dateFrom,dateTo:work?.dateTo,includeInternal:$('include-internal-notes').checked,lessons:context?.lessons||[]}}
@@ -194,10 +204,10 @@ function historyUiChanged(){if(work)void save().catch(e=>notice(e.message,true))
 const historyView=createHistoryWorkbench({work:()=>work,labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:()=>void runLatest(async()=>{await refreshHistoryPlan();historyView.refreshEditor(historyPlan)},{label:'正在逐日核對有效課次'}),fields:(host,item)=>attachImportFields(host,item.record,{work:()=>work,courseId:()=>item.target?.courseId,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,changed:historyWorkChanged})})
 function historyTargets() {
   const targets=new Map()
-  for(const r of work.snapshot.records.filter(r=>r.kind==='enrollment'&&mappingController.validateRow(r,true))) {
-    const choice=$(`enrollment-${r.source_id}`)?.value,courseId=$(`enrollment-course-${r.source_id}`)?.value
-    if(!choice||!courseId)continue
-    targets.set(r.source_id,{id:choice==='new'?idFor('enrollment',r.source_id):choice,isNew:choice==='new',courseId,name:r.sourceStudentName,courseName:context.courses.find(c=>c.id===courseId)?.display_name||r.sourceCourseLabel})
+  for(const r of work.snapshot.records.filter(r=>r.kind==='enrollment')) {
+    const choice=$(`enrollment-${r.source_id}`)?.value,courseId=$(`enrollment-course-${r.source_id}`)?.value||mappingController.courseFor(r)
+    if(!courseId)continue
+    targets.set(r.source_id,{id:choice&&choice!=='new'?choice:choice==='new'?idFor('enrollment',r.source_id):null,isNew:choice==='new',eligible:mappingController.validateRow(r,true),courseId,name:r.sourceStudentName,courseName:context.courses.find(c=>c.id===courseId)?.display_name||r.sourceCourseLabel})
   }
   return targets
 }
@@ -210,7 +220,7 @@ async function refreshHistoryPlan() {
   for(const courseId of lessonCourses){await ensureLessonCatalog(courseId);if(!current())return}
   if(integrationCapabilities.enrollment_history_reports) {
     for(const [admission,target] of targets) {
-      if(target.isNew)continue
+      if(!target.id||target.isNew)continue
       let cursor,rows=[],seenCursors=new Set()
       do{const page=await api('history-list',undefined,{query:{enrollment_id:target.id,source_admission_id:admission,limit:50,cursor}});if(!current())return;rows.push(...page.items||[]);cursor=page.next_cursor||undefined;if(cursor&&seenCursors.has(cursor))throw new Error('歷史清單分頁未前進，請重新核對。');if(cursor)seenCursors.add(cursor)}while(cursor)
       archives.set(target.id,[...(archives.get(target.id)||[]),...rows])
@@ -223,7 +233,7 @@ async function refreshHistoryPlan() {
   historyArchives=archives;historyRoutes=routes
   historyPlan=planHistory(owner.snapshot.records,targets,archives,routes,historyOptions())
   historyView.render(historyPlan)
-  if(!integrationCapabilities.enrollment_history_reports)$('history-sync-summary').textContent='請將 EduLog 升級至 1000126，才能保存完整歷史及逐堂綁定。原工作檢查點保留。'
+  if(!integrationCapabilities.enrollment_history_reports)$('history-sync-summary').textContent='目前連線未提供完整歷史保存；可重新檢查連線。已讀取內容與檢查點保留。'
 }
 async function ensureLessonCatalog(courseId){
   if(loadedLessonCourses.has(courseId))return
@@ -353,7 +363,7 @@ async function preview(reuse = false) {
     if (work.jobId && (work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status))) throw new Error('此工作已有寫入或待確認檢查點。請使用「檢查並續傳」核對原批次，不能重新建立工作。')
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
     await mappingController.resolveFieldRules()
-    if(!integrationCapabilities.enrollment_history_reports)throw new Error('請升級 EduLog 至 1000126 後保存歷史；舊工作的已提交批次與檢查點保留。')
+    if(!integrationCapabilities.enrollment_history_reports)throw Object.assign(new Error('目前連線未提供歷史保存功能。請重新檢查連線；已讀取資料與檢查點會保留。'),{code:'CAPABILITY_UNAVAILABLE'})
     await refreshHistoryPlan()
     const batches = splitBatches(prepareRows(), batchBytes)
     if (!batches.length) {renderNoopSummary();return}
@@ -757,16 +767,7 @@ document.addEventListener('input', event => {
   if (!work || !event.target.closest('#mapping')) return
   if (event.target.closest('#history-workbench')) return
   if (!event.target.closest('.mapping-row,.course-group')) return
-  unsaved = true; work.mappingDirty = true; work.previewDirty = true; $('apply').disabled = true
-  work.revision = (work.revision || 0) + 1
-  scheduleHistoryPlanForCurrentMapping()
-  clearTimeout(editTimer)
-  const editingId = work.id
-  editTimer = setTimeout(() => {
-    if (work?.id !== editingId || busy) return
-    captureMappingChoices()
-    void save().catch(() => { unsaved = true; notice('對應選擇尚未儲存，請保留此分頁並重試。', true) })
-  }, 250)
+  markMappingChanged()
 })
 document.addEventListener('change', event => {
   if (!work || !event.target.closest('#mapping') || event.target.closest('#history-workbench') || !event.target.closest('.mapping-row,.course-group')) return
