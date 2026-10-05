@@ -6,7 +6,7 @@ import { retryHistoryWork } from '../workspace-model.js'
 const source=readFileSync(new URL('../history-workbench.js',import.meta.url),'utf8').replace('export function','function')
 function fixture() {
  const dom=new JSDOM('<section id="history-workbench"><input id="history-search"><select id="history-filter"><option value="needs">待處理</option><option value="all">全部</option></select><div id="history-items"></div><div id="history-editor"><button id="history-back">返回</button><div id="history-detail"></div></div><p id="history-empty"></p><p id="history-sync-summary"></p></section>',{runScripts:'outside-only'})
- const w=dom.window;w.scrollTo=()=>{};w.currentWork={id:'work'};w.hookCounts={changed:0,uiChanged:0,recheck:0};w.eval(source+';window.view=createHistoryWorkbench({work:()=>currentWork,changed:()=>{hookCounts.changed++;window.view?.refreshEditor()},uiChanged:()=>hookCounts.uiChanged++,recheck:()=>hookCounts.recheck++,labels:{},fields:()=>{}})')
+ const w=dom.window;w.scrollTo=()=>{};w.currentWork={id:'work'};w.hookCounts={changed:0,uiChanged:0,recheck:0};w.eval(source+';window.view=createHistoryWorkbench({work:()=>currentWork,changed:()=>{hookCounts.changed++;window.view?.updateStatus()},uiChanged:()=>hookCounts.uiChanged++,recheck:()=>hookCounts.recheck++,labels:{},fields:(host)=>{const detail=host.ownerDocument.createElement("details");detail.dataset.reviewKey="mapping:attendance";detail.innerHTML="<summary>Mapping</summary><input value=kept>";host.append(detail)}})')
  const item=(key,extra={})=>({key,record:{enrollment_source_id:key,date:'2026-10-04'},target:{id:'enrollment',name:'測試學生'},category:'needs',reason:'日期核對',...extra})
  return {w,dom,item,$:id=>w.document.getElementById(id)}
 }
@@ -34,6 +34,10 @@ test('search and filter changes persist UI state without marking import data dir
 test('list editor conflict acknowledgement updates local state without a full recheck',()=>{
  const {w,dom,item,$}=fixture(),row=item('301',{record:{enrollment_source_id:'301',date:'2026-10-04',sourceFieldConflicts:[{key:'content',label:'評語',listValue:'清單內容',editValue:'報告頁內容'}]}});w.currentWork.historyUI={selected:'301'};w.view.render([row]);const acknowledgement=[...$('history-detail').querySelectorAll('.source-conflicts button')][0];assert.ok(acknowledgement);acknowledgement.click()
  assert.equal(row.record.sourceConflictAcknowledged,true);assert.equal(w.hookCounts.changed,1);assert.equal(w.hookCounts.recheck,0);assert.match($('history-detail').textContent,/已確認/);dom.window.close()
+})
+
+test('local mapping updates retain loaded editor controls, expansion, draft, focus, and scroll',()=>{
+ const {w,dom,item,$}=fixture(),row=item('301');w.currentWork.historyUI={selected:'301'};w.view.render([row]);const mapping=$('history-detail').querySelector('[data-review-key="mapping:attendance"]'),input=mapping.querySelector('input');mapping.open=true;input.value='draft';input.focus();$('history-editor').scrollTop=37;row.category='bind';row.reason='Session confirmed';w.view.updateStatus([row]);assert.equal($('history-detail').querySelector('[data-review-key="mapping:attendance"]'),mapping);assert.equal(mapping.open,true);assert.equal(input.value,'draft');assert.equal(w.document.activeElement,input);assert.equal($('history-editor').scrollTop,37);assert.match($('history-detail').querySelector('[data-history-reason]').textContent,/Session confirmed/);dom.window.close()
 })
 
 test('narrow view keeps list and editor states and returns focus to the selected row',()=>{

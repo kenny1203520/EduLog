@@ -7,9 +7,12 @@ export function createHistoryWorkbench(hooks) {
   function open(item) {
     const host=$('history-detail');host.replaceChildren();editorKey=item.key
     const r=item.record, title=make('h3',`${item.target?.name||r.sourceStudentName||'來源報名 #'+r.enrollment_source_id} · ${r.date||r.dateRaw||'日期待確認'}`)
-    host.append(title,make('p',`${item.target?.courseName||r.sourceCourseLabel||'課程待確認'} · ${stateLabels[item.category]}`),make('p',item.reason))
-    const original=make('a','查看原站完整紀錄 ↗'); original.href=`https://corp.orangeapple.co/dt_admissions/${r.enrollment_source_id}`;original.target='_blank';original.rel='noopener noreferrer';original.className='mapping-link';host.append(original)
-    const evidence=make('details'),summary=make('summary','擷取原文與來源證據');evidence.className='source-evidence';evidence.append(summary)
+    const state=make('p',`${item.target?.courseName||r.sourceCourseLabel||'課程待確認'} · ${stateLabels[item.category]}`);state.dataset.historyState=''
+    const reason=make('p',item.reason);reason.dataset.historyReason=''
+    host.append(title,state,reason)
+    const issueList=make('section');issueList.className='history-report-issues';issueList.dataset.historyIssues='';host.append(issueList)
+    const original=make('a','查看原站完整紀錄 ↗'); original.href=`https://corp.orangeapple.co/dt_admissions/${r.enrollment_source_id}`;original.target='_blank';original.rel='noopener noreferrer';original.className='mapping-link';original.dataset.issueTarget='source';host.append(original)
+    const evidence=make('details'),summary=make('summary','擷取原文與來源證據');evidence.className='source-evidence';evidence.dataset.reviewKey=`source-evidence:${item.key}`;evidence.append(summary)
     for(const e of r.sourceEvidence||[]) { evidence.append(make('p',`${e.sourcePath} · ${e.table} · 第 ${e.row} 列`)); for(const f of e.fields||[])evidence.append(make('p',`${f.label}：${f.text??''}`)) }
     if(!r.sourceEvidence?.length)evidence.append(make('p','此工作尚未保留擷取原文，可補讀來源資料。'))
     host.append(evidence)
@@ -17,21 +20,21 @@ export function createHistoryWorkbench(hooks) {
       const section=make('section'),title=make('h4','列表與已儲存報告頁內容不同'),help=make('p','請查看兩邊內容。確認後會採用已儲存報告編輯頁的值；重讀可更新證據，略過不會寫入這筆。');section.className='source-conflicts';section.append(title,help)
       for(const conflict of r.sourceFieldConflicts){const row=make('div');row.append(make('strong',conflict.label),make('p',`歷史列表：${conflict.listValue||'空白'}`),make('p',`已儲存報告頁：${conflict.editValue||'空白'}`));section.append(row)}
       if(r.sourceConflictAcknowledged)section.append(make('p','已確認採用已儲存報告編輯頁內容。','field-mapping-status'))
-      else{const confirm=make('button','核對後採用已儲存報告頁內容');confirm.type='button';confirm.onclick=()=>{r.sourceConflictAcknowledged=true;hooks.changed()};section.append(confirm)}
+      else{const confirm=make('button','核對後採用已儲存報告頁內容');confirm.type='button';confirm.onclick=()=>{r.sourceConflictAcknowledged=true;confirm.replaceWith(make('p','已確認採用已儲存報告編輯頁內容。','field-mapping-status'));hooks.changed()};section.append(confirm)}
       host.append(section)
     }
     if(!r.date||r.sourceDateConflict) {
-      const label=make('label','需要您確認：完整上課日期'),date=make('input'); date.type='date';date.value=r.userConfirmedDate||r.date||'';label.append(date)
+      const label=make('label','需要您確認：完整上課日期'),date=make('input'); date.type='date';date.dataset.issueTarget='date';date.value=r.userConfirmedDate||r.date||'';label.append(date)
       const confirm=make('button','確認日期，保留原文並重新核對');confirm.type='button'
       confirm.onclick=()=>{if(!date.value||!date.checkValidity())return date.reportValidity();r.userConfirmedDate=date.value;r.date=date.value;r.sourceDateConflict=false;hooks.recheck()};host.append(label,confirm)
     }
     if(item.candidates?.length>1) {
-      const label=make('label','需要您確認：本份紀錄的目標課次'),select=make('select');select.dataset.sourceRawOptions='true';select.add(new Option('請選擇合法課次，或先存歷史',''));for(const c of item.candidates)select.add(new Option(`${c.class_name} · ${c.occurrence_date} · ${c.start_time||'時段未提供'}`,c.id));select.value=r.historyOccurrenceId||'';label.append(select);host.append(label);select.onchange=()=>{r.historyOccurrenceId=select.value;r.historyConflictConfirmed=false;hooks.recheck()}
+      const label=make('label','需要您確認：本份紀錄的目標課次'),select=make('select');select.dataset.issueTarget='occurrence';select.dataset.sourceRawOptions='true';select.add(new Option('請選擇合法課次，或先存歷史',''));for(const c of item.candidates)select.add(new Option(`${c.class_name} · ${c.occurrence_date} · ${c.start_time||'時段未提供'}`,c.id));select.value=r.historyOccurrenceId||'';label.append(select);host.append(label);select.onchange=()=>{r.historyOccurrenceId=select.value;r.historyConflictConfirmed=false;hooks.recheck()}
     }
     if(item.conflicts?.length) {
       host.append(make('h4','既有報告差異 · 未勾選的欄位保留 EduLog'))
       for(const f of item.conflicts) {
-        const label=make('label'),check=make('input');check.type='checkbox';check.checked=(r.historyOverwrite||[]).includes(f);label.className='check';label.append(check,make('span',`改用來源「${hooks.labels[f]||f}」：${String(item.occurrence.report[f])} → ${String(item.data[f])}`));host.append(label)
+        const label=make('label'),check=make('input');check.type='checkbox';check.dataset.issueTarget=`conflict:${f}`;check.checked=(r.historyOverwrite||[]).includes(f);label.className='check';label.append(check,make('span',`改用來源「${hooks.labels[f]||f}」：${String(item.occurrence.report[f])} → ${String(item.data[f])}`));host.append(label)
         check.onchange=()=>{r.historyOverwrite=check.checked?[...new Set([...(r.historyOverwrite||[]),f])]:(r.historyOverwrite||[]).filter(k=>k!==f);r.historyConflictConfirmed=false;hooks.changed()}
       }
       const confirm=make('button','已核對差異，依上述選擇列入摘要');confirm.type='button';confirm.onclick=()=>{r.historyConflictConfirmed=true;hooks.recheck()};host.append(confirm)
@@ -83,5 +86,5 @@ export function createHistoryWorkbench(hooks) {
   for(const id of ['history-search','history-filter'])$(id).addEventListener(id.endsWith('search')?'input':'change',()=>{selected='';render(items);hooks.uiChanged?.()})
   $('history-back').onclick=()=>{$('history-workbench').dataset.mobileView='list';buttons.get(selected)?.focus({preventScroll:true})}
   for(const id of ['history-items','history-editor'])$(id).addEventListener('scroll',()=>{if(owner?.historyUI)owner.historyUI[id==='history-items'?'listScroll':'editorScroll']=$(id).scrollTop})
-  return {render,refreshEditor:(next=items)=>{const pane=$('history-editor'),position=pane.scrollTop,page=window.scrollY,key=document.activeElement?.dataset.focusKey,expanded=new Set([...pane.querySelectorAll('details[open]')].map(d=>d.querySelector('summary')?.textContent));editorKey='';render(next);for(const detail of pane.querySelectorAll('details'))if(expanded.has(detail.querySelector('summary')?.textContent))detail.open=true;pane.scrollTop=position;window.scrollTo(0,page);if(key)[...pane.querySelectorAll('[data-focus-key]')].find(c=>c.dataset.focusKey===key)?.focus({preventScroll:true})},items:()=>items}
+  return {render,updateStatus:(next=items)=>{render(next);const item=items.find(i=>i.key===selected),host=$('history-detail');if(!item||editorKey!==selected)return;const state=host.querySelector('[data-history-state]'),reason=host.querySelector('[data-history-reason]');if(state)state.textContent=`${item.target?.courseName||item.record.sourceCourseLabel||'課程待確認'} · ${stateLabels[item.category]}`;if(reason)reason.textContent=item.reason},refreshEditor:(next=items)=>{const pane=$('history-editor'),position=pane.scrollTop,page=window.scrollY,key=document.activeElement?.dataset.focusKey,expanded=new Set([...pane.querySelectorAll('details[open]')].map(d=>d.dataset.reviewKey).filter(Boolean));editorKey='';render(next);for(const detail of pane.querySelectorAll('details'))if(detail.dataset.reviewKey&&expanded.has(detail.dataset.reviewKey))detail.open=true;pane.scrollTop=position;window.scrollTo(0,page);if(key)[...pane.querySelectorAll('[data-focus-key]')].find(c=>c.dataset.focusKey===key)?.focus({preventScroll:true})},items:()=>items}
 }

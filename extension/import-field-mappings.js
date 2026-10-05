@@ -51,7 +51,7 @@ export function attachImportFields(parent, record, hooks) {
   const reportLabel=record.source_id?`報告 #${record.source_id}`:`${record.sourceStudentName||`來源報名 #${record.enrollment_source_id}`} · ${record.date||record.dateRaw||`堂次 ${record.sourceSessionOrdinal||'未辨識'}`}`
   const details = make('details'), summary = make('summary', `${reportLabel}：核對教學欄位與映射`)
   const load = make('button', '讀取此報告的欄位映射'), status = make('p')
-  details.className = 'import-field-review'; load.type = 'button'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite')
+  details.className = 'import-field-review'; details.dataset.reviewKey=`field-review:${record.source_id||record.historyKey||record.evidenceKey||record.enrollment_source_id}`; load.type = 'button'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite')
   details.append(summary, status, load); parent.append(details)
   const editor = make('div'); details.append(editor)
   let busy = false, sequence = 0
@@ -106,6 +106,7 @@ export function attachImportFields(parent, record, hooks) {
           select.addEventListener('change', () => { if (!current()) return; if (select.value === '') delete record.fieldChoices.fields[field.key]; else record.fieldChoices.fields[field.key] = { value: JSON.parse(select.value), sourceValue: field.value, signature: globalThis.edulogFieldMappings.signature(field) }; hooks.changed() })
           globalThis.edulogFieldMappingUI.attach(row, field, value === undefined ? {} : { [field.key]: value }, record.fieldRules || [], {
             enabled: hooks.capable(), sourceValue: field.value, lessons: hooks.lessons().filter(l => l.course_id === courseId), isCurrent: current,
+            scopeLabel: hooks.courseName?.(courseId)||'此課程',
             confirm: item => hooks.api('field-confirm', { source_origin: 'https://corp.orangeapple.co', adapter_version: 'orange-apple-v1', items: [{ ...item, course_id: courseId }] }),
             changed: () => { const data = mappedReport(record, courseId, hooks.lessons()).data; if (data[field.key] !== undefined) select.value = JSON.stringify(data[field.key]); hooks.changed() },
           })
