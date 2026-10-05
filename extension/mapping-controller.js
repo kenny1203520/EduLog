@@ -395,25 +395,25 @@ export function createMappingController(hooks) {
     if(!hooks.capabilities?.()?.field_mapping_memory)return
     const fields=(record.sourceFields||[]).filter(f=>f.type!=='text'&&!f.internal)
     if(!fields.length)return
-    const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:fields.map(f=>({field_key:f.key,course_id:courseId,options_signature:globalThis.edulogFieldMappings.signature(f)}))})
+    const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:fields.map(f=>({field_key:f.key,...(f.key==='lesson_id'?{course_id:courseId}:{}),options_signature:globalThis.edulogFieldMappings.signature(f)}))})
     record.fieldRules=response.items||[]
     // Resolve only the remembered or chosen lesson IDs, never the full directory.
     const ids=[...new Set([...record.fieldRules.filter(r=>r.field_key==='lesson_id'&&r.valid!==false).map(r=>r.canonical_value),...Object.entries(record.fieldChoices?.fields||{}).filter(([key])=>key==='lesson_id').map(([,v])=>v.value)])]
     if(ids.length){const resolved=await api('resolve',{source_refs:[],target_refs:ids.map(id=>({kind:'lessons',id}))});ingest(resolved)}
   }
   async function resolveFieldRules(){
-    const records=work().snapshot.records.filter(r=>r.kind==='report'&&!r.sourceSkipped&&r.date&&r.date>=work().dateFrom&&r.date<=work().dateTo),references=new Map(),key=(f,course)=>`${course}:${f.key}:${globalThis.edulogFieldMappings.signature(f)}`
-    for(const record of records){const course=$(`enrollment-course-${record.enrollment_source_id}`)?.value;record.fieldRuleScope=course;record.fieldRules=[];if(!course||course==='new')continue;for(const field of record.sourceFields||[])if(field.type!=='text'&&!field.internal)references.set(key(field,course),{field_key:field.key,course_id:course,options_signature:globalThis.edulogFieldMappings.signature(field)})}
+    const records=work().snapshot.records.filter(r=>r.kind==='report'&&!r.sourceSkipped&&r.date&&r.date>=work().dateFrom&&r.date<=work().dateTo),references=new Map(),scopeFor=field=>field.key==='lesson_id'?'course':'global',key=(f,course)=>`${scopeFor(f)==='course'?course:'*'}:${f.key}:${globalThis.edulogFieldMappings.signature(f)}`
+    for(const record of records){const course=$(`enrollment-course-${record.enrollment_source_id}`)?.value;record.fieldRuleScope=course;record.fieldRules=[];if(!course||course==='new')continue;for(const field of record.sourceFields||[])if(field.type!=='text'&&!field.internal)references.set(key(field,course),{field_key:field.key,...(scopeFor(field)==='course'?{course_id:course}:{}),options_signature:globalThis.edulogFieldMappings.signature(field)})}
     const items=[...references.values()],rules=[]
     if(hooks.capabilities?.()?.field_mapping_memory)for(let i=0;i<items.length;i+=50){const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:items.slice(i,i+50)});rules.push(...response.items||[])}
     const lessonIds=new Set()
-    for(const record of records){record.fieldRules=rules.filter(rule=>rule.course_id===record.fieldRuleScope);for(const rule of record.fieldRules)if(rule.field_key==='lesson_id'&&rule.valid!==false)lessonIds.add(rule.canonical_value);if(record.fieldChoices?.courseId===record.fieldRuleScope&&record.fieldChoices.fields?.lesson_id)lessonIds.add(record.fieldChoices.fields.lesson_id.value)}
+    for(const record of records){record.fieldRules=rules.filter(rule=>rule.field_key==='lesson_id'?rule.course_id===record.fieldRuleScope:!rule.course_id);for(const rule of record.fieldRules)if(rule.field_key==='lesson_id'&&rule.valid!==false)lessonIds.add(rule.canonical_value);if(record.fieldChoices?.courseId===record.fieldRuleScope&&record.fieldChoices.fields?.lesson_id)lessonIds.add(record.fieldChoices.fields.lesson_id.value)}
     const ids=[...lessonIds];for(let i=0;i<ids.length;i+=50)ingest(await api('resolve',{source_refs:[],target_refs:ids.slice(i,i+50).map(id=>({kind:'lessons',id}))}))
   }
   async function resolveReportFieldRules(record,courseId){
     record.fieldRuleScope=courseId;record.fieldRules=[]
     if(!courseId||courseId==='new')return
-    const fields=(record.sourceFields||[]).filter(f=>f.type!=='text'&&!f.internal&&f.key!=='learning_status'),items=[...new Map(fields.map(f=>[`${courseId}:${f.key}:${globalThis.edulogFieldMappings.signature(f)}`,{field_key:f.key,course_id:courseId,options_signature:globalThis.edulogFieldMappings.signature(f)}])).values()],rules=[]
+    const fields=(record.sourceFields||[]).filter(f=>f.type!=='text'&&!f.internal&&f.key!=='learning_status'),scopeFor=field=>field.key==='lesson_id'?'course':'global',items=[...new Map(fields.map(f=>[`${scopeFor(f)==='course'?courseId:'*'}:${f.key}:${globalThis.edulogFieldMappings.signature(f)}`,{field_key:f.key,...(scopeFor(f)==='course'?{course_id:courseId}:{}),options_signature:globalThis.edulogFieldMappings.signature(f)}])).values()],rules=[]
     if(hooks.capabilities?.()?.field_mapping_memory)for(let i=0;i<items.length;i+=50){const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:items.slice(i,i+50)});rules.push(...response.items||[])}
     record.fieldRules=rules
     const lessonIds=new Set(rules.filter(r=>r.field_key==='lesson_id'&&r.valid!==false).map(r=>r.canonical_value))

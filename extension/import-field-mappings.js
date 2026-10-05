@@ -4,7 +4,7 @@ import './field-mapping-ui.js'
 // Metadata stays in the trusted snapshot. Only returned canonical data enters an import.
 export function mappedReport(record, courseId, lessons = []) {
   const m = globalThis.edulogFieldMappings, data = { ...record.data }, needs = []
-  const rules = record.fieldRuleScope === courseId ? record.fieldRules || [] : []
+  const rules = (record.fieldRules || []).filter(rule => rule.field_key === 'lesson_id' ? rule.course_id === courseId : !rule.course_id)
   const choices = record.fieldChoices?.courseId === courseId ? record.fieldChoices.fields || {} : {}
   let start, end
   for (const field of record.sourceFields || []) {
@@ -107,8 +107,8 @@ export function attachImportFields(parent, record, hooks) {
           select.addEventListener('change', () => { if (!current()) return; if (select.value === '') delete record.fieldChoices.fields[field.key]; else record.fieldChoices.fields[field.key] = { value: JSON.parse(select.value), sourceValue: field.value, signature: globalThis.edulogFieldMappings.signature(field) }; hooks.changed() })
           globalThis.edulogFieldMappingUI.attach(row, field, value === undefined ? {} : { [field.key]: value }, record.fieldRules || [], {
             enabled: hooks.capable(), sourceValue: field.value, lessons: hooks.lessons().filter(l => l.course_id === courseId), isCurrent: current,
-            scopeLabel: hooks.courseName?.(courseId)||'此課程',
-            confirm: item => hooks.api('field-confirm', { source_origin: 'https://corp.orangeapple.co', adapter_version: 'orange-apple-v1', items: [{ ...item, course_id: courseId }] }),
+            scopeLabel: field.key==='lesson_id'?(hooks.courseName?.(courseId)||'此課程'):'所有學生與報告',
+            confirm: item => hooks.api('field-confirm', { source_origin: 'https://corp.orangeapple.co', adapter_version: 'orange-apple-v1', items: [{ ...item, ...(field.key==='lesson_id'?{course_id:courseId}:{}) }] }),
             changed: (_rules,change) => { if(change?.action==='confirm'&&record.fieldChoices?.courseId===courseId){const choice=record.fieldChoices.fields?.[field.key];if(choice?.sourceValue===change.sourceValue&&choice.signature===globalThis.edulogFieldMappings.signature(field))delete record.fieldChoices.fields[field.key]}const data = mappedReport(record, courseId, hooks.lessons()).data; if (data[field.key] !== undefined) select.value = JSON.stringify(data[field.key]); hooks.shareRule?.(record.fieldRules||[],change); hooks.changed() },
           })
         }

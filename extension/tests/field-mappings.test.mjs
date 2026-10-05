@@ -8,6 +8,13 @@ test('shared semantic equivalence preserves Chinese meanings without overwriting
  const f=attendance();assert.equal(m.canonical(f),'present');assert.equal(m.equal(f,{attendance_status:'present'}),true);assert.equal(m.display(f,{attendance_status:'present'}),'出席');assert.equal(m.suggest(f,{attendance_status:'absent'}),'away')
  f.value='';assert.equal(m.equal(f,{attendance_status:'present'}),false)
 })
+test('global attendance mappings apply across course contexts while lessons stay course-scoped',()=>{
+ const field=attendance(),rule={field_key:'attendance_status',source_value:'attended',canonical_value:'present',options_signature:m.signature(field),valid:true}
+ const record={data:{},sourceFields:[field],fieldRules:[rule]}
+ assert.equal(mappedReport(record,'course-a').data.attendance_status,'present');assert.equal(mappedReport(record,'course-b').data.attendance_status,'present')
+ const lesson={key:'lesson_id',type:'select',value:'source-lesson',options:[{value:'source-lesson',label:'Lesson 3',disabled:false}]},scoped={data:{},sourceFields:[lesson],fieldRules:[{field_key:'lesson_id',source_value:'source-lesson',canonical_value:'lesson-a',course_id:'course-a',options_signature:m.signature(lesson),valid:true}]}
+ assert.equal(mappedReport(scoped,'course-a',[{id:'lesson-a',course_id:'course-a'}]).data.lesson_id,'lesson-a');assert.equal(mappedReport(scoped,'course-b',[{id:'lesson-a',course_id:'course-a'}]).data.lesson_id,undefined)
+})
 test('false, zero, empty and verified half stars remain distinct',()=>{
  const complete=select('is_completed','no',[['yes','已完成'],['no','未完成']]);assert.equal(m.canonical(complete),false);assert.equal(m.suggest(complete,{is_completed:false}),'no');assert.equal(m.display(complete,{is_completed:false}),'課程未完成')
  const rating={...select('class_participation','0',[['0','0 星'],['9','4.5 星']]),type:'radio'};assert.equal(m.canonical(rating),0);assert.equal(m.suggest(rating,{class_participation:4.5}),'9');assert.equal(m.suggest({...rating,type:'select'},{class_participation:4.5}),'');assert.equal(m.empty(false),false);assert.equal(m.empty(0),false)

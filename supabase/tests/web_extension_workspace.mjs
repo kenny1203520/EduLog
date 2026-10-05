@@ -72,6 +72,7 @@ try {
   await db.exec(read('1000124_extension_field_mappings.sql'))
   await db.exec(read('1000125_extension_transferred_occurrence_import.sql'))
   await db.exec(read('1000126_enrollment_history_reports.sql'))
+  await db.exec(read('1000127_extension_shared_mappings_and_sync_preferences.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -344,6 +345,25 @@ try {
   await fieldRpc('confirm',[{...changedOptions,source_value:'attended',action:'clear',expected_revision:savedRule.revision}])
   assert.equal((await fieldRpc('resolve',[field])).items.length,0)
   console.log('PASS: 1000124 executable migration; cross-device/account/course isolation, stale options, half stars/false/zero, revisions, clear, permissions and atomic rollback')
+  assert.equal((await fieldRpc('capabilities')).global_progress_mapping,true)
+  assert.equal((await fieldRpc('capabilities')).history_binding_field_mask,true)
+  const sharedField={field_key:'progress_start',options_signature:JSON.stringify([['A','A',false],['B','B',false]])}
+  const sharedRule=(await fieldRpc('confirm',[{...sharedField,source_value:'A',canonical_value:'A',action:'confirm',expected_revision:null}])).items[0]
+  assert.equal((await fieldRpc('resolve',[sharedField])).items[0].revision,sharedRule.revision)
+  assert.equal((await fieldRpc('resolve',[{...sharedField,course_id:nextCourse}])).items[0].revision,sharedRule.revision,'shared progress mapping applies across courses')
+  async function syncPreferenceRpc(operation,input,credential=token,hash='a'.repeat(64)) {
+    await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
+    return (await db.query('SELECT public.web_extension_sync_preferences($1,$2,$3,$4) AS data',[credential,hash,operation,JSON.stringify(input)])).rows[0].data
+  }
+  const preferenceContext={source_origin:origin,adapter_version:'orange-apple-v1'}
+  assert.deepEqual((await syncPreferenceRpc('get',preferenceContext)).fields,{})
+  const preferences=await syncPreferenceRpc('patch',{...preferenceContext,expected_revision:null,fields:[{field_key:'content',enabled:false},{field_key:'class_notes',enabled:true}]})
+  assert.deepEqual(preferences.fields,{content:false,class_notes:true});assert.ok(preferences.revision)
+  assert.deepEqual((await syncPreferenceRpc('get',preferenceContext)).fields,preferences.fields)
+  await assert.rejects(syncPreferenceRpc('patch',{...preferenceContext,expected_revision:null,fields:[{field_key:'content',enabled:true}]}),/VERSION_CONFLICT/)
+  await assert.rejects(syncPreferenceRpc('patch',{...preferenceContext,expected_revision:preferences.revision,fields:[{field_key:'student_id',enabled:false}]}),/INVALID_IMPORT/)
+  assert.equal((await syncPreferenceRpc('capabilities',preferenceContext)).sync_field_preferences,true)
+  console.log('PASS: 1000127 shared A-Z mappings and revision-checked sync preferences')
   async function historyRpc(operation,input) {
     await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
     return (await db.query('SELECT public.web_extension_history($1,$2,$3,$4) data',[token,'a'.repeat(64),operation,JSON.stringify(input)])).rows[0].data
@@ -366,11 +386,19 @@ try {
   const bound=await historyRpc('bind-apply',binding);assert.equal(bound.status,'linked');assert.deepEqual(await historyRpc('bind-apply',binding),bound)
   assert.equal((await historyRpc('list',{enrollment_id:enrollment,unlinked_only:true})).items.length,0)
   await assert.rejects(historyRpc('bind-preview',{...binding,key:id(206)}),/VERSION_CONFLICT/)
+  const excludedHistory=id(208),excludedData={...historyData,report_date:'2024-06-18',source_key:'evidence:excluded',content:'Must remain history only'}
+  const excludedBatch={...historyBatch,key:id(209),fingerprint:'4'.repeat(64),rows:[{source_id:'history:evidence:excluded',target_id:excludedHistory,overwrite:[],record:{kind:'history_report',data:excludedData}}]}
+  await rpc('preview',excludedBatch);await rpc('apply',excludedBatch)
+  const excludedCandidates=await historyRpc('candidates',{history_id:excludedHistory})
+  const excludeBinding={history_id:excludedHistory,class_occurrence_id:excludedCandidates.items[0].id,history_version:1,key:id(210),overwrite:[],include_internal:false,include_fields:[]}
+  const excludedPreview=await historyRpc('bind-preview',excludeBinding);assert.deepEqual(excludedPreview.patch,{})
+  const excludedApply=await historyRpc('bind-apply',excludeBinding);assert.equal(excludedApply.status,'skipped')
+  assert.equal((await db.query('SELECT linked_report_id FROM public.enrollment_history_reports WHERE id=$1',[excludedHistory])).rows[0].linked_report_id,null,'all fields skipped must not bind or create a report')
   await db.exec("INSERT INTO public.denied_permissions VALUES('teaching.reports.read')")
   await assert.rejects(historyRpc('detail',{id:historical}),/PERMISSION_DENIED/);assert.equal((await historyRpc('list',{student_id:student})).items.length,0)
   await db.exec('DELETE FROM public.denied_permissions')
   const protectedData={...historyData,source_key:'evidence:unsafe',source_fields:[{key:'password',label:'password',text:'blocked'}]}
-  await assert.rejects(rpc('preview',{...historyBatch,key:id(207),fingerprint:'3'.repeat(64),rows:[{...historyBatch.rows[0],target_id:id(208),record:{kind:'history_report',data:protectedData}}]}),/INVALID_IMPORT/)
+  await assert.rejects(rpc('preview',{...historyBatch,key:id(207),fingerprint:'3'.repeat(64),rows:[{...historyBatch.rows[0],target_id:id(211),record:{kind:'history_report',data:protectedData}}]}),/INVALID_IMPORT/)
   // Effective routing reads the transferred day, never rewrites enrollment.
   const route=await historyRpc('route',{enrollment_id:weekendEnrollment,dates:['2026-10-03','2026-10-04']})
   assert.ok(route.items.some(o=>o.id===targetOccurrence&&o.occurrence_date==='2026-10-04'))
@@ -392,7 +420,7 @@ try {
   await assert.rejects(historyRpc('list',{...nearestHistory,anchor_date:'2024-06-16',cursor:page.next_cursor}),/INVALID_CURSOR/)
   const archivedIds=new Set();let archiveCursor
   do{const p=await historyRpc('list',{...nearestHistory,limit:50,cursor:archiveCursor});for(const h of p.items){assert.ok(!archivedIds.has(h.id));archivedIds.add(h.id)}archiveCursor=p.next_cursor}while(archiveCursor)
-  assert.equal(archivedIds.size,61)
+  assert.equal(archivedIds.size,62)
   // Version/lifecycle failures leave both the archive link and report unchanged.
   const rollbackHistory=(await historyRpc('list',{...nearestHistory,limit:50})).items.find(h=>h.report_date==='2024-06-16')
   const rollbackOccurrence=(await historyRpc('candidates',{history_id:rollbackHistory.id})).items[0]
