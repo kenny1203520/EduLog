@@ -80,6 +80,10 @@ No extension credential is exposed to the site content script. The PKCE verifier
 
 ## 0.1.0 sideload acceptance
 
+### Shared mappings and selective synchronization (1000127)
+
+Migration **1000127_extension_shared_mappings_and_sync_preferences.sql** adds account-scoped synchronization defaults and makes validated non-lesson field mappings reusable across courses. Lesson mappings remain course-scoped. The workspace can override defaults for one work or one report; excluded fields are removed from both saved history and occurrence-report writes. If every field is excluded, no empty report is created and the history remains unlinked. Wide-screen report differences show source and EduLog side by side; narrow layouts stack the same labeled values. See [the 1000127 acceptance record](tests/ACCEPTANCE-1000127.md).
+
 Startup now runs at `document_start`; page enhancement runs at `document_end`. A neutral loading state hides the main page for at most a 300ms timer while preferences/DOM readiness are unresolved. Failure or timeout shows the native page and a local enable control. A late preference response is remembered for a later visit and does not switch the already displayed page. Unknown routes are shown natively; preferences are requested when Turbo first enters a supported route.
 
 The document mode survives native DOM cleanup for Turbo snapshots. Public page/frame render hooks retain Turbo's renderer and apply enhancements before releasing the loading state. Ordinary updates are coalesced once per animation frame; unchanged forms/dialogs and the shared toolbar retain their native nodes. This theme lifecycle adds no permissions or website storage reads. The workspace's integration APIs and trusted storage are separate; site scripts never receive credentials.

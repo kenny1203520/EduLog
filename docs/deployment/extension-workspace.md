@@ -1,8 +1,8 @@
 # EduLog 0.1.0 整合工作分頁
 
-## 目前版本：1000126 完整歷史同步
+## 目前版本：1000127 共用映射與同步欄位偏好
 
-部署至 **1000126**，並一起更新 API、主站與側載擴充套件。本版將已確認的允許教學原文與位置證據保存為伺服器 enrollment 歷史；下方 1000124 的本機限定說明屬於舊版。最新流程、權限、資料保留與回復說明見 [完整歷史同步部署](extension-enrollment-history.md)，驗收見 `extension/tests/ACCEPTANCE-1000126.md`。
+部署至 **1000127**，並一起更新 API、主站與側載擴充套件。新增跨課程共用語意映射、帳號同步欄位偏好及歷史綁定欄位遮罩；教材仍限定已確認的課程。最新流程與驗收見 `extension/tests/ACCEPTANCE-1000127.md`。歷史報告資料保留和逐課次生命週期沿用 [完整歷史同步部署](extension-enrollment-history.md)。
 
 最新 ZIP：`extension/dist/EduLog-Teaching-Tools-0.1.0-history-field-reconciliation.zip`。老師確認摘要後，合法課次逐堂綁定，其餘先存歷史；不改寫報名關係、調課或自動送出原站表單。
 
