@@ -23,16 +23,18 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     if (!record.date || record.sourceDateConflict) { item.category = 'needs'; item.reason = '需要您確認完整日期；矛盾日期不能直接保存。'; continue }
     if (record.sourceReadStatus === 'failed') { item.category = 'needs'; item.reason = '報告編輯頁尚未完整讀取，請重試或略過。'; continue }
     if (!record.historyKey && !record.source_id && !record.evidenceKey) { item.category = 'needs'; item.reason = '來源證據不足，請補讀紀錄。'; continue }
-    const previous = (archives.get(target.id) || []).filter(h => h.source_admission_id === record.enrollment_source_id)
+    const previous = (target.id ? archives.get(target.id) || [] : []).filter(h => h.source_admission_id === record.enrollment_source_id)
     const sourceKey = record.historyKey || (record.source_id ? `report:${record.source_id}` : `evidence:${record.evidenceKey}`)
     item.sourceKey = sourceKey; item.existing = previous.find(h => h.source_key === sourceKey)
     if(item.existing&&item.existing.report_date!==record.date){item.category='needs';item.reason='來源日期與已保存歷史不同；請核對原站與 EduLog，保留舊紀錄。';continue}
     const mapped = mappedReport(record, target.courseId, options.lessons || [])
     const mappingNeeds=[...mapped.needs]
+    if(record.sourceStudentIdentityConflict)mappingNeeds.push('此歷史報告的學生身份與來源報名不同；請先分拆或核對該筆來源資料。')
     if(record.sourceLearningStatusRaw&&!record.sourceLearningStatus)mappingNeeds.push('原站學習狀態尚未辨識；請選擇原站實際選項。')
     if(record.sourceFieldConflicts?.length&&!record.sourceConflictAcknowledged)mappingNeeds.push('列表與報告編輯頁的欄位內容不同；請核對原文後再匯入。')
     if(globalThis.edulogFieldMappings.splitClassNotes(record.data?.class_notes||'').invalid)mappingNeeds.push('已保存的學習狀態標記重複或內容不符，請重新核對內部紀錄。')
     item.mappingNeeds = mappingNeeds
+    if (!target.id) { item.category='needs'; item.reason='課程與教材可先核對；確認此筆報名的學生與 EduLog 關係後，才能保存歷史報告。'; continue }
     item.data = { enrollment_id: target.id, report_date: record.date, source_origin: 'https://corp.orangeapple.co', source_admission_id: record.enrollment_source_id, source_key: sourceKey, identity_status: record.source_id && !record.identityUnverified ? 'verified' : 'evidence_only',
       source_fields: (record.sourceFields || []).filter(f => !f.internal || options.includeInternal).filter(f => ['attendance_status','absence_reason','lesson_id','progress_start','progress_end','is_completed','class_participation','classroom_behavior','content','contact_notes','class_notes','sourceLessonLabel','progress_letter'].includes(f.key)).map(f => ({key:f.key,label:f.label || f.key,text:String(f.value ?? '')})),
       source_evidence: (record.sourceEvidence || []).slice(-50).map(e => ({source_path:e.sourcePath,table:e.table,row:e.row,captured_at:e.capturedAt})),

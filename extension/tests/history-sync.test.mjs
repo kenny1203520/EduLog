@@ -49,3 +49,10 @@ test('same-day ambiguous identities and two sources for one occurrence require r
 test('internal notes are separately selected and unknown fields never enter history payloads',()=>{
  const [item]=plan([record({data:{password:'blocked'},sourceInternalNotes:'private',sourceFields:[{key:'password',label:'Password',value:'blocked'},{key:'class_notes',label:'內部',value:'private',internal:true}]})]);assert.equal(item.data.password,undefined);assert.equal(item.data.class_notes,undefined);assert.deepEqual(item.data.source_fields,[])
 })
+test('remembered course context can inspect a report before its enrollment is confirmed, without making a write payload',()=>{
+ const unconfirmed=new Map([['301',{id:null,courseId:'course',name:'測試學生',eligible:false}]]),[item]=planHistory([record()],unconfirmed,new Map(),new Map(),options)
+ assert.equal(item.category,'needs');assert.match(item.reason,/課程與教材可先核對/);assert.equal(item.data,undefined);assert.equal(item.target.courseId,'course')
+})
+test('a report with a conflicting source student identity remains review-only',()=>{
+ const [item]=plan([record({sourceStudentIdentityConflict:true})]);assert.equal(item.category,'needs');assert.match(item.reason,/學生身份與來源報名不同/);assert.equal(item.occurrence,undefined)
+})

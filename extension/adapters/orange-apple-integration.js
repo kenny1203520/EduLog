@@ -189,6 +189,13 @@
     const match=raw.match(/^(.*?)\s*\(([a-z][a-z0-9-]{1,63})\)\s*$/i)
     return {sourceCourseName:(match?.[1]||raw).trim(),sourceCourseCode:match?.[2]?.toLowerCase()||null,sourceCourseLabel:raw||null}
   }
+  function admissionStudent(doc) {
+    const item=[...doc.querySelectorAll('#admission-data li')].find(li=>/^學生[：:]/.test(text(li)))
+    const link=[...(item?.querySelectorAll('a[href]')||[])].map(a=>({node:a,path:(()=>{try{const u=new URL(a.getAttribute('href'),ORIGIN);return u.origin===ORIGIN?u.pathname:''}catch{return ''}})()})).find(a=>/^\/students\/\d+$/.test(a.path))
+    const id=link?.path.match(/^\/students\/(\d+)$/)?.[1]||null
+    const name=link?text(link.node):item?.textContent.replace(/^\s*學生[：:]\s*/,'').trim()||''
+    return {sourceStudentName:name,student_source_id:id}
+  }
   function sourceCourseCode(label) { return label?.match(/\(([a-z][a-z0-9-]{1,63})\)\s*$/i)?.[1]?.toLowerCase()||null }
   function mergeEvidence(...arrays) {
     const map = new Map()
@@ -249,6 +256,7 @@
   function extractHistory(doc, admissionId) {
     const results=[]
     const course=admissionCourse(doc)
+    const student=admissionStudent(doc)
     for(const row of doc.querySelectorAll('#page-body > .content table tbody tr')){
       if(!row.querySelector('td'))continue
       const cells=[...row.cells],dateCell=teachingCell(row,['日期','上課日期','課次日期'])||(!headerCells(row.closest('table')).length?cells[1]:null)
@@ -280,9 +288,9 @@
       if(!reportId&&!date&&!sourceFields.some(f=>f.value!==''))continue
       const editPath=reportId?`/dt_admissions/${admissionId}/reports/${reportId}/edit`:null
       const sessionCell=teachingCell(row,['堂次']);const sessionOrdinal=sessionCell?reportText(sessionCell).match(/\d+/)?.[0]||null:null
-      results.push({kind:'report',source_id:reportId,enrollment_source_id:admissionId,date,dateRaw,sourceSessionOrdinal:sessionOrdinal,sourceCourseName:course.sourceCourseName,sourceCourseCode:course.sourceCourseCode,sourceCourseLabel:course.sourceCourseLabel,sourceLessonSequence:stageNumber,
+      results.push({kind:'report',source_id:reportId,enrollment_source_id:admissionId,sourceStudentName:student.sourceStudentName,student_source_id:student.student_source_id,date,dateRaw,sourceSessionOrdinal:sessionOrdinal,sourceCourseName:course.sourceCourseName,sourceCourseCode:course.sourceCourseCode,sourceCourseLabel:course.sourceCourseLabel,sourceLessonSequence:stageNumber,
         evidenceKey:`${admissionId}:${row.rowIndex}`,identityUnverified:!ref,
-        sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','來源報名 ID',admissionId],['report_id','來源報告 ID',reportId],['course_name','來源課程名稱',course.sourceCourseName],['course_code','來源課程代碼',course.sourceCourseCode],['date','課次日期原文',dateRaw],...sourceFields.map(f=>[f.key,f.label,f.value])])],
+        sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','來源報名 ID',admissionId],['student_id','來源學生 ID',student.student_source_id],['student_name','學生姓名原文',student.sourceStudentName],['report_id','來源報告 ID',reportId],['course_name','來源課程名稱',course.sourceCourseName],['course_code','來源課程代碼',course.sourceCourseCode],['date','課次日期原文',dateRaw],...sourceFields.map(f=>[f.key,f.label,f.value])])],
         sourceFields,sourceLessonLabel:stageLabel||stageRaw||undefined,sourceLessonSequence:lessonStage(stageLabel||stageRaw||''),sourceLearningStatus:sourceFields.find(f=>f.learningStatus)?.learningStatus||null,sourceLearningStatusRaw:sourceFields.find(f=>f.label==='學習狀態原文')?.value||'',sourceInternalNotes:sourceFields.filter(f=>f.internal&&!f.learningStatus).map(f=>f.value).join('\n'),
         data:{...data,...(editPath?{external_link:ORIGIN+editPath}:{})},sourceReadStatus:'list',
         needs:[...(!date?['完整上課日期待確認']:[]),...(reportId?['待讀取已儲存報告欄位']:[])]})

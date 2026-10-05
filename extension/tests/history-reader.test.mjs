@@ -26,6 +26,13 @@ test('legacy checkpoints resume at the saved report index',async()=>{
  assert.deepEqual(calls,['b','/dt_admissions/2']);assert.equal(work.history.queue,undefined);assert.equal(work.history.next,2)
 })
 
+test('history student identity conflicts are preserved per report and block silent grouping',async()=>{
+ const work=fixture(),enrollment={kind:'enrollment',source_id:'1',student_source_id:'student-a',sourceStudentName:'同名學生',data:{}},records=[{kind:'report',source_id:null,enrollment_source_id:'1',student_source_id:'student-b',sourceStudentName:'同名學生',date:'2026-10-01',evidenceKey:'a',data:{}},{kind:'report',source_id:null,enrollment_source_id:'1',student_source_id:'student-a',sourceStudentName:'同名學生',date:'2026-10-02',evidenceKey:'b',data:{}}]
+ work.snapshot.records=[enrollment]
+ await readHistoryWork(work,{current:()=>true,paused:()=>false,save:async()=>{},progress:()=>{},merge:(a,b)=>[...a,...b],source:async action=>action==='history'?records:undefined})
+ assert.equal(enrollment.sourceStudentConflict,true);assert.equal(records[0].sourceStudentIdentityConflict,true);assert.equal(records[1].sourceStudentIdentityConflict,undefined);assert.deepEqual(enrollment.sourceStudentIdConflictValues,['student-a','student-b'])
+})
+
 test('evidence-only history is retained and explicit reread scans modified editors',async()=>{
  const work=fixture();let version=1,listReads=0
  const hooks={current:()=>true,paused:()=>false,save:async()=>{},progress:()=>{},merge:(a,b)=>[...a.filter(r=>r.evidenceKey!==b[0].evidenceKey),...b],source:async(action)=>{

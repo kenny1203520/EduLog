@@ -24,11 +24,22 @@ export async function readHistoryWork(work, hooks, retryPath) {
           const records=await read('history',{historyPath})
           const admissionId=historyPath.match(/^\/dt_admissions\/(\d+)$/)?.[1]
           const enrollment=work.snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===admissionId)
-          for(const report of records)if(report.sourceCourseCode&&enrollment){
-            if(enrollment.sourceCourseCode&&enrollment.sourceCourseCode!==report.sourceCourseCode){enrollment.sourceCourseConflict=true;enrollment.sourceIdentityChanged=true}
-            else {enrollment.sourceCourseCode=report.sourceCourseCode;enrollment.sourceCourseLabel=report.sourceCourseLabel||enrollment.sourceCourseLabel;enrollment.source_course_id=`code:${report.sourceCourseCode}`}
+          for(const report of records)if(enrollment){
+            if(report.student_source_id){
+              if(enrollment.student_source_id&&enrollment.student_source_id!==report.student_source_id){enrollment.sourceStudentConflict=true;report.sourceStudentIdentityConflict=true;enrollment.sourceStudentIdConflictValues=[...new Set([...(enrollment.sourceStudentIdConflictValues||[enrollment.student_source_id]),report.student_source_id])];enrollment.sourceIdentityChanged=true}
+              else enrollment.student_source_id=report.student_source_id
+            }
+            if(report.sourceStudentName){
+              if(enrollment.sourceStudentName&&enrollment.sourceStudentName!==report.sourceStudentName){enrollment.sourceStudentNameConflict=true;report.sourceStudentIdentityConflict=true;enrollment.sourceStudentNameConflictValues=[...new Set([...(enrollment.sourceStudentNameConflictValues||[enrollment.sourceStudentName]),report.sourceStudentName])];enrollment.sourceIdentityChanged=true}
+              else enrollment.sourceStudentName=report.sourceStudentName
+            }
+            if(report.sourceCourseCode){
+              if(enrollment.sourceCourseCode&&enrollment.sourceCourseCode!==report.sourceCourseCode){enrollment.sourceCourseConflict=true;enrollment.sourceIdentityChanged=true}
+              else {enrollment.sourceCourseCode=report.sourceCourseCode;enrollment.sourceCourseLabel=report.sourceCourseLabel||enrollment.sourceCourseLabel;enrollment.source_course_id=`code:${report.sourceCourseCode}`}
+            }
             const evidence=new Map([...(enrollment.sourceEvidence||[]),...(report.sourceEvidence||[])].map(item=>[`${item.sourcePath}:${item.table}:${item.row}`,item]));enrollment.sourceEvidence=[...evidence.values()]
           }
+          for(const report of records)if(enrollment){report.student_source_id||=enrollment.student_source_id;report.sourceStudentName||=enrollment.sourceStudentName;report.sourceCourseCode||=enrollment.sourceCourseCode;report.sourceCourseName||=enrollment.sourceCourseName;report.sourceCourseLabel||=enrollment.sourceCourseLabel}
           checkpoint=history.checkpoints[historyPath]={records,next:0}
           history.issues=history.issues.filter(r=>!(r.listFailed&&r.admissionPath===historyPath));await persist()
         } catch(error) {
