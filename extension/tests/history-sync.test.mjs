@@ -5,7 +5,7 @@ const record=(extra={})=>({kind:'report',enrollment_source_id:'301',source_id:'4
 const target=new Map([['301',{id:'enrollment',courseId:'course',name:'測試學生'}]])
 const occurrence={id:'sunday-occurrence',class_session_id:'sunday-session',class_name:'週日班',occurrence_date:'2026-10-04',can_write:true}
 const options={dateFrom:'1900-01-01',dateTo:'9999-12-31'}
-const plan=(records,archive=[],routes=[occurrence])=>planHistory(records,target,new Map([['enrollment',archive]]),new Map([['enrollment',routes]]),options)
+const plan=(records,archive=[],routes=[occurrence],settings=options)=>planHistory(records,target,new Map([['enrollment',archive]]),new Map([['enrollment',routes]]),settings)
 test('transfer date routes to the effective Sunday occurrence without enrollment or occurrence writes',()=>{
  const [item]=plan([record()]);assert.equal(item.category,'bind');assert.equal(item.occurrence.class_session_id,'sunday-session');assert.equal(item.data.is_completed,false);assert.equal(item.data.class_participation,0);assert.equal(item.data.classroom_behavior,4.5);assert.equal(item.data.class_session_id,undefined)
  assert.equal(bindingStillMatches(item,{report_version:null}),true);assert.equal(bindingStillMatches(item,{report_version:2}),false)
@@ -55,4 +55,14 @@ test('remembered course context can inspect a report before its enrollment is co
 })
 test('a report with a conflicting source student identity remains review-only',()=>{
  const [item]=plan([record({sourceStudentIdentityConflict:true})]);assert.equal(item.category,'needs');assert.match(item.reason,/學生身份與來源報名不同/);assert.equal(item.occurrence,undefined)
+})
+
+test('sync field preferences exclude payload and raw source text; report exceptions override saved defaults',()=>{
+ const source={...record({sourceFields:[{key:'content',label:'評語',type:'text',value:'來源文字'}],data:{content:'來源文字',attendance_status:'present',is_completed:false}})}
+ const [excluded]=plan([source],[],[occurrence],{...options,syncFields:{content:false,attendance_status:true,is_completed:true}})
+ assert.equal(excluded.data.content,undefined);assert.equal(excluded.data.source_fields.some(f=>f.key==='content'),false);assert.equal(excluded.data.attendance_status,'present');assert.equal(excluded.includedFields.includes('content'),false)
+ const [override]=plan([{...source,syncFieldOverrides:{content:true}}],[],[occurrence],{...options,syncFields:{content:false,attendance_status:true,is_completed:true}})
+ assert.equal(override.data.content,'來源文字');assert.equal(override.includedFields.includes('content'),true)
+ const [none]=plan([{...source,syncFieldOverrides:{content:false,attendance_status:false,is_completed:false,progress_letter:false,lesson_id:false,absence_reason:false,class_participation:false,classroom_behavior:false,contact_notes:false,class_notes:false,external_link:false}}],[],[occurrence],{...options,syncFields:Object.fromEntries(['content','attendance_status','is_completed','progress_letter','lesson_id','absence_reason','class_participation','classroom_behavior','contact_notes','class_notes','external_link'].map(k=>[k,false]))})
+ assert.equal(none.category,'skipped');assert.match(none.reason,/所有同步欄位皆已略過/)
 })

@@ -10,6 +10,8 @@ import { initWorkspaceI18n } from './workspace-i18n.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
 initWorkspaceI18n()
 let fieldRules=[]
+const syncFields=[['lesson_id','教材'],['is_completed','完成狀況'],['progress_letter','章節進度'],['attendance_status','出席狀態'],['absence_reason','不出席原因'],['class_participation','課程參與'],['classroom_behavior','課堂秩序'],['content','學習報告'],['contact_notes','聯絡欄'],['class_notes','內部紀錄'],['external_link','報告連結']]
+let syncPreferences={fields:{},revision:null},syncDraftOverrides={}
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
@@ -23,7 +25,7 @@ async function send(message) {
   if (response?.error) { const e = new Error(workspaceErrorMessage(response.error)); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; e.fields = response.error.fields; e.rawMessage = response.error.message; throw e }
   return response?.data
 }
-const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','reports','work','reconcile','import-info'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
+const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','reconcile','import-info'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
 const source = (action, extra = {}) => send({ type: 'workspace-source', action, tabId: Number($('source-tab').value), sourcePath: selectedPath, requestId: activeReadId || undefined, ...extra })
 async function save() {
   const current = work
@@ -160,6 +162,8 @@ async function initialize() {
   context = { classrooms: [], courses: [], class_sessions: [], students: [], enrollments: [], occurrences: [], report_targets: [], lessons: [], source_links: [], permissions: {} }
   if ($('source-tab').value) await changeSource()
   else { $('source-label').textContent = '尚未選擇來源；請先開啟支援網站的班級頁或報告表單，再選取分頁。'; $('collect').disabled = true; $('read-form').disabled = true; notice('連線已驗證。尚未選取來源分頁；匯入與預填入口暫不可用。') }
+  try { await loadSyncPreferences() } catch (error) { $('sync-preferences-status').textContent=`同步偏好讀取失敗；使用本機預設，可重試保存。 ${error.message}` }
+  if(!integrationCapabilities.sync_field_preferences){$('sync-preferences-status').textContent='目前連線不支援跨裝置同步偏好；本次工作仍可調整欄位。';$('save-sync-preferences').disabled=true} renderSyncFields()
   flow(params.get('flow') || 'import')
 }
 async function changeSource() {
@@ -188,7 +192,11 @@ function markMappingChanged(){
 const mappingController = createMappingController({ capabilities: () => integrationCapabilities, settingsUrl: () => frontendSettingsUrl, rereadSource: () => source('collect'),state:()=>({work,context}),generation:()=>generation,readGeneration:()=>activeReadGeneration,api,catalog,run:(action,options)=>options?.readOnly?runLatest(action,options):run(action,options),notice,idFor,loadClassrooms,loadMappingCourses,mappingChanged:markMappingChanged})
 let historyPlan = [], historyCheckSequence = 0, historyLocalSequence = 0, historyArchives = new Map(), historyRoutes = new Map()
 const loadedLessonCourses=new Set(),lessonCatalogLoads=new Map()
-function historyOptions(){return {dateFrom:work?.dateFrom,dateTo:work?.dateTo,includeInternal:$('include-internal-notes').checked,lessons:context?.lessons||[]}}
+function historyOptions(){return {dateFrom:work?.dateFrom,dateTo:work?.dateTo,includeInternal:$('include-internal-notes').checked,lessons:context?.lessons||[],syncFields:effectiveSyncFields()}}
+function effectiveSyncFields(record){const base={lesson_id:true,is_completed:true,progress_letter:true,attendance_status:true,absence_reason:true,class_participation:true,classroom_behavior:true,content:true,contact_notes:true,class_notes:false,external_link:true};Object.assign(base,syncPreferences.fields||{},syncDraftOverrides,work?.syncFieldPreferences||{},work?.syncFieldOverrides||{});if(record)Object.assign(base,record.syncFieldOverrides||{});return base}
+function renderSyncFields(){const host=$('sync-field-options');if(!host)return;const current=effectiveSyncFields();for(const [key,label] of syncFields){let wrap=host.querySelector(`[data-sync-choice="${key}"]`),input=wrap?.querySelector('input');if(!wrap){wrap=node('label',undefined,'sync-field-choice');wrap.dataset.syncChoice=key;input=node('input');input.type='checkbox';input.dataset.syncField=key;wrap.append(input,node('span',label));host.append(wrap);input.addEventListener('change',()=>{syncDraftOverrides[key]=input.checked;if(key==='class_notes')$('include-internal-notes').checked=input.checked;if(work){if(key==='class_notes')work.includeInternalNotes=input.checked;work.syncFieldOverrides||={};work.syncFieldOverrides[key]=input.checked;work.syncPreferencesSnapshot={...effectiveSyncFields(),[key]:input.checked};historyWorkChanged();historyView.refreshEditor(historyPlan)}$('sync-preferences-status').textContent=`${work?'本次工作':'目前選擇'}：${label}${input.checked?'會同步':'不同步'}。尚未提交的差異已失效。`})}if(input!==document.activeElement)input.checked=current[key]!==false&&(key!=='class_notes'||$('include-internal-notes').checked)}}
+async function loadSyncPreferences(){if(!integrationCapabilities.sync_field_preferences)return;const data=await api('sync-preferences-get',undefined,{query:{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1'}});syncPreferences={fields:data.fields||{},revision:data.revision||null};renderSyncFields()}
+async function saveSyncPreferences(){const fields=syncFields.map(([field_key])=>({field_key,enabled:$('sync-field-options').querySelector(`[data-sync-field="${field_key}"]`).checked}));const result=await api('sync-preferences-save',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',expected_revision:syncPreferences.revision,fields});syncPreferences={fields:result.fields||Object.fromEntries(fields.map(x=>[x.field_key,x.enabled])),revision:result.revision};syncDraftOverrides={};if(work){work.syncFieldPreferences={...syncPreferences.fields};work.syncPreferencesSnapshot={...syncPreferences.fields};work.syncFieldOverrides={};historyWorkChanged();historyView.refreshEditor(historyPlan)}$('sync-preferences-status').textContent='已記住同步欄位預設；可在本次工作或單份報告調整。';renderSyncFields()}
 function updateHistoryPlanLocal(){if(!work?.snapshot)return;historyPlan=planHistory(work.snapshot.records,historyTargets(),historyArchives,historyRoutes,historyOptions());historyView.updateStatus(historyPlan)}
 function scheduleHistoryPlanForCurrentMapping(){
   if(!work?.snapshot)return
@@ -201,7 +209,7 @@ function scheduleHistoryPlanForCurrentMapping(){
 }
 function historyWorkChanged(){if(!work)return;work.previewDirty=true;updateHistoryPlanLocal();void save().catch(e=>notice(e.message,true))}
 function historyUiChanged(){if(work)void save().catch(e=>notice(e.message,true))}
-const historyView=createHistoryWorkbench({work:()=>work,labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:()=>void runLatest(async()=>{await refreshHistoryPlan();historyView.refreshEditor(historyPlan)},{label:'正在逐日核對有效課次'}),fields:(host,item)=>attachImportFields(host,item.record,{work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId)){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
+const historyView=createHistoryWorkbench({work:()=>work,labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:()=>void runLatest(async()=>{await refreshHistoryPlan();historyView.refreshEditor(historyPlan)},{label:'正在逐日核對有效課次'}),defaults:effectiveSyncFields,fieldLabel:key=>fieldLabels[key]||key,diffValue:displayValue,fields:(host,item)=>attachImportFields(host,item.record,{work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&(change.fieldKey!=='lesson_id'||historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId))){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
 function historyTargets() {
   const targets=new Map()
   for(const r of work.snapshot.records.filter(r=>r.kind==='enrollment')) {
@@ -259,7 +267,7 @@ async function collect() {
   if (!$('date-from').value || !$('date-to').value || $('date-from').value > $('date-to').value) throw new Error('請確認有效日期範圍。')
   const snapshot = await source('collect')
   if (!snapshot?.classId || snapshot.sourcePath !== selectedPath) throw new Error('目前來源不是可辨識的班級頁。請切換到班級頁後再擷取。')
-  work = { id: crypto.randomUUID(), type: 'import', status: 'collected', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, title: snapshot.title, snapshot, ids: {}, dateFrom: $('all-history').checked?'1900-01-01':$('date-from').value, dateTo: $('all-history').checked?'9999-12-31':$('date-to').value, includeInternalNotes: $('include-internal-notes').checked, done: 0 }
+  work = { id: crypto.randomUUID(), type: 'import', status: 'collected', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, title: snapshot.title, snapshot, ids: {}, dateFrom: $('all-history').checked?'1900-01-01':$('date-from').value, dateTo: $('all-history').checked?'9999-12-31':$('date-to').value, includeInternalNotes: $('include-internal-notes').checked, syncFieldPreferences:{...(syncPreferences.fields||{})},syncPreferencesSnapshot:{...effectiveSyncFields()},syncFieldOverrides:{...syncDraftOverrides}, done: 0 }
   if ($('read-history').checked) work.history = { paths: snapshot.admissionPaths, next: 0 }
   await save(); if (work.history) await collectHistory()
   await mappingView();renderHistoryIssues(); notice(`已擷取 ${work.snapshot.records.length} 筆可辨識資料。缺少欄位仍需確認。${work.status === 'paused-extraction' ? '擷取中斷，可從工作紀錄繼續。' : ''}`)
@@ -352,7 +360,7 @@ function prepareRows() {
     const targetId=item.existing?.id||idFor('history_report',item.key)
     add('history_report',item.key,targetId,item.data)
     if(item.record.historyDuplicateConfirmed)rows.at(-1).reviewed_duplicate=true
-    if(item.category==='bind')work.historyBindings.push({historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:item.record.historyOverwrite||[],include_internal:work.includeInternalNotes},status:'pending'})
+    if(item.category==='bind')work.historyBindings.push({historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:item.record.historyOverwrite||[],include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending'})
   }
   work.destination = { classroom_id: $('classroom').value, course_ids: courseIds, class_session_id: sessionId, report_session_ids: [...new Set([sessionId,...(work.historyBindings||[]).map(b=>b.occurrence.class_session_id)])] }; work.needs = needs
   return rows
@@ -396,8 +404,9 @@ function renderDifferences() {
     if (row.kind === 'class_session' && row.status !== 'added' && JSON.stringify(row.before.course_ids) !== JSON.stringify(row.after.course_ids)) { details.open = true; summary.textContent = '加入班級可上課程 · 需要明確確認'; details.append(node('p','只追加本次確認的課程，保留班級原有課程與排程。','hint')) }
     for (const key of Object.keys(row.after)) {
       const diff = node('div', undefined, 'diff'), before = node('div'), after = node('div')
-      before.append(node('strong', `${fieldLabels[key] || key} · EduLog`), node('span', displayValue(key, row.before[key])))
-      after.append(node('strong', `${fieldLabels[key] || key} · 來源`), node('span', displayValue(key, row.after[key])))
+      before.append(node('strong', `${fieldLabels[key] || key} · 來源`), node('span', displayValue(key, row.after[key])))
+      after.append(node('strong', `${fieldLabels[key] || key} · EduLog`), node('span', displayValue(key, row.before[key])))
+      if(typeof row.before[key]==='string'&&typeof row.after[key]==='string'&&row.before[key]!==row.after[key])appendTextDiff(diff,row.before[key],row.after[key]); else if(JSON.stringify(row.before[key])===JSON.stringify(row.after[key])) diff.append(node('p','內容一致','diff-same'))
       details.append(diff); diff.append(before, after)
       if (!['report_date','source_origin','source_admission_id','source_report_id','source_key','identity_status'].includes(key) && row.status !== 'added' && JSON.stringify(row.before[key]) !== JSON.stringify(row.after[key]) && (!['student_id','course_id','classroom_id','class_session_id','course_ids','enrollment_id','class_occurrence_id','start_date','day_of_week','start_time','end_time','time_zone','occurrence_date','original_start_time','original_end_time'].includes(key) || row.kind === 'class_session' && key === 'course_ids' && context.permissions.session?.class_update)) {
         const label = node('label', undefined, 'check'), check = node('input'); check.type = 'checkbox'; check.checked = work.batches[batchIndex].rows[rowIndex].overwrite.includes(key)
@@ -464,6 +473,7 @@ function renderImportOutcome() {
     repair.addEventListener('click',()=>flow('work'));host.append(repair)
   }
 }
+function appendTextDiff(host,before,after){const p=node('p',undefined,'text-diff');const oldText=String(before??''),newText=String(after??'');let start=0;while(start<oldText.length&&start<newText.length&&oldText[start]===newText[start])start++;let suffix=0;while(suffix<oldText.length-start&&suffix<newText.length-start&&oldText[oldText.length-1-suffix]===newText[newText.length-1-suffix])suffix++;if(start)p.append(document.createTextNode(oldText.slice(0,start)));const deleted=node('del',oldText.slice(start,oldText.length-suffix)||'（空白）');deleted.setAttribute('aria-label','刪除內容');p.append(deleted);const added=node('ins',newText.slice(start,newText.length-suffix)||'（空白）');added.setAttribute('aria-label','新增內容');p.append(added);if(suffix)p.append(document.createTextNode(oldText.slice(oldText.length-suffix)));p.setAttribute('aria-label','文字差異；顯示刪除與新增內容');host.append(p)}
 function displayValue(key, value) {
   if (value == null) return '—'
   if(key==='source_fields')return value.map(f=>`${f.label}：${f.text}`).join('\n')||'未提供原文'
@@ -473,7 +483,7 @@ function displayValue(key, value) {
   if (key === 'is_completed') return value ? '課程已完成' : '課程未完成'
   if (key === 'status') return ({ regular: '正式', trial: '試讀', completed: '完課', dropped: '退班' })[value] || String(value)
   const resource = { classroom_id: 'classrooms', course_id: 'courses', course_ids: 'courses', student_id: 'students', class_session_id: 'class_sessions', lesson_id: 'lessons' }[key]
-  if (resource) return (Array.isArray(value) ? value : [value]).map(id => { const item = context[resource].find(r => r.id === id); return item?.name || item?.display_name || item?.title || (item?.subject ? `${item.subject} ${item.stage}` : `待建立／對應 ${String(id).slice(0, 8)}`) }).join('、')
+  if (resource) return (Array.isArray(value) ? value : [value]).map(id => { const item = context[resource].find(r => r.id === id); if(key==='lesson_id'&&item)return globalThis.edulogFieldMappings.lessonLabel(item);return item?.name || item?.display_name || item?.title || (item?.subject ? `${item.subject} ${item.stage}` : `待建立／對應 ${String(id).slice(0, 8)}`) }).join('、')
   return String(value)
 }
 function progress() {
@@ -629,7 +639,7 @@ async function compare() {
   if (!report.full) { const full = (await api('reports', undefined, { query: { id: report.id } })).reports[0]; if (!full) throw new Error('找不到所選報告，請重新載入摘要。'); report = { ...full, full: true } }
   if (report.occurrence_date !== $('target-date').value) throw new Error('EduLog 報告日期與原站課次不一致，請重新選擇。')
   const current = await source('form'); if (current.fingerprint !== form.fingerprint) throw new Error('原站內容已变更，請重新讀取表單。')
-  fieldRules=[];if(integrationCapabilities.field_mapping_memory&&form.targetCourseId){const result=await api('field-resolve',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:form.fields.filter(f=>f.type!=='text'&&f.key!=='learning_status').map(f=>({field_key:f.key,course_id:form.targetCourseId,options_signature:globalThis.edulogFieldMappings.signature(f)}))});fieldRules=result.items||[]}
+  fieldRules=[];if(integrationCapabilities.field_mapping_memory&&form.targetCourseId){const result=await api('field-resolve',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:form.fields.filter(f=>f.type!=='text'&&f.key!=='learning_status').map(f=>({field_key:f.key,...(f.key==='lesson_id'?{course_id:form.targetCourseId}:{}),options_signature:globalThis.edulogFieldMappings.signature(f)}))});fieldRules=result.items||[]}
   $('fields').replaceChildren()
   $('report-completeness').textContent = `${report.student_name} · ${report.occurrence_date} · ${report.completeness?.isMissing ? '未齊備：缺漏欄位請人工補齊' : '已齊備'}；課程${report.is_completed ? '已完成' : '未完成'}。`
   for (const field of form.fields) {
@@ -649,7 +659,7 @@ async function compare() {
     if (!suggested && field.type !== 'text') card.append(node('p', '未建立可靠選項對應。請依 EduLog 報告人工選擇原站選項。', 'hint'))
     if(consistent)card.append(node('p','內容一致，保留原站；不需覆寫。','field-mapping-status'))
     if (field.value&&!consistent) { const overwriteLabel = node('label', undefined, 'check'), overwrite = node('input'); overwrite.type = 'checkbox'; overwrite.dataset.overwrite = ''; overwriteLabel.append(overwrite, node('span', '我確認覆寫此欄原站內容')); card.append(overwriteLabel) }
-    const selectedReport=report,selectedWork=work;globalThis.edulogFieldMappingUI.attach(card,field,report,fieldRules,{enabled:integrationCapabilities.field_mapping_memory&&Boolean(form.targetCourseId),sourceValue:input.value,lessons:context.lessons,confirm:item=>api('field-confirm',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:[{...item,course_id:form.targetCourseId}]}),isCurrent:()=>report===selectedReport&&work===selectedWork,changed:()=>{if(!check.checked)input.value=suggestedValue(field,report,fieldRules)}});
+    const selectedReport=report,selectedWork=work;globalThis.edulogFieldMappingUI.attach(card,field,report,fieldRules,{enabled:integrationCapabilities.field_mapping_memory&&Boolean(form.targetCourseId),sourceValue:input.value,lessons:context.lessons,confirm:item=>api('field-confirm',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:[{...item,...(field.key==='lesson_id'?{course_id:form.targetCourseId}:{})}]}),isCurrent:()=>report===selectedReport&&work===selectedWork,changed:()=>{if(!check.checked)input.value=suggestedValue(field,report,fieldRules)}});
     $('fields').append(card)
   }
   show('field-review'); stage('prefill', 'prefill'); notice('請逐欄核對，未勾選的欄位會保留原站內容。')
@@ -761,6 +771,7 @@ $('date-from').value = yearAgo.toISOString().slice(0, 10); $('date-to').value = 
 $('all-history').addEventListener('change',()=>{for(const id of ['date-from','date-to'])$(id).disabled=$('all-history').checked})
 $('include-internal-notes').addEventListener('change',()=>{if(!work)return;work.includeInternalNotes=$('include-internal-notes').checked;historyWorkChanged()})
 $('check-history').addEventListener('click',()=>void runLatest(refreshHistoryPlan,{label:'正在重新核對完整歷史'}))
+$('save-sync-preferences')?.addEventListener('click',()=>void run(saveSyncPreferences,{label:'正在保存同步欄位預設'}))
 bridge.onInvalidated(() => { paused = true; ++generation; notice('擴充套件已更新，請重新開啟工作分頁；已保存檢查點可續傳。', true) })
 document.querySelectorAll('input,select,textarea').forEach(input => { if (!input.name) input.name = input.id; input.autocomplete = 'off' })
 document.addEventListener('input', event => {

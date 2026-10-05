@@ -46,7 +46,7 @@ export function installWorkspaceBroker(getStatus) {
       reconcile: ['GET', `/enrollments/${message.enrollmentId}/reconciliation`],
       'import-info': ['GET', `/imports/${message.jobId}`], complete: ['POST', `/imports/${message.jobId}/complete`],
       'enrollment-info': ['GET', `/enrollments/${message.enrollmentId}`],
-      'field-resolve':['POST','/field-mappings/resolve'], 'field-confirm':['POST','/field-mappings/confirm'], context: ['GET', '/context'], catalog: ['GET', '/catalog'], resolve: ['POST', '/catalog/resolve'], confirm: ['POST', '/catalog/confirm'], reports: ['GET', '/reports'], work: ['GET', '/work'], map: ['POST', '/source-links'],
+      'field-resolve':['POST','/field-mappings/resolve'], 'field-confirm':['POST','/field-mappings/confirm'], 'sync-preferences-get':['GET','/sync-preferences'], 'sync-preferences-save':['PATCH','/sync-preferences'], context: ['GET', '/context'], catalog: ['GET', '/catalog'], resolve: ['POST', '/catalog/resolve'], confirm: ['POST', '/catalog/confirm'], reports: ['GET', '/reports'], work: ['GET', '/work'], map: ['POST', '/source-links'],
       job: ['POST', '/imports'], preview: ['POST', `/imports/${message.jobId}/preview`], apply: ['POST', `/imports/${message.jobId}/apply`],
       'job-status': ['PATCH', `/imports/${message.jobId}`], push: ['POST', '/report-pushes'],
     }
@@ -54,10 +54,10 @@ export function installWorkspaceBroker(getStatus) {
     if (['history-detail','history-candidates','history-bind-preview','history-bind-apply'].includes(message.operation) && !/^[a-f0-9-]{36}$/i.test(message.historyId||'')) fail('歷史報告識別碼不正確。')
     if (!operations[message.operation] || (['preview', 'apply', 'job-status', 'import-info', 'complete'].includes(message.operation) && !/^[a-f0-9-]{36}$/.test(message.jobId)) || (message.operation === 'enrollment-info' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || ''))) fail('工作操作不正確。')
     const [method, path] = operations[message.operation], url = new URL(`${bound.instance}/api/extension/v1${path}`)
-    if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id','source_admission_id','unlinked_only'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
+    if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id','source_admission_id','unlinked_only','source_origin','adapter_version'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
     const payload = method === 'GET' ? undefined : JSON.stringify(message.operation === 'complete' ? message.body : message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
-    const readOnly = ['history-list','history-route','history-detail','history-candidates','context','catalog','resolve','field-resolve','reports','work','reconcile','import-info'].includes(message.operation)
+    const readOnly = ['history-list','history-route','history-detail','history-candidates','context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','reconcile','import-info'].includes(message.operation)
     if (readOnly && message.requestId && !/^[a-f0-9-]{36}$/i.test(message.requestId)) fail('查詢識別碼不正確。')
     const remaining = 30000 - (Date.now() - startedAt)
     if (remaining <= 0) { const error = new Error('連線驗證與 API 查詢超過 30 秒。'); error.code = 'API_TIMEOUT'; throw error }
@@ -184,7 +184,7 @@ export function installWorkspaceBroker(getStatus) {
             const field=form.fields.find(f=>f.key===item.field_key&&f.type!=='text')
             const signature=field&&JSON.stringify(field.options.map(o=>[String(o.value),o.label,Boolean(o.disabled)]))
             if(!field||signature!==item.options_signature||operation==='field-confirm'&&item.action!=='clear'&&(field.disabled||!field.options.some(o=>o.value===item.source_value&&!o.disabled)))fail('原站欄位選項已變更，請重新核對。')
-            return {field_key:field.key,options_signature:signature,course_id:target.courseId,class_session_id:target.classSessionId,...(operation==='field-confirm'?{action:item.action,source_value:item.source_value,canonical_value:item.canonical_value,expected_revision:item.expected_revision}: {})}
+            return {field_key:field.key,options_signature:signature,...(field.key==='lesson_id'?{course_id:target.courseId}:{}),class_session_id:target.classSessionId,...(operation==='field-confirm'?{action:item.action,source_value:item.source_value,canonical_value:item.canonical_value,expected_revision:item.expected_revision}: {})}
           })
           return call({operation,body:{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:safe}})
         }

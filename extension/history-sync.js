@@ -7,7 +7,7 @@ export const historyIdentity = r => `${r.enrollment_source_id}:${r.historyKey ||
 // This planner consumes permission-filtered, fully paginated server results.
 // It never creates a class occurrence or infers a transfer from a class name.
 export function planHistory(records, enrollmentTargets, archives, routes, options = {}) {
-  const items = [], seen = new Map()
+  const items = [], seen = new Map(), fieldAllowed=(record,key)=>{const globalKey=key.startsWith('progress_')?'progress_letter':key;const configured=options.syncFields?.[globalKey]!==false;const reportConfigured=record.syncFieldOverrides?.[globalKey];return (reportConfigured===undefined?configured:reportConfigured)&&(globalKey!=='class_notes'||options.includeInternal||record.syncFieldOverrides?.class_notes===true)}
   const needs = (item, code, reason, details = []) => {
     item.category = 'needs'; item.reason = reason
     item.issues = details.length ? details : [{id:code,code,message:reason,target:'source'}]
@@ -32,6 +32,9 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     item.sourceKey = sourceKey; item.existing = previous.find(h => h.source_key === sourceKey)
     if(item.existing&&item.existing.report_date!==record.date){needs(item,'saved-date-conflict','來源日期與已保存歷史不同；請核對原站與 EduLog，保留舊紀錄。',[{id:'saved-date-conflict',code:'date',message:'來源日期與已保存歷史不同；請核對原站與 EduLog，保留舊紀錄。',target:'date'}]);continue}
     const mapped = mappedReport(record, target.courseId, options.lessons || [])
+    for(const field of teachingFields)if(!fieldAllowed(record,field))delete mapped.data[field]
+    const includedFields=teachingFields.filter(field=>fieldAllowed(record,field)&&field!=='class_notes'&&field!=='external_link'&&Object.hasOwn(mapped.data,field));if(fieldAllowed(record,'class_notes')&&options.includeInternal&&Object.hasOwn(mapped.data,'class_notes'))includedFields.push('class_notes');if(record.source_id&&!record.identityUnverified&&fieldAllowed(record,'external_link'))includedFields.push('external_link');item.includedFields=[...new Set(includedFields)]
+    if(!item.includedFields.length){item.category='skipped';item.reason='所有同步欄位皆已略過；來源資料保留在本機。';continue}
     const mappingNeeds=[...mapped.needs]
     if(record.sourceStudentIdentityConflict)mappingNeeds.push('此歷史報告的學生身份與來源報名不同；請先分拆或核對該筆來源資料。')
     if(record.sourceLearningStatusRaw&&!record.sourceLearningStatus)mappingNeeds.push('原站學習狀態尚未辨識；請展開來源證據確認實際選項。')
@@ -40,13 +43,13 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     item.mappingNeeds = mappingNeeds
     if (!target.id) { needs(item,'enrollment-unconfirmed','課程與教材可先核對；確認此筆報名的學生與 EduLog 關係後，才能保存歷史報告。',[{id:'enrollment-unconfirmed',code:'enrollment',message:'課程與教材可先核對；確認此筆報名的學生與 EduLog 關係後，才能保存歷史報告。',target:'enrollment'}]); continue }
     item.data = { enrollment_id: target.id, report_date: record.date, source_origin: 'https://corp.orangeapple.co', source_admission_id: record.enrollment_source_id, source_key: sourceKey, identity_status: record.source_id && !record.identityUnverified ? 'verified' : 'evidence_only',
-      source_fields: (record.sourceFields || []).filter(f => !f.internal || options.includeInternal).filter(f => ['attendance_status','absence_reason','lesson_id','progress_start','progress_end','is_completed','class_participation','classroom_behavior','content','contact_notes','class_notes','sourceLessonLabel','progress_letter'].includes(f.key)).map(f => ({key:f.key,label:f.label || f.key,text:String(f.value ?? '')})),
+      source_fields: (record.sourceFields || []).filter(f => (!f.internal || options.includeInternal || record.syncFieldOverrides?.class_notes===true)&&fieldAllowed(record,f.key)).filter(f => ['attendance_status','absence_reason','lesson_id','progress_start','progress_end','is_completed','class_participation','classroom_behavior','content','contact_notes','class_notes','sourceLessonLabel','progress_letter'].includes(f.key)).map(f => ({key:f.key,label:f.label || f.key,text:String(f.value ?? '')})),
       source_evidence: (record.sourceEvidence || []).slice(-50).map(e => ({source_path:e.sourcePath,table:e.table,row:e.row,captured_at:e.capturedAt})),
     }
-    if (item.data.identity_status === 'verified') { item.data.source_report_id = record.source_id; item.data.external_link = `https://corp.orangeapple.co/dt_admissions/${record.enrollment_source_id}/reports/${record.source_id}/edit` }
+    if (item.data.identity_status === 'verified' && fieldAllowed(record,'external_link')) { item.data.source_report_id = record.source_id; item.data.external_link = `https://corp.orangeapple.co/dt_admissions/${record.enrollment_source_id}/reports/${record.source_id}/edit` }
     if(item.existing?.source_evidence?.length)item.data.source_evidence=[...item.existing.source_evidence,...item.data.source_evidence.filter(e=>!item.existing.source_evidence.some(old=>old.source_path===e.source_path&&old.table===e.table&&old.row===e.row))].slice(-50)
-    for (const field of teachingFields.filter(f => f !== 'external_link' && f !== 'class_notes')) if (mapped.data[field] !== undefined && (mapped.data[field] !== '' || ['content','contact_notes','absence_reason'].includes(field))) item.data[field] = mapped.data[field]
-    if (options.includeInternal && (record.sourceInternalNotes||record.sourceLearningStatus||record.sourceLearningStatusRaw)) item.data.class_notes=globalThis.edulogFieldMappings.composeClassNotes(record.sourceLearningStatus,record.sourceInternalNotes,record.sourceLearningStatusRaw&&!record.sourceLearningStatus?record.sourceLearningStatusRaw:'')
+    for (const field of teachingFields.filter(f => f !== 'external_link' && f !== 'class_notes' && fieldAllowed(record,f))) if (mapped.data[field] !== undefined && (mapped.data[field] !== '' || ['content','contact_notes','absence_reason'].includes(field))) item.data[field] = mapped.data[field]
+    if ((options.includeInternal||record.syncFieldOverrides?.class_notes===true) && fieldAllowed(record,'class_notes') && (record.sourceInternalNotes||record.sourceLearningStatus||record.sourceLearningStatusRaw)) item.data.class_notes=globalThis.edulogFieldMappings.composeClassNotes(record.sourceLearningStatus,record.sourceInternalNotes,record.sourceLearningStatusRaw&&!record.sourceLearningStatus?record.sourceLearningStatusRaw:'')
     if (!item.existing && previous.some(h => h.report_date === record.date && (item.data.identity_status === 'evidence_only' || h.identity_status === 'evidence_only')) && !record.historyDuplicateConfirmed) { item.identityAmbiguous=true; needs(item,'duplicate-history','同日已有身份不足的歷史；請核對內容改變或同日另一筆，不自動產生第二份。',[{id:'duplicate-history',code:'identity',message:'同日已有身份不足的歷史；請核對內容改變或同日另一筆，不自動產生第二份。',target:'identity'}]); continue }
     if (item.existing?.linked_report_id) {
       const changed = [...teachingFields,'source_fields'].some(f => Object.hasOwn(item.data,f) && JSON.stringify(item.data[f]) !== JSON.stringify(item.existing[f]))

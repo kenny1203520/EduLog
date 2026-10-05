@@ -15,13 +15,22 @@ function appWith(data: unknown, error: unknown = null, productionErrors = false)
   return { app, rpc }
 }
 describe('workspace API contract', () => {
+  it('reads and revision-checks account-wide sync preferences with a bounded field allowlist',async()=>{
+    const {app,rpc}=appWith({fields:{attendance_status:false},revision:id})
+    const read=await request(app).get('/api/extension/v1/sync-preferences?source_origin=https%3A%2F%2Fcorp.orangeapple.co&adapter_version=orange-apple-v1').set('Authorization','Bearer test')
+    expect(read.status).toBe(200);expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'get',p_input:{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1'}})
+    const body={source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',expected_revision:id,fields:[{field_key:'attendance_status',enabled:false},{field_key:'progress_letter',enabled:true}]}
+    const saved=await request(app).patch('/api/extension/v1/sync-preferences').set('Authorization','Bearer test').send(body)
+    expect(saved.status).toBe(200);expect(rpc.mock.calls.at(-1)![1]).toMatchObject({p_operation:'patch',p_input:body})
+    for(const invalid of [{...body,fields:[body.fields[0],body.fields[0]]},{...body,fields:[{field_key:'student_id',enabled:false}]},{...body,expected_revision:'bad'}])expect((await request(app).patch('/api/extension/v1/sync-preferences').send(invalid)).status).toBe(400)
+  })
   it('routes bounded effective dates and versioned history binding without forged actors',async()=>{
     const {app,rpc}=appWith({items:[],next_cursor:null})
     const body={enrollment_id:id,dates:['2026-10-03','2026-10-04'],limit:50}
     expect((await request(app).post('/api/extension/v1/history-reports/route').set('Authorization','Bearer test').send(body)).status).toBe(200)
     expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'route',p_input:body})
     for(const invalid of [{...body,dates:Array(51).fill('2026-10-04')},{...body,dates:['2026-02-30']},{...body,user_id:id}])expect((await request(app).post('/api/extension/v1/history-reports/route').send(invalid)).status).toBe(400)
-    const binding={key:id,class_occurrence_id:id,history_version:1,overwrite:['content'],include_internal:false}
+    const binding={key:id,class_occurrence_id:id,history_version:1,overwrite:['content'],include_internal:false,include_fields:['content','attendance_status']}
     expect((await request(app).post(`/api/extension/v1/history-reports/${id}/bind/preview`).set('Authorization','Bearer test').send(binding)).status).toBe(200)
     expect(rpc.mock.calls.at(-1)![1]).toMatchObject({p_operation:'bind-preview',p_input:{...binding,history_id:id}})
     expect((await request(app).post(`/api/extension/v1/history-reports/${id}/bind/apply`).send({...binding,history_version:0})).status).toBe(400)
