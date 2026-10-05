@@ -15,7 +15,7 @@
     if(field.type==='text'||field.key==='learning_status')return
     const doc=parent.ownerDocument,m=globalThis.edulogFieldMappings,box=make(doc,'details'),summary=make(doc,'summary','欄位映射：查看／修改記憶');box.className='field-mapping-memory';box.append(summary)
     const feedback=make(doc,'p');feedback.className='field-mapping-status';feedback.setAttribute('role','status');feedback.setAttribute('aria-live','polite')
-    if(!options.enabled){feedback.textContent=options.reason||'升級 EduLog 至 1000124 並確認報名後，可跨裝置記住映射。';box.append(feedback);parent.append(box);return}
+    if(!options.enabled){feedback.textContent=options.reason||'目前連線不支援跨裝置記住映射；本次欄位核對仍可繼續。';box.append(feedback);parent.append(box);return}
     const source=make(doc,'select'),canonical=make(doc,'select'),values=choices(field,report,options.lessons)
     source.name=`mapping-source-${field.key}`;canonical.name=`mapping-value-${field.key}`;source.autocomplete=canonical.autocomplete='off'
     for(const o of field.options.filter(o=>!o.disabled&&o.value!=='')){const n=make(doc,'option',o.label||o.value);n.value=o.value;source.append(n)}

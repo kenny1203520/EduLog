@@ -123,7 +123,7 @@
     groups.get('exact').cursor=cursor;paintGroup('exact')
     if(target){addGroup(box,'same-course','同學生、同課程的其他報告',[],!items.length);addGroup(box,'other-course','同學生、其他課程',[],false);if(!items.length&&capabilities.nearest_report_candidates)void loadGroup('same-course')}
     if(target&&capabilities.enrollment_history_reports)addGroup(box,'history','已保存的歷史紀錄（範本）',[],false)
-    if(target&&!capabilities.nearest_report_candidates)box.append(make('p','請將伺服器升級至 1000123，才能使用依目標日排序的新版候選。','help'))
+    if(target&&!capabilities.nearest_report_candidates)box.append(make('p','目前連線未提供依目標日期排序的候選；仍可手動搜尋及選取報告。','help'))
     renderSearch(box)
   }
   function renderSearch(parent) {

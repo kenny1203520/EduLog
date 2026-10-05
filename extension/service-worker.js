@@ -87,9 +87,12 @@ async function verifyIntegrationStatus() {
         catalog_v1: data?.capabilities?.catalog_v1 === true,
         multi_course_import: data?.capabilities?.multi_course_import === true,
         mapping_memory: data?.capabilities?.mapping_memory === true,
+        field_mapping_memory: data?.capabilities?.field_mapping_memory === true,
         student_enrollment_catalog: data?.capabilities?.student_enrollment_catalog === true,
         enrollment_reconciliation: data?.capabilities?.enrollment_reconciliation === true,
         transferred_occurrence_import: data?.capabilities?.transferred_occurrence_import === true,
+        enrollment_history_reports: data?.capabilities?.enrollment_history_reports === true,
+        per_occurrence_report_routing: data?.capabilities?.per_occurrence_report_routing === true,
         nearest_report_candidates: data?.capabilities?.nearest_report_candidates === true,
       },
     }

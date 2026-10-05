@@ -26,7 +26,7 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
   let entries = [], section = 'courses', selected = '', pinCurrent = true, mobileEditor = false, scrolls = {}, listScrolls = {}, listWindows = {}, sections = {}, restoredWork = ''
   const buttons = new Map()
   const viewport = matchMedia('(max-width: 768px)')
-  const save = () => { if (work()) work().mappingView = { section, selected, mobileEditor, search: $('mapping-search').value, filter: $('mapping-filter').value, scrolls, listScrolls, listWindows, sections, courseOverrides: work().mappingView?.courseOverrides || [] }; changed() }
+  const save = () => { if (work()) work().mappingView = { section, selected, mobileEditor, search: $('mapping-search').value, filter: $('mapping-filter').value, scrolls, listScrolls, listWindows, sections, courseOverrides: work().mappingView?.courseOverrides || [], studentSplits: work().mappingView?.studentSplits || [] }; changed() }
   function visible(entry) {
     const filter = $('mapping-filter').value, search = $('mapping-search').value.trim().toLocaleLowerCase('zh-TW')
     return entry.section === section && (pinCurrent && entry.key === selected || (!search || `${entry.title} ${entry.subtitle}`.toLocaleLowerCase('zh-TW').includes(search)) && (filter === 'all' || filter === 'pending' && !['remembered','skipped'].includes(entry.status) || filter === entry.status))

@@ -127,7 +127,7 @@ test('temporary target answers are permission checked; templates with unknown da
   const b=broker(async url=>({ok:false,status:403,json:async()=>({error:{code:'PERMISSION_DENIED',message:'No access'}})}),undefined,{},async m=>{if(m.type==='integration-supplement')supplementSent=true;return{data:form}})
   const reply=await b.send({type:'integration-inline-prefill',operation:'supplement',input:{enrollmentId:id}},b.site)
   assert.equal(reply.error.code,'PERMISSION_DENIED');assert.equal(supplementSent,false)
-  const old=await b.send({type:'integration-inline-prefill',operation:'candidates',query:{group:'same-course'}},b.site);assert.match(old.error.message,/1000123/)
+  const old=await b.send({type:'integration-inline-prefill',operation:'candidates',query:{group:'same-course'}},b.site);assert.match(old.error.message,/目前連線未提供依目標日期排序的候選/);assert.doesNotMatch(old.error.message,/1000123/)
 })
 test('temporary enrollment answers cannot be reused across EduLog instances',async()=>{
   const id='00000000-0000-4000-8000-000000000001',form={formId:'f1',fingerprint:'hash',admissionId:'301',reportId:'401',date:'2024-10-04',supplement:{enrollmentId:id,binding:{instance:'https://other.example',userId:'other'}}}

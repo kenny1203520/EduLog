@@ -145,11 +145,11 @@ export function installWorkspaceBroker(getStatus) {
           return {connected:true,form,target,reports:data.reports||[],next_cursor:data.next_cursor||null,settingsUrl:bound.status.settingsUrl,capabilities:bound.status.capabilities,reason:!target?'尚無有效報名對應；可選擇既有學生與報名，或人工選取範本。':!form.date?form.dateInfo?.reason||dateReadError||'請確認完整上課日期。':''}
         }
         if(operation==='candidates'){
-          if(bound.status.capabilities?.nearest_report_candidates!==true)fail('請將 EduLog 伺服器升級至 1000123，才能使用依目標日期排序的報告候選。')
+          if(bound.status.capabilities?.nearest_report_candidates!==true)fail('目前連線未提供依目標日期排序的候選；請重新檢查連線後再試。','CAPABILITY_UNAVAILABLE')
           const target=await inlineTarget(form,bound), query=message.query||{}
           if(!target)fail('請先確認目標學生與報名；仍可使用其他學生搜尋。')
           if(query.group==='history'){
-            if(!bound.status.capabilities?.enrollment_history_reports)fail('請升級 EduLog 至 1000126，才能讀取已保存歷史範本。')
+            if(!bound.status.capabilities?.enrollment_history_reports)fail('目前連線未提供已保存歷史範本；請重新檢查連線後再試。','CAPABILITY_UNAVAILABLE')
             const data=await call({operation:'history-list',query:{student_id:target.studentId,course_id:target.courseId,sort:'nearest',anchor_date:form.date||new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),unlinked_only:'true',limit:50,cursor:query.cursor||undefined}})
             return {reports:data.items.map(r=>({...r,occurrence_date:r.report_date,template_only:true})),next_cursor:data.next_cursor}
           }
@@ -175,7 +175,7 @@ export function installWorkspaceBroker(getStatus) {
           return { reports: result.data?.reports || [], next_cursor: result.data?.next_cursor || null }
         }
         if (['field-resolve','field-confirm'].includes(operation)) {
-          if(bound.status.capabilities?.field_mapping_memory!==true)fail('請升級 EduLog 至 1000124，才能跨裝置保存欄位映射。')
+          if(bound.status.capabilities?.field_mapping_memory!==true)fail('目前連線未提供跨裝置欄位映射記憶；本次核對仍可繼續。','CAPABILITY_UNAVAILABLE')
           const target=await inlineTarget(form,bound)
           if(!target)fail('請先確認有效報名，才能保存課程範圍的映射。')
           const items=operation==='field-resolve'?form.fields.filter(f=>f.type!=='text').map(f=>({field_key:f.key,options_signature:JSON.stringify(f.options.map(o=>[String(o.value),o.label,Boolean(o.disabled)]))})):message.items
