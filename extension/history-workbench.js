@@ -2,7 +2,7 @@ const stateLabels = {bind:'可綁定課次',history:'先存歷史',needs:'需要
 /** Retain list controls and the active draft while filters and async results change. */
 export function createHistoryWorkbench(hooks) {
   const $ = id => document.getElementById(id), make = (tag,text) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; return n }
-  const buttons = new Map(); let items=[], selected='', owner, editorKey=''
+  const buttons = new Map(),studentGroups=new Map(),enrollmentGroups=new Map(); let items=[], selected='', owner, editorKey=''
   function changed() { hooks.changed() }
   function open(item) {
     const host=$('history-detail');host.replaceChildren();editorKey=item.key
@@ -26,7 +26,7 @@ export function createHistoryWorkbench(hooks) {
       confirm.onclick=()=>{if(!date.value||!date.checkValidity())return date.reportValidity();r.userConfirmedDate=date.value;r.date=date.value;r.sourceDateConflict=false;hooks.recheck()};host.append(label,confirm)
     }
     if(item.candidates?.length>1) {
-      const label=make('label','需要您確認：本份紀錄的目標課次'),select=make('select');select.add(new Option('請選擇合法課次，或先存歷史',''));for(const c of item.candidates)select.add(new Option(`${c.class_name} · ${c.occurrence_date} · ${c.start_time||'時段未提供'}`,c.id));select.value=r.historyOccurrenceId||'';label.append(select);host.append(label);select.onchange=()=>{r.historyOccurrenceId=select.value;r.historyConflictConfirmed=false;hooks.recheck()}
+      const label=make('label','需要您確認：本份紀錄的目標課次'),select=make('select');select.dataset.sourceRawOptions='true';select.add(new Option('請選擇合法課次，或先存歷史',''));for(const c of item.candidates)select.add(new Option(`${c.class_name} · ${c.occurrence_date} · ${c.start_time||'時段未提供'}`,c.id));select.value=r.historyOccurrenceId||'';label.append(select);host.append(label);select.onchange=()=>{r.historyOccurrenceId=select.value;r.historyConflictConfirmed=false;hooks.recheck()}
     }
     if(item.conflicts?.length) {
       host.append(make('h4','既有報告差異 · 未勾選的欄位保留 EduLog'))
@@ -47,19 +47,34 @@ export function createHistoryWorkbench(hooks) {
     for(const control of host.querySelectorAll('button,input,select,textarea,summary,a'))control.dataset.focusKey=`${control.tagName}:${control.type||''}:${control.closest('label')?.firstChild?.textContent||control.textContent.trim().slice(0,80)}`
   }
   function render(next) {
-    const work=hooks.work(),restored=owner!==work?work?.historyUI:null;if(owner!==work){buttons.clear();$('history-items').replaceChildren();owner=work;editorKey='';selected=work?.historyUI?.selected||'';for(const [id,key] of [['history-search','search'],['history-filter','filter']])$(id).value=work?.historyUI?.[key]??(key==='filter'?'needs':'')}
+    const work=hooks.work(),restored=owner!==work?work?.historyUI:null;if(owner!==work){buttons.clear();studentGroups.clear();enrollmentGroups.clear();$('history-items').replaceChildren();owner=work;editorKey='';selected=work?.historyUI?.selected||'';for(const [id,key] of [['history-search','search'],['history-filter','filter']])$(id).value=work?.historyUI?.[key]??(key==='filter'?'needs':'')}
     items=next;const query=$('history-search').value.trim().toLowerCase(),filter=$('history-filter').value
     const keys=new Set(items.map(i=>i.key));for(const [key,button] of buttons)if(!keys.has(key)){button.remove();buttons.delete(key)}
     if(!keys.has(selected)){selected='';editorKey='';$('history-detail').textContent='選擇需要處理的項目；其餘紀錄可在同步摘要集中確認。'}
-    let visible=0
+    let visible=0;const visibleStudents=new Set(),visibleEnrollments=new Set(),currentStudents=new Set(),currentEnrollments=new Set(),reportCounts=new Map(),splitAdmissions=new Set(work?.mappingView?.studentSplits||[])
     for(const item of items) {
+      const r=item.record,name=String(item.target?.name||r.sourceStudentName||'').trim(),admission=String(r.enrollment_source_id||'unknown'),studentId=r.student_source_id
+      const studentKey=splitAdmissions.has(admission)?`admission:${admission}`:studentId?`student:${studentId}`:name?`name:${name}`:`admission:${admission}`;currentStudents.add(studentKey)
+      let student=studentGroups.get(studentKey)
+      if(!student){student=make('section');student.className='history-student-group';student.dataset.studentGroup=studentKey;const heading=make('h4',name||`來源報名 #${admission}`);heading.className='history-student-heading';heading.dataset.sourceRaw='true';student.append(heading,make('span',''));student.lastElementChild.className='history-student-count';if(studentKey.startsWith('name:'))student.append(make('p','依姓名暫時分組；來源沒有可靠學生 ID，請在寫入前確認身份。','hint'));const children=make('div');children.className='history-enrollments';student.append(children);studentGroups.set(studentKey,student)}
+      const course=item.target?.courseName||r.sourceCourseLabel||'課程待確認',enrollmentKey=`${studentKey}:enrollment:${admission}:${r.sourceCourseCode||course}`;currentEnrollments.add(enrollmentKey);reportCounts.set(enrollmentKey,(reportCounts.get(enrollmentKey)||0)+1)
+      let enrollment=enrollmentGroups.get(enrollmentKey)
+      if(!enrollment){enrollment=make('section');enrollment.className='history-enrollment-group';enrollment.dataset.enrollmentGroup=enrollmentKey;const heading=make('h5',`${course} · 報名 #${admission}`);enrollment.append(heading);const list=make('div');list.className='history-report-items';enrollment.append(list);studentGroups.get(studentKey).lastElementChild.append(enrollment);enrollmentGroups.set(enrollmentKey,enrollment)}
+      if(!student.isConnected)$('history-items').append(student)
       let b=buttons.get(item.key)
-      if(!b){b=make('button');b.type='button';b.className='mapping-list-item';b.onclick=()=>{const current=items.find(i=>i.key===b.dataset.key);if(!current)return;selected=current.key;editorKey='';render(items);$('history-workbench').dataset.mobileView='editor';hooks.uiChanged?.()};b.dataset.key=item.key;buttons.set(item.key,b);$('history-items').append(b)}
-      const r=item.record,text=`${item.target?.name||r.sourceStudentName||''} ${item.target?.courseName||''} ${r.date||r.dateRaw||''} ${r.enrollment_source_id}`
+      if(!b){b=make('button');b.type='button';b.className='mapping-list-item';b.onclick=()=>{const current=items.find(i=>i.key===b.dataset.key);if(!current)return;selected=current.key;editorKey='';render(items);$('history-workbench').dataset.mobileView='editor';hooks.uiChanged?.()};b.dataset.key=item.key;buttons.set(item.key,b)}
+      if(b.parentElement!==enrollment.lastElementChild)enrollment.lastElementChild.append(b)
+      const text=`${name} ${course} ${r.date||r.dateRaw||''} ${admission}`
       b.hidden=item.key!==selected&&((filter!=='all'&&filter!==item.category)||!text.toLowerCase().includes(query));if(!b.hidden)visible++
-      b.replaceChildren(make('strong',item.target?.name||r.sourceStudentName||`來源報名 #${r.enrollment_source_id}`),make('span',`${r.date||r.dateRaw||'日期待確認'} · ${item.target?.courseName||'課程待確認'}`),make('span',stateLabels[item.category]));b.setAttribute('aria-current',String(item.key===selected))
+      b.replaceChildren(make('strong',r.date||r.dateRaw||'日期待確認'),make('span',stateLabels[item.category]));b.setAttribute('aria-current',String(item.key===selected));if(!b.hidden){visibleStudents.add(studentKey);visibleEnrollments.add(enrollmentKey)}
       if(item.key===selected&&editorKey!==selected)open(item)
     }
+    for(const [key,group] of studentGroups)if(!currentStudents.has(key)){group.remove();studentGroups.delete(key)}
+    for(const [key,group] of enrollmentGroups)if(!currentEnrollments.has(key)){group.remove();enrollmentGroups.delete(key)}
+    for(const [key,group] of enrollmentGroups){const heading=group.querySelector('h5');if(heading)heading.textContent=`${heading.textContent.replace(/ · \d+ 份歷史$/,'')} · ${reportCounts.get(key)||0} 份歷史`}
+    for(const [key,group] of studentGroups){const count=group.querySelector('.history-student-count');if(count)count.textContent=`${group.querySelectorAll('.history-enrollment-group').length} 筆報名`}
+    for(const [key,group] of studentGroups)group.hidden=!visibleStudents.has(key)
+    for(const [key,group] of enrollmentGroups)group.hidden=!visibleEnrollments.has(key)
     $('history-empty').hidden=visible>0
     $('history-sync-summary').textContent=Object.entries(stateLabels).map(([k,v])=>`${v} ${items.filter(i=>i.category===k).length}`).join(' · ')
     if(restored){$('history-items').scrollTop=restored.listScroll||0;$('history-editor').scrollTop=restored.editorScroll||0}
