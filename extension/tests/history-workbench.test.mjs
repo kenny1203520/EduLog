@@ -5,7 +5,7 @@ import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 import { retryHistoryWork } from '../workspace-model.js'
 const source=readFileSync(new URL('../history-workbench.js',import.meta.url),'utf8').replace('export function','function')
 function fixture() {
- const dom=new JSDOM('<section id="history-workbench"><input id="history-search"><select id="history-filter"><option value="needs">待處理</option><option value="all">全部</option></select><div id="history-items"></div><div id="history-editor"><button id="history-back">返回</button><div id="history-detail"></div></div><p id="history-empty"></p><p id="history-sync-summary"></p></section>',{runScripts:'outside-only'})
+ const dom=new JSDOM('<section id="history-workbench"><p id="history-action-count"></p><button id="history-next-issue"></button><button id="history-next-report"></button><input id="history-search"><select id="history-filter"><option value="needs">待處理</option><option value="all">全部</option></select><div id="history-items"></div><div id="history-editor"><button id="history-back">返回</button><div id="history-detail"></div></div><p id="history-empty"></p><p id="history-sync-summary"></p></section>',{runScripts:'outside-only'})
  const w=dom.window;w.scrollTo=()=>{};w.currentWork={id:'work'};w.hookCounts={changed:0,uiChanged:0,recheck:0};w.eval(source+';window.view=createHistoryWorkbench({work:()=>currentWork,changed:()=>{hookCounts.changed++;window.view?.updateStatus()},uiChanged:()=>hookCounts.uiChanged++,recheck:()=>hookCounts.recheck++,labels:{},fields:(host)=>{const detail=host.ownerDocument.createElement("details");detail.dataset.reviewKey="mapping:attendance";detail.innerHTML="<summary>Mapping</summary><input value=kept>";host.append(detail)}})')
  const item=(key,extra={})=>({key,record:{enrollment_source_id:key,date:'2026-10-04'},target:{id:'enrollment',name:'測試學生'},category:'needs',reason:'日期核對',...extra})
  return {w,dom,item,$:id=>w.document.getElementById(id)}
@@ -38,6 +38,11 @@ test('list editor conflict acknowledgement updates local state without a full re
 
 test('local mapping updates retain loaded editor controls, expansion, draft, focus, and scroll',()=>{
  const {w,dom,item,$}=fixture(),row=item('301');w.currentWork.historyUI={selected:'301'};w.view.render([row]);const mapping=$('history-detail').querySelector('[data-review-key="mapping:attendance"]'),input=mapping.querySelector('input');mapping.open=true;input.value='draft';input.focus();$('history-editor').scrollTop=37;row.category='bind';row.reason='Session confirmed';w.view.updateStatus([row]);assert.equal($('history-detail').querySelector('[data-review-key="mapping:attendance"]'),mapping);assert.equal(mapping.open,true);assert.equal(input.value,'draft');assert.equal(w.document.activeElement,input);assert.equal($('history-editor').scrollTop,37);assert.match($('history-detail').querySelector('[data-history-reason]').textContent,/Session confirmed/);dom.window.close()
+})
+
+test('progress separates report counts from issue counts and navigation waits for an explicit action',()=>{
+ const {w,dom,item,$}=fixture(),a=item('301',{issues:[{id:'date',message:'Date needed',target:'date'},{id:'mapping:lesson',message:'Lesson needed',target:'source'}]}),b=item('302',{issues:[{id:'identity',message:'Confirm identity',target:'source'}]}),ready=item('303',{category:'bind',issues:[]})
+ w.view.render([a,b,ready]);assert.match($('history-action-count').textContent,/待處理報告 2 份 · 問題 3 項 · 可同步 1 份/);assert.equal(w.currentWork.historyUI.selected,'');$('history-next-report').click();assert.equal(w.currentWork.historyUI.selected,'301');$('history-next-issue').click();assert.equal($('history-detail').querySelector('[data-issue-id="date"]')!==null,true);$('history-next-issue').click();assert.equal($('history-detail').querySelector('[data-issue-id="mapping:lesson"]')!==null,true);dom.window.close()
 })
 
 test('narrow view keeps list and editor states and returns focus to the selected row',()=>{

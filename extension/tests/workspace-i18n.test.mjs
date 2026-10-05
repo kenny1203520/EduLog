@@ -22,3 +22,13 @@ test('workspace locale falls back to browser language when extension storage is 
   assert.equal(dom.window.document.querySelector('h1').textContent,'Teaching data import')
   dom.window.close()
 })
+
+test('dynamic review progress and issue guidance are translated in place',async()=>{
+  const source=readFileSync(new URL('../workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p id="count"></p><p id="issue"></p><p id="saved"></p></body></html>',{runScripts:'outside-only'})
+  const w=dom.window;w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'zh-TW'}),set:async()=>{}},onChanged:{addListener:()=>{}}}};w.eval(source+';initWorkspaceI18n()');await new Promise(resolve=>setTimeout(resolve,0))
+  w.document.getElementById('count').textContent='待處理報告 2 份 · 問題 3 項 · 可同步 4 份';w.document.getElementById('issue').textContent='待處理問題 · 2 項';w.document.getElementById('saved').textContent='已記住：「出席」→「present」；套用範圍：Python。';await new Promise(resolve=>setTimeout(resolve,0))
+  w.document.getElementById('workspace-locale').value='en';w.document.getElementById('workspace-locale').dispatchEvent(new w.Event('change'));await new Promise(resolve=>setTimeout(resolve,0))
+  assert.equal(w.document.getElementById('count').textContent,'2 reports need attention · 3 issues · 4 ready to sync');assert.equal(w.document.getElementById('issue').textContent,'2 issues to resolve');assert.equal(w.document.getElementById('saved').textContent,'Saved mapping: "出席" → "present" · Scope: Python.')
+  dom.window.close()
+})

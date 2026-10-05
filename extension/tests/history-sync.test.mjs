@@ -27,7 +27,7 @@ test('multiple legal occurrences and nonempty content conflicts require explicit
  const [confirmed]=plan([record({historyConflictConfirmed:true,historyOverwrite:['content']})],[],[conflict]);assert.equal(confirmed.category,'bind');assert.deepEqual(confirmed.conflicts,['is_completed','content']);assert.equal(bindingStillMatches(confirmed,{report_version:3}),true)
 })
 test('unread, changed linked and conflicting duplicate data cannot be silently imported',()=>{
- assert.equal(plan([record({sourceReadStatus:'failed'})])[0].category,'needs')
+ const [unread]=plan([record({sourceReadStatus:'failed'})]);assert.equal(unread.category,'needs');assert.equal(unread.issues[0].id,'source-read');assert.equal(unread.issues[0].target,'source')
  assert.equal(plan([record(),record()]).length,1)
  assert.equal(plan([record(),record({data:{content:'different'}})])[0].category,'needs')
  const linked={id:'archive',report_date:'2026-10-04',source_fields:[{key:'content',label:'評語',text:''}],source_admission_id:'301',source_key:'report:401',linked_report_id:'report',is_completed:false,class_participation:0,classroom_behavior:4.5,content:'',external_link:'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'}

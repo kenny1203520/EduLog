@@ -3,11 +3,12 @@ import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {JSDOM} from '../../app/node_modules/jsdom/lib/api.js'
 const field={key:'attendance_status',type:'select',value:'yes',options:[{value:'yes',label:'出席',disabled:false},{value:'no',label:'不出席',disabled:false}]}
-function setup(rules,confirm,isCurrent=()=>true){const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});for(const f of ['field-mappings.js','field-mapping-ui.js'])dom.window.eval(readFileSync(new URL('../'+f,import.meta.url),'utf8'));dom.window.edulogFieldMappingUI.attach(dom.window.document.querySelector('main'),field,{attendance_status:'present'},rules,{enabled:true,confirm,isCurrent});return dom}
+function setup(rules,confirm,isCurrent=()=>true,changed){const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});for(const f of ['field-mappings.js','field-mapping-ui.js'])dom.window.eval(readFileSync(new URL('../'+f,import.meta.url),'utf8'));dom.window.edulogFieldMappingUI.attach(dom.window.document.querySelector('main'),field,{attendance_status:'present'},rules,{enabled:true,confirm,isCurrent,changed});return dom}
 const tick=()=>new Promise(resolve=>setTimeout(resolve,0))
 test('explicit confirmation uses returned revision; clearing leaves original field untouched',async()=>{
- const rules=[],calls=[];const dom=setup(rules,async input=>{calls.push(input);return{items:input.action==='confirm'?[{...input,revision:'rev-1',valid:true}]:[{cleared:true}]}}),doc=dom.window.document
+ const rules=[],calls=[],changes=[];const dom=setup(rules,async input=>{calls.push(input);return{items:input.action==='confirm'?[{...input,revision:'rev-1',valid:true}]:[{cleared:true}]}},()=>true,(_rules,change)=>changes.push(change)),doc=dom.window.document
  const [save,clear]=doc.querySelectorAll('button');save.click();save.click();await tick();assert.equal(calls.length,1);assert.equal(rules[0].revision,'rev-1');assert.match(doc.querySelector('[role=status]').textContent,/已記住/)
+ assert.equal(changes[0].optionsSignature,dom.window.edulogFieldMappings.signature(field));assert.equal(changes[0].canonicalValue,'present')
  clear.click();await tick();assert.equal(calls[1].expected_revision,'rev-1');assert.equal(rules.length,0);assert.equal(field.value,'yes');dom.window.close()
 })
 test('removed source options keep their revision and allow clearing, not confirmation',async()=>{

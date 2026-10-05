@@ -94,6 +94,7 @@ export function attachImportFields(parent, record, hooks) {
         for (const field of record.sourceFields || []) {
           if (field.internal || field.type === 'text' || globalThis.edulogFieldMappings.empty(field.value)) continue
           const row = make('section'), label = make('label', `${field.label} · 原站：${field.options.find(o => o.value === field.value)?.label || field.value}`), select = make('select')
+          row.dataset.reviewField=field.key
           label.append(select); select.append(new Option('請確認此欄位的 EduLog 意義', ''))
           const values = globalThis.edulogFieldMappingUI.choices(field, {}, hooks.lessons().filter(l => l.course_id === courseId))
           values.forEach(([value, text]) => select.append(new Option(text, JSON.stringify(value))))
@@ -108,7 +109,7 @@ export function attachImportFields(parent, record, hooks) {
             enabled: hooks.capable(), sourceValue: field.value, lessons: hooks.lessons().filter(l => l.course_id === courseId), isCurrent: current,
             scopeLabel: hooks.courseName?.(courseId)||'此課程',
             confirm: item => hooks.api('field-confirm', { source_origin: 'https://corp.orangeapple.co', adapter_version: 'orange-apple-v1', items: [{ ...item, course_id: courseId }] }),
-            changed: () => { const data = mappedReport(record, courseId, hooks.lessons()).data; if (data[field.key] !== undefined) select.value = JSON.stringify(data[field.key]); hooks.changed() },
+            changed: (_rules,change) => { if(change?.action==='confirm'&&record.fieldChoices?.courseId===courseId){const choice=record.fieldChoices.fields?.[field.key];if(choice?.sourceValue===change.sourceValue&&choice.signature===globalThis.edulogFieldMappings.signature(field))delete record.fieldChoices.fields[field.key]}const data = mappedReport(record, courseId, hooks.lessons()).data; if (data[field.key] !== undefined) select.value = JSON.stringify(data[field.key]); hooks.shareRule?.(record.fieldRules||[],change); hooks.changed() },
           })
         }
       }
