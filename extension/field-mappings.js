@@ -44,13 +44,18 @@
     if(field.key==='class_notes')return splitClassNotes(report.class_notes||'').notes
     return report[field.key]
   }
+  function lessonLabel(lesson) {
+    const title=lesson?.title||lesson?.name||`教材 #${String(lesson?.id||'').slice(0,8)}`
+    const sequence=Number(lesson?.sequence)
+    return Number.isInteger(sequence)&&sequence>0?`Lesson ${sequence} · ${title}`:`序號未提供 · ${title}`
+  }
   function display(field, report) {
     const value = reportValue(field,report)
     if (empty(value)) return '未填寫'
     if (field.key === 'attendance_status') return attendance[value] || '未辨識出席狀態'
     if (field.key === 'absence_reason') return reasons[value] || '未辨識缺席原因'
     if (field.key === 'is_completed') return typeof value === 'boolean' ? value ? '課程已完成' : '課程未完成' : '未辨識完成狀況'
-    if (field.key === 'lesson_id') return report.lesson_name || `教材 #${String(value).slice(0,8)}`
+    if (field.key === 'lesson_id') return lessonLabel({id:value,title:report.lesson_name,sequence:report.lesson_sequence})
     if (['class_participation','classroom_behavior'].includes(field.key)) return `${value} 星`
     return String(value)
   }
@@ -83,5 +88,5 @@
     const source = canonical(field,rules)
     return source !== undefined && source === reportValue(field,report)
   }
-  globalThis.edulogFieldMappings = Object.freeze({ empty, signature, scalar, reportValue, display, suggest, canonical, equal, attendance, reasons, learningStatus, splitClassNotes, composeClassNotes })
+  globalThis.edulogFieldMappings = Object.freeze({ empty, signature, scalar, reportValue, lessonLabel, display, suggest, canonical, equal, attendance, reasons, learningStatus, splitClassNotes, composeClassNotes })
 })()

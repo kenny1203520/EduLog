@@ -8,7 +8,7 @@
     if(field.key==='is_completed')return [[true,'課程已完成'],[false,'課程未完成']]
     if(['class_participation','classroom_behavior'].includes(field.key))return Array.from({length:11},(_,i)=>[i/2,`${i/2} 星`])
     if(field.key.startsWith('progress_'))return Array.from({length:26},(_,i)=>[String.fromCharCode(65+i),String.fromCharCode(65+i)])
-    if(field.key==='lesson_id')return extra.length?extra.map(l=>[l.id,l.title]):report.lesson_id?[[report.lesson_id,report.lesson_name||`教材 #${report.lesson_id.slice(0,8)}`]]:[]
+    if(field.key==='lesson_id')return extra.length?extra.map(l=>[l.id,m.lessonLabel(l)]):report.lesson_id?[[report.lesson_id,m.lessonLabel({id:report.lesson_id,title:report.lesson_name,sequence:report.lesson_sequence})]]:[]
     return []
   }
   function attach(parent,field,report,rules,options) {

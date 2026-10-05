@@ -86,7 +86,7 @@ export function attachImportFields(parent, record, hooks) {
         if (!current()) return
         controls?.remove(); controls = make('div'); editor.append(controls)
         if(record.sourceLessonLabel&&!(record.sourceFields||[]).some(f=>f.key==='lesson_id'&&f.type==='stage')) {
-          const label=make('label',`教材原文：${record.sourceLessonLabel}`),select=make('select');select.add(new Option('請確認 EduLog 教材',''));for(const lesson of hooks.lessons().filter(l=>l.course_id===courseId))select.add(new Option(lesson.title,lesson.id));select.value=record.historyLessonCourse===courseId?record.historyLessonId||'':'';label.append(select);controls.append(label)
+          const label=make('label',`教材原文：${record.sourceLessonLabel}`),select=make('select');select.add(new Option('請確認 EduLog 教材',''));for(const lesson of hooks.lessons().filter(l=>l.course_id===courseId).sort((a,b)=>(Number(a.sequence)||Infinity)-(Number(b.sequence)||Infinity)||String(a.title).localeCompare(String(b.title))))select.add(new Option(globalThis.edulogFieldMappings.lessonLabel(lesson),lesson.id));select.value=record.historyLessonCourse===courseId?record.historyLessonId||'':'';label.append(select);controls.append(label)
           select.addEventListener('change',()=>{if(!current())return;record.historyLessonId=select.value;record.historyLessonCourse=courseId;hooks.changed()})
         }
         record.fieldChoices ||= { courseId, fields: {} }

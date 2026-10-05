@@ -640,7 +640,7 @@ async function compare() {
     check.checked = !field.internal && !field.value && Boolean(suggested) && !field.disabled; label.append(check, node('span', `套用${field.label}${field.internal ? '（給內部看的）' : ''}`)); card.append(label)
     card.append(node('p', `原站目前：${field.options.find(o => o.value === field.value)?.label || field.value || '空白'}`, 'hint'))
     const lesson = context.lessons.find(l => l.id === report.lesson_id)
-    const original=globalThis.edulogFieldMappings.display(field,{...report,lesson_name:report.lesson_name||lesson?.title})
+    const original=globalThis.edulogFieldMappings.display(field,{...report,lesson_name:report.lesson_name||lesson?.title,lesson_sequence:report.lesson_sequence??lesson?.sequence})
     card.append(node('p', `EduLog：${original}`, 'hint'))
     const input = node(field.type === 'text' ? 'textarea' : 'select'); input.id = `field-${field.key}`; input.dataset.value = ''; input.disabled = field.disabled
     if (field.type !== 'text') { input.append(new Option('請人工確認選項', '')); field.options.filter(o => !o.disabled && o.value).forEach(o => input.append(new Option(o.label || o.value, o.value))) }

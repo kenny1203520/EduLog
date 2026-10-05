@@ -12,6 +12,12 @@ test('false, zero, empty and verified half stars remain distinct',()=>{
  const complete=select('is_completed','no',[['yes','已完成'],['no','未完成']]);assert.equal(m.canonical(complete),false);assert.equal(m.suggest(complete,{is_completed:false}),'no');assert.equal(m.display(complete,{is_completed:false}),'課程未完成')
  const rating={...select('class_participation','0',[['0','0 星'],['9','4.5 星']]),type:'radio'};assert.equal(m.canonical(rating),0);assert.equal(m.suggest(rating,{class_participation:4.5}),'9');assert.equal(m.suggest({...rating,type:'select'},{class_participation:4.5}),'');assert.equal(m.empty(false),false);assert.equal(m.empty(0),false)
 })
+test('lesson display includes the real sequence without changing the lesson identity',()=>{
+ const m=globalThis.edulogFieldMappings,lesson={id:'lesson-3',course_id:'course-a',sequence:3,title:'跳躍吧！小鳥'}
+ assert.equal(m.lessonLabel(lesson),'Lesson 3 · 跳躍吧！小鳥')
+ assert.equal(m.lessonLabel({id:'lesson-x',title:'跳躍吧！小鳥'}),'序號未提供 · 跳躍吧！小鳥')
+ assert.deepEqual(globalThis.edulogFieldMappingUI.choices({key:'lesson_id'}, {}, [lesson]),[['lesson-3','Lesson 3 · 跳躍吧！小鳥']])
+})
 test('multiple source options never imply one reverse mapping; stale revisions are not used',()=>{
  const f=select('attendance_status','first',[['first','選項一'],['second','選項二']]),rules=f.options.map(o=>({field_key:f.key,source_value:o.value,canonical_value:'present',options_signature:m.signature(f)}))
  assert.equal(m.canonical(f,rules),'present');assert.equal(m.suggest(f,{attendance_status:'present'},rules),'')
