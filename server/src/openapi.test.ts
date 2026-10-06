@@ -6,6 +6,18 @@ import { allowedRpcs } from './rpcContract.js'
 import { isAllowedRpc as routerAllowsRpc } from './rpcRouter.js'
 
 describe('generated API contract', () => {
+  it('documents blank email clearing for student and contact mutations', () => {
+    const spec = buildOpenApi() as { paths: Record<string, Record<string, any>> }
+    for (const resource of ['students', 'student-contacts']) {
+      for (const [path, method] of [[`/api/${resource}`, 'post'], [`/api/${resource}/{id}`, 'patch']]) {
+        const email = spec.paths[path][method].requestBody.content['application/json'].schema.properties.email
+        expect(email.description).toContain('a blank string is normalized to null')
+        expect(email.description).toContain('Omit the field on PATCH')
+        expect(email.anyOf).toEqual(expect.arrayContaining([{ type: 'null' }, expect.objectContaining({ type: 'string', format: 'email' })]))
+      }
+    }
+  })
+
   it('documents self-service credential changes with mandatory identity verification', () => {
     const spec = buildOpenApi() as { paths: Record<string, Record<string, any> | undefined>; components: { schemas: Record<string, any> } }
     expect(spec.paths['/api/auth/me/email']?.post?.security).toEqual([{ cookieAuth: [] }])

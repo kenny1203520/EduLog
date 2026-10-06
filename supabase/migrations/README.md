@@ -6,7 +6,7 @@ For authenticated self-service credential changes, configure Supabase Auth to re
 
 The canonical chain is the individual migration files listed below. The former consolidated migration names are not valid inputs. Existing migrations through `1000080` remain unchanged. The current forward migrations add strict system/teaching RBAC domains (`1000081`), atomic RBAC management functions (`1000082`), system-managed account status (`1000083`), canonical suspension attendance/occupancy semantics (`1000084`), regular-enrollment-only report provisioning (`1000085`), the missing invoker table grants required by attendance evaluation (`1000086`), aligned report INSERT RLS (`1000087`), permission parity for roster provisioning (`1000088`), removal of the stale report INSERT policy (`1000089`), a narrow authenticated provisioning command that isolates placeholder insertion from interactive report CRUD (`1000090`), an occurrence-date-scoped class-session roster read model (`1000091`), scoped teaching-role permission policies (`1000092`), overlapping system-role assignment protection (`1000093`), the audit-event date index (`1000094`), classroom-scoped teaching-role assignments (`1000095`), the initial global teaching scope and canonical person profile transition (`1000096`), the final single-`profiles` person model (`1000097`), distinct full-name/nickname fields with Auth-owned login email (`1000098`), current report collaboration snapshot RLS (`1000103`), domain-aware permission policies (`1000104`), query-performance indexes (`1000105`), separate action-specific RBAC policy RLS (`1000106`), transfer-aware occurrence rosters with private class-session invalidation hints (`1000107`), date-scoped class-session invalidation (`1000108`), target-occurrence workspace inclusion for report-backed makeup enrollments (`1000109`), a restored standalone lesson course lookup index (`1000113`), a unified effective occurrence roster for report-backed makeup enrollments (`1000114`), and report-occurrence-authoritative makeup roster membership (`1000115`). `1000041a_has_api_permission_compatibility.sql` intentionally sorts between `1000041` and `1000042`.
 
-This directory contains the append-only database history for EduLog. Existing migrations must not be edited. The current chain includes the pre-1000058 compatibility step and the forward-only repairs through 1000115, without rewriting applied migration files.
+This directory contains the append-only database history for EduLog. Existing migrations must not be edited. The current chain includes the pre-1000058 compatibility step and the forward-only repairs through 1000128, without rewriting applied migration files. Versions 1000116–1000127 are reserved by `feature/9-web-extension`; 1000128 also applies independently to this branch because it only depends on the existing student table and permission functions.
 
 The `1000078` read-model migration covers courses, classrooms, teachers, incomplete reports, holidays, and class-session workspaces with authenticated-only, explicit projections.
 
@@ -140,6 +140,7 @@ The former consolidated migration names are intentionally absent. `1000041a_has_
 | 1000113 | `1000113_lessons_course_id_index.sql` | Restore a standalone B-tree index for lesson lookups by course |
 | 1000114 | `1000114_unified_occurrence_makeup_roster.sql` | Unify report-backed makeup eligibility in the shared effective occurrence roster |
 | 1000115 | `1000115_report_occurrence_authoritative_roster.sql` | Make the target occurrence's report link authoritative for makeup roster membership |
+| 1000128 | `1000128_student_create_permission_alignment.sql` | Align student INSERT RLS with platform create permission and allow INSERT RETURNING through the existing platform read grant |
 
 The missing versions `1000010`, `1000015`, and `1000016` are historical unused numbers, not missing files. Apply migrations in lexical order; `1000041a` sorts between `1000041` and `1000042`, and `1000057a` sorts between `1000057` and `1000058`.
 
@@ -149,7 +150,7 @@ The security and scope changes are intentionally kept as separate migration file
 
 ## Clean install
 
-Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/tests/postgres_bootstrap.sql`, then run every `supabase/migrations/*.sql` file in lexical order with `ON_ERROR_STOP=1`. Finish with `supabase/tests/migration_chain_integration.sql`.
+Start a disposable PostgreSQL/Supabase-compatible database, apply `supabase/tests/postgres_bootstrap.sql`, then run every `supabase/migrations/*.sql` file in lexical order with `ON_ERROR_STOP=1`. Finish with `supabase/tests/migration_chain_integration.sql` and `supabase/tests/student_create_permission_integration.sql`. The student fixture rolls back its grants and data, verifies platform teacher INSERT RETURNING with null legacy ownership, and denies local, unassigned, explicitly denied, and create-only read access. Repeat 1000128 and the fixture to verify rerun safety.
 
 ## Upgrade an existing database
 
