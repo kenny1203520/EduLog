@@ -27,7 +27,7 @@ for (const [browserName, executablePath] of executables) {
   const browser = await chromium.launch({ headless: true, executablePath })
   try {
     for (const state of ['not-connected', 'pending', 'connected', 'unavailable']) {
-      const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 360, height: 600 } })
+      const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 390, height: 600 } })
       await page.setContent(read('../popup.html').replace('</head>', `<style>${read('../popup.css')}</style></head>`))
       await page.evaluate(state => {
         window.chrome = {
@@ -38,6 +38,7 @@ for (const [browserName, executablePath] of executables) {
       for (const file of ['runtime-bridge.js', 'ui-core.js', 'ui-messages.js', 'connection-ui.js', 'integration-ui.js', 'popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
       await page.locator(`[data-state="${state}"]`).waitFor()
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} popup overflow`)
+      assert.equal(await page.locator('html').evaluate(el => Math.round(el.getBoundingClientRect().width)), 390, `${browserName} popup target width`)
       await page.screenshot({ path: join(output, `${browserName}-popup-${state}.png`), fullPage: true })
       const flow = page.locator('.edulog-flow details').first()
       await flow.locator('summary').focus()
@@ -70,6 +71,16 @@ for (const [browserName, executablePath] of executables) {
       assert.equal(await page.locator('#edulog-extension-root').count(), 1)
       await page.waitForTimeout(80)
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), `${browserName} ${name} ${width}: page overflow`)
+      const toolbarRoot = page.locator('#edulog-extension-root').evaluateHandle(el => el.shadowRoot)
+      const toolbar = page.locator('#edulog-extension-root').evaluateHandle(el => el.shadowRoot.querySelector('.integration'))
+      await toolbar.then(handle => handle.asElement().click())
+      const panel = await page.locator('#edulog-extension-root').evaluateHandle(el => el.shadowRoot.querySelector('.panel'))
+      const panelBounds = await panel.evaluate(el => { const r = el.getBoundingClientRect(); return { width:r.width, right:r.right, bottom:r.bottom } })
+      assert.ok(panelBounds.width <= Math.min(400, width - 16) + 1, `${browserName} ${name} ${width}: integration panel width`)
+      assert.ok(panelBounds.right <= width + 1 && panelBounds.bottom <= 1000 + 1, `${browserName} ${name} ${width}: integration panel bounds`)
+      await panel.evaluate(el => el.querySelector('.panel-close').click())
+      assert.equal(await panel.evaluate(el => el.hidden), true, `${browserName} ${name} ${width}: close control`)
+      await toolbarRoot.dispose(); await toolbar.dispose(); await panel.dispose()
       assert.ok(await page.evaluate(() => document.querySelector('.content h1,.content h2').getBoundingClientRect().top >= document.querySelector('#edulog-extension-root').shadowRoot.querySelector('.bar').getBoundingClientRect().bottom), `${browserName} ${name} ${width}: toolbar obscures heading`)
       if (name === 'reports' && width === 390) {
         assert.equal(await page.locator('#reports th[data-edulog-week-cell]:visible').count(), 1)

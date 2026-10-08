@@ -61,6 +61,7 @@
     document.documentElement.removeAttribute('data-edulog-nav-open')
   }
   function toolbar(page) {
+    const ownerDocument = document
     host = document.createElement('div')
     host.id = 'edulog-extension-root'
     host.dataset.edulogOwned = ''
@@ -72,17 +73,18 @@
       button:hover{background:#eff4ff}button:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
       .bar{display:flex;gap:12px;align-items:center;min-height:64px;padding:8px 20px;background:white;border-bottom:1px solid #dbe3ee;box-shadow:0 2px 8px #1720330a}
       strong{color:#1e40af}.title{flex:1}.toggle{color:#1e40af;font-weight:600}.menu{display:none}
-      .panel{margin:8px 16px 0 auto;padding:18px;max-width:400px;max-height:calc(100dvh - 96px);overflow:auto;overscroll-behavior:contain;background:white;border:1px solid #dbe3ee;border-radius:12px;box-shadow:0 12px 32px #17203320}
-      .panel[hidden]{display:none}p{margin:8px 0;color:#475569}.panel button{margin-top:8px}.note{font-size:13px}
+      .panel{position:fixed;right:16px;top:72px;margin:0;padding:16px;width:min(400px,calc(100vw - 32px));max-width:400px;max-height:calc(100dvh - 88px);overflow:auto;overscroll-behavior:contain;background:white;border:1px solid #dbe3ee;border-radius:12px;box-shadow:0 12px 32px #17203320}
+      .panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.panel-heading strong{min-width:0;overflow-wrap:anywhere}.panel-close{flex:none!important;width:44px!important;min-width:44px;padding:8px!important;margin:0!important;font-size:20px;line-height:1}
+      .panel[hidden]{display:none}p{margin:8px 0;color:#475569}.panel p{font-size:14px}.panel button{margin-top:8px}.panel .panel-close{margin-top:0}.note{font-size:14px}
       :host([data-enabled="false"]){inset:auto 16px 20px auto;max-width:calc(100vw - 32px)}.bar{border-radius:0}
       :host([data-enabled="false"]) .bar{padding:6px;border:1px solid #dbe3ee;border-radius:12px}
       :host([data-enabled="false"]) .bar>:not(.integration){display:none}
-      :host([data-enabled="false"]) .panel{position:fixed;right:16px;bottom:86px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 112px)}
+      :host([data-enabled="false"]) .panel{top:auto;right:16px;bottom:86px;width:min(400px,calc(100vw - 32px));max-width:400px;max-height:calc(100dvh - 112px)}
       .preferences{border-top:1px solid #dbe3ee;margin-top:12px}.preferences summary{min-height:44px;display:flex;align-items:center;cursor:pointer}.preferences select{font:inherit;min-height:44px;max-width:100%;margin-top:8px}
       @media(max-width:991px){.menu{display:block}.bar{padding:8px 12px;gap:8px}.title{font-size:14px}}
-      @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{margin:8px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 152px)}}
+      @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{right:8px;width:min(400px,calc(100vw - 16px));max-width:400px;max-height:calc(100dvh - 152px)}}
     </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="integration" type="button" aria-expanded="false">EduLog 功能</button></div>
-    <section class="panel" aria-label="EduLog 整合功能" hidden><strong>EduLog 連線與整合</strong><p class="status" role="status" aria-live="polite"></p><p class="note">清晰主題不需要配對。下方可查看教學整合的規劃流程；原站的報告操作可照常使用。</p><button class="settings" type="button">開啟整合設定</button></section>`
+    <section class="panel" aria-label="EduLog 整合功能" hidden><div class="panel-heading"><strong>EduLog 連線與整合</strong><button class="panel-close" type="button" aria-label="關閉 EduLog 整合面板">×</button></div><p class="status" role="status" aria-live="polite"></p><p class="note">清晰主題不需要配對。下方可查看教學整合的規劃流程；原站的報告操作可照常使用。</p><button class="settings" type="button">開啟整合設定</button></section>`
     root.querySelector('.title').textContent = page.title
     const preferences=document.createElement('details');preferences.className='preferences'
     const preferenceTitle=document.createElement('summary');preferenceTitle.textContent='設定';preferences.append(preferenceTitle)
@@ -117,7 +119,7 @@
       event.currentTarget.setAttribute('aria-expanded', String(open))
     })
     const panel = root.querySelector('.panel'), integration = root.querySelector('.integration')
-    panel.style.cssText = 'overflow-wrap:anywhere;max-height:70vh;overflow:auto'
+    panel.style.overflowWrap = 'anywhere'
     const diagnostics = document.createElement('details')
     diagnostics.hidden = true
     const summary = document.createElement('summary')
@@ -155,10 +157,27 @@
       } finally { retry.disabled = false }
     }
     retry.addEventListener('click', () => { void checkConnection() })
+    const closePanel = (restoreFocus = false) => {
+      panel.hidden = true
+      integration.setAttribute('aria-expanded', 'false')
+      if (restoreFocus && integration.isConnected) integration.focus()
+    }
+    const closeButton = root.querySelector('.panel-close')
+    if (globalThis.edulogUi) {
+      globalThis.edulogUi.text(root.querySelector('.panel-heading strong'), 'ui.integrationPanel')
+      globalThis.edulogUi.text(closeButton, 'ui.closePanel', {}, 'aria-label')
+    }
+    closeButton.addEventListener('click', () => closePanel(true))
+    const dismissOutside = event => {
+      const path = event.composedPath()
+      if (host.isConnected && !panel.hidden && !path.includes(panel) && !path.includes(integration)) closePanel()
+    }
+    ownerDocument.addEventListener('pointerdown', dismissOutside, true)
     integration.addEventListener('click', async () => {
       panel.hidden = !panel.hidden
       integration.setAttribute('aria-expanded', String(!panel.hidden))
       if (panel.hidden) return
+      closeButton.focus()
       await checkConnection()
     })
     root.querySelector('.settings').addEventListener('click', async () => {
@@ -166,9 +185,15 @@
       if (!result?.opened) root.querySelector('.status').textContent = '請點選瀏覽器工具列的 EduLog 圖示，設定伺服器並完成配對。'
     })
     root.addEventListener('keydown', event => {
-      if (event.key === 'Escape' && !panel.hidden) { panel.hidden = true; integration.setAttribute('aria-expanded', 'false'); integration.focus() }
+      if (event.key === 'Escape' && !panel.hidden) closePanel(true)
     })
     document.body.append(host)
+    const hostObserver = new MutationObserver(() => {
+      if (host.isConnected) return
+      ownerDocument.removeEventListener('pointerdown', dismissOutside, true)
+      hostObserver.disconnect()
+    })
+    hostObserver.observe(document.body, { childList: true, subtree: true })
     if (enabled) {
       const html = document.documentElement
       heightState = { value: html.style.getPropertyValue('--edulog-toolbar-height'), priority: html.style.getPropertyPriority('--edulog-toolbar-height'), hadStyle: html.hasAttribute('style') }
