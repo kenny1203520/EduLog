@@ -6,6 +6,7 @@ import { historyIdentity, planHistory, teachingFields, bindingStillMatches } fro
 import { createHistoryWorkbench } from './history-workbench.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
 import { labels, splitBatches, validateBatches, workspaceErrorMessage, plainText, suggestedValue, retryHistoryWork } from './workspace-model.js'
+import { workflowState, combineWorkRecords, workCategory } from './workflow-state.js'
 import { initWorkspaceI18n } from './workspace-i18n.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
 initWorkspaceI18n()
@@ -15,7 +16,14 @@ let syncPreferences={fields:{},revision:null},syncDraftOverrides={}
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
-const wizardMax = { import: 1, prefill: 1 }
+let activeFlow = 'import', continuation = null
+const activeWorks = {import:null,prefill:null}, activeStages = {import:1,prefill:1}
+function currentWorkflow(view) { const identity=work?.type==='import'&&work.snapshot?work.snapshot.records.filter(row=>row.kind==='enrollment'&&!row.sourceSkipped&&!mappingController.validateRow(row,true)).length:0;return workflowState(view,{work:work?.type===view?work:activeWorks[view],form,report,previewCount:previewResults.length,unresolved:identity+historyPlan.filter(item=>item.category==='needs').length}) }
+function taskStatus() {
+  const ui=globalThis.edulogUi;ui?.text($('draft-status'),unsaved?'work.unsaved':work?'work.saved':'work.ready')
+  $('task-title').textContent=work?.title||sourceContext?.title||''
+  $('task-status').textContent=work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
+}
 const params = new URLSearchParams(location.search)
 const fieldLabels = { report_date: '上課日期', source_fields: '允許的教學原文', source_evidence: '來源位置', identity_status: '來源身份', source_key: '來源紀錄識別', name: '名稱', subject: '科目', stage: '階段', display_name: '課程名稱', external_link: '原站連結', classroom_id: '教室', course_ids: '班級可上課程', student_id: '學生', course_id: '課程', class_session_id: '班級', enrollment_id: '報名', class_occurrence_id: '課次', start_date: '開始日期', day_of_week: '星期', start_time: '開始時間', end_time: '結束時間', original_start_time: '課次開始時間', original_end_time: '課次結束時間', occurrence_date: '課次日期', time_zone: '時區', status: '報名狀態', content: '學習表現', is_completed: '課程完成狀況', progress_letter: '章節進度', attendance_status: '出席', absence_reason: '缺席原因', lesson_id: '教材', class_participation: '課程參與', classroom_behavior: '課堂秩序', contact_notes: '聯絡欄', class_notes: '內部紀錄' }
 const node = (tag, text, className) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (className) n.className = className; return n }
@@ -29,12 +37,15 @@ const api = (operation, body, extra = {}) => send({ type: 'workspace-api', opera
 const source = (action, extra = {}) => send({ type: 'workspace-source', action, tabId: Number($('source-tab').value), sourcePath: selectedPath, requestId: activeReadId || undefined, ...extra })
 async function save() {
   const current = work
+  if(!current)return
+  unsaved=true;taskStatus()
+  current.interfaceState={...(current.interfaceState||{}),stage:activeStages[current.type]||1,reviewPane:$('mapping').dataset.reviewPane||'reports'}
   current.revision = (current.revision || 0) + 1
   const revision = current.revision
   const stored = await send({ type: 'workspace-store', action: 'put', work: current })
   if (work === current && work.revision === revision) {
     for (const key of Object.keys(current)) if (!Object.hasOwn(stored, key)) delete current[key]
-    Object.assign(current, stored); unsaved = false
+    Object.assign(current, stored); unsaved = false;taskStatus()
   }
 }
 function captureMappingChoices() {
@@ -42,32 +53,52 @@ function captureMappingChoices() {
 }
 function show(id) { $(id).hidden = false }
 function stage(view, primary) {
-  $(`${view}-view`).querySelectorAll('.primary').forEach(b => { if (!b.closest('.mapping-workbench')) b.classList.remove('primary') }); $(primary)?.classList.add('primary')
   const step = view === 'import' ? ({ collect: 1, preview: 2, repreview: 3, apply: 3, pause: 4, resume: 4, 'cancel-work': 4 }[primary] || 1) : ({ 'read-form': 1, compare: 2, prefill: 3, 'return-source': 4 }[primary] || 1)
-  wizardMax[view] = Math.max(wizardMax[view] || 1, step)
-  document.querySelectorAll(`[data-wizard-step^="${view}-"]`).forEach(item => {
-    const indexStep = Number(item.dataset.wizardStep.split('-').at(-1)); item.dataset.state = indexStep === step ? 'current' : indexStep <= wizardMax[view] ? 'complete' : 'pending'
-    const nav = item.querySelector('[data-stage-nav]'); if (nav) nav.disabled = indexStep > wizardMax[view]
-    if (indexStep === step) item.setAttribute('aria-current', 'step'); else item.removeAttribute('aria-current')
+  activeStages[view]=step
+  if(work?.type===view)work.interfaceState={...(work.interfaceState||{}),stage:step}
+  const state=currentWorkflow(view)
+  document.querySelectorAll(`[data-wizard-step^="${view}-"]`).forEach(item=>{
+    const index=Number(item.dataset.wizardStep.split('-').at(-1))-1
+    item.dataset.state=index===step-1?'current':state.attention[index]?'attention':state.complete[index]?'complete':'pending'
+    const nav=item.querySelector('[data-stage-nav]');if(nav)nav.disabled=!state.available[index]
+    if(index===step-1)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current')
   })
-  if (view === 'import') for (const [index, id] of ['import-scope','mapping','preview-section','import-progress'].entries()) $(id).hidden = index + 1 !== step
-  if (view === 'prefill') for (const [index, id] of ['prefill-target-step','report-picker','field-review','prefill-result'].entries()) $(id).hidden = index + 1 !== step
+  if(view==='import')for(const [index,id] of ['import-scope','mapping','preview-section','import-progress'].entries())$(id).hidden=index+1!==step
+  if(view==='prefill')for(const [index,id] of ['prefill-target-step','report-picker','field-review','prefill-result'].entries())$(id).hidden=index+1!==step
+  taskStatus()
 }
-document.querySelectorAll('[data-stage-nav]').forEach(button => button.addEventListener('click', () => {
-  const [view, raw] = button.dataset.stageNav.split(':'), step = Number(raw)
-  if (step > wizardMax[view]) return
-  const primary = view === 'import' ? ({1:'collect',2:'preview',3:'apply',4:'resume'})[step] : ({1:'read-form',2:'compare',3:'prefill',4:'return-source'})[step]
-  stage(view, primary)
+function restoreStage(view) {
+  const own=work?.type===view?work:activeWorks[view],state=currentWorkflow(view)
+  let step=own?.interfaceState?.stage||activeStages[view]||1
+  if(!state.available[step-1])step=state.available.findLastIndex(Boolean)+1
+  if(own&&['applying','failed','outcome_unknown','complete','partial_complete','paused','cancelled'].includes(own.status))step=4
+  stage(view,(view==='import'?['collect','preview','apply','resume']:['read-form','compare','prefill','return-source'])[step-1])
+}
+document.querySelectorAll('[data-stage-nav]').forEach(button=>button.addEventListener('click',()=>{
+  if(busy)return
+  const [view,raw]=button.dataset.stageNav.split(':'),step=Number(raw)
+  if(!currentWorkflow(view).available[step-1])return
+  stage(view,(view==='import'?['collect','preview','apply','resume']:['read-form','compare','prefill','return-source'])[step-1])
+  if(work?.type===view)void save().catch(error=>notice(error.message,true))
 }))
+function reviewPane(value) {
+  $('mapping').dataset.reviewPane=value
+  for(const tab of document.querySelectorAll('[data-review-pane]'))tab.setAttribute('aria-pressed',String(tab.dataset.reviewPane===value))
+  $('identity-pane').hidden=value!=='identity';$('history-sync').hidden=value!=='reports'
+  if(work?.type==='import')work.interfaceState={...(work.interfaceState||{}),reviewPane:value}
+}
+document.querySelectorAll('[data-review-pane]').forEach(button=>button.addEventListener('click',()=>{reviewPane(button.dataset.reviewPane);if(work)void save().catch(error=>notice(error.message,true))}))
 function flow(value) {
-  if (!['import', 'prefill', 'work'].includes(value)) value = 'import'
-  if (busy && activeReadId) void cancelRead(false)
-  for (const item of ['import', 'prefill', 'work']) $(`${item}-view`).hidden = item !== value
-  document.querySelectorAll('[data-flow]').forEach(button => { if (button.dataset.flow === value) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current') })
-  $('source-picker').hidden = value === 'work'
-  if (value === 'import') stage('import', 'collect')
-  if (value === 'prefill') stage('prefill', 'read-form')
-  if (value === 'work' && binding) void runLatest(loadWork, { label: '正在更新工作紀錄' })
+  if(!['import','prefill','work'].includes(value))value='import'
+  if(work?.type)activeWorks[work.type]=work
+  activeFlow=value
+  if(value!=='work')work=activeWorks[value]||null
+  for(const item of ['import','prefill','work'])$(`${item}-view`).hidden=item!==value
+  document.querySelectorAll('[data-flow]').forEach(button=>{if(button.dataset.flow===value)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current')})
+  $('source-picker').hidden=value==='work'&&Boolean($('source-tab').value)
+  if(value==='import'||value==='prefill')restoreStage(value)
+  if(value==='work'&&binding)void runLatest(loadWork,{label:'正在更新工作紀錄'})
+  taskStatus()
 }
 async function cancelRead(updateNotice = true) {
   if (!activeReadId) return
@@ -100,7 +131,7 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
     if (unsaved && work?.type === 'import' && !$('mapping').hidden) { clearTimeout(editTimer); captureMappingChoices(); await save() }
     const result = await action()
     if (readGeneration !== activeReadGeneration && readOnly) return
-    if (readOnly) { $('operation-status').dataset.state = 'complete'; $('operation-title').textContent = '查詢完成'; $('operation-detail').textContent = `等待時間 ${((Date.now() - startedAt) / 1000).toFixed(1)} 秒。`; $('cancel-read').hidden = true }
+    if (readOnly) { $('operation-status').hidden=true; $('operation-status').dataset.state = 'complete'; $('operation-title').textContent = '查詢完成'; $('operation-detail').textContent = `等待時間 ${((Date.now() - startedAt) / 1000).toFixed(1)} 秒。`; $('cancel-read').hidden = true }
     return result
   }
   catch (error) {
@@ -111,7 +142,7 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
     notice(error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : '目前輸入與對應仍保留，請依上方說明處理後重試。', true)
     $('diagnostic').textContent = [error.code || 'WORK_FAILED', error.rawMessage, ...Object.entries(error.fields || {}).flatMap(([key, messages]) => messages.map(message => `${key}：${message}`)), error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
-  } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; $('apply').disabled = !previewResults.length || work?.previewDirty === true; finishRead() }
+  } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); taskStatus(); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; $('apply').disabled = !previewResults.length || work?.previewDirty === true; finishRead() }
 }
 function options(select, rows, label, placeholder, extra) {
   select.dataset.sourceRawOptions='true'
@@ -164,10 +195,10 @@ async function initialize() {
   else { $('source-label').textContent = '尚未選擇來源；請先開啟支援網站的班級頁或報告表單，再選取分頁。'; $('collect').disabled = true; $('read-form').disabled = true; notice('連線已驗證。尚未選取來源分頁；匯入與預填入口暫不可用。') }
   try { await loadSyncPreferences() } catch (error) { $('sync-preferences-status').textContent=`同步偏好讀取失敗；使用本機預設，可重試保存。 ${error.message}` }
   if(!integrationCapabilities.sync_field_preferences){$('sync-preferences-status').textContent='目前連線不支援跨裝置同步偏好；本次工作仍可調整欄位。';$('save-sync-preferences').disabled=true} renderSyncFields()
-  flow(params.get('flow') || 'import')
+  flow(params.get('flow') || ($('source-tab').value?'import':'work'))
 }
 async function changeSource() {
-  const current = ++generation; form = null; report = null; previewResults = []; work = null
+  const current = ++generation; form = null; report = null; previewResults = []; work = null;activeWorks.import=null;activeWorks.prefill=null;activeStages.import=1;activeStages.prefill=1;continuation=null;$('continue-work').hidden=true
   const tab = tabs.find(t => t.id === Number($('source-tab').value)); selectedPath = tab?.path || ''
   sourceContext = null; classSourceReady = false; reportSourceReady = false
   if (!tab) { $('source-label').textContent = '尚未選擇來源分頁'; $('collect').disabled = true; $('read-form').disabled = true; return }
@@ -178,6 +209,10 @@ async function changeSource() {
   $('source-label').textContent = `${c.sourceOrigin} · ${c.title || c.sourcePath} · ${c.sourcePath}`
   notice(classSourceReady ? '已辨識來源班級，可開始擷取。' : '已辨識報告表單，可開始預填。')
   for (const id of ['mapping','preview-section','import-progress','target-summary','report-picker','field-review','prefill-result']) $(id).hidden = true
+  restoreStage(activeFlow==='prefill'?'prefill':'import')
+  const saved=await send({type:'workspace-store',action:'list'});if(current!==generation)return
+  continuation=(saved||[]).find(row=>row.type==='import'&&row.snapshot?.classId===c.classId&&row.sourcePath===(c.sourcePath||selectedPath)&&!['complete','cancelled'].includes(row.status))||null
+  $('continue-work').hidden=!continuation;if(continuation){globalThis.edulogUi?.text($('continue-work-copy'),'work.resumeHelp');$('collect').disabled=true}
 }
 function linked(kind, id) { const row = context.source_links.find(l => l.source_origin === 'https://corp.orangeapple.co' && l.source_kind === kind && l.source_id === id); return row?.valid === false ? undefined : row?.edulog_id || row?.target_id }
 function idFor(kind, id) { const key = `${kind}:${id}`; return linked(kind, id) || (work.ids[key] ||= crypto.randomUUID()) }
@@ -197,7 +232,7 @@ function effectiveSyncFields(record){const base={lesson_id:true,is_completed:tru
 function renderSyncFields(){const host=$('sync-field-options');if(!host)return;const current=effectiveSyncFields();for(const [key,label] of syncFields){let wrap=host.querySelector(`[data-sync-choice="${key}"]`),input=wrap?.querySelector('input');if(!wrap){wrap=node('label',undefined,'sync-field-choice');wrap.dataset.syncChoice=key;input=node('input');input.type='checkbox';input.dataset.syncField=key;wrap.append(input,node('span',label));host.append(wrap);input.addEventListener('change',()=>{syncDraftOverrides[key]=input.checked;if(key==='class_notes')$('include-internal-notes').checked=input.checked;if(work){if(key==='class_notes')work.includeInternalNotes=input.checked;work.syncFieldOverrides||={};work.syncFieldOverrides[key]=input.checked;work.syncPreferencesSnapshot={...effectiveSyncFields(),[key]:input.checked};historyWorkChanged();historyView.refreshEditor(historyPlan)}$('sync-preferences-status').textContent=`${work?'本次工作':'目前選擇'}：${label}${input.checked?'會同步':'不同步'}。尚未提交的差異已失效。`})}if(input!==document.activeElement)input.checked=current[key]!==false&&(key!=='class_notes'||$('include-internal-notes').checked)}}
 async function loadSyncPreferences(){if(!integrationCapabilities.sync_field_preferences)return;const data=await api('sync-preferences-get',undefined,{query:{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1'}});syncPreferences={fields:data.fields||{},revision:data.revision||null};renderSyncFields()}
 async function saveSyncPreferences(){const fields=syncFields.map(([field_key])=>({field_key,enabled:$('sync-field-options').querySelector(`[data-sync-field="${field_key}"]`).checked}));const result=await api('sync-preferences-save',{source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',expected_revision:syncPreferences.revision,fields});syncPreferences={fields:result.fields||Object.fromEntries(fields.map(x=>[x.field_key,x.enabled])),revision:result.revision};syncDraftOverrides={};if(work){work.syncFieldPreferences={...syncPreferences.fields};work.syncPreferencesSnapshot={...syncPreferences.fields};work.syncFieldOverrides={};historyWorkChanged();historyView.refreshEditor(historyPlan)}$('sync-preferences-status').textContent='已記住同步欄位預設；可在本次工作或單份報告調整。';renderSyncFields()}
-function updateHistoryPlanLocal(){if(!work?.snapshot)return;historyPlan=planHistory(work.snapshot.records,historyTargets(),historyArchives,historyRoutes,historyOptions());historyView.updateStatus(historyPlan)}
+function updateHistoryPlanLocal(){if(!work?.snapshot)return;historyPlan=planHistory(work.snapshot.records,historyTargets(),historyArchives,historyRoutes,historyOptions());historyView.updateStatus(historyPlan);stage('import',['collect','preview','apply','resume'][activeStages.import-1])}
 function scheduleHistoryPlanForCurrentMapping(){
   if(!work?.snapshot)return
   const owner=work,epoch=generation,sequence=++historyLocalSequence
@@ -209,7 +244,7 @@ function scheduleHistoryPlanForCurrentMapping(){
 }
 function historyWorkChanged(){if(!work)return;work.previewDirty=true;updateHistoryPlanLocal();void save().catch(e=>notice(e.message,true))}
 function historyUiChanged(){if(work)void save().catch(e=>notice(e.message,true))}
-const historyView=createHistoryWorkbench({work:()=>work,labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:()=>void runLatest(async()=>{await refreshHistoryPlan();historyView.refreshEditor(historyPlan)},{label:'正在逐日核對有效課次'}),defaults:effectiveSyncFields,fieldLabel:key=>fieldLabels[key]||key,diffValue:displayValue,fields:(host,item)=>attachImportFields(host,item.record,{work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&(change.fieldKey!=='lesson_id'||historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId))){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
+const historyView=createHistoryWorkbench({work:()=>work,labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:()=>void runLatest(async()=>{const state=historyView.capture();await refreshHistoryPlan();historyView.refreshEditor(historyPlan,state)},{label:'正在逐日核對有效課次'}),defaults:effectiveSyncFields,fieldLabel:key=>fieldLabels[key]||key,diffValue:displayValue,fields:(host,item)=>attachImportFields(host,item.record,{work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&(change.fieldKey!=='lesson_id'||historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId))){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
 function historyTargets() {
   const targets=new Map()
   for(const r of work.snapshot.records.filter(r=>r.kind==='enrollment')) {
@@ -241,6 +276,7 @@ async function refreshHistoryPlan() {
   historyArchives=archives;historyRoutes=routes
   historyPlan=planHistory(owner.snapshot.records,targets,archives,routes,historyOptions())
   historyView.render(historyPlan)
+  stage('import',['collect','preview','apply','resume'][activeStages.import-1])
   if(!integrationCapabilities.enrollment_history_reports)$('history-sync-summary').textContent='目前連線未提供完整歷史保存；可重新檢查連線。已讀取內容與檢查點保留。'
 }
 async function ensureLessonCatalog(courseId){
@@ -255,7 +291,8 @@ async function ensureLessonCatalog(courseId){
 async function mappingView() {
   $('operation-title').textContent='正在解析已確認的對應';
   await mappingController.mount(); show('mapping'); stage('import','preview')
-  $('identity-review').open = work.snapshot.records.some(r=>r.kind==='enrollment'&&!mappingController.validateRow(r,true))
+  const needsIdentity=work.snapshot.records.some(r=>r.kind==='enrollment'&&!mappingController.validateRow(r,true));$('identity-review').open=needsIdentity
+  reviewPane(work.interfaceState?.reviewPane||(needsIdentity?'identity':'reports'))
   await refreshHistoryPlan()
 }
 async function loadScopedMappingData(){return mappingController.scoped()}
@@ -269,7 +306,7 @@ async function collect() {
   if (!snapshot?.classId || snapshot.sourcePath !== selectedPath) throw new Error('目前來源不是可辨識的班級頁。請切換到班級頁後再擷取。')
   work = { id: crypto.randomUUID(), type: 'import', status: 'collected', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, title: snapshot.title, snapshot, ids: {}, dateFrom: $('all-history').checked?'1900-01-01':$('date-from').value, dateTo: $('all-history').checked?'9999-12-31':$('date-to').value, includeInternalNotes: $('include-internal-notes').checked, syncFieldPreferences:{...(syncPreferences.fields||{})},syncPreferencesSnapshot:{...effectiveSyncFields()},syncFieldOverrides:{...syncDraftOverrides}, done: 0 }
   if ($('read-history').checked) work.history = { paths: snapshot.admissionPaths, next: 0 }
-  await save(); if (work.history) await collectHistory()
+  activeWorks.import=work;await save(); if (work.history) await collectHistory()
   await mappingView();renderHistoryIssues(); notice(`已擷取 ${work.snapshot.records.length} 筆可辨識資料。缺少欄位仍需確認。${work.status === 'paused-extraction' ? '擷取中斷，可從工作紀錄繼續。' : ''}`)
 }
 async function collectHistory(retryPath) {
@@ -391,7 +428,7 @@ async function preview(reuse = false) {
   work.status = 'previewed'; work.previewDirty = false; work.mappingDirty = false; work.batchCount = work.batches.length; await save(); renderDifferences(); notice('差異已更新，請檢查後確認匯入。')
 }
 function renderNoopSummary() {
-  work.previewDirty=true;previewResults=[];$('apply').disabled=true;show('preview-section');stage('import','repreview')
+  work.previewEvaluated=true;work.previewDirty=true;previewResults=[];$('apply').disabled=true;show('preview-section');stage('import','repreview')
   $('counts').textContent=`沒有新的可寫入資料 · 已綁定 ${historyPlan.filter(i=>i.category==='linked').length} 份 · 需處理 ${work.needs?.length||0} 項`
   $('diff-list').replaceChildren(node('p','本次核對不需要建立新工作。既有報告與檢查點保留；待處理項目可返回「處理例外」核對。'))
   notice('核對完成：沒有新的可寫入資料，不會重送已同步報告。')
@@ -491,7 +528,7 @@ function progress() {
   $('progress-label').textContent = `已完成 ${work.done || 0} / ${work.batchCount || 0} 批。${work.needs?.length || 0} 項仍需處理。`
   $('resume').hidden = !['paused','failed','outcome_unknown'].includes(work.status)
   $('pause').hidden = work.status !== 'applying'; $('cancel-work').hidden = ['complete','cancelled','partial_complete'].includes(work.status)
-  $('operation-status').hidden = false
+  stage('import','resume');$('operation-status').hidden = work.status!=='applying'
   $('operation-status').dataset.state = work.status === 'applying' ? 'loading' : ['failed','outcome_unknown'].includes(work.status) ? 'error' : 'complete'
   $('operation-title').textContent = ({ applying:'正在寫入匯入批次', paused:'匯入已暫停', failed:'匯入部分失敗', outcome_unknown:'寫入結果尚未確認', complete:'匯入批次已完成', partial_complete:'部分完成，尚有待處理項目', cancelled:'已取消剩餘批次' })[work.status] || '匯入進度'
   $('operation-detail').textContent = `已核對 ${work.done || 0} / ${work.batchCount || 0} 批；${work.needs?.length || 0} 筆需處理。取消不會撤回已完成批次。`
@@ -605,9 +642,9 @@ async function resumeImport() {
 async function readForm() {
   if (!reportSourceReady) throw new Error('來源分頁沒有開啟可辨識的報告表單。請在網站開啟「記錄」表單後重新讀取。')
   form = await source('form')
-  context.source_links=[]; const mapped=await api('resolve',{source_refs:[{source_kind:'enrollment',source_id:form.admissionId}],target_refs:[],memory_refs:[{kind:'admission',key:form.admissionId}]}); const memory=(mapped.memories||[]).find(m=>m.valid&&!m.suggestion); const linked=(mapped.source_links||[]).find(m=>m.valid!==false); form.targetEnrollmentId=memory?.target_id||linked?.target_id||null; form.targetStudentId=memory?.student_id; form.targetCourseId=memory?.course_id;
+  const mapped=await api('resolve',{source_refs:[{source_kind:'enrollment',source_id:form.admissionId}],target_refs:[],memory_refs:[{kind:'admission',key:form.admissionId}]}); const memory=(mapped.memories||[]).find(m=>m.valid&&!m.suggestion); const linked=(mapped.source_links||[]).find(m=>m.valid!==false); form.targetEnrollmentId=memory?.target_id||linked?.target_id||null; form.targetStudentId=memory?.student_id; form.targetCourseId=memory?.course_id;
   work = { id: crypto.randomUUID(), type: 'prefill', status: 'reviewing', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, title: form.title || `原站報告 ${form.reportId}`, form }
-  await save(); $('target-title').textContent = `${form.targetEnrollmentId ? '已沿用報名對應 · ' : ''}${form.title || '請核對原站學生'} · 報名 ${form.admissionId} · 報告 ${form.reportId}`; $('target-date').value = form.date || ''; $('target-confirm').checked = false
+  activeWorks.prefill=work;await save(); $('target-title').textContent = `${form.targetEnrollmentId ? '已沿用報名對應 · ' : ''}${form.title || '請核對原站學生'} · 報名 ${form.admissionId} · 報告 ${form.reportId}`; $('target-date').value = form.date || ''; $('target-confirm').checked = false
   reports = []; reportCursor = ''; await loadReportCourses(true); await loadReportSummaries(true); show('target-summary'); show('report-picker'); stage('prefill', 'compare'); notice('已讀取表單；尚未變更原站內容。')
 }
 async function loadReportCourses(reset = false) {
@@ -744,7 +781,7 @@ async function loadWork() {
   remote.pushes.forEach(r => d.append(node('p', `報告 ${r.report_id.slice(0, 8)} · ${r.status === 'confirmed' ? '已確認' : '待人工送出／待確認'}`)))
   $('work-list').append(d); notice('工作紀錄已更新。')
 }
-document.querySelectorAll('[data-flow]').forEach(b => b.addEventListener('click', () => flow(b.dataset.flow)))
+document.querySelectorAll('[data-flow]').forEach(b => b.addEventListener('click', async () => {if(busy&&!activeReadId)return;if(activeReadId){await cancelRead(false);await readFinished}flow(b.dataset.flow)}))
 $('source-tab').addEventListener('change', () => void runLatest(changeSource, { label: '正在讀取來源班級' }))
 $('classroom-search').addEventListener('input', () => { clearTimeout(mappingSearchTimer); mappingSearchTimer = setTimeout(() => void runLatest(() => loadClassrooms(true), { label: '正在搜尋目標教室' }), 300) })
 $('more-classrooms').addEventListener('click', () => void runLatest(() => loadClassrooms(false), { label: '正在載入更多教室候選' }))
@@ -754,6 +791,8 @@ $('classroom').addEventListener('change', () => void runLatest(async () => { awa
 $('course').addEventListener('change', () => void runLatest(async () => { await updateDestinations(); await loadScopedMappingData(); updateMappingOptions() }, { label: '正在查詢班級候選' }))
 $('class-session').addEventListener('change', () => void runLatest(async () => { $('new-session').hidden = $('class-session').value !== 'new'; await loadScopedMappingData(); updateMappingOptions() }, { label: '正在查詢學生報名與課次' }))
 $('course-source-id').addEventListener('change', updateMappingOptions)
+$('start-new-work').onclick=()=>{continuation=null;$('continue-work').hidden=true;work=null;activeWorks.import=null;activeStages.import=1;flow('import');$('collect').disabled=!classSourceReady;taskStatus()}
+$('resume-source-work').onclick=()=>void runLatest(async()=>{const row=continuation;if(!row)return;work=row;activeWorks.import=row;$('continue-work').hidden=true;$('collect').disabled=!classSourceReady;$('include-internal-notes').checked=row.includeInternalNotes===true;flow('import');if(row.batches){await resumeImport();return}if(row.history?.next<row.history?.paths.length)await collectHistory();await mappingView();renderHistoryIssues()},{label:'正在恢復未完成工作'})
 for (const [id, action] of Object.entries({ collect, preview: () => preview(), repreview: () => preview(!work.mappingDirty), apply, resume: resumeImport, 'read-form': readForm, compare, prefill, 'refresh-work': loadWork, reconnect: initialize })) $(id).addEventListener('click', () => void run(action, { label: ({ collect:'正在讀取來源班級與學習紀錄', preview:'正在比對 EduLog 目標與匯入差異', repreview:'正在重新檢查資料差異', apply:'正在寫入匯入批次', resume:'正在檢查未完成批次', 'read-form':'正在讀取原站報告目標', compare:'正在查詢報告欄位並核對目標', prefill:'正在套用已確認欄位至原站', 'refresh-work':'正在更新工作紀錄', reconnect:'正在重新驗證連線' })[id] || '正在處理工作', readOnly: ['collect','read-form','compare','refresh-work','reconnect'].includes(id) }))
 $('cancel-read').addEventListener('click', () => void cancelRead())
 $('pause').addEventListener('click', () => { paused = true; notice('正在完成目前批次，之後暫停。') })
@@ -770,7 +809,7 @@ const today = new Date(), yearAgo = new Date(today); yearAgo.setFullYear(today.g
 $('date-from').value = yearAgo.toISOString().slice(0, 10); $('date-to').value = today.toISOString().slice(0, 10)
 $('all-history').addEventListener('change',()=>{for(const id of ['date-from','date-to'])$(id).disabled=$('all-history').checked})
 $('include-internal-notes').addEventListener('change',()=>{if(!work)return;work.includeInternalNotes=$('include-internal-notes').checked;historyWorkChanged()})
-$('check-history').addEventListener('click',()=>void runLatest(refreshHistoryPlan,{label:'正在重新核對完整歷史'}))
+$('check-history').addEventListener('click',()=>void runLatest(async()=>{const state=historyView.capture();await refreshHistoryPlan();historyView.refreshEditor(historyPlan,state)},{label:'正在重新核對完整歷史'}))
 $('save-sync-preferences')?.addEventListener('click',()=>void run(saveSyncPreferences,{label:'正在保存同步欄位預設'}))
 bridge.onInvalidated(() => { paused = true; ++generation; notice('擴充套件已更新，請重新開啟工作分頁；已保存檢查點可續傳。', true) })
 document.querySelectorAll('input,select,textarea').forEach(input => { if (!input.name) input.name = input.id; input.autocomplete = 'off' })

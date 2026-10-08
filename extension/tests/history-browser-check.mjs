@@ -33,10 +33,10 @@ try{
     const before=await page.evaluate(()=>({page:scrollY,pane:document.getElementById('history-editor').scrollTop}))
     await page.keyboard.press('Enter')
     assert.equal(await page.locator('#history-detail textarea').inputValue(),'保留核對草稿\n第二行')
-    assert.equal(await page.locator('#history-items button').first().isVisible(),width>768)
+    assert.equal(await page.locator('#history-items button').first().isVisible(),width>=768)
     const after=await page.evaluate(()=>({page:scrollY,pane:document.getElementById('history-editor').scrollTop,focus:document.activeElement.textContent}))
     assert.equal(after.page,before.page);assert.equal(after.pane,before.pane);assert.equal(after.focus,'重新核對此份紀錄')
-    if(width<=768){await page.locator('#history-back').click();assert.equal(await page.locator('#history-items button').first().isVisible(),true)}
+    if(width<768){await page.locator('#history-back').click();assert.equal(await page.locator('#history-items button').first().isVisible(),true)}
     await page.locator('#history-search').fill('不存在的學生');assert.equal(await page.locator('#history-empty').isVisible(),true)
     await page.locator('#history-search').fill('');await page.locator('#history-filter').selectOption('all')
     assert.equal(await page.locator('#history-items button').count(),70)
