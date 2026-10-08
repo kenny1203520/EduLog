@@ -23,7 +23,11 @@ export const integrationRecord = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('history_report'), data: z.object({ enrollment_id: uuid, report_date: date, source_origin: source, source_admission_id: z.string().regex(/^\d+$/), source_report_id: z.string().regex(/^\d+$/).optional(), source_key: text, source_evidence: z.array(z.object({source_path:z.string().regex(/^\/(dt_admissions\/\d+(\/reports\/\d+\/edit)?|courses\/dt\/\d+)$/),table:z.string().max(256),row:z.number().int().positive(),captured_at:z.string().datetime()}).strict()).max(50).optional(), identity_status: z.enum(['verified','evidence_only']), source_fields: z.array(z.object({ key: z.enum(['attendance_status','absence_reason','lesson_id','progress_start','progress_end','is_completed','class_participation','classroom_behavior','content','contact_notes','class_notes','sourceLessonLabel','progress_letter']), label: z.string().max(256), text: short }).strict()).max(50), lesson_id: uuid.optional(), is_completed: z.boolean().optional(), progress_letter: z.string().regex(/^[A-Z](-[A-Z])?$/).optional(), attendance_status: z.enum(['present','absent','pending']).optional(), absence_reason: z.string().max(64).optional(), class_participation: z.number().min(0).max(5).multipleOf(0.5).optional(), classroom_behavior: z.number().min(0).max(5).multipleOf(0.5).optional(), content: short.optional(), contact_notes: short.optional(), class_notes: short.optional(), external_link: url.optional() }).strict() }),
 ])
 export const importRow = z.object({ source_id: text, source_identity: identity.optional(), source_rule: ruleKey.optional(), reviewed_duplicate: z.boolean().optional(), target_id: uuid, overwrite: z.array(z.string().max(64)).max(20).default([]), record: integrationRecord }).strict().refine(r => !r.source_rule || r.record.kind === 'course' && r.source_rule.startsWith('label:') && /^work:[a-f0-9-]{36}$/i.test(r.source_id), 'Course rules require a work identity')
-export const importBatch = z.object({ key: z.string().uuid(), rows: z.array(importRow).min(1).max(50) }).strict().refine(value => new Set(value.rows.map(row => `${row.record.kind}:${row.source_id}`)).size === value.rows.length, 'Duplicate source IDs')
+const importDependency = z.object({ key: uuid, fingerprint: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
+export const importBatch = z.object({ key: z.string().uuid(), rows: z.array(importRow).min(1).max(50), dependencies: z.array(importDependency).max(50).optional() })
+  .strict()
+  .refine(value => new Set(value.rows.map(row => `${row.record.kind}:${row.source_id}`)).size === value.rows.length, 'Duplicate source IDs')
+  .refine(value => new Set((value.dependencies ?? []).map(ref => ref.key)).size === (value.dependencies ?? []).length, 'Duplicate import dependencies')
 export const importJob = z.object({ source_origin: source, source_class_id: text, date_from: date, date_to: date, classroom_id: uuid, course_id: uuid.optional(), course_ids: z.array(uuid).min(1).max(10).optional(), class_session_id: uuid, report_session_ids: z.array(uuid).min(1).max(50).refine(ids => new Set(ids).size === ids.length).optional() }).strict().refine(v => v.date_from <= v.date_to, 'Invalid date range').refine(v => Boolean(v.course_id || v.course_ids?.length), 'Select courses').refine(v => !v.course_ids || new Set(v.course_ids).size === v.course_ids.length && (!v.course_id || v.course_ids.includes(v.course_id)), 'Invalid course selection')
 export const historyQuery = z.object({ sort: z.enum(['nearest']).optional(), anchor_date: date.optional(), enrollment_id: uuid.optional(), student_id: uuid.optional(), course_id: uuid.optional(), source_admission_id: z.string().regex(/^\d+$/).optional(), date_from: date.optional(), date_to: date.optional(), unlinked_only: z.enum(['true','false']).transform(v => v === 'true').optional(), cursor: z.string().regex(/^(h1\|[a-f0-9]{32}\|)?\d{4}-\d{2}-\d{2}\|[a-f0-9-]{36}$/i).optional(), limit: z.coerce.number().int().min(1).max(50).default(50) }).strict().refine(v => Boolean(v.enrollment_id || v.student_id), 'Select an enrollment or student').refine(v => v.sort !== 'nearest' || Boolean(v.anchor_date), 'Nearest sorting requires an anchor date')
 const reportField = z.enum(['lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link'])
@@ -63,12 +67,35 @@ export const fieldMappingResolve = z.object({ source_origin: source, adapter_ver
 export const fieldMappingConfirm = z.object({ source_origin: source, adapter_version: z.literal('orange-apple-v1'), items: z.array(fieldReference.extend({ source_value: z.string().min(1).max(256), action: z.enum(['confirm','clear']), expected_revision: uuid.nullable(), canonical_value: z.union([z.string().min(1).max(64),z.boolean(),z.number().min(0).max(5)]).optional() }).strict().refine(item => item.action === 'clear' || item.canonical_value !== undefined)).min(1).max(50) }).strict()
 const syncField = z.enum(['lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link'])
 const syncPreferencesPatch = z.object({ source_origin: source, adapter_version: z.literal('orange-apple-v1'), expected_revision: uuid.nullable(), fields: z.array(z.object({ field_key: syncField, enabled: z.boolean() }).strict()).min(1).max(11).refine(fields => new Set(fields.map(field => field.field_key)).size === fields.length) }).strict()
-function databaseError(error: { message: string; code?: string }) {
-  const statuses: Record<string, number> = { HISTORY_IDENTITY_AMBIGUOUS:409, HISTORY_ALREADY_LINKED:409, EXTENSION_AUTH_INVALID: 401, PERMISSION_DENIED: 403, NOT_FOUND: 404, PREVIEW_STALE: 409, SOURCE_MAPPING_CONFLICT: 409, VERSION_CONFLICT: 409, JOB_STOPPED: 409, IDEMPOTENCY_CONFLICT: 409, IMPORT_BATCHES_INCOMPLETE: 409, INVALID_REFERENCE: 422, INVALID_IMPORT: 422 }
+function databaseError(error: { message: string; code?: string; details?: string }) {
+  const statuses: Record<string, number> = { HISTORY_IDENTITY_AMBIGUOUS:409, HISTORY_ALREADY_LINKED:409, EXTENSION_AUTH_INVALID: 401, PERMISSION_DENIED: 403, NOT_FOUND: 404, PREVIEW_STALE: 409, SOURCE_MAPPING_CONFLICT: 409, VERSION_CONFLICT: 409, JOB_STOPPED: 409, IDEMPOTENCY_CONFLICT: 409, IMPORT_BATCHES_INCOMPLETE: 409, IMPORT_DEPENDENCY_INVALID:409, IMPORT_DEPENDENCY_PENDING:409, INVALID_REFERENCE: 422, INVALID_IMPORT: 422 }
+  if (error.message === 'INVALID_REFERENCE') {
+    const allowedFields = new Set(['enrollment_id','lesson_id'])
+    const allowedReasons = new Set(['ENROLLMENT_REFERENCE_UNVERIFIED','LESSON_COURSE_MISMATCH'])
+    try {
+      const diagnostic = JSON.parse(error.details ?? '') as { kind?: unknown; source_id?: unknown; field?: unknown; reason?: unknown }
+      const allowedKinds = new Set(['history_report','report','enrollment'])
+      if (typeof diagnostic.source_id === 'string' && diagnostic.source_id.length <= 256 && allowedKinds.has(String(diagnostic.kind)) && allowedFields.has(String(diagnostic.field)) && allowedReasons.has(String(diagnostic.reason))) {
+        return new ApiError(422, 'INVALID_REFERENCE', 'A source row references an unavailable or mismatched record', { [`rows.${diagnostic.kind}.${diagnostic.source_id}.${diagnostic.field}`]: [String(diagnostic.reason)] })
+      }
+    } catch { /* Return a safe batch-level diagnostic for legacy database errors. */ }
+    return new ApiError(422, 'INVALID_REFERENCE', 'One or more records could not be verified. Refresh the source and target catalogs, then retry.', { job: ['REFERENCE_CHECK_FAILED'] })
+  }
   return statuses[error.message] ? new ApiError(statuses[error.message]!, error.message, error.message) : mapDatabaseError(error)
 }
 export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   const router = Router()
+  const runManifest = async (args: Parameters<SupabaseClient['rpc']>[1]) => {
+    const result = await admin.rpc('web_extension_import_batch_manifest', args)
+    if (result.error) {
+      const message = result.error.message ?? ''
+      if (result.error.code === 'PGRST202' || result.error.code === '42883' || /web_extension_import_batch_manifest.*(not found|does not exist|could not find)/i.test(message)) {
+        throw new ApiError(503, 'IMPORT_DEPENDENCIES_UNAVAILABLE', 'This server cannot verify cross-batch references. Recheck the connection or retry after the server update.')
+      }
+      throw databaseError(result.error)
+    }
+    return result.data
+  }
   const run = async (req: Request, operation: string, input: unknown, rpc = 'web_extension_workspace') => {
     const bearer = req.header('authorization')!.replace(/^Bearer\s+/i, '')
     const result = await admin.rpc(rpc, { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: crypto.createHash('sha256').update(bearer).digest('hex'), p_operation: operation, p_input: input })
@@ -129,9 +156,22 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   for (const action of ['preview', 'apply'] as const) router.post(`/imports/:id/${action}`, wrap(async (req, res) => {
     const batch = importBatch.parse(req.body)
     const rows = batch.rows.map(row => ({ ...row, source_fingerprint: crypto.createHash('sha256').update(JSON.stringify({ source_id: row.source_id, record: row.record })).digest('hex') }))
-    // Hash the validated payload, never accept a client-provided fingerprint.
-    const fingerprint = crypto.createHash('sha256').update(JSON.stringify(rows)).digest('hex')
-    reply(req, res, await run(req, action, { job_id: uuid.parse(req.params.id), ...batch, rows, fingerprint }))
+    const dependencies = batch.dependencies ?? []
+    // Hash the validated rows and their dependency checkpoints; never accept a client fingerprint.
+    const fingerprintInput = dependencies.length ? { rows, dependencies } : rows
+    const fingerprint = crypto.createHash('sha256').update(JSON.stringify(fingerprintInput)).digest('hex')
+    const jobId = uuid.parse(req.params.id)
+    if (action === 'apply' && dependencies.length) {
+      const bearer = req.header('authorization')!.replace(/^Bearer\s+/i, '')
+      await runManifest({ p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: crypto.createHash('sha256').update(bearer).digest('hex'), p_job_id: jobId, p_batch_key: batch.key, p_fingerprint: fingerprint, p_manifest: [], p_dependencies: dependencies, p_action: 'apply-check' })
+    }
+    const result = await run(req, action, { job_id: jobId, ...batch, rows, fingerprint }) as Record<string, unknown>
+    if (action === 'preview' && result.applied == null) {
+      const bearer = req.header('authorization')!.replace(/^Bearer\s+/i, '')
+      const manifest = rows.flatMap(row => row.record.kind === 'enrollment' ? [{ source_id: row.source_id, target_id: row.target_id, course_id: row.record.data.course_id }] : [])
+      await runManifest({ p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: crypto.createHash('sha256').update(bearer).digest('hex'), p_job_id: jobId, p_batch_key: batch.key, p_fingerprint: fingerprint, p_manifest: manifest, p_dependencies: dependencies, p_action: 'save' })
+    }
+    reply(req, res, action === 'preview' ? { ...result, batch_fingerprint: fingerprint } : result)
   }))
   router.patch('/imports/:id', wrap(async (req, res) => reply(req, res, await run(req, 'job-status', { job_id: uuid.parse(req.params.id), ...jobStatus.parse(req.body) }))))
   router.get('/work', wrap(async (req, res) => reply(req, res, await run(req, 'work', {}))))

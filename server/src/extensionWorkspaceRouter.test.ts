@@ -117,7 +117,7 @@ describe('workspace API contract', () => {
     expect(importBatch.safeParse({ ...batches[0], rows: [enrollment, row, enrollment] }).success).toBe(false)
     const { app, rpc } = appWith({ rows: [], counts: {} })
     const response = await request(app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization', `Bearer ${'a'.repeat(64)}`).send(batches[0])
-    expect(response.status).toBe(200);expect(rpc).toHaveBeenCalledTimes(1)
+    expect(response.status).toBe(200);expect(rpc).toHaveBeenCalledTimes(2);expect(rpc.mock.calls[1]![0]).toBe('web_extension_import_batch_manifest')
     const strict = appWith({}, null, true)
     const duplicate = await request(strict.app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization', `Bearer ${'a'.repeat(64)}`).send({ ...batches[0], rows: [enrollment, row, enrollment] })
     expect(duplicate.status).toBe(422);expect(duplicate.body.error).toMatchObject({ code: 'VALIDATION_FAILED', fields: { request: ['Duplicate source IDs'] } });expect(strict.rpc).not.toHaveBeenCalled()
@@ -163,6 +163,38 @@ describe('workspace API contract', () => {
     expect((await request(app).get('/api/extension/v1/reports?sort=nearest').set('Authorization',`Bearer ${'a'.repeat(64)}`)).status).toBe(400)
     expect((await request(app).get('/api/extension/v1/reports?sort=nearest&anchor_date=2023-02-29').set('Authorization',`Bearer ${'a'.repeat(64)}`)).status).toBe(400)
     expect((await request(app).get(`/api/extension/v1/reports?sort=nearest&anchor_date=2024-06-15&limit=51`).set('Authorization',`Bearer ${'a'.repeat(64)}`)).status).toBe(400)
+  })
+  it('accepts bounded same-job preview dependencies and rejects duplicate or forged references', async()=>{
+    const dependency={key:id,fingerprint:'a'.repeat(64)},body={key:'00000000-0000-4000-8000-000000000002',rows:[row],dependencies:[dependency]}
+    expect(importBatch.safeParse(body).success).toBe(true)
+    expect(importBatch.safeParse({...body,dependencies:Array(51).fill(dependency)}).success).toBe(false)
+    expect(importBatch.safeParse({...body,dependencies:[dependency,dependency]}).success).toBe(false)
+    expect(importBatch.safeParse({...body,dependencies:[{...dependency,fingerprint:'invalid'}]}).success).toBe(false)
+    const {app,rpc}=appWith({rows:[],counts:{}})
+    const response=await request(app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization',`Bearer ${'b'.repeat(64)}`).send(body)
+    expect(response.status).toBe(200);expect(rpc).toHaveBeenCalledTimes(2)
+    expect(rpc.mock.calls[0]![1].p_input).toMatchObject({dependencies:[dependency]})
+    expect(rpc.mock.calls[1]![0]).toBe('web_extension_import_batch_manifest')
+    expect(rpc.mock.calls[1]![1]).toMatchObject({p_action:'save',p_manifest:[],p_dependencies:[dependency]})
+    expect(response.body.data.batch_fingerprint).toMatch(/^[a-f0-9]{64}$/)
+  })
+  it('fails safely when the server cannot verify cross-batch references', async()=>{
+    const dependency={key:id,fingerprint:'a'.repeat(64)},body={key:'00000000-0000-4000-8000-000000000002',rows:[row],dependencies:[dependency]}
+    const {app,rpc}=appWith({rows:[],counts:{}})
+    rpc.mockResolvedValueOnce({data:{rows:[],counts:{}},error:null}).mockResolvedValueOnce({data:null,error:{code:'PGRST202',message:'Could not find the function public.web_extension_import_batch_manifest'}})
+    const response=await request(app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(response.status).toBe(503);expect(response.body.error.code).toBe('IMPORT_DEPENDENCIES_UNAVAILABLE');expect(response.body.error.message).not.toContain('1000130')
+  })
+  it('returns safe row-scoped diagnostics for reference failures and a generic issue for old database errors',async()=>{
+    const detail=JSON.stringify({kind:'history_report',source_id:'301:report:401',field:'lesson_id',reason:'LESSON_COURSE_MISMATCH'})
+    const body={key:id,rows:[{...row,record:{kind:'history_report',data:{enrollment_id:id,report_date:'2026-10-04',source_origin:'https://corp.orangeapple.co',source_admission_id:'301',source_key:'evidence:hash',identity_status:'evidence_only',source_fields:[]}}}]}
+    const {app}=appWith(null,{message:'INVALID_REFERENCE',details:detail},true)
+    const response=await request(app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(response.status).toBe(422);expect(response.body.error.fields).toEqual({'rows.history_report.301:report:401.lesson_id':['LESSON_COURSE_MISMATCH']})
+    expect(JSON.stringify(response.body)).not.toContain('PRIVATE')
+    const legacy=appWith(null,{message:'INVALID_REFERENCE'},true).app
+    const fallback=await request(legacy).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(fallback.status).toBe(422);expect(fallback.body.error.fields).toEqual({job:['REFERENCE_CHECK_FAILED']})
   })
   it('returns stale preview and permission errors without raw database details', async () => {
     for (const [message, status] of [['PREVIEW_STALE', 409], ['PERMISSION_DENIED', 403], ['EXTENSION_AUTH_INVALID', 401]] as const) {

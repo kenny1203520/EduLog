@@ -12,6 +12,10 @@ async function rpc(operation, input) {
   await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
   return (await db.query('SELECT public.web_extension_workspace($1,$2,$3,$4) AS data', [token,'a'.repeat(64),operation,JSON.stringify(input)])).rows[0].data
 }
+async function rpcManifest(jobId,batchKey,fingerprint,manifest=[],dependencies=[],action='save') {
+  await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
+  return (await db.query('SELECT public.web_extension_import_batch_manifest($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8) AS data',[token,'a'.repeat(64),jobId,batchKey,fingerprint,JSON.stringify(manifest),JSON.stringify(dependencies),action])).rows[0].data
+}
 async function rpcCatalog(operation, input) {
   await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
   return (await db.query('SELECT public.web_extension_catalog($1,$2,$3,$4) AS data', [token,'a'.repeat(64),operation,JSON.stringify(input)])).rows[0].data
@@ -73,6 +77,7 @@ try {
   await db.exec(read('1000125_extension_transferred_occurrence_import.sql'))
   await db.exec(read('1000126_enrollment_history_reports.sql'))
   await db.exec(read('1000127_extension_shared_mappings_and_sync_preferences.sql'))
+  await db.exec(read('1000130_import_preview_dependencies_and_diagnostics.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -454,6 +459,25 @@ try {
   const narrowJob=await rpc('job',{...destination,date_from:'2026-10-04',date_to:'2026-10-04',class_session_id:weekendSession})
   const narrowBatch={job_id:narrowJob.id,key:id(209),fingerprint:'4'.repeat(64),rows:[{source_id:'target-date-report',target_id:id(210),overwrite:[],record:{kind:'report',data:{enrollment_id:weekendEnrollment,class_occurrence_id:targetOccurrence,attendance_status:'present'}}}]}
   await rpc('preview',narrowBatch);await rpc('apply',narrowBatch)
+  // Enrollment references created in a prior preview batch are verified through
+  // a same-job manifest, then required to be applied before dependent history.
+  const dependencyJob=await rpc('job',{...destination,source_class_id:'dependency-test'})
+  const dependentEnrollment=id(881), dependentHistory=id(882), parentKey=id(883), childKey=id(884)
+  const parent={job_id:dependencyJob.id,key:parentKey,fingerprint:'1'.repeat(64),rows:[{source_id:'1881',target_id:dependentEnrollment,overwrite:[],record:{kind:'enrollment',data:{student_id:student,course_id:course,classroom_id:room,class_session_id:session,status:'regular',start_date:'2026-01-01',time_zone:'Asia/Taipei'}}}]}
+  await rpc('preview',parent)
+  const parentManifest=[{source_id:'1881',target_id:dependentEnrollment,course_id:course}]
+  await rpcManifest(dependencyJob.id,parentKey,parent.fingerprint,parentManifest)
+  const dependency={key:parentKey,fingerprint:parent.fingerprint}
+  const child={job_id:dependencyJob.id,key:childKey,fingerprint:'2'.repeat(64),dependencies:[dependency],rows:[{source_id:'1881:report:1991',target_id:dependentHistory,overwrite:[],record:{kind:'history_report',data:{enrollment_id:dependentEnrollment,report_date:'2026-10-04',source_origin:destination.source_origin,source_admission_id:'1881',source_key:'report:1991',identity_status:'evidence_only',source_fields:[]}}}]}
+  assert.equal((await rpc('preview',child)).rows[0].status,'added')
+  await rpcManifest(dependencyJob.id,childKey,child.fingerprint,[],[dependency])
+  await assert.rejects(rpcManifest(dependencyJob.id,childKey,child.fingerprint,[],[dependency],'apply-check'),/IMPORT_DEPENDENCY_PENDING/)
+  await rpc('apply',parent)
+  assert.equal((await rpcManifest(dependencyJob.id,childKey,child.fingerprint,[],[dependency],'apply-check')).status,'ready')
+  assert.equal((await rpc('apply',child)).applied,1)
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM public.enrollment_history_reports WHERE id=$1',[dependentHistory])).rows[0].n,1)
+  await assert.rejects(rpcManifest(dependencyJob.id,childKey,child.fingerprint,[],[{key:parentKey,fingerprint:'f'.repeat(64)}],'apply-check'),/IMPORT_DEPENDENCY_INVALID/)
+  await assert.rejects(rpcManifest(id(999),childKey,child.fingerprint,[],[dependency],'apply-check'),/NOT_FOUND/)
   console.log('PASS: 1000126 durable evidence-only history, false/zero/half stars, source whitelist, ambiguity, classifications, versioned binding/replay, permissions and narrow transfer date')
   await rpc('job-status',{job_id:job.id,status:'paused'}); await assert.rejects(rpc('preview',update),/JOB_STOPPED/)
   await db.exec(`UPDATE public.web_extension_tokens SET revoked_at=now() WHERE id='${token}'`)
