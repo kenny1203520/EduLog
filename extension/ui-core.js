@@ -1,0 +1,86 @@
+// Shared extension-owned presentation. Provider content is never registered here.
+(() => {
+  if (globalThis.edulogUi) return
+  const catalog = {
+    'ui.language': ['介面語言', 'Interface language'],
+    'ui.settings': ['設定', 'Settings'],
+    'ui.navigation': ['網站導覽', 'Site navigation'],
+    'ui.integration': ['EduLog 功能', 'EduLog tools'],
+    'ui.themeOn': ['套用清晰主題', 'Use light theme'],
+    'ui.themeOff': ['使用原站主題', 'Use original theme'],
+    'ui.work': ['繼續工作／工作紀錄', 'Continue work / work history'],
+    'ui.sourceTeaching': ['原站教學 · 工作台同步', 'Teach here · sync in the workspace'],
+    'flow.import': ['同步教學資料', 'Sync teaching data'],
+    'flow.importHelp': ['讀取完整歷史，集中核對例外與同步摘要。', 'Read full history, review exceptions, and confirm the sync summary.'],
+    'flow.prefill': ['預填目前報告', 'Prefill current report'],
+    'flow.prefillHelp': ['在原站核對欄位，再由您人工送出。', 'Review fields in the source form, then submit it yourself.'],
+    'flow.details': ['操作說明', 'How it works'],
+    'flow.ready': ['可開始', 'Ready'],
+    'flow.connect': ['先完成連線', 'Connect first'],
+    'flow.unavailable': ['此連線未提供這項操作，請重新檢查連線或查看診斷。', 'This connection does not provide this operation. Recheck it or view diagnostics.'],
+    'work.saved': ['草稿已保存在此瀏覽器', 'Draft saved in this browser'],
+    'work.unsaved': ['正在保存草稿…', 'Saving draft…'],
+    'work.ready': ['尚未開始工作', 'No work started'],
+    'work.settings': ['本次同步設定', 'Settings for this sync'],
+    'work.settingsHelp': ['共用規則與欄位偏好；逐份報告可另外調整。', 'Shared rules and field preferences; each report can be adjusted separately.'],
+    'work.continue': ['繼續未完成工作', 'Continue unfinished work'],
+    'work.new': ['建立新工作', 'Start new work'],
+    'work.resumeHelp': ['此來源已有未完成草稿，請選擇繼續或建立新工作。', 'There is an unfinished draft for this source. Continue it or start new work.'],
+    'work.remaining': ['處理剩餘項目', 'Resolve remaining items'],
+    'work.filter': ['工作狀態', 'Work status'],
+    'work.all': ['全部工作', 'All work'],
+    'work.resumable': ['可繼續', 'Can continue'],
+    'work.attention': ['需要處理', 'Needs attention'],
+    'work.done': ['已完成', 'Completed'],
+    'work.local': ['本機草稿', 'Local draft'],
+    'work.remote': ['EduLog 紀錄', 'EduLog record'],
+    'work.merged': ['本機草稿＋EduLog 紀錄', 'Local draft + EduLog record'],
+    'work.filteredEmpty': ['此篩選沒有工作紀錄。', 'No work matches this filter.'],
+    'assistant.apply': ['套用 {count} 個欄位 · 覆寫 {overwrite} 個', 'Apply {count} fields · overwrite {overwrite}'],
+    'assistant.target': ['1 · 核對目標', '1 · Review target'],
+    'assistant.candidates': ['2 · 選擇報告', '2 · Choose report'],
+    'assistant.fields': ['3 · 核對欄位', '3 · Review fields'],
+    'assistant.result': ['4 · 套用結果 · 待人工送出', '4 · Applied fields · submit manually'],
+    'assistant.refresh': ['重新核對', 'Recheck'],
+    'assistant.collapse': ['收合助手', 'Collapse assistant'],
+    'assistant.expand': ['展開 EduLog 助手', 'Open EduLog assistant'],
+    'assistant.native': ['原站表單', 'Source form'],
+    'assistant.tab': ['EduLog 預填', 'EduLog prefill'],
+    'assistant.title': ['EduLog 報告助手', 'EduLog report assistant'],
+  }
+  let locale = /^en(?:-|$)/i.test(globalThis.navigator?.language || '') ? 'en' : 'zh-TW'
+  const bindings = new Map(), listeners = new Set()
+  const normalize = value => value === 'en' ? 'en' : 'zh-TW'
+  function t(key, params = {}) {
+    const entry = catalog[key]
+    return String(entry ? entry[locale === 'en' ? 1 : 0] : key).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
+  }
+  function text(el, key, params = {}, attr) {
+    if (!el) return el
+    if (!attr) el.dataset.i18n = key
+    bindings.set(el, { key, params, attr }); update(el, bindings.get(el)); return el
+  }
+  function update(el, binding) { const value = t(binding.key, typeof binding.params === 'function' ? binding.params() : binding.params); if (binding.attr) el.setAttribute(binding.attr, value); else el.textContent = value }
+  function bind(root) { for (const el of root.querySelectorAll('[data-i18n]')) text(el, el.dataset.i18n, {}, el.dataset.i18nAttr) }
+  function setLocale(value) {
+    const next = normalize(value), changed = next !== locale; locale = next
+    for (const [el, binding] of bindings) { if (!el.isConnected) { bindings.delete(el); continue } update(el, binding) }
+    if (changed) for (const listener of listeners) listener(locale)
+  }
+  async function saveLocale(value) {
+    setLocale(value)
+    // The worker validates both the sender and the bounded language value.
+    const result = await globalThis.edulogRuntime?.send({ type: 'set-ui-preferences', language: normalize(value) })
+    if (result?.error) throw new Error('PREFERENCES_UNAVAILABLE')
+  }
+  function languageSelect(doc = document) {
+    const select = doc.createElement('select'); text(select, 'ui.language', {}, 'aria-label')
+    for (const [value, label] of [['zh-TW', '繁體中文'], ['en', 'English']]) { const option = doc.createElement('option'); option.value = value; option.textContent = label; select.append(option) }
+    select.value = locale; select.addEventListener('change', () => void saveLocale(select.value).catch(() => {})); subscribe(value => { select.value = value }); return select
+  }
+  function subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener) }
+  const styles = `:host{--ui-primary:#2563eb;--ui-text:#0f172a;--ui-muted:#475569;--ui-border:#cbd5e1;--ui-surface:#fff;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ui-text)}button,input,select,textarea{font:inherit;min-height:44px}small,.hint,.muted,.note{font-size:14px}button,input,select,textarea,a,summary{scroll-margin:80px 0}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #2563eb;outline-offset:3px}[hidden]{display:none!important}`
+  globalThis.edulogUi = Object.freeze({ t, text, bind, setLocale, saveLocale, subscribe, languageSelect, styles, get locale() { return locale }, register(entries) { Object.assign(catalog, entries) } })
+  globalThis.chrome?.storage?.onChanged?.addListener((changes, area) => { if (area === 'local' && changes.edulogWorkspaceLocale?.newValue) setLocale(changes.edulogWorkspaceLocale.newValue) })
+  if (globalThis.chrome?.storage?.local?.get) void globalThis.chrome.storage.local.get('edulogWorkspaceLocale').then(data => { if (data.edulogWorkspaceLocale) setLocale(data.edulogWorkspaceLocale) }).catch(() => {})
+})()

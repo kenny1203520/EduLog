@@ -38,6 +38,14 @@ test('UI preference defaults on without pairing and persists only non-secret set
   assert.equal(JSON.stringify(w.storage.edulogUiPreferences), '{"orange-apple":{"enabled":false}}')
 })
 
+test('shared language is bounded and does not toggle the website theme',async()=>{
+  const w=worker();await w.send({type:'set-ui-preferences',enabled:false},w.popup)
+  const result=await w.send({type:'set-ui-preferences',language:'en'},w.site)
+  assert.equal(result.language,'en');assert.equal(result.enabled,false);assert.equal(w.storage.edulogWorkspaceLocale,'en')
+  assert.equal((await w.send({type:'set-ui-preferences',language:'fr'},w.popup)).error,'INVALID_LANGUAGE')
+  assert.equal(w.storage.edulogWorkspaceLocale,'en');assert.equal(w.storage.edulogExtension.token,'test-secret')
+})
+
 test('verification refreshes legacy frontend URL and exposes no credentials', async () => {
   const w = worker(async () => ({ ok: true, json: async () => ({ data: { user_id: 'user', settings_url: 'https://web.example:8443/edulog/dashboard/settings?tab=integrations' } }) }))
   w.storage.edulogExtension.tokenExpiresAt = '2099-01-01T00:00:00Z'

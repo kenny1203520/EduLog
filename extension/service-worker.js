@@ -132,13 +132,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     void (async () => {
       const key = 'edulogUiPreferences'
       const stored = (await chrome.storage.local.get(key))[key] || {}
-      if (message.type === 'set-ui-preferences' && typeof message.enabled === 'boolean') {
+      if (message.type === 'set-ui-preferences') {
+        if (message.language !== undefined && !['zh-TW','en'].includes(message.language)) return { error: 'INVALID_LANGUAGE' }
+        if (message.language !== undefined) await chrome.storage.local.set({ edulogWorkspaceLocale: message.language })
+        if (typeof message.enabled === 'boolean') {
         stored[globalThis.edulogSiteAdapter.id] = { enabled: message.enabled }
         await chrome.storage.local.set({ [key]: stored })
         const tabs = await chrome.tabs.query({})
         await Promise.allSettled(tabs.filter(tab => isTeachingPage(tab.url)).map(tab => chrome.tabs.sendMessage(tab.id, { type: 'ui-preferences-changed', enabled: message.enabled })))
       }
-      return { enabled: stored[globalThis.edulogSiteAdapter.id]?.enabled !== false }
+      }
+      return { enabled: stored[globalThis.edulogSiteAdapter.id]?.enabled !== false, language: (await chrome.storage.local.get('edulogWorkspaceLocale')).edulogWorkspaceLocale || null }
     })().then(sendResponse, () => sendResponse({ error: 'PREFERENCES_UNAVAILABLE' }))
     return true
   }

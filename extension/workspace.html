@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>整合工作台 · EduLog</title><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="workspace-status.css"><link rel="stylesheet" href="mapping-workbench.css"><link rel="stylesheet" href="workspace-i18n.css"></head><body>
+<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>整合工作台 · EduLog</title><link rel="stylesheet" href="workspace.css"><link rel="stylesheet" href="workspace-status.css"><link rel="stylesheet" href="mapping-workbench.css"><link rel="stylesheet" href="workspace-i18n.css"><link rel="stylesheet" href="ui-tokens.css"></head><body>
 <a class="skip" href="#main">跳至工作內容</a>
 <header><div class="brand">EduLog <span>整合工作台</span></div><div class="header-tools"><label class="visually-hidden" for="workspace-locale">介面語言</label><select id="workspace-locale" aria-label="Interface language"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p>清晰主題 · 0.1.0</p></div></header>
 <nav aria-label="整合工作"><button data-flow="import" aria-current="page">教學資料匯入</button><button data-flow="prefill">報告預填</button><button data-flow="work">工作紀錄</button></nav>
@@ -34,4 +34,4 @@
 <section id="prefill-result" class="card" hidden><h2>待人工送出／待確認</h2><p>請返回網站檢查內容並人工送出。目前尚無可靠送出成功樣本，不會標記推送成功。</p><button id="return-source" class="primary">返回網站檢查</button></section>
 </section>
 <section id="work-view" hidden><div class="heading"><h1>工作紀錄</h1><button id="refresh-work">重新整理</button></div><p class="hint">續傳資料只保留於此瀏覽器，綁定 EduLog 實例與使用者，最多七天。完成或取消後移除來源內容。</p><div id="work-list"></div></section>
-</div></main><script src="runtime-bridge.js"></script><script type="module" src="workspace.js"></script></body></html>
+</div></main><script src="runtime-bridge.js"></script><script src="ui-core.js"></script><script src="ui-messages.js"></script><script type="module" src="workspace.js"></script></body></html>

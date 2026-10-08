@@ -12,20 +12,53 @@
     "service_worker": "service-worker.js",
     "type": "module"
   },
-  "permissions": ["storage"],
-  "host_permissions": ["https://corp.orangeapple.co/*"],
-  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*", "http://[::1]/*"],
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://corp.orangeapple.co/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://[::1]/*"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://corp.orangeapple.co/*"],
-      "js": ["runtime-bridge.js", "adapters/orange-apple.js", "bootstrap.js"],
-      "css": ["adapters/orange-apple.css"],
+      "matches": [
+        "https://corp.orangeapple.co/*"
+      ],
+      "js": [
+        "runtime-bridge.js",
+        "adapters/orange-apple.js",
+        "bootstrap.js"
+      ],
+      "css": [
+        "adapters/orange-apple.css"
+      ],
       "run_at": "document_start"
     },
     {
-      "matches": ["https://corp.orangeapple.co/*"],
-      "js": ["source-date.js", "field-mappings.js", "field-mapping-ui.js", "connection-ui.js", "integration-ui.js", "adapters/orange-apple-workflows.js", "adapters/orange-apple-integration.js", "editor-prefill.js", "content.js"],
-      "css": ["editor-prefill.css"],
+      "matches": [
+        "https://corp.orangeapple.co/*"
+      ],
+      "js": [
+        "ui-core.js",
+        "ui-messages.js",
+        "source-date.js",
+        "field-mappings.js",
+        "field-mapping-ui.js",
+        "connection-ui.js",
+        "integration-ui.js",
+        "adapters/orange-apple-workflows.js",
+        "adapters/orange-apple-integration.js",
+        "editor-prefill.js",
+        "content.js"
+      ],
+      "css": [
+        "editor-prefill.css"
+      ],
       "run_at": "document_end"
     }
   ]

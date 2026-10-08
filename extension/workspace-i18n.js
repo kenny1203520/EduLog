@@ -83,6 +83,12 @@ function visit(root){
 }
 async function persist(value){locale=value;document.documentElement.lang=value==='en'?'en':'zh-Hant';visit(document.body);document.dispatchEvent(new CustomEvent('edulog-workspace-locale-change',{detail:{locale:value}}));try{await globalThis.chrome?.storage?.local?.set({edulogWorkspaceLocale:value})}catch{}}
 export function initWorkspaceI18n(){
+  if(globalThis.edulogUi){
+    const ui=globalThis.edulogUi,select=document.getElementById('workspace-locale')
+    ui.bind(document);globalThis.edulogUiLegacy?.watch(document.body)
+    const sync=value=>{document.documentElement.lang=value==='en'?'en':'zh-Hant';if(select)select.value=value;document.dispatchEvent(new CustomEvent('edulog-workspace-locale-change',{detail:{locale:value}}))}
+    sync(ui.locale);ui.subscribe(sync);select?.addEventListener('change',()=>void ui.saveLocale(select.value).catch(()=>{}));return
+  }
   const select=document.getElementById('workspace-locale');if(!select)return
   const set=value=>{const selected=value==='en'?'en':'zh-TW';select.value=selected;void persist(selected)}
   const browserDefault=/^en(?:-|$)/i.test(navigator.language)?'en':'zh-TW'
