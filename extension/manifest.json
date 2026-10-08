@@ -57,6 +57,7 @@
         "content.js"
       ],
       "css": [
+        "dialog-layout.css",
         "editor-prefill.css"
       ],
       "run_at": "document_end"

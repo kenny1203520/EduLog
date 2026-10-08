@@ -91,7 +91,6 @@ html[data-edulog-ui="on"] [data-edulog-profile-input] :is(input,select,textarea)
 html[data-edulog-ui="on"] [data-edulog-profile-input] textarea { min-height:110px; }
 html[data-edulog-ui="on"] [data-edulog-dialog] .modal-header { display:flex; flex-wrap:wrap; gap:8px; }
 html[data-edulog-ui="on"] [data-edulog-dialog] .modal-title { flex:1; }
-html[data-edulog-ui="on"] [data-edulog-dialog="compact"] .modal-dialog { width:calc(100% - 32px); max-width:640px; margin:24px auto; }
 html[data-edulog-ui="on"] [data-edulog-dialog="compact"] textarea { width:100%; min-height:160px; padding:12px; border:1px solid #94a3b8; border-radius:8px; }
 html[data-edulog-ui="on"] [data-edulog-close] { display:block!important; min-width:44px; min-height:44px; flex:0 0 44px; }
 html[data-edulog-ui="on"] [data-edulog-dialog] :is(button,input[type=submit]) { min-height:44px; min-width:44px; }
@@ -118,7 +117,6 @@ html[data-edulog-ui="on"] .edulog-week-tools button { flex:1; padding:8px 6px; f
  html[data-edulog-ui="on"] [data-edulog-hours-filter] { flex-direction:column; align-items:stretch; }
  html[data-edulog-ui="on"] [data-edulog-hours-filter] select { width:100%; }
  html[data-edulog-ui="on"][data-edulog-page="profile"] .edulog-section { grid-template-columns:1fr; }
- html[data-edulog-ui="on"] [data-edulog-dialog="compact"] .modal-dialog { width:calc(100% - 16px); margin:8px auto; }
 }
 html[data-edulog-ui="on"] [data-edulog-owned] { font-family:system-ui,-apple-system,"Segoe UI","Microsoft JhengHei",sans-serif; }
 html[data-edulog-ui="on"] .edulog-table-tools h3 { margin:0; font-size:18px; font-weight:600; }
@@ -165,8 +163,6 @@ html[data-edulog-ui="on"][data-edulog-page="calendar"] .content .nav-tabs { over
 html[data-edulog-ui="on"][data-edulog-page="calendar"] .content .nav-link { white-space:nowrap; }
 html[data-edulog-ui="on"] [data-edulog-calendar-table] tr:first-child th { position:sticky; top:0; z-index:3; }
 html[data-edulog-ui="on"] [data-edulog-calendar-table] :is(th,td):first-child { position:sticky; left:0; background:#f1f5f9; z-index:2; }
-html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-dialog { width:calc(100% - 32px); max-width:920px; margin:24px auto; }
-html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-content { border-radius:16px; border:1px solid var(--edulog-line); }
 html[data-edulog-ui="on"] #lesson-report-modal .modal-header { padding:20px 24px; }
 html[data-edulog-ui="on"] #lesson-report-modal .modal-body { padding:20px 24px; }
 html[data-edulog-ui="on"] #lesson-report-modal .report-body { display:block!important; width:100%; min-width:0; }
@@ -240,8 +236,6 @@ html[data-edulog-ui="on"] #lesson-report-modal :is(select,input):disabled { back
 }
 @media(max-width:600px) {
  html[data-edulog-ui="on"] :is(.edulog-page-context,.edulog-class-summary,.edulog-history-summary,.edulog-admission-details) { padding:16px; }
- html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-dialog { width:100%; margin:0; max-width:none; }
- html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-content { border-radius:0; }
  html[data-edulog-ui="on"] #lesson-report-modal .modal-body { padding:16px; }
  html[data-edulog-ui="on"] #lesson-report-modal .edulog-rating-control { flex-wrap:wrap; }
  html[data-edulog-ui="on"] #lesson-report-modal .edulog-rating-control select { width:100%; }

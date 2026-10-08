@@ -16,6 +16,9 @@
 .modal[data-edulog-prefill] .modal-title{float:none!important;min-width:0;flex:1;margin:0}
 .modal[data-edulog-prefill] .modal-header .close{float:none!important;position:static!important;flex:none;margin:0}
 .edulog-editor-tabs small{display:block;font-size:14px;line-height:1.4;flex-basis:100%;min-width:0;overflow-wrap:anywhere}
+.edulog-editor-native form{padding-bottom:max(24px,env(safe-area-inset-bottom))}
+.edulog-editor-native :is(button,input,textarea,select,summary){scroll-margin-block:24px}
+.edulog-editor-assistant{scroll-padding-bottom:96px}
 @media(max-width:1199px){
  .modal[data-edulog-prefill] .modal-dialog{max-width:920px!important}
  .edulog-editor-tabs{display:flex!important;flex-wrap:wrap;grid-column:1/-1;gap:8px;padding:8px 16px;border-bottom:1px solid #dbe3ee}

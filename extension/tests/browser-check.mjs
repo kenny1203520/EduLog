@@ -10,8 +10,8 @@ const { chromium } = process.argv[2] ? await import(pathToFileURL(process.argv[2
 const output = process.argv[3] || mkdtempSync(join(tmpdir(), 'edulog-ui-'))
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
-const css = read('../adapters/orange-apple.css')
-let nativeCss = ''
+const css = read('../adapters/orange-apple.css') + read('../dialog-layout.css')
+let nativeCss = read('fixtures/native-bootstrap-dialog.css')
 if (process.argv[4]) {
   const dir = process.argv[4]
   const application = readdirSync(dir).find(n => n.startsWith('application-'))
@@ -39,7 +39,7 @@ for (const [browserName, executablePath] of executables) {
       await page.locator(`[data-state="${state}"]`).waitFor()
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} popup overflow`)
       await page.screenshot({ path: join(output, `${browserName}-popup-${state}.png`), fullPage: true })
-      const flow = page.locator('.edulog-flow').first()
+      const flow = page.locator('.edulog-flow details').first()
       await flow.locator('summary').focus()
       await page.keyboard.press('Enter')
       assert.equal(await flow.evaluate(element => element.open), true)
@@ -49,7 +49,7 @@ for (const [browserName, executablePath] of executables) {
       await page.close()
     }
     // 720 CSS px at DPR 2 covers the layout of a 1440 px desktop at 200% zoom.
-    for (const width of [360, 390, 768, 1024, 1440, 720]) for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['overview', '/'], ['class', '/courses/dt/101'], ['reports', '/courses/dt/101/lesson_reports'], ['classes','/courses/dt'], ['history','/dt_admissions/301'], ['calendar','/calendar'], ['unfilled','/admissions/month_unfilled_report']]) {
+    for (const width of [360, 390, 768, 1024, 1200, 1440, 1920, 720]) for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['overview', '/'], ['class', '/courses/dt/101'], ['reports', '/courses/dt/101/lesson_reports'], ['classes','/courses/dt'], ['history','/dt_admissions/301'], ['calendar','/calendar'], ['unfilled','/admissions/month_unfilled_report'], ['unfilled-current','/admissions/unfilled_report'], ['report-editor','/dt_admissions/301/reports/401/edit']]) {
       const page = await browser.newPage({ viewport: { width, height: width === 720 ? 500 : 1000 }, deviceScaleFactor: width === 720 ? 2 : 1 })
       let fixture = read(`fixtures/${name}.html`)
       if (name === 'calendar') fixture = fixture.replace('<form method="get">','<div class="row"><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-09-21">前一週</a></div><div class="col-sm-8"><form method="get"><div class="row"><div class="col-sm-7">').replace('<input type="submit"','</div><div class="col-sm-3"><input type="submit"').replace('</form>','</div></div></form></div><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-10-05">下一週</a></div></div>')
@@ -125,7 +125,8 @@ for (const [browserName, executablePath] of executables) {
         await page.evaluate(()=>{const mask=document.createElement('div');mask.className='modal-backdrop fade show';document.body.append(mask)})
         const close=page.locator('#edit-teacher-comment-modal [data-edulog-close]')
         assert.equal(await close.isVisible(),true,'native hidden close button becomes visible')
-        assert.ok(await close.evaluate(el=>{const r=el.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return el===hit||el.contains(hit)}),'modal close is not covered by toolbar or backdrop')
+        const closeHit=await close.evaluate(el=>{const r=el.getBoundingClientRect();const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return{ok:el===hit||el.contains(hit),hit:hit?.outerHTML.slice(0,200),x:r.x,y:r.y,modal:getComputedStyle(el.closest('.modal')).zIndex}})
+        assert.ok(closeHit.ok,'modal close is not covered by toolbar or backdrop '+JSON.stringify(closeHit))
         assert.ok(await page.locator('.modal-backdrop').evaluate(el=>{const r=el.getBoundingClientRect();return r.x===0&&r.y===0&&r.width>=innerWidth&&r.height>=innerHeight}),'backdrop covers viewport')
         await page.locator('#admissions_teacher_comment').fill('備註草稿')
         await close.focus()
@@ -145,11 +146,15 @@ for (const [browserName, executablePath] of executables) {
       await page.screenshot({ path: join(output, `${browserName}-${name}-${width}.png`), fullPage: true })
       // Verify keyboard focus and unchanged native form state on toggle.
       if (name === 'class') await page.locator('textarea').fill('未送出的內容')
+      await page.getByRole('button',{name:'EduLog 功能',exact:true}).click()
+      await page.locator('.preferences summary').click()
       const toggle = page.getByRole('button', { name: '使用原站主題' })
       await toggle.focus(); await page.keyboard.press('Enter')
       assert.equal(await page.locator('html[data-edulog-ui]').count(), 0)
       if (name === 'class') assert.equal(await page.locator('textarea').inputValue(), '未送出的內容')
       if (name === 'profile-edit') assert.equal(await page.locator('#employee_skill').inputValue(),'保留的個人資料草稿')
+      await page.getByRole('button',{name:'EduLog 功能',exact:true}).click()
+      await page.locator('.preferences summary').click()
       await page.getByRole('button', { name: '套用清晰主題' }).press('Enter')
       await page.locator('html[data-edulog-ui=on]').waitFor()
       if (name === 'class') {
