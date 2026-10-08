@@ -32,6 +32,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-lesson-guidance.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-1000127.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-workflow-redesign.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-1000130-preview-dependencies.md') -Destination $stagingPath
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
@@ -45,7 +46,8 @@ try {
         '1000124_extension_field_mappings.sql',
         '1000125_extension_transferred_occurrence_import.sql',
         '1000126_enrollment_history_reports.sql',
-        '1000127_extension_shared_mappings_and_sync_preferences.sql'
+        '1000127_extension_shared_mappings_and_sync_preferences.sql',
+        '1000130_import_preview_dependencies_and_diagnostics.sql'
     )) {
         Copy-Item -LiteralPath (Join-Path $repositoryRoot "supabase/migrations/$migration") -Destination $migrationPath
     }

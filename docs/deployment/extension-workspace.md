@@ -2,11 +2,13 @@
 
 ## 最新介面：原站教學、工作台同步
 
-最新側載包為 `extension/dist/EduLog-Teaching-Tools-0.1.0-workflow-redesign.zip`。本轮重構 Popup、12 類來源頁、工具列、助手、工作台及配對／裝置入口，**沒有新增 migration 或 API**。現有 1000127 功能與權限檢查仍沿用；之後資料庫需求從 **1000130** 起編號，不使用 1000128／1000129。
+最新側載包為 `extension/dist/EduLog-Teaching-Tools-0.1.0-workflow-redesign.zip`。本輪修正 Popup、網站浮層及工作台版面，並新增 1000130 跨批次預覽依賴與安全診斷。部署 migration 後更新 API 與側載套件；1000128／1000129 保留為未使用編號。
 
 工作台依實際核對與交易進度呈現「讀取與核對 → 處理例外 → 摘要並同步 → 結果」。共用設定集中收合、左右差異與逐段 diff、已提交與待處理分開統計。已有未完成工作可繼續；功能與中英切換保留草稿及選取。工作紀錄依可靠 job ID 合併並提供狀態篩選，單側讀取失敗不抹除另一側資料。
 
 側載更新後，先保存來源草稿，重新載入擴充套件、來源分頁與工作台，再檢查配對。教學表單仍由老師確認並人工送出。自動、已安裝瀏覽器離線樣本與真實側載分開記錄，詳見 `extension/tests/ACCEPTANCE-workflow-redesign.md`；原生 200% 縮放與真實站讀寫尚待驗收。
+
+跨批次歷史預覽依賴需先套用 `1000130_import_preview_dependencies_and_diagnostics.sql` 並更新 API。部署與驗收狀態見 `extension/tests/ACCEPTANCE-1000130-preview-dependencies.md`。未完成前，舊伺服器會安全阻擋相依預覽，不放寬參照驗證。
 
 ## 既有資料能力：1000127 共用映射與同步欄位偏好
 

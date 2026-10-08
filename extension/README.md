@@ -4,7 +4,7 @@
 
 This rebuild covers the popup, contextual toolbar, all 12 supported source page types, the report assistant, workspace and pairing/device entry. Review exceptions in a single list/editor, then confirm one sync summary. Steps reflect actual review and transaction evidence. Shared Traditional Chinese/English preferences update extension controls in place; source text stays unchanged. Differences show source/EduLog sides and paragraph changes; outcomes and resumable records distinguish verified writes from pending review.
 
-Use `extension/dist/EduLog-Teaching-Tools-0.1.0-workflow-redesign.zip`. This interface update needs **no new migration or endpoint**; existing API/database capabilities remain required. Future database changes start at **1000130**, skipping 1000128/1000129. Validation and pending real-site/native-zoom checks are documented in [workflow redesign acceptance](tests/ACCEPTANCE-workflow-redesign.md). Version remains **0.1.0**; the extension never submits the source teaching form.
+Use `extension/dist/EduLog-Teaching-Tools-0.1.0-workflow-redesign.zip`. This update adds migration **1000130** for verified same-job cross-batch preview dependencies and row-scoped reference diagnostics. Apply the migration and update the API before using cross-batch history previews. See [preview dependency acceptance](tests/ACCEPTANCE-1000130-preview-dependencies.md) and [workflow redesign acceptance](tests/ACCEPTANCE-workflow-redesign.md). Version remains **0.1.0**; the extension never submits the source teaching form.
 
 ## Previous build: student review and localization (0.1.0)
 
