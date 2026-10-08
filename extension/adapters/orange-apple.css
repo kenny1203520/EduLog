@@ -249,6 +249,15 @@ html[data-edulog-ui="on"] #lesson-report-modal :is(select,input):disabled { back
  html[data-edulog-ui="on"] #reports :is(th,td) { padding:10px 8px; }
 }
 
+/* Shared visual hierarchy; geometry of report dialogs belongs to editor-prefill.css. */
+html[data-edulog-ui="on"] body{font-size:16px;line-height:1.6;color:#0f172a;background:#f8fafc}
+html[data-edulog-ui="on"] #page-body > .content :is(input,select,textarea){font-size:16px}
+html[data-edulog-ui="on"] :is(.edulog-table-tools,.edulog-page-context,.edulog-facts,.edulog-week-tools,.edulog-history-stats,.edulog-dialog-context){font-size:14px}
+html[data-edulog-ui="on"] :is(.edulog-page-context,.edulog-history-summary,.edulog-class-summary,.edulog-section){border-radius:10px;box-shadow:none}
+html[data-edulog-ui="on"] :is(button,a,input,select,textarea,summary){scroll-margin-block:calc(var(--edulog-toolbar-height,64px) + 16px)}
+html[data-edulog-ui="on"] :is(button,a,input,select,textarea,summary):focus-visible{outline:3px solid #2563eb;outline-offset:3px}
+@media(max-width:767px){html[data-edulog-ui="on"] [data-edulog-scroll]{max-height:none;overscroll-behavior:auto}}
+
 /* Keep the provider's native whole/half-star controls inside their own rating block. */
 html[data-edulog-ui="on"] #lesson-report-modal [data-edulog-rating-stars] {
  position:relative!important; display:flow-root!important; float:none!important; clear:both;

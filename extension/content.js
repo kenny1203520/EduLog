@@ -47,7 +47,7 @@
     enhancement?.restore()
     enhancement = null
     if (keepToolbar) return
-    host?.remove()
+    host?.stopLocale?.(); host?.remove()
     host = null
     resizeObserver?.disconnect()
     resizeObserver = null
@@ -67,7 +67,7 @@
     host.dataset.enabled = String(enabled)
     const root = host.attachShadow({ mode: 'open' })
     root.innerHTML = `<style>
-      :host{all:initial;position:fixed;inset:0 0 auto;z-index:1040;color:#172033;font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+      :host{all:initial;position:fixed;inset:0 0 auto;z-index:1040;color:#172033;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
       *{box-sizing:border-box}button{font:inherit;cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#334155}
       button:hover{background:#eff4ff}button:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
       .bar{display:flex;gap:12px;align-items:center;min-height:64px;padding:8px 20px;background:white;border-bottom:1px solid #dbe3ee;box-shadow:0 2px 8px #1720330a}
@@ -76,12 +76,19 @@
       .panel[hidden]{display:none}p{margin:8px 0;color:#475569}.panel button{margin-top:8px}.note{font-size:13px}
       :host([data-enabled="false"]){inset:auto 16px 20px auto;max-width:calc(100vw - 32px)}.bar{border-radius:0}
       :host([data-enabled="false"]) .bar{padding:6px;border:1px solid #dbe3ee;border-radius:12px}
-      :host([data-enabled="false"]) .bar>:not(.toggle){display:none}
-      @media(max-width:991px){.menu{display:block}.bar{padding:8px 12px;gap:8px}.title{font-size:13px}}
+      :host([data-enabled="false"]) .bar>:not(.integration){display:none}
+      :host([data-enabled="false"]) .panel{position:fixed;right:16px;bottom:86px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 112px)}
+      .preferences{border-top:1px solid #dbe3ee;margin-top:12px}.preferences summary{min-height:44px;display:flex;align-items:center;cursor:pointer}.preferences select{font:inherit;min-height:44px;max-width:100%;margin-top:8px}
+      @media(max-width:991px){.menu{display:block}.bar{padding:8px 12px;gap:8px}.title{font-size:14px}}
       @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{margin:8px;max-width:calc(100vw - 16px);max-height:calc(100dvh - 152px)}}
-    </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="integration" type="button" aria-expanded="false">EduLog 功能</button><button class="toggle" type="button"></button></div>
+    </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="integration" type="button" aria-expanded="false">EduLog 功能</button></div>
     <section class="panel" aria-label="EduLog 整合功能" hidden><strong>EduLog 連線與整合</strong><p class="status" role="status" aria-live="polite"></p><p class="note">清晰主題不需要配對。下方可查看教學整合的規劃流程；原站的報告操作可照常使用。</p><button class="settings" type="button">開啟整合設定</button></section>`
     root.querySelector('.title').textContent = page.title
+    const preferences=document.createElement('details');preferences.className='preferences'
+    const preferenceTitle=document.createElement('summary');preferenceTitle.textContent='設定';preferences.append(preferenceTitle)
+    const themeToggle=document.createElement('button');themeToggle.type='button';themeToggle.className='toggle';preferences.append(themeToggle);root.querySelector('.panel').append(preferences)
+    if(globalThis.edulogUi){const style=document.createElement('style');style.textContent=globalThis.edulogUi.styles;root.append(style);preferences.append(globalThis.edulogUi.languageSelect());globalThis.edulogUi.text(preferenceTitle,'ui.settings');globalThis.edulogUi.text(root.querySelector('.integration'),'ui.integration');globalThis.edulogUi.text(root.querySelector('.menu'),'ui.navigation')}
+    host.stopLocale=globalThis.edulogUiLegacy?.watch(root)
     const banner = document.createElement('div')
     banner.className = 'notice'
     banner.style.cssText = 'padding:10px 16px;background:#fff7ed;color:#9a3412;max-width:100vw'
@@ -90,6 +97,7 @@
     banner.hidden = !notice
     root.querySelector('.bar').after(banner)
     root.querySelector('.toggle').textContent = enabled ? globalThis.edulogIntegrationUi.theme.original : globalThis.edulogIntegrationUi.theme.apply
+    if(globalThis.edulogUi)globalThis.edulogUi.text(root.querySelector('.toggle'),enabled?'ui.themeOff':'ui.themeOn')
     root.querySelector('.toggle').title = enabled ? '目前使用 EduLog 清晰主題' : '套用 EduLog 清晰主題'
     root.querySelector('.toggle').addEventListener('click', async () => {
       enabled = !enabled

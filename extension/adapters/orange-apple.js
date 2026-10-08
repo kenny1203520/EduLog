@@ -29,7 +29,7 @@
         else node.setAttribute(name, value)
       },
       listen(node, event, handler) { node.addEventListener(event, handler); listeners.push(() => node.removeEventListener(event, handler)) },
-      element(tag, text) { const node = doc.createElement(tag); node.dataset.edulogOwned = ''; if (text) node.textContent = text; return node },
+      element(tag, text) { const node = doc.createElement(tag); node.dataset.edulogOwned = ''; if (text) node.textContent = globalThis.edulogUiLegacy?.translate(text) || text; if(text&&globalThis.edulogUiLegacy){const ownedText=node.firstChild;listeners.push(globalThis.edulogUi.subscribe(()=>{if(ownedText?.parentNode===node)ownedText.data=globalThis.edulogUiLegacy.translate(text)}))} return node },
       add(node) { added.push(node); return node },
       move(node, destination) {
         const anchor = doc.createElement('span'); anchor.dataset.edulogOwned = ''; anchor.hidden = true

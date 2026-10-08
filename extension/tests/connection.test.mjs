@@ -92,7 +92,7 @@ for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected',
   assert.equal(get('server-form').hidden, !['not-connected', 'expired', 'revoked', 'pairing-expired'].includes(state))
   assert.equal(w.document.body.textContent.includes('private-token'), false)
   if (state === 'connected') {
-    assert.match(get('feature-list').textContent, /伺服器尚未支援/)
+    assert.match(get('feature-list').textContent, /此操作未就緒/)
     get('change').click(); get('instance').value = 'http://localhost:9999'; get('cancel').click()
     assert.equal(get('server-form').hidden, true)
     assert.equal(get('instance').value, stored.origin)

@@ -16,6 +16,7 @@
     'flow.prefillHelp': ['在原站核對欄位，再由您人工送出。', 'Review fields in the source form, then submit it yourself.'],
     'flow.details': ['操作說明', 'How it works'],
     'flow.ready': ['可開始', 'Ready'],
+    'flow.notReady': ['此操作未就緒', 'Operation unavailable'],
     'flow.connect': ['先完成連線', 'Connect first'],
     'flow.unavailable': ['此連線未提供這項操作，請重新檢查連線或查看診斷。', 'This connection does not provide this operation. Recheck it or view diagnostics.'],
     'work.saved': ['草稿已保存在此瀏覽器', 'Draft saved in this browser'],
@@ -47,6 +48,12 @@
     'assistant.native': ['原站表單', 'Source form'],
     'assistant.tab': ['EduLog 預填', 'EduLog prefill'],
     'assistant.title': ['EduLog 報告助手', 'EduLog report assistant'],
+    'flow.importStep1':['讀取每筆報名全部可讀歷史，可自行縮小日期範圍。','Read all accessible enrollment history, or choose a date range.'],
+    'flow.importStep2':['沿用有效對應，只處理身份、日期、教材及覆寫例外。','Reuse valid matches and resolve identity, date, lesson, and overwrite exceptions.'],
+    'flow.importStep3':['查看摘要後確認同步；寫入中斷可核對並續傳。','Review the summary and confirm sync. Interrupted writes can be checked and resumed.'],
+    'flow.prefillStep1':['在原站開啟報告，核對學生及完整上課日期。','Open a source report and verify the student and full session date.'],
+    'flow.prefillStep2':['選擇報告並逐欄預覽；非空內容需確認覆寫。','Choose a report and preview each field. Confirm overwrites of existing values.'],
+    'flow.prefillStep3':['預填後由老師檢查與人工送出。','After prefilling, the teacher reviews and submits the source form.'],
   }
   let locale = /^en(?:-|$)/i.test(globalThis.navigator?.language || '') ? 'en' : 'zh-TW'
   const bindings = new Map(), listeners = new Set()

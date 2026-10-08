@@ -1,3 +1,6 @@
+globalThis.edulogUi?.bind(document)
+globalThis.edulogUiLegacy?.watch(document.body)
+const localeHost=document.getElementById('popup-language');if(localeHost&&globalThis.edulogUi)localeHost.append(globalThis.edulogUi.languageSelect())
 const bridge = globalThis.edulogRuntime
 const presentation = globalThis.edulogConnectionUi
 const ui = id => document.getElementById(id)
