@@ -145,7 +145,7 @@ onUnmounted(() => { mounted = false; generation++; controller?.abort(); clearTim
       <section aria-labelledby="extension-connections-title">
         <h3 id="extension-connections-title" class="font-semibold text-slate-900">{{ t('settings.extension.connection_count', { count: activeTokens.length }) }}</h3>
         <p v-if="!activeTokens.length" class="mt-3 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{{ t('settings.extension.no_connections') }}</p>
-        <ul v-else class="mt-3 space-y-3">
+        <ul v-else class="device-grid mt-3">
           <li v-for="token in activeTokens" :key="token.id" class="rounded-xl border border-slate-200 bg-white p-4">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0"><h4 class="break-words font-semibold text-slate-900">{{ name(token) }}</h4><p v-if="device(token)" class="mt-1 text-sm text-slate-600">{{ device(token) }}</p></div>
@@ -181,12 +181,13 @@ onUnmounted(() => { mounted = false; generation++; controller?.abort(); clearTim
 
 <style scoped>
 .extension-connections button { min-height:44px;padding:8px 14px;border-radius:10px;font-size:14px;font-weight:600; }
+.extension-connections{font-size:16px;line-height:1.6}.extension-connections .text-xs{font-size:14px}.device-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:12px}.device-grid li{min-width:0}.extension-connections :is(button,input,summary){scroll-margin-block:24px}.extension-connections input{font-size:16px}
 .primary { background:#1e40af;color:#fff;border:1px solid #1e40af; }.primary:hover { background:#1e3a8a; }
 .secondary { background:#fff;color:#334155;border:1px solid #cbd5e1; }.secondary:hover { background:#f8fafc; }
 .danger { background:#fff;color:#b91c1c;border:1px solid #fecaca; }.danger:hover { background:#fef2f2; }
 button:disabled { opacity:.6;cursor:wait; }button:focus-visible,input:focus-visible,summary:focus-visible { outline:3px solid #2563eb;outline-offset:3px; }
 input { display:block;width:100%;max-width:480px;min-height:44px;padding:8px 12px;border:1px solid #94a3b8;border-radius:8px;background:#fff;color:#0f172a; }
-summary { min-height:44px;display:list-item;padding:12px 0;cursor:pointer;font-size:13px; }
+summary { min-height:44px;display:list-item;padding:12px 0;cursor:pointer;font-size:14px; }
 dialog { margin:auto;width:min(440px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid #cbd5e1;border-radius:16px;padding:24px;color:#0f172a; }
 dialog::backdrop { background:rgb(15 23 42 / .5); }
 </style>

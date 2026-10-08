@@ -7,7 +7,7 @@ html[data-edulog-ui="on"] [data-edulog-close]{position:relative;z-index:2;flex:n
 html[data-edulog-ui="on"] [data-edulog-dialog="compact"] .modal-dialog { width:calc(100% - 32px); max-width:640px; margin:24px auto; }
 html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-dialog { width:calc(100% - 32px); max-width:920px; margin:24px auto; }
 html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-content { border-radius:16px; border:1px solid var(--edulog-line); }
-.modal[data-edulog-prefill]{position:fixed;inset:0;z-index:1055;overflow:auto}
+.modal[data-edulog-prefill]{position:fixed;inset:0;z-index:1055;overflow:auto;overscroll-behavior:contain}
 .modal[data-edulog-prefill] .modal-header{display:flex;align-items:flex-start;padding:16px 20px;gap:12px}
 .modal[data-edulog-prefill] .modal-header :is(.close,.btn-close){position:relative!important;z-index:2;flex:0 0 44px;display:block!important}
 @media(max-width:767px){html[data-edulog-ui="on"] [data-edulog-dialog="compact"] .modal-dialog{width:calc(100% - 16px);margin:8px auto}}

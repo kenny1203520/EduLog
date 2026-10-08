@@ -1,8 +1,10 @@
+import {comparison,decisionResult,semanticValue} from './review-ui.js'
 const stateLabels = {bind:'可綁定課次',history:'先存歷史',needs:'需要處理',linked:'已綁定',skipped:'已略過'}
 /** Retain list controls and the active draft while filters and async results change. */
 export function createHistoryWorkbench(hooks) {
   const $ = id => document.getElementById(id), make = (tag,text) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; return n }
   const buttons = new Map(),studentGroups=new Map(),enrollmentGroups=new Map(),issueCursors=new Map(),reviewedIssues=new Map(); let items=[], selected='', owner, editorKey=''
+  const listPane=()=> $('history-items').closest('aside')||$('history-items')
   function changed() { hooks.changed() }
   function focusIssue(item,issue) {
     const host=$('history-detail'), target=issue?.target||''
@@ -79,8 +81,10 @@ export function createHistoryWorkbench(hooks) {
     if(item.conflicts?.length) {
       host.append(make('h4','既有報告差異 · 未勾選的欄位保留 EduLog'))
       for(const f of item.conflicts) {
-        const label=make('label'),check=make('input');check.type='checkbox';check.dataset.issueTarget=`conflict:${f}`;check.checked=(r.historyOverwrite||[]).includes(f);label.className='check';label.append(check,make('span',`改用來源「${hooks.labels[f]||f}」：${String(item.occurrence.report[f])} → ${String(item.data[f])}`));host.append(label)
-        check.onchange=()=>{r.historyOverwrite=check.checked?[...new Set([...(r.historyOverwrite||[]),f])]:(r.historyOverwrite||[]).filter(k=>k!==f);r.historyConflictConfirmed=false;hooks.changed()}
+        const source=()=>hooks.diffValue?.(f,item.data[f])??semanticValue(f,item.data[f]),target=()=>hooks.diffValue?.(f,item.occurrence.report[f])??semanticValue(f,item.occurrence.report[f])
+        const card=comparison(document,{label:hooks.labels[f]||f,source:item.data[f],target:item.occurrence.report[f],sourceDisplay:source,targetDisplay:target,text:['content','contact_notes','class_notes'].includes(f)})
+        const label=make('label','處理方式'),choice=make('select');choice.dataset.issueTarget=`conflict:${f}`;choice.add(new Option('保留 EduLog','keep'));choice.add(new Option('採用來源','source'));choice.add(new Option('不同步此欄位','skip'));choice.value=r.syncFieldOverrides?.[f]===false?'skip':(r.historyOverwrite||[]).includes(f)?'source':'keep';label.append(choice);card.append(label);decisionResult(card,choice.value==='source'?source:target,choice.value);host.append(card)
+        choice.onchange=()=>{const decision=choice.value;r.historyFieldDecisions||={};r.historyFieldDecisions[f]=decision;r.syncFieldOverrides||={};r.syncFieldOverrides[f]=decision!=='skip';r.historyOverwrite=(r.historyOverwrite||[]).filter(key=>key!==f);if(decision==='source')r.historyOverwrite.push(f);r.historyConflictConfirmed=false;decisionResult(card,decision==='source'?source:target,decision);hooks.changed()}
       }
       const confirm=make('button','已核對差異，依上述選擇列入摘要');confirm.type='button';confirm.dataset.issueTarget='conflict-confirm';confirm.onclick=()=>{r.historyConflictConfirmed=true;hooks.recheck()};host.append(confirm)
     }
@@ -96,7 +100,6 @@ export function createHistoryWorkbench(hooks) {
     const skip=make('button',r.sourceSkipped?'取消略過':'略過此份紀錄');skip.type='button';skip.onclick=()=>{r.sourceSkipped=!r.sourceSkipped;hooks.recheck()};actions.append(only,retry,skip);host.append(actions)
     for(const [index,control] of [...host.querySelectorAll('button,input,select,textarea,summary,a')].entries())control.dataset.focusKey||=`${item.key}:${control.dataset.issueTarget||control.dataset.reviewKey||control.name||control.closest('[data-review-field]')?.dataset.reviewField||index}:${control.tagName}`
   }
-  function appendPlainDiff(host,before,after){const p=make('p');p.className='text-diff';let start=0;while(start<before.length&&start<after.length&&before[start]===after[start])start++;let suffix=0;while(suffix<before.length-start&&suffix<after.length-start&&before[before.length-1-suffix]===after[after.length-1-suffix])suffix++;if(start)p.append(document.createTextNode(before.slice(0,start)));const del=make('del',before.slice(start,before.length-suffix)||'（空白）'),ins=make('ins',after.slice(start,after.length-suffix)||'（空白）');del.setAttribute('aria-label','刪除內容');ins.setAttribute('aria-label','新增內容');p.append(del,ins);if(suffix)p.append(document.createTextNode(before.slice(before.length-suffix)));p.setAttribute('aria-label','文字差異；顯示刪除與新增內容');host.append(p)}
   function renderBatchReview() {
     const host=$('history-batch-review');if(!host)return
     const conflicts=items.filter(item=>item.conflicts?.length)
@@ -106,7 +109,7 @@ export function createHistoryWorkbench(hooks) {
     const details=make('details'),summary=make('summary',`批次核對差異 · ${new Set(conflicts.map(item=>item.key)).size} 份報告`);details.append(summary,make('p','按欄位查看來源與 EduLog 差異；決策只套用於本次工作，可再逐份調整。'))
     const fields=[...new Set(conflicts.flatMap(item=>item.conflicts))]
     for(const field of fields){const affected=conflicts.filter(item=>item.conflicts.includes(field)),section=make('section');section.className='history-batch-field';section.append(make('h4',`${hooks.fieldLabel?.(field)||field} · ${affected.length} 份`));
-      for(const item of affected){const row=make('div');row.className='diff history-batch-diff';const source=make('div'),target=make('div');const sourceValue=hooks.diffValue?.(field,item.data[field])??String(item.data[field]??'（空白）'),targetValue=hooks.diffValue?.(field,item.occurrence?.report?.[field])??String(item.occurrence?.report?.[field]??'（空白）');source.append(make('strong','來源'),make('p',sourceValue));target.append(make('strong','EduLog'),make('p',targetValue));row.append(source,target,make('p',`${item.target?.name||item.record.sourceStudentName||'學生未辨識'} · ${item.record.date||'日期待確認'}`));if(typeof item.data[field]==='string'&&typeof item.occurrence?.report?.[field]==='string')appendPlainDiff(row,item.occurrence.report[field],item.data[field]);section.append(row)}
+      for(const item of affected){const row=comparison(document,{label:`${item.target?.name||item.record.sourceStudentName||'學生未辨識'} · ${item.record.date||'日期待確認'}`,source:item.data[field],target:item.occurrence?.report?.[field],sourceDisplay:()=>hooks.diffValue?.(field,item.data[field])??semanticValue(field,item.data[field]),targetDisplay:()=>hooks.diffValue?.(field,item.occurrence?.report?.[field])??semanticValue(field,item.occurrence?.report?.[field]),text:['content','contact_notes','class_notes'].includes(field)});row.classList.add('history-batch-diff');section.append(row)}
       const label=make('label','本次工作決策'),choice=make('select');choice.add(new Option('選擇批次處理方式',''));choice.add(new Option('採用來源內容','source'));choice.add(new Option('保留 EduLog','keep'));choice.add(new Option('不同步此欄位','skip'));label.append(choice);const apply=make('button',`套用至 ${affected.length} 份報告`);apply.type='button';apply.disabled=true;const status=make('p');status.setAttribute('role','status');status.setAttribute('aria-live','polite');choice.onchange=()=>apply.disabled=!choice.value;apply.onclick=()=>{const decision=choice.value;for(const item of affected){const r=item.record;r.historyFieldDecisions||={};r.historyFieldDecisions[field]=decision;r.historyOverwrite||=[];r.historyOverwrite=r.historyOverwrite.filter(key=>key!==field);if(decision==='source')r.historyOverwrite.push(field);r.syncFieldOverrides||={};r.syncFieldOverrides[field]=decision!=='skip';if(item.conflicts.every(key=>r.historyFieldDecisions[key]))r.historyConflictConfirmed=true}apply.disabled=true;status.textContent=`已套用至 ${affected.length} 份報告；僅限本次工作。`;hooks.changed();render(items)};section.append(label,apply,status);details.append(section)}
     host.append(details)
   }
@@ -146,13 +149,13 @@ export function createHistoryWorkbench(hooks) {
     $('history-action-count').textContent=`待處理報告 ${pending.length} 份 · 問題 ${issueCount} 項 · 可同步 ${ready} 份`
     if(globalThis.edulogUi){globalThis.edulogUi.text($('history-action-count'),'work.actionSummary',{reports:pending.length,issues:issueCount,ready});globalThis.edulogUi.text($('review-action-summary'),'work.actionSummary',{reports:pending.length,issues:issueCount,ready})}
     $('history-next-issue').disabled=issueCount===0;$('history-next-report').disabled=pending.length===0
-    if(restored){$('history-items').scrollTop=restored.listScroll||0;$('history-editor').scrollTop=restored.editorScroll||0}
-    if(work)work.historyUI={selected,search:$('history-search').value,filter:$('history-filter').value,reason:reasonFilter,listScroll:$('history-items').scrollTop,editorScroll:$('history-editor').scrollTop}
+    if(restored){listPane().scrollTop=restored.listScroll||0;$('history-editor').scrollTop=restored.editorScroll||0}
+    if(work)work.historyUI={selected,search:$('history-search').value,filter:$('history-filter').value,reason:reasonFilter,listScroll:listPane().scrollTop,editorScroll:$('history-editor').scrollTop}
   }
   for(const id of ['history-search','history-filter','history-reason'])$(id)?.addEventListener(id.endsWith('search')?'input':'change',()=>{selected='';render(items);hooks.uiChanged?.()})
   $('history-back').onclick=()=>{$('history-workbench').dataset.mobileView='list';buttons.get(selected)?.focus({preventScroll:true})}
   $('history-next-issue').onclick=selectNextIssue;$('history-next-report').onclick=selectNextReport
-  for(const id of ['history-items','history-editor'])$(id).addEventListener('scroll',()=>{if(owner?.historyUI)owner.historyUI[id==='history-items'?'listScroll':'editorScroll']=$(id).scrollTop})
+  for(const [pane,key] of [[listPane(),'listScroll'],[$('history-editor'),'editorScroll']])pane.addEventListener('scroll',()=>{if(owner?.historyUI)owner.historyUI[key]=pane.scrollTop})
   function capture(){const pane=$('history-editor');return {position:pane.scrollTop,page:window.scrollY,key:document.activeElement?.dataset.focusKey,expanded:new Set([...pane.querySelectorAll('details[open]')].map(d=>d.dataset.reviewKey).filter(Boolean))}}
   return {render,capture,updateStatus:(next=items)=>{render(next);const item=items.find(i=>i.key===selected),host=$('history-detail');if(!item||editorKey!==selected)return;const state=host.querySelector('[data-history-state]'),reason=host.querySelector('[data-history-reason]');if(state)state.textContent=`${item.target?.courseName||item.record.sourceCourseLabel||'課程待確認'} · ${stateLabels[item.category]}`;if(reason)reason.textContent=item.reason;renderIssues(host.querySelector('[data-history-issues]'),item)},refreshEditor:(next=items,saved=capture())=>{const pane=$('history-editor');editorKey='';render(next);for(const detail of pane.querySelectorAll('details'))if(detail.dataset.reviewKey&&saved.expanded.has(detail.dataset.reviewKey))detail.open=true;pane.scrollTop=saved.position;window.scrollTo(0,saved.page);if(saved.key)[...pane.querySelectorAll('[data-focus-key]')].find(c=>c.dataset.focusKey===saved.key)?.focus({preventScroll:true})},items:()=>items}
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 import { retryHistoryWork } from '../workspace-model.js'
-const source=readFileSync(new URL('../history-workbench.js',import.meta.url),'utf8').replace('export function','function')
+const source=readFileSync(new URL('../review-ui.js',import.meta.url),'utf8').replaceAll('export function','function')+'\n'+readFileSync(new URL('../history-workbench.js',import.meta.url),'utf8').replace(/^import[^\n]*\n/,'').replace('export function','function')
 function fixture() {
  const dom=new JSDOM('<section id="history-workbench"><p id="history-action-count"></p><button id="history-next-issue"></button><button id="history-next-report"></button><input id="history-search"><select id="history-filter"><option value="needs">待處理</option><option value="all">全部</option></select><div id="history-batch-review"></div><div id="history-items"></div><div id="history-editor"><button id="history-back">返回</button><div id="history-detail"></div></div><p id="history-empty"></p><p id="history-sync-summary"></p></section>',{runScripts:'outside-only'})
  const w=dom.window;w.scrollTo=()=>{};w.currentWork={id:'work'};w.hookCounts={changed:0,uiChanged:0,recheck:0};w.eval(source+';window.view=createHistoryWorkbench({work:()=>currentWork,changed:()=>{hookCounts.changed++;window.view?.updateStatus()},uiChanged:()=>hookCounts.uiChanged++,recheck:()=>hookCounts.recheck++,labels:{},fields:(host)=>{const detail=host.ownerDocument.createElement("details");detail.dataset.reviewKey="mapping:attendance";detail.innerHTML="<summary>Mapping</summary><input value=kept>";host.append(detail)}})')

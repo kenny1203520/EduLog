@@ -64,7 +64,7 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
   function mount(groups, cards) {
     const previousEntry = entries.find(e => e.key === selected), sameWork = restoredWork === work().id
     if (sameWork && selected) scrolls[selected] = $('mapping-editor-pane').scrollTop
-    const editorScroll = sameWork ? $('mapping-editor-pane').scrollTop : 0, listScroll = sameWork ? $('mapping-items').scrollTop : 0
+    const editorScroll = sameWork ? $('mapping-editor-pane').scrollTop : 0, listScroll = sameWork ? ($('mapping-items').closest('aside')||$('mapping-items')).scrollTop : 0
     entries = []
     const old = work().mappingView || {}
     if (!sameWork) { buttons.clear(); pinCurrent = true; section = ['courses','admissions'].includes(old.section) ? old.section : 'courses'; selected = old.selected || ''; mobileEditor = old.mobileEditor || false; scrolls = old.scrolls || {}; listScrolls = old.listScrolls || {}; listWindows = old.listWindows || {}; sections = old.sections || {}; $('mapping-search').value = old.search || ''; $('mapping-filter').value = old.filter || sections[section]?.filter || 'pending'; restoredWork = work().id }
@@ -88,8 +88,8 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
     refresh()
     if (!selected && !viewport.matches) choose(entries.find(e => visible(e))?.key || '')
     refresh()
-    $('mapping-editor-pane').scrollTop = selected === previousEntry?.key && sameWork ? editorScroll : scrolls[selected] || 0
-    $('mapping-items').scrollTop = sameWork ? listScroll : listScrolls[section] || 0
+    $('mapping-editor-pane').scrollTop = selected === previousEntry?.key && sameWork ? editorScroll : scrolls[selected] || 0;
+    ($('mapping-items').closest('aside')||$('mapping-items')).scrollTop = sameWork ? listScroll : listScrolls[section] || 0
   }
   function targetSummary(entry) {
     const box = entry.panel.querySelector('.selected-target'); if (!box) return
@@ -146,7 +146,7 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
   }
   for (const b of document.querySelectorAll('[data-mapping-section]')) b.addEventListener('click', () => {
     if (section === b.dataset.mappingSection) return
-    listScrolls[section] = $('mapping-items').scrollTop
+    listScrolls[section] = ($('mapping-items').closest('aside')||$('mapping-items')).scrollTop
     if (selected) scrolls[selected] = $('mapping-editor-pane').scrollTop
     sections[section] = { selected, search: $('mapping-search').value, filter: $('mapping-filter').value }
     section = b.dataset.mappingSection
@@ -157,7 +157,7 @@ export function createMappingView({ work, context, settingsUrl, changed, querySt
     const restored = entries.find(e => e.key === previous.selected && e.section === section)
     if (restored || !viewport.matches) choose(restored?.key || entries.find(e => visible(e))?.key || '')
     if (viewport.matches) mobileEditor = false
-    refresh(); $('mapping-items').scrollTop = listScrolls[section] || 0
+    refresh(); ($('mapping-items').closest('aside')||$('mapping-items')).scrollTop = listScrolls[section] || 0
     save()
   })
   $('mapping-search').addEventListener('input', () => { pinCurrent = false; refresh(); save() })

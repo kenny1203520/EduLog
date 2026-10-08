@@ -62,6 +62,13 @@
     'assistant.native': ['原站表單', 'Source form'],
     'assistant.tab': ['EduLog 預填', 'EduLog prefill'],
     'assistant.title': ['EduLog 報告助手', 'EduLog report assistant'],
+    'work.previewRefresh':['更新差異','Refresh differences'],
+    'work.applyBatches':['確認並分批匯入','Confirm and import batches'],
+    'work.sourceChoice':['來源分頁 · 查看／修改','Source tab · view / change'],
+    'work.conflictHelp':['衝突預設保留 EduLog。勾選改用來源欄位後，必須重新產生差異。','Conflicts keep EduLog values by default. After selecting source values, refresh the preview.'],
+    'work.import1':['1 讀取與核對','1 Read and review'],'work.import2':['2 處理例外','2 Resolve exceptions'],'work.import3':['3 摘要並同步','3 Review and sync'],'work.import4':['4 匯入結果','4 Import results'],
+    'work.prefill1':['1 確認目標','1 Confirm target'],'work.prefill2':['2 選擇報告','2 Choose report'],'work.prefill3':['3 檢查欄位','3 Review fields'],'work.prefill4':['4 套用至原站','4 Apply to source'],
+    'work.state.collected':['已讀取，待核對','Read; review required'],'work.state.collecting':['正在讀取','Reading…'],'work.state.reviewing':['正在核對','Reviewing…'],'work.state.previewed':['摘要待確認','Summary requires confirmation'],'work.state.applying':['正在寫入','Writing…'],'work.state.paused':['已暫停','Paused'],'work.state.failed':['需要處理','Needs attention'],'work.state.outcome_unknown':['寫入結果待核對','Write outcome requires verification'],'work.state.partial_complete':['部分完成','Partially complete'],'work.state.complete':['已核驗完成','Verified complete'],'work.state.pending_confirm':['待人工送出／待確認','Manual submission required'],'work.state.cancelled':['已取消剩餘工作','Remaining work cancelled'],
     'flow.importStep1':['讀取每筆報名全部可讀歷史，可自行縮小日期範圍。','Read all accessible enrollment history, or choose a date range.'],
     'flow.importStep2':['沿用有效對應，只處理身份、日期、教材及覆寫例外。','Reuse valid matches and resolve identity, date, lesson, and overwrite exceptions.'],
     'flow.importStep3':['查看摘要後確認同步；寫入中斷可核對並續傳。','Review the summary and confirm sync. Interrupted writes can be checked and resumed.'],
@@ -74,7 +81,7 @@
   const normalize = value => value === 'en' ? 'en' : 'zh-TW'
   function t(key, params = {}) {
     const entry = catalog[key]
-    return String(entry ? entry[locale === 'en' ? 1 : 0] : key).replace(/\{(\w+)\}/g, (_, name) => String(params[name] ?? ''))
+    return String(entry ? entry[locale === 'en' ? 1 : 0] : key).replace(/\{(\w+)\}/g, (_, name) => typeof params[name]==='number' ? new Intl.NumberFormat(locale).format(params[name]) : String(params[name] ?? ''))
   }
   function text(el, key, params = {}, attr) {
     if (!el) return el
@@ -85,8 +92,14 @@
   function bind(root) { for (const el of root.querySelectorAll('[data-i18n]')) text(el, el.dataset.i18n, {}, el.dataset.i18nAttr) }
   function setLocale(value) {
     const next = normalize(value), changed = next !== locale; locale = next
+    // Capture geometry before translated labels change wrapping. Keep the actual
+    // controls, focus and selection; restore scroll after compatibility observers.
+    const positions=[],collect=root=>{for(const el of root?.querySelectorAll?.('*')||[]){if(el.scrollTop||el.scrollLeft)positions.push([el,el.scrollTop,el.scrollLeft]);if(el.shadowRoot)collect(el.shadowRoot)}}
+    if(changed)collect(globalThis.document)
+    const pageY=globalThis.scrollY||0,pageX=globalThis.scrollX||0
     for (const [el, binding] of bindings) { if (!el.isConnected) { bindings.delete(el); continue } update(el, binding) }
     if (changed) for (const listener of listeners) listener(locale)
+    if(changed&&globalThis.requestAnimationFrame)requestAnimationFrame(()=>requestAnimationFrame(()=>{if(locale!==next)return;for(const [el,top,left] of positions)if(el.isConnected){el.scrollTop=top;el.scrollLeft=left}globalThis.scrollTo?.({top:pageY,left:pageX,behavior:'instant'})}))
   }
   async function saveLocale(value) {
     setLocale(value)

@@ -480,7 +480,7 @@ export function createMappingController(hooks) {
   $('reread-source').addEventListener('click',()=>void run(async()=>{
     const activeWork=work(),fresh=await hooks.rereadSource();if(work()!==activeWork||fresh.classId!==work().snapshot.classId||fresh.sourceOrigin!==work().snapshot.sourceOrigin||fresh.sourcePath!==work().snapshot.sourcePath)throw new Error('來源已改變，未修改目前工作。')
     const focus=document.activeElement,focusId=focus?.id,range=['text','search','textarea'].includes(focus?.type)?[focus.selectionStart,focus.selectionEnd]:null
-    const position={page:window.scrollY,editor:$('mapping-editor-pane').scrollTop,list:$('mapping-items').scrollTop}
+    const position={page:window.scrollY,editor:$('mapping-editor-pane').scrollTop,list:($('mapping-items').closest('aside')||$('mapping-items')).scrollTop}
     const courseChoices=new Map(groups.map((g,i)=>[g.key,{value:$(`source-course-${i}`).value,subject:$(`subject-${i}`).value,stage:$(`stage-${i}`).value}]))
     const values=new Map(work().snapshot.records.filter(r=>r.kind==='enrollment').map(r=>[r.source_id,studentSelect(r)?.value]));let changedIdentities=0
     for(const old of work().snapshot.records){
@@ -496,7 +496,7 @@ export function createMappingController(hooks) {
     const choices=[...$('mapping').querySelectorAll('input,select,textarea')].filter(n=>n.id&&!/^(source-course|subject|stage)-/.test(n.id)).map(n=>({id:n.id,value:n.value,checked:n.checked})),seen=new Set()
     for(const [i,g]of groupCourses(work().snapshot.records).entries()){const previous=courseChoices.get(g.key);if(previous)for(const key of ['value','subject','stage'])choices.push({id:key==='value'?`source-course-${i}`:`${key}-${i}`,value:previous[key]})}
     for(const r of work().snapshot.records.filter(r=>r.kind==='enrollment')){const id=r.student_source_id&&!seen.has(r.student_source_id)?`student-${r.student_source_id}`:`student-for-${r.source_id}`;seen.add(r.student_source_id);if(values.get(r.source_id))choices.push({id,value:values.get(r.source_id)})}work().uiState=[...new Map(choices.map(c=>[c.id,c])).values()]
-    await mount();$('mapping-editor-pane').scrollTop=position.editor;$('mapping-items').scrollTop=position.list;window.scrollTo(0,position.page);if(focusId){const current=$(focusId);current?.focus({preventScroll:true});if(range&&current?.setSelectionRange)current.setSelectionRange(...range)}dirty();notice(`來源原文已補讀；${changedIdentities} 筆身份變更需重新確認，原有選擇保留。`)
+    await mount();$('mapping-editor-pane').scrollTop=position.editor;($('mapping-items').closest('aside')||$('mapping-items')).scrollTop=position.list;window.scrollTo(0,position.page);if(focusId){const current=$(focusId);current?.focus({preventScroll:true});if(range&&current?.setSelectionRange)current.setSelectionRange(...range)}dirty();notice(`來源原文已補讀；${changedIdentities} 筆身份變更需重新確認，原有選擇保留。`)
   },{readOnly:true,label:'正在補讀來源摘要與原文'}))
   for(const [id,kind]of[['forget-session','class_session'],['forget-classroom','classroom']])$(id).addEventListener('click',()=>void run(async()=>{if(!await forget([{kind,key:work().snapshot.classId,expected_revision:revision(kind,work().snapshot.classId)}]))return;dirty()},{label:'正在清除對應記憶'}))
   $('remember-destination').addEventListener('click',()=>void run(confirmDestination,{label:'正在保存教室與班級對應'}))
