@@ -35,7 +35,7 @@ try{
         await page.evaluate(()=>{
           document.documentElement.dataset.edulogUi='on'
           const modal=document.createElement('div');modal.id='lesson-report-modal';modal.innerHTML='<div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h4 class="modal-title">測試報告</h4></div><div class="modal-body"><form><div class="row"><div class="col-md-6"><fieldset class="rating"></fieldset></div><div class="col-md-6"><fieldset class="rating"></fieldset></div></div><textarea id="lesson_report_feedback"></textarea><input type="submit" value="更新"></form></div></div></div>';document.body.append(modal)
-          for(const [group,name] of [...modal.querySelectorAll('.rating')].entries())for(let score=1;score<=10;score++){const radio=document.createElement('input');radio.type='radio';radio.name=`admission_lesson_report[${group?'order_rating':'participation_rating'}]`;radio.value=String(score);const label=document.createElement('label');if(score%2)label.className='half';label.setAttribute('for',`rating-${group}-${score}`);radio.id=`rating-${group}-${score}`;group.append(radio,label)}
+          for(const [index,group] of [...modal.querySelectorAll('.rating')].entries())for(let score=1;score<=10;score++){const radio=document.createElement('input');radio.type='radio';radio.name=`admission_lesson_report[${index?'order_rating':'participation_rating'}]`;radio.value=String(score);const label=document.createElement('label');if(score%2)label.className='half';label.setAttribute('for',`rating-${index}-${score}`);radio.id=`rating-${group}-${score}`;group.append(radio,label)}
           window.pageEnhancement=edulogSiteAdapter.enhancePage(document)
           window.dialogEnhancement=edulogSiteAdapter.enhanceDialog(document,{})
         })
@@ -48,7 +48,7 @@ try{
         for(const rating of await page.locator('[data-edulog-rating-stars]').all()){
           const box=await rating.boundingBox(),halves=await rating.locator('[data-edulog-rating-half]').all()
           assert.ok(box&&box.height>=30,`${channel} ${width}: rating has a containing block`)
-          for(const half of halves){const hb=await half.boundingBox();assert.ok(hb.y>=box.y-1&&hb.bottom<=box.y+box.height+1,`${channel} ${width}: half star stays inside rating`)}
+          for(const half of halves){const hb=await half.boundingBox();assert.ok(hb.y>=box.y-1&&hb.y+hb.height<=box.y+box.height+1,`${channel} ${width}: half star stays inside rating`)}
         }
         const select=page.locator('.edulog-rating-control select').first(),selectBox=await select.boundingBox(),ratingBox=await page.locator('[data-edulog-rating-stars]').first().boundingBox()
         assert.ok(selectBox.y>=ratingBox.y+ratingBox.height-1,`${channel} ${width}: numeric score does not overlap stars`)

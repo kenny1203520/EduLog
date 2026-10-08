@@ -27,7 +27,7 @@ for (const [browserName, executablePath] of executables) {
   const browser = await chromium.launch({ headless: true, executablePath })
   try {
     for (const state of ['not-connected', 'pending', 'connected', 'unavailable']) {
-      const page = await browser.newPage({ viewport: { width: 360, height: 600 } })
+      const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 360, height: 600 } })
       await page.setContent(read('../popup.html').replace('</head>', `<style>${read('../popup.css')}</style></head>`))
       await page.evaluate(state => {
         window.chrome = {
@@ -35,7 +35,7 @@ for (const [browserName, executablePath] of executables) {
           runtime: { sendMessage: async data => data.type === 'get-edulog-installation' ? { installation_id: '11111111-1111-4111-8111-111111111111', device_name: '教室筆電', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' } : data.type === 'get-ui-preferences' ? { enabled: true } : { status: state, deviceName: '教室筆電 · Chrome', origin: 'http://localhost:5173', settingsUrl: 'http://localhost:5173/dashboard/settings?tab=integrations', lastVerifiedAt: new Date().toISOString() } },
         }
       }, state)
-      for (const file of ['runtime-bridge.js', 'connection-ui.js', 'integration-ui.js', 'popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
+      for (const file of ['runtime-bridge.js', 'ui-core.js', 'ui-messages.js', 'connection-ui.js', 'integration-ui.js', 'popup.js']) await page.addScriptTag({ content: read(`../${file}`) })
       await page.locator(`[data-state="${state}"]`).waitFor()
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${browserName} popup overflow`)
       await page.screenshot({ path: join(output, `${browserName}-popup-${state}.png`), fullPage: true })
@@ -48,9 +48,9 @@ for (const [browserName, executablePath] of executables) {
       console.log(`${browserName} popup ${state}: passed`)
       await page.close()
     }
-    // 720 CSS px at DPR 2 covers the layout of a 1440 px desktop at 200% zoom.
+    // 720 CSS px at DPR 2 is a layout surrogate; native browser 200% zoom remains pending.
     for (const width of [360, 390, 768, 1024, 1200, 1440, 1920, 720]) for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['overview', '/'], ['class', '/courses/dt/101'], ['reports', '/courses/dt/101/lesson_reports'], ['classes','/courses/dt'], ['history','/dt_admissions/301'], ['calendar','/calendar'], ['unfilled','/admissions/month_unfilled_report'], ['unfilled-current','/admissions/unfilled_report'], ['report-editor','/dt_admissions/301/reports/401/edit']]) {
-      const page = await browser.newPage({ viewport: { width, height: width === 720 ? 500 : 1000 }, deviceScaleFactor: width === 720 ? 2 : 1 })
+      const page = await browser.newPage({ locale:'zh-TW', viewport: { width, height: width === 720 ? 500 : 1000 }, deviceScaleFactor: width === 720 ? 2 : 1 })
       let fixture = read(`fixtures/${name}.html`)
       if (name === 'calendar') fixture = fixture.replace('<form method="get">','<div class="row"><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-09-21">前一週</a></div><div class="col-sm-8"><form method="get"><div class="row"><div class="col-sm-7">').replace('<input type="submit"','</div><div class="col-sm-3"><input type="submit"').replace('</form>','</div></div></form></div><div class="col-sm-2"><a class="btn" href="/calendar?date=2026-10-05">下一週</a></div></div>')
       fixture = fixture.replace('</head>', `<style>${nativeCss}</style><style>${css}</style></head>`)
@@ -61,7 +61,7 @@ for (const [browserName, executablePath] of executables) {
       })
       await page.addScriptTag({ content: read('../adapters/orange-apple-workflows.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple.js') })
-      await page.addScriptTag({ content: read('../runtime-bridge.js') })
+      await page.addScriptTag({ content: read('../runtime-bridge.js') });await page.addScriptTag({ content: read('../ui-core.js') });await page.addScriptTag({ content: read('../ui-messages.js') })
       await page.addScriptTag({ content: read('../bootstrap.js') })
       await page.addScriptTag({ content: read('../connection-ui.js') })
       await page.addScriptTag({ content: read('../integration-ui.js') })

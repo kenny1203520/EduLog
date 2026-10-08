@@ -18,7 +18,7 @@ try{
   const browser=await chromium.launch({channel,headless:true})
   try{
    for(const width of [360,390,768,1024,1200,1440,1920]){
-    const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
+    const page=await browser.newPage({locale:'zh-TW',viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message))
     await page.goto(url);await page.addStyleTag({content:'.modal{z-index:1050}'});await page.addScriptTag({url:new URL('/source-date.js',url).href});await page.addScriptTag({url:new URL('/field-mappings.js',url).href});await page.addScriptTag({url:new URL('/field-mapping-ui.js',url).href});await page.addScriptTag({url:new URL('/adapters/orange-apple-integration.js',url).href})
     await page.evaluate(()=>{
      const a=document.querySelector('#reports a');a.addEventListener('click',e=>e.preventDefault());a.click()
@@ -41,7 +41,7 @@ try{
       return{data:{reports:[],items:[],next_cursor:null}}
      }}
     })
-    await page.addScriptTag({url:new URL('/editor-prefill.js',url).href})
+    await page.addScriptTag({url:new URL('/ui-core.js',url).href});await page.addScriptTag({url:new URL('/ui-messages.js',url).href});await page.addScriptTag({url:new URL('/editor-prefill.js',url).href})
     const helper=page.locator('aside[data-edulog-owned]'),shadow=selector=>helper.locator(selector)
     if(width<1200){await page.locator('.edulog-editor-native').waitFor({state:'visible'});await page.locator('button[data-view=assistant]').click()}
     const openGroups=()=>helper.evaluate(n=>n.shadowRoot.querySelectorAll('.field-group').forEach(d=>d.open=true))
@@ -83,6 +83,12 @@ try{
     await page.waitForFunction(()=>document.querySelector('aside').shadowRoot.querySelector('[data-key=content]')?.value==='助手草稿\n保留段落'&&document.querySelector('aside').shadowRoot.activeElement?.dataset.key==='content')
     const restored=await helper.evaluate(n=>({scroll:n.scrollTop,start:n.shadowRoot.activeElement.selectionStart,end:n.shadowRoot.activeElement.selectionEnd}))
     assert.deepEqual(restored,recheck)
+    await page.evaluate(()=>edulogUi.setLocale('en'))
+    await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
+    assert.equal(await shadow('.refresh').textContent(),'Recheck')
+    assert.equal(await shadow('[data-key=content]').inputValue(),'助手草稿\n保留段落')
+    assert.deepEqual(await helper.evaluate(n=>({scroll:n.scrollTop,start:n.shadowRoot.activeElement.selectionStart,end:n.shadowRoot.activeElement.selectionEnd})),recheck)
+    await page.evaluate(()=>edulogUi.setLocale('zh-TW'))
     await openGroups()
     if(width===390){
       await page.evaluate(()=>{delayDetails=true;const root=document.querySelector('aside').shadowRoot,buttons=[...root.querySelectorAll('.result .choice')];buttons[1].click();buttons[0].click()})

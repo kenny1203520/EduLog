@@ -160,6 +160,13 @@ try {
       try { await page.locator('#preview-section').waitFor({state:'visible',timeout:5000}) }
       catch { throw new Error(`${name} ${width}: preview did not render; review=${await page.locator('#review-301').isChecked()} notice=${await page.locator('#notice').textContent()} diagnostics=${await page.locator('#diagnostic').textContent()} operation=${await page.locator('#operation-detail').textContent()} calls=${JSON.stringify(await page.evaluate(()=>testCalls.slice(-8)))}`) }
       assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,`${name} ${width}: preview overflow`)
+      await page.evaluate(()=>{window.previewNode=document.querySelector('#diff-list');window.nativeDraftNode=document.querySelector('#status-301')})
+      await page.locator('[data-flow=prefill]').click();await page.locator('[data-flow=import]').click()
+      assert.equal(await page.locator('#preview-section').isVisible(),true,'return to the actual preview stage')
+      assert.equal(await page.evaluate(()=>previewNode===document.querySelector('#diff-list')&&nativeDraftNode===document.querySelector('#status-301')),true,'flow switching keeps controls and preview nodes')
+      await page.evaluate(()=>edulogUi.setLocale('en'));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
+      assert.equal(await page.locator('#apply').textContent(),'Confirm and import batches')
+      await page.evaluate(()=>edulogUi.setLocale('zh-TW'));await page.evaluate(()=>new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))))
       await page.screenshot({path:new URL(`${name}-${width}-import.png`,output).pathname.replace(/^\//,'')})
       await page.locator('#apply').click(); await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('已核對'))
       assert.equal(await page.evaluate(()=>testCalls.filter(m=>m.operation==='apply').length),1)

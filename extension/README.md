@@ -1,6 +1,12 @@
 # EduLog Teaching Systems extension
 
-## Current workspace build: student review and localization (0.1.0)
+## Current build: teaching on the source site, synchronization in the workspace (0.1.0)
+
+This rebuild covers the popup, contextual toolbar, all 12 supported source page types, the report assistant, workspace and pairing/device entry. Review exceptions in a single list/editor, then confirm one sync summary. Steps reflect actual review and transaction evidence. Shared Traditional Chinese/English preferences update extension controls in place; source text stays unchanged. Differences show source/EduLog sides and paragraph changes; outcomes and resumable records distinguish verified writes from pending review.
+
+Use `extension/dist/EduLog-Teaching-Tools-0.1.0-workflow-redesign.zip`. This interface update needs **no new migration or endpoint**; existing API/database capabilities remain required. Future database changes start at **1000130**, skipping 1000128/1000129. Validation and pending real-site/native-zoom checks are documented in [workflow redesign acceptance](tests/ACCEPTANCE-workflow-redesign.md). Version remains **0.1.0**; the extension never submits the source teaching form.
+
+## Previous build: student review and localization (0.1.0)
 
 This update adds student-level history grouping, temporary exact-name groups when source student IDs are missing, explicit admission splitting, course/material review before enrollment confirmation, and Traditional Chinese/English workspace localization. It reuses the current API, database and import contract; **no new migration or endpoint is required**. Use `extension/dist/EduLog-Teaching-Tools-0.1.0-student-review-i18n.zip`, reload the extension and recheck pairing. The manifest stays **0.1.0**. Automated results and pending live checks are in `tests/ACCEPTANCE-student-review-i18n.md`.
 
