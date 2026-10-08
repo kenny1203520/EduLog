@@ -3,7 +3,7 @@ export const labels = { student: '學生', course: '課程', class_session: '班
 /** Start a new reconciliation without altering the committed job or its keys. */
 export function retryHistoryWork(previous) {
   const next=structuredClone(previous)
-  for(const key of ['jobId','batches','batchCount','appliedBatchKeys','batchSummaries','serverImportSummary','historyBindings','historySummary','needs','rosterChecks','rosterVerification','rosterCheckError','revision','updatedAt'])delete next[key]
+  for(const key of ['jobId','batches','batchCount','appliedBatchKeys','batchSummaries','serverImportSummary','historyBindings','historySummary','needs','blockedRows','rosterChecks','rosterVerification','rosterCheckError','revision','updatedAt'])delete next[key]
   Object.assign(next,{id:crypto.randomUUID(),parentWorkId:previous.id,status:'collected',done:0,previewDirty:true})
   if(next.history)next.history={paths:next.snapshot.admissionPaths||next.history.paths,next:0}
   return next
@@ -63,6 +63,7 @@ export function splitBatches(rows, limit = 180000) {
   return batches
 }
 export function workspaceErrorMessage(error) {
+  if (error.code === 'IMPORT_DEPENDENCIES_UNAVAILABLE') return globalThis.edulogUi?.t('error.importDependenciesUnavailable') || '目前連線的 EduLog 尚不能安全核對跨批次報名關係。請重新檢查連線後重試；待處理資料仍保留。'
   if (error.code === 'VERSION_CONFLICT') return '對應或目標已變更。請按「重新檢查對應記憶」，核對後再確認。'
   if (error.code === 'VALIDATION_FAILED') {
     const details = Object.values(error.fields || {}).flat()

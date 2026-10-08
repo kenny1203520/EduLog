@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
-import { splitBatches, validateBatches } from '../workspace-model.js'
+import { labels, splitBatches, validateBatches } from '../workspace-model.js'
 import { bindingStillMatches } from '../history-sync.js'
 
 // Exercise the real preview orchestration with isolated API/storage effects.
@@ -34,7 +34,7 @@ test('a late binding response cannot update a changed work context',async()=>{
 const row = n => ({source_id:String(n),target_id:`target-${n}`,overwrite:[],record:{kind:'course',data:{subject:'合成課程',stage:'初階'}}})
 function previewFixture(work, rows) {
   const calls=[],saved=[],controls={apply:{disabled:false}}
-  const context=vm.createContext({work,rows,splitBatches,validateBatches,integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
+  const context=vm.createContext({work,rows,labels,splitBatches,validateBatches,crypto:{randomUUID:(()=>{let n=0;return()=>`new-key-${++n}`})()},integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
     calls.push({operation,body:structuredClone(body),extra})
     if(operation==='job')return{id:'new-job'}
     if(operation==='preview'){
@@ -94,4 +94,28 @@ test('malformed legacy batches stop before the API and are never silently normal
   const original=JSON.stringify(current),f=previewFixture(current,[])
   await assert.rejects(f.preview(true),e=>e.code==='DUPLICATE_SOURCE_IDS')
   assert.equal(JSON.stringify(current),original);assert.equal(f.calls.length,0)
+})
+test('an invalid reference is preserved as a blocked row while the valid rows receive a fresh preview',async()=>{
+  const current=work(),rows=[row(1),row(2)],f=previewFixture(current,rows)
+  const failure=Object.assign(new Error('reference failed'),{code:'INVALID_REFERENCE',fields:{'rows.course.1.lesson_id':['LESSON_COURSE_MISMATCH']}})
+  f.context.failure=failure;f.context.results=[{rows:[{kind:'course',source_id:'2',status:'added',before:{},after:{subject:'A'}}],counts:{added:1}}]
+  await f.preview(false)
+  assert.equal(current.blockedRows.length,1);assert.equal(current.blockedRows[0].source_id,'1')
+  assert.deepEqual(current.batches[0].rows.map(item=>item.source_id),['2'])
+  assert.equal(current.status,'previewed');assert.equal(current.previewDirty,false)
+  assert.equal(f.calls.filter(call=>call.operation==='preview').length,2)
+  assert.equal(f.controls.apply.disabled,false)
+})
+test('history batches carry a fingerprinted dependency on an enrollment batch',async()=>{
+  const current=work(),studentId='student-1',enrollmentId='enrollment-1'
+  const enrollment={source_id:'301',target_id:enrollmentId,overwrite:[],record:{kind:'enrollment',data:{student_id:studentId,course_id:'course',class_session_id:'session'}}}
+  const histories=Array.from({length:52},(_,i)=>({source_id:`history-${i}`,target_id:`history-target-${i}`,overwrite:[],record:{kind:'history_report',data:{enrollment_id:enrollmentId}}}))
+  const rows=[enrollment,...histories],f=previewFixture(current,rows)
+  f.context.results=Array.from({length:2},(_,i)=>({rows:[],counts:{},batch_fingerprint:`${String(i+1).repeat(64)}`}))
+  await f.preview(false)
+  const historyBatches=current.batches.filter(batch=>batch.rows.some(item=>item.record.kind==='history_report'))
+  assert.equal(historyBatches.filter(batch=>batch.dependencies?.length===1).length,1)
+  assert.ok(historyBatches.find(batch=>batch.dependencies?.length===1).dependencies[0].fingerprint==='1'.repeat(64))
+  assert.ok(current.batches[0].rows.some(item=>item.record.kind==='enrollment'))
+  assert.equal(f.calls.filter(call=>call.operation==='preview')[1].body.dependencies[0].fingerprint,'1'.repeat(64))
 })

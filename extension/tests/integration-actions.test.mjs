@@ -186,3 +186,9 @@ test('validation errors have Chinese guidance while original details remain avai
   assert.match(workspaceErrorMessage({...error,fields:{request:['Unrecognized key']}}),/未通過驗證/)
   assert.equal(error.fields.request[0],'Duplicate source IDs')
 })
+test('cross-batch capability errors use the shared localized recovery guidance', () => {
+  const original=globalThis.edulogUi
+  globalThis.edulogUi={t:key=>key==='error.importDependenciesUnavailable'?'localized recovery':'unexpected'}
+  assert.equal(workspaceErrorMessage({code:'IMPORT_DEPENDENCIES_UNAVAILABLE',message:'raw server detail'}),'localized recovery')
+  globalThis.edulogUi=original
+})

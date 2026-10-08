@@ -415,7 +415,20 @@ async function preview(reuse = false) {
     if(!integrationCapabilities.enrollment_history_reports)throw Object.assign(new Error('目前連線未提供歷史保存功能。請重新檢查連線；已讀取資料與檢查點會保留。'),{code:'CAPABILITY_UNAVAILABLE'})
     await refreshHistoryPlan()
     const batches = splitBatches(prepareRows(), batchBytes)
+    const batchWithEnrollment = new Map()
+    for (const batch of batches) for (const row of batch.rows) if (row.record?.kind === 'enrollment') batchWithEnrollment.set(row.target_id, batch)
+    const dependent = new Map(batches.map(batch => [batch, batch.rows.some(row => row.record?.kind === 'history_report' && batchWithEnrollment.get(row.record.data.enrollment_id) && batchWithEnrollment.get(row.record.data.enrollment_id) !== batch) ? 1 : 0]))
+    batches.sort((a,b) => dependent.get(a)-dependent.get(b))
+    for (const batch of batches) {
+      const dependencies = new Map()
+      for (const row of batch.rows) if (row.record?.kind === 'history_report') {
+        const parent = batchWithEnrollment.get(row.record.data.enrollment_id)
+        if (parent && parent !== batch) dependencies.set(parent.key, parent)
+      }
+      if (dependencies.size) batch.dependencies = [...dependencies.values()].map(parent => ({ key: parent.key, fingerprint: parent.previewFingerprint || '' }))
+    }
     if (!batches.length) {renderNoopSummary();return}
+    work.blockedRows = []
     work.previewDirty = true; previewResults = []; $('apply').disabled = true
     if (work.jobId) await api('job-status', { status: 'cancelled' }, { jobId: work.jobId })
     const job = await api('job', { source_origin: work.snapshot.sourceOrigin, source_class_id: work.snapshot.classId, date_from: work.dateFrom, date_to: work.dateTo, ...work.destination })
@@ -425,11 +438,41 @@ async function preview(reuse = false) {
   validateBatches(work.batches)
   previewResults = []
   for (let i = work.done || 0; i < work.batches.length; i++) {
-    const result = await api('preview', work.batches[i], { jobId: work.jobId })
-    if (result.applied != null) { work.done = i + 1; work.appliedBatchKeys = [...new Set([...(work.appliedBatchKeys || []), work.batches[i].key])]; await save() }
-    else previewResults.push({ ...result, batchIndex: i })
+    const batch = work.batches[i]
+    try {
+      const result = await api('preview', batch, { jobId: work.jobId })
+      if (result.batch_fingerprint) {
+        batch.previewFingerprint = result.batch_fingerprint
+        for (const child of work.batches.slice(i + 1)) if (child.dependencies?.some(ref => ref.key === batch.key)) child.dependencies = child.dependencies.map(ref => ref.key === batch.key ? { key: batch.key, fingerprint: result.batch_fingerprint } : ref)
+        await save()
+      }
+      if (result.applied != null) { work.done = i + 1; work.appliedBatchKeys = [...new Set([...(work.appliedBatchKeys || []), batch.key])]; await save() }
+      else previewResults.push({ ...result, batchIndex: i })
+    } catch (error) {
+      const entry = Object.entries(error.fields || {}).find(([key]) => key.startsWith('rows.'))
+      const parts = entry?.[0].split('.') || []
+      const kind = parts[1], sourceId = parts.slice(2, -1).join('.'), field = parts.at(-1)
+      const rowIndex = kind && sourceId ? batch.rows.findIndex(row => row.record?.kind === kind && row.source_id === sourceId) : -1
+      if (rowIndex < 0 || work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status)) throw error
+      batch.rows.splice(rowIndex, 1)
+      work.blockedRows ||= []
+      work.blockedRows.push({ kind, source_id: sourceId, field, reason: entry[1][0] || 'REFERENCE_CHECK_FAILED' })
+      work.previewDirty = true; $('apply').disabled = true
+      if (batch.rows.length) {
+        const previousKey=batch.key; batch.key = crypto.randomUUID(); delete batch.previewFingerprint
+        const retainedEnrollments=new Set(batch.rows.filter(row=>row.record?.kind==='enrollment').map(row=>row.target_id))
+        for (const child of work.batches.slice(i + 1)) if (child.dependencies?.some(ref => ref.key === previousKey)) {
+          const needsParent=child.rows.some(row=>row.record?.kind==='history_report'&&retainedEnrollments.has(row.record.data.enrollment_id))
+          child.dependencies=needsParent?child.dependencies.map(ref=>ref.key===previousKey?{key:batch.key,fingerprint:''}:ref):child.dependencies.filter(ref=>ref.key!==previousKey)
+        }
+        i--
+      }
+      else work.batches.splice(i--, 1)
+      await save()
+      notice(globalThis.edulogUi?.t('work.previewBlockedRow',{kind:labels[kind]||kind,sourceId}) || `${labels[kind]||kind} ${sourceId} 需要處理；其他資料繼續核對。`,true)
+    }
   }
-  work.status = 'previewed'; work.previewDirty = false; work.mappingDirty = false; work.batchCount = work.batches.length; await save(); renderDifferences(); notice('差異已更新，請檢查後確認匯入。')
+  work.status = 'previewed'; work.previewDirty = false; work.mappingDirty = false; work.batchCount = work.batches.length; await save(); renderDifferences(); $('apply').disabled=work.batches.length===0; notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : '差異已更新，請檢查後確認匯入。')
 }
 function renderNoopSummary() {
   work.previewEvaluated=true;work.previewDirty=true;previewResults=[];$('apply').disabled=true;show('preview-section');stage('import','repreview')
@@ -459,9 +502,20 @@ function renderDifferences() {
   $('counts').textContent = [...Object.entries(totals).map(([k, v]) => `${labels[k]} ${v}`), `需處理 ${work.needs.length}`].join(' · ')
   const summary=node('section');summary.append(node('h3',`確認本次同步：保存 ${work.batches.flatMap(b=>b.rows).filter(r=>r.record.kind==='history_report').length} 份歷史 · 綁定 ${(work.historyBindings||[]).length} 堂課`),node('p','確認同步後，先保存歷史，再依已核對日期與有效名單綁定課次。未選取覆寫的非空內容保留 EduLog；報名關係不變。'))
   for(const plan of work.historyBindings||[])summary.append(node('p',`${plan.occurrence.class_name} · ${plan.occurrence.occurrence_date} · ${plan.itemKey} · 覆寫 ${plan.body.overwrite.length} 個欄位`))
+  if (work.blockedRows?.length) {
+    const blocked = node('section', undefined, 'notice warning')
+    blocked.setAttribute('role','status'); blocked.setAttribute('aria-live','polite')
+    blocked.append(node('h3',globalThis.edulogUi?.t('work.blockedCount',{count:work.blockedRows.length}) || `待處理來源資料：${work.blockedRows.length} 筆`))
+    blocked.append(node('p',globalThis.edulogUi?.t('work.blockedSummary',{count:work.blockedRows.length}) || '確認後僅同步已核對資料；被阻擋資料會保留。'))
+    for (const issue of work.blockedRows) blocked.append(node('p',`${labels[issue.kind]||issue.kind} · ${issue.source_id} · ${issue.field} · ${issue.reason}`))
+    summary.append(blocked)
+    const applyButton=$('apply'); if(applyButton) globalThis.edulogUi?.text(applyButton,'work.applyEligible')
+  } else {
+    const applyButton=$('apply'); if(applyButton) globalThis.edulogUi?.text(applyButton,'work.applyBatches')
+  }
   $('diff-list').prepend(summary)
   if (work.needs.length) { const d = node('details'); d.append(node('summary', `查看 ${work.needs.length} 項需處理資料`)); work.needs.forEach(text => d.append(node('p', text))); $('diff-list').append(d) }
-  show('preview-section'); stage('import', 'apply'); $('apply').disabled = false
+  show('preview-section'); stage('import', 'apply'); $('apply').disabled = work.batches.length===0 || work.previewDirty===true
 }
 function summarizeImportRows(rows) {
   const result = {}
@@ -547,7 +601,7 @@ async function finalizeImport() {
   work.historySummary={saved:work.batches.flatMap(b=>b.rows).filter(r=>r.record.kind==='history_report').length,linked:(work.historyBindings||[]).filter(b=>b.status==='done').length,skipped:work.snapshot?.records.filter(r=>r.kind==='report'&&r.sourceSkipped).length||0}
   const keys = work.batches.map(batch => batch.key)
   const completed = await api('complete', { expected_batch_keys: keys }, { jobId: work.jobId })
-  work.status = completed.verified === true && !work.needs?.length && !work.historySummary.skipped && !(work.history?.issues||[]).some(i=>i.skipped||i.listFailed||!work.snapshot.records.some(r=>r.kind==='report'&&historyIdentity(r)===historyIdentity(i)&&r.date&&r.sourceReadStatus!=='failed')) ? 'complete' : 'partial_complete'
+  work.status = completed.verified === true && !work.blockedRows?.length && !work.needs?.length && !work.historySummary.skipped && !(work.history?.issues||[]).some(i=>i.skipped||i.listFailed||!work.snapshot.records.some(r=>r.kind==='report'&&historyIdentity(r)===historyIdentity(i)&&r.date&&r.sourceReadStatus!=='failed')) ? 'complete' : 'partial_complete'
   work.appliedBatchKeys = keys
   try {
     const checks=[...new Map((work.historyBindings||[]).filter(b=>b.status==='done').map(b=>[`${b.occurrence.class_session_id}:${b.occurrence.occurrence_date}`,{session:b.occurrence.class_session_id,date:b.occurrence.occurrence_date,name:b.occurrence.class_name}])).values()]
@@ -600,6 +654,7 @@ async function applyHistoryBindings() {
 }
 async function apply() {
   if (work.previewDirty || !work.jobId) throw new Error('請先更新差異。')
+  if (work.blockedRows?.length && !window.confirm(globalThis.edulogUi?.t('work.confirmEligible',{count:work.blockedRows.length}) || `仍有 ${work.blockedRows.length} 筆來源資料被阻擋。只同步可處理資料並保留待處理項目？`)) return
   for (const result of previewResults) for (const row of result.rows || []) if (row.kind === 'class_session' && row.status !== 'added' && JSON.stringify(row.before.course_ids) !== JSON.stringify(row.after.course_ids)) {
     const batchRow = work.batches[result.batchIndex].rows.find(r => r.record.kind === row.kind && r.source_id === row.source_id)
     if (!batchRow?.overwrite.includes('course_ids')) throw new Error('請明確確認「加入班級可上課程」，再更新差異後匯入。')
