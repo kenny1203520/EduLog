@@ -4,7 +4,7 @@
   if (!adapter?.matchesHost(location.hostname)) return
   globalThis.edulogPageController = true
   const boot = globalThis.edulogUiBoot
-  let enabled = false, enhancement, host, suspended = false, timer, resizeObserver, heightState
+  let enabled = false, enhancement, host, toolbarLifecycle, suspended = false, timer, resizeObserver, heightState
   let initialized = false, revision = 0, navigation = 0, needsPreference = false
   let preferenceVisit = null
   let failedPath = null
@@ -40,6 +40,35 @@
     if (element) { element.textContent = text; element.hidden = !text }
   }
 
+  function restoreToolbarHeight(ownerDocument = toolbarLifecycle?.ownerDocument ?? globalThis.document) {
+    if (!heightState) return
+    const html = ownerDocument?.documentElement
+    if (!html) { heightState = null; return }
+    const style = html.style
+    if (heightState.value) style.setProperty('--edulog-toolbar-height', heightState.value, heightState.priority)
+    else style.removeProperty('--edulog-toolbar-height')
+    if (!heightState.hadStyle && !html.getAttribute('style')) html.removeAttribute('style')
+    heightState = null
+  }
+
+  function disposeToolbar(instance = toolbarLifecycle, removeNode = false) {
+    if (!instance || instance.disposed) return
+    instance.disposed = true
+    instance.observer?.disconnect()
+    instance.resizeObserver?.disconnect()
+    const ownerDocument = instance.ownerDocument ?? globalThis.document
+    ownerDocument?.removeEventListener('pointerdown', instance.dismissOutside, true)
+    instance.stopLocale?.()
+    if (removeNode) instance.host?.remove()
+    if (toolbarLifecycle === instance) {
+      toolbarLifecycle = null
+      if (host === instance.host) host = null
+      if (resizeObserver === instance.resizeObserver) resizeObserver = null
+      restoreToolbarHeight(ownerDocument)
+      ownerDocument?.documentElement?.removeAttribute('data-edulog-nav-open')
+    }
+  }
+
   function teardown(keepDialog = false, keepToolbar = false) {
     cancelFrame(timer)
     timer = null
@@ -47,26 +76,24 @@
     enhancement?.restore()
     enhancement = null
     if (keepToolbar) return
-    host?.stopLocale?.(); host?.remove()
+    disposeToolbar(toolbarLifecycle, true)
     host = null
     resizeObserver?.disconnect()
     resizeObserver = null
-    if (heightState) {
-      const style = document.documentElement.style
-      if (heightState.value) style.setProperty('--edulog-toolbar-height', heightState.value, heightState.priority)
-      else style.removeProperty('--edulog-toolbar-height')
-      if (!heightState.hadStyle && !document.documentElement.getAttribute('style')) document.documentElement.removeAttribute('style')
-      heightState = null
-    }
+    restoreToolbarHeight()
     document.documentElement.removeAttribute('data-edulog-nav-open')
   }
   function toolbar(page) {
     const ownerDocument = document
-    host = document.createElement('div')
-    host.id = 'edulog-extension-root'
-    host.dataset.edulogOwned = ''
-    host.dataset.enabled = String(enabled)
-    const root = host.attachShadow({ mode: 'open' })
+    const toolbarHost = document.createElement('div')
+    host = toolbarHost
+    toolbarHost.id = 'edulog-extension-root'
+    toolbarHost.dataset.edulogOwned = ''
+    toolbarHost.dataset.enabled = String(enabled)
+    const root = toolbarHost.attachShadow({ mode: 'open' })
+    const instance = { host: toolbarHost, root, ownerDocument, disposed: false, observer: null, resizeObserver: null, dismissOutside: null, stopLocale: null }
+    toolbarLifecycle = instance
+    const isCurrent = () => !instance.disposed && toolbarLifecycle === instance && toolbarHost.isConnected && toolbarHost.shadowRoot === root
     root.innerHTML = `<style>
       :host{all:initial;position:fixed;inset:0 0 auto;z-index:1040;color:#172033;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
       *{box-sizing:border-box}button{font:inherit;cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#334155}
@@ -90,7 +117,7 @@
     const preferenceTitle=document.createElement('summary');preferenceTitle.textContent='設定';preferences.append(preferenceTitle)
     const themeToggle=document.createElement('button');themeToggle.type='button';themeToggle.className='toggle';preferences.append(themeToggle);root.querySelector('.panel').append(preferences)
     if(globalThis.edulogUi){const style=document.createElement('style');style.textContent=globalThis.edulogUi.styles;root.append(style);preferences.append(globalThis.edulogUi.languageSelect());globalThis.edulogUi.text(preferenceTitle,'ui.settings');globalThis.edulogUi.text(root.querySelector('.integration'),'ui.integration');globalThis.edulogUi.text(root.querySelector('.menu'),'ui.navigation')}
-    host.stopLocale=globalThis.edulogUiLegacy?.watch(root)
+    instance.stopLocale=globalThis.edulogUiLegacy?.watch(root)
     const banner = document.createElement('div')
     banner.className = 'notice'
     banner.style.cssText = 'padding:10px 16px;background:#fff7ed;color:#9a3412;max-width:100vw'
@@ -142,7 +169,7 @@
       retry.disabled = true
       try {
         const result = await message({ type: 'get-edulog-integration-status' })
-        if (!host?.isConnected || host.shadowRoot !== root) return
+        if (!isCurrent()) return
         const state = globalThis.edulogConnectionUi.describe(result?.status)
         featureUi.update(result)
         status.textContent = `${state.label}：${state.detail}${result?.origin ? ` ${result.origin}` : ''}${result?.lastVerifiedAt ? ` 最近驗證：${new Date(result.lastVerifiedAt).toLocaleString()}` : ''}`
@@ -152,9 +179,10 @@
         root.querySelector('.settings').hidden = result?.status !== 'connected'
         root.querySelector('.settings').disabled = !result?.settingsUrl
       } catch (error) {
+        if (!isCurrent()) return
         status.textContent = bridge.invalidated ? '通訊已停止；清晰主題與原站操作仍可使用。' : error.message
         retry.hidden = bridge.invalidated
-      } finally { retry.disabled = false }
+      } finally { if (isCurrent()) retry.disabled = false }
     }
     retry.addEventListener('click', () => { void checkConnection() })
     const closePanel = (restoreFocus = false) => {
@@ -170,8 +198,9 @@
     closeButton.addEventListener('click', () => closePanel(true))
     const dismissOutside = event => {
       const path = event.composedPath()
-      if (host.isConnected && !panel.hidden && !path.includes(panel) && !path.includes(integration)) closePanel()
+      if (isCurrent() && !panel.hidden && !path.includes(panel) && !path.includes(integration)) closePanel()
     }
+    instance.dismissOutside = dismissOutside
     ownerDocument.addEventListener('pointerdown', dismissOutside, true)
     integration.addEventListener('click', async () => {
       panel.hidden = !panel.hidden
@@ -181,28 +210,27 @@
       await checkConnection()
     })
     root.querySelector('.settings').addEventListener('click', async () => {
-      const result = await message({ type: 'open-edulog-settings' }).catch(error => { showNotice(error.message); return null })
-      if (!result?.opened) root.querySelector('.status').textContent = '請點選瀏覽器工具列的 EduLog 圖示，設定伺服器並完成配對。'
+      const result = await message({ type: 'open-edulog-settings' }).catch(error => { if (isCurrent()) showNotice(error.message); return null })
+      if (isCurrent() && !result?.opened) root.querySelector('.status').textContent = '請點選瀏覽器工具列的 EduLog 圖示，設定伺服器並完成配對。'
     })
     root.addEventListener('keydown', event => {
       if (event.key === 'Escape' && !panel.hidden) closePanel(true)
     })
-    document.body.append(host)
-    const hostObserver = new MutationObserver(() => {
-      if (host.isConnected) return
-      ownerDocument.removeEventListener('pointerdown', dismissOutside, true)
-      hostObserver.disconnect()
+    document.body.append(toolbarHost)
+    instance.observer = new MutationObserver(() => {
+      if (instance.host.isConnected) return
+      disposeToolbar(instance)
     })
-    hostObserver.observe(document.body, { childList: true, subtree: true })
+    instance.observer.observe(document.body, { childList: true, subtree: true })
     if (enabled) {
       const html = document.documentElement
       heightState = { value: html.style.getPropertyValue('--edulog-toolbar-height'), priority: html.style.getPropertyPriority('--edulog-toolbar-height'), hadStyle: html.hasAttribute('style') }
-      const updateHeight = () => html.style.setProperty('--edulog-toolbar-height', `${Math.max(64, root.querySelector('.bar').getBoundingClientRect().height + banner.getBoundingClientRect().height)}px`)
+      const updateHeight = () => { if (isCurrent()) html.style.setProperty('--edulog-toolbar-height', `${Math.max(64, root.querySelector('.bar').getBoundingClientRect().height + banner.getBoundingClientRect().height)}px`) }
       updateHeight()
       if (typeof ResizeObserver !== 'undefined') {
-        resizeObserver = new ResizeObserver(updateHeight)
-        resizeObserver.observe(root.querySelector('.bar'))
-        resizeObserver.observe(banner)
+        instance.resizeObserver = resizeObserver = new ResizeObserver(updateHeight)
+        instance.resizeObserver.observe(root.querySelector('.bar'))
+        instance.resizeObserver.observe(banner)
       }
     }
   }
