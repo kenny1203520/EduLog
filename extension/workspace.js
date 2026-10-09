@@ -17,11 +17,11 @@ let syncPreferences={fields:{},revision:null},syncDraftOverrides={}
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
-let activeFlow = 'import', continuation = null
+let activeFlow = 'import', continuation = null, unsavedWorkId = ''
 const activeWorks = {import:null,prefill:null}, activeStages = {import:1,prefill:1}
 function currentWorkflow(view) { const identity=work?.type==='import'&&work.snapshot?work.snapshot.records.filter(row=>row.kind==='enrollment'&&!row.sourceSkipped&&!mappingController.validateRow(row,true)).length:0;return workflowState(view,{work:work?.type===view?work:activeWorks[view],form,report,previewCount:previewResults.length,unresolved:identity+historyPlan.filter(item=>item.category==='needs').length}) }
 function taskStatus() {
-  const ui=globalThis.edulogUi;ui?.text($('draft-status'),unsaved?'work.unsaved':work?'work.saved':'work.ready')
+  const ui=globalThis.edulogUi;ui?.text($('draft-status'),unsaved&&unsavedWorkId===work?.id?'work.unsaved':work?'work.saved':'work.ready')
   $('task-title').textContent=work?.title||sourceContext?.title||''
   $('task-status').textContent=work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
   if(work&&ui&&ui.t('work.state.'+work.status)!=='work.state.'+work.status)ui.text($('task-status'),'work.state.'+work.status)
@@ -36,21 +36,37 @@ async function send(message) {
   if (response?.error) { const e = new Error(workspaceErrorMessage(response.error)); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; e.fields = response.error.fields; e.rawMessage = response.error.message; throw e }
   return response?.data
 }
-const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','reconcile','import-info'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
+const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','reconcile','import-info','history-list','history-route'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
 const source = (action, extra = {}) => send({ type: 'workspace-source', action, tabId: Number($('source-tab').value), sourcePath: selectedPath, requestId: activeReadId || undefined, ...extra })
-async function save() {
-  const current = work
-  if(!current)return
-  unsaved=true;taskStatus()
+let saveChain=Promise.resolve(),saveRequestSequence=0
+function save() {
+  const current=work
+  if(!current)return Promise.resolve(false)
+  const request=++saveRequestSequence
+  unsaved=true;unsavedWorkId=current.id;taskStatus()
+  const pending=saveChain.catch(()=>{}).then(()=>persistWork(current,request))
+  saveChain=pending
+  return pending
+}
+async function persistWork(current,request) {
   current.interfaceState={...(current.interfaceState||{}),stage:activeStages[current.type]||1}
   current.revision = (current.revision || 0) + 1
   const revision = current.revision
   const stored = await send({ type: 'workspace-store', action: 'put', work: current })
-  if (work === current && work.revision === revision) {
+  if (work === current && work.revision === revision && stored?.revision === revision) {
     if($('source-picker').dataset.workId!==work.id){$('source-picker').open=false;$('source-picker').dataset.workId=work.id}
-    for (const key of Object.keys(current)) if (!Object.hasOwn(stored, key)) delete current[key]
-    Object.assign(current, stored); unsaved = false;taskStatus()
+    // `put` crosses the extension messaging boundary and returns a structured
+    // clone. Replacing the live snapshot here detaches controls that still
+    // reference its report records. Keep the in-memory graph and copy only
+    // persistence metadata; terminal cleanup is still reflected locally.
+    current.updatedAt = stored.updatedAt
+    current.expiresAt = stored.expiresAt
+    if (!stored.snapshot && ['complete','cancelled'].includes(stored.status)) delete current.snapshot
+    if(request===saveRequestSequence&&unsavedWorkId===current.id){unsaved = false;unsavedWorkId='';taskStatus()}
+    return true
   }
+  if(work===current&&current.revision===revision){const error=new Error(globalThis.edulogUi?.t('error.workConflict')||'工作已在其他分頁更新；目前草稿保留，請重新載入後核對。');error.code='WORK_CONFLICT';throw error}
+  return false
 }
 function captureMappingChoices() {
   work.uiState = [...$('mapping').querySelectorAll('input,select,textarea')].filter(e => e.id).map(e => ({ id: e.id, value: e.value, checked: e.checked }))
@@ -113,10 +129,11 @@ async function cancelRead(updateNotice = true) {
 }
 async function runLatest(action, options = {}) {
   if (busy && activeReadId) { await cancelRead(false); await readFinished }
+  else if(busy){notice('目前有同步或保存作業進行中；完成後再重新核對。');return false}
   return run(action, { readOnly: true, ...options })
 }
 async function run(action, { label = '正在處理工作', readOnly = false } = {}) {
-  if (busy) return
+  if (busy){notice('目前有操作進行中；完成或取消後再試。');return false}
   busy = true; $('workspace').setAttribute('aria-busy', 'true'); const sourceDisabled=$('source-tab').disabled; if(!readOnly)$('source-tab').disabled=true
   const trigger = document.activeElement, previousDisabled = trigger instanceof HTMLButtonElement ? trigger.disabled : false
   if (trigger instanceof HTMLButtonElement) trigger.disabled = true
@@ -140,7 +157,8 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
   }
   catch (error) {
     $('operation-status').dataset.state = 'error'
-    if (!readOnly && work?.status === 'outcome_unknown') { $('operation-title').textContent = '寫入結果尚未確認'; $('operation-detail').textContent = '未收到這批的確認回應。檢查點已保留；續傳會先用原冪等鍵核對結果，不會建立新的匯入工作。'; notice('寫入結果尚未確認。請使用「檢查並續傳」核對批次狀態。', true) }
+    if (error.code==='READ_CANCELLED'){$('operation-status').dataset.state='complete';$('operation-title').textContent='已取消唯讀查詢';$('operation-detail').textContent='已完成資料與目前選擇保留；可重新核對。';return false}
+    else if (!readOnly && work?.status === 'outcome_unknown') { $('operation-title').textContent = '寫入結果尚未確認'; $('operation-detail').textContent = '未收到這批的確認回應。檢查點已保留；續傳會先用原冪等鍵核對結果，不會建立新的匯入工作。'; notice('寫入結果尚未確認。請使用「檢查並續傳」核對批次狀態。', true) }
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
     else if (error.code === 'RATE_LIMITED') { $('operation-title').textContent = '伺服器暫時限制查詢'; $('operation-detail').textContent = error.retryAfter ? `請於 ${error.retryAfter} 秒後手動重試。` : '請稍後手動重試。' }
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
@@ -246,9 +264,9 @@ function scheduleHistoryPlanForCurrentMapping(){
     updateHistoryPlanLocal()
   }).catch(error=>{if(owner===work&&epoch===generation&&sequence===historyLocalSequence)notice(`課程教材目錄尚未載入，請重新核對後重試。${error.message}`,true)})
 }
-function historyWorkChanged(){if(!work)return;work.previewDirty=true;updateHistoryPlanLocal();void save().catch(e=>notice(e.message,true))}
+async function historyWorkChanged(){if(!work)return false;historyCheckSequence++;historyLocalSequence++;work.previewDirty=true;updateHistoryPlanLocal();try{return await save()}catch(e){notice(`核對結果未保存：${e.message}。選擇仍保留，請重試。`,true);return false}}
 function historyUiChanged(){if(work)void save().catch(e=>notice(e.message,true))}
-const historyView=createHistoryWorkbench({work:()=>work,labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:()=>void runLatest(async()=>{const state=historyView.capture();await refreshHistoryPlan();historyView.refreshEditor(historyPlan,state)},{label:'正在逐日核對有效課次'}),defaults:effectiveSyncFields,fieldLabel:key=>fieldLabels[key]||key,diffValue:displayValue,fields:(host,item)=>attachImportFields(host,item.record,{work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&(change.fieldKey!=='lesson_id'||historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId))){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
+const historyView=createHistoryWorkbench({work:()=>work,record:item=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record,item:key=>historyPlan.find(candidate=>candidate.key===key),labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:(key)=>void runLatest(async()=>{const state=historyView.capture(),selected=historyView.selectedKey(),owner=work?.id;await refreshHistoryPlan({admissions:key?[historyPlan.find(i=>i.key===key)?.record.enrollment_source_id].filter(Boolean):undefined});if(owner===work?.id&&selected===historyView.selectedKey())historyView.refreshEditor(historyPlan,state)},{label:key?'正在核對此份紀錄':'正在逐日核對有效課次'}),defaults:effectiveSyncFields,fieldLabel:key=>fieldLabels[key]||key,diffValue:displayValue,fields:(host,item)=>attachImportFields(host,item.record,{record:()=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record,work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&(change.fieldKey!=='lesson_id'||historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId))){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
 function historyTargets() {
   const targets=new Map()
   for(const r of work.snapshot.records.filter(r=>r.kind==='enrollment')) {
@@ -258,22 +276,26 @@ function historyTargets() {
   }
   return targets
 }
-async function refreshHistoryPlan() {
+async function refreshHistoryPlan({admissions:admissionFilter}={}) {
   if(!work?.snapshot)return
-  const owner=work,epoch=generation,sequence=++historyCheckSequence,targets=historyTargets(),archives=new Map(),routes=new Map()
+  const owner=work,epoch=generation,sequence=++historyCheckSequence,targets=historyTargets(),archives=new Map(admissionFilter?historyArchives:[]),routes=new Map(admissionFilter?historyRoutes:[])
   const current=()=>owner===work&&epoch===generation&&sequence===historyCheckSequence
   $('history-sync-summary').textContent='正在核對歷史與有效名單；既有選擇保留…'
-  const lessonCourses=new Set(owner.snapshot.records.filter(r=>r.kind==='report'&&(r.sourceFields||[]).some(f=>f.key==='lesson_id'&&f.type==='stage')).map(r=>targets.get(r.enrollment_source_id)?.courseId).filter(id=>id&&id!=='new'))
+  const selectedAdmissions=admissionFilter?new Set(admissionFilter):null
+  const lessonCourses=new Set(owner.snapshot.records.filter(r=>r.kind==='report'&&(!selectedAdmissions||selectedAdmissions.has(r.enrollment_source_id))&&(r.sourceFields||[]).some(f=>f.key==='lesson_id'&&f.type==='stage')).map(r=>targets.get(r.enrollment_source_id)?.courseId).filter(id=>id&&id!=='new'))
   for(const courseId of lessonCourses){await ensureLessonCatalog(courseId);if(!current())return}
   if(integrationCapabilities.enrollment_history_reports) {
     for(const [admission,target] of targets) {
-      if(!target.id||target.isNew)continue
+      if(!target.id||target.isNew||(selectedAdmissions&&!selectedAdmissions.has(admission)))continue
       let cursor,rows=[],seenCursors=new Set()
       do{const page=await api('history-list',undefined,{query:{enrollment_id:target.id,source_admission_id:admission,limit:50,cursor}});if(!current())return;rows.push(...page.items||[]);cursor=page.next_cursor||undefined;if(cursor&&seenCursors.has(cursor))throw new Error('歷史清單分頁未前進，請重新核對。');if(cursor)seenCursors.add(cursor)}while(cursor)
-      archives.set(target.id,[...(archives.get(target.id)||[]),...rows])
+      const existingArchive=archives.get(target.id)||[]
+      archives.set(target.id,[...existingArchive.filter(row=>row.source_admission_id!==admission),...rows])
       const dates=[...new Set(owner.snapshot.records.filter(r=>r.kind==='report'&&r.enrollment_source_id===admission&&r.date&&r.date>=owner.dateFrom&&r.date<=owner.dateTo).map(r=>r.date))],occurrences=[]
       for(let i=0;i<dates.length;i+=50){cursor=undefined;seenCursors=new Set();do{const page=await api('history-route',{enrollment_id:target.id,dates:dates.slice(i,i+50),limit:50,...(cursor?{cursor}:{})});if(!current())return;occurrences.push(...page.items||[]);cursor=page.next_cursor||undefined;if(cursor&&seenCursors.has(cursor))throw new Error('課次分頁未前進，請重新核對。');if(cursor)seenCursors.add(cursor)}while(cursor)}
-      routes.set(target.id,occurrences)
+      const refreshedDates=new Set(dates)
+      const byId=new Map([...(routes.get(target.id)||[]).filter(row=>!refreshedDates.has(row.occurrence_date)),...occurrences].map(row=>[row.id,row]))
+      routes.set(target.id,[...byId.values()])
     }
   }
   if(!current())return
