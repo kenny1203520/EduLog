@@ -1,6 +1,10 @@
 # EduLog Teaching Systems extension
 
-## Current build: teaching on the source site, synchronization in the workspace (0.1.0)
+## Current build: verified mapping identity (0.1.0)
+
+The mapping review preserves confirmed student/enrollment selections when a reliable student ID or course code is filled in later, but only when the server verifies that the source link still points to the same EduLog relationship. A name difference under the same reliable student ID is a warning and does not change the EduLog name. True identity/course conflicts remain blocked; temporarily unavailable targets preserve the selection and ask for a recheck. Apply migration **1000133** and deploy the matching API before using identity enrichment. See [acceptance record](tests/ACCEPTANCE-history-mapping-validity.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-mapping-validity.zip`.
+
+## Previous build: teaching on the source site, synchronization in the workspace (0.1.0)
 
 This rebuild covers the popup, contextual toolbar, all 12 supported source page types, the report assistant, workspace and pairing/device entry. Review exceptions in a single list/editor, then confirm one sync summary. Steps reflect actual review and transaction evidence. Shared Traditional Chinese/English preferences update extension controls in place; source text stays unchanged. Differences show source/EduLog sides and paragraph changes; outcomes and resumable records distinguish verified writes from pending review.
 

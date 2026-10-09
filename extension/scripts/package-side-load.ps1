@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $extensionRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $repositoryRoot = (Resolve-Path (Join-Path $extensionRoot '..')).Path
 $distributionRoot = Join-Path $extensionRoot 'dist'
-$packageName = 'EduLog-Teaching-Tools-0.1.0-history-row-classification'
+$packageName = 'EduLog-Teaching-Tools-0.1.0-mapping-validity'
 $archivePath = Join-Path $distributionRoot "$packageName.zip"
 $temporaryRoot = [System.IO.Path]::GetTempPath()
 $stagingPath = Join-Path $temporaryRoot "edulog-package-$([guid]::NewGuid().ToString('N'))"
@@ -39,6 +39,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-work-records.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-skip-review-reconfirm.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-history-row-classification.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-history-mapping-validity.md') -Destination $stagingPath
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
@@ -55,7 +56,8 @@ try {
         '1000127_extension_shared_mappings_and_sync_preferences.sql',
         '1000130_import_preview_dependencies_and_diagnostics.sql',
         '1000131_extension_work_record_metadata.sql',
-        '1000132_extension_report_skip_decisions.sql'
+        '1000132_extension_report_skip_decisions.sql',
+        '1000133_extension_mapping_memory_reasons.sql'
     )) {
         Copy-Item -LiteralPath (Join-Path $repositoryRoot "supabase/migrations/$migration") -Destination $migrationPath
     }
