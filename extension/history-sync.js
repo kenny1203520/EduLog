@@ -65,7 +65,8 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     if (!teachingFields.some(f => !['external_link','class_notes'].includes(f) && Object.hasOwn(item.data,f))) { item.reason = '尚無已確認的教學欄位，保留來源證據。'; continue }
     item.occurrence = chosen
     item.conflicts = teachingFields.filter(f => Object.hasOwn(item.data,f) && chosen.report?.[f] != null && chosen.report[f] !== '' && JSON.stringify(item.data[f]) !== JSON.stringify(chosen.report[f]))
-    if (item.conflicts.length && !record.historyConflictConfirmed) { needs(item,'report-conflict','既有課次報告有不同內容，請核對保留或逐欄覆寫。',item.conflicts.map(field=>({id:`conflict:${field}`,code:'conflict',message:`${field} 有不同內容；可保留 EduLog 或明確選擇覆寫。`,target:`conflict:${field}`,fieldKey:field}))); continue }
+    item.conflictSignature = JSON.stringify({item:key,occurrence:chosen.id,reportVersion:chosen.report?.version??null,fields:item.conflicts.map(field=>[field,item.data[field],chosen.report?.[field],record.historyFieldDecisions?.[field],record.syncFieldOverrides?.[field]])})
+    if (item.conflicts.length && !(record.historyConflictConfirmed&&record.historyConflictSignature===item.conflictSignature)) { needs(item,'report-conflict','既有課次報告有不同內容，請核對保留或逐欄覆寫。',item.conflicts.map(field=>({id:`conflict:${field}`,code:'conflict',message:`${field} 有不同內容；可保留 EduLog 或明確選擇覆寫。`,target:`conflict:${field}`,fieldKey:field}))); continue }
     item.category = 'bind'; item.reason = `${chosen.class_name} · ${chosen.occurrence_date} · 有效名單已核對，報名關係不變。`
   }
   for(const item of items) {
