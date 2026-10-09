@@ -423,28 +423,47 @@ function prepareRows() {
       rows.at(-1).source_identity=admissionIdentity(r)
     }
   }
-  work.historyBindings=[]
+  const historyBindings=[]
   for(const item of historyPlan) {
     if(item.category==='skipped'||item.category==='linked')continue
     if(item.category==='needs'){needs.push(`${item.target?.name||'來源報名 #'+item.record.enrollment_source_id} · ${item.record.date||item.record.dateRaw||'日期待確認'}：${item.reason}`);continue}
-    if(!enrollments.has(item.record.enrollment_source_id)){needs.push(`歷史 ${item.key} 的報名尚未確認。`);continue}
+    if(['unfilled','other-admission','system-excluded'].includes(item.category))continue
+    if(!['history','bind'].includes(item.category)){needs.push(globalThis.edulogUi?.t('work.historyUnknownCategory',{key:item.key||'來源報告',category:item.category||'未提供'})||`歷史 ${item.key||'來源報告'} 的分類「${item.category||'未提供'}」無法識別；請重新核對此報告。`);continue}
+    const admissionId=item.record?.enrollment_source_id,preparedEnrollmentId=enrollments.get(admissionId)
+    if(!admissionId||!preparedEnrollmentId){needs.push(`歷史 ${item.key||'來源報告'} 的報名尚未確認；此報告未加入同步資料。`);continue}
+    if(!item.data||typeof item.data!=='object'||Array.isArray(item.data)||typeof item.data.enrollment_id!=='string'||!item.data.enrollment_id.trim()||item.data.enrollment_id!==preparedEnrollmentId||typeof item.data.report_date!=='string'||!item.data.report_date||!item.includedFields?.some(field=>Object.hasOwn(item.data,field))){needs.push(globalThis.edulogUi?.t('work.historyInvalidReference',{sourceId:item.key||admissionId})||`歷史 ${item.key||'來源報告'} 缺少有效報名、日期或已選取的教學欄位；請重新核對此報告。`);continue}
+    if(item.category==='bind'&&(!item.occurrence?.id||!item.occurrence.class_session_id)){needs.push(`歷史 ${item.key} 缺少有效課次資料；已保留報告，請重新核對課次。`);continue}
     const targetId=item.existing?.id||idFor('history_report',item.key)
     add('history_report',item.key,targetId,item.data)
     if(item.record.historyDuplicateConfirmed)rows.at(-1).reviewed_duplicate=true
-    if(item.category==='bind')work.historyBindings.push({historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:item.record.historyOverwrite||[],include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending'})
+    if(item.category==='bind')historyBindings.push({historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:item.record.historyOverwrite||[],include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending'})
   }
-  work.destination = { classroom_id: $('classroom').value, course_ids: courseIds, class_session_id: sessionId, report_session_ids: [...new Set([sessionId,...(work.historyBindings||[]).map(b=>b.occurrence.class_session_id)])] }; work.needs = needs
+  work.historyBindings=historyBindings
+  work.destination = { classroom_id: $('classroom').value, course_ids: courseIds, class_session_id: sessionId, report_session_ids: [...new Set([sessionId,...historyBindings.map(b=>b.occurrence.class_session_id)])] }; work.needs = needs
   return rows
+}
+function validateHistoryRows(rows) {
+  for(const row of rows) if(row?.record?.kind==='history_report') {
+    const data=row.record.data
+    if(typeof row.source_id!=='string'||!row.source_id.trim()||typeof row.target_id!=='string'||!row.target_id.trim()||!data||typeof data!=='object'||Array.isArray(data)||typeof data.enrollment_id!=='string'||!data.enrollment_id.trim()||typeof data.report_date!=='string'||!data.report_date) {
+      const error=new Error(globalThis.edulogUi?.t('work.historyInvalidReference',{sourceId:row.source_id||'來源識別未提供'})||`歷史報告 ${row.source_id||'來源識別未提供'} 缺少有效報名或日期；請返回核對並重新產生摘要。`)
+      error.code='HISTORY_REFERENCE_INVALID'
+      throw error
+    }
+  }
 }
 async function preview(reuse = false) {
   if (!work || work.type !== 'import') throw new Error('請先擷取目前班級。')
   if (!reuse) {
     if (work.jobId && (work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status))) throw new Error('此工作已有寫入或待確認檢查點。請使用「檢查並續傳」核對原批次，不能重新建立工作。')
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
+    work.previewDirty=true;previewResults=[];$('apply').disabled=true
+    await save()
     await mappingController.resolveFieldRules()
     if(!integrationCapabilities.enrollment_history_reports)throw Object.assign(new Error('目前連線未提供歷史保存功能。請重新檢查連線；已讀取資料與檢查點會保留。'),{code:'CAPABILITY_UNAVAILABLE'})
     await refreshHistoryPlan()
-    const batches = splitBatches(prepareRows(), batchBytes)
+    const rows=prepareRows();validateHistoryRows(rows)
+    const batches = splitBatches(rows, batchBytes)
     const batchWithEnrollment = new Map()
     for (const batch of batches) for (const row of batch.rows) if (row.record?.kind === 'enrollment') batchWithEnrollment.set(row.target_id, batch)
     const dependent = new Map(batches.map(batch => [batch, batch.rows.some(row => row.record?.kind === 'history_report' && batchWithEnrollment.get(row.record.data.enrollment_id) && batchWithEnrollment.get(row.record.data.enrollment_id) !== batch) ? 1 : 0]))
@@ -466,7 +485,7 @@ async function preview(reuse = false) {
     try{await saveWorkMetadata(work,{server_job_id:job.id})}catch(error){work.metadataSyncError=error.message}
     await save()
   }
-  validateBatches(work.batches)
+  validateBatches(work.batches);validateHistoryRows(work.batches.flatMap(batch=>batch.rows))
   previewResults = []
   for (let i = work.done || 0; i < work.batches.length; i++) {
     const batch = work.batches[i]

@@ -66,6 +66,8 @@
     'work.historyAutoExcludedHelp':['這些來源列不會送出，也不需要逐筆確認；來源內容更新後重新讀取即可重新分類。','These source rows will not be submitted and need no individual review. Reread after the source changes to classify them again.'],
     'work.historyExclusionFilter':['{label}: {count} 份','{label}: {count}'],
     'work.historyNoAutoExcluded':['沒有尚未填寫、其他報名或系統排除項目。','No unfilled, other-enrollment, or automatically excluded rows.'],
+    'work.historyUnknownCategory':['報告 {key} 的來源分類「{category}」不受支援；來源資料已保留，請重新核對。','Report {key} has an unsupported source classification “{category}”. The source data is preserved; review it again.'],
+    'work.historyInvalidReference':['歷史報告 {sourceId} 缺少有效報名或日期；請返回核對並重新產生摘要。','History report {sourceId} is missing a valid enrollment or date. Return to review and generate the summary again.'],
     'work.unfilledNoSync':['原站尚未保存教學內容。這筆不會送出；之後來源填寫完成，再重新讀取即可核對。','No teaching content has been saved at the source. This row will not be submitted. Reread it after the source report is filled.'],
     'work.otherAdmissionNoSync':['這筆列屬於其他報名，系統無法可靠確認學生與課程，因此未納入目前同步。','This row belongs to another enrollment. Its student and course could not be verified, so it is excluded from this sync.'],
     'work.systemExcludedNoSync':['這筆列依目前同步條件由系統排除，不會寫入 EduLog。','This row is excluded under the current sync settings and will not be written to EduLog.'],
