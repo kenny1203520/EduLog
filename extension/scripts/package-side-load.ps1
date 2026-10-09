@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $extensionRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $repositoryRoot = (Resolve-Path (Join-Path $extensionRoot '..')).Path
 $distributionRoot = Join-Path $extensionRoot 'dist'
-$packageName = 'EduLog-Teaching-Tools-0.1.0-work-records'
+$packageName = 'EduLog-Teaching-Tools-0.1.0-skip-review-reconfirm'
 $archivePath = Join-Path $distributionRoot "$packageName.zip"
 $temporaryRoot = [System.IO.Path]::GetTempPath()
 $stagingPath = Join-Path $temporaryRoot "edulog-package-$([guid]::NewGuid().ToString('N'))"
@@ -25,6 +25,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs/deployment/extension-workspace.md') -Destination $docsPath
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs/deployment/extension-transferred-occurrence.md') -Destination $docsPath
     Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs/deployment/extension-enrollment-history.md') -Destination $docsPath
+    Copy-Item -LiteralPath (Join-Path $repositoryRoot 'docs/deployment/extension-skip-review.md') -Destination $docsPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-1000125.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-1000126.md') -Destination $stagingPath
@@ -36,6 +37,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-toolbar-lifecycle.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-1000130-preview-dependencies.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-work-records.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-skip-review-reconfirm.md') -Destination $stagingPath
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
@@ -51,7 +53,8 @@ try {
         '1000126_enrollment_history_reports.sql',
         '1000127_extension_shared_mappings_and_sync_preferences.sql',
         '1000130_import_preview_dependencies_and_diagnostics.sql',
-        '1000131_extension_work_record_metadata.sql'
+        '1000131_extension_work_record_metadata.sql',
+        '1000132_extension_report_skip_decisions.sql'
     )) {
         Copy-Item -LiteralPath (Join-Path $repositoryRoot "supabase/migrations/$migration") -Destination $migrationPath
     }

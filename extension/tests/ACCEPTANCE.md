@@ -313,3 +313,8 @@
   EduLog-Teaching-Tools-0.1.0-unfilled-rating-editor-fix.zip
 
 重新載入擴充套件前先保存原站草稿，再刷新開啟中的 corp 頁面。版本維持 **0.1.0**。
+## 2026-10-10：略過報告再確認與教材排序（1000132）
+
+去識別化擴充功能測試與 PGlite 驗證通過：Lesson 數值排序、跨裝置略過指紋、欄位變動／目標情境變動再確認、30 天期限、revision 衝突與清除。新增工作台多選「繼續略過」操作；未決定報告仍不進入寫入。API TypeScript typecheck 通過。Vitest 路由測試因沙箱禁止本機 TCP listener 未能執行完整 HTTP 測試。Chrome／Edge 真實側載與實站核驗待進行，未送出來源報告。
+
+交付：`extension/dist/EduLog-Teaching-Tools-0.1.0-skip-review-reconfirm.zip`；新增 migration 1000132，需更新 API 並按序套用 migration。

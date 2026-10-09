@@ -4,7 +4,7 @@
 
 This rebuild covers the popup, contextual toolbar, all 12 supported source page types, the report assistant, workspace and pairing/device entry. Review exceptions in a single list/editor, then confirm one sync summary. Steps reflect actual review and transaction evidence. Shared Traditional Chinese/English preferences update extension controls in place; source text stays unchanged. Differences show source/EduLog sides and paragraph changes; outcomes and resumable records distinguish verified writes from pending review.
 
-Use `extension/dist/EduLog-Teaching-Tools-0.1.0-toolbar-lifecycle-fix.zip`. This package includes the site toolbar lifecycle fix and the history review reliability changes. It reuses the existing API and database contract; no migration is added. See [toolbar lifecycle acceptance](tests/ACCEPTANCE-toolbar-lifecycle.md), [history review reliability acceptance](tests/ACCEPTANCE-history-review-reliability.md), and [workflow redesign acceptance](tests/ACCEPTANCE-workflow-redesign.md). Version remains **0.1.0**; the extension never submits the source teaching form.
+Use `extension/dist/EduLog-Teaching-Tools-0.1.0-skip-review-reconfirm.zip`. It adds remembered skip decisions, recheck reminders, numeric lesson ordering, and a batch action for confirming selected skipped reports. Apply migration **1000132** and deploy the matching API before enabling cross-device skip memory. See [skip review deployment](../docs/deployment/extension-skip-review.md) and [acceptance record](tests/ACCEPTANCE-skip-review-reconfirm.md). Version remains **0.1.0**; the extension never submits the source teaching form.
 
 ## Previous build: student review and localization (0.1.0)
 
