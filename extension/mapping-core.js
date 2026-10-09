@@ -7,6 +7,17 @@ export function courseIdentity(row) {
   return label ? `label:${label}` : `missing:${row.source_id}`
 }
 export function admissionIdentity(row) { return JSON.stringify([row.student_source_id || null,courseIdentity(row)]) }
+export function classifyAdmissionIdentityChange(previous,current,{studentLinkedToExisting=false,courseLinkedToExisting=false,sameCourseLabel=false}={}) {
+  let before,after
+  try { before=JSON.parse(previous);after=JSON.parse(current) } catch { return 'conflict' }
+  if(!Array.isArray(before)||!Array.isArray(after)||before.length!==2||after.length!==2)return 'conflict'
+  const sameStudent=before[0]===after[0]
+  const studentEnriched=before[0]==null&&after[0]!=null&&studentLinkedToExisting
+  const sameCourse=before[1]===after[1]
+  const courseEnriched=String(before[1]).startsWith('label:')&&String(after[1]).startsWith('code:')&&courseLinkedToExisting&&sameCourseLabel
+  if((sameStudent||studentEnriched)&&(sameCourse||courseEnriched))return sameStudent&&sameCourse?'same':'enriched'
+  return 'conflict'
+}
 export function groupCourses(records) {
   const groups = new Map()
   for (const row of records.filter(r => r.kind === 'enrollment')) {

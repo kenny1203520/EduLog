@@ -44,7 +44,7 @@ export async function readHistoryWork(work, hooks, retryPath) {
               else enrollment.student_source_id=report.student_source_id
             }
             if(report.sourceStudentName){
-              if(enrollment.sourceStudentName&&enrollment.sourceStudentName!==report.sourceStudentName){enrollment.sourceStudentNameConflict=true;report.sourceStudentIdentityConflict=true;enrollment.sourceStudentNameConflictValues=[...new Set([...(enrollment.sourceStudentNameConflictValues||[enrollment.sourceStudentName]),report.sourceStudentName])];enrollment.sourceIdentityChanged=true}
+              if(enrollment.sourceStudentName&&enrollment.sourceStudentName!==report.sourceStudentName){enrollment.sourceStudentNameConflict=true;report.sourceStudentIdentityConflict=true;enrollment.sourceStudentNameConflictValues=[...new Set([...(enrollment.sourceStudentNameConflictValues||[enrollment.sourceStudentName]),report.sourceStudentName])]}
               else enrollment.sourceStudentName=report.sourceStudentName
             }
             if(report.sourceCourseCode){
@@ -53,6 +53,20 @@ export async function readHistoryWork(work, hooks, retryPath) {
             }
             const evidence=new Map([...(enrollment.sourceEvidence||[]),...(report.sourceEvidence||[])].map(item=>[`${item.sourcePath}:${item.table}:${item.row}`,item]));enrollment.sourceEvidence=[...evidence.values()]
             report.student_source_id||=enrollment.student_source_id;report.sourceStudentName||=enrollment.sourceStudentName;report.sourceCourseCode||=enrollment.sourceCourseCode;report.sourceCourseName||=enrollment.sourceCourseName;report.sourceCourseLabel||=enrollment.sourceCourseLabel
+          }
+          for(const enrollment of work.snapshot.records.filter(r=>r.kind==='enrollment')){
+            const related=records.filter(r=>r.enrollment_source_id===enrollment.source_id)
+            if(!related.length)continue
+            const studentIds=[...new Set([enrollment.student_source_id,...related.map(r=>r.student_source_id)].filter(Boolean))]
+            const courseCodes=[...new Set([enrollment.sourceCourseCode,...related.map(r=>r.sourceCourseCode)].filter(Boolean))]
+            const names=[...new Set([enrollment.sourceStudentName,...related.map(r=>r.sourceStudentName)].filter(Boolean))]
+            enrollment.sourceStudentConflict=studentIds.length>1
+            enrollment.sourceStudentIdConflictValues=studentIds.length>1?studentIds:[]
+            enrollment.sourceStudentNameConflict=names.length>1
+            enrollment.sourceStudentNameConflictValues=names.length>1?names:[]
+            enrollment.sourceCourseConflict=courseCodes.length>1
+            enrollment.sourceIdentityChanged=enrollment.sourceStudentConflict||enrollment.sourceCourseConflict
+            for(const report of related)report.sourceStudentIdentityConflict=Boolean(report.student_source_id&&enrollment.student_source_id&&report.student_source_id!==enrollment.student_source_id)
           }
           checkpoint=history.checkpoints[historyPath]={records,next:0}
           history.issues=history.issues.filter(r=>!(r.listFailed&&r.admissionPath===historyPath));await persist()

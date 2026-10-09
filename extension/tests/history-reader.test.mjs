@@ -39,7 +39,16 @@ test('history student identity conflicts are preserved per report and block sile
  const work=fixture(),enrollment={kind:'enrollment',source_id:'1',student_source_id:'student-a',sourceStudentName:'同名學生',data:{}},records=[{kind:'report',source_id:null,enrollment_source_id:'1',student_source_id:'student-b',sourceStudentName:'同名學生',date:'2026-10-01',evidenceKey:'a',data:{}},{kind:'report',source_id:null,enrollment_source_id:'1',student_source_id:'student-a',sourceStudentName:'同名學生',date:'2026-10-02',evidenceKey:'b',data:{}}]
  work.snapshot.records=[enrollment]
  await readHistoryWork(work,{current:()=>true,paused:()=>false,save:async()=>{},progress:()=>{},merge:(a,b)=>[...a,...b],source:async action=>action==='history'?records:undefined})
- assert.equal(enrollment.sourceStudentConflict,true);assert.equal(records[0].sourceStudentIdentityConflict,true);assert.equal(records[1].sourceStudentIdentityConflict,undefined);assert.deepEqual(enrollment.sourceStudentIdConflictValues,['student-a','student-b'])
+ assert.equal(enrollment.sourceStudentConflict,true);assert.equal(records[0].sourceStudentIdentityConflict,true);assert.equal(records[1].sourceStudentIdentityConflict,false);assert.deepEqual(enrollment.sourceStudentIdConflictValues,['student-a','student-b'])
+})
+
+test('name differences with the same reliable student ID are informational, not identity conflicts',async()=>{
+ const work=fixture(),enrollment={kind:'enrollment',source_id:'1',student_source_id:'student-a',sourceStudentName:'林同學',data:{}},records=[{kind:'report',source_id:null,enrollment_source_id:'1',student_source_id:'student-a',sourceStudentName:'林同學',date:'2026-10-01',evidenceKey:'a',data:{}},{kind:'report',source_id:null,enrollment_source_id:'1',student_source_id:'student-a',sourceStudentName:'林同學（英文名）',date:'2026-10-02',evidenceKey:'b',data:{}}]
+ work.snapshot.records=[enrollment]
+ await readHistoryWork(work,{current:()=>true,paused:()=>false,save:async()=>{},progress:()=>{},merge:(a,b)=>[...a,...b],source:async action=>action==='history'?records:undefined})
+ assert.equal(enrollment.sourceStudentConflict,false);assert.equal(enrollment.sourceStudentNameConflict,true);assert.equal(enrollment.sourceIdentityChanged,false)
+ assert.equal(records[0].sourceStudentIdentityConflict,false);assert.equal(records[1].sourceStudentIdentityConflict,false)
+ assert.deepEqual(enrollment.sourceStudentNameConflictValues,['林同學','林同學（英文名）'])
 })
 
 test('evidence-only history is retained and explicit reread scans modified editors',async()=>{
