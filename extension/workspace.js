@@ -17,7 +17,7 @@ let syncPreferences={fields:{},revision:null},syncDraftOverrides={}
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
-let activeFlow = 'import', continuation = null, unsavedWorkId = ''
+let activeFlow = 'import', continuation = null, unsavedWorkId = '', workHistory = { local: [], remote: null, metadata: [] }, selectedWorkRecord = null
 const activeWorks = {import:null,prefill:null}, activeStages = {import:1,prefill:1}
 function currentWorkflow(view) { const identity=work?.type==='import'&&work.snapshot?work.snapshot.records.filter(row=>row.kind==='enrollment'&&!row.sourceSkipped&&!mappingController.validateRow(row,true)).length:0;return workflowState(view,{work:work?.type===view?work:activeWorks[view],form,report,previewCount:previewResults.length,unresolved:identity+historyPlan.filter(item=>item.category==='needs').length}) }
 function taskStatus() {
@@ -36,7 +36,7 @@ async function send(message) {
   if (response?.error) { const e = new Error(workspaceErrorMessage(response.error)); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; e.fields = response.error.fields; e.rawMessage = response.error.message; throw e }
   return response?.data
 }
-const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','reconcile','import-info','history-list','history-route'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
+const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','work-records','reconcile','import-info','history-list','history-route'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
 const source = (action, extra = {}) => send({ type: 'workspace-source', action, tabId: Number($('source-tab').value), sourcePath: selectedPath, requestId: activeReadId || undefined, ...extra })
 let saveChain=Promise.resolve(),saveRequestSequence=0
 function save() {
@@ -115,7 +115,7 @@ function flow(value) {
   if(value!=='work')work=activeWorks[value]||null
   for(const item of ['import','prefill','work'])$(`${item}-view`).hidden=item!==value
   document.querySelectorAll('[data-flow]').forEach(button=>{if(button.dataset.flow===value)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current')})
-  $('source-picker').hidden=value==='work'&&Boolean($('source-tab').value)
+  $('source-picker').hidden=value==='work'
   if(value==='import'||value==='prefill')restoreStage(value)
   if(value==='work'&&binding)void runLatest(loadWork,{label:'正在更新工作紀錄'})
   taskStatus()
@@ -330,9 +330,9 @@ async function collect() {
   if (!$('date-from').value || !$('date-to').value || $('date-from').value > $('date-to').value) throw new Error('請確認有效日期範圍。')
   const snapshot = await source('collect')
   if (!snapshot?.classId || snapshot.sourcePath !== selectedPath) throw new Error('目前來源不是可辨識的班級頁。請切換到班級頁後再擷取。')
-  work = { id: crypto.randomUUID(), type: 'import', status: 'collected', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, title: snapshot.title, snapshot, ids: {}, dateFrom: $('all-history').checked?'1900-01-01':$('date-from').value, dateTo: $('all-history').checked?'9999-12-31':$('date-to').value, includeInternalNotes: $('include-internal-notes').checked, syncFieldPreferences:{...(syncPreferences.fields||{})},syncPreferencesSnapshot:{...effectiveSyncFields()},syncFieldOverrides:{...syncDraftOverrides}, done: 0 }
+  work = { id: crypto.randomUUID(), type: 'import', status: 'collected', sourceTab: Number($('source-tab').value), sourcePath: selectedPath, sourceClassId:String(snapshot.classId),sourceTitle:snapshot.title||'',title: snapshot.title, snapshot, ids: {}, dateFrom: $('all-history').checked?'1900-01-01':$('date-from').value, dateTo: $('all-history').checked?'9999-12-31':$('date-to').value, includeInternalNotes: $('include-internal-notes').checked, syncFieldPreferences:{...(syncPreferences.fields||{})},syncPreferencesSnapshot:{...effectiveSyncFields()},syncFieldOverrides:{...syncDraftOverrides}, done: 0 }
   if ($('read-history').checked) work.history = { paths: snapshot.admissionPaths, next: 0 }
-  activeWorks.import=work;await save(); if (work.history) await collectHistory()
+  activeWorks.import=work;await save();try{await saveWorkMetadata(work)}catch(error){work.metadataSyncError=error.message;notice('本機草稿已保存；跨裝置工作整理稍後可重試。',true)} if (work.history) await collectHistory()
   await mappingView();renderHistoryIssues(); notice(`已擷取 ${work.snapshot.records.length} 筆可辨識資料。缺少欄位仍需確認。${work.status === 'paused-extraction' ? '擷取中斷，可從工作紀錄繼續。' : ''}`)
 }
 async function collectHistory(retryPath) {
@@ -455,6 +455,7 @@ async function preview(reuse = false) {
     if (work.jobId) await api('job-status', { status: 'cancelled' }, { jobId: work.jobId })
     const job = await api('job', { source_origin: work.snapshot.sourceOrigin, source_class_id: work.snapshot.classId, date_from: work.dateFrom, date_to: work.dateTo, ...work.destination })
     work.batches = batches; work.done = 0; work.jobId = job.id; work.batchCount = batches.length; work.previewDirty = true
+    try{await saveWorkMetadata(work,{server_job_id:job.id})}catch(error){work.metadataSyncError=error.message}
     await save()
   }
   validateBatches(work.batches)
@@ -796,78 +797,113 @@ async function prefill() {
   notice(`已套用 ${result.applied} 個欄位，未送出表單。請返回網站檢查。`)
 }
 let workHistory={local:null,remote:null}
-async function loadWork() {
-  const [localResult, remoteResult] = await Promise.allSettled([send({ type: 'workspace-store', action: 'list' }), api('work')])
-  const local = localResult.status === 'fulfilled' ? localResult.value : null
-  const remote = remoteResult.status === 'fulfilled' ? remoteResult.value : null
-  workHistory={local,remote};renderWorkRecords()
+async function saveWorkMetadata(row, changes = {}) {
+  if (!integrationCapabilities.work_record_metadata || !row?.id) return null
+  const path=row.sourcePath||row.form?.sourcePath
+  const classId=row.snapshot?.classId||row.sourceClassId||row.form?.admissionId||(/^\/courses\/dt\/(\d+)$/.exec(path||'')?.[1])
+  if(!path||!classId)return null
+  const prior=workHistory.metadata.find(item=>item.work_id===row.id)
+  const base={source_origin:'https://corp.orangeapple.co',source_path:path,source_class_id:String(classId),source_label:row.sourceTitle||row.snapshot?.title||'',target_classroom_id:row.destination?.classroom_id||null,target_class_session_id:row.destination?.class_session_id||null,target_label:row.destination?.targetLabel||[context?.classrooms?.find(item=>item.id===row.destination?.classroom_id)?.name,context?.class_sessions?.find(item=>item.id===row.destination?.class_session_id)?.name].filter(Boolean).join(' · '),title:row.title||'',source_device:'此瀏覽器',...changes}
+  const result=await api('work-record-save',{expected_revision:prior?.revision||null,changes:base},{workId:row.id})
+  const saved=result?.item;if(saved){workHistory.metadata=[...workHistory.metadata.filter(item=>item.work_id!==saved.work_id),saved];renderWorkRecords()}
+  return saved
 }
+async function loadWork() {
+  const tasks=[send({type:'workspace-store',action:'list'}),api('work')]
+  if(integrationCapabilities.work_record_metadata)tasks.push((async()=>{let cursor,items=[];do{const page=await api('work-records',undefined,{query:{limit:50,cursor}});items.push(...page.items||[]);cursor=page.next_cursor}while(cursor);return items})())
+  const [localResult,remoteResult,metadataResult]=await Promise.allSettled(tasks)
+  workHistory={local:localResult.status==='fulfilled'?localResult.value:null,remote:remoteResult.status==='fulfilled'?remoteResult.value:null,metadata:metadataResult?.status==='fulfilled'?metadataResult.value:[]}
+  workHistory.metadataError=metadataResult&&metadataResult.status==='rejected'?metadataResult.reason:null
+  renderWorkRecords()
+  const requested=params.get('work')||location.hash.match(/^#work=([a-f0-9-]{36})$/i)?.[1]
+  if(requested){const row=combineWorkRecords(workHistory.local||[],workHistory.remote||{},workHistory.metadata).find(item=>item.local?.id===requested||item.metadata?.work_id===requested);if(row)selectWorkRecord(row)}
+}
+const workStatusText=status=>({applying:'寫入中',paused:'已暫停',failed:'需要處理',outcome_unknown:'結果待核對',complete:'已完成',partial_complete:'部分完成',cancelled:'剩餘工作已取消',collected:'已讀取，待核對',collecting:'正在讀取', 'paused-extraction':'擷取已暫停',reviewing:'待檢查',previewed:'摘要待確認',pending_confirmation:'待確認原站結果',confirmed:'已確認',pending:'待處理'})[status]||'狀態待確認'
+function recordLabel(item){return item.metadata?.title||item.local?.title||item.remote?.title||item.remote?.source_class_id&&`來源班級 ${item.remote.source_class_id}`||item.push&&`報告 ${String(item.push.report_id||item.push.id).slice(0,8)}`||item.local?.id||item.remote?.id||item.metadata?.work_id||'工作紀錄'}
+function recordClass(item){return item.metadata?.source_label||item.local?.sourceTitle||item.local?.snapshot?.title||item.local?.snapshot?.classId||item.remote?.source_class_id||item.metadata?.source_class_id||''}
+const workArchived=item=>Boolean(item.metadata?.archived_at||item.local?.archived_at)
+const workPinned=item=>Boolean(item.metadata?.pinned??item.local?.pinned)
+function selectWorkRecord(item){selectedWorkRecord=item;renderWorkRecords();}
 function renderWorkRecords() {
-  const {local,remote}=workHistory,combined=combineWorkRecords(local||[],remote||{}),filter=$('work-filter').value||'all',visible=combined.filter(row=>filter==='all'||row.category===filter)
-  globalThis.edulogUi?.text($('work-count'),'work.count',{visible:visible.length,total:combined.length})
-  $('work-list').replaceChildren()
-  if (!local) {
-    const card = node('article', undefined, 'card'); card.append(node('h2', '本機工作暫時無法讀取'), node('p', '工作資料庫連線已中斷。請重新整理以重新開啟連線；已儲存的工作資料不會因這次讀取失敗而刪除。', 'hint'))
-    const retry = node('button', '重試讀取本機工作'); retry.addEventListener('click', () => void runLatest(loadWork, { label: '正在重新開啟本機工作資料庫' })); card.append(retry); $('work-list').append(card)
+  const {local,remote,metadata=[]}=workHistory,combined=combineWorkRecords(local||[],remote||{},metadata),filter=$('work-filter').value||'all',type=$('work-type-filter').value||'all',query=$('work-search').value.trim().toLocaleLowerCase(),classQuery=$('work-class-filter').value.trim().toLocaleLowerCase()
+  const selectedId=selectedWorkRecord?.local?.id||selectedWorkRecord?.metadata?.work_id||selectedWorkRecord?.remote?.id||selectedWorkRecord?.push?.id
+  if(selectedId){const current=combined.find(item=>(item.local?.id||item.metadata?.work_id||item.remote?.id||item.push?.id)===selectedId);selectedWorkRecord=current||null}
+  const all=combined.filter(item=>{const row=item.local||item.remote||item.push||{},status=item.category,labels=`${recordLabel(item)} ${recordClass(item)} ${row.id||''} ${row.status||''}`.toLocaleLowerCase();return(filter==='all'||status===filter)&&(type==='all'||(item.local?.type||'import')===type)&&(!query||labels.includes(query))&&(!classQuery||String(recordClass(item)).toLocaleLowerCase().includes(classQuery))})
+  const active=all.filter(item=>!workArchived(item)).sort((a,b)=>Number(Boolean((b.local?.id||b.metadata?.work_id)===work?.id))-Number(Boolean((a.local?.id||a.metadata?.work_id)===work?.id))||Number(workPinned(b))-Number(workPinned(a))||({attention:0,resumable:1,done:2}[a.category]-{attention:0,resumable:1,done:2}[b.category])||((b.local?.updatedAt||Date.parse(b.metadata?.updated_at)||0)-(a.local?.updatedAt||Date.parse(a.metadata?.updated_at)||0)))
+  const completed=active.filter(item=>item.category==='done'),visibleActive=active.filter(item=>item.category!=='done')
+  const archived=all.filter(workArchived)
+  $('work-count').textContent=`顯示 ${active.length} 筆工作；封存 ${archived.length} 筆。狀態依實際檢查點與交易結果計算。`
+  const host=$('work-list');host.replaceChildren()
+  if(local===null){const error=node('article',undefined,'card');error.append(node('h2','本機工作暫時無法讀取'),node('p','工作資料庫讀取失敗；目前伺服器紀錄仍保留。','hint'));const retry=node('button','重試讀取本機工作');retry.onclick=()=>void runLatest(loadWork,{label:'正在重試本機工作紀錄'});error.append(retry);host.append(error)}
+  const groups=new Map();for(const item of visibleActive){const key=recordClass(item)||'來源班級未命名';if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item)}
+  for(const [groupLabel,items] of groups){const group=node('section',undefined,'work-group');const groupTitle=node('h2',groupLabel);groupTitle.dataset.sourceRaw='';group.append(groupTitle);for(const item of items){const row=item.local||item.remote||item.push||{},article=node('article',undefined,'work-record');article.dataset.workId=item.local?.id||item.metadata?.work_id||item.remote?.id||item.push?.id||'';if(selectedWorkRecord&&(selectedWorkRecord.local?.id||selectedWorkRecord.metadata?.work_id)===article.dataset.workId)article.setAttribute('aria-current','true');const main=node('div');const title=node('button',recordLabel(item),'work-record-title');title.dataset.sourceRaw='';title.type='button';title.addEventListener('click',()=>selectWorkRecord(item));main.append(title);main.append(node('p',`${item.local?.type==='prefill'?'報告預填':'教學資料同步'} · ${workStatusText(row.status)}`,'work-record-meta'));const time=row.updatedAt||item.metadata?.updated_at;if(time)main.append(node('p',new Date(time).toLocaleString(globalThis.edulogUi?.locale||'zh-TW'),'work-record-meta'));if(item.local?.expiresAt)main.append(node('p','本機草稿期限：'+new Date(item.local.expiresAt).toLocaleDateString(globalThis.edulogUi?.locale||'zh-TW'),'work-record-meta'));if(item.metadata?.source_device)main.append(node('p',`來源裝置：${item.metadata.source_device} · 草稿期限七天`,'work-record-meta'));const actions=node('div',undefined,'work-record-actions');const open=node('button',primaryWorkAction(item));open.type='button';open.onclick=()=>void run(()=>openWorkRecord(item),{label:'正在恢復所選工作'});actions.append(open);article.append(main,actions);group.append(article)}host.append(group)}
+  if(!visibleActive.length&&!completed.length){const empty=node('p','沒有符合篩選條件的工作。','hint');host.append(empty)}
+  if(completed.length){const details=node('details',undefined,'work-archived');details.open=filter==='done';details.append(node('summary',`已完成 · ${completed.length} 筆`));for(const item of completed){const entry=node('div',undefined,'work-record');const title=node('button',recordLabel(item),'work-record-title');title.dataset.sourceRaw='';title.onclick=()=>selectWorkRecord(item);const restore=node('button',workArchived(item)?'解除封存':'查看結果');restore.onclick=()=>workArchived(item)?void run(()=>updateWorkMetadata(item,{archived_at:null}),{label:'正在解除封存'}):selectWorkRecord(item);entry.append(title,restore);details.append(entry)}host.append(details)}
+  if(archived.length){const details=node('details',undefined,'work-archived');details.append(node('summary',`已封存 · ${archived.length} 筆`));for(const item of archived){const entry=node('div',undefined,'work-record');const title=node('button',recordLabel(item),'work-record-title');title.dataset.sourceRaw='';title.onclick=()=>selectWorkRecord(item);const restore=node('button','解除封存');restore.onclick=()=>void run(()=>updateWorkMetadata(item,{archived_at:null}),{label:'正在解除封存'});entry.append(title,restore);details.append(entry)}host.append(details)}
+  const remoteError=remote===null?node('article',undefined,'card'):null;if(remoteError){remoteError.append(node('h2','EduLog 工作紀錄暫時無法載入'),node('p','本機續傳資料仍可查看；重新整理伺服器紀錄不會改變已提交資料。','hint'));const retry=node('button','重試載入伺服器紀錄');retry.onclick=()=>void runLatest(loadWork,{label:'正在重試 EduLog 工作紀錄'});remoteError.append(retry);host.append(remoteError)}
+  if(workHistory.metadataError){const error=node('p','跨裝置工作整理讀取失敗；已載入的本機與伺服器紀錄仍可使用。','hint');host.append(error)}
+  $('work-view').dataset.detailOpen=selectedWorkRecord?'true':'false'
+  if(selectedWorkRecord)renderWorkDetail(selectedWorkRecord)
+}
+function primaryWorkAction(item){const row=item.local||item.remote||{};if(['outcome_unknown','applying'].includes(row.status))return '核對未知結果';if(row.status==='partial_complete')return '處理剩餘項目';if(['complete','confirmed','cancelled'].includes(row.status))return '查看結果';if(item.local?.snapshot||item.local?.batches)return '繼續核對';if(item.local?.type==='prefill')return '查看預填結果';return '查看工作詳情'}
+async function updateWorkMetadata(item,changes){
+  if(!integrationCapabilities.work_record_metadata){
+    if(item.local){Object.assign(item.local,changes);await send({type:'workspace-store',action:'put',work:item.local});notice('跨裝置整理功能目前不可用；設定只保存於本機工作。',true);await loadWork()}
+    return
   }
-  for (const combinedRow of visible.filter(row=>row.local).sort((a,b)=>b.local.updatedAt-a.local.updatedAt)) {
-    const row=combinedRow.local
-    const card = node('article', undefined, 'card'); const statusText = ({ applying:'寫入中', paused:'已暫停', failed:'部分失敗', outcome_unknown:'結果尚未確認', complete:'已完成', partial_complete:'部分完成，尚有待處理項目', cancelled:'已取消剩餘批次', collected:'已擷取，待確認對應', collecting:'擷取中', 'paused-extraction':'擷取已暫停', reviewing:'待檢查欄位', pending_confirmation:'待人工送出／待確認' })[row.status] || '狀態需確認'; card.append(node('h2', row.title || row.id), node('p', `${row.type === 'import' ? '教學資料匯入' : '報告預填'} · ${statusText} · ${new Date(row.updatedAt).toLocaleString(globalThis.edulogUi?.locale||'zh-TW')}`))
-    const origin=node('p',undefined,'record-origin');globalThis.edulogUi?.text(origin,combinedRow.remote?'work.merged':'work.local');card.append(origin)
-    if(combinedRow.remote)appendRemoteWork(card,combinedRow.remote,row)
-    if(row.type==='import'&&row.status==='partial_complete'&&row.snapshot) {
-      const repair=node('button','處理未完成項目 · 重新讀取與核對');repair.type='button'
-      repair.addEventListener('click',()=>void run(async()=>{
-        const chosen=Number($('source-tab').value)||row.sourceTab
-        $('source-tab').value=String(chosen);selectedPath=tabs.find(t=>t.id===chosen)?.path||row.sourcePath
-        const current=await source('context');if(current.classId!==row.snapshot.classId)throw new Error('請開啟相同來源班級頁，再處理未完成項目。')
-        work=retryHistoryWork(row);work.sourceTab=chosen;work.sourcePath=selectedPath;$('include-internal-notes').checked=work.includeInternalNotes===true
-        await save();flow('import');if(work.history)await collectHistory();await mappingView();renderHistoryIssues();notice('已重新核對歷史；原工作與已提交批次保留，已綁定資料不重複新增。')
-      }));card.append(repair)
-    }
-    if (row.type === 'import' && row.batches && !['complete','cancelled','partial_complete'].includes(row.status)) {
-      const resume = node('button', '檢查並續傳'); resume.addEventListener('click', () => void run(async () => {
-        work = row; $('source-tab').value = String(row.sourceTab); selectedPath = row.sourcePath; flow('import')
-        if (row.done === row.batches.length) { await finalizeImport(); notice('已恢復完成檢查點；伺服器批次與名單核對已更新。'); return }
-        if (row.status === 'outcome_unknown' || row.status === 'applying' || row.status === 'failed') { await resumeImport(); return }
-        if (row.status === 'paused') await api('job-status', { status: 'applying' }, { jobId: row.jobId }); await preview(true); progress(); notice('檢查剩餘批次後，按確認匯入或續傳。')
-      })); card.append(resume)
-    }
-    if (row.type === 'import' && row.snapshot && (!row.batches || !row.done && ['collected','previewed'].includes(row.status))) {
-      const resume = node('button', row.history?.next < row.history?.paths.length ? '繼續擷取／確認對應' : '繼續確認對應')
-      resume.addEventListener('click', () => void run(async () => {
-        const chosen = Number($('source-tab').value) || row.sourceTab
-        $('source-tab').value = String(chosen); selectedPath = tabs.find(t => t.id === chosen)?.path || row.sourcePath
-        $('include-internal-notes').checked = row.includeInternalNotes === true
-        const c = await source('context'); if (c.classId !== row.snapshot.classId) throw new Error('請先選擇同一來源班級的分頁。')
-        work = { ...row, sourceTab: chosen, sourcePath: selectedPath }; await save()
-        flow('import'); if (row.history) await collectHistory(); await mappingView();renderHistoryIssues(); notice('已恢復來源資料，請確認對應。')
-      })); card.append(resume)
-    }
-    if (row.type === 'prefill' && row.push && !row.pushRecorded) {
-      const retry = node('button', '重試回寫待確認紀錄'); retry.addEventListener('click', () => void run(async () => { await api('push', row.push); await send({ type: 'workspace-store', action: 'put', work: { ...row, pushRecorded: true } }); notice('待確認紀錄已回寫；原站表單未再次套用。'); await loadWork() })); card.append(retry)
-    }
-    if (row.type === 'prefill' && row.status === 'applying') card.append(node('p', '上次套用回應中斷，請到原站確認內容。不會自動重複套用。'))
-    $('work-list').append(card)
+  let meta=item.metadata
+  if(!meta&&item.local){meta=await saveWorkMetadata(item.local,changes);if(meta)item.metadata=meta}
+  if(!meta){notice('此工作缺少可驗證的來源識別，無法保存整理設定。',true);return}
+  const result=await api('work-record-save',{expected_revision:meta.revision,changes},{workId:meta.work_id})
+  const saved=result?.item
+  if(!saved)return
+  workHistory.metadata=workHistory.metadata.map(value=>value.work_id===saved.work_id?saved:value)
+  item.metadata=saved
+  if(item.local){Object.assign(item.local,changes);await send({type:'workspace-store',action:'put',work:item.local})}
+  renderWorkRecords()
+}
+async function setSourceForWork(row){
+  const expected=row.snapshot?.classId||row.sourceClassId
+  let candidate=tabs.find(tab=>tab.id===row.sourceTab&&tab.path===row.sourcePath)
+  if(!candidate){const matches=tabs.filter(tab=>tab.path===row.sourcePath);if(matches.length===1)candidate=matches[0];else if(matches.length>1){const verified=[];for(const tab of matches){try{const c=await send({type:'workspace-source',action:'context',tabId:tab.id,sourcePath:tab.path});if(!expected||c.classId===expected)verified.push(tab)}catch{}}if(verified.length===1)candidate=verified[0];else throw new Error(verified.length?'找到多個相同班級的來源分頁；請在清單選擇要使用的來源。':'目前開啟的來源頁與原工作班級不符。')}}
+  if(!candidate){candidate=await send({type:'workspace-open-source',sourcePath:row.sourcePath});tabs.push(candidate);$('source-tab').add(new Option(`${candidate.title} · ${candidate.path}`,candidate.id))}
+  $('source-tab').value=String(candidate.id);selectedPath=candidate.path;const c=await source('context');if(expected&&c.classId!==expected)throw new Error('來源班級與原工作不符；請檢查新開啟的來源頁面。');sourceContext=c;classSourceReady=Boolean(c.classId);reportSourceReady=Boolean(c.reportOpen);return candidate
+}
+async function openWorkRecord(item){const row=item.local;if(!row){renderWorkDetail(item);return}if(row.type==='import'){await setSourceForWork(row);work=row.status==='partial_complete'?retryHistoryWork(row):row;activeWorks.import=work;$('include-internal-notes').checked=work.includeInternalNotes===true;flow('import');if(row.batches){await resumeImport();return}if(work.history?.next<work.history?.paths.length)await collectHistory();await save();await mappingView();renderHistoryIssues();return}if(row.type==='prefill'){await setSourceForWork(row);work=row;activeWorks.prefill=work;flow('prefill');notice('已恢復預填工作。請重新讀取原生表單並核對，不會自動套用。')}}
+async function repeatWork(row){await setSourceForWork(row);$('date-from').value=row.dateFrom||$('date-from').value;$('date-to').value=row.dateTo||$('date-to').value;$('all-history').checked=row.dateFrom==='1900-01-01'&&row.dateTo==='9999-12-31';work=null;activeWorks.import=null;continuation=null;flow('import');await collect();notice('已建立新工作；身份對應與欄位偏好會重新驗證，逐筆覆寫及略過選擇不會沿用。')}}
+function renderWorkDetail(item){
+  const detail=$('work-detail'),row=item.local||item.remote||{},locale=globalThis.edulogUi?.locale||'zh-TW'
+  detail.replaceChildren()
+  const back=node('button','返回工作清單');back.id='work-detail-back';back.type='button';back.onclick=()=>{selectedWorkRecord=null;renderWorkRecords()};detail.append(back)
+  const title=node('h2',recordLabel(item));title.dataset.sourceRaw='';detail.append(title)
+  const sourceName=node('p',recordClass(item)||'來源班級未命名','hint');sourceName.dataset.sourceRaw='';detail.append(sourceName)
+  detail.append(node('p',`${item.local?.type==='prefill'?'報告預填':'教學資料同步'} · 狀態：${workStatusText(row.status||item.category)}`))
+  if(row.done!=null)detail.append(node('p',`已完成 ${row.done}/${row.batchCount||row.batches?.length||0} 批`))
+  if(item.metadata?.target_label)detail.append(node('p',`目標 EduLog：${item.metadata.target_label}`,'hint'))
+  if(row.expiresAt)detail.append(node('p',`本機草稿期限：${new Date(row.expiresAt).toLocaleString(locale)}`,'hint'))
+  if(item.local?.metadataSyncError)detail.append(node('p','跨裝置整理尚未保存；可重新整理後再試。','notice warning'))
+  if(item.remote)appendRemoteWork(detail,item.remote,item.local)
+  if(item.local){
+    const local=row,remaining=Math.max(0,(local.history?.paths?.length||0)-(local.history?.next||0)),summary=node('section',undefined,'work-detail-summary')
+    summary.append(node('h3','工作進度'))
+    if(local.type==='import')summary.append(node('p',`來源資料 ${local.snapshot?.records?.length||0} 列 · 歷史待讀取 ${remaining} 份`))
+    if(local.batches?.length){summary.append(node('p',`批次 ${local.done||0}/${local.batches.length} · 已寫入 ${local.applied||local.result?.applied||0} · 略過 ${local.skipped||0} · 失敗 ${local.failed||0}`));const list=node('ul');for(const batch of local.batches)list.append(node('li',`${String(batch.key||batch.id||'批次').slice(0,12)} · ${batch.status||'待處理'} · ${batch.applied||0} 筆`));summary.append(list)}
+    const checks=local.rosterChecks||[];if(local.rosterVerification||checks.length){summary.append(node('h3','名單核對'));for(const check of [local.rosterVerification,...checks].filter(Boolean)){const date=check.date||check.roster_date||'日期未提供';summary.append(node('p',`${date} · EduLog ${check.edulog_count??check.target_count??'—'} 人 · 來源 ${check.source_count??'—'} 人${check.missing_count!=null?` · 缺少 ${check.missing_count}`:''}${check.extra_count!=null?` · 其他 ${check.extra_count}`:''}`))}}
+    if(remaining)summary.append(node('p',`仍有 ${remaining} 份歷史資料待讀取或處理。`,'notice warning'))
+    detail.append(summary)
   }
-  if(local&&remote&&!visible.length){const empty=node('p',undefined,'hint');globalThis.edulogUi?.text(empty,'work.filteredEmpty');$('work-list').append(empty)}
-  if (!remote) {
-    const remoteError = node('article', undefined, 'card'); remoteError.append(node('h2', 'EduLog 工作紀錄暫時無法載入'), node('p', '本機續傳資料仍可查看。請確認連線後重試伺服器紀錄。', 'hint'))
-    const retryRemote = node('button', '重試載入 EduLog 紀錄'); retryRemote.addEventListener('click', () => void runLatest(loadWork, { label: '正在重新載入 EduLog 工作紀錄' })); remoteError.append(retryRemote); $('work-list').append(remoteError)
-    notice('工作紀錄部分載入失敗；本機與伺服器資料分開保留。', true); return
-  }
-  for(const row of visible.filter(row=>!row.local)) {
-    const card=node('article',undefined,'card'),origin=node('p',undefined,'record-origin');globalThis.edulogUi?.text(origin,'work.remote');card.append(origin)
-    if(row.remote)appendRemoteWork(card,row.remote)
-    else {const push=row.push;card.append(node('h2',`報告 ${String(push.report_id||push.id).slice(0,8)}`),node('p',push.status==='confirmed'?'已確認':'待人工送出／待確認'))}
-    $('work-list').append(card)
-  }
-  notice('工作紀錄已更新。')
+  if(item.local?.error){const error=node('section',undefined,'notice error');error.append(node('h3','最近一次操作失敗'),node('p',item.local.error.message||'請重試此工作的讀取。'));const retry=node('button','重試此工作讀取');retry.onclick=()=>void run(()=>openWorkRecord(item),{label:'正在重試此工作'});error.append(retry);detail.append(error)}
+  const actions=node('div',undefined,'work-detail-actions'),pin=node('button',workPinned(item)?'取消置頂':'置頂');pin.onclick=()=>void run(()=>updateWorkMetadata(item,{pinned:!workPinned(item)}),{label:'正在保存置頂設定'});actions.append(pin)
+  const rename=node('button','重新命名');rename.onclick=()=>{const label=node('label','工作名稱'),input=node('input');input.value=recordLabel(item);input.maxLength=100;input.setAttribute('aria-label','工作名稱');const saveName=node('button','保存名稱');saveName.onclick=()=>void run(()=>updateWorkMetadata(item,{title:input.value.trim()}),{label:'正在保存工作名稱'});label.append(input);actions.append(label,saveName);input.focus()};actions.append(rename)
+  if(item.metadata||item.local){const archive=node('button',workArchived(item)?'解除封存':'封存工作');archive.onclick=()=>void run(()=>updateWorkMetadata(item,{archived_at:workArchived(item)?null:new Date().toISOString()}),{label:'正在保存封存設定'});actions.append(archive)}
+  if(item.local&&['complete','cancelled','partial_complete'].includes(item.local.status)){const again=node('button','再次同步');again.onclick=()=>void run(()=>repeatWork(item.local),{label:'正在建立新的同步工作'});actions.append(again)}
+  if(item.local){const remove=node('button','移除此裝置草稿');remove.onclick=()=>{const prompt=node('section',undefined,'notice warning');prompt.append(node('p','只會移除此瀏覽器的草稿。EduLog 已保存結果與其他裝置上的草稿不會刪除。'));const yes=node('button','確認移除本機草稿'),no=node('button','保留草稿');yes.onclick=()=>void run(async()=>{await send({type:'workspace-store',action:'delete',id:item.local.id});if(selectedWorkRecord?.local?.id===item.local.id)selectedWorkRecord=null;await loadWork()},{label:'正在移除本機工作草稿'});no.onclick=()=>prompt.remove();prompt.append(yes,no);detail.append(prompt)};actions.append(remove)}
+  detail.append(actions)
 }
 function appendRemoteWork(item,r,local) {
   const statusText=status=>({queued:'排隊中',collecting:'擷取中',previewed:'待確認差異',applying:'匯入中',paused:'已暫停',failed:'部分失敗',outcome_unknown:'結果尚未確認',partial_complete:'部分完成，尚有待處理項目',complete:'已完成',cancelled:'已取消剩餘批次',pending_confirmation:'待人工確認',confirmed:'已確認'})[status]||'狀態待確認'
   item.append(node('p',`來源班級 ${r.source_class_id||'—'} · ${statusText(r.status)} · 批次內已處理 ${r.counts?.applied||0} 筆`))
-  const label=node('label','名單核對日期'),date=node('input');date.type='date';date.value=local?.rosterVerification?.date||local?.rosterChecks?.[0]?.date||taipeiToday();label.append(date);item.append(label)
+  const label=node('label','名單核對日期'),date=node('input');date.type='date';date.value=local?.rosterVerification?.date||local?.rosterChecks?.[0]?.date||'';label.append(date);item.append(label)
   const inspect=node('button','查詢批次與有效名單');inspect.type='button';inspect.addEventListener('click',()=>void runLatest(async()=>{
     if(!date.value||!date.checkValidity())return date.reportValidity()
     const info=await api('import-info',undefined,{jobId:r.id,query:{roster_date:date.value}}),roster=info.roster?.enrollments||[]
@@ -878,11 +914,33 @@ function appendRemoteWork(item,r,local) {
     item.append(panel);notice('已讀取伺服器批次檢查點與目標班級有效名單。')
   },{label:'正在核對伺服器批次與班級名單'}));item.append(inspect)
 }
+$('archive-completed').addEventListener('click',()=>void run(async()=>{
+  const completed=combineWorkRecords(workHistory.local||[],workHistory.remote||{},workHistory.metadata||[]).filter(item=>item.category==='done'&&!workArchived(item))
+  const eligible=completed.filter(item=>item.metadata||item.local?.sourcePath)
+  if(!eligible.length){notice('目前沒有可封存的已完成工作。',true);return}
+  for(const item of eligible)await updateWorkMetadata(item,{archived_at:new Date().toISOString()})
+  notice(`已封存 ${eligible.length} 筆已完成工作。`);await loadWork()
+},{label:'正在封存已完成工作'}))
 $('work-filter').addEventListener('change',renderWorkRecords)
+$('work-type-filter').addEventListener('change',renderWorkRecords)
+$('work-search').addEventListener('input',renderWorkRecords)
+$('work-class-filter').addEventListener('input',renderWorkRecords)
 
 
 document.querySelectorAll('[data-flow]').forEach(b => b.addEventListener('click', async () => {if(busy&&!activeReadId)return;if(activeReadId){await cancelRead(false);await readFinished}flow(b.dataset.flow)}))
 $('source-tab').addEventListener('change', () => void runLatest(changeSource, { label: '正在讀取來源班級' }))
+chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
+  if(message?.type!=='workspace-focus')return
+  void(async()=>{
+    if(message.binding?.instance!==binding?.instance||message.binding?.userId!==binding?.userId)throw new Error('目前工作台連線與要求的帳號不同，請重新開啟工作台。')
+    if(busy)throw new Error('目前操作正在進行；完成或取消後再切換工作。')
+    if(unsaved&&work)await save()
+    if(message.sourceTab){const refreshed=await send({type:'workspace-init'});tabs=refreshed.tabs||[];const sourceTab=tabs.find(tab=>tab.id===message.sourceTab.id&&tab.path===message.sourceTab.path);if(!sourceTab)throw new Error('來源分頁已關閉或網址已變更，請重新開啟來源頁面。');$('source-tab').value=String(sourceTab.id);await changeSource()}
+    flow(message.flow==='prefill'?'prefill':message.flow==='work'?'work':'import')
+    return{ok:true}
+  })().then(respond,error=>respond({ok:false,error:{message:error.message||'無法切換工作台。'}}))
+  return true
+})
 $('classroom-search').addEventListener('input', () => { clearTimeout(mappingSearchTimer); mappingSearchTimer = setTimeout(() => void runLatest(() => loadClassrooms(true), { label: '正在搜尋目標教室' }), 300) })
 $('more-classrooms').addEventListener('click', () => void runLatest(() => loadClassrooms(false), { label: '正在載入更多教室候選' }))
 $('mapping-course-search').addEventListener('input', () => { clearTimeout(mappingSearchTimer); mappingSearchTimer = setTimeout(() => void runLatest(() => loadMappingCourses(true), { label: '正在搜尋目標課程' }), 300) })
