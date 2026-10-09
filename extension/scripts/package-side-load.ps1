@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $extensionRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $repositoryRoot = (Resolve-Path (Join-Path $extensionRoot '..')).Path
 $distributionRoot = Join-Path $extensionRoot 'dist'
-$packageName = 'EduLog-Teaching-Tools-0.1.0-skip-review-reconfirm'
+$packageName = 'EduLog-Teaching-Tools-0.1.0-history-row-classification'
 $archivePath = Join-Path $distributionRoot "$packageName.zip"
 $temporaryRoot = [System.IO.Path]::GetTempPath()
 $stagingPath = Join-Path $temporaryRoot "edulog-package-$([guid]::NewGuid().ToString('N'))"
@@ -38,6 +38,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-1000130-preview-dependencies.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-work-records.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-skip-review-reconfirm.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-history-row-classification.md') -Destination $stagingPath
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
