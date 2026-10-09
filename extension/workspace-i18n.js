@@ -33,6 +33,22 @@ const en = {
   '待處理進度': 'Review progress', '下一個問題': 'Next issue', '下一份待處理': 'Next report needing attention', '前往處理': 'Go to issue', '問題': 'issues', '份': 'reports', '可同步': 'ready to sync', '映射已保存': 'Mapping saved', '已核對，待同步': 'Reviewed, ready to sync', '已保存歷史／已綁定課次': 'History saved / session linked', '處理此項': 'Resolve this issue', '已清除映射；原站內容保留。': 'Mapping cleared. The source value is unchanged.', '一致，不需再次記住': 'Matches; no need to remember again', '目前課程': 'current course', '同一來源身份出現不同內容，請補讀並核對。': 'This source identity has conflicting content. Read again and review.', '來源或 EduLog 資料已變更，請重新產生差異。': 'Source or EduLog data changed. Generate the differences again.',
   '星期日': 'Sunday', '星期一': 'Monday', '星期二': 'Tuesday', '星期三': 'Wednesday', '星期四': 'Thursday', '星期五': 'Friday', '星期六': 'Saturday'
 }
+Object.assign(en,{
+  '搜尋':'Search','工作狀態':'Work status','類型':'Type','全部類型':'All types','教學資料同步':'Teaching data sync','來源班級':'Source class','工作名稱、班級或識別碼':'Work name, class, or ID','班級名稱或編號':'Class name or ID',
+  '草稿只保存在此瀏覽器七天；封存只整理清單，不代表工作完成。':'Drafts stay in this browser for seven days. Archiving only organizes the list; it does not complete the work.',
+  '顯示':'Showing','筆工作':'work items','封存':'Archived','筆。狀態依實際檢查點與交易結果計算。':'items. Status follows saved checkpoints and transaction results.',
+  '沒有符合篩選條件的工作。':'No work matches these filters.','來源班級未命名':'Unnamed source class','此瀏覽器':'This browser','來源裝置：':'Source device:','草稿期限七天':'Draft retained for seven days',
+  '選取一筆工作以查看進度、結果與管理操作。':'Select a work item to view progress, results, and actions.','寫入中':'Applying','已暫停':'Paused','需要處理':'Needs attention','結果待核對':'Outcome needs review','已完成':'Complete','部分完成':'Partially complete','剩餘工作已取消':'Remaining work cancelled','已讀取，待核對':'Read, needs review','正在讀取':'Reading','擷取已暫停':'Reading paused','待檢查':'Needs review','摘要待確認':'Preview needs confirmation','待確認原站結果':'Source result needs confirmation','已確認':'Confirmed','待處理':'Pending',
+  '核對未知結果':'Check unknown result','處理剩餘項目':'Handle remaining items','查看結果':'View results','繼續核對':'Continue review','查看預填結果':'View prefill result','查看工作詳情':'View work details','已封存':'Archived',
+  '解除封存':'Unarchive','置頂':'Pin','取消置頂':'Unpin','重新命名':'Rename','保存名稱':'Save name','封存工作':'Archive work','再次同步':'Sync again','移除此裝置草稿':'Remove this device’s draft',
+  '← 返回工作清單':'← Back to work list','來源草稿只保存在建立工作的裝置；此處可整理名稱、置頂與封存，並查看伺服器結果。':'The source draft stays on the device where it was created. You can organize its name, pin, archive, and view server results here.',
+  '狀態：':'Status:','已完成':'Complete','批':'batches','目標 EduLog：':'EduLog destination:','本機草稿期限：':'Local draft expires:','只會移除此瀏覽器的草稿。EduLog 已保存結果與其他裝置上的草稿不會刪除。':'This removes only the draft on this browser. Saved EduLog results and drafts on other devices are not deleted.',
+  '確認移除本機草稿':'Remove this local draft','保留草稿':'Keep draft','此伺服器尚未提供跨裝置整理；設定只保存在本機工作。':'Cross-device organization is not available on this server. This setting is saved with the local work only.',
+  '此工作缺少可驗證的來源識別，無法跨裝置保存整理設定。':'This work has no verifiable source identity, so organization settings cannot be saved across devices.',
+  '跨裝置工作整理讀取失敗；已載入的本機與伺服器紀錄仍可使用。':'Cross-device work organization could not be loaded. Loaded local drafts and server records remain available.',
+  'EduLog 工作紀錄暫時無法載入':'EduLog work history could not be loaded','本機續傳資料仍可查看；重新整理伺服器紀錄不會改變已提交資料。':'Local checkpoints remain available. Refreshing server history will not change submitted data.',
+  '重試載入伺服器紀錄':'Retry server history','重試讀取本機工作':'Retry local work history','正在恢復所選工作':'Resuming selected work','工作紀錄已更新。':'Work history updated.'
+})
 const attributes=['placeholder','title','aria-label']
 const originals=new WeakMap()
 let locale='zh-TW', observer
