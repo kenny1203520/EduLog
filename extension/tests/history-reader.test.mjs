@@ -15,6 +15,15 @@ test('retrying one failed history list never revisits completed students',async(
  await readHistoryWork(work,hooks);assert.equal(work.history.issues.length,1);const other=calls.filter(p=>p.endsWith('/2')).length
  fail=false;await readHistoryWork(work,hooks,'/dt_admissions/1');assert.equal(work.history.issues.length,0);assert.equal(work.history.next,2);assert.equal(calls.filter(p=>p.endsWith('/2')).length,other)
 })
+
+test('a checkpoint save failure is not treated as a source failure and resumes without a second list read',async()=>{
+ const work=fixture(),calls=[];let saves=0,allowSave=false
+ const hooks={current:()=>true,paused:()=>false,save:async()=>{saves++;if(saves===2&&!allowSave)throw Object.assign(new Error('storage full'),{code:'WORK_STORAGE_FULL'})},progress:()=>{},merge:(a,b)=>[...a,...b],source:async(action,input)=>{calls.push([action,input.historyPath,input.input?.reportId]);if(action==='history')return input.historyPath.endsWith('/1')?[record('a'),record('b')]:[];return record(input.input.reportId)}}
+ await assert.rejects(readHistoryWork(work,hooks),error=>error.code==='WORK_STORAGE_FULL')
+ assert.equal(work.status,'paused-extraction');assert.equal(work.collectionSaveError,'WORK_STORAGE_FULL');assert.equal(work.history.next,0);assert.equal(work.history.issues.length,0);assert.equal(work.history.checkpoints['/dt_admissions/1'].next,0);assert.deepEqual(calls,[['history','/dt_admissions/1',undefined]])
+ allowSave=true;await readHistoryWork(work,hooks)
+ assert.equal(work.status,'collected');assert.equal(work.history.next,2);assert.equal(calls.filter(call=>call[0]==='history'&&call[1].endsWith('/1')).length,1);assert.equal(calls.filter(call=>call[0]==='history-report').length,2);assert.equal(work.snapshot.records.length,2)
+})
 test('late source responses cannot mutate a replaced work',async()=>{
  const work=fixture();let current=true
  await readHistoryWork(work,{current:()=>current,paused:()=>false,save:async()=>{},progress:()=>{},merge:()=>{throw Error('must not merge')},source:async()=>{current=false;return[record('late')]}})

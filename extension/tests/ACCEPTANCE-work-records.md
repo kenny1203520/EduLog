@@ -37,3 +37,11 @@
 - Local source drafts retain the existing seven-day lifetime. Removing a local draft does not delete server results or drafts on another device.
 - Archiving changes list visibility only; it does not mark a work complete or run it.
 - Unknown or unavailable data remains identified as unavailable; read failures do not become empty work history.
+
+## Large-history draft persistence follow-up
+
+- Reproduced the storage boundary with 600 synthetic history reports: the complete work serialized to 4,430,734 characters, exceeding the former 4,000,000-character local draft limit. This matches the reported pause path; the exact size of the user's original work was not available, so this is a reproduced cause rather than a claim about that one work item.
+- Local drafts now store the serialized payload in 512 KiB IndexedDB chunks. The compact work header, all chunks, and revision are written in one transaction. Reads still return the complete work object, and legacy inline drafts remain readable until their next successful save converts them.
+- Chrome and Edge IndexedDB checks passed for a >4 MB, 600-report Chinese sample with source evidence, internal notes, half-star/zero/false values, legacy conversion, owner isolation, quota failure rollback, missing-chunk detection, repair, and deletion cleanup.
+- A draft-save failure now pauses extraction without classifying it as a source-read failure or advancing its saved checkpoint. The workbench keeps the current unsaved state and exposes an explicit retry-and-continue action; both browser engines passed this recovery flow without uncaught page errors.
+- Extension automated tests: 221 passed. Chrome and Edge synthetic responsive flows passed at 360, 390, 768, 1024, 1200, 1440, and 1920 CSS pixels. Real extension side-load remains pending; no source teaching report was submitted.

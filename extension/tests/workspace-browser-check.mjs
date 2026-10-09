@@ -21,10 +21,10 @@ const mock = () => {
   const catalog = { classrooms:[{id:id(1),name:'測試教室'}],courses:[{id:id(2),display_name:'測試課程'}],class_sessions:[{id:id(3),name:'測試班級',classroom_id:id(1),course_ids:[id(2)],start_time:'09:00:00',end_time:'10:00:00',start_date:'2026-01-01',day_of_week:5}],students:[],enrollments:[],occurrences:[],report_targets:[],source_links:[],lessons:[],permissions:{course_create:true,classroom_scopes:[{id:id(1),class_create:true}],session_scopes:[{id:id(3),student_create:true,enrollment_create:true,occurrence_create:true,report_create:true}]} }
   const native = {formId:'native-form',action:'/dt_admissions/301/reports/401',admissionId:'301',reportId:'401',title:'測試學生 A 課堂紀錄',date:'2026-10-02',fingerprint:'a'.repeat(64),sourceReportUrl:'https://corp.orangeapple.co/dt_admissions/301/reports/401',fields:[{key:'attendance_status',label:'出席',type:'select',value:'',options:[{value:'attended',label:'出席'},{value:'absent',label:'不出席'}]},{key:'content',label:'學習表現',type:'text',value:'原站草稿',options:[]},{key:'class_notes',label:'內部紀錄',internal:true,type:'text',value:'',options:[]}]}
   const report = {id:id(5),version:1,student_name:'測試學生 A',course_name:'測試課程',occurrence_date:'2026-10-02',updated_at:'2026-10-02T00:00:00Z',content:'EduLog 評語',attendance_status:'present',is_completed:true,class_notes:'內部文字',completeness:{isMissing:true}}
-  window.testCalls=[]; window.appliedRows=[]; window.chrome={runtime:{sendMessage:async m=>{
+  window.testCalls=[]; window.appliedRows=[]; window.failWorkSaves??=0; window.chrome={runtime:{sendMessage:async m=>{
     window.testCalls.push(m)
     if(m.type==='workspace-init')return{data:{binding:{instance:'http://localhost:3000',userId:id(8)},status:{status:'connected',capabilities:{teaching_data_import:true,report_prefill:true,catalog_v1:true,mapping_memory:true,multi_course_import:true,enrollment_history_reports:true,per_occurrence_report_routing:true}},tabs:new URL(location.href).searchParams.has('empty')?[]:[{id:10,title:'測試班級',path:'/courses/dt/11',url:'https://corp.orangeapple.co/courses/dt/11'}]}}
-    if(m.type==='workspace-store'){ if(m.action==='list')return{data:[...store.values()]};if(m.action==='get')return{data:store.get(m.id)};let w=structuredClone(m.work);if(['complete','cancelled'].includes(w.status)){delete w.snapshot;delete w.batches}w.updatedAt=Date.now();store.set(w.id,w);return{data:w} }
+    if(m.type==='workspace-store'){ if(m.action==='list')return{data:[...store.values()]};if(m.action==='get')return{data:store.get(m.id)};if(window.failWorkSaves>0){window.failWorkSaves--;return{error:{code:'WORK_STORAGE_FULL',message:'此瀏覽器的工作儲存空間不足。請移除不需要的本機工作草稿後重試。'}}}let w=structuredClone(m.work);if(['complete','cancelled'].includes(w.status)){delete w.snapshot;delete w.batches}w.updatedAt=Date.now();store.set(w.id,w);return{data:w} }
     if(m.type==='workspace-check-source')return{data:{closed:false}}
     if(m.type==='workspace-cancel-read')return{data:true}
     if(m.type==='workspace-source'){
@@ -71,12 +71,22 @@ try {
         assert.deepEqual(await emptyPage.evaluate(()=>unhandledRejections),[],`${name} ${flow}: no unhandled startup rejections`)
         console.log(`PASS ${name}: ${flow} entry initializes safely with no source tab`); await emptyPage.close()
       }
+      if(!editorOnly&&!inlineOnly){
+        const retryPage=await browser.newPage({viewport:{width:390,height:800}}),retryErrors=[]
+        retryPage.on('pageerror',error=>retryErrors.push(error.message));await retryPage.addInitScript(()=>{window.failWorkSaves=1;window.unhandledRejections=[];window.addEventListener('unhandledrejection',event=>window.unhandledRejections.push(String(event.reason)))});await retryPage.addInitScript(mock);await retryPage.goto(`http://127.0.0.1:${port}/workspace.html?source=10`);await retryPage.locator('#workspace').waitFor({state:'visible'});await retryPage.locator('#collect').click();await retryPage.locator('#retry-history-save').waitFor({state:'visible'});assert.match(await retryPage.locator('#draft-status').textContent(),/草稿保存失敗|Draft save failed/);assert.equal(await retryPage.evaluate(()=>testCalls.filter(call=>call.type==='workspace-store'&&call.action==='put').length),1);await retryPage.locator('#retry-history-save').click();await retryPage.locator('#mapping').waitFor({state:'visible'});assert.equal(await retryPage.locator('#retry-history-save').isVisible(),false);assert.equal(await retryPage.evaluate(()=>testCalls.filter(call=>call.type==='workspace-store'&&call.action==='put').length)>=3,true);assert.deepEqual(retryErrors,[]);assert.deepEqual(await retryPage.evaluate(()=>unhandledRejections),[]);console.log(`PASS ${name}: failed first draft save pauses; explicit retry saves and resumes without uncaught errors`);await retryPage.close()
+      }
       const storagePage = await browser.newPage(), storageErrors = []
       storagePage.on('pageerror', error => storageErrors.push(error.message))
       await storagePage.goto(`http://127.0.0.1:${port}/workspace.css`)
       const checks = await storagePage.evaluate(async () => {
         const { workStore } = await import('/work-store.js'), owner = { instance: 'https://test.invalid', userId: 'user-a' }, other = { ...owner, userId: 'user-b' }
         const results = [], check = (name, value) => results.push({ name, passed: !!value })
+        await new Promise((resolve, reject) => { const deletion = indexedDB.deleteDatabase('edulog-integration-work'); deletion.onsuccess = resolve; deletion.onerror = () => reject(deletion.error); deletion.onblocked = () => reject(new Error('work database stayed open before legacy upgrade')) })
+        await new Promise((resolve, reject) => { const opening = indexedDB.open('edulog-integration-work', 1); opening.onupgradeneeded = () => opening.result.createObjectStore('work', { keyPath: 'id' }); opening.onerror = () => reject(opening.error); opening.onsuccess = () => { const database = opening.result, tx = database.transaction('work', 'readwrite'); tx.objectStore('work').put({ id: 'legacy-work', instance: owner.instance, userId: owner.userId, revision: 1, expiresAt: Date.now() + 86400000, status: 'paused', snapshot: { records: [{ kind: 'report', data: { content: 'legacy draft' } }] } }); tx.oncomplete = () => { database.close(); resolve() }; tx.onerror = () => reject(tx.error) } })
+        const legacy = await workStore.get('legacy-work', owner)
+        check('version 1 inline draft remains readable', legacy?.snapshot?.records?.[0]?.data?.content === 'legacy draft')
+        const migrated = await workStore.put(legacy, owner)
+        check('legacy draft converts on save without data loss', migrated.snapshot.records[0].data.content === legacy.snapshot.records[0].data.content && !!migrated.updatedAt)
         const row = { id: 'storage-test', revision: 2, status: 'paused', history: {checkpoints:{private:{records:['private']}}}, snapshot: { records: ['private'] }, batches: [1], form: { value: 'draft' }, prefill: { value: 'draft' }, report: { id: 'test' }, uiState: [1] }
         const saved = await workStore.put(row, owner)
         check('seven-day expiry', saved.expiresAt <= Date.now() + 7 * 86400000)
@@ -94,7 +104,7 @@ try {
         await workStore.put({ id: 'expired', status: 'paused', expiresAt: Date.now() - 1 }, owner)
         check('expired invisible', await workStore.get('expired', owner) === null)
         await workStore.purge()
-        check('purge preserves active works', (await workStore.list(owner)).length === 3)
+        check('purge preserves active works', (await workStore.list(owner)).length === 4)
         await new Promise((resolve, reject) => {
           const deletion = indexedDB.deleteDatabase('edulog-integration-work')
           deletion.onsuccess = resolve
@@ -103,6 +113,28 @@ try {
         })
         const reopened = await Promise.all(Array.from({length: 3}, (_, index) => workStore.put({ id: `reopened-${index}`, status: 'paused' }, owner)))
         check('closed database connection reopens for parallel operations', reopened.length === 3 && (await workStore.list(owner)).filter(row => row.id.startsWith('reopened-')).length === 3)
+        const paragraph = '學生能跟上進度；評語保留原文。'.repeat(420)
+        const historyRecords = Array.from({ length: 600 }, (_, index) => ({ kind: 'report', source_id: `report-${index}`, enrollment_source_id: 'large-admission', date: '2026-10-01', evidenceKey: `large-${index}`, data: { attendance_status: 'absent', absence_reason: 'other', class_participation: 0.5, classroom_behavior: 0, is_completed: false, content: paragraph, class_notes: '內部紀錄\n' + paragraph }, sourceFields: [{ key: 'content', value: paragraph, type: 'text' }], sourceEvidence: [{ sourcePath: '/dt_admissions/large-admission', table: 'reports', row: index, fields: [{ label: '評語', text: paragraph }] }] }))
+        const large = { id: 'large-history', revision: 1, status: 'paused-extraction', history: { paths: ['/dt_admissions/large-admission'], next: 0, reportCount: 73, checkpoints: { '/dt_admissions/large-admission': { records: structuredClone(historyRecords), next: 73 } } }, snapshot: { records: [{ kind: 'enrollment', source_id: 'large-admission', data: { name: '學生甲' } }, ...historyRecords] } }
+        const largeCharacters = JSON.stringify(large).length
+        check('large fixture exceeds the former four million character limit', largeCharacters > 4_000_000)
+        const largeSaved = await workStore.put(large, owner), largeLoaded = await workStore.get(large.id, owner), largeListed = (await workStore.list(owner)).find(item => item.id === large.id)
+        check('more than 600 source reports and checkpoints restore from segments', largeLoaded.snapshot.records.length === 601 && largeLoaded.history.checkpoints['/dt_admissions/large-admission'].records.length === 600 && largeListed.snapshot.records.length === 601)
+        check('false zero half-star internal notes and source evidence survive', largeLoaded.snapshot.records[1].data.classroom_behavior === 0 && largeLoaded.snapshot.records[1].data.is_completed === false && largeLoaded.snapshot.records[1].data.class_participation === 0.5 && largeLoaded.snapshot.records[1].data.class_notes.includes('內部紀錄') && largeLoaded.snapshot.records[1].sourceEvidence[0].fields[0].text === paragraph)
+        const dbHandle = await new Promise((resolve, reject) => { const opening = indexedDB.open('edulog-integration-work', 2); opening.onerror = () => reject(opening.error); opening.onsuccess = () => resolve(opening.result) }), payloadRows = await new Promise((resolve, reject) => { const req = dbHandle.transaction('payloads').objectStore('payloads').getAll(); req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error) })
+        check('large work is split into bounded payload chunks', payloadRows.filter(part => part.workId === large.id).length > 1 && payloadRows.filter(part => part.workId === large.id).every(part => part.data.byteLength <= 512 * 1024)); dbHandle.close()
+        let failChunk = true; const originalPut = IDBObjectStore.prototype.put
+        IDBObjectStore.prototype.put = function (...args) { if (this.name === 'payloads' && failChunk) { failChunk = false; throw new DOMException('simulated quota', 'QuotaExceededError') } return originalPut.apply(this, args) }
+        let failedWrite; try { await workStore.put({ ...large, revision: 2, snapshot: { records: [{ kind: 'report', data: { content: 'new version' } }] } }, owner) } catch (error) { failedWrite = error } finally { IDBObjectStore.prototype.put = originalPut }
+        const afterFailedWrite = await workStore.get(large.id, owner)
+        check('failed chunk transaction reports quota and keeps prior complete draft', failedWrite?.code === 'WORK_STORAGE_FULL' && afterFailedWrite.revision === 1 && afterFailedWrite.snapshot.records.length === 601)
+        await new Promise((resolve, reject) => { const req = indexedDB.open('edulog-integration-work', 2); req.onerror = () => reject(req.error); req.onsuccess = () => { const db = req.result, tx = db.transaction('payloads', 'readwrite'); tx.objectStore('payloads').delete([large.id, 1]); tx.oncomplete = () => { db.close(); resolve() }; tx.onerror = () => reject(tx.error) } })
+        let corrupt; try { await workStore.get(large.id, owner) } catch (error) { corrupt = error }
+        check('missing segment is reported as corrupt data', corrupt?.code === 'WORK_DATA_CORRUPT')
+        await workStore.put(large, owner)
+        check('re-saving the live draft repairs missing segments', (await workStore.get(large.id, owner)).snapshot.records.length === 601)
+        await workStore.delete(large.id, owner)
+        check('deleting work also removes all payload segments', !(await workStore.list(owner)).some(item => item.id === large.id) && !(await new Promise((resolve, reject) => { const opening = indexedDB.open('edulog-integration-work', 2); opening.onerror = () => reject(opening.error); opening.onsuccess = () => { const db = opening.result, req = db.transaction('payloads').objectStore('payloads').getAll(); req.onsuccess = () => { const remains = req.result.some(part => part.workId === large.id); db.close(); resolve(remains) }; req.onerror = () => reject(req.error) } })))
         return results
       })
       assert.deepEqual(checks.filter(c => !c.passed), []); assert.deepEqual(storageErrors, [])
