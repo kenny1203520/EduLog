@@ -81,6 +81,18 @@ try {
         }
     }
 
+    # Parse every JavaScript file from the staged package using the same module
+    # mode as the extension source. This prevents broken source from replacing
+    # the last known-good side-load archive.
+    $null = Get-Command node -CommandType Application -ErrorAction Stop
+    $syntaxPackagePath = Join-Path $stagingPath 'package.json'
+    [System.IO.File]::WriteAllText($syntaxPackagePath, '{"private":true,"type":"module"}', [System.Text.UTF8Encoding]::new($false))
+    foreach ($sourceFile in (Get-ChildItem -LiteralPath $stagingPath -File -Recurse | Where-Object { $_.Extension -eq '.js' })) {
+        & node --check $sourceFile.FullName
+        if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax check failed: $($sourceFile.FullName)" }
+    }
+    Remove-Item -LiteralPath $syntaxPackagePath -Force
+
     Compress-Archive -Path (Join-Path $stagingPath '*') -DestinationPath $archivePath -Force
 }
 finally {

@@ -57,10 +57,20 @@ try {
     const browser = await chromium.launch({ executablePath, headless: true })
     try {
       if(!inlineOnly){
-      const emptyPage = await browser.newPage(); await emptyPage.addInitScript(mock); await emptyPage.goto(`http://127.0.0.1:${port}/workspace.html?empty=1`); await emptyPage.locator('#workspace').waitFor({state:'visible'})
-      assert.equal(await emptyPage.locator('#collect').isDisabled(),true); assert.equal(await emptyPage.locator('#read-form').isDisabled(),true)
-      assert.equal(await emptyPage.evaluate(()=>testCalls.some(m=>m.type==='workspace-api'&&['context','catalog','reports'].includes(m.operation))),false)
-      console.log(`PASS ${name}: no source tabs means no catalog reads and no active import/prefill action`); await emptyPage.close()
+      for(const flow of ['import','prefill','work']){
+        const emptyPage=await browser.newPage(),startupErrors=[]
+        emptyPage.on('pageerror',error=>startupErrors.push(error.message))
+        await emptyPage.addInitScript(()=>{window.unhandledRejections=[];window.addEventListener('unhandledrejection',event=>window.unhandledRejections.push(String(event.reason)))})
+        await emptyPage.addInitScript(mock); await emptyPage.goto(`http://127.0.0.1:${port}/workspace.html?empty=1&flow=${flow}`); await emptyPage.locator('#workspace').waitFor({state:'visible'})
+        await emptyPage.locator(`#${flow}-view`).waitFor({state:'visible'})
+        await emptyPage.waitForFunction(()=>document.querySelector('#workspace')?.getAttribute('aria-busy')!=='true')
+        assert.equal(await emptyPage.locator('#collect').isDisabled(),true,`${name} ${flow}: import remains unavailable without a source`)
+        assert.equal(await emptyPage.locator('#read-form').isDisabled(),true,`${name} ${flow}: prefill remains unavailable without a source`)
+        assert.equal(await emptyPage.evaluate(()=>testCalls.some(m=>m.type==='workspace-api'&&['context','catalog','reports'].includes(m.operation))),false,`${name} ${flow}: no source scoped requests`)
+        assert.deepEqual(startupErrors,[],`${name} ${flow}: no uncaught startup errors`)
+        assert.deepEqual(await emptyPage.evaluate(()=>unhandledRejections),[],`${name} ${flow}: no unhandled startup rejections`)
+        console.log(`PASS ${name}: ${flow} entry initializes safely with no source tab`); await emptyPage.close()
+      }
       const storagePage = await browser.newPage(), storageErrors = []
       storagePage.on('pageerror', error => storageErrors.push(error.message))
       await storagePage.goto(`http://127.0.0.1:${port}/workspace.css`)
@@ -142,7 +152,7 @@ try {
         await editorPage.close()
       }
       for (const width of ((editorOnly||inlineOnly)?[]:[360,390,768,1024,1200,1440,1920])) {
-      const page = await browser.newPage({viewport:{width,height:900}}), errors=[]; page.on('pageerror',e=>errors.push(e.message)); await page.addInitScript(mock)
+      const page = await browser.newPage({viewport:{width,height:900}}), errors=[]; page.on('pageerror',e=>errors.push(e.message)); await page.addInitScript(()=>{window.unhandledRejections=[];window.addEventListener('unhandledrejection',event=>window.unhandledRejections.push(String(event.reason)))}); await page.addInitScript(mock)
       await page.goto(`http://127.0.0.1:${port}/workspace.html?source=10`); await page.locator('#workspace').waitFor({state:'visible'})
       await page.locator('#read-history').uncheck(); await page.locator('#collect').click(); await page.locator('#mapping').waitFor({state:'visible'})
       await page.locator('#classroom').selectOption('00000000-0000-4000-8000-000000000001'); await page.locator('#class-session').selectOption('00000000-0000-4000-8000-000000000003')
@@ -151,8 +161,7 @@ try {
       await page.locator('#review-301').check()
       if (width === 390) {
         await page.waitForFunction(() => testCalls.some(m => m.type === 'workspace-store' && m.work?.uiState?.find(s => s.id === 'status-301' && s.value === 'regular')))
-        await page.locator('[data-flow=work]').click(); await page.getByRole('button', { name: '繼續確認對應', exact: true }).click()
-        await page.waitForFunction(() => document.querySelector('#notice').textContent.includes('已恢復來源資料'))
+        await page.locator('[data-flow=work]').click(); await page.waitForFunction(()=>document.querySelector('#workspace').getAttribute('aria-busy')!=='true'); await page.getByRole('button',{name:'\u7e7c\u7e8c\u6838\u5c0d',exact:true}).click(); await page.waitForFunction(()=>document.querySelector('#workspace').getAttribute('aria-busy')!=='true'); await page.waitForFunction(()=>document.querySelector('#mapping')&&!document.querySelector('#mapping').hidden,{timeout:10000}).catch(async()=>{const state=await page.evaluate(()=>({notice:document.querySelector('#notice')?.textContent,operation:document.querySelector('#operation-detail')?.textContent,calls:testCalls.slice(-8)}));throw new Error('Work resume did not show mapping: '+JSON.stringify(state))})
         for (const [id, value] of [['classroom','00000000-0000-4000-8000-000000000001'],['class-session','00000000-0000-4000-8000-000000000003'],['student-101','new'],['enrollment-301','new'],['enrollment-course-301','00000000-0000-4000-8000-000000000002'],['start-301','2026-01-01'],['status-301','regular']]) assert.equal(await page.locator(`#${id}`).inputValue(), value, `${name}: restores ${id}`)
       }
       assert.equal(await page.locator('#review-301').isChecked(), true, `${name} ${width}: new enrollment confirmation retained`)
@@ -179,8 +188,8 @@ try {
       await page.screenshot({path:new URL(`${name}-${width}-prefill.png`,output).pathname.replace(/^\//,'')})
       await page.locator('#prefill').click(); await page.locator('#prefill-result').waitFor({state:'visible'})
       const fields = await page.evaluate(()=>testCalls.find(m=>m.type==='workspace-source'&&m.action==='apply').input.fields); assert.deepEqual(fields.map(f=>f.key),['attendance_status'])
-      await page.locator('[data-flow=work]').click(); await page.waitForFunction(()=>document.querySelector('#notice').textContent.includes('工作紀錄已更新'))
-      assert.deepEqual(errors,[]); console.log(`PASS ${name} ${width}: import, manual mapping, preview/apply, prefill preservation, pending record, history, overflow`); await page.close()
+      await page.locator('[data-flow=work]').click(); await page.locator('#work-view').waitFor({state:'visible'}); await page.waitForFunction(()=>document.querySelector('#work-count').textContent.trim().length>0)
+      assert.deepEqual(errors,[]); assert.deepEqual(await page.evaluate(()=>unhandledRejections),[]); console.log(`PASS ${name} ${width}: import, manual mapping, preview/apply, prefill preservation, pending record, history, overflow`); await page.close()
     } } finally { await browser.close() }
   }
 } finally { await new Promise(resolve=>server.close(resolve)) }
