@@ -290,7 +290,17 @@ export function installWorkspaceBroker(getStatus) {
         if (['history','history-report'].includes(message.action)) {
           const row = await workStore.get(message.workId, owner)
           if (!row || row.sourceTab !== tab.id || row.sourcePath !== new URL(tab.url).pathname || !row.snapshot?.admissionPaths?.includes(message.historyPath)) fail('來源紀錄不屬於此工作。')
-          if(message.action==='history-report'){const input=message.input||{},record=[...row.snapshot.records,...row.history?.queue||[],...Object.values(row.history?.checkpoints||{}).flatMap(c=>c.records||[]),...row.history?.issues||[]].find(r=>r.kind==='report'&&r.enrollment_source_id===message.historyPath.split('/').pop()&&(input.evidenceKey?r.evidenceKey===input.evidenceKey:r.source_id===input.reportId));if(!record)fail('來源報告不屬於此工作。');if(input.editUrl&&String(input.editUrl).length>2048)fail('來源連結過長。');message.input={record,editUrl:input.editUrl,confirmedDate:input.confirmedDate}}
+          if(message.action==='history-report'){
+            const input=message.input||{},records=[...row.snapshot.records,...row.history?.queue||[],...Object.values(row.history?.checkpoints||{}).flatMap(c=>c.records||[]),...row.history?.issues||[]]
+            const record=records.find(r=>{
+              if(r.kind!=='report'||(input.evidenceKey?r.evidenceKey!==input.evidenceKey:r.source_id!==input.reportId))return false
+              const ownerAdmission=String(message.historyPath).split('/').pop()
+              if(r.enrollment_source_id===ownerAdmission)return true
+              return r.sourceRowType==='previous-admission'&&r.sourceAdmissionContextVerified===true&&
+                (r.sourceHistoryPath===message.historyPath||(r.sourceEvidence||[]).some(e=>e.sourcePath===message.historyPath))
+            })
+            if(!record)fail('來源報告不屬於此工作。');if(input.editUrl&&String(input.editUrl).length>2048)fail('來源連結過長。');message.input={record,editUrl:input.editUrl,confirmedDate:input.confirmedDate}
+          }
         }
         let response,sourceTimer
         try { response = await Promise.race([chrome.tabs.sendMessage(tab.id, { type: types[message.action], expectedPath: new URL(tab.url).pathname, history: false, historyPath: message.historyPath, input: message.input }),new Promise((_,reject)=>{sourceTimer=setTimeout(()=>reject(Object.assign(new Error('讀取來源超過 30 秒；檢查點保留，請稍後重試。'),{code:'SOURCE_READ_TIMEOUT'})),30000)})]) }

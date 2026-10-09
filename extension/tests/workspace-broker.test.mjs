@@ -108,6 +108,16 @@ test('history editor reads require an owned checkpoint and preserve the stored s
  assert.ok((await b.send(message)).data);assert.match((await b.send({...message,input:{...message.input,evidenceKey:'other'}})).error.message,/不屬於/)
  b.tabs.length=0;assert.equal((await b.send(message)).error.code,'SOURCE_CLOSED')
 })
+test('verified previous-admission reports are readable only through their original history evidence',async()=>{
+ const b=broker(undefined,undefined,{},async m=>({data:{...m.input.record,sourceReadStatus:'read'}}))
+ const currentPath='/dt_admissions/301',record={kind:'report',source_id:'401',enrollment_source_id:'202',sourceRowType:'previous-admission',sourceAdmissionContextVerified:true,evidenceKey:'prev:401',sourceEvidence:[{sourcePath:currentPath}],data:{}}
+ b.rows.set('job',{id:'job',...b.binding,sourceTab:1,sourcePath:'/courses/dt/11',snapshot:{admissionPaths:[currentPath],records:[]},history:{checkpoints:{[currentPath]:{records:[record],next:0}}}})
+ const request={type:'workspace-source',action:'history-report',binding:b.binding,tabId:1,sourcePath:'/courses/dt/11',workId:'job',historyPath:currentPath,input:{reportId:'401',evidenceKey:'prev:401',editUrl:'/dt_admissions/202/reports/401/edit'}}
+ assert.ok((await b.send(request)).data)
+ assert.ok((await b.send({...request,input:{...request.input,evidenceKey:'not-owned'}})).error)
+ record.sourceAdmissionContextVerified=false
+ assert.ok((await b.send(request)).error)
+})
 test('inline candidates use authoritative student/course across enrollments and preserve scoped pagination',async()=>{
   const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`,queries=[]
   const form={formId:'f1',fingerprint:'hash',admissionId:'301',reportId:'401',date:'2024-06-15'}

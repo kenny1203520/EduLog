@@ -31,9 +31,14 @@ export async function readHistoryWork(work, hooks, retryPath) {
         }
         history.lastSourceReadAt=Math.max(Date.now(),(history.lastSourceReadAt||0)+1)
         {
-          const admissionId=historyPath.match(/^\/dt_admissions\/(\d+)$/)?.[1]
-          const enrollment=work.snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===admissionId)
-          for(const report of records)if(enrollment){
+          const previousEnrollments=new Map()
+          for(const report of records)if(report.sourceRowType==='previous-admission'&&report.sourceAdmissionContextVerified&&report.enrollment_source_id&&report.student_source_id&&report.sourceCourseCode&&!work.snapshot.records.some(r=>r.kind==='enrollment'&&r.source_id===report.enrollment_source_id)){
+            previousEnrollments.set(report.enrollment_source_id,{kind:'enrollment',source_id:report.enrollment_source_id,student_source_id:report.student_source_id,sourceStudentName:report.sourceStudentName,sourceCourseName:report.sourceCourseName,sourceCourseLabel:report.sourceCourseLabel,sourceCourseCode:report.sourceCourseCode,source_course_id:`code:${report.sourceCourseCode}`,data:{external_link:`https://corp.orangeapple.co/dt_admissions/${report.enrollment_source_id}`},sourceEvidence:report.sourceEvidence||[],needs:[]})
+          }
+          if(previousEnrollments.size)work.snapshot.records=hooks.merge(work.snapshot.records,[...previousEnrollments.values()])
+          for(const report of records){
+            const enrollment=work.snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===report.enrollment_source_id)
+            if(!enrollment)continue
             if(report.student_source_id){
               if(enrollment.student_source_id&&enrollment.student_source_id!==report.student_source_id){enrollment.sourceStudentConflict=true;report.sourceStudentIdentityConflict=true;enrollment.sourceStudentIdConflictValues=[...new Set([...(enrollment.sourceStudentIdConflictValues||[enrollment.student_source_id]),report.student_source_id])];enrollment.sourceIdentityChanged=true}
               else enrollment.student_source_id=report.student_source_id
@@ -47,14 +52,15 @@ export async function readHistoryWork(work, hooks, retryPath) {
               else {enrollment.sourceCourseCode=report.sourceCourseCode;enrollment.sourceCourseLabel=report.sourceCourseLabel||enrollment.sourceCourseLabel;enrollment.source_course_id=`code:${report.sourceCourseCode}`}
             }
             const evidence=new Map([...(enrollment.sourceEvidence||[]),...(report.sourceEvidence||[])].map(item=>[`${item.sourcePath}:${item.table}:${item.row}`,item]));enrollment.sourceEvidence=[...evidence.values()]
+            report.student_source_id||=enrollment.student_source_id;report.sourceStudentName||=enrollment.sourceStudentName;report.sourceCourseCode||=enrollment.sourceCourseCode;report.sourceCourseName||=enrollment.sourceCourseName;report.sourceCourseLabel||=enrollment.sourceCourseLabel
           }
-          for(const report of records)if(enrollment){report.student_source_id||=enrollment.student_source_id;report.sourceStudentName||=enrollment.sourceStudentName;report.sourceCourseCode||=enrollment.sourceCourseCode;report.sourceCourseName||=enrollment.sourceCourseName;report.sourceCourseLabel||=enrollment.sourceCourseLabel}
           checkpoint=history.checkpoints[historyPath]={records,next:0}
           history.issues=history.issues.filter(r=>!(r.listFailed&&r.admissionPath===historyPath));await persist()
         }
       }
       while(checkpoint.next<checkpoint.records.length&&!hooks.paused()) {
         const record=checkpoint.records[checkpoint.next]
+        record.sourceHistoryPath ||= historyPath
         if(record.date&&(record.date<work.dateFrom||record.date>work.dateTo)){checkpoint.next++;await persist();continue}
         hooks.progress(`正在讀取報名 #${record.enrollment_source_id} 的報告；已讀取 ${history.reportCount} 份。`)
         let incoming=record

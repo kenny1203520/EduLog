@@ -64,3 +64,43 @@ test('history keeps dates in wrapper divs and parses the real assessment columns
  assert.equal(r.sourceLearningStatus,'on_track');assert.equal(r.sourceLearningStatusRaw,'能跟上進度');assert.equal(r.sourceInternalNotes,'內部筆記第一段\n內部筆記第二段')
  assert.equal(JSON.stringify(r).includes('管理'),false);dom.window.close()
 })
+
+test('attendance action URLs are lookup evidence only and empty rows are classified as unfilled',async()=>{
+ const {api,pages,calls,dom}=fixture()
+ const html=`<div id="page-body"><div class="content"><div id="admission-data"><ul><li><strong>學生：</strong><a href="/students/9981">林同學</a></li><li><strong>課程名稱：</strong>菁英_Python程式開發班(dt-python)</li></ul></div><table><thead><tr><th>堂次</th><th>日期</th><th>啟用進度</th><th>課程進度</th><th>出席狀況</th><th>學習評估</th><th>寄送時未填寫</th></tr></thead><tbody><tr><td>2</td><td><div>2026-10-24</div></td><td colspan="2"></td><td><a href="/dt/admissions/lesson_reports/attendance_status?report_ids%5B%5D=6422189&amp;type=1">設為不出席</a></td><td colspan="2"></td></tr></tbody></table></div></div>`
+ pages.set('/dt_admissions/301',html)
+ const [record]=await api.readHistory('/dt_admissions/301')
+ assert.equal(record.sourceRowType,'unfilled');assert.equal(record.source_id,null);assert.equal(record.sourceLookupReportId,'6422189');assert.equal(record.data.attendance_status,undefined);assert.equal(record.sourceFields.length,0)
+ assert.equal(calls.length,1,'the lookup action is never followed and no guessed editor request is made')
+ dom.window.close()
+})
+
+test('previous-admission rows are included only after matching the original admission student and course',async()=>{
+ const {api,pages,dom}=fixture()
+ const current=`<div id="page-body"><div class="content"><div id="admission-data"><ul><li><strong>學生：</strong><a href="/students/9981">林同學</a></li><li><strong>課程名稱：</strong>菁英_JavaScript程式開發班(dt-js2)</li></ul></div><table><thead><tr><th>堂次</th><th>日期</th><th>啟用進度</th><th>課程進度</th><th>出席狀況</th><th>學習評估</th></tr></thead><tbody><tr><td>前一<br>報名</td><td>2026-05-09</td><td></td><td>L8</td><td><a href="/dt/admissions/lesson_reports/attendance_status?report_ids%5B%5D=701&amp;type=1">設為不出席</a></td><td>評語：已完成</td><td><a href="/dt_admissions/200/reports/700/edit">編輯</a></td></tr></tbody></table></div></div>`
+ pages.set('/dt_admissions/301',current)
+ pages.set('/dt_admissions/200',`<div id="admission-data"><ul><li><strong>學生：</strong><a href="/students/9981">林同學</a></li><li><strong>課程名稱：</strong>菁英_Python程式開發班(dt-python)</li></ul></div>`)
+ const [record]=await api.readHistory('/dt_admissions/301',{listOnly:true})
+ assert.equal(record.sourceRowType,'previous-admission');assert.equal(record.enrollment_source_id,'200');assert.equal(record.sourceAdmissionContextVerified,true);assert.equal(record.student_source_id,'9981');assert.equal(record.sourceCourseCode,'dt-python');assert.equal(record.source_id,'700');assert.equal(record.sourceLookupReportId,'701');assert.equal(record.data.attendance_status,undefined)
+ pages.set('/dt_admissions/200',`<div id="admission-data"><ul><li><strong>學生：</strong><a href="/students/9999">不同學生</a></li><li><strong>課程名稱：</strong>菁英_Python程式開發班(dt-python)</li></ul></div>`)
+ const [mismatch]=await api.readHistory('/dt_admissions/301',{listOnly:true});assert.equal(mismatch.sourceRowType,'other-admission');assert.equal(mismatch.sourceAdmissionContextVerified,false)
+ dom.window.close()
+})
+
+test('history column lookup expands colspan on both headers and rows',async()=>{
+ const {api,pages,dom}=fixture()
+ const html=`<div id="page-body"><div class="content"><table><thead><tr><th>堂次</th><th>日期</th><th colspan="2">課程資料</th><th>出席狀況</th><th colspan="2">學習評估</th></tr><tr><th></th><th></th><th>啟用進度</th><th>課程進度</th><th></th><th></th><th></th></tr></thead><tbody><tr><td>1</td><td>2026-07-25</td><td colspan="2">Lesson 2</td><td>出席</td><td colspan="2"><label>評語：</label><p>欄位正確</p></td></tr></tbody></table></div></div>`
+ pages.set('/dt_admissions/301',html)
+ const [record]=await api.readHistory('/dt_admissions/301')
+ assert.equal(record.date,'2026-07-25');assert.equal(record.data.attendance_status,'present');assert.equal(record.data.content,'欄位正確')
+ dom.window.close()
+})
+
+test('explicit holidays without teaching content are system exclusions, while saved attendance remains a report',async()=>{
+ const {api,pages,dom}=fixture()
+ const html=`<div id="page-body"><div class="content"><table><thead><tr><th>堂次</th><th>日期</th><th>啟用進度</th><th>課程進度</th><th>出席狀況</th><th>學習評估</th></tr></thead><tbody><tr><td>--</td><td>2026-09-26</td><td></td><td></td><td>休假日</td><td></td></tr><tr><td>10</td><td>2026-10-10</td><td></td><td></td><td>不出席</td><td></td></tr></tbody></table></div></div>`
+ pages.set('/dt_admissions/301',html)
+ const records=await api.readHistory('/dt_admissions/301',{listOnly:true})
+ assert.equal(records.length,2);assert.equal(records[0].sourceRowType,'system-excluded');assert.equal(records[1].sourceRowType,'report');assert.equal(records[1].data.attendance_status,'absent')
+ dom.window.close()
+})

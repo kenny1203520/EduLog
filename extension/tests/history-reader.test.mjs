@@ -51,3 +51,11 @@ test('evidence-only history is retained and explicit reread scans modified edito
  await readHistoryWork(work,hooks);assert.equal(work.snapshot.records.length,1);assert.equal(work.history.issues.length,0)
  version=2;await readHistoryWork(work,hooks,'/dt_admissions/1');assert.equal(listReads,3);assert.equal(work.snapshot.records[0].data.content,'2')
 })
+
+test('verified previous-admission history creates a local source enrollment for the original course',async()=>{
+ const work=fixture(),report={kind:'report',source_id:'old-report',enrollment_source_id:'2',sourceRowType:'previous-admission',sourceAdmissionContextVerified:true,student_source_id:'student-7',sourceStudentName:'林同學',sourceCourseName:'Python',sourceCourseLabel:'菁英_Python程式開發班(dt-python)',sourceCourseCode:'dt-python',date:'2026-06-01',evidenceKey:'previous:old-report',data:{}}
+ await readHistoryWork(work,{current:()=>true,paused:()=>false,save:async()=>{},progress:()=>{},merge:(a,b)=>[...a.filter(x=>!(x.kind===b[0].kind&&x.source_id===b[0].source_id)),...b],source:async action=>action==='history'?[report]:report})
+ const previous=work.snapshot.records.find(row=>row.kind==='enrollment'&&row.source_id==='2')
+ const storedReport=work.snapshot.records.find(row=>row.kind==='report')
+ assert.ok(previous);assert.equal(previous.student_source_id,'student-7');assert.equal(previous.sourceCourseCode,'dt-python');assert.equal(previous.data.external_link,'https://corp.orangeapple.co/dt_admissions/2');assert.equal(storedReport.enrollment_source_id,'2');assert.equal(storedReport.sourceHistoryPath,'/dt_admissions/1')
+})

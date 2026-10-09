@@ -146,15 +146,27 @@
   function headerCells(table) {
     return [...(table?.rows || [])].find(r => r.querySelector('th') && [...r.cells].some(c => /^(姓名|學生|上課日期|課次日期|日期)$/.test(cellText(c))))?.cells || []
   }
+  const tableGrids=new WeakMap()
+  function tableGrid(table){
+    if(!table)return[]
+    if(tableGrids.has(table))return tableGrids.get(table)
+    const grid=[],rows=[...table.rows]
+    rows.forEach((row,rowIndex)=>{grid[rowIndex]||=[];let column=0;for(const cell of [...row.cells]){while(grid[rowIndex][column])column++;const width=Math.max(1,Number(cell.colSpan)||1),height=Math.max(1,Number(cell.rowSpan)||1);for(let r=rowIndex;r<Math.min(rows.length,rowIndex+height);r++){grid[r]||=[];for(let c=column;c<column+width;c++)grid[r][c]=cell}column+=width}})
+    tableGrids.set(table,grid);return grid
+  }
+  function logicalCell(row,column){const table=row?.closest('table'),index=table?[...table.rows].indexOf(row):-1;return index>=0?tableGrid(table)[index]?.[column]||null:null}
+  function logicalColumn(row,cell){const grid=tableGrid(row?.closest('table'))[[...row.closest('table').rows].indexOf(row)]||[];return grid.indexOf(cell)}
   function teachingCell(row, labels) {
-    const headers = [...headerCells(row.closest('table'))]
-    const index = headers.findIndex(c => labels.includes(cellText(c)))
-    return index >= 0 ? row.cells[index] : null
+    const table=row.closest('table'),headerRow=[...(table?.rows||[])].find(r=>r.querySelector('th')&&[...r.cells].some(c=>labels.includes(cellText(c))))
+    const header=[...(headerRow?.cells||[])].find(c=>labels.includes(cellText(c)))
+    const column=header?logicalColumn(headerRow,header):-1
+    return column>=0?logicalCell(row,column):null
   }
   function reportText(node) {
     if (!node) return ''
     const copy=node.cloneNode(true)
     copy.querySelectorAll('script,style,svg,button,input,select,textarea,.dropdown,.badge,.admission-comment-box,.tooltip,.popover,.status,[role="tooltip"],[data-edulog-owned]').forEach(n=>n.remove())
+    copy.querySelectorAll('a[href]').forEach(a=>{try{const u=new URL(a.getAttribute('href'),ORIGIN);if(u.origin===ORIGIN&&u.pathname==='/dt/admissions/lesson_reports/attendance_status')a.remove()}catch{}})
     return [...copy.querySelectorAll(':scope > p')].map(p=>p.textContent.trim()).filter(Boolean).join('\n') || copy.textContent.replace(/\u00a0/g,' ').replace(/[\t ]+/g,' ').trim()
   }
   function labeledValue(container, labelText) {
@@ -261,19 +273,26 @@
       if(!row.querySelector('td'))continue
       const cells=[...row.cells],dateCell=teachingCell(row,['日期','上課日期','課次日期'])||(!headerCells(row.closest('table')).length?cells[1]:null)
       const dateRaw=reportText(dateCell),date=fullDate(dateRaw)
-      const ref=links(row).find(a=>new RegExp(`^/dt_admissions/${admissionId}/reports/\\d+(?:/edit)?$`).test(a.path))
-      if(!ref&&links(row).some(a=>/^\/dt_admissions\/\d+\/reports\//.test(a.path)))continue
+      const rowLinks=links(row),reportRefs=rowLinks.filter(a=>/^\/dt_admissions\/\d+\/reports\/\d+(?:\/edit)?$/.test(a.path))
+      const ref=reportRefs.find(a=>new RegExp(`^/dt_admissions/${admissionId}/reports/\\d+(?:/edit)?$`).test(a.path))
+      const foreignRefs=reportRefs.filter(a=>a!==ref),ownerAdmissions=[...new Set(foreignRefs.map(a=>a.path.match(/^\/dt_admissions\/(\d+)\//)?.[1]).filter(Boolean))]
+      const sessionCell=teachingCell(row,['堂次']),sessionRaw=sessionCell?reportText(sessionCell):''
+      const isPreviousAdmission=/前\s*一\s*報名/.test(sessionRaw)
+      if(reportRefs.length&&!ref&&!isPreviousAdmission)continue
+      const ownerRef=isPreviousAdmission?(ownerAdmissions.length===1?foreignRefs.find(a=>a.path.startsWith(`/dt_admissions/${ownerAdmissions[0]}/`)):null):ref
+      const ownerAdmission=ownerRef?.path.match(/^\/dt_admissions\/(\d+)\//)?.[1]||(isPreviousAdmission?null:admissionId)
       // A single published report ID can be verified against its actual editor;
       // multiple IDs or row numbers never supply a permanent report identity.
       const queryIds=[...row.querySelectorAll('a[href]')].flatMap(a=>{try{const u=new URL(a.getAttribute('href'),ORIGIN);if(u.origin!==ORIGIN||u.pathname!=='/dt/admissions/lesson_reports/attendance_status')return [];const ids=u.searchParams.getAll('report_ids[]');return ids.length===1&&/^\d+$/.test(ids[0])?ids:[]}catch{return []}})
-      const reportId=ref?.path.match(/reports\/(\d+)/)?.[1]||([...new Set(queryIds)].length===1?queryIds[0]:null)
+      const reportId=ownerRef?.path.match(/reports\/(\d+)/)?.[1]||null
+      const lookupReportIds=[...new Set(queryIds)]
       // The history page uses label + sibling paragraphs as well as table columns.
       // Never capture administrative cells or the whole evaluation container.
       const assessment=teachingCell(row,['學習評估'])||cells.find(c=>c.querySelector('label,strong,b')||/評語[：:]|學習表現[：:]|聯絡欄[：:]|紀錄[：:]|內部紀錄[：:]/.test(reportText(c)))
       const sourceFields=[],data={}
       const field=(key,label,value,{internal=false,type='text',options=[{value,label:value,disabled:false}]}={})=>{if(value===undefined)return;sourceFields.push({key,label,type,value,options,internal,disabled:false})}
       const setValue=(key,label,value,canonical,config)=>{field(key,label,value,config);if(canonical!==undefined)data[key]=canonical}
-      const attendance=teachingCell(row,['出席狀況','出席狀態']);if(attendance){const raw=reportText(attendance).split('\n')[0],canonical=/不出席|未出席|缺席/.test(raw)?'absent':/出席/.test(raw)?'present':undefined;setValue('attendance_status','出席狀況',raw,canonical,{type:'select',options:[{value:raw,label:raw,disabled:false}]})}
+      const attendance=teachingCell(row,['出席狀況','出席狀態']);if(attendance){const raw=reportText(attendance).split('\n')[0].trim(),canonical=/^(?:不出席|未出席|缺席)$/.test(raw)?'absent':/^(?:出席|出席試聽|試聽出席)$/.test(raw)?'present':undefined;if(raw&&raw!=='設為不出席')setValue('attendance_status','出席狀況',raw,canonical,{type:'select',options:[{value:raw,label:raw,disabled:false}]})}
       const progressCell=teachingCell(row,['課程進度']);const stageRaw=progressCell?reportText(progressCell):''
       const stageLabel=labeledValue(assessment,'最新課程階段')??labeledValue(assessment,'學習課程')??labeledValue(assessment,'教材')
       const stageSource=stageLabel||stageRaw,stageNumber=lessonStage(stageSource||'')
@@ -285,18 +304,25 @@
       const recordLabel=labeledValue(assessment,'紀錄')??labeledValue(assessment,'內部紀錄');
       if(recordLabel!==undefined){const labelNode=[...(assessment?.querySelectorAll('label,strong,b,dt')||[])].find(n=>['紀錄','內部紀錄'].includes(text(n).replace(/[：:]$/,'')));let paragraphs=[];if(labelNode){for(let n=labelNode.nextElementSibling;n&&n.tagName==='P';n=n.nextElementSibling)paragraphs.push(n.textContent.trim())}if(!paragraphs.length)paragraphs=recordLabel.split('\n');const statusText=paragraphs[0]||'',statusEntry=Object.entries(learningStatusLabels).find(([,label])=>label===statusText),internalNotes=paragraphs.slice(1).join('\n');if(statusText){const known=statusEntry?.[0];field('class_notes','學習狀態原文',statusText,{internal:true});if(known)sourceFields.at(-1).learningStatus=known;else sourceFields.at(-1).unknownLearningStatus=true}if(internalNotes)field('class_notes','內部紀錄',internalNotes,{internal:true})}
       const detailProgress=labeledValue(assessment,'進度細項')??labeledValue(assessment,'章節進度');if(detailProgress){field('progress_letter','進度細項',detailProgress);const m=detailProgress.match(/^(?:Section\s*)?([A-Z])\s*(?:(?:到|至|–|-)\s*(?:Section\s*)?([A-Z]))?$/);if(m)data.progress_letter=m[2]?`${m[1]}-${m[2]}`:m[1]}
-      if(!reportId&&!date&&!sourceFields.some(f=>f.value!==''))continue
-      const editPath=reportId?`/dt_admissions/${admissionId}/reports/${reportId}/edit`:null
-      const sessionCell=teachingCell(row,['堂次']);const sessionOrdinal=sessionCell?reportText(sessionCell).match(/\d+/)?.[0]||null:null
-      results.push({kind:'report',source_id:reportId,enrollment_source_id:admissionId,sourceStudentName:student.sourceStudentName,student_source_id:student.student_source_id,date,dateRaw,sourceSessionOrdinal:sessionOrdinal,sourceCourseName:course.sourceCourseName,sourceCourseCode:course.sourceCourseCode,sourceCourseLabel:course.sourceCourseLabel,sourceLessonSequence:stageNumber,
-        evidenceKey:`${admissionId}:${row.rowIndex}`,identityUnverified:!ref,
-        sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','來源報名 ID',admissionId],['student_id','來源學生 ID',student.student_source_id],['student_name','學生姓名原文',student.sourceStudentName],['report_id','來源報告 ID',reportId],['course_name','來源課程名稱',course.sourceCourseName],['course_code','來源課程代碼',course.sourceCourseCode],['date','課次日期原文',dateRaw],...sourceFields.map(f=>[f.key,f.label,f.value])])],
+      const statusCell=teachingCell(row,['出席狀況','出席狀態']),statusText=statusCell?reportText(statusCell):''
+      const attendanceAction=rowLinks.some(a=>a.path==='/dt/admissions/lesson_reports/attendance_status')||/設為不出席/.test(statusText)
+      const holiday=/休假日|停課|課程取消/.test(statusText||sessionRaw)
+      const persistedValues=Object.entries(data).filter(([key,value])=>key!=='external_link'&&!(holiday&&key==='attendance_status')&&value!==undefined&&value!==null&&value!=='')
+      const hasTeachingContent=persistedValues.length>0||sourceFields.some(f=>!(holiday&&f.key==='attendance_status')&&f.value!==''&&f.value!==undefined&&f.value!==null)
+      const rowType=isPreviousAdmission?(ownerRef?'previous-admission':'other-admission'):holiday&&!hasTeachingContent?'system-excluded':attendanceAction&&!hasTeachingContent?'unfilled':'report'
+      if(!reportId&&!date&&!hasTeachingContent&&!attendanceAction&&!isPreviousAdmission&&!holiday)continue
+      const editPath=reportId&&ownerAdmission?`/dt_admissions/${ownerAdmission}/reports/${reportId}/edit`:null
+      const sessionOrdinal=sessionRaw.match(/\d+/)?.[0]||null
+      const sameAdmission=ownerAdmission===admissionId
+      results.push({kind:'report',source_id:reportId,enrollment_source_id:ownerAdmission||admissionId,sourceOwnerAdmissionId:ownerAdmission,sourceAdmissionContextVerified:sameAdmission,sourceRowType:rowType,sourceRowReason:isPreviousAdmission&&!ownerRef?'無法從原生報告連結確認前一報名。':undefined,sourceLookupReportId:lookupReportIds.length===1?lookupReportIds[0]:null,sourceLookupReportIds:lookupReportIds,sourceAttendanceAction:attendanceAction,sourceStudentName:sameAdmission?student.sourceStudentName:'',student_source_id:sameAdmission?student.student_source_id:null,date,dateRaw,sourceSessionOrdinal:sessionOrdinal,sourceSessionLabel:sessionRaw,sourceCourseName:sameAdmission?course.sourceCourseName:'',sourceCourseCode:sameAdmission?course.sourceCourseCode:null,sourceCourseLabel:sameAdmission?course.sourceCourseLabel:null,sourceLessonSequence:stageNumber,
+        evidenceKey:`${admissionId}:${row.rowIndex}`,identityUnverified:!ownerRef,
+        sourceEvidence:[evidence(row,`/dt_admissions/${admissionId}`,[['admission_id','目前頁面報名 ID',admissionId],['owner_admission_id','列所屬報名 ID',ownerAdmission],['student_id','來源學生 ID',sameAdmission?student.student_source_id:null],['student_name','學生姓名原文',sameAdmission?student.sourceStudentName:''],['report_id','原生報告編輯 ID',reportId],['attendance_lookup_id','設為不出席連結查找 ID',lookupReportIds.join(',')],['course_name','來源課程名稱',sameAdmission?course.sourceCourseName:''],['course_code','來源課程代碼',sameAdmission?course.sourceCourseCode:''],['date','課次日期原文',dateRaw],['row_type','來源列類型',rowType],...sourceFields.map(f=>[f.key,f.label,f.value])])],
         sourceFields,sourceLessonLabel:stageLabel||stageRaw||undefined,sourceLessonSequence:lessonStage(stageLabel||stageRaw||''),sourceLearningStatus:sourceFields.find(f=>f.learningStatus)?.learningStatus||null,sourceLearningStatusRaw:sourceFields.find(f=>f.label==='學習狀態原文')?.value||'',sourceInternalNotes:sourceFields.filter(f=>f.internal&&!f.learningStatus).map(f=>f.value).join('\n'),
         data:{...data,...(editPath?{external_link:ORIGIN+editPath}:{})},sourceReadStatus:'list',
-        needs:[...(!date?['完整上課日期待確認']:[]),...(reportId?['待讀取已儲存報告欄位']:[])]})
+        needs:[...(!date&&rowType==='report'?['完整上課日期待確認']:[]),...(reportId?['待讀取已儲存報告欄位']:[])]})
     }
     const unique=new Map()
-    for(const record of results){const key=record.source_id?`report:${record.source_id}`:record.evidenceKey,old=unique.get(key);if(!old){unique.set(key,record);continue}old.sourceEvidence=mergeEvidence(old.sourceEvidence,record.sourceEvidence);old.historyDateValues=[...new Set([...(old.historyDateValues||[old.dateRaw]),record.dateRaw])];if(!old.data.content&&record.data.content)old.data.content=record.data.content}
+    for(const record of results){const key=record.source_id?`report:${record.enrollment_source_id}:${record.source_id}`:record.evidenceKey,old=unique.get(key);if(!old){unique.set(key,record);continue}old.sourceEvidence=mergeEvidence(old.sourceEvidence,record.sourceEvidence);old.historyDateValues=[...new Set([...(old.historyDateValues||[old.dateRaw]),record.dateRaw])];if(!old.data.content&&record.data.content)old.data.content=record.data.content}
     return [...unique.values()]
   }
   async function readReport(record, suppliedUrl, confirmedDate) {
@@ -347,9 +373,28 @@
   }
   async function readHistory(sourcePath,input={}) {
     if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw new Error('來源路徑尚未驗證。')
-    let records=extractHistory(await readPath(sourcePath),sourcePath.split('/').pop())
+    const currentAdmission=sourcePath.split('/').pop(),currentDoc=await readPath(sourcePath)
+    let records=extractHistory(currentDoc,currentAdmission)
+    const currentStudent=admissionStudent(currentDoc)
+    const previousAdmissions=[...new Set(records.filter(r=>r.sourceRowType==='previous-admission').map(r=>r.enrollment_source_id))]
+    for(const previousId of previousAdmissions){
+      const rows=records.filter(r=>r.enrollment_source_id===previousId&&r.sourceRowType==='previous-admission')
+      try{
+        const previousDoc=await readPath(`/dt_admissions/${previousId}`),previousStudent=admissionStudent(previousDoc),previousCourse=admissionCourse(previousDoc)
+        const studentMatches=Boolean(currentStudent.student_source_id&&previousStudent.student_source_id&&currentStudent.student_source_id===previousStudent.student_source_id)
+        const courseReliable=Boolean(previousCourse.sourceCourseName&&previousCourse.sourceCourseCode)
+        for(const record of rows){
+          if(!studentMatches||!courseReliable){record.sourceRowType='other-admission';record.sourceAdmissionContextVerified=false;record.sourceRowReason=!studentMatches?'前一報名無法以可靠學生 ID 確認為同一學生。':'前一報名未提供可辨識課程。';continue}
+          record.sourceAdmissionContextVerified=true;record.sourceStudentName=previousStudent.sourceStudentName;record.student_source_id=previousStudent.student_source_id
+          record.sourceCourseName=previousCourse.sourceCourseName;record.sourceCourseCode=previousCourse.sourceCourseCode;record.sourceCourseLabel=previousCourse.sourceCourseLabel
+          record.sourceEvidence=mergeEvidence(record.sourceEvidence,[{sourcePath:`/dt_admissions/${previousId}`,table:'原報名資料',row:1,capturedAt:new Date().toISOString(),fields:[['admission_id','前一報名 ID',previousId],['student_id','前一報名學生 ID',previousStudent.student_source_id],['student_name','前一報名學生姓名',previousStudent.sourceStudentName],['course_name','前一報名課程',previousCourse.sourceCourseName],['course_code','前一報名課程代碼',previousCourse.sourceCourseCode]].map(([key,label,value])=>({key,label,text:String(value||'')}))}])
+        }
+      }catch{
+        for(const record of rows){record.sourceRowType='other-admission';record.sourceAdmissionContextVerified=false;record.sourceRowReason='無法讀取前一報名以確認學生與課程歸屬。'}
+      }
+    }
     for(const record of records){
-      record.historyKey=record.source_id?`report:${record.source_id}`:`evidence:${await digest([record.enrollment_source_id,record.date||record.dateRaw,record.sourceFields.map(f=>[f.key,f.value])])}`
+      record.historyKey=record.source_id?`report:${record.enrollment_source_id}:${record.source_id}`:`evidence:${await digest([record.enrollment_source_id,record.sourceLookupReportId||null,record.date||record.dateRaw,record.sourceSessionOrdinal,record.sourceRowType,record.sourceFields.map(f=>[f.key,f.value])])}`
       if(!record.source_id)record.evidenceKey=`${record.enrollment_source_id}:${record.historyKey}`
     }
     const unique=new Map();for(const record of records){const key=`${record.enrollment_source_id}:${record.historyKey}`,old=unique.get(key);if(old)old.sourceEvidence=mergeEvidence(old.sourceEvidence,record.sourceEvidence);else unique.set(key,record)}records=[...unique.values()]
@@ -357,7 +402,7 @@
     for(let i=0;i<records.length;i++){
       const record=records[i]
       if(input.dateFrom&&record.date&&record.date<input.dateFrom||input.dateTo&&record.date&&record.date>input.dateTo){record.outsideRange=true;continue}
-      if(!record.source_id)continue
+      if(!record.source_id||!['report','previous-admission'].includes(record.sourceRowType))continue
       try{records[i]=await readReport(record)}catch(e){record.sourceReadStatus='failed';record.needs=[e.message]}
     }
     return records
