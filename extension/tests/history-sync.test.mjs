@@ -23,8 +23,10 @@ test('multiple legal occurrences and nonempty content conflicts require explicit
  assert.equal(plan([record()],[],two)[0].category,'needs')
  assert.equal(plan([record({historyOnly:true})],[],two)[0].category,'history')
  const conflict={...occurrence,report:{id:'report',version:3,content:'existing',is_completed:true}}
- assert.equal(plan([record()],[],[conflict])[0].category,'needs')
- const [confirmed]=plan([record({historyConflictConfirmed:true,historyOverwrite:['content']})],[],[conflict]);assert.equal(confirmed.category,'bind');assert.deepEqual(confirmed.conflicts,['is_completed','content']);assert.equal(bindingStillMatches(confirmed,{report_version:3}),true)
+ const initial=plan([record()],[],[conflict])[0];assert.equal(initial.category,'needs')
+ const confirmedRecord=record({historyConflictConfirmed:true,historyConflictSignature:initial.conflictSignature,historyOverwrite:['content']})
+ const [confirmed]=plan([confirmedRecord],[],[conflict]);assert.equal(confirmed.category,'bind');assert.deepEqual(confirmed.conflicts,['is_completed','content']);assert.equal(bindingStillMatches(confirmed,{report_version:3}),true)
+ const changedTarget=plan([confirmedRecord],[],[{...conflict,report:{...conflict.report,version:4}}])[0];assert.equal(changedTarget.category,'needs');assert.match(changedTarget.reason,/核對/)
 })
 test('unread, changed linked and conflicting duplicate data cannot be silently imported',()=>{
  const [unread]=plan([record({sourceReadStatus:'failed'})]);assert.equal(unread.category,'needs');assert.equal(unread.issues[0].id,'source-read');assert.equal(unread.issues[0].target,'source')

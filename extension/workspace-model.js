@@ -63,6 +63,7 @@ export function splitBatches(rows, limit = 180000) {
   return batches
 }
 export function workspaceErrorMessage(error) {
+  if (error.code === 'WORK_CONFLICT') return globalThis.edulogUi?.t('error.workConflict') || '工作已在其他分頁更新；目前草稿保留，請重新載入後核對。'
   if (error.code === 'IMPORT_DEPENDENCIES_UNAVAILABLE') return globalThis.edulogUi?.t('error.importDependenciesUnavailable') || '目前連線的 EduLog 尚不能安全核對跨批次報名關係。請重新檢查連線後重試；待處理資料仍保留。'
   if (error.code === 'VERSION_CONFLICT') return '對應或目標已變更。請按「重新檢查對應記憶」，核對後再確認。'
   if (error.code === 'VALIDATION_FAILED') {
