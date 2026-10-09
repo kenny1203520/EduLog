@@ -2,11 +2,19 @@
 
 ## Automated checks
 
-- `extension`: 219 tests passed, including stable local/server work identity joins, account and instance binding, source-tab recovery, local-draft removal, and responsive workbench behavior.
+- `extension`: 220 tests passed, including complete published-script module syntax checks, stable local/server work identity joins, account and instance binding, source-tab recovery, local-draft removal, and responsive workbench behavior.
 - `server`: 38 test files and 228 tests passed, including work-record metadata API validation, bounded pagination, field allowlists, and revision conflicts.
 - PGlite: migration `1000131` applied and passed owner scoping, verified server-job linkage, metadata field validation, keyset pagination, and optimistic revision checks. Existing workspace and extension migration suites passed as well.
 - Server TypeScript typecheck passed.
 - `git diff --check` passed.
+
+## Startup regression follow-up
+
+- Fixed the duplicate top-level `workHistory` declaration in `workspace.js` and the extra closing brace in `repeatWork()`. Both prevented the complete workbench module from parsing, so none of its entry flows could initialize.
+- Added a test that runs `node --check` over every published JavaScript source and adapter, rather than checking only extracted functions.
+- The side-load packaging script now parses every staged JavaScript file before replacing the archive. A syntax error stops packaging and leaves the previous archive intact.
+- Chrome and Edge synthetic checks passed for import, prefill, and work-history entries without a source tab. Full workbench import and prefill flows passed at 360, 390, 768, 1024, 1200, 1440, and 1920 px, with no page errors or unhandled promise rejections reported.
+- Work-history resume and repeat-sync controls are covered by the responsive browser flow. Real extension side-load remains pending.
 
 ## Implemented behavior
 
@@ -20,7 +28,7 @@
 
 ## Not yet verified in a real browser
 
-- Real Chrome and Edge extension side-load, toolbar entry, source-tab recovery across browser restart, keyboard-only operation, 360/390/768/1024/1200/1440/1920 px layouts, short viewport, and 200% zoom remain pending.
+- Real Chrome and Edge extension side-load, toolbar popup entry, source-tab recovery across browser restart, keyboard-only operation, short viewport, and 200% zoom remain pending. The listed responsive widths passed in synthetic browser checks, not a real side-load session.
 - Cross-device synchronization against a deployed server with migration `1000131` applied remains pending.
 - Source-site workflows were not submitted. No teaching report was sent.
 
