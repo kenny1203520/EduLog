@@ -24,6 +24,17 @@ describe('workspace API contract', () => {
     expect(saved.status).toBe(200);expect(rpc.mock.calls.at(-1)![1]).toMatchObject({p_operation:'patch',p_input:body})
     for(const invalid of [{...body,fields:[body.fields[0],body.fields[0]]},{...body,fields:[{field_key:'student_id',enabled:false}]},{...body,expected_revision:'bad'}])expect((await request(app).patch('/api/extension/v1/sync-preferences').send(invalid)).status).toBe(400)
   })
+  it('exposes revision-checked work metadata with a strict privacy allowlist and bounded pagination',async()=>{
+    const {app,rpc}=appWith({items:[],next_cursor:null})
+    const list=await request(app).get('/api/extension/v1/work-records?limit=50').set('Authorization','Bearer test')
+    expect(list.status).toBe(200);expect(rpc.mock.calls[0]![0]).toBe('web_extension_work_records');expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'list',p_input:{limit:50}})
+    const meta={work_id:id,expected_revision:null,changes:{source_origin:'https://corp.orangeapple.co',source_path:'/courses/dt/4773',source_class_id:'4773',title:'Python 同步',pinned:true}}
+    const saved=await request(app).patch(`/api/extension/v1/work-records/${id}`).set('Authorization','Bearer test').send(meta)
+    expect(saved.status).toBe(200);expect(rpc.mock.calls.at(-1)![1]).toMatchObject({p_operation:'patch',p_input:meta})
+    for(const invalid of [{...meta,changes:{...meta.changes,raw_report:'must not sync'}},{...meta,changes:{...meta.changes,source_path:'/students/4'}},{...meta,changes:{...meta.changes,title:'x'.repeat(101)}},{...meta,actor_id:id}])
+      expect((await request(app).patch(`/api/extension/v1/work-records/${id}`).set('Authorization','Bearer test').send(invalid)).status).toBe(400)
+    expect((await request(app).get('/api/extension/v1/work-records?limit=51').set('Authorization','Bearer test')).status).toBe(400)
+  })
   it('routes bounded effective dates and versioned history binding without forged actors',async()=>{
     const {app,rpc}=appWith({items:[],next_cursor:null})
     const body={enrollment_id:id,dates:['2026-10-03','2026-10-04'],limit:50}

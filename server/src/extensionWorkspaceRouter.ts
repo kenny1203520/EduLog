@@ -8,6 +8,7 @@ import { reportMissingFlags } from './reportSemantics.js'
 const uuid = z.string().uuid()
 const date = z.iso.date()
 const source = z.literal('https://corp.orangeapple.co')
+const workPath = z.string().regex(/^\/(courses\/dt\/\d+|dt_admissions\/\d+|admissions\/unfilled_report)$/)
 const text = z.string().trim().min(1).max(256)
 const identity = z.string().trim().min(1).max(1024)
 const ruleKey = z.string().trim().min(1).max(512)
@@ -67,6 +68,14 @@ export const fieldMappingResolve = z.object({ source_origin: source, adapter_ver
 export const fieldMappingConfirm = z.object({ source_origin: source, adapter_version: z.literal('orange-apple-v1'), items: z.array(fieldReference.extend({ source_value: z.string().min(1).max(256), action: z.enum(['confirm','clear']), expected_revision: uuid.nullable(), canonical_value: z.union([z.string().min(1).max(64),z.boolean(),z.number().min(0).max(5)]).optional() }).strict().refine(item => item.action === 'clear' || item.canonical_value !== undefined)).min(1).max(50) }).strict()
 const syncField = z.enum(['lesson_id','is_completed','progress_letter','attendance_status','absence_reason','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link'])
 const syncPreferencesPatch = z.object({ source_origin: source, adapter_version: z.literal('orange-apple-v1'), expected_revision: uuid.nullable(), fields: z.array(z.object({ field_key: syncField, enabled: z.boolean() }).strict()).min(1).max(11).refine(fields => new Set(fields.map(field => field.field_key)).size === fields.length) }).strict()
+const workRecordsQuery = z.object({ limit: z.coerce.number().int().min(1).max(50).default(50), cursor: z.string().max(100).regex(/^\d{4}-\d\d-\d\dT[^|]{1,40}\|[a-f0-9-]{36}$/i).optional() }).strict()
+const workRecordPatch = z.object({ work_id: uuid, expected_revision: uuid.nullable(), changes: z.object({
+  server_job_id: uuid.nullable().optional(), source_origin: source.optional(), source_path: workPath.optional(),
+  source_class_id: z.string().trim().min(1).max(100).optional(), source_label: z.string().max(160).optional(),
+  target_classroom_id: uuid.nullable().optional(), target_class_session_id: uuid.nullable().optional(),
+  target_label: z.string().max(160).optional(), title: z.string().max(100).optional(), source_device: z.string().max(80).optional(),
+  pinned: z.boolean().optional(), archived_at: z.iso.datetime().nullable().optional(),
+}).strict().refine(changes => Object.keys(changes).length > 0) }).strict()
 function databaseError(error: { message: string; code?: string; details?: string }) {
   const statuses: Record<string, number> = { HISTORY_IDENTITY_AMBIGUOUS:409, HISTORY_ALREADY_LINKED:409, EXTENSION_AUTH_INVALID: 401, PERMISSION_DENIED: 403, NOT_FOUND: 404, PREVIEW_STALE: 409, SOURCE_MAPPING_CONFLICT: 409, VERSION_CONFLICT: 409, JOB_STOPPED: 409, IDEMPOTENCY_CONFLICT: 409, IMPORT_BATCHES_INCOMPLETE: 409, IMPORT_DEPENDENCY_INVALID:409, IMPORT_DEPENDENCY_PENDING:409, INVALID_REFERENCE: 422, INVALID_IMPORT: 422 }
   if (error.message === 'INVALID_REFERENCE') {
@@ -113,6 +122,11 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   router.post('/field-mappings/confirm', wrap(async (req, res) => reply(req, res, await run(req, 'confirm', fieldMappingConfirm.parse(req.body), 'web_extension_field_mappings'))))
   router.get('/sync-preferences', wrap(async (req, res) => reply(req, res, await run(req, 'get', z.object({ source_origin: source, adapter_version: z.literal('orange-apple-v1') }).strict().parse(req.query), 'web_extension_sync_preferences'))))
   router.patch('/sync-preferences', wrap(async (req, res) => reply(req, res, await run(req, 'patch', syncPreferencesPatch.parse(req.body), 'web_extension_sync_preferences'))))
+  router.get('/work-records', wrap(async (req, res) => reply(req, res, await run(req, 'list', workRecordsQuery.parse(req.query), 'web_extension_work_records'))))
+  router.patch('/work-records/:id', wrap(async (req, res) => {
+    const input = workRecordPatch.parse({ ...req.body, work_id: req.params.id })
+    reply(req, res, await run(req, 'patch', input, 'web_extension_work_records'))
+  }))
   router.get('/history-reports', wrap(async (req,res) => reply(req,res,await run(req,'list',historyQuery.parse(req.query),'web_extension_history'))))
   router.post('/history-reports/route', wrap(async (req,res) => reply(req,res,await run(req,'route',z.object({enrollment_id:uuid,dates:z.array(date).min(1).max(50),cursor:uuid.optional(),limit:z.number().int().min(1).max(50).default(50)}).strict().parse(req.body),'web_extension_history'))))
   router.get('/history-reports/:id', wrap(async (req,res) => reply(req,res,await run(req,'detail',{ id: uuid.parse(req.params.id) },'web_extension_history'))))

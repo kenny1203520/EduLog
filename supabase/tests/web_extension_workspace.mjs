@@ -28,6 +28,10 @@ async function rpcFinalize(input) {
   await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
   return (await db.query('SELECT public.web_extension_finalize_import($1,$2,$3,$4) AS data', [token,'a'.repeat(64),'complete',JSON.stringify(input)])).rows[0].data
 }
+async function workRecordsRpc(operation,input) {
+  await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
+  return (await db.query('SELECT public.web_extension_work_records($1,$2,$3,$4) AS data',[token,'a'.repeat(64),operation,JSON.stringify(input)])).rows[0].data
+}
 async function rpcEnrollmentInfo(input) {
   await db.exec("SELECT set_config('request.jwt.claim.role','service_role',false)")
   return (await db.query('SELECT public.web_extension_enrollment_info($1,$2,$3,$4) AS data', [token,'a'.repeat(64),'enrollment-info',JSON.stringify(input)])).rows[0].data
@@ -78,9 +82,18 @@ try {
   await db.exec(read('1000126_enrollment_history_reports.sql'))
   await db.exec(read('1000127_extension_shared_mappings_and_sync_preferences.sql'))
   await db.exec(read('1000130_import_preview_dependencies_and_diagnostics.sql'))
+  await db.exec(read('1000131_extension_work_record_metadata.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
+  const workMetaId=id(901),metadata=await workRecordsRpc('patch',{work_id:workMetaId,expected_revision:null,changes:{source_origin:destination.source_origin,source_path:'/courses/dt/11',source_class_id:'11',source_label:'測試班級',title:'Python 同步',server_job_id:job.id,pinned:true}})
+  assert.equal(metadata.item.server_job_id,job.id);assert.equal(metadata.item.title,'Python 同步');assert.equal(metadata.item.pinned,true)
+  const metadataPage=await workRecordsRpc('list',{limit:1});assert.equal(metadataPage.items.length,1);assert.equal(metadataPage.items[0].work_id,workMetaId)
+  await assert.rejects(workRecordsRpc('patch',{work_id:workMetaId,expected_revision:null,changes:{title:'舊版本'}}),/VERSION_CONFLICT/)
+  await assert.rejects(workRecordsRpc('patch',{work_id:id(902),expected_revision:null,changes:{source_path:'/students/11',source_class_id:'11'}}),/INVALID_IMPORT/)
+  await assert.rejects(workRecordsRpc('patch',{work_id:id(903),expected_revision:null,changes:{source_path:'/courses/dt/11',source_class_id:'11',title:'x',raw_report:'private'}}),/INVALID_IMPORT/)
+  await assert.rejects(workRecordsRpc('patch',{work_id:id(904),expected_revision:null,changes:{source_path:'/courses/dt/12',source_class_id:'12',server_job_id:job.id}}),/INVALID_REFERENCE/)
+  console.log('PASS: 1000131 owner-scoped work metadata, verified job linkage, allowlisted fields, cursor listing and revision conflicts')
   const batch = { job_id:job.id,key:id(20),fingerprint:'b'.repeat(64),rows:[{source_id:'101',target_id:student,overwrite:[],record:{kind:'student',data:{name:'Deidentified A'}}}] }
   assert.equal((await rpc('preview',batch)).rows[0].status,'added')
   await assert.rejects(rpcFinalize({job_id:job.id,expected_batch_keys:[batch.key]}),/IMPORT_BATCHES_INCOMPLETE/)
