@@ -88,6 +88,7 @@ try {
   await db.exec(read('1000130_import_preview_dependencies_and_diagnostics.sql'))
   await db.exec(read('1000131_extension_work_record_metadata.sql'))
   await db.exec(read('1000132_extension_report_skip_decisions.sql'))
+  await db.exec(read('1000133_extension_mapping_memory_reasons.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -206,6 +207,17 @@ try {
   assert.equal(remembered.memories.find(m=>m.kind==='course_rule').suggestion,false)
   assert.equal((await resolveMemory('12',[{kind:'course_rule',key:courseRule.key}])).memories[0].suggestion,true)
   assert.equal((await resolveMemory('11',[{kind:'admission',key:'301',source_identity:'label:Changed course'}])).memories[0].valid,false)
+  const knownSourceStudent=await resolveMemory('11',[],[{source_kind:'student',source_id:'101'}])
+  const enrichedStudent={kind:'student',key:'101',action:'confirm',target_id:student,expected_revision:knownSourceStudent.source_links[0].revision,versions}
+  const enrichedCourse={kind:'course',key:'code:dt-python',action:'confirm',target_id:course,expected_revision:null,versions}
+  await confirm([enrichedStudent,enrichedCourse])
+  const oldEnrichedIdentity=JSON.stringify([null,'label:Python'])
+  await confirm([{kind:'admission',key:'enriched-1',action:'confirm',target_id:enrollment,student_id:student,course_id:course,class_session_id:session,source_identity:oldEnrichedIdentity,expected_revision:null,versions}])
+  const enrichment=await resolveMemory('11',[{kind:'admission',key:'enriched-1',source_identity:JSON.stringify(['101','code:dt-python']),source_course_id:'code:dt-python',source_course_label:'Python'}])
+  const enrichedMemory=enrichment.memories[0]
+  assert.equal(enrichedMemory.valid,true);assert.equal(enrichedMemory.reason,'identity_enriched');assert.equal(enrichedMemory.student_id,student);assert.equal(enrichedMemory.course_id,course)
+  const stableEnrichment=await resolveMemory('11',[{kind:'admission',key:'enriched-1',source_identity:JSON.stringify(['101','code:dt-python']),source_course_id:'code:dt-python',source_course_label:'Python'}])
+  assert.equal(stableEnrichment.memories[0].valid,true);assert.equal(stableEnrichment.memories[0].reason,'valid')
   await assert.rejects(confirm([courseRule]),/VERSION_CONFLICT/)
   const admissionRevision=remembered.memories.find(m=>m.kind==='admission').revision
   await assert.rejects(confirm([{...admissionMemory,course_id:nextCourse,expected_revision:admissionRevision,versions:{...versions,[nextCourse]:(await resolveMemory('11',[],[],[{kind:'courses',id:nextCourse}])).targets[0].target_version}}]),/SOURCE_MAPPING_CONFLICT/)

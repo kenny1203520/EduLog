@@ -49,7 +49,7 @@ export const catalogResolve = z.object({
   source_refs: z.array(z.object({ source_kind: z.enum(['student','course','classroom','class_session','enrollment','occurrence','report']), source_id: text }).strict()).max(50),
   target_refs: z.array(z.object({ kind: catalogResource.exclude(['permissions']), id: uuid }).strict()).max(50),
   source_class_id: text.optional(),
-  memory_refs: z.array(z.object({ kind: z.enum(['course_rule','admission','classroom']), key: ruleKey, source_identity: identity.optional() }).strict()).max(50).optional(),
+  memory_refs: z.array(z.object({ kind: z.enum(['course_rule','admission','classroom']), key: ruleKey, source_identity: identity.optional(), source_course_id: text.optional(), source_course_label: text.optional() }).strict()).max(50).optional(),
 }).strict()
 export const memoryConfirmation = z.object({
   source_origin: source, source_class_id: text,

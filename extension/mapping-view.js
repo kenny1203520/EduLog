@@ -1,7 +1,7 @@
 import { sourceName, sourceUrl, frontendUrl, shortId, displayDate, statusLabel, mergeEvidence } from './mapping-presentation.js'
 const $ = id => document.getElementById(id)
 const node = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n }
-const stateNames = { skipped: '已略過', remembered: '已記住', identity: '可靠識別', pending: '待確認', missing: '需補資料', invalid: '已失效' }
+const stateNames = { skipped: '已略過', remembered: '已核對', identity: '可靠識別', pending: '待確認', missing: '需補資料', invalid: '記憶需重核', verification: '待驗證', conflict: '來源有矛盾', legacy: '舊資料需補讀' }
 export function evidenceDetails(records) {
   const details = node('details', undefined, 'source-evidence')
   details.append(node('summary', '擷取原文'))
