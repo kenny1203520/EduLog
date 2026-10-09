@@ -1,6 +1,10 @@
 # EduLog Teaching Systems extension
 
-## Current build: verified mapping identity (0.1.0)
+## Current build: history list and preview repair (0.1.0)
+
+The history review list now reserves a full-width row for ordinary reports and a separate 44px selection target only for reports that support batch actions. Preview assembly includes only validated `history` and `bind` records; unfilled, unrelated and system-excluded rows remain outside the write payload, while unknown classifications or missing references stay visible as review issues. A new preview invalidates the previous summary before refreshing data. No API or database migration is required. See [acceptance record](tests/ACCEPTANCE-history-list-preview-fix.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-history-list-preview-fix.zip`.
+
+## Previous build: verified mapping identity (0.1.0)
 
 The mapping review preserves confirmed student/enrollment selections when a reliable student ID or course code is filled in later, but only when the server verifies that the source link still points to the same EduLog relationship. A name difference under the same reliable student ID is a warning and does not change the EduLog name. True identity/course conflicts remain blocked; temporarily unavailable targets preserve the selection and ask for a recheck. Apply migration **1000133** and deploy the matching API before using identity enrichment. See [acceptance record](tests/ACCEPTANCE-history-mapping-validity.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-mapping-validity.zip`.
 

@@ -18,11 +18,16 @@ try{
     await page.evaluate(async()=>{
      const {createHistoryWorkbench}=await import('/history-workbench.js')
      document.getElementById('workspace').hidden=false;document.getElementById('import-view').hidden=false;document.getElementById('mapping').hidden=false;document.getElementById('import-scope').hidden=true;document.getElementById('identity-review').open=false
-     const work={id:'synthetic'},items=Array.from({length:70},(_,i)=>({key:String(301+i),category:'needs',reason:'需要確認來源課程；報名關係不變。',target:{id:'enrollment',name:`測試學生 ${i+1}`,courseName:'長課程名稱 · 程式設計與教學紀錄核對'},record:{enrollment_source_id:String(301+i),date:'2026-10-04',sourceEvidence:[{sourcePath:'/dt_admissions/301',table:'歷史紀錄',row:1,fields:[{label:'評語',text:'允許的來源教學原文。'.repeat(30)}]}]}}))
+     const work={id:'synthetic'},items=Array.from({length:70},(_,i)=>({key:String(301+i),category:'needs',reason:'需要確認來源課程；報名關係不變。',target:{id:'enrollment',name:`測試學生 ${i+1}`,courseName:'長課程名稱 · 程式設計與教學紀錄核對'},record:{enrollment_source_id:String(301+i),date:'2026-10-04',...(i===1?{skipDecision:{status:'review'}}:{}),sourceEvidence:[{sourcePath:'/dt_admissions/301',table:'歷史紀錄',row:1,fields:[{label:'評語',text:'允許的來源教學原文。'.repeat(30)}]}]}}))
      let view
      view=createHistoryWorkbench({work:()=>work,labels:{},changed:()=>{},recheck:()=>{items[0].category='history';view.render(items);view.refreshEditor()},fields:(host,item)=>{const label=document.createElement('label');label.textContent='人工核對草稿';const input=document.createElement('textarea');input.name='review-draft';input.value=item.record.draft||'';input.style.minHeight='110px';input.oninput=()=>{item.record.draft=input.value};label.append(input);host.append(label)}})
      window.historyTest={view,items,work};view.render(items)
     })
+    const layout=await page.evaluate(()=>({searchVisible:document.querySelector('label[for="history-search"]').getBoundingClientRect().width>0,regular:(()=>{const entry=document.querySelector('.history-report-entry[data-selectable="false"]'),button=entry?.querySelector('.mapping-list-item');return entry&&button?{entry:entry.getBoundingClientRect().width,button:button.getBoundingClientRect().width}:null})(),selectable:(()=>{const entry=document.querySelector('.history-report-entry[data-selectable="true"]'),button=entry?.querySelector('.mapping-list-item'),target=entry?.querySelector('.history-skip-toggle');return entry&&button&&target?{entry:entry.getBoundingClientRect().width,button:button.getBoundingClientRect().width,target:target.getBoundingClientRect().width,height:target.getBoundingClientRect().height}:null})()}))
+    assert.equal(layout.searchVisible,true,`${name} ${width}: history search remains visible`)
+    assert.ok(layout.regular&&layout.regular.button>=layout.regular.entry*.8,`${name} ${width}: regular report uses full row`)
+    assert.ok(layout.selectable&&layout.selectable.button>=layout.selectable.entry*.7,`${name} ${width}: selectable report button keeps a readable column`)
+    assert.ok(layout.selectable.target>=44&&layout.selectable.height>=44,`${name} ${width}: batch checkbox has a 44px target`)
     await page.locator('#history-items button').first().click()
     await page.locator('#history-detail textarea').fill('保留核對草稿\n第二行')
     await page.locator('#history-detail summary').click()

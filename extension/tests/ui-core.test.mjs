@@ -16,3 +16,19 @@ test('keyed shared language updates controls in place, preserves source text and
   assert.equal(sent[0].language,'en');assert.equal(sent[0].type,'set-ui-preferences')
   listeners[0]({edulogWorkspaceLocale:{newValue:'zh-TW'}},'local');assert.equal(button.textContent,'套用 3 個欄位 · 覆寫 1 個');dom.window.close()
 })
+
+test('history preview validation messages are localized with report details',async()=>{
+  const dom=new JSDOM('<body></body>',{runScripts:'outside-only'})
+  const w=dom.window
+  w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'zh-TW'})},onChanged:{addListener:()=>{}}}}
+  w.eval(readFileSync(new URL('../ui-core.js',import.meta.url),'utf8'))
+  await new Promise(r=>setTimeout(r,0))
+  const zhUnknown=w.edulogUi.t('work.historyUnknownCategory',{key:'報告 7',category:'unexpected'})
+  const zhReference=w.edulogUi.t('work.historyInvalidReference',{sourceId:'報告 8'})
+  assert.match(zhUnknown,/報告 7/);assert.match(zhUnknown,/unexpected/)
+  assert.match(zhReference,/報告 8/)
+  w.edulogUi.setLocale('en')
+  assert.match(w.edulogUi.t('work.historyUnknownCategory',{key:'Report 7',category:'unexpected'}),/Report 7/)
+  assert.match(w.edulogUi.t('work.historyInvalidReference',{sourceId:'Report 8'}),/Report 8/)
+  dom.window.close()
+})
