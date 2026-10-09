@@ -34,3 +34,4 @@ main,body>header,body>nav{max-width:1600px}body{font-size:16px}main{padding-bott
 #work-detail .work-detail-summary ul{padding-left:22px}
 #work-detail .work-detail-actions label{display:grid;gap:4px;min-width:min(100%,220px)}
 @media(min-width:768px){#work-detail-back{display:none}}
+#history-workbench aside{overflow:visible}
