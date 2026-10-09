@@ -2,7 +2,7 @@ import express from 'express'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createExtensionWorkspaceRouter, importBatch, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm } from './extensionWorkspaceRouter.js'
+import { createExtensionWorkspaceRouter, importBatch, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm, reportDecisionResolve, reportDecisionConfirm } from './extensionWorkspaceRouter.js'
 import { errorHandler } from './errors.js'
 const id = '00000000-0000-4000-8000-000000000001'
 const row = { source_id: '101', target_id: id, overwrite: [], record: { kind: 'student', data: { name: 'Test A' } } }
@@ -15,6 +15,21 @@ function appWith(data: unknown, error: unknown = null, productionErrors = false)
   return { app, rpc }
 }
 describe('workspace API contract', () => {
+  it('bounds report skip decision resolve and revision-checked confirm batches',async()=>{
+    const item={source_admission_id:'274452',source_report_id:'6558414',content_fingerprint:'a'.repeat(64),context_fingerprint:'b'.repeat(64),field_fingerprints:{content:'c'.repeat(64),is_completed:'d'.repeat(64)}}
+    const body={target_instance:'http://localhost:5173',source_origin:'https://corp.orangeapple.co',adapter_version:'orange-apple-v1',items:[item]}
+    expect(reportDecisionResolve.safeParse(body).success).toBe(true)
+    expect(reportDecisionResolve.safeParse({...body,items:Array(51).fill(item)}).success).toBe(false)
+    expect(reportDecisionResolve.safeParse({...body,items:[{...item,source_report_id:'../../other'}]}).success).toBe(false)
+    expect(reportDecisionResolve.safeParse({...body,target_instance:'https://user:pass@example.com'}).success).toBe(false)
+    expect(reportDecisionConfirm.safeParse({...body,items:[{...item,action:'skip',expected_revision:null}]}).success).toBe(true)
+    expect(reportDecisionConfirm.safeParse({...body,items:[{...item,action:'delete',expected_revision:null}]}).success).toBe(false)
+    const {app,rpc}=appWith({items:[{...item,status:'none'}]})
+    const resolved=await request(app).post('/api/extension/v1/report-decisions/resolve').set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(resolved.status).toBe(200);expect(rpc.mock.calls[0]![0]).toBe('web_extension_report_decisions');expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'resolve',p_input:body})
+    const confirmed=await request(app).post('/api/extension/v1/report-decisions/confirm').set('Authorization',`Bearer ${'a'.repeat(64)}`).send({...body,items:[{...item,action:'skip',expected_revision:null}]})
+    expect(confirmed.status).toBe(200);expect(rpc.mock.calls[1]![1]).toMatchObject({p_operation:'confirm'})
+  })
   it('reads and revision-checks account-wide sync preferences with a bounded field allowlist',async()=>{
     const {app,rpc}=appWith({fields:{attendance_status:false},revision:id})
     const read=await request(app).get('/api/extension/v1/sync-preferences?source_origin=https%3A%2F%2Fcorp.orangeapple.co&adapter_version=orange-apple-v1').set('Authorization','Bearer test')

@@ -76,6 +76,12 @@ const workRecordPatch = z.object({ work_id: uuid, expected_revision: uuid.nullab
   target_label: z.string().max(160).optional(), title: z.string().max(100).optional(), source_device: z.string().max(80).optional(),
   pinned: z.boolean().optional(), archived_at: z.iso.datetime().nullable().optional(),
 }).strict().refine(changes => Object.keys(changes).length > 0) }).strict()
+const decisionHash = z.string().regex(/^[a-f0-9]{64}$/)
+const decisionField = z.enum(['attendance_status','absence_reason','lesson_id','progress_letter','is_completed','class_participation','classroom_behavior','content','contact_notes','class_notes','external_link'])
+const targetInstance = z.string().url().max(300).refine(value => { const u=new URL(value); return !u.username&&!u.password&&!u.search&&!u.hash&&u.pathname==='/'&&(['https:','http:'].includes(u.protocol))&&!(u.protocol==='http:'&&!['localhost','127.0.0.1','[::1]'].includes(u.hostname)) })
+const reportDecisionBase = z.object({ target_instance:targetInstance,source_origin:source,adapter_version:z.literal('orange-apple-v1'),items:z.array(z.object({source_admission_id:z.string().regex(/^\d+$/).max(40),source_report_id:z.string().regex(/^\d+$/).max(40),content_fingerprint:decisionHash,context_fingerprint:decisionHash,field_fingerprints:z.partialRecord(decisionField,decisionHash).refine(value=>Object.keys(value).length<=11)}).strict()).min(1).max(50) }).strict().refine(value=>new Set(value.items.map(i=>`${i.source_admission_id}:${i.source_report_id}`)).size===value.items.length)
+export const reportDecisionResolve = reportDecisionBase
+export const reportDecisionConfirm = z.object({ ...reportDecisionBase.shape, items:z.array(reportDecisionBase.shape.items.element.extend({action:z.enum(['skip','clear']),expected_revision:uuid.nullable()})).min(1).max(50) }).strict().refine(value=>new Set(value.items.map(i=>`${i.source_admission_id}:${i.source_report_id}`)).size===value.items.length)
 function databaseError(error: { message: string; code?: string; details?: string }) {
   const statuses: Record<string, number> = { HISTORY_IDENTITY_AMBIGUOUS:409, HISTORY_ALREADY_LINKED:409, EXTENSION_AUTH_INVALID: 401, PERMISSION_DENIED: 403, NOT_FOUND: 404, PREVIEW_STALE: 409, SOURCE_MAPPING_CONFLICT: 409, VERSION_CONFLICT: 409, JOB_STOPPED: 409, IDEMPOTENCY_CONFLICT: 409, IMPORT_BATCHES_INCOMPLETE: 409, IMPORT_DEPENDENCY_INVALID:409, IMPORT_DEPENDENCY_PENDING:409, INVALID_REFERENCE: 422, INVALID_IMPORT: 422 }
   if (error.message === 'INVALID_REFERENCE') {
@@ -127,6 +133,8 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
     const input = workRecordPatch.parse({ ...req.body, work_id: req.params.id })
     reply(req, res, await run(req, 'patch', input, 'web_extension_work_records'))
   }))
+  router.post('/report-decisions/resolve',wrap(async(req,res)=>reply(req,res,await run(req,'resolve',reportDecisionResolve.parse(req.body),'web_extension_report_decisions'))))
+  router.post('/report-decisions/confirm',wrap(async(req,res)=>reply(req,res,await run(req,'confirm',reportDecisionConfirm.parse(req.body),'web_extension_report_decisions'))))
   router.get('/history-reports', wrap(async (req,res) => reply(req,res,await run(req,'list',historyQuery.parse(req.query),'web_extension_history'))))
   router.post('/history-reports/route', wrap(async (req,res) => reply(req,res,await run(req,'route',z.object({enrollment_id:uuid,dates:z.array(date).min(1).max(50),cursor:uuid.optional(),limit:z.number().int().min(1).max(50).default(50)}).strict().parse(req.body),'web_extension_history'))))
   router.get('/history-reports/:id', wrap(async (req,res) => reply(req,res,await run(req,'detail',{ id: uuid.parse(req.params.id) },'web_extension_history'))))

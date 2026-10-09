@@ -178,12 +178,13 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
   extensionApi.use(requireExtensionToken(admin, config))
   extensionApi.get('/me', wrap(async (req, res) => {
     const tokenHash = hash(req.header('authorization')!.replace(/^Bearer\s+/i, ''))
-    const [readiness, catalog, fieldMappings, syncPreferences, workRecords] = await Promise.all([
+    const [readiness, catalog, fieldMappings, syncPreferences, workRecords, reportDecisions] = await Promise.all([
       admin.rpc('web_extension_workspace', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
       admin.rpc('web_extension_catalog', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
       admin.rpc('web_extension_field_mappings', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
       admin.rpc('web_extension_sync_preferences', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: { source_origin: 'https://corp.orangeapple.co', adapter_version: 'orange-apple-v1' } }),
       admin.rpc('web_extension_work_records', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
+      admin.rpc('web_extension_report_decisions', { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: tokenHash, p_operation: 'capabilities', p_input: {} }),
     ])
     const ready = !readiness.error && readiness.data?.workspace_version === 1
     return res.json(envelope(req, {
@@ -197,6 +198,7 @@ export function createExtensionIntegrationRouter(clients: SupabaseClients, confi
         global_progress_mapping: !fieldMappings.error && fieldMappings.data?.global_progress_mapping === true,
         sync_field_preferences: !syncPreferences.error && syncPreferences.data?.sync_field_preferences === true,
         work_record_metadata: !workRecords.error && workRecords.data?.work_records === true,
+        report_skip_decisions: !reportDecisions.error && reportDecisions.data?.report_skip_decisions === true,
         history_binding_field_mask: !fieldMappings.error && fieldMappings.data?.history_binding_field_mask === true,
         teaching_data_import: ready,
         report_prefill: ready,

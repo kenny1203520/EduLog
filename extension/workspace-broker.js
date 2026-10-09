@@ -50,6 +50,7 @@ export function installWorkspaceBroker(getStatus) {
       job: ['POST', '/imports'], preview: ['POST', `/imports/${message.jobId}/preview`], apply: ['POST', `/imports/${message.jobId}/apply`],
       'job-status': ['PATCH', `/imports/${message.jobId}`], push: ['POST', '/report-pushes'],
       'work-records':['GET','/work-records'], 'work-record-save':['PATCH',`/work-records/${message.workId}`],
+      'report-decisions-resolve':['POST','/report-decisions/resolve'], 'report-decisions-confirm':['POST','/report-decisions/confirm'],
     }
     if (message.operation === 'reconcile' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || '')) fail('報名識別碼不正確。')
     if (['history-detail','history-candidates','history-bind-preview','history-bind-apply'].includes(message.operation) && !/^[a-f0-9-]{36}$/i.test(message.historyId||'')) fail('歷史報告識別碼不正確。')
@@ -59,7 +60,7 @@ export function installWorkspaceBroker(getStatus) {
     if (message.operation === 'work-records' && message.query) for (const [key,value] of Object.entries(message.query)) { if(value==null||value==='')continue;if(!['limit','cursor'].includes(key)||String(value).length>100)fail('工作紀錄查詢格式不正確。');url.searchParams.set(key,String(value)) }
     const payload = method === 'GET' ? undefined : JSON.stringify(message.operation === 'complete' ? message.body : message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
-    const readOnly = ['history-list','history-route','history-detail','history-candidates','context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','work-records','reconcile','import-info'].includes(message.operation)
+    const readOnly = ['history-list','history-route','history-detail','history-candidates','context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','work-records','report-decisions-resolve','reconcile','import-info'].includes(message.operation)
     if (readOnly && message.requestId && !/^[a-f0-9-]{36}$/i.test(message.requestId)) fail('查詢識別碼不正確。')
     const remaining = 30000 - (Date.now() - startedAt)
     if (remaining <= 0) { const error = new Error('連線驗證與 API 查詢超過 30 秒。'); error.code = 'API_TIMEOUT'; throw error }

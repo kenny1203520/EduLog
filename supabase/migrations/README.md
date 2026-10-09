@@ -172,3 +172,7 @@ Do not consolidate, rename, delete, or rewrite existing migrations `1000040`–`
 ## Extension work-record metadata (1000131)
 
 `1000131_extension_work_record_metadata.sql` adds account-scoped names, pin/archive state, and verified source/target summaries for extension work records. It does not store source report text, form contents, or local drafts. Apply it after `1000130_import_preview_dependencies_and_diagnostics.sql` when deploying the current extension package. The extension capability endpoint reports work-record metadata support only when the migration RPC is available.
+
+## Extension report skip decisions (1000132)
+
+`1000132_extension_report_skip_decisions.sql` stores account-scoped skip fingerprints and revisions, without source report text. It supports resolve and revision-checked confirm/clear batches of up to 50 reports, with a 30-day confirmation window. Apply it after `1000131_extension_work_record_metadata.sql`; the extension exposes cross-device skip memory only when the capability RPC succeeds.

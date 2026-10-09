@@ -90,6 +90,7 @@ async function verifyIntegrationStatus() {
         field_mapping_memory: data?.capabilities?.field_mapping_memory === true,
         global_progress_mapping: data?.capabilities?.global_progress_mapping === true,
         sync_field_preferences: data?.capabilities?.sync_field_preferences === true,
+        report_skip_decisions: data?.capabilities?.report_skip_decisions === true,
         history_binding_field_mask: data?.capabilities?.history_binding_field_mask === true,
         student_enrollment_catalog: data?.capabilities?.student_enrollment_catalog === true,
         enrollment_reconciliation: data?.capabilities?.enrollment_reconciliation === true,
