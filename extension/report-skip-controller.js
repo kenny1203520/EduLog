@@ -36,6 +36,7 @@ export function createReportSkipController(hooks) {
     return count
   }
   async function setSkip(item,active) {
+    try {
     const owner=hooks.getWork(),record=owner?.snapshot.records.find(r=>r.kind==='report'&&hooks.identity(r)===item.key)||item.record
     if(!owner||!record)return false
     const fp=await fingerprint(record),identified=Boolean(record.source_id&&!record.identityUnverified),prior=record.skipDecision
@@ -47,6 +48,7 @@ export function createReportSkipController(hooks) {
     } else record.skipDecision=active?{status:'local-skip',confirmedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+30*86400000).toISOString(),fingerprint:fp.content_fingerprint,contextFingerprint:fp.context_fingerprint,fieldFingerprints:fp.field_fingerprints}:undefined
     record.sourceSkipped=active
     return hooks.changed()
+    } catch { return false }
   }
   async function refreshContext(owner=hooks.getWork()) {
     if(!owner||owner!==hooks.getWork())return 0

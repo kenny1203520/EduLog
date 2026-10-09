@@ -54,3 +54,16 @@ test('a successful reread resolves 600 skipped reports in batches of 50 without 
   assert.deepEqual(sizes,Array(12).fill(50))
   assert.ok(records.every(record=>record.sourceSkipped&&record.skipDecision.status==='skip'))
 })
+
+test('a failed single-report skip keeps the report unchanged and allows retry',async()=>{
+  const record={kind:'report',enrollment_source_id:'12',source_id:'34',date:'2026-10-04',sourceFields:[]}
+  const owner={snapshot:{records:[record]}}
+  let calls=0
+  const controller=createReportSkipController({getWork:()=>owner,targets:()=>new Map(),instance:()=> 'https://edulog.example',capable:()=>true,identity:r=>`${r.enrollment_source_id}:${r.source_id}`,api:async()=>{calls++;if(calls===1)throw new Error('offline');return{items:[{revision:'next',confirmed_at:'2026-10-04T00:00:00Z',expires_at:'2026-11-03T00:00:00Z'}]}},changed:async()=>true})
+  const item={key:'12:34',record}
+  assert.equal(await controller.setSkip(item,true),false)
+  assert.equal(record.sourceSkipped,undefined)
+  assert.equal(await controller.setSkip(item,true),true)
+  assert.equal(record.sourceSkipped,true)
+  assert.equal(calls,2)
+})
