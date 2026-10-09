@@ -796,7 +796,6 @@ async function prefill() {
   catch (error) { notice(`已預填，但待確認紀錄尚未回寫：${error.message}。可在工作紀錄重試；不會重填表單。`, true); return }
   notice(`已套用 ${result.applied} 個欄位，未送出表單。請返回網站檢查。`)
 }
-let workHistory={local:null,remote:null}
 async function saveWorkMetadata(row, changes = {}) {
   if (!integrationCapabilities.work_record_metadata || !row?.id) return null
   const path=row.sourcePath||row.form?.sourcePath
@@ -870,7 +869,7 @@ async function setSourceForWork(row){
   $('source-tab').value=String(candidate.id);selectedPath=candidate.path;const c=await source('context');if(expected&&c.classId!==expected)throw new Error('來源班級與原工作不符；請檢查新開啟的來源頁面。');sourceContext=c;classSourceReady=Boolean(c.classId);reportSourceReady=Boolean(c.reportOpen);return candidate
 }
 async function openWorkRecord(item){const row=item.local;if(!row){renderWorkDetail(item);return}if(row.type==='import'){await setSourceForWork(row);work=row.status==='partial_complete'?retryHistoryWork(row):row;activeWorks.import=work;$('include-internal-notes').checked=work.includeInternalNotes===true;flow('import');if(row.batches){await resumeImport();return}if(work.history?.next<work.history?.paths.length)await collectHistory();await save();await mappingView();renderHistoryIssues();return}if(row.type==='prefill'){await setSourceForWork(row);work=row;activeWorks.prefill=work;flow('prefill');notice('已恢復預填工作。請重新讀取原生表單並核對，不會自動套用。')}}
-async function repeatWork(row){await setSourceForWork(row);$('date-from').value=row.dateFrom||$('date-from').value;$('date-to').value=row.dateTo||$('date-to').value;$('all-history').checked=row.dateFrom==='1900-01-01'&&row.dateTo==='9999-12-31';work=null;activeWorks.import=null;continuation=null;flow('import');await collect();notice('已建立新工作；身份對應與欄位偏好會重新驗證，逐筆覆寫及略過選擇不會沿用。')}}
+async function repeatWork(row){await setSourceForWork(row);$('date-from').value=row.dateFrom||$('date-from').value;$('date-to').value=row.dateTo||$('date-to').value;$('all-history').checked=row.dateFrom==='1900-01-01'&&row.dateTo==='9999-12-31';work=null;activeWorks.import=null;continuation=null;flow('import');await collect();notice('已建立新工作；身份對應與欄位偏好會重新驗證，逐筆覆寫及略過選擇不會沿用。')}
 function renderWorkDetail(item){
   const detail=$('work-detail'),row=item.local||item.remote||{},locale=globalThis.edulogUi?.locale||'zh-TW'
   detail.replaceChildren()
