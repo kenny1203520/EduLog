@@ -2,7 +2,7 @@
 
 ## 最新介面：原站教學、工作台同步
 
-最新側載包為 `extension/dist/EduLog-Teaching-Tools-0.1.0-workflow-redesign.zip`。本輪修正 Popup、網站浮層及工作台版面，並新增 1000130 跨批次預覽依賴與安全診斷。部署 migration 後更新 API 與側載套件；1000128／1000129 保留為未使用編號。
+最新側載包為 `extension/dist/EduLog-Teaching-Tools-0.1.0-history-review-reliability.zip`。本輪修正差異確認的草稿引用、單筆本地確認與局部重查，沿用既有 API 與資料庫契約，不新增 migration。側載包仍包含先前版本的 1000130 部署文件與 migration；若尚未部署跨批次預覽功能，請依其驗收／部署說明一併更新 API。
 
 工作台依實際核對與交易進度呈現「讀取與核對 → 處理例外 → 摘要並同步 → 結果」。共用設定集中收合、左右差異與逐段 diff、已提交與待處理分開統計。已有未完成工作可繼續；功能與中英切換保留草稿及選取。工作紀錄依可靠 job ID 合併並提供狀態篩選，單側讀取失敗不抹除另一側資料。
 
