@@ -4,6 +4,7 @@ import { createMappingController } from './mapping-controller.js'
 import { mappedReport, attachImportFields } from './import-field-mappings.js'
 import { historyIdentity, planHistory, teachingFields, bindingStillMatches } from './history-sync.js'
 import { createHistoryWorkbench } from './history-workbench.js'
+import { createReportSkipController } from './report-skip-controller.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
 import { labels, splitBatches, validateBatches, workspaceErrorMessage, plainText, suggestedValue, retryHistoryWork } from './workspace-model.js'
 import { workflowState, combineWorkRecords, workCategory } from './workflow-state.js'
@@ -268,9 +269,12 @@ function scheduleHistoryPlanForCurrentMapping(){
     updateHistoryPlanLocal()
   }).catch(error=>{if(owner===work&&epoch===generation&&sequence===historyLocalSequence)notice(`課程教材目錄尚未載入，請重新核對後重試。${error.message}`,true)})
 }
-async function historyWorkChanged(){if(!work)return false;historyCheckSequence++;historyLocalSequence++;work.previewDirty=true;updateHistoryPlanLocal();try{return await save()}catch(e){notice(`核對結果未保存：${e.message}。選擇仍保留，請重試。`,true);return false}}
+async function historyWorkChanged(){if(!work)return false;historyCheckSequence++;historyLocalSequence++;work.previewDirty=true;await reportSkipController?.refreshContext(work);updateHistoryPlanLocal();try{return await save()}catch(e){notice(`核對結果未保存：${e.message}。選擇仍保留，請重試。`,true);return false}}
+const reportSkipController=createReportSkipController({getWork:()=>work,targets:historyTargets,routes:()=>historyRoutes,instance:()=>binding?.instance||'',api,capable:()=>integrationCapabilities.report_skip_decisions,identity:historyIdentity,changed:historyWorkChanged,recompute:updateHistoryPlanLocal,save})
 function historyUiChanged(){if(work)void save().catch(e=>notice(e.message,true))}
 const historyView=createHistoryWorkbench({work:()=>work,record:item=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record,item:key=>historyPlan.find(candidate=>candidate.key===key),labels:fieldLabels,changed:historyWorkChanged,uiChanged:historyUiChanged,recheck:(key)=>void runLatest(async()=>{const state=historyView.capture(),selected=historyView.selectedKey(),owner=work?.id;await refreshHistoryPlan({admissions:key?[historyPlan.find(i=>i.key===key)?.record.enrollment_source_id].filter(Boolean):undefined});if(owner===work?.id&&selected===historyView.selectedKey())historyView.refreshEditor(historyPlan,state)},{label:key?'正在核對此份紀錄':'正在逐日核對有效課次'}),defaults:effectiveSyncFields,fieldLabel:key=>fieldLabels[key]||key,diffValue:displayValue,fields:(host,item)=>attachImportFields(host,item.record,{record:()=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record,work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&(change.fieldKey!=='lesson_id'||historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId))){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
+historyView.setSkip((item,active)=>reportSkipController.setSkip(item,active))
+historyView.setSkipMany(items=>reportSkipController.continueSkipping(items))
 function historyTargets() {
   const targets=new Map()
   for(const r of work.snapshot.records.filter(r=>r.kind==='enrollment')) {
@@ -342,7 +346,7 @@ async function collect() {
 async function collectHistory(retryPath) {
   paused=false
   const owner=work, epoch=activeReadGeneration, sourceEpoch=generation
-  try{await readHistoryWork(owner,{current:()=>owner===work&&epoch===activeReadGeneration&&sourceEpoch===generation,paused:()=>paused,save,source,merge:mergeRecords,progress:message=>{$('operation-detail').textContent=message;notice(message)},saveFailure:error=>{owner.collectionSaveError=error.code||'WORK_SAVE_FAILED';taskStatus()}},retryPath)}
+  try{await readHistoryWork(owner,{current:()=>owner===work&&epoch===activeReadGeneration&&sourceEpoch===generation,paused:()=>paused,save,source,merge:mergeRecords,progress:message=>{$('operation-detail').textContent=message;notice(message)},saveFailure:error=>{owner.collectionSaveError=error.code||'WORK_SAVE_FAILED';taskStatus()}},retryPath);await reportSkipController.resolve(owner)}
   finally{if(owner===work)renderHistoryIssues()}
 }
 function renderHistoryIssues(){

@@ -29,6 +29,7 @@ export async function readHistoryWork(work, hooks, retryPath) {
           history.issues.push({evidenceKey:historyPath,listFailed:true,admissionPath:historyPath,reason:error.message})
           if(!retryPath)history.next++;await persist();continue
         }
+        history.lastSourceReadAt=Math.max(Date.now(),(history.lastSourceReadAt||0)+1)
         {
           const admissionId=historyPath.match(/^\/dt_admissions\/(\d+)$/)?.[1]
           const enrollment=work.snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===admissionId)
@@ -61,6 +62,7 @@ export async function readHistoryWork(work, hooks, retryPath) {
           try {incoming=await read('history-report',{historyPath,input:{reportId:record.source_id,evidenceKey:record.evidenceKey}});history.reportCount++}
           catch(error){if(interruptionCodes.has(error.code))throw error;incoming={...record,sourceReadStatus:'failed',needs:[error.message]}}
         }
+        if(incoming.sourceReadStatus!=='failed')history.lastSourceReadAt=Math.max(Date.now(),(history.lastSourceReadAt||0)+1)
         history.issues=history.issues.filter(r=>r.evidenceKey!==incoming.evidenceKey)
         if(!incoming.date||incoming.sourceReadStatus==='failed')history.issues.push(incoming)
         work.snapshot.records=hooks.merge(work.snapshot.records,[incoming])

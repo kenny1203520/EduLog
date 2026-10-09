@@ -22,7 +22,8 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     }
     const item = { key, record, target, fingerprint, category: 'history', reason: '沒有唯一合法課次，先保存報名歷史。' }
     seen.set(key, item); items.push(item)
-    if (record.sourceSkipped) { item.category = 'skipped'; item.reason = '已明確略過。'; continue }
+    if (record.skipDecision?.status === 'review') { const reason=record.skipDecision.reason||'content_changed'; const message=reason==='expired'?'先前略過已超過 30 天，請重新確認。':reason==='context_changed'?'先前略過時的學生、報名或目標對應已改變，請重新確認。':reason==='legacy'?'舊工作中的略過沒有版本資料，請重新確認。':'來源內容與上次略過時不同，請確認是否繼續略過。'; needs(item,'previously-skipped',message,[{id:'previously-skipped',code:'previously-skipped',message,target:'skip-decision'}]); continue }
+    if (record.sourceSkipped) { item.category = 'skipped'; item.reason = '已確認略過。'; continue }
     if (!target) { needs(item,'enrollment','請先確認這筆來源報名的學生與課程',[{id:'enrollment',code:'enrollment',message:'請先確認這筆來源報名的學生與課程',target:'enrollment'}]); continue }
     if (!record.date || record.sourceDateConflict) { needs(item,'date','需要您確認完整日期；矛盾日期不能直接保存',[{id:'date',code:'date',message:'需要您確認完整日期；矛盾日期不能直接保存',target:'date'}]); continue }
     if (record.sourceReadStatus === 'failed') { needs(item,'source-read','報告編輯頁尚未完整讀取，請重試或略過',[{id:'source-read',code:'source-read',message:'報告編輯頁尚未完整讀取，請重試或略過',target:'source'}]); continue }
