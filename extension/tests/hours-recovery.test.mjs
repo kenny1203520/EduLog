@@ -1,14 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
+import { JSDOM, VirtualConsole } from '../../app/node_modules/jsdom/lib/api.js'
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const tick = () => new Promise(resolve => setTimeout(resolve, 40))
 function fixture(name = 'hours-nested') {
-  const dom = new JSDOM(read(`fixtures/${name}.html`), { url: 'https://corp.orangeapple.co/my/hour', runScripts: 'outside-only', pretendToBeVisual: true })
+  const jsdomErrors=[],virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>jsdomErrors.push(error))
+  const dom = new JSDOM(read(`fixtures/${name}.html`), { url: 'https://corp.orangeapple.co/my/hour', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole })
   const w = dom.window, doc = w.document
   for (const file of ['adapters/orange-apple-workflows.js', 'adapters/orange-apple.js']) w.eval(read(`../${file}`))
-  return { dom, w, doc, enhance: () => w.edulogSiteAdapter.enhancePage(doc) }
+  return { dom, w, doc, jsdomErrors, enhance: () => w.edulogSiteAdapter.enhancePage(doc) }
 }
 for (const name of ['hours', 'hours-nested']) test(`${name}: preserves native query, events and exact restore across repeat applications`, () => {
   const s = fixture(name), form = s.doc.querySelector('form'), year = form.querySelector('[name=year]'), month = form.querySelector('[name=month]')
@@ -99,9 +100,9 @@ async function controller(failAt = 'apply') {
   s.w.chrome = { runtime: { sendMessage: async data => { sent.push(data); return { enabled: data.enabled ?? true } }, onMessage: { addListener() {} } } }
   for (const file of ['runtime-bridge.js', 'bootstrap.js', 'connection-ui.js', 'integration-ui.js', 'content.js']) s.w.eval(read(`../${file}`))
   await tick()
-  return { ...s, draft, sent, errors, attempts: () => attempts, clearFault: () => { fault = null }, close() {
+  return { ...s, draft, sent, errors, attempts: () => attempts, clearFault: () => { fault = null }, async close() {
     s.doc.dispatchEvent(new s.w.Event('turbo:before-cache'))
-    s.w.edulogUiBoot.release(); s.dom.window.close()
+    s.w.edulogUiBoot.release();await tick();assert.deepEqual(s.jsdomErrors,[]);s.dom.window.close()
   } }
 }
 function checkFallback(s) {
@@ -127,7 +128,7 @@ test('initial failure releases loading and blocks observer retries; manual retry
   assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
   assert.equal(s.doc.querySelector('[name=year]'), year); assert.equal(year.value, '2025')
   assert.equal(s.doc.querySelector('#edulog-extension-root').shadowRoot.querySelector('.notice').hidden, true)
-  assert.deepEqual(s.errors, []); s.close()
+  assert.deepEqual(s.errors, []); await s.close()
 })
 test('refresh failure restores native form and focus; a new Turbo visit can reapply', async () => {
   const s = await controller('refresh'), month = s.doc.querySelector('[name=month]')
@@ -140,14 +141,14 @@ test('refresh failure restores native form and focus; a new Turbo visit can reap
   assert.equal(s.doc.documentElement.dataset.edulogUi, 'on')
   assert.equal(s.doc.querySelector('[name=month]'), month); assert.equal(month.value, '8')
   assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
-  s.close()
+  await s.close()
 })
 test('Turbo rendering succeeds even when extension enhancement fails and returns native content', async () => {
   const s = await controller(), before = s.attempts()
   s.doc.dispatchEvent(new s.w.Event('turbo:visit'))
   const event = new s.w.CustomEvent('turbo:before-render', { detail: { render: () => 'native-render-result' } })
   s.doc.dispatchEvent(event); assert.equal(await event.detail.render(), 'native-render-result')
-  checkFallback(s); assert.equal(s.attempts(), before + 1); s.close()
+  checkFallback(s); assert.equal(s.attempts(), before + 1); await s.close()
 })
 test('controller rebuild after native filter replacement keeps the new selection and form', async () => {
   const s = await controller(null), form = s.doc.querySelector('form'), old = s.doc.querySelector('[name=year]')
@@ -157,5 +158,5 @@ test('controller rebuild after native filter replacement keeps the new selection
   assert.equal(replacement.form, form); assert.equal(replacement.value, '2025')
   assert.equal(s.doc.querySelectorAll('[name=year]').length, 1)
   assert.equal(s.doc.querySelectorAll('#edulog-extension-root').length, 1)
-  assert.equal(s.draft.value, '尚未送出的內容'); s.close()
+  assert.equal(s.draft.value, '尚未送出的內容'); await s.close()
 })

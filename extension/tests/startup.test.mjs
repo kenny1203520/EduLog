@@ -1,11 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
+import { JSDOM, VirtualConsole } from '../../app/node_modules/jsdom/lib/api.js'
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const tick = () => new Promise(resolve => setTimeout(resolve, 25))
 function start(path = '/courses/dt/101') {
-  const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only', pretendToBeVisual: true })
+  const errors=[],virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>errors.push(error))
+  const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole })
   const w = dom.window, doc = w.document
   let answer, reject, deadline, messages = 0
   const response = new Promise((resolve, fail) => { answer = resolve; reject = fail })
@@ -20,7 +21,7 @@ function start(path = '/courses/dt/101') {
     doc.body.innerHTML = source.window.document.body.innerHTML; source.window.close()
     for (const file of ['connection-ui.js', 'integration-ui.js', 'adapters/orange-apple-workflows.js', 'content.js']) w.eval(read(`../${file}`))
   }
-  return { dom, w, doc, answer, reject, mount, expire: () => deadline?.(), messages: () => messages }
+  return { dom, w, doc, answer, reject, mount, expire: () => deadline?.(), messages: () => messages, errors }
 }
 for (const enabled of [true, false]) test(`bootstrap resolves preference ${enabled} before native DOM exists`, async () => {
   const s = start()
@@ -185,4 +186,18 @@ test('clean cache rendering restores a reliable native field focus and caret', a
   assert.equal(restored.selectionStart, 2)
   assert.equal(restored.selectionEnd, 6)
   s.dom.window.close()
+})
+
+test('toolbar cache teardown disconnects its observer before clearing the host reference', async () => {
+  const s=start();s.mount();s.answer({enabled:true});await tick();const old=s.doc.querySelector('#edulog-extension-root')
+  s.doc.dispatchEvent(new s.w.Event('turbo:before-cache'));await tick()
+  assert.equal(old.isConnected,false);assert.equal(s.doc.querySelector('#edulog-extension-root'),null);assert.deepEqual(s.errors,[]);s.dom.window.close()
+})
+
+test('a removed toolbar can synchronously rebuild without its old observer touching the new instance', async () => {
+  const s=start();s.mount();s.answer({enabled:true});await tick();const old=s.doc.querySelector('#edulog-extension-root'),toggle=old.shadowRoot.querySelector('.toggle')
+  old.remove();toggle.click();await tick()
+  const current=s.doc.querySelector('#edulog-extension-root');assert.ok(current);assert.notEqual(current,old);assert.equal(s.doc.querySelectorAll('#edulog-extension-root').length,1);assert.deepEqual(s.errors,[])
+  let checks=0;const oldSend=s.w.chrome.runtime.sendMessage;s.w.chrome.runtime.sendMessage=data=>{if(data.type==='get-edulog-integration-status')checks++;return Promise.resolve({enabled:true,status:'not-connected'})}
+  current.shadowRoot.querySelector('.integration').click();await tick();assert.equal(checks,1);assert.deepEqual(s.errors,[]);s.w.chrome.runtime.sendMessage=oldSend;s.dom.window.close()
 })

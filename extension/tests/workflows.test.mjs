@@ -1,9 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
+import { JSDOM, VirtualConsole } from '../../app/node_modules/jsdom/lib/api.js'
 const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const wait = () => new Promise(resolve => setTimeout(resolve, 150))
+const pendingJsdomErrors = []
+test.afterEach(async () => {
+  await wait()
+  assert.deepEqual(pendingJsdomErrors.splice(0), [], 'unexpected asynchronous JSDOM error')
+})
 
 test('hours preserves native GET filters and distinguishes empty loaded month', () => {
   const dom = fixture('hours','/my/hour?year=2026&month=9'), doc = dom.window.document
@@ -116,7 +121,9 @@ test('report date context is shown only when it matches the native form action',
   assert.equal(doc.querySelector('.edulog-dialog-context'),null);other.restore();dom.window.close()
 })
 function fixture(name, path) {
-  const dom = new JSDOM(read(`fixtures/${name}.html`), { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only' })
+  const virtualConsole = new VirtualConsole()
+  virtualConsole.on('jsdomError', error => pendingJsdomErrors.push(error))
+  const dom = new JSDOM(read(`fixtures/${name}.html`), { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only', virtualConsole })
   for (const file of ['adapters/orange-apple-workflows.js', 'adapters/orange-apple.js']) dom.window.eval(read(`../${file}`))
   return dom
 }

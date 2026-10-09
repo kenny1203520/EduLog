@@ -1,13 +1,23 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
+import { JSDOM, VirtualConsole } from '../../app/node_modules/jsdom/lib/api.js'
 import { webcrypto } from 'node:crypto'
 const read = path => readFileSync(new URL(path, import.meta.url), 'utf8')
 const wait = () => new Promise(resolve => setTimeout(resolve, 30))
+const pendingJsdomErrors = []
+function trackedDom(...args) {
+  const virtualConsole = new VirtualConsole()
+  virtualConsole.on('jsdomError', error => pendingJsdomErrors.push(error))
+  return new JSDOM(args[0], { ...args[1], virtualConsole })
+}
+test.afterEach(async () => {
+  await wait()
+  assert.deepEqual(pendingJsdomErrors.splice(0), [], 'unexpected asynchronous JSDOM error')
+})
 
 test('pairing includes named installation metadata and blocks duplicate submission', async () => {
-  const dom = new JSDOM(read('../popup.html'), { url: 'https://extension.example/popup.html', runScripts: 'outside-only' })
+  const dom = trackedDom(read('../popup.html'), { url: 'https://extension.example/popup.html', runScripts: 'outside-only' })
   const w = dom.window, stored = {}, requests = [], opened = []
   const installation = { installation_id: '11111111-1111-4111-8111-111111111111', device_name: 'Chrome · Windows', browser_name: 'Chrome', platform_name: 'Windows', extension_version: '0.1.0' }
   let finish
@@ -39,7 +49,7 @@ test('pairing includes named installation metadata and blocks duplicate submissi
 })
 
 for (const failure of ['sync', 'async', 'listener']) test(`invalidated ${failure}: preserves drafts and stops communications`, async () => {
-  const dom = new JSDOM(read('fixtures/class.html'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only' })
+  const dom = trackedDom(read('fixtures/class.html'), { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only' })
   const w = dom.window
   let calls = 0
   const fail = () => { throw new Error('Extension context invalidated.') }
@@ -65,7 +75,7 @@ for (const failure of ['sync', 'async', 'listener']) test(`invalidated ${failure
 })
 
 test('transient bridge rejection permits retry', async () => {
-  const dom = new JSDOM('', { runScripts: 'outside-only' })
+  const dom = trackedDom('', { runScripts: 'outside-only' })
   let calls = 0
   dom.window.chrome = { runtime: { sendMessage() { return ++calls === 1 ? Promise.reject(new Error('Receiving end does not exist')) : Promise.resolve({ enabled: true }) } } }
   dom.window.eval(read('../runtime-bridge.js'))
@@ -76,7 +86,7 @@ test('transient bridge rejection permits retry', async () => {
 })
 
 for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected', 'expired', 'revoked', 'unavailable', 'forbidden']) test(`popup renders ${state}, independent UI preferences`, async () => {
-  const dom = new JSDOM(read('../popup.html'), { url: 'https://extension.example/popup.html', runScripts: 'outside-only' })
+  const dom = trackedDom(read('../popup.html'), { url: 'https://extension.example/popup.html', runScripts: 'outside-only' })
   const w = dom.window
   const stored = { origin: 'http://localhost:5173', token: 'private-token', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString(), authorizeUrl: 'http://localhost:5173/dashboard/settings?extension_pair=id' } : undefined }
   const opened = []
