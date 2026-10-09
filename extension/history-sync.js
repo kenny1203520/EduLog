@@ -14,7 +14,6 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
   }
   for (const record of records.filter(r => r.kind === 'report')) {
     const key = historyIdentity(record), target = enrollmentTargets.get(record.enrollment_source_id)
-    if (record.date && (record.date < options.dateFrom || record.date > options.dateTo)) continue
     const fingerprint = JSON.stringify({ date: record.date, fields: record.sourceFields, data: record.data })
     if (seen.has(key)) {
       if (seen.get(key).fingerprint !== fingerprint) needs(seen.get(key),'source-conflict','同一來源身份出現不同內容，請補讀並核對。')
@@ -22,6 +21,10 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     }
     const item = { key, record, target, fingerprint, category: 'history', reason: '沒有唯一合法課次，先保存報名歷史。' }
     seen.set(key, item); items.push(item)
+    if (record.date && (record.date < options.dateFrom || record.date > options.dateTo)) {item.category='system-excluded';item.reason='日期不在本次同步範圍內。';continue}
+    if(record.sourceRowType==='other-admission'||record.sourceRowType==='previous-admission'&&!record.sourceAdmissionContextVerified){item.category='other-admission';item.reason=record.sourceRowReason||'來源列屬於其他報名，無法確認學生與課程歸屬；未納入同步。';continue}
+    if(record.sourceRowType==='unfilled'){item.category='unfilled';item.reason='原站尚未填寫教學報告；保留在未填清單，來源有內容後重新讀取即可納入。';continue}
+    if(record.sourceRowType==='system-excluded'){item.category='system-excluded';item.reason=record.sourceRowReason||'原站標示休假或停課，且沒有教學資料；系統已排除。';continue}
     if (record.skipDecision?.status === 'review') { const reason=record.skipDecision.reason||'content_changed'; const message=reason==='expired'?'先前略過已超過 30 天，請重新確認。':reason==='context_changed'?'先前略過時的學生、報名或目標對應已改變，請重新確認。':reason==='legacy'?'舊工作中的略過沒有版本資料，請重新確認。':'來源內容與上次略過時不同，請確認是否繼續略過。'; needs(item,'previously-skipped',message,[{id:'previously-skipped',code:'previously-skipped',message,target:'skip-decision'}]); continue }
     if (record.sourceSkipped) { item.category = 'skipped'; item.reason = '已確認略過。'; continue }
     if (!target) { needs(item,'enrollment','請先確認這筆來源報名的學生與課程',[{id:'enrollment',code:'enrollment',message:'請先確認這筆來源報名的學生與課程',target:'enrollment'}]); continue }
@@ -35,7 +38,7 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     const mapped = mappedReport(record, target.courseId, options.lessons || [])
     for(const field of teachingFields)if(!fieldAllowed(record,field))delete mapped.data[field]
     const includedFields=teachingFields.filter(field=>fieldAllowed(record,field)&&field!=='class_notes'&&field!=='external_link'&&Object.hasOwn(mapped.data,field));if(fieldAllowed(record,'class_notes')&&options.includeInternal&&Object.hasOwn(mapped.data,'class_notes'))includedFields.push('class_notes');if(record.source_id&&!record.identityUnverified&&fieldAllowed(record,'external_link'))includedFields.push('external_link');item.includedFields=[...new Set(includedFields)]
-    if(!item.includedFields.length){item.category='skipped';item.reason='所有同步欄位皆已略過；來源資料保留在本機。';continue}
+    if(!item.includedFields.length){item.category='system-excluded';item.reason='本次同步未選取任何可同步欄位；來源資料保留在本機。';continue}
     const mappingNeeds=[...mapped.needs]
     if(record.sourceStudentIdentityConflict)mappingNeeds.push('此歷史報告的學生身份與來源報名不同；請先分拆或核對該筆來源資料。')
     if(record.sourceLearningStatusRaw&&!record.sourceLearningStatus)mappingNeeds.push('原站學習狀態尚未辨識；請展開來源證據確認實際選項。')

@@ -66,6 +66,19 @@ test('history reports group by reliable student or exact temporary name, then en
  w.view.render([a,b,c,d]);assert.equal(w.document.querySelectorAll('#history-items .history-student-group').length,3);assert.equal(w.document.querySelectorAll('#history-items .history-student-group[data-student-group="student:student-a"] button').length,1);assert.equal(w.document.querySelectorAll('#history-items .history-student-group[data-student-group="student:student-b"] button').length,1);assert.equal(w.document.querySelectorAll('#history-items .history-student-group[data-student-group="name:暫時同組"] button').length,2);assert.match($('history-items').textContent,/依姓名暫時分組/);dom.window.close()
 })
 
+test('automatic exclusions are summarized separately and can be inspected without per-row sync controls',()=>{
+ const {w,dom,item,$}=fixture(),items=[
+  item('301',{category:'unfilled',reason:'原站尚未填寫'}),
+  item('302',{category:'other-admission',reason:'前一報名無法確認'}),
+  item('303',{category:'system-excluded',reason:'日期不在範圍'})
+ ]
+ w.view.render(items)
+ const details=$('history-auto-exclusions');assert.ok(details);assert.equal(details.querySelectorAll('.history-exclusion-filter').length,3);assert.match($('history-auto-exclusions-summary').textContent,/3/)
+ const filter=[...details.querySelectorAll('.history-exclusion-filter')].find(button=>button.textContent.includes('尚未填寫'));filter.click();assert.equal($('history-filter').value,'unfilled');assert.equal($('history-items').querySelector('[data-key="301"]').hidden,false)
+ $('history-items').querySelector('[data-key="301"]').click();assert.match($('history-detail').textContent,/原站尚未填寫/);assert.equal($('history-detail').querySelector('.mapping-actions'),null)
+ assert.match($('history-action-count').textContent,/待處理報告 0 份/);dom.window.close()
+})
+
 test('batch field decisions explicitly enable a per-report source override or exclude only that field',()=>{
  const {w,dom,item,$}=fixture(),a=item('301',{record:{enrollment_source_id:'301',date:'2026-10-04',syncFieldOverrides:{attendance_status:false}},data:{attendance_status:'present'},occurrence:{report:{attendance_status:'absent'}},conflicts:['attendance_status']}),b=item('302',{record:{enrollment_source_id:'302',date:'2026-10-05'},data:{attendance_status:'present'},occurrence:{report:{attendance_status:'absent'}},conflicts:['attendance_status']})
  w.view.render([a,b]);const decision=$('history-batch-review').querySelector('select');decision.value='source';decision.dispatchEvent(new w.Event('change'));$('history-batch-review').querySelector('button').click();assert.equal(a.record.syncFieldOverrides.attendance_status,true);assert.equal(b.record.syncFieldOverrides.attendance_status,true);assert.deepEqual(Array.from(a.record.historyOverwrite),['attendance_status'])

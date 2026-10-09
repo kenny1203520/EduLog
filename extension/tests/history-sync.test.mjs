@@ -59,6 +59,26 @@ test('a report with a conflicting source student identity remains review-only',(
  const [item]=plan([record({sourceStudentIdentityConflict:true})]);assert.equal(item.category,'needs');assert.match(item.reason,/學生身份與來源報名不同/);assert.equal(item.occurrence,undefined)
 })
 
+test('placeholder and unverified previous-enrollment rows are categorized without teacher-action issues or payloads',()=>{
+ const [unfilled,other]=plan([
+  record({sourceRowType:'unfilled',sourceLookupReportId:'6422189',data:{},sourceFields:[]}),
+  record({sourceRowType:'other-admission',sourceRowReason:'前一報名學生無法確認',enrollment_source_id:'200'})
+ ])
+ assert.equal(unfilled.category,'unfilled');assert.equal(unfilled.issues,undefined);assert.equal(unfilled.data,undefined)
+ assert.equal(other.category,'other-admission');assert.equal(other.issues,undefined);assert.equal(other.data,undefined)
+})
+
+test('verified previous-admission rows route through their original enrollment while holidays and range exclusions stay grouped',()=>{
+ const admissions=new Map([['301',{id:'current',courseId:'course',name:'目前學生'}],['200',{id:'previous',courseId:'older-course',name:'目前學生'}]])
+ const [previous,holiday,outside]=planHistory([
+  record({enrollment_source_id:'200',historyKey:'report:200:401',sourceRowType:'previous-admission',sourceAdmissionContextVerified:true,sourceCourseCode:'dt-python'}),
+  record({source_id:'402',historyKey:'report:402',sourceRowType:'system-excluded',sourceRowReason:'休假日，沒有教學資料'}),
+  record({source_id:'403',historyKey:'report:403',date:'1800-01-01'})
+ ],admissions,new Map([['previous',[]]]),new Map([['previous',[occurrence]]]),options)
+ assert.equal(previous.category,'bind');assert.equal(previous.target.id,'previous')
+ assert.equal(holiday.category,'system-excluded');assert.equal(holiday.data,undefined);assert.equal(outside.category,'system-excluded');assert.equal(outside.data,undefined)
+})
+
 test('sync field preferences exclude payload and raw source text; report exceptions override saved defaults',()=>{
  const source={...record({sourceFields:[{key:'content',label:'評語',type:'text',value:'來源文字'}],data:{content:'來源文字',attendance_status:'present',is_completed:false}})}
  const [excluded]=plan([source],[],[occurrence],{...options,syncFields:{content:false,attendance_status:true,is_completed:true}})
@@ -66,5 +86,5 @@ test('sync field preferences exclude payload and raw source text; report excepti
  const [override]=plan([{...source,syncFieldOverrides:{content:true}}],[],[occurrence],{...options,syncFields:{content:false,attendance_status:true,is_completed:true}})
  assert.equal(override.data.content,'來源文字');assert.equal(override.includedFields.includes('content'),true)
  const [none]=plan([{...source,syncFieldOverrides:{content:false,attendance_status:false,is_completed:false,progress_letter:false,lesson_id:false,absence_reason:false,class_participation:false,classroom_behavior:false,contact_notes:false,class_notes:false,external_link:false}}],[],[occurrence],{...options,syncFields:Object.fromEntries(['content','attendance_status','is_completed','progress_letter','lesson_id','absence_reason','class_participation','classroom_behavior','contact_notes','class_notes','external_link'].map(k=>[k,false]))})
- assert.equal(none.category,'skipped');assert.match(none.reason,/所有同步欄位皆已略過/)
+ assert.equal(none.category,'system-excluded');assert.match(none.reason,/未選取任何可同步欄位/)
 })
