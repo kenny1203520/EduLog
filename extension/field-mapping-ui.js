@@ -1,6 +1,14 @@
 // Reused in the shadow assistant and trusted workbench. Never auto-confirms rules.
 (() => {
   const make = (doc,tag,text) => { const n=doc.createElement(tag);if(text!==undefined)n.textContent=text;return n }
+  const lessonSequence = lesson => Number.isInteger(Number(lesson?.sequence)) && Number(lesson.sequence) > 0 ? Number(lesson.sequence) : null
+  const sortLessons = lessons => [...lessons].sort((a,b) => {
+    const as=lessonSequence(a),bs=lessonSequence(b)
+    if(as===null&&bs!==null)return 1
+    if(as!==null&&bs===null)return -1
+    if(as!==null&&bs!==null&&as!==bs)return as-bs
+    return String(a?.title||a?.name||a?.display_name||'').localeCompare(String(b?.title||b?.name||b?.display_name||''),'zh-Hant') || String(a?.id||'').localeCompare(String(b?.id||''))
+  })
   const choices = (field,report,extra=[]) => {
     const m=globalThis.edulogFieldMappings
     if(field.key==='attendance_status')return Object.entries(m.attendance)
@@ -8,7 +16,7 @@
     if(field.key==='is_completed')return [[true,'課程已完成'],[false,'課程未完成']]
     if(['class_participation','classroom_behavior'].includes(field.key))return Array.from({length:11},(_,i)=>[i/2,`${i/2} 星`])
     if(field.key.startsWith('progress_'))return Array.from({length:26},(_,i)=>[String.fromCharCode(65+i),String.fromCharCode(65+i)])
-    if(field.key==='lesson_id')return extra.length?extra.map(l=>[l.id,m.lessonLabel(l)]):report.lesson_id?[[report.lesson_id,m.lessonLabel({id:report.lesson_id,title:report.lesson_name,sequence:report.lesson_sequence})]]:[]
+    if(field.key==='lesson_id')return extra.length?sortLessons(extra).map(l=>[l.id,m.lessonLabel(l)]):report.lesson_id?[[report.lesson_id,m.lessonLabel({id:report.lesson_id,title:report.lesson_name,sequence:report.lesson_sequence})]]:[]
     return []
   }
   function attach(parent,field,report,rules,options) {
@@ -36,5 +44,5 @@
     }
     source.addEventListener('change',refresh);canonical.addEventListener('change',()=>save.disabled=!writable());save.addEventListener('click',()=>void send('confirm'));clear.addEventListener('click',()=>void send('clear'));box.append(lab,target,feedback,actions);parent.append(box);refresh()
   }
-  globalThis.edulogFieldMappingUI=Object.freeze({attach,choices})
+  globalThis.edulogFieldMappingUI=Object.freeze({attach,choices,sortLessons})
 })()

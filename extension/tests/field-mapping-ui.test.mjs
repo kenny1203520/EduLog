@@ -21,3 +21,8 @@ test('uncertain saves lock repeat writes until rechecking',async()=>{
 test('late confirmations do not write memory after the target changes',async()=>{
  const rules=[];let resolve,current=true;const dom=setup(rules,()=>new Promise(r=>resolve=r),()=>current);dom.window.document.querySelector('button').click();current=false;resolve({items:[{field_key:field.key,source_value:'yes',revision:'late'}]});await tick();assert.equal(rules.length,0);dom.window.close()
 })
+test('lesson choices sort by numeric sequence, then title and id, with missing sequence last',()=>{
+ const dom=new JSDOM('<main></main>',{runScripts:'outside-only'});dom.window.eval(readFileSync(new URL('../field-mapping-ui.js',import.meta.url),'utf8'))
+ const lessons=[{id:'z',sequence:10,title:'ten'},{id:'b',sequence:2,title:'Beta'},{id:'a',sequence:2,title:'Alpha'},{id:'one',sequence:1,title:'One'},{id:'missing',title:'Missing'}]
+ assert.deepEqual([...dom.window.edulogFieldMappingUI.sortLessons(lessons)].map(row=>row.id),['one','a','b','z','missing']);dom.window.close()
+})
