@@ -21,7 +21,9 @@ let activeFlow = 'import', continuation = null, unsavedWorkId = '', workHistory 
 const activeWorks = {import:null,prefill:null}, activeStages = {import:1,prefill:1}
 function currentWorkflow(view) { const identity=work?.type==='import'&&work.snapshot?work.snapshot.records.filter(row=>row.kind==='enrollment'&&!row.sourceSkipped&&!mappingController.validateRow(row,true)).length:0;return workflowState(view,{work:work?.type===view?work:activeWorks[view],form,report,previewCount:previewResults.length,unresolved:identity+historyPlan.filter(item=>item.category==='needs').length}) }
 function taskStatus() {
-  const ui=globalThis.edulogUi;ui?.text($('draft-status'),unsaved&&unsavedWorkId===work?.id?'work.unsaved':work?'work.saved':'work.ready')
+  const ui=globalThis.edulogUi
+  if(work?.collectionSaveError){const savedAt=work.updatedAt?new Intl.DateTimeFormat(ui?.locale||'zh-TW',{dateStyle:'short',timeStyle:'short'}).format(new Date(work.updatedAt)):ui?.t('work.savedAtUnknown')||'尚無成功保存版本';ui?.text($('draft-status'),'work.saveFailed',{savedAt});$('retry-history-save').hidden=false}
+  else {ui?.text($('draft-status'),unsaved&&unsavedWorkId===work?.id?'work.unsaved':work?'work.saved':'work.ready');$('retry-history-save').hidden=true}
   $('task-title').textContent=work?.title||sourceContext?.title||''
   $('task-status').textContent=work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
   if(work&&ui&&ui.t('work.state.'+work.status)!=='work.state.'+work.status)ui.text($('task-status'),'work.state.'+work.status)
@@ -61,6 +63,7 @@ async function persistWork(current,request) {
     // persistence metadata; terminal cleanup is still reflected locally.
     current.updatedAt = stored.updatedAt
     current.expiresAt = stored.expiresAt
+    if(current.collectionSaveError){delete current.collectionSaveError;delete current.collectionError}
     if (!stored.snapshot && ['complete','cancelled'].includes(stored.status)) delete current.snapshot
     if(request===saveRequestSequence&&unsavedWorkId===current.id){unsaved = false;unsavedWorkId='';taskStatus()}
     return true
@@ -162,7 +165,8 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
     else if (error.code === 'RATE_LIMITED') { $('operation-title').textContent = '伺服器暫時限制查詢'; $('operation-detail').textContent = error.retryAfter ? `請於 ${error.retryAfter} 秒後手動重試。` : '請稍後手動重試。' }
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
-    notice(error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : '目前輸入與對應仍保留，請依上方說明處理後重試。', true)
+    if(['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code)&&work?.type==='import'){work.status='paused-extraction';work.collectionError=error.message;work.collectionSaveError=error.code;$('retry-history-save').hidden=false;taskStatus()}
+    notice(error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前輸入與對應仍保留，請依上方說明處理後重試。', true)
     $('diagnostic').textContent = [error.code || 'WORK_FAILED', error.rawMessage, ...Object.entries(error.fields || {}).flatMap(([key, messages]) => messages.map(message => `${key}：${message}`)), error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
   } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('source-tab').disabled=sourceDisabled; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); taskStatus(); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; $('apply').disabled = !previewResults.length || work?.previewDirty === true; finishRead() }
 }
@@ -338,8 +342,8 @@ async function collect() {
 async function collectHistory(retryPath) {
   paused=false
   const owner=work, epoch=activeReadGeneration, sourceEpoch=generation
-  await readHistoryWork(owner,{current:()=>owner===work&&epoch===activeReadGeneration&&sourceEpoch===generation,paused:()=>paused,save,source,merge:mergeRecords,progress:message=>{$('operation-detail').textContent=message;notice(message)}},retryPath)
-  if(owner===work)renderHistoryIssues()
+  try{await readHistoryWork(owner,{current:()=>owner===work&&epoch===activeReadGeneration&&sourceEpoch===generation,paused:()=>paused,save,source,merge:mergeRecords,progress:message=>{$('operation-detail').textContent=message;notice(message)},saveFailure:error=>{owner.collectionSaveError=error.code||'WORK_SAVE_FAILED';taskStatus()}},retryPath)}
+  finally{if(owner===work)renderHistoryIssues()}
 }
 function renderHistoryIssues(){
   const box=$('history-issues');box.replaceChildren();const issues=work?.history?.issues||[]
@@ -951,6 +955,7 @@ $('course-source-id').addEventListener('change', updateMappingOptions)
 $('start-new-work').onclick=()=>{continuation=null;$('continue-work').hidden=true;work=null;activeWorks.import=null;activeStages.import=1;flow('import');$('collect').disabled=!classSourceReady;taskStatus()}
 $('resume-source-work').onclick=()=>void runLatest(async()=>{const row=continuation;if(!row)return;work=row.status==='partial_complete'?retryHistoryWork(row):row;activeWorks.import=work;$('continue-work').hidden=true;$('collect').disabled=!classSourceReady;$('include-internal-notes').checked=work.includeInternalNotes===true;flow('import');if(work.batches){await resumeImport();return}if(work.history?.next<work.history?.paths.length)await collectHistory();await mappingView();renderHistoryIssues()},{label:'正在恢復未完成工作'})
 for (const [id, action] of Object.entries({ collect, preview: () => preview(), repreview: () => preview(!work.mappingDirty), apply, resume: resumeImport, 'read-form': readForm, compare, prefill, 'refresh-work': loadWork, reconnect: initialize })) $(id).addEventListener('click', () => void run(action, { label: ({ collect:'正在讀取來源班級與學習紀錄', preview:'正在比對 EduLog 目標與匯入差異', repreview:'正在重新檢查資料差異', apply:'正在寫入匯入批次', resume:'正在檢查未完成批次', 'read-form':'正在讀取原站報告目標', compare:'正在查詢報告欄位並核對目標', prefill:'正在套用已確認欄位至原站', 'refresh-work':'正在更新工作紀錄', reconnect:'正在重新驗證連線' })[id] || '正在處理工作', readOnly: ['collect','read-form','compare','refresh-work','reconnect'].includes(id) }))
+$('retry-history-save').addEventListener('click',()=>void run(async()=>{const owner=work;if(!owner)return;await save();if(owner!==work)return;if(owner.history)await collectHistory();await mappingView();renderHistoryIssues()},{label:'正在重試保存草稿並繼續讀取'}))
 $('cancel-read').addEventListener('click', () => void cancelRead())
 $('pause').addEventListener('click', () => { paused = true; notice('正在完成目前批次，之後暫停。') })
 $('cancel-work').addEventListener('click', () => { paused = true; cancelRequested = true; if (busy) { notice('正在完成目前批次，之後取消剩餘工作。'); return } void run(async () => { await api('job-status', { status: 'cancelled' }, { jobId: work.jobId }); work.status = 'cancelled'; await save(); progress(); notice('已取消剩餘工作；成功寫入的資料保留。') }) })

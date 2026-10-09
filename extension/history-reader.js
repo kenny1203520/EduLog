@@ -9,19 +9,27 @@ export async function readHistoryWork(work, hooks, retryPath) {
     delete history.queue; delete history.nextReport
   }
   const assertCurrent=()=>{if(!hooks.current()){const error=new Error('來源或工作已切換；已讀取的檢查點保留。');error.code='READ_CANCELLED';throw error}}
-  const persist=async()=>{assertCurrent();await hooks.save();assertCurrent()}
+  const persist=async()=>{assertCurrent();try{await hooks.save()}catch(error){error.workspaceSaveFailure=true;throw error}assertCurrent()}
   const read=async(action,extra)=>{assertCurrent();const data=await hooks.source(action,{workId:work.id,...extra});assertCurrent();return data}
   const paths=retryPath?[retryPath]:history.paths.slice(history.next)
   if(retryPath)delete history.checkpoints[retryPath]
-  work.status='collecting';await persist()
+  work.status='collecting'
   try {
+    await persist()
     for(const historyPath of paths) {
       if(hooks.paused())break
       let checkpoint=history.checkpoints[historyPath]
       if(checkpoint?.complete){if(!retryPath)history.next++;await persist();continue}
       if(!checkpoint) {
-        try {
-          const records=await read('history',{historyPath})
+        let records
+        try { records=await read('history',{historyPath}) }
+        catch(error) {
+          if(interruptionCodes.has(error.code)||error.workspaceSaveFailure)throw error
+          history.issues=history.issues.filter(r=>!(r.listFailed&&r.admissionPath===historyPath))
+          history.issues.push({evidenceKey:historyPath,listFailed:true,admissionPath:historyPath,reason:error.message})
+          if(!retryPath)history.next++;await persist();continue
+        }
+        {
           const admissionId=historyPath.match(/^\/dt_admissions\/(\d+)$/)?.[1]
           const enrollment=work.snapshot.records.find(r=>r.kind==='enrollment'&&r.source_id===admissionId)
           for(const report of records)if(enrollment){
@@ -42,11 +50,6 @@ export async function readHistoryWork(work, hooks, retryPath) {
           for(const report of records)if(enrollment){report.student_source_id||=enrollment.student_source_id;report.sourceStudentName||=enrollment.sourceStudentName;report.sourceCourseCode||=enrollment.sourceCourseCode;report.sourceCourseName||=enrollment.sourceCourseName;report.sourceCourseLabel||=enrollment.sourceCourseLabel}
           checkpoint=history.checkpoints[historyPath]={records,next:0}
           history.issues=history.issues.filter(r=>!(r.listFailed&&r.admissionPath===historyPath));await persist()
-        } catch(error) {
-          if(interruptionCodes.has(error.code))throw error
-          history.issues=history.issues.filter(r=>!(r.listFailed&&r.admissionPath===historyPath))
-          history.issues.push({evidenceKey:historyPath,listFailed:true,admissionPath:historyPath,reason:error.message})
-          if(!retryPath)history.next++;await persist();continue
         }
       }
       while(checkpoint.next<checkpoint.records.length&&!hooks.paused()) {
@@ -72,6 +75,9 @@ export async function readHistoryWork(work, hooks, retryPath) {
     }
     work.status=hooks.paused()||history.next<history.paths.length?'paused-extraction':'collected';delete work.collectionError;await persist()
   }catch(error){
-    if(hooks.current()){work.status='paused-extraction';work.collectionError=error.message;await persist()}
+    if(!hooks.current())return
+    work.status='paused-extraction';work.collectionError=error.message
+    if(error.workspaceSaveFailure){work.collectionSaveError=error.code||'WORK_SAVE_FAILED';hooks.saveFailure?.(error);throw error}
+    try{await persist()}catch(saveError){work.collectionSaveError=saveError.code||'WORK_SAVE_FAILED';hooks.saveFailure?.(saveError);throw saveError}
   }
 }
