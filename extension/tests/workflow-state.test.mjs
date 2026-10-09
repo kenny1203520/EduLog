@@ -15,3 +15,10 @@ test('history merges only exact server job identity and keeps remote-only/local-
   const rows=combineWorkRecords([{id:'local',type:'import',jobId:'same',status:'paused'},{id:'separate',type:'import',title:'same name',status:'collected'}],{imports:[{id:'same',status:'paused'},{id:'other',status:'complete'}],pushes:[{report_id:'r',status:'pending_confirmation'}]})
   assert.equal(rows.length,4);assert.equal(rows[0].remote.id,'same');assert.equal(rows[1].remote,null);assert.equal(rows[2].category,'done');assert.equal(rows[3].category,'attention')
 })
+test('work metadata joins only by stable local work id or verified server job id',()=>{
+  const metadata=[{work_id:'local',server_job_id:'same',title:'Python 同步',pinned:true},{work_id:'remote-meta',server_job_id:'remote-job',title:'遠端工作'},{work_id:'summary-only',server_job_id:null,title:'本機草稿摘要'}]
+  const rows=combineWorkRecords([{id:'local',type:'import',jobId:'same',status:'paused'},{id:'other',type:'import',title:'Python 同步',status:'collected'}],{imports:[{id:'same',status:'paused'},{id:'remote-job',status:'complete'}],pushes:[]},metadata)
+  assert.equal(rows[0].metadata.title,'Python 同步');assert.equal(rows[0].metadata.pinned,true)
+  assert.equal(rows[1].metadata,null,'same title must not merge unrelated work')
+  assert.equal(rows[2].metadata.title,'遠端工作');assert.equal(rows[3].metadata.title,'本機草稿摘要')
+})

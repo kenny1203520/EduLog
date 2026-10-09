@@ -56,6 +56,12 @@ export const workStore = {
     if (!row || row.instance !== binding.instance || row.userId !== binding.userId || row.expiresAt <= Date.now()) return null
     return row
   },
+  async delete(id, binding) {
+    const row = await transaction('readonly', store => request(store.get(id)))
+    if (!row) return false
+    if (row.instance !== binding.instance || row.userId !== binding.userId) throw new Error('工作不屬於此實例或使用者。')
+    return transaction('readwrite', async store => { await request(store.delete(id)); return true })
+  },
   async put(row, binding) {
     if (!row || typeof row.id !== 'string' || row.id.length > 80 || JSON.stringify(row).length > 4_000_000) throw new Error('工作資料格式或大小不正確。')
     const value = { ...row, ...binding, updatedAt: Date.now(), expiresAt: Math.min(row.expiresAt || Infinity, Date.now() + 7 * 86400000) }

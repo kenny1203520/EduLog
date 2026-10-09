@@ -49,15 +49,17 @@ export function installWorkspaceBroker(getStatus) {
       'field-resolve':['POST','/field-mappings/resolve'], 'field-confirm':['POST','/field-mappings/confirm'], 'sync-preferences-get':['GET','/sync-preferences'], 'sync-preferences-save':['PATCH','/sync-preferences'], context: ['GET', '/context'], catalog: ['GET', '/catalog'], resolve: ['POST', '/catalog/resolve'], confirm: ['POST', '/catalog/confirm'], reports: ['GET', '/reports'], work: ['GET', '/work'], map: ['POST', '/source-links'],
       job: ['POST', '/imports'], preview: ['POST', `/imports/${message.jobId}/preview`], apply: ['POST', `/imports/${message.jobId}/apply`],
       'job-status': ['PATCH', `/imports/${message.jobId}`], push: ['POST', '/report-pushes'],
+      'work-records':['GET','/work-records'], 'work-record-save':['PATCH',`/work-records/${message.workId}`],
     }
     if (message.operation === 'reconcile' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || '')) fail('報名識別碼不正確。')
     if (['history-detail','history-candidates','history-bind-preview','history-bind-apply'].includes(message.operation) && !/^[a-f0-9-]{36}$/i.test(message.historyId||'')) fail('歷史報告識別碼不正確。')
-    if (!operations[message.operation] || (['preview', 'apply', 'job-status', 'import-info', 'complete'].includes(message.operation) && !/^[a-f0-9-]{36}$/.test(message.jobId)) || (message.operation === 'enrollment-info' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || ''))) fail('工作操作不正確。')
+    if (!operations[message.operation] || (['preview', 'apply', 'job-status', 'import-info', 'complete'].includes(message.operation) && !/^[a-f0-9-]{36}$/.test(message.jobId)) || (message.operation === 'work-record-save' && !/^[a-f0-9-]{36}$/i.test(message.workId||'')) || (message.operation === 'enrollment-info' && !/^[a-f0-9-]{36}$/i.test(message.enrollmentId || ''))) fail('工作操作不正確。')
     const [method, path] = operations[message.operation], url = new URL(`${bound.instance}/api/extension/v1${path}`)
-    if (method === 'GET' && message.query) for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id','source_admission_id','unlinked_only','source_origin','adapter_version'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
+    if (method === 'GET' && message.query && message.operation !== 'work-records') for (const [key, value] of Object.entries(message.query)) { if (value == null || value === '') continue; if (!['offset','id','resource','classroom_id','course_id','class_session_id','student_id','enrollment_id','class_occurrence_id','date_from','date_to','search','cursor','limit','summary','roster_date','sort','anchor_date','exclude_course_id','source_admission_id','unlinked_only','source_origin','adapter_version'].includes(key) || String(value).length > (key==='cursor'?160:100)) fail('查詢格式不正確。'); url.searchParams.set(key, String(value)) }
+    if (message.operation === 'work-records' && message.query) for (const [key,value] of Object.entries(message.query)) { if(value==null||value==='')continue;if(!['limit','cursor'].includes(key)||String(value).length>100)fail('工作紀錄查詢格式不正確。');url.searchParams.set(key,String(value)) }
     const payload = method === 'GET' ? undefined : JSON.stringify(message.operation === 'complete' ? message.body : message.body)
     if (payload && new TextEncoder().encode(payload).byteLength > 200000) fail('批次過大，請拆分後再試。')
-    const readOnly = ['history-list','history-route','history-detail','history-candidates','context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','reconcile','import-info'].includes(message.operation)
+    const readOnly = ['history-list','history-route','history-detail','history-candidates','context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','work-records','reconcile','import-info'].includes(message.operation)
     if (readOnly && message.requestId && !/^[a-f0-9-]{36}$/i.test(message.requestId)) fail('查詢識別碼不正確。')
     const remaining = 30000 - (Date.now() - startedAt)
     if (remaining <= 0) { const error = new Error('連線驗證與 API 查詢超過 30 秒。'); error.code = 'API_TIMEOUT'; throw error }
@@ -101,9 +103,18 @@ export function installWorkspaceBroker(getStatus) {
     if (message?.type === 'open-integration-workspace' && entry(sender)) {
       void (async () => {
         const tab = sender.tab || (await chrome.tabs.query({ active: true, currentWindow: true }))[0]
+        const flow=message.flow === 'prefill' ? 'prefill' : message.flow === 'work' ? 'work' : 'import'
+        const sourceTab=tab?.id&&supported(tab.url)?{id:tab.id,path:new URL(tab.url).pathname}:null
+        const workspaces=await chrome.tabs.query({url:`${chrome.runtime.getURL('workspace.html')}*`})
+        const existing=workspaces.find(candidate=>candidate.id!==sender.tab?.id)
+        if(existing?.id){
+          const bound=await binding()
+          const reply=await chrome.tabs.sendMessage(existing.id,{type:'workspace-focus',flow,sourceTab,binding:{instance:bound.instance,userId:bound.userId}}).catch(()=>null)
+          if(reply?.ok){await chrome.tabs.update(existing.id,{active:true});return{opened:true,reused:true}}
+        }
         const url = new URL(chrome.runtime.getURL('workspace.html'))
-        url.searchParams.set('flow', message.flow === 'prefill' ? 'prefill' : message.flow === 'work' ? 'work' : 'import')
-        if (tab?.id && supported(tab.url)) url.searchParams.set('source', String(tab.id))
+        url.searchParams.set('flow', flow)
+        if (sourceTab) url.searchParams.set('source', String(sourceTab.id))
         await chrome.tabs.create({ url: url.href, active: true })
         return { opened: true }
       })().then(respond, error => respond({ error: { code: 'WORKSPACE_UNAVAILABLE', message: error.message } }))
@@ -250,7 +261,17 @@ export function installWorkspaceBroker(getStatus) {
       if (message.type === 'workspace-store') {
         if (message.action === 'list') return { data: await workStore.list(owner) }
         if (message.action === 'get') return { data: await workStore.get(message.id, owner) }
+        if (message.action === 'delete') return { data: await workStore.delete(message.id, owner) }
         return { data: await workStore.put(message.work, owner) }
+      }
+      if (message.type === 'workspace-open-source') {
+        if (typeof message.sourcePath!=='string' || !/^\/(courses\/dt\/\d+|dt_admissions\/\d+|admissions\/unfilled_report)$/.test(message.sourcePath)) fail('已保存的來源位置不受支援；請重新開啟原站班級或學生頁。','SOURCE_PATH_UNAVAILABLE')
+        const url=`https://corp.orangeapple.co${message.sourcePath}`
+        if(!supported(url))fail('此來源頁型目前無法自動開啟，請手動開啟來源頁後重試。','SOURCE_PATH_UNAVAILABLE')
+        const tab=await chrome.tabs.create({url,active:false})
+        if(tab.status!=='complete')await new Promise((resolve,reject)=>{let timer,finished=false;const finish=(error)=>{if(finished)return;finished=true;clearTimeout(timer);chrome.tabs.onUpdated.removeListener(onUpdated);error?reject(error):resolve()};const onUpdated=(id,change)=>{if(id===tab.id&&change.status==='complete')finish()};chrome.tabs.onUpdated.addListener(onUpdated);timer=setTimeout(()=>finish(Object.assign(new Error('來源頁開啟逾時；請確認你仍已登入來源網站。'),{code:'SOURCE_OPEN_TIMEOUT'})),20000);chrome.tabs.get(tab.id).then(current=>{if(current.status==='complete')finish()}).catch(finish)})
+        const loaded=await chrome.tabs.get(tab.id);if(!supported(loaded.url))fail('來源頁要求重新登入或已轉址；請先在原站登入，再從工作紀錄重試。','SOURCE_LOGIN_REQUIRED')
+        return {data:{id:loaded.id,url:loaded.url,path:new URL(loaded.url).pathname,title:loaded.title||message.sourcePath}}
       }
       if (message.type === 'workspace-source') {
         const tab = await source(message)
