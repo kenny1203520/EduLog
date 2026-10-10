@@ -1,8 +1,8 @@
 # EduLog Teaching Systems extension
 
-## Current build: history list and preview repair (0.1.0)
+## Current build: history list scrolling repair (0.1.0)
 
-The history review list now reserves a full-width row for ordinary reports and a separate 44px selection target only for reports that support batch actions. Preview assembly includes only validated `history` and `bind` records; unfilled, unrelated and system-excluded rows remain outside the write payload, while unknown classifications or missing references stay visible as review issues. A new preview invalidates the previous summary before refreshing data. No API or database migration is required. See [acceptance record](tests/ACCEPTANCE-history-list-preview-fix.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-history-list-preview-fix.zip`.
+The desktop history list is independently scrollable by wheel and keyboard, while the editor and page keep their positions. Mobile continues to use page scrolling. Ordinary reports keep their full-width row and batch-selectable reports retain a 44px selection target. Preview assembly includes only validated `history` and `bind` records. No API or database migration is required. See [acceptance record](tests/ACCEPTANCE-history-list-preview-fix.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-history-scroll-recovery.zip`.
 
 ## Previous build: verified mapping identity (0.1.0)
 

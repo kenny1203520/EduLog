@@ -18,3 +18,13 @@
 - 沿用現有 API 與 migration，沒有新增端點或資料庫 migration。版本維持 **0.1.0**。
 
 側載包：`extension/dist/EduLog-Teaching-Tools-0.1.0-history-list-preview-fix.zip`
+
+## 2026-10-10：恢復左側學生清單捲動
+
+前一版末尾的桌面 CSS 規則將歷史清單側欄設為 `overflow: visible`，覆蓋原有 `overflow: auto`。Chrome 合成版面中側欄高 650px、內容高逾 12,000px，側欄與內層清單捲動位置都停在 0；暫時恢復側欄捲動後，`scrollTop` 可增加。這是上次 CSS 修正造成的回歸。
+
+- 移除覆蓋規則，桌面側欄恢復為單一垂直捲動區；新增鍵盤焦點入口與可見焦點框。手機仍使用頁面捲動。
+- 瀏覽器回歸新增 `PageDown`／`End`、清單末筆可達、側欄捲動不帶動頁面或編輯區，以及重新核對後位置保留。
+- Chrome／Edge 合成樣本共 16 種配置，涵蓋 360、390、768、1024、1200、1440、1920px 及 1440×480 短視窗；桌面實測滾輪、PageDown／End、末筆可達與重查後位置，手機驗證頁面滾輪及 PageDown 未被側欄攔截，全部確認無水平溢位。原生瀏覽器 200% 縮放、真實側載與實站檢查仍待驗收。
+
+側載包：`extension/dist/EduLog-Teaching-Tools-0.1.0-history-scroll-recovery.zip`
