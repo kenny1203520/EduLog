@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 import { retryHistoryWork } from '../workspace-model.js'
-const source=readFileSync(new URL('../review-ui.js',import.meta.url),'utf8').replaceAll('export function','function')+'\n'+readFileSync(new URL('../history-merge.js',import.meta.url),'utf8').replaceAll('export function','function')+'\n'+readFileSync(new URL('../history-workbench.js',import.meta.url),'utf8').replace(/^import[^\n]*\n/gm,'').replace('export function','function')
+import { createHistoryWorkbench as createHistoryWorkbenchModule } from '../history-workbench.js'
+const source='"use strict";\n'+readFileSync(new URL('../review-ui.js',import.meta.url),'utf8').replaceAll('export function','function')+'\n'+readFileSync(new URL('../history-merge.js',import.meta.url),'utf8').replaceAll('export function','function')+'\n'+readFileSync(new URL('../history-workbench.js',import.meta.url),'utf8').replace(/^import[^\n]*\n/gm,'').replace('export function','function')
 function fixture() {
  const dom=new JSDOM('<section id="history-workbench"><p id="history-action-count"></p><button id="history-next-issue"></button><button id="history-next-report"></button><input id="history-search"><select id="history-filter"><option value="needs">待處理</option><option value="all">全部</option></select><div id="history-batch-review"></div><div id="history-items"></div><div id="history-editor"><button id="history-back">返回</button><div id="history-detail"></div></div><p id="history-empty"></p><p id="history-sync-summary"></p></section>',{runScripts:'outside-only'})
  const w=dom.window;w.scrollTo=()=>{};w.currentWork={id:'work',snapshot:{records:[]}};w.currentPlan=[];w.hookCounts={changed:0,uiChanged:0,recheck:0,saveResult:true};w.eval(source+';window.view=createHistoryWorkbench({work:()=>currentWork,record:item=>currentWork.snapshot.records.find(r=>r.enrollment_source_id===item.record.enrollment_source_id)||item.record,item:key=>currentPlan.find(i=>i.key===key),changed:()=>{hookCounts.changed++;window.view?.updateStatus();return hookCounts.saveResult},uiChanged:()=>hookCounts.uiChanged++,recheck:()=>hookCounts.recheck++,labels:{},fields:(host)=>{const detail=host.ownerDocument.createElement("details");detail.dataset.reviewKey="mapping:attendance";detail.innerHTML="<summary>Mapping</summary><input value=kept>";host.append(detail)}})')
@@ -95,4 +96,15 @@ test('empty mixed text requires an explicit clear confirmation and saves its sig
 
 test('async history updates refresh the active editor controls without switching reports',()=>{
  const {w,dom,item,$}=fixture(),row=item('301',{record:{kind:'report',enrollment_source_id:'301',date:'2026-10-04'},data:{content:'來源'},occurrence:{id:'occ-1',report:{content:'目標',version:1}},conflicts:['content']});w.currentWork.historyUI={selected:'301'};w.currentWork.snapshot.records=[row.record];w.currentPlan=[row];w.view.render([row]);row.candidates=[{id:'occ-2',class_name:'週日班',occurrence_date:'2026-10-04'},{id:'occ-3',class_name:'週三班',occurrence_date:'2026-10-04'}];row.occurrence.report.version=2;w.currentPlan=[row];w.view.updateStatus([row]);assert.equal($('history-detail').querySelector('[data-issue-target="occurrence"]')?.options.length,3);assert.equal(w.view.selectedKey(),'301');dom.window.close()
+})
+
+test('the original strict ES module opens and refreshes a selected report without an undeclared signature',()=>{
+ const {w,dom,item,$}=fixture(),previous={document:globalThis.document,window:globalThis.window,Option:globalThis.Option},row=item('strict-301',{record:{kind:'report',enrollment_source_id:'strict-301',date:'2026-10-04'},data:{content:'source'},occurrence:{id:'occ-1',report:{content:'target',version:1}},conflicts:['content']})
+ globalThis.document=w.document;globalThis.window=w;globalThis.Option=w.Option
+ try{
+  const view=createHistoryWorkbenchModule({work:()=>w.currentWork,record:candidate=>w.currentWork.snapshot.records.find(record=>record.enrollment_source_id===candidate.record.enrollment_source_id)||candidate.record,item:key=>w.currentPlan.find(candidate=>candidate.key===key),changed:async()=>true,uiChanged(){},recheck(){},labels:{},fieldLabel:key=>key})
+  w.currentWork.snapshot.records=[row.record];w.currentPlan=[row];view.render([row]);w.document.querySelector('#history-items button').click()
+  row.data.content='updated source';view.updateStatus([row])
+  assert.match($('history-detail').textContent,/updated source/)
+ }finally{if(previous.document===undefined)delete globalThis.document;else globalThis.document=previous.document;if(previous.window===undefined)delete globalThis.window;else globalThis.window=previous.window;if(previous.Option===undefined)delete globalThis.Option;else globalThis.Option=previous.Option;dom.window.close()}
 })

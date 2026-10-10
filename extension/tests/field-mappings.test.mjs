@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mappedReport } from '../import-field-mappings.js'
+import { fieldChoicesForCourse, mappedReport } from '../import-field-mappings.js'
 const m=globalThis.edulogFieldMappings
 const select=(key,value,options)=>({key,type:'select',label:key,value,options:options.map(([value,label])=>({value,label,disabled:false}))})
 const attendance=()=>select('attendance_status','attended',[['attended','出席'],['away','不出席']])
@@ -40,6 +40,16 @@ test('manual choices and remembered lessons are limited to the selected course, 
  const field=select('lesson_id','native1',[['native1','原站教材']]),lesson={id:'edulog1',course_id:'courseA',title:'其他教材'},record={data:{},sourceFields:[field],fieldChoices:{courseId:'courseA',fields:{lesson_id:{value:lesson.id,sourceValue:field.value,signature:m.signature(field)}}}}
  assert.equal(mappedReport(record,'courseA',[lesson]).data.lesson_id,lesson.id);assert.equal(mappedReport(record,'courseB',[lesson]).needs.length,1)
  field.value='changed';assert.equal(mappedReport(record,'courseA',[lesson]).needs.length,1)
+})
+test('missing course and field choices never count as a matching choice scope',()=>{
+ const lesson=select('lesson_id','source-lesson',[['source-lesson','Lesson 1']])
+ for(const fieldChoices of [undefined,{fields:{lesson_id:{value:'target-lesson'}}},{courseId:undefined,fields:{lesson_id:{value:'target-lesson'}}}]){
+  const record={data:{},sourceFields:[lesson],...(fieldChoices===undefined?{}:{fieldChoices})}
+  assert.doesNotThrow(()=>mappedReport(record,undefined))
+  assert.ok(mappedReport(record,undefined).needs.length)
+  assert.deepEqual(fieldChoicesForCourse(record,undefined),{})
+ }
+ assert.deepEqual(fieldChoicesForCourse({fieldChoices:{courseId:'course',fields:{lesson_id:{value:'lesson'}}}},'course'),{lesson_id:{value:'lesson'}})
 })
 test('progress must preserve both endpoints and native option limits',()=>{
  const record={data:{},sourceFields:[select('progress_start','a',[['a','A']]),select('progress_end','b',[['b','B']])]}

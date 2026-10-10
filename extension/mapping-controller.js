@@ -1,7 +1,7 @@
 import { createMappingView, evidenceDetails } from './mapping-view.js'
 import { enrollmentLabel, enrollmentStatuses, mergeEvidence, sourceUrl, frontendUrl, scheduleLabel, sessionLabel, enrollmentDifferences, canMapEnrollmentAcrossSession, legacyCourse, reportMatchesReconciliation } from './mapping-presentation.js'
 import { courseIdentity, admissionIdentity, classifyAdmissionIdentityChange, groupCourses, rankCandidates } from './mapping-core.js'
-import { attachImportFields } from './import-field-mappings.js'
+import { attachImportFields, fieldChoicesForCourse } from './import-field-mappings.js'
 const $ = id => document.getElementById(id)
 const el = (tag,text,cls) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; if(cls)n.className=cls; return n }
 const kinds={student:'students',course:'courses',classroom:'classrooms',class_session:'class_sessions',enrollment:'enrollments',occurrence:'occurrences',report:'report_targets'}
@@ -413,7 +413,7 @@ export function createMappingController(hooks) {
     const items=[...references.values()],rules=[]
     if(hooks.capabilities?.()?.field_mapping_memory)for(let i=0;i<items.length;i+=50){const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:items.slice(i,i+50)});rules.push(...response.items||[])}
     const lessonIds=new Set()
-    for(const record of records){record.fieldRules=rules.filter(rule=>rule.field_key==='lesson_id'?rule.course_id===record.fieldRuleScope:!rule.course_id);for(const rule of record.fieldRules)if(rule.field_key==='lesson_id'&&rule.valid!==false)lessonIds.add(rule.canonical_value);if(record.fieldChoices?.courseId===record.fieldRuleScope&&record.fieldChoices.fields?.lesson_id)lessonIds.add(record.fieldChoices.fields.lesson_id.value)}
+    for(const record of records){record.fieldRules=rules.filter(rule=>rule.field_key==='lesson_id'?rule.course_id===record.fieldRuleScope:!rule.course_id);for(const rule of record.fieldRules)if(rule.field_key==='lesson_id'&&rule.valid!==false)lessonIds.add(rule.canonical_value);const lesson=fieldChoicesForCourse(record,record.fieldRuleScope).lesson_id;if(lesson)lessonIds.add(lesson.value)}
     const ids=[...lessonIds];for(let i=0;i<ids.length;i+=50)ingest(await api('resolve',{source_refs:[],target_refs:ids.slice(i,i+50).map(id=>({kind:'lessons',id}))}))
   }
   async function resolveReportFieldRules(record,courseId){
@@ -423,7 +423,7 @@ export function createMappingController(hooks) {
     if(hooks.capabilities?.()?.field_mapping_memory)for(let i=0;i<items.length;i+=50){const response=await api('field-resolve',{source_origin:work().snapshot.sourceOrigin,adapter_version:'orange-apple-v1',items:items.slice(i,i+50)});rules.push(...response.items||[])}
     record.fieldRules=rules
     const lessonIds=new Set(rules.filter(r=>r.field_key==='lesson_id'&&r.valid!==false).map(r=>r.canonical_value))
-    if(record.fieldChoices?.courseId===courseId&&record.fieldChoices.fields?.lesson_id)lessonIds.add(record.fieldChoices.fields.lesson_id.value)
+    const lesson=fieldChoicesForCourse(record,courseId).lesson_id;if(lesson)lessonIds.add(lesson.value)
     const ids=[...lessonIds];for(let i=0;i<ids.length;i+=50)ingest(await api('resolve',{source_refs:[],target_refs:ids.slice(i,i+50).map(id=>({kind:'lessons',id}))}))
     return rules
   }
