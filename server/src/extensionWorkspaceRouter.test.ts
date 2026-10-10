@@ -157,6 +157,12 @@ describe('workspace API contract', () => {
     expect(rpc.mock.calls[0][1].p_input.rows[0].source_fingerprint).toMatch(/^[a-f0-9]{64}$/)
     expect(rpc.mock.calls[0][1].p_input.fingerprint).toMatch(/^[a-f0-9]{64}$/)
   })
+  it('rejects extension-local preview metadata before invoking any import RPC', async () => {
+    const { app, rpc } = appWith({ rows: [], counts: {} })
+    const response = await request(app).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization', `Bearer ${'a'.repeat(64)}`).send({ key: id, rows: [row], previewFingerprint: 'a'.repeat(64) })
+    expect(response.status).toBe(400)
+    expect(rpc).not.toHaveBeenCalled()
+  })
   it('uses report content semantics, not lesson completion as completeness', async () => {
     const { app } = appWith({ reports: [{ id, content: '', is_completed: true, lesson_id: id, progress_letter: '', class_participation: 5, classroom_behavior: 5 }] })
     const response = await request(app).get('/api/extension/v1/reports').set('Authorization', `Bearer ${'a'.repeat(64)}`)

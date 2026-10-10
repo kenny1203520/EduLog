@@ -2,13 +2,14 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
-import { labels, splitBatches, validateBatches } from '../workspace-model.js'
+import { labels, splitBatches, validateBatches, importBatchRequest } from '../workspace-model.js'
 import { bindingStillMatches } from '../history-sync.js'
 
 // Exercise the real preview orchestration with isolated API/storage effects.
 const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
 const prepareScript = script.slice(script.indexOf('function prepareRows()'), script.indexOf('async function preview('))
 const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
+const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
 const bindingScript=script.slice(script.indexOf('async function applyHistoryBindings('),script.indexOf('async function apply()'))
 function bindingFixture() {
  const plan={historyId:'history',itemKey:'301:report:401',expectedFields:{content:'confirmed'},occurrence:{id:'occurrence',report:{version:1}},body:{key:'original-key',class_occurrence_id:'occurrence',overwrite:[]},status:'pending'},calls=[],saved=[]
@@ -34,9 +35,10 @@ test('a late binding response cannot update a changed work context',async()=>{
 })
 const row = n => ({source_id:String(n),target_id:`target-${n}`,overwrite:[],record:{kind:'course',data:{subject:'合成課程',stage:'初階'}}})
 function previewFixture(work, rows) {
-  const calls=[],saved=[],controls={apply:{disabled:false}}
-  const context=vm.createContext({work,rows,labels,splitBatches,validateBatches,crypto:{randomUUID:(()=>{let n=0;return()=>`new-key-${++n}`})()},integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
+  const calls=[],saved=[],controls={apply:{disabled:false},'preview-section':{hidden:false}}
+  const context=vm.createContext({work,rows,labels,splitBatches,validateBatches,importBatchRequest,crypto:{randomUUID:(()=>{let n=0;return()=>`new-key-${++n}`})()},integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
     calls.push({operation,body:structuredClone(body),extra})
+    if(['preview','apply'].includes(operation)&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'})
     if(operation==='job')return{id:'new-job'}
     if(operation==='preview'){
       if(context.failure){const error=context.failure;context.failure=null;throw error}
@@ -89,12 +91,51 @@ test('resume keeps original keys and rows, skips completed batches and checks un
   assert.equal(f.calls.some(c=>['job','job-status','apply'].includes(c.operation)),false)
   assert.equal(f.context.previewResults[0].batchIndex,2)
 })
+test('saved preview fingerprints stay local when existing batches are checked again',async()=>{
+  const dependency={key:'parent-key',fingerprint:'a'.repeat(64)}
+  const current={...work(),batches:[{key:'saved-key',rows:[row(2)],previewFingerprint:'b'.repeat(64),dependencies:[dependency]}]}
+  const f=previewFixture(current,[]);f.context.results=[{rows:[],counts:{}}]
+  await f.preview(true)
+  const request=f.calls.find(call=>call.operation==='preview').body
+  assert.deepEqual(Object.keys(request),['key','rows','dependencies'])
+  assert.equal(request.dependencies[0].fingerprint,dependency.fingerprint)
+  assert.equal(current.batches[0].previewFingerprint,'b'.repeat(64))
+  assert.equal(current.previewDirty,false)
+})
+test('a fingerprint returned by preview can flow through later apply without entering the API body',async()=>{
+  const current=work(),preview=previewFixture(current,[row(8)])
+  preview.context.results=[{rows:[],counts:{},batch_fingerprint:'e'.repeat(64)}]
+  await preview.preview(false)
+  assert.equal(current.batches[0].previewFingerprint,'e'.repeat(64))
+  const persisted=structuredClone(current.batches[0]),calls=[],controls={pause:{},'cancel-work':{},mapping:{},'preview-section':{}}
+  const context=vm.createContext({work:{type:'import',status:'previewed',previewDirty:false,jobId:current.jobId,done:0,batchCount:1,batches:[persisted],needs:[]},previewResults:[{batchIndex:0,rows:[]}],generation:1,paused:false,cancelRequested:false,importBatchRequest,send:async()=>({closed:false}),api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='apply'&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'});return{}},save:async()=>{},progress(){},finalizeImport:async()=>{},notice(){},stage(){},$:id=>controls[id]})
+  vm.runInContext(applyScript,context);await context.apply()
+  assert.equal(calls.filter(call=>call.operation==='apply').length,1)
+  assert.equal(Object.hasOwn(calls.find(call=>call.operation==='apply').body,'previewFingerprint'),false)
+  assert.equal(persisted.previewFingerprint,'e'.repeat(64))
+})
+test('a failed resume check invalidates the old summary and preserves the uncertain checkpoint',async()=>{
+  const current={...work(),status:'outcome_unknown',batches:[{key:'uncertain-key',rows:[row(9)],previewFingerprint:'f'.repeat(64)}]}
+  const f=previewFixture(current,[]);f.context.failure=Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'})
+  await assert.rejects(f.preview(true),e=>e.code==='VALIDATION_FAILED')
+  assert.equal(current.previewDirty,true);assert.equal(f.controls.apply.disabled,true);assert.equal(f.controls['preview-section'].hidden,true);assert.equal(f.context.previewResults.length,0)
+  assert.equal(current.status,'outcome_unknown');assert.equal(current.jobId,'old-job');assert.equal(current.batches[0].key,'uncertain-key')
+  assert.equal(current.previewError.code,'VALIDATION_FAILED')
+})
+test('apply projects a saved batch without changing its local checkpoint metadata',async()=>{
+  const batch={key:'saved-key',rows:[row(1)],previewFingerprint:'c'.repeat(64),dependencies:[{key:'parent-key',fingerprint:'d'.repeat(64)}]}
+  const calls=[],controls={pause:{},'cancel-work':{},mapping:{},'preview-section':{}}
+  const context=vm.createContext({work:{type:'import',status:'previewed',previewDirty:false,jobId:'job',done:0,batchCount:1,batches:[batch],needs:[]},previewResults:[{batchIndex:0,rows:[]}],generation:1,paused:false,cancelRequested:false,importBatchRequest,send:async()=>({closed:false}),api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(['preview','apply'].includes(operation)&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'});return{}},save:async()=>{},progress(){},finalizeImport:async()=>{},notice(){},stage(){},$:id=>controls[id]})
+  vm.runInContext(applyScript,context);await context.apply()
+  assert.deepEqual(calls.filter(call=>call.operation==='apply'),[{operation:'apply',body:{key:'saved-key',rows:batch.rows,dependencies:batch.dependencies}}])
+  assert.equal(batch.previewFingerprint,'c'.repeat(64))
+})
 
 test('malformed legacy batches stop before the API and are never silently normalized during resume',async()=>{
   const current={...work(),done:1,batches:[{key:'committed',rows:[row(1)]},{key:'remaining',rows:[row(1)]}]}
   const original=JSON.stringify(current),f=previewFixture(current,[])
   await assert.rejects(f.preview(true),e=>e.code==='DUPLICATE_SOURCE_IDS')
-  assert.equal(JSON.stringify(current),original);assert.equal(f.calls.length,0)
+  assert.equal(JSON.stringify(current),JSON.stringify({...JSON.parse(original),previewDirty:true}));assert.equal(f.calls.length,0)
 })
 test('an invalid reference is preserved as a blocked row while the valid rows receive a fresh preview',async()=>{
   const current=work(),rows=[row(1),row(2)],f=previewFixture(current,rows)
@@ -124,9 +165,9 @@ test('history batches carry a fingerprinted dependency on an enrollment batch',a
 function classifiedHistoryFixture(items) {
   const enrollment={kind:'enrollment',source_id:'301',student_source_id:'student-source',sourceStudentName:'測試學生',sourceCourseLabel:'測試課程',data:{external_link:'https://corp.orangeapple.co/dt_admissions/301'}}
   const work={id:'classified-work',type:'import',status:'collected',done:0,previewDirty:false,ids:{},includeInternalNotes:false,history:{paths:[],next:0},snapshot:{sourceOrigin:'https://corp.orangeapple.co',classId:'class-source',records:[enrollment]}}
-  const controls={'include-internal-notes':{checked:false},'enrollment-course-301':{value:'course'},'class-session':{value:'session'},classroom:{value:'room'},'start-301':{value:'2026-01-01'},'status-301':{value:'active'},'enrollment-301':{value:'enrollment-target'},apply:{disabled:false}}
+  const controls={'include-internal-notes':{checked:false},'enrollment-course-301':{value:'course'},'class-session':{value:'session'},classroom:{value:'room'},'start-301':{value:'2026-01-01'},'status-301':{value:'active'},'enrollment-301':{value:'enrollment-target'},apply:{disabled:false},'preview-section':{hidden:false}}
   const calls=[],saved=[]
-  const context=vm.createContext({work,historyPlan:items,context:{class_sessions:[{id:'session',course_ids:['course'],name:'Class',start_date:'2026-01-01',day_of_week:1,start_time:'10:00',end_time:'12:00'}],courses:[{id:'course',display_name:'Test course'}],enrollments:[{id:'enrollment-target',class_session_id:'old-session'}],permissions:{}},mappingController:{validateRow:()=>true,courseRows:()=>[],studentSelect:()=>({value:'student-target'}),resolveFieldRules:async()=>{}},integrationCapabilities:{enrollment_history_reports:true},generation:1,crypto:{randomUUID:(()=>{let n=0;return()=>`generated-${++n}`})()},$:id=>controls[id],admissionIdentity:()=>({}),idFor:(kind,id)=>`${kind}-${id}`,labels,splitBatches,validateBatches,batchBytes:180000,previewResults:[],refreshHistoryPlan:async()=>{},save:async()=>{saved.push(structuredClone(work))},saveWorkMetadata:async()=>{},renderNoopSummary(){},renderDifferences(){},stage(){},notice(){},api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='job')return{id:'new-job'};if(operation==='preview')return{rows:[],counts:{},batch_fingerprint:'a'.repeat(64)};return{}}})
+  const context=vm.createContext({work,historyPlan:items,context:{class_sessions:[{id:'session',course_ids:['course'],name:'Class',start_date:'2026-01-01',day_of_week:1,start_time:'10:00',end_time:'12:00'}],courses:[{id:'course',display_name:'Test course'}],enrollments:[{id:'enrollment-target',class_session_id:'old-session'}],permissions:{}},mappingController:{validateRow:()=>true,courseRows:()=>[],studentSelect:()=>({value:'student-target'}),resolveFieldRules:async()=>{}},integrationCapabilities:{enrollment_history_reports:true},generation:1,crypto:{randomUUID:(()=>{let n=0;return()=>`generated-${++n}`})()},$:id=>controls[id],admissionIdentity:()=>({}),idFor:(kind,id)=>`${kind}-${id}`,labels,splitBatches,validateBatches,importBatchRequest,batchBytes:180000,previewResults:[],refreshHistoryPlan:async()=>{},save:async()=>{saved.push(structuredClone(work))},saveWorkMetadata:async()=>{},renderNoopSummary(){},renderDifferences(){},stage(){},notice(){},api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='job')return{id:'new-job'};if(operation==='preview')return{rows:[],counts:{},batch_fingerprint:'a'.repeat(64)};return{}}})
   vm.runInContext(`${prepareScript}\n${previewScript}`,context)
   return{context,work,calls,saved,controls,preview:()=>context.preview(false)}
 }
