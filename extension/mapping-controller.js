@@ -8,9 +8,10 @@ const kinds={student:'students',course:'courses',classroom:'classrooms',class_se
 export function createMappingController(hooks) {
   const { run,notice:globalNotice,idFor }=hooks
   const state=()=>hooks.state(), ctx=()=>state().context, work=()=>state().work
+  function ensureActiveWork(expected) {if(work()!==expected){const error=new Error('工作已切換；已忽略舊工作的對應回應。');error.code='READ_CANCELLED';throw error}}
   const guard=call=>async(...args)=>{const currentWork=work(),generation=hooks.generation?.(),readGeneration=hooks.readGeneration?.();const result=await call(...args);if(currentWork!==work()||generation!==hooks.generation?.()||readGeneration!==hooks.readGeneration?.()){const error=new Error('查詢已過時，保留目前工作與選擇。');error.code='READ_CANCELLED';throw error}return result}
   const api=guard(hooks.api),catalog=guard(hooks.catalog)
-  let groups=[],memories=[],cards=new Map(),confirmed=new Map(),courseConfirmed=new Map(),studentIds=new Map(),studentSplits=new Set(),cursors=new Map(),candidates=new Map(),enrollmentCursors=new Map(),reportCursors=new Map()
+  let groups=[],memories=[],cards=new Map(),confirmed=new Map(),courseConfirmed=new Map(),studentIds=new Map(),studentSplits=new Set(),studentScopes=new Map(),resolvedSourceRefs=new Set(),cursors=new Map(),candidates=new Map(),enrollmentCursors=new Map(),reportCursors=new Map()
   let mounting=false, localPanel=null, courseOverrides=new Set()
   const reconciliationChecks=new Map(), querySequences=new Map()
   const capable=()=>hooks.capabilities?.()?.student_enrollment_catalog === true
@@ -23,7 +24,8 @@ export function createMappingController(hooks) {
     query()
   }})
   function notice(message,error=false){const n=localPanel?.querySelector('.mapping-feedback');if(n){n.textContent=message;n.dataset.state=error?'error':'complete'}else globalNotice(message,error)}
-  const link=(kind,key)=>ctx().source_links.find(r=>r.source_kind===kind&&r.source_id===key&&r.valid!==false)
+  const sourceLink=(kind,key)=>ctx().source_links.find(r=>r.source_kind===kind&&r.source_id===key)
+  const link=(kind,key)=>{const row=sourceLink(kind,key);return row?.valid===false?undefined:row}
   const memory=(kind,key)=>memories.find(m=>m.kind===kind&&m.key===key&&!m.suggestion)
   const courseName=r=>r.display_name || `${r.subject} ${r.stage}`
   function select(parent,label,id,rows=[],name=r=>r.name,empty='請選擇',extra) {
@@ -55,17 +57,42 @@ export function createMappingController(hooks) {
     for(const t of page.targets||[]) {ctx()[t.kind]||=[];ctx()[t.kind]=[...new Map([...ctx()[t.kind],t].map(r=>[r.id,r])).values()]}
     if(page.memories) memories=[...new Map([...memories,...page.memories].map(r=>[`${r.kind}:${r.key}:${r.source_class_id}`,r])).values()]
   }
+  const refKey=ref=>`${ref.source_kind}:${ref.source_id}`
+  function commitResolvePages(pages,{sourceRefs=[],memoryRefs=[]}={}) {
+    const freshLinks=pages.flatMap(page=>page.source_links||[]),freshMemories=pages.flatMap(page=>page.memories||[])
+    const sourceKeys=new Set(sourceRefs.map(refKey)),memoryKeys=new Set(memoryRefs.map(ref=>`${ref.kind}:${ref.key}`))
+    if(sourceKeys.size)ctx().source_links=ctx().source_links.filter(row=>!sourceKeys.has(refKey({source_kind:row.source_kind,source_id:row.source_id})))
+    if(memoryKeys.size)memories=memories.filter(row=>!memoryKeys.has(`${row.kind}:${row.key}`))
+    for(const page of pages)ingest({...page,source_links:[],memories:[]})
+    if(freshLinks.length)ctx().source_links=[...new Map([...ctx().source_links,...freshLinks].map(row=>[refKey({source_kind:row.source_kind,source_id:row.source_id}),row])).values()]
+    if(freshMemories.length)memories=[...new Map([...memories,...freshMemories].map(row=>[`${row.kind}:${row.key}:${row.source_class_id}`,row])).values()]
+    for(const key of sourceKeys)resolvedSourceRefs.add(key)
+  }
+  async function resolveRelevant(rows) {
+    const activeWork=work(),sourceClassId=activeWork.snapshot.classId
+    const enrollments=rows.filter(row=>row.kind==='enrollment')
+    const refs=[...rows.filter(row=>row.kind&&kinds[row.kind]&&row.source_id).map(row=>({source_kind:row.kind,source_id:row.source_id})),...enrollments.filter(row=>row.student_source_id).map(row=>({source_kind:'student',source_id:row.student_source_id})),...enrollments.filter(row=>row.source_course_id).map(row=>({source_kind:'course',source_id:row.source_course_id}))]
+    const unique=[...new Map(refs.map(row=>[refKey(row),row])).values()],mrefs=enrollments.map(row=>({kind:'admission',key:row.source_id,source_identity:admissionIdentity(row),source_course_id:row.source_course_id,source_course_label:row.sourceCourseLabel}))
+    const pages=[]
+    for(let i=0;i<unique.length;i+=50){pages.push(await api('resolve',{source_class_id:sourceClassId,source_refs:unique.slice(i,i+50),target_refs:[]}));ensureActiveWork(activeWork)}
+    for(let i=0;i<mrefs.length;i+=50){pages.push(await api('resolve',{source_class_id:sourceClassId,source_refs:[],target_refs:[],memory_refs:mrefs.slice(i,i+50)}));ensureActiveWork(activeWork)}
+    ensureActiveWork(activeWork)
+    commitResolvePages(pages,{sourceRefs:unique,memoryRefs:mrefs})
+  }
   async function resolve(records) {
-    memories=[];ctx().source_links=[]
-    const refs=[{source_kind:'class_session',source_id:work().snapshot.classId},...records.filter(r=>r.source_id&&kinds[r.kind]).map(r=>({source_kind:r.kind,source_id:r.source_id})),...records.filter(r=>r.source_course_id).map(r=>({source_kind:'course',source_id:r.source_course_id})),...records.filter(r=>r.kind==='report'&&r.date).map(r=>({source_kind:'occurrence',source_id:`${work().snapshot.classId}:${r.date}`}))]
+    const activeWork=work(),sourceClassId=activeWork.snapshot.classId
+    const refs=[{source_kind:'class_session',source_id:work().snapshot.classId},...records.filter(r=>r.source_id&&kinds[r.kind]).map(r=>({source_kind:r.kind,source_id:r.source_id})),...records.filter(r=>r.kind==='enrollment'&&r.student_source_id).map(r=>({source_kind:'student',source_id:r.student_source_id})),...records.filter(r=>r.source_course_id).map(r=>({source_kind:'course',source_id:r.source_course_id})),...records.filter(r=>r.kind==='report'&&r.date).map(r=>({source_kind:'occurrence',source_id:`${work().snapshot.classId}:${r.date}`}))]
     const unique=[...new Map(refs.map(r=>[`${r.source_kind}:${r.source_id}`,r])).values()]
-    for(let i=0;i<unique.length;i+=50) {const p=await api('resolve',{source_class_id:work().snapshot.classId,source_refs:unique.slice(i,i+50),target_refs:[]});ingest(p)}
-    const mrefs=[{kind:'classroom',key:work().snapshot.classId},...groups.filter(g=>g.key.startsWith('label:')).map(g=>({kind:'course_rule',key:g.key})),...records.filter(r=>r.kind==='enrollment').map(r=>({kind:'admission',key:r.source_id,source_identity:admissionIdentity(r),source_course_id:r.source_course_id,source_course_label:r.sourceCourseLabel}))]
-    for(let i=0;i<mrefs.length;i+=50)ingest(await api('resolve',{source_class_id:work().snapshot.classId,source_refs:[],target_refs:[],memory_refs:mrefs.slice(i,i+50)}))
+    const pages=[]
+    for(let i=0;i<unique.length;i+=50){pages.push(await api('resolve',{source_class_id:sourceClassId,source_refs:unique.slice(i,i+50),target_refs:[]}));ensureActiveWork(activeWork)}
+    const mrefs=[{kind:'classroom',key:sourceClassId},...groups.filter(g=>g.key.startsWith('label:')).map(g=>({kind:'course_rule',key:g.key})),...records.filter(r=>r.kind==='enrollment').map(r=>({kind:'admission',key:r.source_id,source_identity:admissionIdentity(r),source_course_id:r.source_course_id,source_course_label:r.sourceCourseLabel}))]
+    for(let i=0;i<mrefs.length;i+=50){pages.push(await api('resolve',{source_class_id:sourceClassId,source_refs:[],target_refs:[],memory_refs:mrefs.slice(i,i+50)}));ensureActiveWork(activeWork)}
     // Resolve an existing enrollment's related targets without loading a directory.
     const savedTargets=(work().uiState||[]).filter(s=>/^[a-f0-9-]{36}$/i.test(s.value)).map(s=>({kind:s.id==='classroom'?'classrooms':s.id==='class-session'?'class_sessions':/^(source-course-|enrollment-course-)/.test(s.id)?'courses':/^student-/.test(s.id)?'students':/^enrollment-/.test(s.id)?'enrollments':/^occurrence-/.test(s.id)?'occurrences':/^report-/.test(s.id)?'report_targets':null,id:s.value})).filter(s=>s.kind)
     const targets=[...savedTargets,...ctx().enrollments.flatMap(e=>[{kind:'students',id:e.student_id},{kind:'courses',id:e.course_id},{kind:'class_sessions',id:e.class_session_id}]),...ctx().class_sessions.map(s=>({kind:'classrooms',id:s.classroom_id}))]
-    for(let i=0;i<targets.length;i+=50)ingest(await api('resolve',{source_refs:[],target_refs:targets.slice(i,i+50)}))
+    for(let i=0;i<targets.length;i+=50){pages.push(await api('resolve',{source_refs:[],target_refs:targets.slice(i,i+50)}));ensureActiveWork(activeWork)}
+    ensureActiveWork(activeWork)
+    commitResolvePages(pages,{sourceRefs:unique,memoryRefs:mrefs})
   }
   function studentSelect(row) {return $(studentIds.get(row.source_id))}
   function baseStudentGroupKey(row) {
@@ -97,23 +124,50 @@ export function createMappingController(hooks) {
     $('mapping-summary').textContent=`已核對 ${count.remembered} · 可靠識別 ${count.identity} · 待確認 ${count.pending} · 需補資料 ${count.missing} · 待驗證 ${count.verification} · 衝突 ${count.conflict} · 記憶需重核 ${count.invalid} · 舊資料需補讀 ${count.legacy}`
     applyFilter()
   }
-  async function versionRefs(items) {
+  async function versionRefs(items,activeWork=work()) {
     const refs=items.flatMap(item=>[{kind:item.kind==='course_rule'?'courses':kinds[item.kind]||'enrollments',id:item.target_id},{kind:'students',id:item.student_id},{kind:'courses',id:item.course_id},{kind:'class_sessions',id:item.class_session_id}]).filter(r=>r.id&&r.id!=='new')
-    const p=await api('resolve',{source_refs:[],target_refs:[...new Map(refs.map(r=>[`${r.kind}:${r.id}`,r])).values()]});ingest(p)
+    const p=await api('resolve',{source_refs:[],target_refs:[...new Map(refs.map(r=>[`${r.kind}:${r.id}`,r])).values()]});ensureActiveWork(activeWork);ingest(p)
     const versions=Object.fromEntries((p.targets||[]).map(t=>[t.id,t.target_version]));
     for(const ref of refs)if(!versions[ref.id])throw new Error('目標不存在或已無權限，請重新讀取候選。')
     return versions
   }
   async function confirm(items) {
-    const versions=await versionRefs(items)
-    const saved=await api('confirm',{source_origin:work().snapshot.sourceOrigin,source_class_id:work().snapshot.classId,items:items.map(item=>({...item,action:'confirm',versions}))})
-    for(const item of items){const result=saved.items?.find(r=>r.kind===item.kind&&r.key===item.key);if(!result?.revision){const reliable=['student','course','class_session','enrollment'].includes(item.kind);ingest(await api('resolve',{source_class_id:work().snapshot.classId,source_refs:reliable?[{source_kind:item.kind,source_id:item.key}]:[],target_refs:[],memory_refs:reliable?[]:[{kind:item.kind,key:item.key,source_identity:item.source_identity}]}));continue}
+    const activeWork=work(),sourceClassId=activeWork.snapshot.classId,sourceOrigin=activeWork.snapshot.sourceOrigin
+    const versions=await versionRefs(items,activeWork);ensureActiveWork(activeWork)
+    let saved
+    try {saved=await api('confirm',{source_origin:sourceOrigin,source_class_id:sourceClassId,items:items.map(item=>({...item,action:'confirm',versions}))});ensureActiveWork(activeWork)}
+    catch(error){
+      ensureActiveWork(activeWork)
+      if(error.code!=='VERSION_CONFLICT')throw error
+      const rows=work().snapshot.records.filter(row=>items.some(item=>item.kind==='admission'&&row.kind==='enrollment'&&row.source_id===item.key))
+      const refs=items.filter(item=>kinds[item.kind]&&item.kind!=='admission').map(item=>({source_kind:item.kind,source_id:item.key}))
+      for(const item of items.filter(item=>item.kind==='admission'))refs.push({source_kind:'enrollment',source_id:item.key})
+      for(const row of rows){if(row.student_source_id)refs.push({source_kind:'student',source_id:row.student_source_id});if(row.source_course_id)refs.push({source_kind:'course',source_id:row.source_course_id})}
+      const unique=[...new Map(refs.map(ref=>[refKey(ref),ref])).values()],mrefs=items.filter(item=>['admission','classroom','course_rule'].includes(item.kind)).map(item=>{const row=rows.find(candidate=>candidate.source_id===item.key);return{kind:item.kind,key:item.key,...(item.source_identity?{source_identity:item.source_identity}:{}),...(row?.source_course_id?{source_course_id:row.source_course_id}:{}),...(row?.sourceCourseLabel?{source_course_label:row.sourceCourseLabel}:{})}}),pages=[]
+      try {
+        for(let i=0;i<unique.length;i+=50){pages.push(await api('resolve',{source_class_id:sourceClassId,source_refs:unique.slice(i,i+50),target_refs:[]}));ensureActiveWork(activeWork)}
+        for(let i=0;i<mrefs.length;i+=50){pages.push(await api('resolve',{source_class_id:sourceClassId,source_refs:[],target_refs:[],memory_refs:mrefs.slice(i,i+50)}));ensureActiveWork(activeWork)}
+        ensureActiveWork(activeWork)
+        commitResolvePages(pages,{sourceRefs:unique,memoryRefs:mrefs})
+        for(const row of rows){confirmed.delete(row.source_id);const status=$(`mapping-error-${row.source_id}`);if(status)status.textContent='已重新核對；目前選擇尚未保存。請檢查最新記憶後再次確認。'}
+        update();summary();dirty()
+      } catch(refreshError) {
+        if(refreshError.code==='READ_CANCELLED')throw refreshError
+        const wrapped=new Error('版本衝突後局部重查失敗；目前選擇已保留，請重試「重新檢查對應記憶」。');wrapped.code='VERSION_CONFLICT';throw wrapped
+      }
+      const wrapped=new Error('伺服器記憶或目標版本已更新。已重新核對最新狀態，選擇尚未保存；請檢查後再次確認。');wrapped.code='VERSION_CONFLICT';wrapped.fields=error.fields;throw wrapped
+    }
+    for(const item of items){ensureActiveWork(activeWork);const result=saved.items?.find(r=>r.kind===item.kind&&r.key===item.key);if(!result?.revision){const reliable=['student','course','class_session','enrollment'].includes(item.kind),page=await api('resolve',{source_class_id:sourceClassId,source_refs:reliable?[{source_kind:item.kind,source_id:item.key}]:[],target_refs:[],memory_refs:reliable?[]:[{kind:item.kind,key:item.key,source_identity:item.source_identity}]});ensureActiveWork(activeWork);ingest(page);continue}
       ingest({memories:[{...item,source_class_id:work().snapshot.classId,revision:result.revision,valid:true}]})
       if(['student','course','class_session','enrollment','admission'].includes(item.kind)&&item.target_id){const kind=item.kind==='admission'?'enrollment':item.kind;ctx().source_links=ctx().source_links.filter(r=>r.source_kind!==kind||r.source_id!==item.key);ctx().source_links.push({source_origin:work().snapshot.sourceOrigin,source_kind:kind,source_id:item.key,target_id:item.target_id,revision:result.revision,valid:true,reason:'remembered'})}
     }
     notice('對應已保存；下次會先核對目標與權限，再自動帶入。')
   }
-  const revision=(kind,key)=>memory(kind,key)?.revision||link(kind,key)?.revision||null
+  const revision=(kind,key)=>{
+    const sourceKind=kind==='admission'?'enrollment':kind
+    if(kinds[sourceKind]&&!resolvedSourceRefs.has(`${sourceKind}:${key}`))return undefined
+    return memory(kind,key)?.revision||sourceLink(sourceKind,key)?.revision||null
+  }
   async function forget(items) {
     if(!window.confirm('清除此對應記憶？已匯入的 EduLog 資料會保留。'))return false
     await api('confirm',{source_origin:work().snapshot.sourceOrigin,source_class_id:work().snapshot.classId,items:items.map(item=>({...item,action:'clear'}))});for(const item of items){memories=memories.filter(m=>m.kind!==item.kind||m.key!==item.key);ctx().source_links=ctx().source_links.filter(r=>r.source_kind!==(item.kind==='admission'?'enrollment':item.kind)||r.source_id!==item.key)}notice('記憶已清除；EduLog 資料保留。');return true
@@ -142,14 +196,22 @@ export function createMappingController(hooks) {
   async function confirmRow(row) {
     const student=studentSelect(row).value,course=$(`enrollment-course-${row.source_id}`).value,enrollment=$(`enrollment-${row.source_id}`).value,session=$('class-session').value
     if(!student||!course||!session)throw new Error('請先選擇此報名的學生、課程及目標班級。')
+    if(row.student_source_id&&(!resolvedSourceRefs.has(`student:${row.student_source_id}`)||!resolvedSourceRefs.has(`enrollment:${row.source_id}`)))await resolveRelevant([row])
+    if(revision('admission',row.source_id)===undefined||row.student_source_id&&!studentSplits.has(row.source_id)&&revision('student',row.student_source_id)===undefined)throw new Error('尚未完成此學生與報名的記憶查詢；請重新檢查後再確認。')
     assertReconciled(row)
     if(student==='new'||session==='new'||courseRows().some(r=>r.target_id===course))throw new Error('新建資料的記憶會與匯入同交易保存；請先檢查差異。')
     const targetEnrollment=enrollment&&enrollment!=='new'?ctx().enrollments.find(e=>e.id===enrollment):null
     if(targetEnrollment&&targetEnrollment.class_session_id!==session&&!hooks.capabilities?.()?.transferred_occurrence_import)throw new Error('目前連線無法核對跨班單次調課；請重新檢查連線，或先在 EduLog 核對報名關係。')
     const enrollmentSession=targetEnrollment?.class_session_id||session
+    const sharedStudent=sourceLink('student',row.student_source_id),changesShared=Boolean(row.student_source_id&&!studentSplits.has(row.source_id)&&sharedStudent&&(!sharedStudent.target_id||sharedStudent.target_id!==student))
+    const scope=$(`student-scope-${row.source_id}`),scopeChoice=studentScopes.get(row.source_id)||scope?.value||''
+    if(changesShared&&!['enrollment','shared'].includes(scopeChoice))throw new Error('此學生 ID 已有其他共用對應。請選擇只更新此報名，或更新共用學生對應。')
+    const onlyEnrollment=changesShared&&scopeChoice==='enrollment'
+    if(onlyEnrollment){studentSplits.add(row.source_id);work().mappingView={...work().mappingView,studentSplits:[...studentSplits]};dirty()}
     const items=[{kind:'admission',key:row.source_id,source_identity:admissionIdentity(row),student_id:student,course_id:course,class_session_id:enrollmentSession,...(enrollment&&enrollment!=='new'?{target_id:enrollment}:{}),expected_revision:revision('admission',row.source_id)}]
     if(row.student_source_id&&!studentSplits.has(row.source_id))items.push({kind:'student',key:row.student_source_id,target_id:student,expected_revision:revision('student',row.student_source_id)})
     await confirm(items);row.sourceIdentityChanged=false;row.sourceStudentNameConflict=false;row.sourceStudentConflict=false;work().skippedAdmissions=(work().skippedAdmissions||[]).filter(id=>id!==row.source_id);confirmed.set(row.source_id,signature(row));cards.get(row.source_id).open=true;summary();dirty()
+    if(changesShared&&!onlyEnrollment)for(const peer of work().snapshot.records.filter(candidate=>candidate.kind==='enrollment'&&candidate.student_source_id===row.student_source_id&&candidate.source_id!==row.source_id)){confirmed.delete(peer.source_id);const status=$(`mapping-error-${peer.source_id}`);if(status)status.textContent='共用學生對應已更新；此報名尚未重新核對，請檢查後確認。'}
     notice('已記住此報名；來源與目標關係已核對。')
   }
   async function destination() {
@@ -188,7 +250,7 @@ export function createMappingController(hooks) {
     if(reset){cursors.delete(key);candidates.set(key,(candidates.get(key)||[]).filter(c=>c.id===previous))}
     const p=await catalog('students',{search:query,cursor:cursors.get(key)||undefined});if(($(`student-search-${key}`)?.value.trim()||row.sourceStudentName)!==query)return;cursors.set(key,p.next_cursor||'')
     ctx().students=[...new Map([...ctx().students,...p.items||[]].map(r=>[r.id,r])).values()];candidates.set(key,[...new Map([...(candidates.get(key)||[]),...p.items||[]].map(r=>[r.id,r])).values()]);$('more-students-'+key).hidden=!p.next_cursor
-    fill(s,rankCandidates(candidates.get(key),row.sourceStudentName),c=>`${c.name} · #${c.id.slice(0,8)}`,'略過此報名的學生',row.student_source_id&&createAllowed('student')?'建立獨立學生':null)
+    fill(s,rankCandidates(candidates.get(key),row.sourceStudentName),c=>`${c.name} · #${c.id.slice(0,8)}`,'請選擇目標學生',row.student_source_id&&createAllowed('student')?'建立獨立學生':null)
     update()
   }
   function assertReconciled(row) {
@@ -271,7 +333,7 @@ export function createMappingController(hooks) {
     const sessionKey=JSON.stringify(session)+hooks.settingsUrl?.();if(sessionInfo.dataset.signature!==sessionKey){sessionInfo.dataset.signature=sessionKey;sessionInfo.replaceChildren();if(session){sessionInfo.append(el('p',`${session.name} · ${scheduleLabel(session)} · ${session.time_zone||'時區未提供'}`,'hint'));const url=frontendUrl(hooks.settingsUrl?.(),`/dashboard/classrooms/session/${session.id}`);if(url){const a=el('a','查看 EduLog 班級 ↗','mapping-link');a.href=url;a.target='_blank';a.rel='noopener noreferrer';sessionInfo.append(a)}}}
     for(const r of work().snapshot.records.filter(r=>r.kind==='enrollment')) {
       const student=studentSelect(r);if(!student)continue
-      fill(student,candidates.get(r.source_id)||[],c=>`${c.name} · #${c.id.slice(0,8)}`,'略過此報名的學生',r.student_source_id&&createAllowed('student')?'建立獨立學生':null)
+      fill(student,candidates.get(r.source_id)||[],c=>`${c.name} · #${c.id.slice(0,8)}`,'請選擇目標學生',r.student_source_id&&createAllowed('student')?'建立獨立學生':null)
       const group=groups.find(g=>g.key===courseIdentity(r)),target=selectedCourse(group),course=$(`enrollment-course-${r.source_id}`)
       const extraCourses=courseRowsSafe(),all=[...ctx().courses,...extraCourses]
       const oldCourse=course.value
@@ -307,7 +369,7 @@ export function createMappingController(hooks) {
   }
   function courseRowsSafe(){return groups.filter(g=>$(`source-course-${groups.indexOf(g)}`)?.value==='new').map(g=>({id:newCourseId(g),display_name:g.label,subject:'新建課程',stage:''}))}
   async function mount() {
-    mounting=true;reconciliationChecks.clear();querySequences.clear();courseOverrides=new Set(work().mappingView?.courseOverrides||[]);studentSplits=new Set(work().mappingView?.studentSplits||[]);groups=groupCourses(work().snapshot.records);cards=new Map();confirmed=new Map();courseConfirmed=new Map();studentIds=new Map();cursors=new Map();candidates=new Map();enrollmentCursors=new Map();reportCursors=new Map()
+    mounting=true;reconciliationChecks.clear();querySequences.clear();resolvedSourceRefs=new Set();courseOverrides=new Set(work().mappingView?.courseOverrides||[]);studentSplits=new Set(work().mappingView?.studentSplits||[]);studentScopes=new Map(work().mappingView?.studentScopes||[]);groups=groupCourses(work().snapshot.records);cards=new Map();confirmed=new Map();courseConfirmed=new Map();studentIds=new Map();cursors=new Map();candidates=new Map();enrollmentCursors=new Map();reportCursors=new Map()
     await resolve(work().snapshot.records);await hooks.loadClassrooms(false)
     for(const r of work().snapshot.records.filter(r=>r.kind==='enrollment'))if(memory('admission',r.source_id)?.reason==='identity_enriched'&&memory('admission',r.source_id)?.valid){r.sourceIdentityChanged=false;r.sourceStudentConflict=false;r.sourceCourseConflict=false;for(const report of work().snapshot.records.filter(row=>row.kind==='report'&&row.enrollment_source_id===r.source_id))report.sourceStudentIdentityConflict=Boolean(report.student_source_id&&r.student_source_id&&report.student_source_id!==r.student_source_id)}
     const rememberedSession=ctx().class_sessions.find(s=>s.id===link('class_session',work().snapshot.classId)?.target_id),room=memory('classroom',work().snapshot.classId)
@@ -336,7 +398,10 @@ export function createMappingController(hooks) {
       const studentId=!seenStudentGroups.has(studentGroupKey(r))&&r.student_source_id?`student-${r.student_source_id}`:`student-for-${r.source_id}`;seenStudents.add(r.student_source_id);seenStudentGroups.add(studentGroupKey(r));studentIds.set(r.source_id,studentId)
       const memo=memory('admission',r.source_id),existing=ctx().enrollments.find(e=>e.id===link('enrollment',r.source_id)?.target_id)
       const selectedStudent=work().uiState?.find(s=>s.id===studentId)?.value||(memoryMatchesAdmission(memo,memo?.student_id,memo?.course_id,memo?.target_id)?memo.student_id:existing?.student_id||link('student',r.student_source_id)?.target_id)
-      const s=select(right,'目標學生',studentId,ctx().students,c=>`${c.name} · ${c.id.slice(0,8)}`,'略過此報名的學生',r.student_source_id&&createAllowed('student')?'建立獨立學生':null);s.value=selectedStudent||''
+      const s=select(right,'目標學生',studentId,ctx().students,c=>`${c.name} · ${c.id.slice(0,8)}`,'請選擇目標學生',r.student_source_id&&createAllowed('student')?'建立獨立學生':null);s.value=selectedStudent||''
+      const scopeLabel=el('label','此變更的影響範圍'),scope=el('select');scope.id=`student-scope-${r.source_id}`;scope.name=scope.id;scope.dataset.sourceRawOptions='true';scope.add(new Option('請選擇影響範圍',''));scope.add(new Option('只更新此報名','enrollment'));scope.add(new Option('更新共用學生對應','shared'));scope.value=studentScopes.get(r.source_id)||'';scope.hidden=true;scopeLabel.htmlFor=scope.id;scopeLabel.hidden=true;right.append(scopeLabel,scope)
+      const syncStudentScope=()=>{const saved=sourceLink('student',r.student_source_id);const required=Boolean(r.student_source_id&&!studentSplits.has(r.source_id)&&saved&&(!saved.target_id||saved.target_id!==s.value));scope.hidden=!required;scopeLabel.hidden=!required;if(!required){scope.value='';studentScopes.delete(r.source_id)}else if(scope.value)studentScopes.set(r.source_id,scope.value)}
+      syncStudentScope();scope.addEventListener('change',()=>{if(scope.value)studentScopes.set(r.source_id,scope.value);else studentScopes.delete(r.source_id);work().mappingView={...work().mappingView,studentScopes:[...studentScopes]};dirty()});s.addEventListener('change',()=>{scope.value='';studentScopes.delete(r.source_id);syncStudentScope()})
       candidates.set(r.source_id,ctx().students.filter(t=>t.id===selectedStudent));const search=input(right,'搜尋學生候選',`student-search-${r.source_id}`,'search',r.sourceStudentName||'')
       const more=button(right,'載入更多學生候選',()=>studentPage(r,false));more.id=`more-students-${r.source_id}`;more.hidden=true
       let timer;const queryWhenReady=()=>{if(!c.isConnected)return;if(localPanel){timer=setTimeout(queryWhenReady,300);return}void localTask(()=>studentPage(r,true),c.querySelector('[data-query-student]'))};search.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(queryWhenReady,300)})
@@ -362,7 +427,7 @@ export function createMappingController(hooks) {
       button(right,'恢復此筆對應',async()=>{work().skippedAdmissions=(work().skippedAdmissions||[]).filter(id=>id!==r.source_id);summary();dirty();notice('此筆已恢復，請核對後確認。')})
       button(right,'清除此報名記憶',async()=>{if(!await forget([{kind:'admission',key:r.source_id,expected_revision:revision('admission',r.source_id)}]))return;confirmed.delete(r.source_id);summary();dirty()})
       if(r.student_source_id)button(right,'清除此學生 ID 對應',async()=>{if(!await forget([{kind:'student',key:r.student_source_id,expected_revision:revision('student',r.student_source_id)}]))return;notice('學生 ID 對應已清除；各筆已確認的報名記憶仍保留。');dirty()})
-      for(const control of [s,cs,es])control.addEventListener('change',()=>{review.checked=false;querySequences.set(r.source_id,(querySequences.get(r.source_id)||0)+1);if(control===s)es.value='';if(control===cs){courseOverrides.add(r.source_id);work().mappingView={...work().mappingView,courseOverrides:[...courseOverrides]}}confirmed.delete(r.source_id);if(control===s)for(const peer of work().snapshot.records.filter(p=>p.kind==='enrollment'&&studentGroupKey(p)===studentGroupKey(r)&&p.source_id!==r.source_id)){const other=studentSelect(peer);if(other&&other.value!==s.value){candidates.set(peer.source_id,candidates.get(r.source_id)||[]);fill(other,candidates.get(r.source_id)||[],c=>`${c.name} · ${c.id.slice(0,8)}`,'略過此報名的學生',createAllowed('student')?'建立獨立學生':null);other.value=s.value;confirmed.delete(peer.source_id)}}update();dirty()})
+      for(const control of [s,cs,es])control.addEventListener('change',()=>{review.checked=false;querySequences.set(r.source_id,(querySequences.get(r.source_id)||0)+1);if(control===s)es.value='';if(control===cs){courseOverrides.add(r.source_id);work().mappingView={...work().mappingView,courseOverrides:[...courseOverrides]}}confirmed.delete(r.source_id);if(control===s)for(const peer of work().snapshot.records.filter(p=>p.kind==='enrollment'&&studentGroupKey(p)===studentGroupKey(r)&&p.source_id!==r.source_id)){const other=studentSelect(peer);if(other&&other.value!==s.value){candidates.set(peer.source_id,candidates.get(r.source_id)||[]);fill(other,candidates.get(r.source_id)||[],c=>`${c.name} · ${c.id.slice(0,8)}`,'請選擇目標學生',createAllowed('student')?'建立獨立學生':null);other.value=s.value;confirmed.delete(peer.source_id)}}update();dirty()})
       const peers=work().snapshot.records.filter(p=>p.kind==='enrollment'&&baseStudentGroupKey(p)===baseStudentGroupKey(r))
       if(peers.length>1){if(!r.student_source_id)left.append(el('p','依完全相同姓名暫時分組；這不是永久身份對應。確認前可拆分報名。','hint'));const split=button(right,studentSplits.has(r.source_id)?'併回此學生分組':'拆分此報名的學生',()=>{const joining=studentSplits.has(r.source_id);if(joining)studentSplits.delete(r.source_id);else studentSplits.add(r.source_id);work().mappingView={...work().mappingView,studentSplits:[...studentSplits]};if(joining)for(const peer of peers){if(peer.source_id===r.source_id||studentSplits.has(peer.source_id))continue;const other=studentSelect(peer);if(other)other.value=s.value}for(const peer of peers)confirmed.delete(peer.source_id);update();dirty();notice(studentSplits.has(r.source_id)?'此報名及其歷史已獨立；請重新核對目標學生。':'此報名已併回分組；請核對共用的學生選擇。')});split.dataset.studentGroupAction='true'}
       $('student-mappings').append(c)
