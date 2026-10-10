@@ -89,6 +89,7 @@ try {
   await db.exec(read('1000131_extension_work_record_metadata.sql'))
   await db.exec(read('1000132_extension_report_skip_decisions.sql'))
   await db.exec(read('1000133_extension_mapping_memory_reasons.sql'))
+  await db.exec(read('1000134_atomic_history_reconciliation.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -444,6 +445,22 @@ try {
   const bound=await historyRpc('bind-apply',binding);assert.equal(bound.status,'linked');assert.deepEqual(await historyRpc('bind-apply',binding),bound)
   assert.equal((await historyRpc('list',{enrollment_id:enrollment,unlinked_only:true})).items.length,0)
   await assert.rejects(historyRpc('bind-preview',{...binding,key:id(206)}),/VERSION_CONFLICT/)
+  const linkedReport=(await historyRpc('detail',{id:historical})).linked_report_id
+  const reconcileRow={...historyBatch.rows[0],overwrite:['content'],record:{...historyBatch.rows[0].record,data:{...historyData,content:'merged source line',source_fields:[{key:'content',label:'Comment',text:'merged source line'}]}},history_reconciliation:{key:id(247),class_occurrence_id:binding.class_occurrence_id,include_fields:['content'],overwrite:['content'],include_internal:false}}
+  const reconcileBatch={...historyBatch,key:id(246),fingerprint:'8'.repeat(64),rows:[reconcileRow]}
+  const reconcilePreview=await rpc('preview',reconcileBatch);assert.equal(reconcilePreview.rows[0].history_reconciliation.changes[0].status,'updated')
+  const reconciled=await rpc('apply',reconcileBatch);assert.equal(reconciled.history_reconciliations[0].status,'linked')
+  let sameContent=(await db.query('SELECT h.content AS history_content,r.content AS report_content FROM public.enrollment_history_reports h JOIN public.occurrence_reports r ON r.id=h.linked_report_id WHERE h.id=$1',[historical])).rows[0]
+  assert.equal(sameContent.history_content,'merged source line');assert.equal(sameContent.report_content,'merged source line')
+  const rollbackBatch={...reconcileBatch,key:id(248),fingerprint:'9'.repeat(64),rows:[{...reconcileRow,record:{...reconcileRow.record,data:{...reconcileRow.record.data,content:'must roll back'}}}]}
+  await rpc('preview',rollbackBatch)
+  await db.exec(`CREATE FUNCTION public.test_history_reconciliation_rollback() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'TEST_RECONCILIATION_ROLLBACK'; END $$;
+    CREATE TRIGGER test_history_reconciliation_rollback BEFORE UPDATE ON public.occurrence_reports FOR EACH ROW WHEN (NEW.id='${linkedReport}'::uuid) EXECUTE FUNCTION public.test_history_reconciliation_rollback()`)
+  await assert.rejects(rpc('apply',rollbackBatch),/TEST_RECONCILIATION_ROLLBACK/)
+  sameContent=(await db.query('SELECT h.content AS history_content,r.content AS report_content FROM public.enrollment_history_reports h JOIN public.occurrence_reports r ON r.id=h.linked_report_id WHERE h.id=$1',[historical])).rows[0]
+  assert.equal(sameContent.history_content,'merged source line');assert.equal(sameContent.report_content,'merged source line')
+  await db.exec('DROP TRIGGER test_history_reconciliation_rollback ON public.occurrence_reports; DROP FUNCTION public.test_history_reconciliation_rollback()')
+  console.log('PASS: 1000134 previewed history/occurrence reconciliation, exact target versions, atomic update and rollback')
   const excludedHistory=id(208),excludedData={...historyData,report_date:'2024-06-18',source_key:'evidence:excluded',content:'Must remain history only'}
   const excludedBatch={...historyBatch,key:id(209),fingerprint:'4'.repeat(64),rows:[{source_id:'history:evidence:excluded',target_id:excludedHistory,overwrite:[],record:{kind:'history_report',data:excludedData}}]}
   await rpc('preview',excludedBatch);await rpc('apply',excludedBatch)

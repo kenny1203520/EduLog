@@ -2,7 +2,7 @@ import express from 'express'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createExtensionWorkspaceRouter, importBatch, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm, reportDecisionResolve, reportDecisionConfirm } from './extensionWorkspaceRouter.js'
+import { createExtensionWorkspaceRouter, importBatch, importRow, pendingPush, importJob, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm, reportDecisionResolve, reportDecisionConfirm } from './extensionWorkspaceRouter.js'
 import { errorHandler } from './errors.js'
 const id = '00000000-0000-4000-8000-000000000001'
 const row = { source_id: '101', target_id: id, overwrite: [], record: { kind: 'student', data: { name: 'Test A' } } }
@@ -81,6 +81,14 @@ describe('workspace API contract', () => {
     expect(response.status).toBe(200);expect(rpc.mock.calls[0]![0]).toBe('web_extension_history')
     const invalid=await request(app).get('/api/extension/v1/history-reports?limit=51').set('Authorization','Bearer test')
     expect(invalid.status).toBe(400);expect(rpc).toHaveBeenCalledTimes(1)
+  })
+  it('validates the optional atomic history reconciliation metadata strictly',()=>{
+    const history={...row,record:{kind:'history_report',data:{enrollment_id:id,report_date:'2026-10-04',source_origin:'https://corp.orangeapple.co',source_admission_id:'6332',source_key:'evidence:hash',identity_status:'evidence_only',source_fields:[],content:'merged'}}}
+    const metadata={key:id,class_occurrence_id:id,include_fields:['content'],overwrite:['content'],include_internal:false}
+    expect(importRow.safeParse({...history,history_reconciliation:metadata}).success).toBe(true)
+    expect(importRow.safeParse({...history,history_reconciliation:{...metadata,previewFingerprint:'secret'}}).success).toBe(false)
+    expect(importRow.safeParse({...row,history_reconciliation:metadata}).success).toBe(false)
+    expect(importRow.safeParse({...history,history_reconciliation:{...metadata,include_fields:['private']}}).success).toBe(false)
   })
   it('bounds and isolates field memory RPCs from identity confirmation and forged actors',async()=>{
     const item={field_key:'attendance_status',course_id:id,options_signature:JSON.stringify([['attended','出席',false]])}

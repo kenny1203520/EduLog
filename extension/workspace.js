@@ -438,8 +438,13 @@ function prepareRows() {
     if(item.category==='bind'&&(!item.occurrence?.id||!item.occurrence.class_session_id)){needs.push(`歷史 ${item.key} 缺少有效課次資料；已保留報告，請重新核對課次。`);continue}
     const targetId=item.existing?.id||idFor('history_report',item.key)
     add('history_report',item.key,targetId,item.data)
-    if(item.record.historyDuplicateConfirmed)rows.at(-1).reviewed_duplicate=true
-    if(item.category==='bind')historyBindings.push({historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:item.record.historyOverwrite||[],include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending'})
+    const historyRow=rows.at(-1);historyRow.overwrite=[...(item.record.historyOverwrite||[])]
+    if(item.record.historyDuplicateConfirmed)historyRow.reviewed_duplicate=true
+    if(item.category==='bind'){
+      const binding={historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:item.record.historyOverwrite||[],include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending',atomic:true}
+      historyRow.history_reconciliation={key:binding.body.key,class_occurrence_id:item.occurrence.id,overwrite:binding.body.overwrite,include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]}
+      historyBindings.push(binding)
+    }
   }
   work.historyBindings=historyBindings
   work.destination = { classroom_id: $('classroom').value, course_ids: courseIds, class_session_id: sessionId, report_session_ids: [...new Set([sessionId,...historyBindings.map(b=>b.occurrence.class_session_id)])] }; work.needs = needs
@@ -692,6 +697,7 @@ async function applyHistoryBindings() {
   const owner=work,epoch=generation
   const check=()=>{if(owner!==work||epoch!==generation){const error=new Error('工作情境已變更；請用原檢查點核對保存結果。');error.code='API_RESPONSE_INVALID';throw error}}
   for(const plan of owner.historyBindings||[]) {
+    if(plan.atomic)continue
     if(['done','blocked'].includes(plan.status))continue
     try {
       if(plan.status!=='previewed') {
@@ -727,7 +733,8 @@ async function apply() {
       // the chosen class. Collected data may resume without a closed source tab.
       const sourceCheck = await send({ type: 'workspace-check-source', tabId: work.sourceTab, sourcePath: work.sourcePath })
       if (sourceCheck.closed && !work.batches?.[i]?.rows?.length) throw new Error('來源分頁已關閉且此批尚未完整擷取。請重新開啟相同班級頁後再續傳。')
-      await api('apply', importBatchRequest(work.batches[i]), { jobId: work.jobId })
+      const applied=await api('apply', importBatchRequest(work.batches[i]), { jobId: work.jobId })
+      for(const result of applied.history_reconciliations||[]){const plan=work.historyBindings?.find(binding=>binding.atomic&&binding.itemKey===result.source_id);if(plan){plan.result=result;plan.status=result.status==='linked'?'done':result.status==='skipped'?'blocked':'done';if(plan.status==='blocked')work.needs.push(`課次同步 ${plan.itemKey}：${result.reason||'本次沒有可套用欄位'}；歷史已保存。`)}}
       const previewBatch = previewResults.find(result => result.batchIndex === i)
       if (previewBatch) {
         const summary = {}
