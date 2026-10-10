@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { planHistory, bindingStillMatches } from '../history-sync.js'
+import { mergeClearToken, mergeSignature } from '../history-merge.js'
 const record=(extra={})=>({kind:'report',enrollment_source_id:'301',source_id:'401',historyKey:'report:401',date:'2026-10-04',sourceFields:[{key:'content',label:'評語',type:'text',value:''}],data:{is_completed:false,class_participation:0,classroom_behavior:4.5,content:''},...extra})
 const target=new Map([['301',{id:'enrollment',courseId:'course',name:'測試學生'}]])
 const occurrence={id:'sunday-occurrence',class_session_id:'sunday-session',class_name:'週日班',occurrence_date:'2026-10-04',can_write:true}
@@ -28,13 +29,52 @@ test('multiple legal occurrences and nonempty content conflicts require explicit
  const [confirmed]=plan([confirmedRecord],[],[conflict]);assert.equal(confirmed.category,'bind');assert.deepEqual(confirmed.conflicts,['is_completed','content']);assert.equal(bindingStillMatches(confirmed,{report_version:3}),true)
  const changedTarget=plan([confirmedRecord],[],[{...conflict,report:{...conflict.report,version:4}}])[0];assert.equal(changedTarget.category,'needs');assert.match(changedTarget.reason,/核對/)
 })
+test('history-only still validates source identity and unresolved field mappings',()=>{
+  const [item]=plan([record({historyOnly:true,sourceLearningStatusRaw:'unrecognized marker'})])
+  assert.equal(item.category,'needs');assert.equal(item.issues[0].code,'mapping')
+})
+test('history-only decisions compare against saved history and confirm with the same current signature',()=>{
+ const existing={id:'saved-history',report_date:'2026-10-04',source_admission_id:'301',source_key:'report:401',content:'old text',version:4}
+ const [pending]=plan([record({historyOnly:true,data:{content:'new text'}})],[existing]);assert.equal(pending.category,'needs');assert.equal(pending.comparisonReport,existing);assert.deepEqual(pending.conflicts,['content'])
+ const [confirmed]=plan([record({historyOnly:true,data:{content:'new text'},historyConflictConfirmed:true,historyConflictSignature:pending.conflictSignature,historyOverwrite:['content']})],[existing]);assert.equal(confirmed.category,'history');assert.equal(confirmed.data.content,'new text')
+})
+test('changed linked reports can be reviewed against their existing occurrence without changing the link',()=>{
+ const existing={id:'saved-history',report_date:'2026-10-04',source_admission_id:'301',source_key:'report:401',linked_report_id:'report',content:'old text',version:4}
+ const linkedOccurrence={...occurrence,report:{id:'report',version:3,content:'older text'}}
+ const [pending]=plan([record({data:{content:'new text'}})],[existing],[linkedOccurrence]);assert.equal(pending.category,'needs');assert.equal(pending.boundExisting,true);assert.equal(pending.occurrence,undefined);assert.deepEqual(pending.conflicts,['content'])
+ const [confirmed]=plan([record({data:{content:'new text'},historyConflictConfirmed:true,historyConflictSignature:pending.conflictSignature,historyOverwrite:['content']})],[existing],[linkedOccurrence]);assert.equal(confirmed.category,'bind');assert.equal(confirmed.occurrence.id,occurrence.id)
+})
+test('a changed already-bound history cannot be saved history-only and must reconcile its original occurrence',()=>{
+ const existing={id:'saved-history',report_date:'2026-10-04',source_admission_id:'301',source_key:'report:401',linked_report_id:'report',content:'old history',version:4}
+ const linked={...occurrence,report:{id:'report',version:3,content:'old lesson'}}
+ const recordWithChoice=record({historyOnly:true,data:{content:'new text'}})
+ const [blocked]=plan([recordWithChoice],[existing],[linked]);assert.equal(blocked.category,'needs');assert.equal(blocked.issues[0].id,'bound-history-reconcile');assert.equal(blocked.comparisonReport.id,'report')
+ recordWithChoice.historyOnly=false
+ const [review]=plan([recordWithChoice],[existing],[linked]);assert.equal(review.category,'needs');assert.deepEqual(review.conflicts,['content']);assert.equal(review.occurrence,undefined)
+})
+test('mixed text uses the exact source and chosen EduLog signature for the payload',()=>{
+ const report={...occurrence,report:{id:'report',version:3,content:'old\nkeep'}}
+ const r=record({data:{content:'keep\nnew'},historyMerge:{content:{signature:JSON.stringify(['keep\nnew','old\nkeep']),text:'old\nkeep\nnew'}},historyConflictConfirmed:true})
+ const first=plan([r],[],[report])[0];r.historyConflictSignature=first.conflictSignature
+ const [item]=plan([r],[],[report]);assert.equal(item.category,'bind');assert.equal(item.data.content,'old\nkeep\nnew');assert.equal(item.sourceData.content,'keep\nnew')
+})
+test('mixed empty text blocks history and occurrence payloads until the exact clear result is confirmed',()=>{
+ const report={...occurrence,report:{id:'report',version:3,content:'keep this'}}
+ const merge={signature:mergeSignature('', 'keep this'),text:''}
+ const pendingRecord=record({data:{content:''},historyMerge:{content:merge},historyFieldDecisions:{content:'mixed'},historyOverwrite:['content']})
+ const [pending]=plan([pendingRecord],[],[report]);assert.equal(pending.category,'needs');assert.equal(pending.mergeClearNeeds.includes('content'),true);assert.equal(pending.issues[0].code,'merge-clear')
+ pendingRecord.historyMergeClearConfirmed={content:mergeClearToken(merge)}
+ const [review]=plan([pendingRecord],[],[report]);assert.equal(review.category,'needs');assert.deepEqual(review.conflicts,['content']);pendingRecord.historyConflictConfirmed=true;pendingRecord.historyConflictSignature=review.conflictSignature
+ const [confirmed]=plan([pendingRecord],[],[report]);assert.equal(confirmed.category,'bind');assert.equal(confirmed.data.content,'')
+})
 test('unread, changed linked and conflicting duplicate data cannot be silently imported',()=>{
  const [unread]=plan([record({sourceReadStatus:'failed'})]);assert.equal(unread.category,'needs');assert.equal(unread.issues[0].id,'source-read');assert.equal(unread.issues[0].target,'source')
  assert.equal(plan([record(),record()]).length,1)
  assert.equal(plan([record(),record({data:{content:'different'}})])[0].category,'needs')
  const linked={id:'archive',report_date:'2026-10-04',source_fields:[{key:'content',label:'評語',text:''}],source_admission_id:'301',source_key:'report:401',linked_report_id:'report',is_completed:false,class_participation:0,classroom_behavior:4.5,content:'',external_link:'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'}
  assert.equal(plan([record()],[linked])[0].category,'linked')
- assert.equal(plan([record({data:{content:'changed'}})],[linked])[0].category,'needs')
+ const changedLinked={...occurrence,report:{id:'report',version:3,content:''}}
+ assert.equal(plan([record({data:{content:'changed'}})],[linked],[changedLinked])[0].category,'needs')
 })
 test('list/editor disagreements wait for explicit confirmation before course-report binding',()=>{
  const conflict={key:'content',label:'學習表現',listValue:'舊列表',editValue:'已儲存內容'}

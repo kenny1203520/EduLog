@@ -197,7 +197,8 @@ export function createMappingController(hooks) {
     if(row.sourceStudentConflict||row.sourceCourseConflict||row.sourceIdentityChanged)throw new Error('來源課程或學生 ID 有矛盾，請核對原文並確認後再繼續。')
     const memo=memory('admission',row.source_id)
     if(memo?.reason==='target_unavailable'||memo?.reason==='identity_unverified')throw new Error('目前無法驗證原對應；請重查目標權限與報名後再繼續。')
-    if(memo?.valid===false)throw new Error('原對應記憶與目前來源不一致，請重新核對並記住此報名。')
+    // An invalid memory must not block the teacher from replacing it. The live
+    // student/course/enrollment selections below are validated independently.
     const value=$(`enrollment-${row.source_id}`).value,student=studentSelect(row).value,course=$(`enrollment-course-${row.source_id}`).value,session=$('class-session').value
     const target=ctx().enrollments.find(e=>e.id===value)
     if(target&&!canMapEnrollmentAcrossSession(target,{student,course}))throw new Error('既有報名的學生或課程不一致。請選擇正確報名，或略過此筆。')
