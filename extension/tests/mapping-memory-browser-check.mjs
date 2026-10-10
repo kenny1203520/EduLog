@@ -148,7 +148,7 @@ try{
         assert.equal(await row.getByRole('link',{name:'查看原站報名（新分頁）'}).getAttribute('href'),`https://corp.orangeapple.co/dt_admissions/${admission}`)
         await row.locator('.source-evidence>summary').click();assert.match(await row.locator('.source-evidence').textContent(),/同名學生/);await row.locator('.source-evidence>summary').click()
         const button=row.locator('.mapping-actions>.primary')
-        if(index===0){await page.evaluate(()=>window.confirmFailure='VERSION_CONFLICT');await button.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/對應或目標已變更/);assert.equal(await page.locator(`#start-${admission}`).inputValue(),'2026-01-01')}
+        if(index===0){const baseline=await page.evaluate(()=>testCalls.length);await page.evaluate(()=>window.confirmFailure='VERSION_CONFLICT');await button.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已重新核對最新狀態|目前選擇尚未保存/);assert.equal(await page.locator(`#start-${admission}`).inputValue(),'2026-01-01');const recovery=await page.evaluate(n=>testCalls.slice(n),baseline),attempts=recovery.filter(m=>m.operation==='confirm');assert.equal(attempts.length,1,'a conflict is rechecked once and never auto-resubmitted');const refresh=recovery.filter(m=>m.operation==='resolve');assert.ok(refresh.some(call=>call.body.source_refs.some(ref=>ref.source_kind==='student'&&ref.source_id==='101')),'focused conflict recovery resolves the source student ID')}
         if(index===1){await page.evaluate(()=>window.confirmFailure='API_TIMEOUT');await button.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/保存結果尚未確認/);assert.equal(await button.getAttribute('aria-disabled'),'true');await page.locator('#reload-memories').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await button.getAttribute('aria-disabled'),'false')}
         await button.click();await page.waitForFunction(()=>!document.querySelector('.mapping-row[aria-busy]'));assert.match(await row.locator('.mapping-feedback').textContent(),/已記住此報名/);assert.equal(await row.isVisible(),true)
       }
@@ -187,8 +187,8 @@ try{
       }
       if(width===390){
         await page.evaluate(()=>window.previewFailure=true);await page.locator('#preview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'))
-        assert.match(await page.locator('#operation-detail').textContent(),/重複來源 ID/)
-        assert.match(await page.locator('#diagnostic').textContent(),/Duplicate source IDs/);assert.match(await page.locator('#diagnostic').textContent(),/edulog-synthetic-duplicate/)
+        assert.match(await page.locator('#operation-title').textContent(),/差異核對失敗/)
+        assert.match(await page.locator('#operation-detail').textContent(),/請重試核對/);assert.match(await page.locator('#diagnostic').textContent(),/重複來源 ID|Duplicate source IDs/);assert.match(await page.locator('#diagnostic').textContent(),/edulog-synthetic-duplicate/)
         assert.equal(await page.locator('#start-301').inputValue(),'2026-01-01');assert.equal(await page.locator('#apply').isDisabled(),true)
       }
       await page.locator('#preview').click();await page.waitForFunction(()=>!document.querySelector('#workspace').hasAttribute('aria-busy'));assert.equal(await page.locator('#preview-section').isVisible(),true,await page.locator('#operation-detail').textContent())
