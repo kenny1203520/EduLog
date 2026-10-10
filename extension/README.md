@@ -1,6 +1,10 @@
 # EduLog Teaching Systems extension
 
-## Current build: history list scrolling repair (0.1.0)
+## Current build: class page teaching assistance (0.1.0)
+
+Class reports default to the source site's selected session, with an optional three-week comparison. Comparison keeps student identity and the header visible, gives each week its own compact status summary, and confines narrow-screen horizontal scrolling to the comparison table. Class menus and native controls share the site theme. Teachers can open a previous-teaching summary on demand; the extension reads only that enrollment, uses an exact source date, and never submits the source form. No server endpoint or database migration was added. See [acceptance record](tests/ACCEPTANCE-class-teaching-assistance.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-class-teaching-assistance.zip`.
+
+## Previous build: history list scrolling repair (0.1.0)
 
 The desktop history list is independently scrollable by wheel and keyboard, while the editor and page keep their positions. Mobile continues to use page scrolling. Ordinary reports keep their full-width row and batch-selectable reports retain a 44px selection target. Preview assembly includes only validated `history` and `bind` records. No API or database migration is required. See [acceptance record](tests/ACCEPTANCE-history-list-preview-fix.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-history-scroll-recovery.zip`.
 

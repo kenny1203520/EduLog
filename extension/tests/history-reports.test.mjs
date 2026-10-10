@@ -19,6 +19,23 @@ test('history reads each verified editor, even blank feedback, incomplete and ze
  assert.equal(records.length,3);assert.equal(records[0].data.content,'','editor blank is authoritative over a stale list comment');assert.ok(records[0].sourceFieldConflicts.some(f=>f.key==='content'&&f.listValue==='列表過時評語'&&f.editValue==='空白'));assert.equal(records[0].data.is_completed,false);assert.equal(records[0].data.class_participation,4.5);assert.equal(records[0].data.classroom_behavior,0);assert.equal(records[1].sourceReadStatus,'complete');assert.equal(records[2].outsideRange,true)
  assert.equal(calls.length,3);assert.equal(records[0].data.external_link,'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit');assert.equal(JSON.stringify(records).includes('FORBIDDEN_LOGIN_SECRET'),false);assert.equal(JSON.stringify(records).includes('<html>'),false);assert.ok(records[0].sourceEvidence.length>1);dom.window.close()
 })
+test('selected class report resolves its exact full date from the matching native editor',async()=>{
+ const {api,pages,calls,dom}=fixture();pages.set('/dt_admissions/301',table(row('401','10/04')));pages.set('/dt_admissions/301/reports/401/edit',editor('401','2026-10-04'))
+ const resolved=await api.resolveSessionDate('/dt_admissions/301','https://corp.orangeapple.co/dt_admissions/301/reports/401/edit')
+ assert.equal(resolved.date,'2026-10-04');assert.equal(resolved.reportId,'401');assert.equal(resolved.enrollmentId,'301')
+ assert.deepEqual(calls.map(call=>new URL(call.url).pathname),['/dt_admissions/301','/dt_admissions/301/reports/401/edit'])
+ await assert.rejects(api.resolveSessionDate('/dt_admissions/302','https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'),error=>error.code==='SOURCE_REPORT_MISMATCH')
+ dom.window.close()
+})
+
+test('on-demand previous teaching reads only the newest substantive report for that enrollment and requires a full cutoff date',async()=>{
+ const {api,pages,calls,dom}=fixture();pages.set('/dt_admissions/301',table(row('401','2026/10/01')+row('402','2026/10/02')+row('403','2026/10/03')));pages.set('/dt_admissions/301/reports/401/edit',editor('401','2026-10-01'));pages.set('/dt_admissions/301/reports/402/edit',editor('402','2026-10-02'));pages.set('/dt_admissions/301/reports/403/edit',editor('403','2026-10-03'))
+ await assert.rejects(api.readPreviousTeaching('/dt_admissions/301','10/04'),error=>error.code==='SESSION_DATE_UNAVAILABLE')
+ const result=await api.readPreviousTeaching('/dt_admissions/301','2026-10-04')
+ assert.equal(result.status,'found');assert.equal(result.report.sourceId,'403');assert.equal(result.report.date,'2026-10-03');assert.equal(result.report.behavior,0)
+ assert.deepEqual(calls.map(call=>new URL(call.url).pathname),['/dt_admissions/301','/dt_admissions/301/reports/403/edit'])
+ dom.window.close()
+})
 test('individual failures retain evidence and successful records; retry reads only the failed editor',async()=>{
  const {api,pages,calls,dom}=fixture();pages.set('/dt_admissions/301',table(row('401','2026.10.01')+row('402','2026.10.02')));pages.set('/dt_admissions/301/reports/402/edit',editor('402','2026-10-02'))
  const records=await api.readHistory('/dt_admissions/301');assert.equal(records[0].sourceReadStatus,'failed');assert.equal(records[1].sourceReadStatus,'complete');assert.ok(records[0].sourceEvidence.length)

@@ -69,11 +69,36 @@ test('week selection preserves the source statuses and report links', () => {
   const dom = fixture('reports', '/courses/dt/101/lesson_reports'), doc = dom.window.document
   const source = [...doc.querySelectorAll('#reports tr')].map(row=>[...row.cells].slice(3).map(cell=>cell.textContent.replace('記錄','課堂記錄')))
   const enhanced = dom.window.edulogSiteAdapter.enhancePage(doc)
-  assert.equal(doc.querySelector('.edulog-week-tools [aria-pressed=true]').dataset.week, '4')
-  doc.querySelector('.edulog-week-tools button').click()
-  assert.equal(doc.querySelector('.edulog-week-tools [aria-pressed=true]').dataset.week, '3')
-  assert.deepEqual([...doc.querySelectorAll('#reports tr')].map(row=>[...row.cells].slice(3).map(cell=>cell.textContent)), source)
+  assert.equal(doc.querySelector('#reports').dataset.edulogWeekMode, 'single')
+  assert.equal(doc.querySelector('[data-edulog-report-region]').dataset.edulogReportMode, 'single')
+  assert.equal(doc.querySelector('.edulog-week-tools [data-week][aria-pressed=true]').dataset.week, '4')
+  for(const row of doc.querySelectorAll('#reports tr[data-edulog-report-row]')){
+    assert.equal(row.cells[4].hasAttribute('data-edulog-week-selected'),true,'the default week is projected during initial render')
+    assert.equal(row.cells[3].hasAttribute('data-edulog-week-selected'),false)
+    assert.equal(row.cells[5].hasAttribute('data-edulog-week-cell'),true)
+  }
+  doc.querySelector('.edulog-week-tools [data-report-mode=compare]').click()
+  assert.equal(doc.querySelector('[data-edulog-report-region]').dataset.edulogReportMode, 'compare')
+  doc.querySelector('.edulog-week-tools [data-week="3"]').click()
+  assert.equal(doc.querySelector('.edulog-week-tools [data-week][aria-pressed=true]').dataset.week, '3')
+  const visibleSource=[...doc.querySelectorAll('#reports tr:not([data-edulog-last-teaching-row])')].map(row=>[...row.cells].slice(3).map(cell=>{const clone=cell.cloneNode(true);clone.querySelectorAll('[data-edulog-owned]').forEach(node=>node.remove());return clone.textContent}))
+  assert.deepEqual(visibleSource, source)
   enhanced.restore(); dom.window.close()
+})
+test('non-session students stay visible in a named collapsed group for the selected week', () => {
+  const dom=fixture('reports','/courses/dt/101/lesson_reports'),doc=dom.window.document
+  const enhanced=dom.window.edulogSiteAdapter.enhancePage(doc)
+  const reportRows=[...doc.querySelectorAll('#reports tbody tr[data-edulog-report-row]')]
+  assert.equal(reportRows.length,2)
+  doc.querySelector('.edulog-week-tools [data-week=\"5\"]')?.click()
+  const otherRows=reportRows.filter(row=>row.getAttribute('data-edulog-session-rank')==='other')
+  assert.equal(otherRows.length,1,'the selected week determines which students are outside this session')
+  assert.equal(otherRows[0].hasAttribute('data-edulog-filtered'),true,'non-session rows are collapsed from the active list')
+  const group=doc.querySelector('.edulog-other-session-list')
+  assert.ok(group.querySelector('summary').textContent.includes('1'))
+  group.open=true;group.dispatchEvent(new dom.window.Event('toggle'))
+  assert.equal(otherRows[0].hasAttribute('data-edulog-filtered'),false)
+  enhanced.restore();dom.window.close()
 })
 test('standalone UI works without pairing and homepage shortcuts use source class links', async () => {
   const dom = fixture('overview', '/')

@@ -71,6 +71,86 @@ test('report details preserve native handlers and selected target date without i
   enhanced.restore(); assert.equal(link.textContent,'記錄'); dom.window.close()
 })
 
+test('class reports default to one native session and load the same enrollment lesson summary on demand', async () => {
+  const dom=fixture('class','/courses/dt/101'),w=dom.window,doc=w.document,view={}
+  const header=doc.querySelector('#reports th:nth-child(5)');header.setAttribute('data-date','2026-10-04')
+  const calls=[];w.edulogSourceIntegration={readPreviousTeaching:async(path,date)=>{calls.push([path,date]);return{status:'found',readAt:'2026-10-11T08:00:00.000Z',report:{date:'2026-09-27',lesson:'Lesson 3 · 樂趣 Lesson',completed:false,progress:'C-D',internalNotes:'繼續練習',content:'完成迴圈練習',participation:0,behavior:null,contactNotes:'',externalLink:'https://corp.orangeapple.co/dt_admissions/301/reports/399/edit'}}}}
+  const enhanced=dom.window.edulogSiteAdapter.enhancePage(doc,view)
+  assert.equal(doc.querySelector('#reports').getAttribute('data-edulog-week-mode'),'single')
+  assert.equal(doc.querySelector('.edulog-week-tools [data-report-mode="single"]').getAttribute('aria-pressed'),'true')
+  assert.equal(doc.querySelector('.edulog-week-tools [data-report-mode="compare"]').getAttribute('aria-pressed'),'false')
+  assert.match(doc.querySelector('.edulog-session-status').textContent,/本堂排定進度.*已啟用教材.*出席狀態.*課堂紀錄/)
+  assert.deepEqual(calls,[],'history remains unloaded until the teacher opens the summary')
+  const button=doc.querySelector('.edulog-last-teaching-toggle');assert.equal(button.disabled,false)
+  const reportRow=doc.querySelector('#reports tbody tr')
+  assert.equal(button.closest('td'),reportRow.cells[0],'the previous-teaching action stays with the student identity, not a selected week')
+  doc.querySelector('.edulog-week-tools [data-report-mode="compare"]').click()
+  assert.equal(reportRow.querySelectorAll('[data-edulog-week-summary]').length,3,'each compared week has its own status summary')
+  for(const weekCell of [...reportRow.cells].slice(-3)){
+    assert.match(weekCell.querySelector('[data-edulog-week-summary]').textContent,/本堂排定進度.*已啟用教材.*出席狀態.*課堂紀錄/)
+  }
+  assert.equal(reportRow.querySelector('.edulog-teaching-actions')?.closest('td'),reportRow.cells[0],'changing view does not move the student summary action')
+  doc.querySelector('.edulog-week-tools [data-report-mode="single"]').click()
+  button.click();await wait()
+  assert.equal(doc.querySelector('.edulog-last-teaching-panel').hidden,false,'the opened teaching summary panel is visible')
+  assert.equal(doc.querySelector('.edulog-last-teaching-content').hidden,false,'the live content region is not hidden after expansion')
+  assert.deepEqual(calls,[['/dt_admissions/301','2026-10-04']])
+  assert.match(doc.querySelector('.edulog-last-teaching-content').textContent,/2026-09-27.*Lesson 3.*未完成.*繼續練習.*完成迴圈練習/)
+  assert.match(doc.querySelector('.edulog-last-teaching-content').textContent,/0/,'zero ratings remain visible')
+  const form=doc.createElement('form');form.action='https://corp.orangeapple.co/dt_admissions/301/reports/399/edit';doc.body.append(form)
+  form.dispatchEvent(new w.CustomEvent('turbo:submit-end',{detail:{success:true},bubbles:true}))
+  assert.match(doc.querySelector('.edulog-last-teaching-content').textContent,/待重新讀取/,'a confirmed native report save invalidates the cached lesson summary')
+  doc.querySelector('.edulog-last-teaching-panel > button').click();await wait()
+  assert.equal(calls.length,2,'refresh after a confirmed save performs a fresh enrollment-scoped read')
+  doc.querySelector('.edulog-week-tools [data-report-mode="compare"]').click()
+  assert.equal(doc.querySelector('#reports').getAttribute('data-edulog-week-mode'),'compare')
+  doc.querySelector('.edulog-week-tools [data-report-mode="single"]').click()
+  assert.equal(doc.querySelector('#reports').getAttribute('data-edulog-week-mode'),'single')
+  enhanced.restore();assert.equal(doc.querySelector('.edulog-last-teaching-toggle'),null);dom.window.close()
+})
+
+test('load all session summaries reads only reliably linked students with concurrency capped at three', async()=>{
+ const dom=fixture('reports','/courses/dt/101/lesson_reports'),w=dom.window,doc=w.document,view={},calls=[];let active=0,maximum=0
+ const header=doc.querySelector('#reports th:nth-child(5)');header.setAttribute('data-date','2026-10-04')
+ const body=doc.querySelector('#reports tbody'),template=[...body.rows].find(row=>row.cells.length===6)
+ for(let id=302;id<=304;id++){const clone=template.cloneNode(true);const link=clone.cells[4].querySelector('a[href*="/reports/"]');link.setAttribute('href',`/dt_admissions/${id}/reports/${500+id}/edit`);body.append(clone)}
+ w.edulogSourceIntegration={readPreviousTeaching:async(path,date)=>{active++;maximum=Math.max(maximum,active);calls.push([path,date]);await new Promise(resolve=>setTimeout(resolve,12));active--;return{status:'none',readAt:'2026-10-11T08:00:00.000Z'}}}
+ dom.window.edulogSiteAdapter.enhancePage(doc,view)
+ assert.equal(view.classHistoryEligibleCount,4,'the non-session row without a report link is excluded')
+ const result=await view.loadClassHistory()
+ assert.equal(result.done,4);assert.equal(result.failed,0);assert.equal(result.total,4);assert.equal(result.cancelled,false)
+ assert.equal(maximum,3,'at most three source history reads run at once')
+ assert.deepEqual(new Set(calls.map(call=>call[0])),new Set(['/dt_admissions/301','/dt_admissions/302','/dt_admissions/303','/dt_admissions/304']))
+ const rendered=[...doc.querySelectorAll('.edulog-last-teaching-content')].map(panel=>panel.textContent)
+ assert.equal(rendered.filter(value=>value.includes('未找到')).length,4,rendered.join(' | '))
+ dom.window.close()
+})
+
+test('class lesson summary resolves a complete date from the selected native report before reading history', async () => {
+  const dom=fixture('class','/courses/dt/101'),w=dom.window,doc=w.document,calls=[]
+  doc.querySelector('#reports th:nth-child(5)').removeAttribute('data-date')
+  w.edulogSourceIntegration={resolveSessionDate:async(path,url)=>{calls.push(['date',path,new URL(url).pathname]);return{date:'2026-10-04'}},readPreviousTeaching:async(path,date)=>{calls.push(['history',path,date]);return{status:'none',readAt:'2026-10-11T08:00:00.000Z'}}}
+  dom.window.edulogSiteAdapter.enhancePage(doc,{})
+  doc.querySelector('.edulog-last-teaching-toggle').click();await wait()
+  assert.deepEqual(calls,[['date','/dt_admissions/301','/dt_admissions/301/reports/401/edit'],['history','/dt_admissions/301','2026-10-04']])
+  assert.match(doc.querySelector('.edulog-last-teaching-content').textContent,/2026-10-11|未找到|沒有符合/)
+  dom.window.close()
+})
+
+test('class lesson summary never guesses a year from a week label', async () => {
+  const dom=fixture('class','/courses/dt/101'),w=dom.window,doc=w.document;let calls=0
+  w.edulogSourceIntegration={readPreviousTeaching:async()=>{calls++;return{status:'none'}}}
+  doc.querySelector('#reports a[href*="/reports/"]').remove()
+  dom.window.edulogSiteAdapter.enhancePage(doc,{})
+  assert.equal(doc.querySelector('.edulog-last-teaching-toggle').disabled,false,'a unique student and course may resolve the enrollment from the native roster link')
+  doc.querySelector('.edulog-last-teaching-toggle').click();await wait()
+  assert.equal(calls,0)
+  const message=doc.querySelector('.edulog-last-teaching-content').textContent
+  assert.ok(message.length>0,'the panel explains why an exact previous lesson cannot be selected')
+  assert.equal(doc.querySelector('.edulog-last-teaching-panel > button').hidden,false,'the teacher can retry after the source date becomes available')
+  dom.window.close()
+})
+
 test('secondary modal updates preserve focused draft and do not duplicate controls', async () => {
   const dom=fixture('class','/courses/dt/101'),w=dom.window,doc=w.document
   w.chrome={runtime:{sendMessage:async()=>({enabled:true}),onMessage:{addListener(){}}}}
@@ -91,7 +171,7 @@ test('report cell replacement restores disclosures without rebuilding page contr
   w.chrome={runtime:{sendMessage:async()=>({enabled:true}),onMessage:{addListener(){}}}}
   for(const file of ['runtime-bridge.js','connection-ui.js', 'integration-ui.js','bootstrap.js','content.js']) w.eval(read(`../${file}`))
   await wait(); const search=doc.querySelector('[data-edulog-search=reports]')
-  const cell=doc.querySelector('#reports tbody tr').cells[1]; cell.textContent='更新課程';await wait()
+  const cell=doc.querySelector('#reports tbody tr').cells[2]; cell.textContent='更新課程';await wait()
   assert.equal(doc.querySelector('[data-edulog-search=reports]'),search)
   assert.match(cell.querySelector('.edulog-report-details').textContent,/更新課程/)
   assert.equal(cell.querySelectorAll('.edulog-report-details').length,1)

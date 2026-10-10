@@ -82,6 +82,20 @@ for (const [browserName, executablePath] of executables) {
       assert.equal(await panel.evaluate(el => el.hidden), true, `${browserName} ${name} ${width}: close control`)
       await toolbarRoot.dispose(); await toolbar.dispose(); await panel.dispose()
       assert.ok(await page.evaluate(() => document.querySelector('.content h1,.content h2').getBoundingClientRect().top >= document.querySelector('#edulog-extension-root').shadowRoot.querySelector('.bar').getBoundingClientRect().bottom), `${browserName} ${name} ${width}: toolbar obscures heading`)
+      if (name === 'reports') {
+        assert.equal(await page.locator('#reports').getAttribute('data-edulog-week-mode'),'single')
+        await page.getByRole('button',{name:'三週比較'}).click()
+        assert.equal(await page.locator('#reports').getAttribute('data-edulog-week-mode'),'compare')
+        const compareLayout=await page.locator('#reports').evaluate(table=>{const region=table.closest('[data-edulog-report-region]')||table.parentElement;return{tableWidth:table.getBoundingClientRect().width,regionWidth:region.clientWidth,regionScrollWidth:region.scrollWidth,headerPosition:getComputedStyle(table.tHead.rows[0].cells[0]).position,namePosition:getComputedStyle(table.tBodies[0].rows[0].cells[0]).position,weekCount:table.querySelectorAll('tbody [data-edulog-week-summary]').length,reportRows:table.querySelectorAll('tbody tr[data-edulog-report-row]').length}})
+        assert.equal(compareLayout.weekCount,compareLayout.reportRows*3,`${browserName} ${name} ${width}: each report row has three independent week summaries`)
+        assert.equal(compareLayout.headerPosition,'sticky',`${browserName} ${name} ${width}: compare header stays visible`)
+        assert.equal(compareLayout.namePosition,'sticky',`${browserName} ${name} ${width}: student identity stays visible`)
+        if(width<=1199)assert.ok(compareLayout.regionScrollWidth>compareLayout.regionWidth,'narrow comparison stays inside its labelled horizontal scroll region')
+        else assert.ok(compareLayout.tableWidth>=compareLayout.regionWidth-1,'wide comparison fills the available region')
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'three-week comparison must not overflow the whole page')
+        await page.getByRole('button',{name:'單堂清單'}).click()
+        assert.equal(await page.locator('#reports').getAttribute('data-edulog-week-mode'),'single')
+      }
       if (name === 'reports' && width === 390) {
         assert.equal(await page.locator('#reports th[data-edulog-week-cell]:visible').count(), 1)
         await page.getByRole('button', { name: /上週/ }).click()
