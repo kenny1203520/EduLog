@@ -407,6 +407,46 @@
     }
     return records
   }
+  async function readPreviousTeaching(sourcePath,beforeDate) {
+    if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw Object.assign(new Error('來源報名位置尚未驗證。'),{code:'SOURCE_PATH_UNAVAILABLE'})
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(beforeDate||'')||!dates.parse(beforeDate).date)throw Object.assign(new Error('原站未提供可核對的完整課次日期，無法判斷上次教學。'),{code:'SESSION_DATE_UNAVAILABLE'})
+    const admissionId=sourcePath.split('/').pop(),listed=await readHistory(sourcePath,{listOnly:true})
+    const groups=new Map()
+    for(const record of listed){
+      if(record.kind!=='report'||record.sourceRowType!=='report'||record.enrollment_source_id!==admissionId||!record.date||record.date>=beforeDate)continue
+      const items=groups.get(record.date)||[];items.push(record);groups.set(record.date,items)
+    }
+    const datesDescending=[...groups.keys()].sort((a,b)=>b.localeCompare(a))
+    const hasContent=record=>['content','contact_notes','class_notes','lesson_id','progress_start','progress_end','progress_letter','class_participation','classroom_behavior'].some(key=>Object.hasOwn(record.data||{},key)&&record.data[key]!==undefined&&record.data[key]!==null&&record.data[key]!=='')||Boolean(record.sourceLessonLabel||record.sourceInternalNotes)
+    for(const date of datesDescending){
+      const candidates=[]
+      for(const record of groups.get(date)){
+        const full=record.source_id?await readReport(record):record
+        if((full.sourceReadStatus==='complete'||full.sourceReadStatus==='list')&&hasContent(full))candidates.push(full)
+      }
+      const present=candidates.map(record=>({
+        sourceId:record.source_id,date:record.date,lesson:record.sourceLessonLabel||record.sourceFields?.find(f=>f.key==='lesson_id')?.options?.find(o=>o.value===record.sourceFields.find(f=>f.key==='lesson_id')?.value)?.label||'',
+        completed:Object.hasOwn(record.data||{},'is_completed')?record.data.is_completed:null,
+        progress:record.data?.progress_letter??null,content:record.data?.content||'',internalNotes:record.data?.class_notes||record.sourceInternalNotes||'',
+        participation:Object.hasOwn(record.data||{},'class_participation')?record.data.class_participation:null,
+        behavior:Object.hasOwn(record.data||{},'classroom_behavior')?record.data.classroom_behavior:null,
+        contactNotes:record.data?.contact_notes||'',externalLink:record.data?.external_link||''
+      }))
+      if(present.length>1)return {status:'ambiguous',date,reports:present,readAt:new Date().toISOString()}
+      if(present.length===1)return {status:'found',report:present[0],readAt:new Date().toISOString()}
+    }
+    return {status:'none',readAt:new Date().toISOString()}
+  }
+  async function resolveSessionDate(sourcePath, suppliedUrl) {
+    if(!/^\/dt_admissions\/\d+$/.test(sourcePath))throw Object.assign(new Error('來源報名位置尚未驗證。'),{code:'SOURCE_PATH_UNAVAILABLE'})
+    const url=new URL(suppliedUrl,ORIGIN),match=url.pathname.match(/^\/dt_admissions\/(\d+)\/reports\/(\d+)\/edit\/?$/)
+    if(url.origin!==ORIGIN||url.search||url.hash||url.username||url.password||!match||match[1]!==sourcePath.split('/').pop())throw Object.assign(new Error('課次報告連結與來源報名不一致。'),{code:'SOURCE_REPORT_MISMATCH'})
+    const doc=await readPath(sourcePath),record=extractHistory(doc,sourcePath.split('/').pop()).find(item=>item.source_id===match[2]&&item.enrollment_source_id===match[1])
+    if(!record)throw Object.assign(new Error('目前報名中找不到所選課次的報告。'),{code:'SOURCE_REPORT_NOT_FOUND'})
+    const full=await readReport(record,url.href)
+    if(!full.date)throw Object.assign(new Error('所選課次的原站報告沒有提供完整日期。'),{code:'SESSION_DATE_UNAVAILABLE'})
+    return {date:full.date,reportId:full.source_id,enrollmentId:full.enrollment_source_id}
+  }
   async function readPath(sourcePath) {
     if (!/^\/(?:courses\/dt\/\d+(?:\/lesson[-_]reports)?|dt_admissions\/\d+|dt_admissions\/\d+\/reports\/\d+\/edit)$/.test(sourcePath)) throw new Error('來源路徑尚未驗證。')
     const response = await fetch(`${ORIGIN}${sourcePath}`, { credentials: 'same-origin', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(15000), headers: { Accept: 'text/html' } })
@@ -437,7 +477,7 @@
     return snapshot
   }
   globalThis.edulogSourceIntegration = Object.freeze({ origin: ORIGIN, extractClass, extractHistory, collect, readForm, getForm, applyForm, digest, supplementForm, resolveFormDate,
-    readHistory, readReport,
+    readHistory, readReport, readPreviousTeaching, resolveSessionDate,
     context(doc) { const p = doc.location.pathname, page = globalThis.edulogSiteAdapter?.matchPage?.(p), classId = p.match(/^\/courses\/dt\/(\d+)/)?.[1] || null; return { sourceOrigin: ORIGIN, sourcePath: p, classId, title: text(doc.querySelector('#page-body > .content h2')) || page?.title || '', reportOpen: Boolean(getForm(doc)), capabilities: { current_class_import: Boolean(classId && page?.kind !== 'report-editor'), report_prefill: Boolean(getForm(doc) || page?.kind === 'report-editor') } } },
     capabilities: { current_class_import: true, report_prefill: true, all_classes_import: false, submission_confirmation: false },
   })
