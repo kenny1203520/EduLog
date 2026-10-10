@@ -46,6 +46,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-class-teaching-assistance.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-preview-request-recovery.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-history-merge-reconciliation.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-workspace-editor-recovery.md') -Destination $stagingPath
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
