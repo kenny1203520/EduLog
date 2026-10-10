@@ -236,6 +236,18 @@ describe('workspace API contract', () => {
     const fallback=await request(legacy).post(`/api/extension/v1/imports/${id}/preview`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
     expect(fallback.status).toBe(422);expect(fallback.body.error.fields).toEqual({job:['REFERENCE_CHECK_FAILED']})
   })
+  it('returns bounded item-scoped diagnostics for mapping revision conflicts',async()=>{
+    const key='124931',body={source_origin:'https://corp.orangeapple.co',source_class_id:'4773',items:[{kind:'student',key,target_id:id,action:'confirm',expected_revision:null,versions:{[id]:'a'.repeat(32)}}]}
+    const details=JSON.stringify({kind:'student',key,field:'expected_revision',reason:'MEMORY_REVISION_CHANGED'})
+    const {app}=appWith(null,{message:'VERSION_CONFLICT',details},true)
+    const response=await request(app).post('/api/extension/v1/catalog/confirm').set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(response.status).toBe(409)
+    expect(response.body.error.fields).toEqual({[`items.student.${key}.expected_revision`]:['MEMORY_REVISION_CHANGED']})
+    expect(JSON.stringify(response.body)).not.toContain('target_id')
+    const old=appWith(null,{message:'VERSION_CONFLICT'},true).app
+    const fallback=await request(old).post('/api/extension/v1/catalog/confirm').set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(fallback.status).toBe(409);expect(fallback.body.error.fields).toBeUndefined()
+  })
   it('returns stale preview and permission errors without raw database details', async () => {
     for (const [message, status] of [['PREVIEW_STALE', 409], ['PERMISSION_DENIED', 403], ['EXTENSION_AUTH_INVALID', 401]] as const) {
       const { app } = appWith(null, { message }); const response = await request(app).get('/api/extension/v1/context').set('Authorization', `Bearer ${'a'.repeat(64)}`)

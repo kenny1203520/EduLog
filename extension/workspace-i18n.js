@@ -52,6 +52,7 @@ Object.assign(en,{
 const attributes=['placeholder','title','aria-label']
 const originals=new WeakMap()
 let locale='zh-TW', observer
+Object.assign(en,{'請選擇目標學生':'Choose an EduLog student','此變更的影響範圍':'Scope of this change','請選擇影響範圍':'Choose the scope','只更新此報名':'Update this enrollment only','更新共用學生對應':'Update the shared student match','此學生 ID 已有其他共用對應。請選擇只更新此報名，或更新共用學生對應。':'This source student ID already has a different shared match. Choose whether to update this enrollment only or the shared match.','尚未完成此學生與報名的記憶查詢；請重新檢查後再確認。':'The student and enrollment match has not been fully checked. Recheck before confirming.','伺服器記憶或目標版本已更新。已重新核對最新狀態，選擇尚未保存；請檢查後再次確認。':'A saved match or target changed. The latest state was rechecked, but your selection was not saved. Review it and confirm again.','版本衝突後局部重查失敗；目前選擇已保留，請重試「重新檢查對應記憶」。':'The focused recheck failed after a version conflict. Your selection is preserved; retry “Recheck saved matches”.','已重新核對；目前選擇尚未保存。請檢查最新記憶後再次確認。':'Rechecked. Your selection is not saved yet. Review the latest match and confirm again.','共用學生對應已更新；此報名尚未重新核對，請檢查後確認。':'The shared student match changed. This enrollment still needs review and confirmation.'})
 function translate(value){
   if(locale!=='en')return value
   if(en[value])return en[value]

@@ -90,6 +90,7 @@ try {
   await db.exec(read('1000132_extension_report_skip_decisions.sql'))
   await db.exec(read('1000133_extension_mapping_memory_reasons.sql'))
   await db.exec(read('1000134_atomic_history_reconciliation.sql'))
+  await db.exec(read('1000135_extension_mapping_conflict_diagnostics.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -232,6 +233,23 @@ try {
   const freshStudent=(await resolveMemory('11',[],[],[{kind:'students',id:student}])).targets[0]
   const freshVersions={...versions,[student]:freshStudent.target_version}
   await confirm([{...admissionMemory,expected_revision:admissionRevision,versions:freshVersions}])
+  // Student IDs may exist only on an enrollment row. Resolve that source ID
+  // before confirming both the admission and its already remembered student.
+  await confirm([{kind:'student',key:'124931',action:'confirm',target_id:student,expected_revision:null,versions:freshVersions}])
+  const enrollmentOnlyStudent=await resolveMemory('11',[{kind:'admission',key:'255723',source_identity:JSON.stringify(['124931','code:dt-js2'])}],[{source_kind:'student',source_id:'124931'}])
+  const studentRevision=enrollmentOnlyStudent.source_links.find(row=>row.source_kind==='student'&&row.source_id==='124931')?.revision
+  assert.ok(studentRevision,'resolve must return existing student revision for an enrollment-only source ID')
+  assert.equal(enrollmentOnlyStudent.memories.length,0,'no admission memory is treated as confirmed absence')
+  await confirm([
+    {kind:'admission',key:'255723',action:'confirm',source_identity:JSON.stringify(['124931','code:dt-js2']),target_id:enrollment,student_id:student,course_id:course,class_session_id:session,expected_revision:null,versions:freshVersions},
+    {kind:'student',key:'124931',action:'confirm',target_id:student,expected_revision:studentRevision,versions:freshVersions}
+  ])
+  await assert.rejects(confirm([{kind:'student',key:'124931',action:'confirm',target_id:student,expected_revision:null,versions:freshVersions}]),error=>{
+    assert.match(error.message,/VERSION_CONFLICT/)
+    assert.equal(JSON.parse(error.detail).field,'expected_revision')
+    assert.equal(JSON.parse(error.detail).reason,'MEMORY_REVISION_CHANGED')
+    return true
+  })
   const updatedAdmission=(await resolveMemory('11',[{kind:'admission',key:'301'}])).memories[0]
   assert.notEqual(updatedAdmission.revision,admissionRevision)
   // Same names never resolve without a confirmed mapping or a unique canonical link.

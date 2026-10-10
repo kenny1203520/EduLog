@@ -97,6 +97,19 @@ function databaseError(error: { message: string; code?: string; details?: string
     } catch { /* Return a safe batch-level diagnostic for legacy database errors. */ }
     return new ApiError(422, 'INVALID_REFERENCE', 'One or more records could not be verified. Refresh the source and target catalogs, then retry.', { job: ['REFERENCE_CHECK_FAILED'] })
   }
+  if(error.message==='VERSION_CONFLICT') {
+    try {
+      const diagnostic=JSON.parse(error.details??'') as {kind?:unknown;key?:unknown;field?:unknown;reason?:unknown}
+      const kinds=new Set(['student','course','class_session','classroom','enrollment','admission','course_rule'])
+      const fields=new Set(['expected_revision','target_version'])
+      const reasons=new Set(['MEMORY_REVISION_CHANGED','TARGET_VERSION_CHANGED'])
+      const keyIsSafe=typeof diagnostic.key==='string'&&(['student','enrollment','admission'].includes(String(diagnostic.kind))?/^\d{1,40}$/.test(diagnostic.key):/^[0-9a-f-]{36}$/i.test(diagnostic.key))
+      if(typeof diagnostic.kind==='string'&&kinds.has(diagnostic.kind)&&keyIsSafe&&typeof diagnostic.field==='string'&&fields.has(diagnostic.field)&&typeof diagnostic.reason==='string'&&reasons.has(diagnostic.reason)) {
+        return new ApiError(409,'VERSION_CONFLICT','The saved match or target changed. Recheck before confirming.',{[`items.${diagnostic.kind}.${diagnostic.key}.${diagnostic.field}`]:[diagnostic.reason]})
+      }
+    } catch { /* Older database functions return only the generic conflict code. */ }
+    return new ApiError(409,'VERSION_CONFLICT','The saved match or target changed. Recheck before confirming.')
+  }
   return statuses[error.message] ? new ApiError(statuses[error.message]!, error.message, error.message) : mapDatabaseError(error)
 }
 export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
