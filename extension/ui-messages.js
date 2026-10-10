@@ -42,6 +42,43 @@ Object.assign(en,{
   '搜尋':'Search','工作狀態':'Work status','類型':'Type','全部工作':'All work','全部類型':'All types','教學資料同步':'Teaching data sync','來源班級':'Source class','工作名稱、班級或識別碼':'Work name, class, or ID','班級名稱或編號':'Class name or ID',
   '草稿只保存在此瀏覽器七天；封存只整理清單，不代表工作完成。':'Drafts stay in this browser for seven days. Archiving organizes the list; it does not complete the work.','沒有符合篩選條件的工作。':'No work matches these filters.','來源班級未命名':'Unnamed source class','此瀏覽器':'This browser','來源裝置：':'Source device:','草稿期限七天':'Draft retained for seven days','選取一筆工作以查看進度、結果與管理操作。':'Select a work item to view progress, results, and actions.','返回工作清單':'Back to work list','工作進度':'Work progress','名單核對':'Roster verification','本機草稿期限：':'Local draft expires:','來源資料':'Source records','歷史待讀取':'History reports pending','批次':'Batches','已寫入':'Written','略過':'Skipped','失敗':'Failed','已封存':'Archived','解除封存':'Unarchive','置頂':'Pin','取消置頂':'Unpin','重新命名':'Rename','工作名稱':'Work name','保存名稱':'Save name','封存工作':'Archive work','再次同步':'Sync again','移除此裝置草稿':'Remove this device’s draft','確認移除本機草稿':'Remove local draft','保留草稿':'Keep draft','最近一次操作失敗':'Last operation failed','重試此工作讀取':'Retry this work','本機工作暫時無法讀取':'Local work could not be read','EduLog 工作紀錄暫時無法載入':'EduLog work history could not be loaded','重試讀取本機工作':'Retry local work history','重試載入 EduLog 紀錄':'Retry EduLog work history','目前沒有可封存的已完成工作。':'There are no completed work items to archive.','封存已完成':'Archive completed','重新整理':'Refresh','教學資料同步':'Teaching data sync','報告預填':'Report prefill','核對未知結果':'Verify unknown result','處理剩餘項目':'Resolve remaining items','查看結果':'View results','繼續核對':'Continue review','查看預填結果':'View prefill result','查看工作詳情':'View work details','狀態：':'Status:','目標 EduLog：':'EduLog destination:','寫入中':'Applying','已暫停':'Paused','需要處理':'Needs attention','結果待核對':'Outcome needs review','已完成':'Complete','部分完成':'Partially complete','剩餘工作已取消':'Remaining work cancelled','已讀取，待核對':'Read; review needed','正在讀取':'Reading','擷取已暫停':'Reading paused','待檢查':'Needs review','摘要待確認':'Preview needs confirmation','待確認原站結果':'Source result needs confirmation','已確認':'Confirmed','待處理':'Pending','狀態待確認':'Status not verified'
 })
+Object.assign(en,{
+  '單堂清單':'Single-session list','三週比較':'Three-week comparison','課次與顯示方式':'Session and view mode','報告週次':'Report week',
+  '本堂全部':'All students for this session','待確認出席':'Attendance to confirm','待填紀錄':'Reports to complete','狀態未提供':'Status unavailable','學生篩選':'Student filter',
+  '課堂紀錄表，可依螢幕寬度捲動':'Class reports; scroll horizontally when needed','查看上次教學':'View previous lesson','無法可靠識別報名':'Enrollment could not be reliably identified','重新整理上次教學':'Refresh lesson summary',
+  '原站未提供明確出席結果':'The source does not provide a clear attendance result','原站提供設定入口，結果待確認':'The source offers an attendance action; the result is unconfirmed','原站未提供明確狀態':'The source does not provide a clear status',
+  '原站提供課堂紀錄入口':'The source provides a lesson report link','原站標示待填寫':'The source marks this report as incomplete','原站未提供可確認的課堂紀錄入口':'The source does not provide a verifiable lesson report link',
+  '課程狀態':'Course status','出席狀態':'Attendance status','課堂紀錄':'Lesson report','本堂進度':'Session progress','評語、評分與聯絡欄':'Feedback, ratings, and contact notes',
+  '未找到所選課次日期之前、且含實際教學內容的紀錄。':'No lesson with teaching content was found before this session.','同一天有多份教學紀錄，無法可靠排序；請逐份查看。':'Multiple lesson reports share this date and cannot be reliably ordered. Review each one.',
+  '完成狀況':'Completion','已完成':'Completed','未完成':'Incomplete','未提供':'Not provided','章節進度':'Chapter progress','內部紀錄':'Internal notes','學習表現':'Learning report','課程參與評分':'Participation rating','課堂秩序評分':'Classroom behavior rating','聯絡欄':'Contact notes','查看原站紀錄':'View source report',
+  '讀取時間：':'Read at:','原站課次標籤：':'Source session:','來源沒有完整日期，不能判定哪一份是上次教學。':'The source has no full date, so the previous lesson cannot be determined.',
+  '目前課次已變更；請按「重新整理上次教學」讀取對應摘要。':'The selected session changed. Refresh the lesson summary to match it.',
+  '無法從本堂原站連結可靠識別報名與報告，請使用原站紀錄或從學生名單開啟報名。':'The source link does not reliably identify this enrollment and report. Open the native report or open the enrollment from the student list.',
+  '課程與進度':'Course and progress','出席統計與專案':'Attendance and projects','學生操作':'Student actions','單堂清單':'Single-session list','三週比較':'Three-week comparison','本堂與待確認':'Current session and unverified','非本堂學生 · ':'Other session students · ',
+  '原站未提供明確狀態':'The source does not provide a clear status','待確認（原站提供設定入口）':'Needs confirmation (the source provides an action)','原站未提供明確出席結果':'The source does not provide a clear attendance result','原站未提供課堂紀錄入口':'The source does not provide a lesson report link','可開啟課堂紀錄':'Lesson report available',
+  '原站已確認保存。上次教學摘要已更新為待重新讀取。':'The source confirmed the save. Refresh the previous-lesson summary to load the updated record.',
+  '正在讀取此學生的相關報名與教學紀錄…':'Reading this student’s enrollment and lesson history…','讀取失敗':'Reading failed','讀取失敗：':'Reading failed:','請重新整理此學生的摘要。':'Refresh this student’s summary.',
+  '目前擴充功能版本不支援按需讀取，請重新載入擴充功能後重試。':'This extension version cannot load lesson summaries on demand. Reload the extension and try again.',
+  '來源沒有完整日期，不能判定哪一份是上次教學。':'The source has no full date, so the previous lesson cannot be determined.'
+})
+Object.assign(en,{
+  '位學生 · 已確認出席':'students · attendance confirmed','· 已填紀錄':'· reports complete','· 狀態待確認':'· status unverified',
+  '非本堂學生 · ':'Other session students · ','（展開下方清單）':'(show them below)',
+  '可讀取':'Available to read','位本堂學生的上次教學摘要':'students’ previous lesson summaries',
+  '載入本堂全部摘要':'Load all session summaries','載入此課次全部摘要':'Load all summaries for this session','停止載入':'Stop loading','正在計算可讀取的本堂學生…':'Checking how many session summaries are available…',
+  '正在讀取':'Reading','讀取進度':'Read progress','位已讀取 · 失敗需重試':'read · failed, retry needed',
+  '已停止；完成':'Stopped; completed','讀取完成；成功':'Reading complete; succeeded','位 · 失敗需重試':'· failed, retry needed',
+  '已停止讀取；已完成的摘要會保留。':'Reading stopped. Completed summaries are kept.','目前版本無法載入整班摘要，請重新載入頁面後重試。':'This version cannot load all summaries. Reload the page and try again.',
+  '顯示':'Showing','本堂排定進度':'Scheduled progress','已啟用教材':'Enabled lesson','課程狀態':'Course status','課程狀態與詳細資訊':'Course status and details'
+})
+Object.assign(en,{
+  '來源沒有完整日期，且目前版本無法從報告編輯頁補讀日期。':'The source has no full date, and this version cannot read it from the report editor.',
+  '所選課次的原站報告沒有提供完整日期。':'The source report does not provide a full date for this session.',
+  '未找到所選課次日期之前、且含實際教學內容的紀錄。':'No lesson with teaching content was found before this session.',
+  '同一天有多份教學紀錄，無法可靠排序；請逐份查看。':'Multiple lesson reports share this date and cannot be reliably ordered. Review each one.',
+  '日期未提供':'Date unavailable',
+  '正在讀取此學生的相關報名與教學紀錄…':'Reading this student’s enrollment and lesson history…',
+})
 const attributes=['placeholder','title','aria-label']
 const originals=new WeakMap()
 function translate(value){
@@ -53,6 +90,7 @@ function translate(value){
     [/^來源資料 (\d+) 列 · 歷史待讀取 (\d+) 份$/,'Source records: $1 rows · history reports pending: $2'],
     [/^批次 (\d+)\/(\d+) · 已寫入 (\d+) · 略過 (\d+) · 失敗 (\d+)$/,'Batches: $1/$2 · written: $3 · skipped: $4 · failed: $5'],
     [/^仍有 (\d+) 份歷史資料待讀取或處理。$/,'$1 history reports remain to read or resolve.'],
+    [/^位本堂學生的上次教學摘要 · 讀取課次：$/,'students’ previous lesson summaries · session read: '],
     [/^已完成 (\d+)\/(\d+) 批$/,'Completed $1/$2 batches'],
     [/^本機草稿期限：(.+)$/,'Local draft expires: $1'],
     [/^來源裝置：(.+) · 草稿期限七天$/,'Source device: $1 · draft retained for seven days'],
