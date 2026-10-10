@@ -6,7 +6,7 @@ import { historyIdentity, planHistory, teachingFields, bindingStillMatches } fro
 import { createHistoryWorkbench } from './history-workbench.js'
 import { createReportSkipController } from './report-skip-controller.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
-import { labels, splitBatches, validateBatches, importBatchRequest, workspaceErrorMessage, plainText, suggestedValue, retryHistoryWork } from './workspace-model.js'
+import { labels, splitBatches, validateBatches, importBatchRequest, workspaceErrorMessage, plainText, suggestedValue } from './workspace-model.js'
 import { workflowState, combineWorkRecords, workCategory } from './workflow-state.js'
 import {comparison,decisionResult,semanticValue,outcomeMetrics} from './review-ui.js'
 import { initWorkspaceI18n } from './workspace-i18n.js'
@@ -467,6 +467,7 @@ async function preview(reuse = false) {
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
   }
   work.previewDirty=true;delete work.previewError;previewResults=[];$('apply').disabled=true;$('preview-section').hidden=true
+  try {
   await save()
   if (!reuse) {
     await mappingController.resolveFieldRules()
@@ -537,6 +538,17 @@ async function preview(reuse = false) {
     }
   }
   work.status = 'previewed'; delete work.previewError; work.previewDirty = false; work.mappingDirty = false; work.batchCount = work.batches.length; await save(); renderDifferences(); $('apply').disabled=work.batches.length===0; notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : '差異已更新，請檢查後確認匯入。')
+  } catch(error) {
+    const alreadyRecorded=work.previewError
+    work.previewDirty=true
+    if(!alreadyRecorded)work.previewError={code:error.code||'PREVIEW_FAILED',message:error.message||'Preview failed'}
+    previewResults=[]
+    $('apply').disabled=true;$('preview-section').hidden=true
+    taskStatus()
+    notice(globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗，請檢查後重試。',true)
+    if(!alreadyRecorded)try{await save()}catch{}
+    throw error
+  }
 }
 function renderNoopSummary() {
   work.previewEvaluated=true;work.previewDirty=true;previewResults=[];$('apply').disabled=true;show('preview-section');stage('import','repreview')
@@ -761,7 +773,8 @@ async function resumeImport() {
     notice('已使用原冪等鍵檢查未確認批次。檢視差異後，再按「確認並分批匯入」。')
     return
   }
-  await apply()
+  await preview(true)
+  notice('已用原批次與檢查點重新核對。請檢視差異，再明確選擇「確認並同步」；此步驟沒有寫入教學資料。')
 }
 async function readForm() {
   if (!reportSourceReady) throw new Error('來源分頁沒有開啟可辨識的報告表單。請在網站開啟「記錄」表單後重新讀取。')
@@ -904,14 +917,48 @@ async function updateWorkMetadata(item,changes){
   if(item.local){Object.assign(item.local,changes);await send({type:'workspace-store',action:'put',work:item.local})}
   renderWorkRecords()
 }
+async function flushWorkBeforeSwitch(nextId){
+  const current=work
+  if(!current||current.id===nextId)return
+  await saveChain
+  if(unsaved&&unsavedWorkId===current.id&&!await save())throw new Error('目前工作草稿尚未保存；已保留畫面，請重試保存後再切換。')
+}
 async function setSourceForWork(row){
   const expected=row.snapshot?.classId||row.sourceClassId
   let candidate=tabs.find(tab=>tab.id===row.sourceTab&&tab.path===row.sourcePath)
-  if(!candidate){const matches=tabs.filter(tab=>tab.path===row.sourcePath);if(matches.length===1)candidate=matches[0];else if(matches.length>1){const verified=[];for(const tab of matches){try{const c=await send({type:'workspace-source',action:'context',tabId:tab.id,sourcePath:tab.path});if(!expected||c.classId===expected)verified.push(tab)}catch{}}if(verified.length===1)candidate=verified[0];else throw new Error(verified.length?'找到多個相同班級的來源分頁；請在清單選擇要使用的來源。':'目前開啟的來源頁與原工作班級不符。')}}
-  if(!candidate){candidate=await send({type:'workspace-open-source',sourcePath:row.sourcePath});tabs.push(candidate);$('source-tab').add(new Option(`${candidate.title} · ${candidate.path}`,candidate.id))}
-  $('source-tab').value=String(candidate.id);selectedPath=candidate.path;const c=await source('context');if(expected&&c.classId!==expected)throw new Error('來源班級與原工作不符；請檢查新開啟的來源頁面。');sourceContext=c;classSourceReady=Boolean(c.classId);reportSourceReady=Boolean(c.reportOpen);return candidate
+  if(!candidate){const matches=tabs.filter(tab=>tab.path===row.sourcePath);if(matches.length===1)candidate=matches[0];else if(matches.length>1){const verified=[];for(const tab of matches){try{const c=await send({type:'workspace-source',action:'context',tabId:tab.id,sourcePath:tab.path});if(!expected||String(c.classId)===String(expected))verified.push(tab)}catch{}}if(verified.length===1)candidate=verified[0];else throw new Error(verified.length?'找到多個相同班級的來源分頁；請在清單選擇要使用的來源。':'目前開啟的來源頁與原工作班級不符。')}}
+  if(!candidate){candidate=await send({type:'workspace-open-source',sourcePath:row.sourcePath});tabs.push(candidate)}
+  if(![...$('source-tab').options].some(option=>option.value===String(candidate.id)))$('source-tab').add(new Option((candidate.title||'來源分頁')+' · '+candidate.path,candidate.id))
+  const switching=work?.id!==row.id
+  if(switching){generation++;historyCheckSequence++;historyLocalSequence++;previewResults=[]}
+  $('source-tab').value=String(candidate.id);selectedPath=candidate.path
+  const c=await source('context')
+  if(expected&&String(c.classId)!==String(expected))throw new Error('來源班級與原工作不符；請檢查新開啟的來源頁面。')
+  if(row.type==='import'&&!c.classId)throw new Error('原來源班級目前無法讀取；請重新開啟原班級頁後重試，工作草稿仍已保留。')
+  if(switching){historyPlan=[];historyArchives.clear();historyRoutes.clear()}
+  sourceContext=c;classSourceReady=Boolean(c.classId);reportSourceReady=Boolean(c.reportOpen)
+  $('source-label').textContent=[c.sourceOrigin||'https://corp.orangeapple.co',c.title||candidate.title||candidate.path,c.sourcePath||candidate.path].join(' · ')
+  $('collect').disabled=!classSourceReady;$('read-form').disabled=!reportSourceReady
+  return candidate
 }
-async function openWorkRecord(item){const row=item.local;if(!row){renderWorkDetail(item);return}if(row.type==='import'){await setSourceForWork(row);work=row.status==='partial_complete'?retryHistoryWork(row):row;activeWorks.import=work;$('include-internal-notes').checked=work.includeInternalNotes===true;flow('import');if(row.batches){await resumeImport();return}if(work.history?.next<work.history?.paths.length)await collectHistory();await save();await mappingView();renderHistoryIssues();return}if(row.type==='prefill'){await setSourceForWork(row);work=row;activeWorks.prefill=work;flow('prefill');notice('已恢復預填工作。請重新讀取原生表單並核對，不會自動套用。')}}
+async function restoreImportWork(row){
+  await flushWorkBeforeSwitch(row.id)
+  await setSourceForWork(row)
+  work=row;activeWorks.import=work;$('include-internal-notes').checked=work.includeInternalNotes===true
+  $('continue-work').hidden=true;flow('import');activeStages.import=2
+  if(work.history&&work.history.next<work.history.paths.length)await collectHistory()
+  if(!work.batches?.length){work.previewDirty=true;previewResults=[];$('apply').disabled=true;$('preview-section').hidden=true}
+  await save();await mappingView();renderHistoryIssues()
+  if(work.batches?.length&&work.jobId)await resumeImport()
+  else if(work.batches?.length){work.previewDirty=true;work.previewError={code:'MISSING_JOB_CHECKPOINT',message:'批次缺少伺服器工作識別，請更新差異後再核對。'};$('apply').disabled=true;notice('已恢復草稿，但找不到原伺服器檢查點。請更新差異重新核對；不會直接寫入。',true)}
+  else if(work.history&&work.history.next>=work.history.paths.length)stage('import','preview')
+}
+async function openWorkRecord(item){
+  const row=item.local
+  if(!row){renderWorkDetail(item);return}
+  if(row.type==='import'){await restoreImportWork(row);return}
+  if(row.type==='prefill'){await flushWorkBeforeSwitch(row.id);await setSourceForWork(row);work=row;activeWorks.prefill=work;flow('prefill');notice('已恢復預填工作。請重新讀取原生表單並核對，不會自動套用。')}
+}
 async function repeatWork(row){await setSourceForWork(row);$('date-from').value=row.dateFrom||$('date-from').value;$('date-to').value=row.dateTo||$('date-to').value;$('all-history').checked=row.dateFrom==='1900-01-01'&&row.dateTo==='9999-12-31';work=null;activeWorks.import=null;continuation=null;flow('import');await collect();notice('已建立新工作；身份對應與欄位偏好會重新驗證，逐筆覆寫及略過選擇不會沿用。')}
 function renderWorkDetail(item){
   const detail=$('work-detail'),row=item.local||item.remote||{},locale=globalThis.edulogUi?.locale||'zh-TW'
@@ -992,7 +1039,7 @@ $('course').addEventListener('change', () => void runLatest(async () => { await 
 $('class-session').addEventListener('change', () => void runLatest(async () => { $('new-session').hidden = $('class-session').value !== 'new'; await loadScopedMappingData(); updateMappingOptions() }, { label: '正在查詢學生報名與課次' }))
 $('course-source-id').addEventListener('change', updateMappingOptions)
 $('start-new-work').onclick=()=>{continuation=null;$('continue-work').hidden=true;work=null;activeWorks.import=null;activeStages.import=1;flow('import');$('collect').disabled=!classSourceReady;taskStatus()}
-$('resume-source-work').onclick=()=>void runLatest(async()=>{const row=continuation;if(!row)return;work=row.status==='partial_complete'?retryHistoryWork(row):row;activeWorks.import=work;$('continue-work').hidden=true;$('collect').disabled=!classSourceReady;$('include-internal-notes').checked=work.includeInternalNotes===true;flow('import');if(work.batches){await resumeImport();return}if(work.history?.next<work.history?.paths.length)await collectHistory();await mappingView();renderHistoryIssues()},{label:'正在恢復未完成工作'})
+$('resume-source-work').onclick=()=>void run(async()=>{const row=continuation;if(!row)return;await restoreImportWork(row)},{label:'正在恢復未完成工作'})
 for (const [id, action] of Object.entries({ collect, preview: () => preview(), repreview: () => preview(!work.mappingDirty), apply, resume: resumeImport, 'read-form': readForm, compare, prefill, 'refresh-work': loadWork, reconnect: initialize })) $(id).addEventListener('click', () => void run(action, { label: ({ collect:'正在讀取來源班級與學習紀錄', preview:'正在比對 EduLog 目標與匯入差異', repreview:'正在重新檢查資料差異', apply:'正在寫入匯入批次', resume:'正在檢查未完成批次', 'read-form':'正在讀取原站報告目標', compare:'正在查詢報告欄位並核對目標', prefill:'正在套用已確認欄位至原站', 'refresh-work':'正在更新工作紀錄', reconnect:'正在重新驗證連線' })[id] || '正在處理工作', readOnly: ['collect','read-form','compare','refresh-work','reconnect'].includes(id) }))
 $('retry-history-save').addEventListener('click',()=>void run(async()=>{const owner=work;if(!owner)return;await save();if(owner!==work)return;if(owner.history)await collectHistory();await mappingView();renderHistoryIssues()},{label:'正在重試保存草稿並繼續讀取'}))
 $('cancel-read').addEventListener('click', () => void cancelRead())

@@ -10,6 +10,7 @@ const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
 const prepareScript = script.slice(script.indexOf('function prepareRows()'), script.indexOf('async function preview('))
 const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
 const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
+const resumeScript = script.slice(script.indexOf('async function resumeImport()'), script.indexOf('async function readForm()'))
 const bindingScript=script.slice(script.indexOf('async function applyHistoryBindings('),script.indexOf('async function apply()'))
 function bindingFixture() {
  const plan={historyId:'history',itemKey:'301:report:401',expectedFields:{content:'confirmed'},occurrence:{id:'occurrence',report:{version:1}},body:{key:'original-key',class_occurrence_id:'occurrence',overwrite:[]},status:'pending'},calls=[],saved=[]
@@ -36,7 +37,7 @@ test('a late binding response cannot update a changed work context',async()=>{
 const row = n => ({source_id:String(n),target_id:`target-${n}`,overwrite:[],record:{kind:'course',data:{subject:'合成課程',stage:'初階'}}})
 function previewFixture(work, rows) {
   const calls=[],saved=[],controls={apply:{disabled:false},'preview-section':{hidden:false}}
-  const context=vm.createContext({work,rows,labels,splitBatches,validateBatches,importBatchRequest,crypto:{randomUUID:(()=>{let n=0;return()=>`new-key-${++n}`})()},integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),notice(){},api:async(operation,body,extra)=>{
+  const context=vm.createContext({work,rows,labels,splitBatches,validateBatches,importBatchRequest,crypto:{randomUUID:(()=>{let n=0;return()=>`new-key-${++n}`})()},integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),taskStatus(){},notice(){},api:async(operation,body,extra)=>{
     calls.push({operation,body:structuredClone(body),extra})
     if(['preview','apply'].includes(operation)&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'})
     if(operation==='job')return{id:'new-job'}
@@ -46,9 +47,9 @@ function previewFixture(work, rows) {
     }
     return{}
   }})
-  vm.runInContext(`${prepareScript}\n${previewScript}`,context)
+  vm.runInContext(`${prepareScript}\n${previewScript}\n${resumeScript}`,context)
   context.prepareRows=()=>rows
-  return {context,calls,saved,controls,preview:reuse=>context.preview(reuse)}
+  return {context,calls,saved,controls,preview:reuse=>context.preview(reuse),resume:()=>context.resumeImport()}
 }
 const work = () => ({id:'local-work',type:'import',status:'collected',done:0,jobId:'old-job',batches:[{key:'old-key',rows:[row(1)]}],snapshot:{sourceOrigin:'https://corp.orangeapple.co',classId:'11'},destination:{course_ids:['course']},uiState:[{id:'student',value:'kept'}]})
 test('no new data produces a review summary without cancelling or creating a server job',async()=>{
@@ -58,7 +59,7 @@ test('no new data produces a review summary without cancelling or creating a ser
 test('invalid local rows never cancel the old job, replace its preview, or create a new one',async()=>{
   const current=work(),original=structuredClone(current),f=previewFixture(current,[row(1),{...row(1),target_id:'conflict'}])
   await assert.rejects(f.preview(false),e=>e.code==='SOURCE_ID_CONFLICT')
-  assert.deepEqual(current,{...original,previewDirty:true});assert.equal(f.controls.apply.disabled,true);assert.equal(f.context.previewResults.length,0);assert.equal(f.calls.length,0);assert.equal(f.saved.length,1)
+  assert.equal(current.previewError.code,'SOURCE_ID_CONFLICT');assert.equal(JSON.stringify({...current,previewError:undefined}),JSON.stringify({...original,previewDirty:true,previewError:undefined}));assert.equal(f.controls.apply.disabled,true);assert.equal(f.context.previewResults.length,0);assert.equal(f.calls.length,0);assert.equal(f.saved.length,2)
 })
 
 test('failed previews retain the new job and choices, and can regenerate without applying anything',async()=>{
@@ -90,6 +91,14 @@ test('resume keeps original keys and rows, skips completed batches and checks un
   assert.deepEqual(f.calls.filter(c=>c.operation==='preview').map(c=>c.body.key),['uncertain','remaining'])
   assert.equal(f.calls.some(c=>['job','job-status','apply'].includes(c.operation)),false)
   assert.equal(f.context.previewResults[0].batchIndex,2)
+})
+test('restoring a saved work with batches rechecks the original checkpoint but never writes automatically',async()=>{
+  const current={...work(),status:'paused',batches:[{key:'saved-batch',rows:[row(5)],previewFingerprint:'a'.repeat(64)}]},f=previewFixture(current,[])
+  f.context.results=[{rows:[],counts:{}}]
+  await f.resume()
+  assert.deepEqual(f.calls.filter(call=>call.operation==='preview').map(call=>call.body.key),['saved-batch'])
+  assert.equal(f.calls.some(call=>call.operation==='apply'),false)
+  assert.equal(current.status,'previewed');assert.equal(current.batches[0].key,'saved-batch');assert.equal(current.previewDirty,false)
 })
 test('saved preview fingerprints stay local when existing batches are checked again',async()=>{
   const dependency={key:'parent-key',fingerprint:'a'.repeat(64)}
@@ -135,7 +144,7 @@ test('malformed legacy batches stop before the API and are never silently normal
   const current={...work(),done:1,batches:[{key:'committed',rows:[row(1)]},{key:'remaining',rows:[row(1)]}]}
   const original=JSON.stringify(current),f=previewFixture(current,[])
   await assert.rejects(f.preview(true),e=>e.code==='DUPLICATE_SOURCE_IDS')
-  assert.equal(JSON.stringify(current),JSON.stringify({...JSON.parse(original),previewDirty:true}));assert.equal(f.calls.length,0)
+  assert.equal(current.previewError.code,'DUPLICATE_SOURCE_IDS');assert.equal(JSON.stringify({...current,previewError:undefined}),JSON.stringify({...JSON.parse(original),previewDirty:true,previewError:undefined}));assert.equal(f.calls.length,0)
 })
 test('an invalid reference is preserved as a blocked row while the valid rows receive a fresh preview',async()=>{
   const current=work(),rows=[row(1),row(2)],f=previewFixture(current,rows)
