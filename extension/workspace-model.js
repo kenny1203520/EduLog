@@ -26,6 +26,17 @@ export function validateBatches(batches) {
     if (identity) seen.add(identity)
   }
 }
+/** Project local batch state onto the strict import API contract. */
+export function importBatchRequest(batch) {
+  if (!batch || typeof batch.key !== 'string' || !Array.isArray(batch.rows)) {
+    const error = new Error('匯入批次資料不完整，請重新核對工作草稿。')
+    error.code = 'IMPORT_BATCH_INVALID'
+    throw error
+  }
+  const request = { key: batch.key, rows: batch.rows }
+  if (batch.dependencies !== undefined) request.dependencies = batch.dependencies
+  return request
+}
 export function splitBatches(rows, limit = 180000) {
   const batches = []; let current = []
   const bytes = value => new TextEncoder().encode(JSON.stringify({ key: '00000000-0000-4000-8000-000000000000', rows: value })).byteLength

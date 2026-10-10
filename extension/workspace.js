@@ -6,7 +6,7 @@ import { historyIdentity, planHistory, teachingFields, bindingStillMatches } fro
 import { createHistoryWorkbench } from './history-workbench.js'
 import { createReportSkipController } from './report-skip-controller.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
-import { labels, splitBatches, validateBatches, workspaceErrorMessage, plainText, suggestedValue, retryHistoryWork } from './workspace-model.js'
+import { labels, splitBatches, validateBatches, importBatchRequest, workspaceErrorMessage, plainText, suggestedValue, retryHistoryWork } from './workspace-model.js'
 import { workflowState, combineWorkRecords, workCategory } from './workflow-state.js'
 import {comparison,decisionResult,semanticValue,outcomeMetrics} from './review-ui.js'
 import { initWorkspaceI18n } from './workspace-i18n.js'
@@ -26,7 +26,9 @@ function taskStatus() {
   if(work?.collectionSaveError){const savedAt=work.updatedAt?new Intl.DateTimeFormat(ui?.locale||'zh-TW',{dateStyle:'short',timeStyle:'short'}).format(new Date(work.updatedAt)):ui?.t('work.savedAtUnknown')||'尚無成功保存版本';ui?.text($('draft-status'),'work.saveFailed',{savedAt});$('retry-history-save').hidden=false}
   else {ui?.text($('draft-status'),unsaved&&unsavedWorkId===work?.id?'work.unsaved':work?'work.saved':'work.ready');$('retry-history-save').hidden=true}
   $('task-title').textContent=work?.title||sourceContext?.title||''
-  $('task-status').textContent=work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
+  const previewFailed=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)
+  $('task-status').textContent=previewFailed?(ui?.t('work.previewFailed')||'差異核對失敗，可重試'):work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
+  if(previewFailed)return
   if(work&&ui&&ui.t('work.state.'+work.status)!=='work.state.'+work.status)ui.text($('task-status'),'work.state.'+work.status)
   else ui?.text($('task-status'),'diff.value',{value:work?.status||''})
 }
@@ -164,10 +166,11 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
     if (error.code==='READ_CANCELLED'){$('operation-status').dataset.state='complete';$('operation-title').textContent='已取消唯讀查詢';$('operation-detail').textContent='已完成資料與目前選擇保留；可重新核對。';return false}
     else if (!readOnly && work?.status === 'outcome_unknown') { $('operation-title').textContent = '寫入結果尚未確認'; $('operation-detail').textContent = '未收到這批的確認回應。檢查點已保留；續傳會先用原冪等鍵核對結果，不會建立新的匯入工作。'; notice('寫入結果尚未確認。請使用「檢查並續傳」核對批次狀態。', true) }
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
+    else if(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)){ $('operation-title').textContent=globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗';$('operation-detail').textContent=globalThis.edulogUi?.t('work.previewRetry')||'草稿與批次識別已保留；請重試核對，成功產生新摘要後再確認同步。' }
     else if (error.code === 'RATE_LIMITED') { $('operation-title').textContent = '伺服器暫時限制查詢'; $('operation-detail').textContent = error.retryAfter ? `請於 ${error.retryAfter} 秒後手動重試。` : '請稍後手動重試。' }
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
     if(['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code)&&work?.type==='import'){work.status='paused-extraction';work.collectionError=error.message;work.collectionSaveError=error.code;$('retry-history-save').hidden=false;taskStatus()}
-    notice(error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前輸入與對應仍保留，請依上方說明處理後重試。', true)
+    notice(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)?globalThis.edulogUi?.t('work.previewRetryNotice')||'差異核對失敗，草稿已保留；請重試核對，成功後再確認同步。':error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前輸入與對應仍保留，請依上方說明處理後重試。', true)
     $('diagnostic').textContent = [error.code || 'WORK_FAILED', error.rawMessage, ...Object.entries(error.fields || {}).flatMap(([key, messages]) => messages.map(message => `${key}：${message}`)), error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
   } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('source-tab').disabled=sourceDisabled; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); taskStatus(); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; $('apply').disabled = !previewResults.length || work?.previewDirty === true; finishRead() }
 }
@@ -457,8 +460,10 @@ async function preview(reuse = false) {
   if (!reuse) {
     if (work.jobId && (work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status))) throw new Error('此工作已有寫入或待確認檢查點。請使用「檢查並續傳」核對原批次，不能重新建立工作。')
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
-    work.previewDirty=true;previewResults=[];$('apply').disabled=true
-    await save()
+  }
+  work.previewDirty=true;delete work.previewError;previewResults=[];$('apply').disabled=true;$('preview-section').hidden=true
+  await save()
+  if (!reuse) {
     await mappingController.resolveFieldRules()
     if(!integrationCapabilities.enrollment_history_reports)throw Object.assign(new Error('目前連線未提供歷史保存功能。請重新檢查連線；已讀取資料與檢查點會保留。'),{code:'CAPABILITY_UNAVAILABLE'})
     await refreshHistoryPlan()
@@ -490,7 +495,7 @@ async function preview(reuse = false) {
   for (let i = work.done || 0; i < work.batches.length; i++) {
     const batch = work.batches[i]
     try {
-      const result = await api('preview', batch, { jobId: work.jobId })
+      const result = await api('preview', importBatchRequest(batch), { jobId: work.jobId })
       if (result.batch_fingerprint) {
         batch.previewFingerprint = result.batch_fingerprint
         for (const child of work.batches.slice(i + 1)) if (child.dependencies?.some(ref => ref.key === batch.key)) child.dependencies = child.dependencies.map(ref => ref.key === batch.key ? { key: batch.key, fingerprint: result.batch_fingerprint } : ref)
@@ -503,7 +508,11 @@ async function preview(reuse = false) {
       const parts = entry?.[0].split('.') || []
       const kind = parts[1], sourceId = parts.slice(2, -1).join('.'), field = parts.at(-1)
       const rowIndex = kind && sourceId ? batch.rows.findIndex(row => row.record?.kind === kind && row.source_id === sourceId) : -1
-      if (rowIndex < 0 || work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status)) throw error
+      if (rowIndex < 0 || work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status)) {
+        work.previewError={code:error.code||'PREVIEW_FAILED',message:error.message,batchKey:batch.key}
+        await save()
+        throw error
+      }
       batch.rows.splice(rowIndex, 1)
       work.blockedRows ||= []
       work.blockedRows.push({ kind, source_id: sourceId, field, reason: entry[1][0] || 'REFERENCE_CHECK_FAILED' })
@@ -522,7 +531,7 @@ async function preview(reuse = false) {
       notice(globalThis.edulogUi?.t('work.previewBlockedRow',{kind:labels[kind]||kind,sourceId}) || `${labels[kind]||kind} ${sourceId} 需要處理；其他資料繼續核對。`,true)
     }
   }
-  work.status = 'previewed'; work.previewDirty = false; work.mappingDirty = false; work.batchCount = work.batches.length; await save(); renderDifferences(); $('apply').disabled=work.batches.length===0; notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : '差異已更新，請檢查後確認匯入。')
+  work.status = 'previewed'; delete work.previewError; work.previewDirty = false; work.mappingDirty = false; work.batchCount = work.batches.length; await save(); renderDifferences(); $('apply').disabled=work.batches.length===0; notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : '差異已更新，請檢查後確認匯入。')
 }
 function renderNoopSummary() {
   work.previewEvaluated=true;work.previewDirty=true;previewResults=[];$('apply').disabled=true;show('preview-section');stage('import','repreview')
@@ -718,7 +727,7 @@ async function apply() {
       // the chosen class. Collected data may resume without a closed source tab.
       const sourceCheck = await send({ type: 'workspace-check-source', tabId: work.sourceTab, sourcePath: work.sourcePath })
       if (sourceCheck.closed && !work.batches?.[i]?.rows?.length) throw new Error('來源分頁已關閉且此批尚未完整擷取。請重新開啟相同班級頁後再續傳。')
-      await api('apply', work.batches[i], { jobId: work.jobId })
+      await api('apply', importBatchRequest(work.batches[i]), { jobId: work.jobId })
       const previewBatch = previewResults.find(result => result.batchIndex === i)
       if (previewBatch) {
         const summary = {}
