@@ -43,10 +43,10 @@ describe('workspace API contract', () => {
     const {app,rpc}=appWith({items:[],next_cursor:null})
     const list=await request(app).get('/api/extension/v1/work-records?limit=50').set('Authorization','Bearer test')
     expect(list.status).toBe(200);expect(rpc.mock.calls[0]![0]).toBe('web_extension_work_records');expect(rpc.mock.calls[0]![1]).toMatchObject({p_operation:'list',p_input:{limit:50}})
-    const meta={work_id:id,expected_revision:null,changes:{source_origin:'https://corp.orangeapple.co',source_path:'/courses/dt/4773',source_class_id:'4773',title:'Python 同步',pinned:true}}
+    const meta={work_id:id,expected_revision:null,changes:{source_origin:'https://corp.orangeapple.co',source_path:'/courses/dt/4773',source_class_id:'4773',title:'Python 同步',pinned:true,server_job_id:id,submission_round:1}}
     const saved=await request(app).patch(`/api/extension/v1/work-records/${id}`).set('Authorization','Bearer test').send(meta)
     expect(saved.status).toBe(200);expect(rpc.mock.calls.at(-1)![1]).toMatchObject({p_operation:'patch',p_input:meta})
-    for(const invalid of [{...meta,changes:{...meta.changes,raw_report:'must not sync'}},{...meta,changes:{...meta.changes,source_path:'/students/4'}},{...meta,changes:{...meta.changes,title:'x'.repeat(101)}},{...meta,actor_id:id}])
+    for(const invalid of [{...meta,changes:{...meta.changes,raw_report:'must not sync'}},{...meta,changes:{...meta.changes,source_path:'/students/4'}},{...meta,changes:{...meta.changes,title:'x'.repeat(101)}},{...meta,changes:{...meta.changes,submission_round:0}},{...meta,actor_id:id}])
       expect((await request(app).patch(`/api/extension/v1/work-records/${id}`).set('Authorization','Bearer test').send(invalid)).status).toBe(400)
     expect((await request(app).get('/api/extension/v1/work-records?limit=51').set('Authorization','Bearer test')).status).toBe(400)
   })
@@ -253,6 +253,18 @@ describe('workspace API contract', () => {
       const { app } = appWith(null, { message }); const response = await request(app).get('/api/extension/v1/context').set('Authorization', `Bearer ${'a'.repeat(64)}`)
       expect(response.status).toBe(status); expect(response.body.error.code).toBe(message)
     }
+  })
+  it('returns bounded, request-scoped diagnostics for stale import previews', async()=>{
+    const batchKey=id,body={key:batchKey,rows:[row]}
+    const details=JSON.stringify({kind:'batch',source_id:batchKey,field:'preview',reason:'REQUEST_FINGERPRINT_CHANGED'})
+    const {app}=appWith(null,{message:'PREVIEW_STALE',details},true)
+    const response=await request(app).post(`/api/extension/v1/imports/${id}/apply`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(response.status).toBe(409)
+    expect(response.body.error.fields).toEqual({[`batches.${batchKey}.preview`]:['REQUEST_FINGERPRINT_CHANGED']})
+    expect(JSON.stringify(response.body)).not.toContain('Test A')
+    const unsafe=appWith(null,{message:'PREVIEW_STALE',details:JSON.stringify({kind:'student',source_id:'../../secret',field:'target_version',reason:'TARGET_VERSION_CHANGED'})},true).app
+    const fallback=await request(unsafe).post(`/api/extension/v1/imports/${id}/apply`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(fallback.status).toBe(409);expect(fallback.body.error.fields).toBeUndefined()
   })
   it('does not expose a client confirmation endpoint', async () => {
     const { app, rpc } = appWith({}); const response = await request(app).post('/api/extension/v1/report-pushes/confirm').set('Authorization', `Bearer ${'a'.repeat(64)}`).send({ status: 'confirmed' })

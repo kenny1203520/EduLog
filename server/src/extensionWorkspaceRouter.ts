@@ -72,6 +72,7 @@ const syncPreferencesPatch = z.object({ source_origin: source, adapter_version: 
 const workRecordsQuery = z.object({ limit: z.coerce.number().int().min(1).max(50).default(50), cursor: z.string().max(100).regex(/^\d{4}-\d\d-\d\dT[^|]{1,40}\|[a-f0-9-]{36}$/i).optional() }).strict()
 const workRecordPatch = z.object({ work_id: uuid, expected_revision: uuid.nullable(), changes: z.object({
   server_job_id: uuid.nullable().optional(), source_origin: source.optional(), source_path: workPath.optional(),
+  submission_round: z.number().int().min(1).max(1000).optional(),
   source_class_id: z.string().trim().min(1).max(100).optional(), source_label: z.string().max(160).optional(),
   target_classroom_id: uuid.nullable().optional(), target_class_session_id: uuid.nullable().optional(),
   target_label: z.string().max(160).optional(), title: z.string().max(100).optional(), source_device: z.string().max(80).optional(),
@@ -109,6 +110,20 @@ function databaseError(error: { message: string; code?: string; details?: string
       }
     } catch { /* Older database functions return only the generic conflict code. */ }
     return new ApiError(409,'VERSION_CONFLICT','The saved match or target changed. Recheck before confirming.')
+  }
+  if(error.message==='PREVIEW_STALE') {
+    try {
+      const diagnostic=JSON.parse(error.details??'') as {kind?:unknown;source_id?:unknown;field?:unknown;reason?:unknown}
+      const kinds=new Set(['batch','student','course','class_session','classroom','enrollment','admission','course_rule','history_report','report'])
+      const fields=new Set(['preview','target_version','occurrence_report_version'])
+      const reasons=new Set(['PREVIEW_NOT_FOUND','REQUEST_FINGERPRINT_CHANGED','TARGET_VERSION_CHANGED','OCCURRENCE_REPORT_VERSION_CHANGED'])
+      const keyIsSafe=typeof diagnostic.source_id==='string'&&diagnostic.source_id.length>0&&diagnostic.source_id.length<=256&&/^[a-zA-Z0-9._:-]+$/.test(diagnostic.source_id)
+      if(typeof diagnostic.kind==='string'&&kinds.has(diagnostic.kind)&&keyIsSafe&&typeof diagnostic.field==='string'&&fields.has(diagnostic.field)&&typeof diagnostic.reason==='string'&&reasons.has(diagnostic.reason)) {
+        const key=diagnostic.kind==='batch'?`batches.${diagnostic.source_id}.${diagnostic.field}`:`rows.${diagnostic.kind}.${diagnostic.source_id}.${diagnostic.field}`
+        return new ApiError(409,'PREVIEW_STALE','The preview is no longer current. Recheck the unsubmitted work before applying.',{[key]:[diagnostic.reason]})
+      }
+    } catch { /* Older database functions return the generic stale code. */ }
+    return new ApiError(409,'PREVIEW_STALE','The preview is no longer current. Recheck the unsubmitted work before applying.')
   }
   return statuses[error.message] ? new ApiError(statuses[error.message]!, error.message, error.message) : mapDatabaseError(error)
 }
