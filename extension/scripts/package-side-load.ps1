@@ -51,6 +51,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-workspace-transport-recovery.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-stale-import-recovery.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-preview-stale-precision.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-paused-import-repreview.md') -Destination $stagingPath
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
@@ -72,7 +73,8 @@ try {
         '1000134_atomic_history_reconciliation.sql',
         '1000135_extension_mapping_conflict_diagnostics.sql',
         '1000136_import_preview_diagnostics_and_work_rounds.sql',
-        '1000137_consistent_preview_stale_diagnostics.sql'
+        '1000137_consistent_preview_stale_diagnostics.sql',
+        '1000138_paused_import_repreview.sql'
     )) {
         Copy-Item -LiteralPath (Join-Path $repositoryRoot "supabase/migrations/$migration") -Destination $migrationPath
     }
