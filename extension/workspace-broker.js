@@ -250,6 +250,10 @@ export function installWorkspaceBroker(getStatus) {
         const tabs = (await chrome.tabs.query({})).filter(t => supported(t.url)).map(t => ({ id: t.id, title: t.title, path: new URL(t.url).pathname, url: t.url }))
         return { data: { binding: { instance: bound.instance, userId: bound.userId }, status: bound.status, tabs } }
       }
+      if (message.type === 'workspace-store-authorize') {
+        const bound = await binding(message.binding)
+        return { data: { instance: bound.instance, userId: bound.userId, action: message.action, workId: message.workId, revision: message.revision } }
+      }
       if (!message.binding || typeof message.binding.instance !== 'string' || typeof message.binding.userId !== 'string') fail('缺少實例與使用者工作識別。')
       if (message.type === 'workspace-cancel-read') {
         if (!/^[a-f0-9-]{36}$/i.test(message.requestId || '')) fail('查詢識別碼不正確。')

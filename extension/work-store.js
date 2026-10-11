@@ -1,4 +1,4 @@
-// This module is imported only by the trusted extension service worker.
+// Shared by the trusted extension workspace and service worker.
 const DATABASE_NAME = 'edulog-integration-work'
 const DATABASE_VERSION = 2
 const PAYLOAD_CHUNK_BYTES = 512 * 1024
@@ -75,8 +75,22 @@ async function transaction(names, mode, operation) {
   catch (error) { try { tx.abort() } catch { /* It may have already completed. */ } await complete.catch(() => {}); throw storageFailure(error) }
 }
 
+function summaryOf(row) {
+  return {
+    id: row.id, type: row.type, title: row.title, status: row.status,
+    updatedAt: row.updatedAt, expiresAt: row.expiresAt, sourceTitle: row.sourceTitle,
+    sourcePath: row.sourcePath, sourceOrigin: row.sourceOrigin, jobId: row.jobId,
+    done: row.done, batchCount: row.batchCount ?? row.batches?.length,
+    applied: row.applied, skipped: row.skipped, failed: row.failed,
+    pinned: row.pinned, archived_at: row.archived_at,
+    hasSnapshot: Boolean(row.snapshot), hasBatches: Boolean(row.batches?.length),
+    interfaceState: row.interfaceState ? { stage: row.interfaceState.stage } : undefined,
+    snapshotSummary: row.snapshot ? { title: row.snapshot.title, classId: row.snapshot.classId, sourceOrigin: row.snapshot.sourceOrigin } : undefined,
+  }
+}
+
 function headerOf(row, byteLength, chunkCount) {
-  return { id: row.id, instance: row.instance, userId: row.userId, revision: row.revision, updatedAt: row.updatedAt, expiresAt: row.expiresAt, __edulogPayload: { byteLength, chunkCount } }
+  return { id: row.id, instance: row.instance, userId: row.userId, revision: row.revision, updatedAt: row.updatedAt, expiresAt: row.expiresAt, summary: summaryOf(row), __edulogPayload: { byteLength, chunkCount } }
 }
 
 async function decodePayload(header, rows) {
@@ -177,17 +191,9 @@ export const workStore = {
     })
   },
   async list(binding) {
-    return transaction(['work', 'payloads'], 'readwrite', async stores => {
-      const rows = await request(stores.work.getAll()), payloadRows = await request(stores.payloads.getAll())
-      const byWork = new Map()
-      for (const row of payloadRows) { const group = byWork.get(row.workId) || []; group.push(row); byWork.set(row.workId, group) }
-      const result = []
-      for (const header of rows) {
-        if (header.expiresAt <= Date.now()) { await removePayload(stores.payloads, header.id); await request(stores.work.delete(header.id)); continue }
-        if (header.instance !== binding.instance || header.userId !== binding.userId) continue
-        result.push(header.__edulogPayload ? await decodePayload(header, byWork.get(header.id) || []) : header)
-      }
-      return result
-    })
+    await workStore.purge()
+    return transaction('work', 'readonly', async stores => (await request(stores.work.getAll()))
+      .filter(header => header.instance === binding.instance && header.userId === binding.userId)
+      .map(header => ({ ...(header.summary || summaryOf(header)), instance: header.instance, userId: header.userId, revision: header.revision, __summary: true })))
   },
 }
