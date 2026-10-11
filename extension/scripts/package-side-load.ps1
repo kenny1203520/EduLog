@@ -50,6 +50,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-mapping-conflict-recovery.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-workspace-transport-recovery.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-stale-import-recovery.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-stale-review-summary.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-preview-stale-precision.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-paused-import-repreview.md') -Destination $stagingPath
 
