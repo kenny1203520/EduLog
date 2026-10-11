@@ -49,6 +49,31 @@ Object.assign(en,{
   'EduLog 工作紀錄暫時無法載入':'EduLog work history could not be loaded','本機續傳資料仍可查看；重新整理伺服器紀錄不會改變已提交資料。':'Local checkpoints remain available. Refreshing server history will not change submitted data.',
   '重試載入伺服器紀錄':'Retry server history','重試讀取本機工作':'Retry local work history','正在恢復所選工作':'Resuming selected work','工作紀錄已更新。':'Work history updated.'
 })
+Object.assign(en,{
+  '同步受阻，請重新核對未提交資料':'Sync blocked. Recheck unsubmitted records.',
+  '同步受阻':'Sync blocked',
+  '本輪同步受阻':'This submission round is blocked',
+  '此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。':'This batch was not submitted. Confirmed successful batches are preserved. Recheck the unsubmitted records and review the new differences before syncing.',
+  '預覽已失效；目前批次未提交。請重新核對未提交資料。':'The preview is stale; this batch was not submitted. Recheck the unsubmitted records.',
+  '重新核對未提交資料':'Recheck unsubmitted records',
+  '查看已保存結果':'View saved results',
+  '處理待確認報告':'Review reports awaiting confirmation',
+  '上次同步未提交：':'Previous sync was not submitted: ',
+  '請求內容與上次預覽不同':'The request differs from the previous preview',
+  'EduLog 目標資料已更新':'EduLog target data changed',
+  '課次報告已更新':'The occurrence report changed',
+  '找不到原預覽':'The original preview was not found',
+  '上一份預覽已失效':'The previous preview is stale',
+  '已重新核對本輪差異，請檢查受影響報告後再確認同步。':'The current round was rechecked. Review affected reports before confirming sync.',
+  '同步工作已完成':'Sync work complete',
+  '同步受阻，預覽已失效':'Sync blocked; preview is stale',
+  '同步受阻，需重新核對':'Sync blocked; recheck required',
+  '本輪同步完成，仍有待處理項目':'This round is complete; some items still need review',
+  '提交輪次：':'Submission rounds: ',
+  '處理待確認項目並更新差異；新一輪只會包含尚未保存的資料。':'Resolve pending items and refresh the preview. The next round will include only unsaved records.',
+  '同步進度與結果':'Sync progress and results',
+  '先前選擇需要重新確認':'Confirm previous choices again','預覽失效後保留了原選擇。請為每個欄位重新選擇採用來源或保留 EduLog，再繼續同步。':'Previous choices were retained after the preview expired. Choose whether to use the source or keep EduLog for each field before continuing.','重新採用來源':'Use source again','改為保留 EduLog':'Keep EduLog instead','目前批次尚未提交':'The current batch was not submitted','原因尚未確認':'The reason has not been confirmed','請重新確認預覽失效前的欄位選擇，再同步。':'Confirm the previous field choices again before syncing.','已重新確認採用來源；請更新差異後再同步。':'Source choice confirmed again. Refresh the preview before syncing.','已改為保留 EduLog；請更新差異後再同步。':'Changed to keep EduLog. Refresh the preview before syncing.','已更新伺服器批次檢查點；草稿狀態與教學資料同步結果分開顯示。':'Server batch checkpoints refreshed. Draft status is shown separately from teaching data sync results.','目前工作沒有可查詢的伺服器提交輪次。':'This work has no server submission rounds to check.','沒有新的可寫入資料 · 已綁定':'No new writable data · already linked','份 · 需處理':' linked · needs review'
+})
 const attributes=['placeholder','title','aria-label']
 const originals=new WeakMap()
 let locale='zh-TW', observer
@@ -56,7 +81,19 @@ Object.assign(en,{'請選擇目標學生':'Choose an EduLog student','此變更�
 function translate(value){
   if(locale!=='en')return value
   if(en[value])return en[value]
+  const staleDetail=/^目前批次尚未提交；已知成功批次保留。原因：(.+)。工作資料列數不等於報告數。$/.exec(value)
+  if(staleDetail)return `The current batch was not submitted; confirmed successful batches remain saved. Reason: ${translate(staleDetail[1])}. Work rows are not report counts.`
   const patterns=[
+    [/^跨裝置輪次關聯尚未保存：(.*)。此裝置的工作草稿仍可使用。$/,'Cross-device submission-round details were not saved: $1. The draft on this device is still available.'],
+    [/^新一輪已在此裝置保存，但伺服器未能保存跨裝置輪次關聯；請保留此裝置的工作草稿。$/,'The new round is saved on this device, but the server could not save its cross-device association. Keep this local draft.'],
+    [/^目前批次尚未提交。原因：(.+)。已成功批次仍保留。$/,'The current batch was not submitted. Reason: $1. Successful batches remain saved.'],
+    [/^此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。$/,'This batch was not submitted. Confirmed successful batches remain saved. Recheck unsubmitted records and review the new differences before syncing.'],
+    [/^預覽失效後保留了原選擇。請為每個欄位重新選擇採用來源或保留 EduLog，再繼續同步。$/,'Previous choices were kept after the preview became stale. Choose whether to use the source or keep EduLog for each field before syncing.'],
+    [/^已重新確認採用來源；請更新差異後再同步。$/,'Source choice confirmed again. Refresh the preview before syncing.'],
+    [/^已改為保留 EduLog；請更新差異後再同步。$/,'Changed to keep EduLog. Refresh the preview before syncing.'],
+    [/^上次同步未提交：(.+)。已重新核對本輪差異，請檢查受影響報告後再確認同步。$/,'The previous sync was not submitted: $1. This round was rechecked. Review affected reports before confirming sync.'],
+    [/^提交輪次：(.*)$/,'Submission rounds: $1'],
+    [/^第 (\d+) 輪 (\d+)\/(\d+) 批$/,'Round $1: $2/$3 batches'],
     [/^待處理報告 (\d+) 份 · 問題 (\d+) 項 · 可同步 (\d+) 份$/,'$1 reports need attention · $2 issues · $3 ready to sync'],
     [/^待處理問題 · (\d+) 項$/,'$1 issues to resolve'],
     [/^(\d+) 項需處理$/,'$1 issues to resolve'],

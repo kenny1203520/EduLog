@@ -32,3 +32,15 @@ test('dynamic review progress and issue guidance are translated in place',async(
   assert.equal(w.document.getElementById('count').textContent,'2 reports need attention · 3 issues · 4 ready to sync');assert.equal(w.document.getElementById('issue').textContent,'2 issues to resolve');assert.equal(w.document.getElementById('saved').textContent,'Saved mapping: "出席" → "present" · Scope: Python.')
   dom.window.close()
 })
+
+test('stale import recovery messages translate their reason and restore the source-language text',async()=>{
+  const source=readFileSync(new URL('../workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p id="title"></p><p id="detail"></p></body></html>',{runScripts:'outside-only'})
+  const w=dom.window;w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'zh-TW'}),set:async()=>{}},onChanged:{addListener:()=>{}}}};w.eval(source+';initWorkspaceI18n()');await new Promise(resolve=>setTimeout(resolve,0))
+  const title=w.document.getElementById('title'),detail=w.document.getElementById('detail')
+  title.textContent='同步受阻，預覽已失效';detail.textContent='目前批次尚未提交；已知成功批次保留。原因：EduLog 目標資料已更新。工作資料列數不等於報告數。';await new Promise(resolve=>setTimeout(resolve,0))
+  w.document.getElementById('workspace-locale').value='en';w.document.getElementById('workspace-locale').dispatchEvent(new w.Event('change'));await new Promise(resolve=>setTimeout(resolve,0))
+  assert.equal(title.textContent,'Sync blocked; preview is stale');assert.equal(detail.textContent,'The current batch was not submitted; confirmed successful batches remain saved. Reason: EduLog target data changed. Work rows are not report counts.')
+  w.document.getElementById('workspace-locale').value='zh-TW';w.document.getElementById('workspace-locale').dispatchEvent(new w.Event('change'));await new Promise(resolve=>setTimeout(resolve,0))
+  assert.equal(title.textContent,'同步受阻，預覽已失效');assert.match(detail.textContent,/目標資料已更新/);dom.window.close()
+})

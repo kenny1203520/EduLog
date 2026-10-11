@@ -11,6 +11,7 @@ const prepareScript = script.slice(script.indexOf('function prepareRows()'), scr
 const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
 const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
 const resumeScript = script.slice(script.indexOf('async function resumeImport()'), script.indexOf('async function readForm()'))
+const progressScript=script.slice(script.indexOf('function progress()'),script.indexOf('function taipeiToday()'))
 const bindingScript=script.slice(script.indexOf('async function applyHistoryBindings('),script.indexOf('async function apply()'))
 function bindingFixture() {
  const plan={historyId:'history',itemKey:'301:report:401',expectedFields:{content:'confirmed'},occurrence:{id:'occurrence',report:{version:1}},body:{key:'original-key',class_occurrence_id:'occurrence',overwrite:[]},status:'pending'},calls=[],saved=[]
@@ -92,6 +93,7 @@ test('resume keeps original keys and rows, skips completed batches and checks un
   assert.deepEqual(f.calls.filter(c=>c.operation==='preview').map(c=>c.body.key),['uncertain','remaining'])
   assert.equal(f.calls.some(c=>['job','job-status','apply'].includes(c.operation)),false)
   assert.equal(f.context.previewResults[0].batchIndex,2)
+  assert.ok(current.completedSourceKeys.includes('course:2'),'a server-confirmed applied batch must be excluded from a later submission round')
 })
 test('restoring a saved work with batches rechecks the original checkpoint but never writes automatically',async()=>{
   const current={...work(),status:'paused',batches:[{key:'saved-batch',rows:[row(5)],previewFingerprint:'a'.repeat(64)}]},f=previewFixture(current,[])
@@ -131,6 +133,26 @@ test('a failed resume check invalidates the old summary and preserves the uncert
   assert.equal(current.previewDirty,true);assert.equal(f.controls.apply.disabled,true);assert.equal(f.controls['preview-section'].hidden,true);assert.equal(f.context.previewResults.length,0)
   assert.equal(current.status,'outcome_unknown');assert.equal(current.jobId,'old-job');assert.equal(current.batches[0].key,'uncertain-key')
   assert.equal(current.previewError.code,'VALIDATION_FAILED')
+})
+test('PREVIEW_STALE pauses before further writes and preserves the failed key and confirmed checkpoints',async()=>{
+  const current={...work(),status:'previewed',done:1,batchCount:3,appliedBatchKeys:['already-saved'],appliedSourceKeys:['course:old'],batches:[{key:'committed-key',rows:[row(1)]},{key:'stale-key',rows:[row(2)]},{key:'later-key',rows:[row(3)]}]}
+  const calls=[],controls={pause:{},'cancel-work':{},mapping:{},'preview-section':{hidden:false},apply:{disabled:false}}
+  const context=vm.createContext({work:current,previewResults:[{batchIndex:1,rows:[{kind:'course',source_id:'2',status:'updated',before:{},after:{}}]}],generation:1,paused:false,cancelRequested:false,importBatchRequest,send:async()=>({closed:false}),save:async()=>{},progress(){},finalizeImport:async()=>{throw new Error('must not finalize')},notice(){},stage(){},rememberSubmissionRound(row){row.roundSnapshot=true},$:id=>controls[id],api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='apply')throw Object.assign(new Error('stale'),{code:'PREVIEW_STALE',fields:{'batches.stale-key.preview':['TARGET_VERSION_CHANGED']}});return{}}})
+  vm.runInContext(applyScript,context)
+  await assert.rejects(context.apply(),error=>error.code==='PREVIEW_STALE')
+  assert.equal(current.status,'stale');assert.equal(current.previewDirty,true);assert.equal(current.done,1)
+  assert.equal(current.batches[1].key,'stale-key');assert.deepEqual(current.appliedBatchKeys,['already-saved']);assert.equal(current.roundSnapshot,true)
+  assert.equal(controls['preview-section'].hidden,true);assert.equal(controls.apply.disabled,true)
+  assert.deepEqual(calls.map(call=>call.operation),['job-status','apply','job-status'])
+})
+test('stale progress remains visibly marked as an error',()=>{
+  const elements=new Map(['progress','progress-label','resume','pause','cancel-work','operation-status','operation-title','operation-detail','operation-progress'].map(id=>[id,{dataset:{},hidden:false}]))
+  const context=vm.createContext({work:{status:'stale',done:0,batchCount:3,needs:[{}],staleDiagnostics:{'batches.key.preview':['TARGET_VERSION_CHANGED']}},show(){},stage(){},staleReasonLabel:()=> 'EduLog 目標資料已更新',renderImportOutcome(){},$:id=>elements.get(id)})
+  vm.runInContext(`${progressScript}\nprogress()`,context)
+  assert.equal(elements.get('operation-status').hidden,false)
+  assert.equal(elements.get('operation-status').dataset.state,'error')
+  assert.match(elements.get('operation-title').textContent,/同步受阻/)
+  assert.match(elements.get('operation-detail').textContent,/目前批次尚未提交/)
 })
 test('apply projects a saved batch without changing its local checkpoint metadata',async()=>{
   const batch={key:'saved-key',rows:[row(1)],previewFingerprint:'c'.repeat(64),dependencies:[{key:'parent-key',fingerprint:'d'.repeat(64)}]}
@@ -172,9 +194,9 @@ test('history batches carry a fingerprinted dependency on an enrollment batch',a
   assert.equal(f.calls.filter(call=>call.operation==='preview')[1].body.dependencies[0].fingerprint,'1'.repeat(64))
 })
 
-function classifiedHistoryFixture(items) {
+function classifiedHistoryFixture(items, overrides={}) {
   const enrollment={kind:'enrollment',source_id:'301',student_source_id:'student-source',sourceStudentName:'測試學生',sourceCourseLabel:'測試課程',data:{external_link:'https://corp.orangeapple.co/dt_admissions/301'}}
-  const work={id:'classified-work',type:'import',status:'collected',done:0,previewDirty:false,ids:{},includeInternalNotes:false,history:{paths:[],next:0},snapshot:{sourceOrigin:'https://corp.orangeapple.co',classId:'class-source',records:[enrollment]}}
+  const work={id:'classified-work',type:'import',status:'collected',done:0,previewDirty:false,ids:{},includeInternalNotes:false,history:{paths:[],next:0},snapshot:{sourceOrigin:'https://corp.orangeapple.co',classId:'class-source',records:[enrollment]},...overrides}
   const controls={'include-internal-notes':{checked:false},'enrollment-course-301':{value:'course'},'class-session':{value:'session'},classroom:{value:'room'},'start-301':{value:'2026-01-01'},'status-301':{value:'active'},'enrollment-301':{value:'enrollment-target'},apply:{disabled:false},'preview-section':{hidden:false}}
   const calls=[],saved=[]
   const context=vm.createContext({work,historyPlan:items,context:{class_sessions:[{id:'session',course_ids:['course'],name:'Class',start_date:'2026-01-01',day_of_week:1,start_time:'10:00',end_time:'12:00'}],courses:[{id:'course',display_name:'Test course'}],enrollments:[{id:'enrollment-target',class_session_id:'old-session'}],permissions:{}},mappingController:{validateRow:()=>true,courseRows:()=>[],studentSelect:()=>({value:'student-target'}),resolveFieldRules:async()=>{}},integrationCapabilities:{enrollment_history_reports:true},generation:1,crypto:{randomUUID:(()=>{let n=0;return()=>`generated-${++n}`})()},$:id=>controls[id],admissionIdentity:()=>({}),idFor:(kind,id)=>`${kind}-${id}`,labels,splitBatches,validateBatches,importBatchRequest,batchBytes:180000,previewResults:[],saveState:'saved',globalThis:{edulogUi:{t:()=>''}},refreshHistoryPlan:async()=>{},save:async()=>{saved.push(structuredClone(work))},saveWorkMetadata:async()=>{},renderNoopSummary(){},renderDifferences(){},stage(){},notice(){},api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='job')return{id:'new-job'};if(operation==='preview')return{rows:[],counts:{},batch_fingerprint:'a'.repeat(64)};return{}}})
@@ -190,6 +212,22 @@ test('preview assembles and submits only valid history categories while keeping 
   assert.equal(historyRows.length,1);assert.equal(historyRows[0].source_id,'history-1');assert.equal(historyRows[0].record.data.enrollment_id,'enrollment-target')
   assert.match(f.work.needs.join(' '),/new-unrecognized-category/)
   assert.equal(f.calls.filter(call=>call.operation==='preview').length,1);assert.equal(f.work.previewDirty,false)
+})
+test('a later submission round omits source reports recorded as already saved',async()=>{
+  const saved=historyItem('history','history-saved',{data:{enrollment_id:'enrollment-target',report_date:'2026-10-04',content:'already saved'},includedFields:['content']})
+  const pending=historyItem('history','history-pending',{data:{enrollment_id:'enrollment-target',report_date:'2026-10-05',content:'still pending'},includedFields:['content']})
+  const f=classifiedHistoryFixture([saved,pending],{continuationMode:true,completedSourceKeys:['history_report:history-saved']})
+  await f.preview()
+  const historyRows=f.work.batches.flatMap(batch=>batch.rows).filter(row=>row.record.kind==='history_report')
+  assert.deepEqual(historyRows.map(row=>row.source_id),['history-pending'])
+})
+test('server round metadata is merged with the current local checkpoint instead of replacing it',()=>{
+  const roundsScript=script.slice(script.indexOf('function roundImportSummary('),script.indexOf('function renderImportOutcome('))
+  const work={jobId:'current-job',submissionRoundNo:2,status:'stale',done:1,batchCount:3,appliedBatchKeys:['local-applied'],batchSummaries:{'local-applied':{course:{added:2}}},submissionRounds:[{roundNo:1,jobId:'old-job',appliedBatchKeys:['old-applied'],batchSummaries:{student:{added:1}}},{roundNo:2,jobId:'current-job',status:'previewed',done:0,batchCount:0,appliedBatchKeys:[],batchSummaries:{}}]}
+  const context=vm.createContext({work});vm.runInContext(roundsScript,context)
+  const rounds=context.allSubmissionRounds()
+  assert.equal(rounds.length,2);assert.equal(rounds[1].status,'stale');assert.equal(rounds[1].done,1)
+  assert.deepEqual(rounds[1].appliedBatchKeys,['local-applied']);assert.equal(rounds[1].batchSummaries['local-applied'].course.added,2)
 })
 test('history rows missing required references fail before preview without replacing saved batches',async()=>{
   const malformed={...row(2),record:{kind:'history_report',data:undefined}},current={...work(),batches:[{key:'saved-batch',rows:[malformed]}],jobId:'saved-job',done:0}

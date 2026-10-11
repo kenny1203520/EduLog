@@ -32,8 +32,8 @@ function taskStatus() {
   if(work?.collectionSaveError||currentSaveState==='failed'||currentSaveState==='uncertain'){ui?.text($('draft-status'),currentSaveState==='uncertain'?'work.saveUncertain':'work.saveFailed',{savedAt});$('retry-history-save').hidden=false}
   else {ui?.text($('draft-status'),currentSaveState==='saving'?'work.saving':currentSaveState==='pending'?'work.unsaved':work?'work.saved':'work.ready');$('retry-history-save').hidden=true}
   $('task-title').textContent=work?.title||sourceContext?.title||''
-  const previewFailed=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)
-  $('task-status').textContent=previewFailed?(ui?.t('work.previewFailed')||'差異核對失敗，可重試'):work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
+  const previewFailed=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying','stale'].includes(work.status)
+  $('task-status').textContent=previewFailed?(ui?.t('work.previewFailed')||'差異核對失敗，可重試'):work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',stale:'同步受阻',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
   if(previewFailed)return
   if(work&&ui&&ui.t('work.state.'+work.status)!=='work.state.'+work.status)ui.text($('task-status'),'work.state.'+work.status)
   else ui?.text($('task-status'),'diff.value',{value:work?.status||''})
@@ -194,12 +194,13 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     else if (!readOnly && work?.status === 'outcome_unknown') { $('operation-title').textContent = '寫入結果尚未確認'; $('operation-detail').textContent = '未收到這批的確認回應。檢查點已保留；續傳會先用原冪等鍵核對結果，不會建立新的匯入工作。'; notice('寫入結果尚未確認。請使用「檢查並續傳」核對批次狀態。', true) }
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
     else if(['failed','uncertain'].includes(saveState)){ $('operation-title').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainTitle':'work.saveFailedTitle')|| (saveState==='uncertain'?'保存結果待確認':'草稿保存失敗');$('operation-detail').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainHelp':'work.saveFailedHelp')||'目前內容仍保留在此畫面；修復保存後可重試。同步已停用。' }
-    else if(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)){ $('operation-title').textContent=globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗';$('operation-detail').textContent=globalThis.edulogUi?.t('work.previewRetry')||'草稿與批次識別已保留；請重試核對，成功產生新摘要後再確認同步。' }
+    else if(work?.status==='stale'){ $('operation-title').textContent='本輪同步受阻';$('operation-detail').textContent='此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。' }
+    else if(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying','stale'].includes(work.status)){ $('operation-title').textContent=globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗';$('operation-detail').textContent=globalThis.edulogUi?.t('work.previewRetry')||'草稿與批次識別已保留；請重試核對，成功產生新摘要後再確認同步。' }
     else if (error.code === 'RATE_LIMITED') { $('operation-title').textContent = '伺服器暫時限制查詢'; $('operation-detail').textContent = error.retryAfter ? `請於 ${error.retryAfter} 秒後手動重試。` : '請稍後手動重試。' }
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
     if(['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code)&&work?.type==='import'){work.status='paused-extraction';work.collectionError=error.message;work.collectionSaveError=error.code;$('retry-history-save').hidden=false;taskStatus()}
     const previewFailure=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)
-    notice(previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
+    notice(work?.status==='stale'?'此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。':previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '預覽已失效；目前批次未提交。請重新核對未提交資料。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
     let workBytes=0;try{workBytes=new TextEncoder().encode(JSON.stringify(work)).byteLength}catch{}
     const currentLastSavedAt=lastSavedWorkId===work?.id?lastSavedAt:null
     const currentLastSavedRevision=lastSavedWorkId===work?.id?lastSavedRevision:null
@@ -419,8 +420,12 @@ function prepareRows() {
   const rows = [], needs = []
   for(const issue of work.history?.issues||[])if(issue.listFailed&&!issue.skipped)needs.push(`報名 ${issue.admissionPath} 的歷史索引未讀取；請重試或略過。`)
   if (work.history && work.history.next < work.history.paths.length) needs.push(`尚有 ${work.history.paths.length - work.history.next} 份來源紀錄未完成擷取。`)
-  const add = (kind, sourceId, targetId, data) => rows.push({ source_id: sourceId, target_id: targetId, overwrite: [], record: { kind, data } })
-  rows.push(...mappingController.courseRows().filter(r=>courseIds.includes(r.target_id)))
+  const completedRows=new Set((work.completedSourceKeys||[]).map(value=>String(value)))
+  const add = (kind, sourceId, targetId, data) => {
+    if(work.continuationMode&&completedRows.has(`${kind}:${sourceId}`))return null
+    const row={ source_id: sourceId, target_id: targetId, overwrite: [], record: { kind, data } };rows.push(row);return row
+  }
+  rows.push(...mappingController.courseRows().filter(r=>courseIds.includes(r.target_id)&&!(work.continuationMode&&completedRows.has(`course:${r.source_id}`))))
   const session = context.class_sessions.find(s => s.id === sessionId)
   let schedule
   if ($('class-session').value === 'new') {
@@ -469,8 +474,9 @@ function prepareRows() {
     if(!item.data||typeof item.data!=='object'||Array.isArray(item.data)||typeof item.data.enrollment_id!=='string'||!item.data.enrollment_id.trim()||item.data.enrollment_id!==preparedEnrollmentId||typeof item.data.report_date!=='string'||!item.data.report_date||!item.includedFields?.some(field=>Object.hasOwn(item.data,field))){needs.push(globalThis.edulogUi?.t('work.historyInvalidReference',{sourceId:item.key||admissionId})||`歷史 ${item.key||'來源報告'} 缺少有效報名、日期或已選取的教學欄位；請重新核對此報告。`);continue}
     if(item.category==='bind'&&(!item.occurrence?.id||!item.occurrence.class_session_id)){needs.push(`歷史 ${item.key} 缺少有效課次資料；已保留報告，請重新核對課次。`);continue}
     const targetId=item.existing?.id||idFor('history_report',item.key)
-    add('history_report',item.key,targetId,item.data)
-    const historyRow=rows.at(-1);historyRow.overwrite=[...(item.record.historyOverwrite||[])]
+    const historyRow=add('history_report',item.key,targetId,item.data)
+    if(!historyRow)continue
+    historyRow.overwrite=[...(item.record.historyOverwrite||[])]
     if(item.record.historyDuplicateConfirmed)historyRow.reviewed_duplicate=true
     if(item.category==='bind'){
       const binding={historyId:targetId,itemKey:item.key,expectedFields:Object.fromEntries(teachingFields.filter(f=>Object.hasOwn(item.data,f)).map(f=>[f,item.data[f]])),occurrence:item.occurrence,body:{key:crypto.randomUUID(),class_occurrence_id:item.occurrence.id,overwrite:item.record.historyOverwrite||[],include_internal:work.includeInternalNotes,include_fields:item.includedFields||[]},status:'pending',atomic:true}
@@ -496,7 +502,7 @@ async function preview(reuse = false) {
   if (!work || work.type !== 'import') throw new Error('請先擷取目前班級。')
   if (!reuse && work.jobId && work.previewJobPending) reuse = true
   if (!reuse) {
-    if (work.jobId && (work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status))) throw new Error('此工作已有寫入或待確認檢查點。請使用「檢查並續傳」核對原批次，不能重新建立工作。')
+    if (work.jobId && !work.continuationMode && (work.done > 0 || ['applying','outcome_unknown','failed','stale'].includes(work.status))) throw new Error('此工作已有寫入或待確認檢查點。請使用「檢查並續傳」核對原批次，不能重新建立工作。')
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
   }
   work.previewDirty=true;delete work.previewError;previewResults=[];$('apply').disabled=true;$('preview-section').hidden=true
@@ -523,11 +529,18 @@ async function preview(reuse = false) {
     if (!batches.length) {renderNoopSummary();return}
     work.blockedRows = []
     work.previewDirty = true; previewResults = []; $('apply').disabled = true
-    if (work.jobId) await api('job-status', { status: 'cancelled' }, { jobId: work.jobId })
+    const startingNextRound=work.continuationMode&&Boolean(work.jobId)
+    if(startingNextRound)rememberSubmissionRound(work)
+    else if (work.jobId) await api('job-status', { status: 'cancelled' }, { jobId: work.jobId })
     const job = await api('job', { source_origin: work.snapshot.sourceOrigin, source_class_id: work.snapshot.classId, date_from: work.dateFrom, date_to: work.dateTo, ...work.destination })
+    work.submissionRoundNo=startingNextRound?Math.max(Number(work.submissionRoundNo)||1,...(work.submissionRounds||[]).map(round=>round.roundNo||0))+1:(Number(work.submissionRoundNo)||1)
     work.batches = batches; work.done = 0; work.jobId = job.id; work.batchCount = batches.length; work.previewDirty = true; work.previewJobPending=true
+    work.appliedBatchKeys=[];work.batchSummaries={};work.continuationMode=false;work.status='previewing'
+    delete work.metadataSyncError
+    if(startingNextRound&&!integrationCapabilities.work_record_metadata)work.metadataSyncError='此伺服器未提供提交輪次關聯；輪次資料只保存在此裝置。'
     try{await saveWorkMetadata(work,{server_job_id:job.id})}catch(error){work.metadataSyncError=error.message}
     await save()
+    if(startingNextRound&&work.metadataSyncError)notice('新一輪已在此裝置保存，但伺服器未能保存跨裝置輪次關聯；請保留此裝置的工作草稿。',true)
   }
   validateBatches(work.batches);validateHistoryRows(work.batches.flatMap(batch=>batch.rows))
   previewResults = []
@@ -540,7 +553,7 @@ async function preview(reuse = false) {
         for (const child of work.batches.slice(i + 1)) if (child.dependencies?.some(ref => ref.key === batch.key)) child.dependencies = child.dependencies.map(ref => ref.key === batch.key ? { key: batch.key, fingerprint: result.batch_fingerprint } : ref)
         await save()
       }
-      if (result.applied != null) { work.done = i + 1; work.appliedBatchKeys = [...new Set([...(work.appliedBatchKeys || []), batch.key])]; await save() }
+      if (result.applied != null) { work.done = i + 1; work.appliedBatchKeys = [...new Set([...(work.appliedBatchKeys || []), batch.key])];work.completedSourceKeys=[...new Set([...(work.completedSourceKeys||[]),...(batch.rows||[]).map(row=>`${row.record.kind}:${row.source_id}`)])]; await save() }
       else previewResults.push({ ...result, batchIndex: i })
     } catch (error) {
       const entry = Object.entries(error.fields || {}).find(([key]) => key.startsWith('rows.'))
@@ -587,10 +600,40 @@ function renderNoopSummary() {
   work.previewEvaluated=true;work.previewDirty=true;previewResults=[];$('apply').disabled=true;show('preview-section');stage('import','repreview')
   $('counts').textContent=`沒有新的可寫入資料 · 已綁定 ${historyPlan.filter(i=>i.category==='linked').length} 份 · 需處理 ${work.needs?.length||0} 項`
   $('diff-list').replaceChildren(node('p','本次核對不需要建立新工作。既有報告與檢查點保留；待處理項目可返回「處理例外」核對。'))
+  if(work.needs?.length){work.status='partial_complete';renderImportOutcome()}
   notice('核對完成：沒有新的可寫入資料，不會重送已同步報告。')
+}
+function staleReasonLabel(diagnostics) {
+  const reasons=Object.values(diagnostics||{}).flat().filter(Boolean)
+  if(reasons.includes('REQUEST_FINGERPRINT_CHANGED'))return '請求內容與上次預覽不同'
+  if(reasons.includes('TARGET_VERSION_CHANGED'))return 'EduLog 目標資料已更新'
+  if(reasons.includes('OCCURRENCE_REPORT_VERSION_CHANGED'))return '課次報告已更新'
+  if(reasons.includes('PREVIEW_NOT_FOUND'))return '找不到原預覽'
+  return '預覽目前無法使用，原因尚未確認'
 }
 function renderDifferences() {
   $('diff-list').replaceChildren(); const totals = { added: 0, updated: 0, unchanged: 0, conflict: 0 }
+  if(work.staleReviewPending?.length) {
+    const section=node('section',undefined,'notice warning');section.setAttribute('role','status');section.setAttribute('aria-live','polite');section.setAttribute('aria-label','重新確認先前的欄位選擇')
+    section.append(node('h3','先前選擇需要重新確認'),node('p','預覽失效後保留了原選擇。請為每個欄位重新選擇採用來源或保留 EduLog，再繼續同步。'))
+    for(const pending of [...work.staleReviewPending]) {
+      const controls=node('div',undefined,'stale-review-choice');controls.append(node('p',`${pending.source_id} · ${fieldLabels[pending.field]||pending.field} · 原選擇：採用來源`))
+      const resolveChoice=useSource=>{
+        const target=work.batches?.find(batch=>batch.key===pending.batchKey)?.rows?.find(row=>row.record?.kind===pending.kind&&row.source_id===pending.source_id)
+        const result=previewResults.flatMap(item=>item.rows||[]).find(row=>row.kind===pending.kind&&row.source_id===pending.source_id)
+        if(!target||!result)return
+        if(useSource&&JSON.stringify(result.before?.[pending.field])!==JSON.stringify(result.after?.[pending.field]))target.overwrite=[...new Set([...(target.overwrite||[]),pending.field])]
+        work.staleReviewPending=work.staleReviewPending.filter(item=>item!==pending);work.previewDirty=true;$('apply').disabled=true
+        notice(useSource?'已重新確認採用來源；請更新差異後再同步。':'已改為保留 EduLog；請更新差異後再同步。')
+      }
+      const source=node('button','重新採用來源'),keep=node('button','改為保留 EduLog');source.type=keep.type='button';source.addEventListener('click',()=>resolveChoice(true));keep.addEventListener('click',()=>resolveChoice(false))
+      controls.append(source,keep);section.append(controls)
+    }
+    $('diff-list').append(section)
+  }
+  if(work.staleDiagnostics) {
+    $('diff-list').append(node('p',`上次同步未提交：${staleReasonLabel(work.staleDiagnostics)}。已重新核對本輪差異，請檢查受影響報告後再確認同步。`,'notice warning'))
+  }
   previewResults.forEach(result => result.rows.forEach((row, rowIndex) => {
     const batchIndex = result.batchIndex
     totals[row.status]++; const details = node('details'), summary = node('summary', `${labels[row.kind]} · ${row.source_id} · ${labels[row.status]}`); details.append(summary)
@@ -624,7 +667,7 @@ function renderDifferences() {
   }
   $('diff-list').prepend(summary)
   if (work.needs.length) { const d = node('details'); d.append(node('summary', `查看 ${work.needs.length} 項需處理資料`)); work.needs.forEach(text => d.append(node('p', text))); $('diff-list').append(d) }
-  show('preview-section'); stage('import', 'apply'); $('apply').disabled = work.batches.length===0 || work.previewDirty===true
+  show('preview-section'); stage('import', 'apply'); $('apply').disabled = work.batches.length===0 || work.previewDirty===true || Boolean(work.staleReviewPending?.length)
 }
 function summarizeImportRows(rows) {
   const result = {}
@@ -640,13 +683,32 @@ function mergeImportSummary(target, next) {
   }
   return target
 }
+function roundImportSummary(round) {
+  if(round?.appliedBatchKeys?.length&&round.batchSummaries)return round.appliedBatchKeys.reduce((sum,key)=>mergeImportSummary(sum,round.batchSummaries[key]),{})
+  const batches=round?.serverImportSummary?.batches||[]
+  return batches.filter(batch=>batch.status==='applied').reduce((sum,batch)=>mergeImportSummary(sum,batch.classifications||batch.counts||{}),{})
+}
+function rememberSubmissionRound(row=work) {
+  if(!row?.jobId)return
+  row.submissionRounds ||= []
+  const roundNo=Number(row.submissionRoundNo)||1
+  const snapshot={roundNo,jobId:row.jobId,status:row.status,done:row.done||0,batchCount:row.batchCount||row.batches?.length||0,appliedBatchKeys:[...(row.appliedBatchKeys||[])],batchSummaries:{...(row.batchSummaries||{})},historySummary:row.historySummary||null,bindingSummary:{done:(row.historyBindings||[]).filter(binding=>binding.status==='done').length,total:(row.historyBindings||[]).length},serverImportSummary:row.serverImportSummary||null}
+  row.submissionRounds=row.submissionRounds.filter(round=>round.roundNo!==roundNo)
+  row.submissionRounds.push(snapshot);row.submissionRounds.sort((a,b)=>a.roundNo-b.roundNo)
+}
+function allSubmissionRounds(row=work) {
+  const rounds=[...(row?.submissionRounds||[])]
+  if(row?.jobId){const roundNo=Number(row.submissionRoundNo)||1;const current={roundNo,jobId:row.jobId,status:row.status,done:row.done||0,batchCount:row.batchCount||row.batches?.length||0,appliedBatchKeys:row.appliedBatchKeys||[],batchSummaries:row.batchSummaries||{},historySummary:row.historySummary||null,serverImportSummary:row.serverImportSummary||null};const index=rounds.findIndex(round=>round.roundNo===roundNo);if(index<0)rounds.push(current);else rounds[index]={...rounds[index],...current,serverImportSummary:row.serverImportSummary||rounds[index].serverImportSummary||null}}
+  return rounds.sort((a,b)=>a.roundNo-b.roundNo)
+}
 function renderImportOutcome() {
   const host = $('import-outcome'); host.replaceChildren(); host.hidden = false
-  const title = node('h3', work.status === 'complete' ? '匯入批次已核驗完成' : '部分完成：已寫入資料保留，另有待處理或略過資料')
+  const title = node('h3', work.status==='complete'?'同步工作已完成':work.status==='stale'?'同步受阻，請重新核對未提交資料':work.status==='outcome_unknown'?'結果待確認':'本輪同步完成，仍有待處理項目')
   host.append(title)
   const totals = {}
-  for (const key of work.appliedBatchKeys || []) mergeImportSummary(totals, work.batchSummaries?.[key])
-  const counts=Object.values(totals),bound=(work.historyBindings||[]).filter(binding=>binding.status==='done').length
+  const rounds=allSubmissionRounds()
+  for(const round of rounds)mergeImportSummary(totals,roundImportSummary(round))
+  const counts=Object.values(totals),bound=rounds.reduce((count,round)=>count+(round.bindingSummary?.done||0),0)||(work.historyBindings||[]).filter(binding=>binding.status==='done').length
   outcomeMetrics(host,{saved:work.historySummary?.saved||0,bound,kept:counts.reduce((n,row)=>n+(row.conflict||0),0),skipped:(work.history?.issues||[]).filter(issue=>issue.skipped).length,failed:counts.reduce((n,row)=>n+(row.failed||0),0),pending:work.needs?.length||0})
   for (const kind of ['student','enrollment','occurrence','report','history_report']) {
     const states = totals[kind]
@@ -657,9 +719,10 @@ function renderImportOutcome() {
   if (!Object.keys(totals).length && work.done) host.append(node('p','此工作由舊版擴充套件建立，沒有保留逐類結果；可查詢伺服器批次與有效名單。','hint'))
   const bindings=work.historyBindings||[]
   if(bindings.length)host.append(node('p',`課次報告：新增 ${bindings.filter(b=>b.result?.classification==='added').length} · 更新 ${bindings.filter(b=>b.result?.classification==='updated').length} · 無變更 ${bindings.filter(b=>b.result?.classification==='unchanged').length} · 綁定完成 ${bindings.filter(b=>b.status==='done').length}／${bindings.length}`))
-  const archived=work.historySummary?.saved||0
+  const archived=rounds.reduce((count,round)=>count+(round.historySummary?.saved||0),0)||work.historySummary?.saved||0
   if(archived)host.append(node('p',`已保存歷史 ${archived} 份，其中 ${bindings.filter(b=>b.status==='done').length} 份已綁定課次；未綁定歷史不列入出席統計。`))
   if (work.needs?.length) host.append(node('p', `另有 ${work.needs.length} 項未匯入或需處理；批次完成不代表來源資料已全部同步。`, 'hint'))
+  if(work.metadataSyncError)host.append(node('p',`跨裝置輪次關聯尚未保存：${work.metadataSyncError}。此裝置的工作草稿仍可使用。`,'notice warning'))
   const skippedHistory=(work.history?.issues||[]).filter(r=>r.skipped).length
   if(skippedHistory)host.append(node('p',`歷史報告明確略過 ${skippedHistory} 筆；未建立這些報告。`,'hint'))
   for(const check of work.rosterChecks||[]) {
@@ -671,10 +734,28 @@ function renderImportOutcome() {
     host.append(node('p', `${v.date} 有效名單核對：EduLog ${v.actual} 人；來源應有 ${v.expected} 人；缺少 ${v.missing.length} 人；其他 ${v.extra.length} 人。`))
     if (v.missing.length || v.extra.length) host.append(node('p', `名單有差異：${[...v.missing.map(id=>`缺少 ${id.slice(0,8)}`),...v.extra.map(id=>`EduLog 另有 ${id.slice(0,8)}`)].join('、')}`, 'hint'))
   } else if (work.rosterCheckError) host.append(node('p',`有效名單核對暫時失敗：${work.rosterCheckError}。可在工作紀錄重新查詢。`,'hint'))
-  if(work.status==='partial_complete') {
-    const repair=node('button','處理未完成項目');repair.type='button'
-    repair.addEventListener('click',()=>flow('work'));host.append(repair)
+  if(rounds.length)host.append(node('p',`提交輪次：${rounds.map(round=>`第 ${round.roundNo} 輪 ${round.appliedBatchKeys?.length||round.serverImportSummary?.batches?.filter(batch=>batch.status==='applied').length||0}/${round.batchCount||round.serverImportSummary?.batches?.length||0} 批`).join(' · ')}`,'hint'))
+  if(work.status==='stale') {
+    const reason=node('p',`目前批次尚未提交。原因：${staleReasonLabel(work.staleDiagnostics)}。已成功批次仍保留。`,'notice warning');reason.setAttribute('role','status');reason.setAttribute('aria-live','polite');host.append(reason)
+    const retry=node('button','重新核對未提交資料');retry.type='button';retry.onclick=()=>void run(resumeImport,{label:'正在重新核對未提交資料'});host.append(retry)
+    const results=node('button','查看已保存結果');results.type='button';results.onclick=()=>void run(loadSubmissionRoundResults,{label:'正在查詢已保存結果',readOnly:true});host.append(results)
+    if(work.needs?.length){const pending=node('button','處理待確認報告');pending.type='button';pending.onclick=()=>void run(async()=>{work.continuationMode=true;flow('import');activeStages.import=2;await mappingView();renderHistoryIssues();notice('請處理待確認項目並更新差異；新一輪只會包含尚未保存的資料。')},{label:'正在開啟原工作待處理清單'});host.append(pending)}
   }
+  if(work.status==='partial_complete') {
+    const repair=node('button','處理待確認報告');repair.type='button'
+    repair.addEventListener('click',()=>void run(async()=>{work.continuationMode=true;flow('import');activeStages.import=2;await mappingView();renderHistoryIssues();notice('請處理待確認項目並更新差異；新一輪只會包含尚未保存的資料。')},{label:'正在開啟原工作待處理清單'}));host.append(repair)
+  }
+}
+async function loadSubmissionRoundResults() {
+  const rounds=allSubmissionRounds()
+  if(!rounds.length)throw new Error('目前工作沒有可查詢的伺服器提交輪次。')
+  const owner=work?.id
+  const results=await Promise.all(rounds.map(async round=>({round,info:await api('import-info',{}, {jobId:round.jobId})})))
+  if(work?.id!==owner)return
+  for(const {round,info} of results)round.serverImportSummary=info
+  await save()
+  renderImportOutcome()
+  notice('已更新伺服器批次檢查點；草稿狀態與教學資料同步結果分開顯示。')
 }
 function displayValue(key, value) {
   if(['is_completed','attendance_status','class_participation','classroom_behavior'].includes(key))return semanticValue(key,value)
@@ -694,12 +775,12 @@ function progress() {
   $('progress-label').textContent = `已完成 ${work.done || 0} / ${work.batchCount || 0} 批。${work.needs?.length || 0} 項仍需處理。`
   $('resume').hidden = !['paused','failed','outcome_unknown'].includes(work.status)
   $('pause').hidden = work.status !== 'applying'; $('cancel-work').hidden = ['complete','cancelled','partial_complete'].includes(work.status)
-  stage('import','resume');$('operation-status').hidden = work.status!=='applying'
-  $('operation-status').dataset.state = work.status === 'applying' ? 'loading' : ['failed','outcome_unknown'].includes(work.status) ? 'error' : 'complete'
-  $('operation-title').textContent = ({ applying:'正在寫入匯入批次', paused:'匯入已暫停', failed:'匯入部分失敗', outcome_unknown:'寫入結果尚未確認', complete:'匯入批次已完成', partial_complete:'部分完成，尚有待處理項目', cancelled:'已取消剩餘批次' })[work.status] || '匯入進度'
-  $('operation-detail').textContent = `已核對 ${work.done || 0} / ${work.batchCount || 0} 批；${work.needs?.length || 0} 筆需處理。取消不會撤回已完成批次。`
+  stage('import','resume');$('operation-status').hidden = !['applying','stale','outcome_unknown','partial_complete','complete','failed'].includes(work.status)
+  $('operation-status').dataset.state = work.status === 'applying' ? 'loading' : ['failed','stale','outcome_unknown'].includes(work.status) ? 'error' : 'complete'
+  $('operation-title').textContent = ({ applying:'正在寫入匯入批次', paused:'匯入已暫停', failed:'匯入部分失敗', stale:'同步受阻，預覽已失效', outcome_unknown:'寫入結果尚未確認', complete:'同步工作已完成', partial_complete:'本輪完成，仍有待處理項目', cancelled:'已取消剩餘批次' })[work.status] || '匯入進度'
+  $('operation-detail').textContent = work.status==='stale'?`目前批次尚未提交；已知成功批次保留。原因：${staleReasonLabel(work.staleDiagnostics)}。工作資料列數不等於報告數。`:`已核對 ${work.done || 0} / ${work.batchCount || 0} 批；${work.needs?.length || 0} 筆需處理。取消不會撤回已完成批次。`
   $('operation-progress').hidden = !work.batchCount; $('operation-progress').max = work.batchCount || 1; $('operation-progress').value = work.done || 0
-  if (work.status === 'complete' || work.status === 'partial_complete') renderImportOutcome()
+  if (work.status === 'complete' || work.status === 'partial_complete' || work.status === 'stale' || work.status==='outcome_unknown') renderImportOutcome()
 }
 function taipeiToday() {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
@@ -736,6 +817,7 @@ async function finalizeImport() {
     work.rosterCheckError = error.message
   }
   delete work.sourceRosterEntries
+  rememberSubmissionRound(work)
   await save(); progress()
 }
 async function applyHistoryBindings() {
@@ -764,6 +846,7 @@ async function applyHistoryBindings() {
 }
 async function apply() {
   if (work.previewDirty || !work.jobId) throw new Error('請先更新差異。')
+  if(work.staleReviewPending?.length)throw new Error('請重新確認預覽失效前的欄位選擇，再同步。')
   if (work.blockedRows?.length && !window.confirm(globalThis.edulogUi?.t('work.confirmEligible',{count:work.blockedRows.length}) || `仍有 ${work.blockedRows.length} 筆來源資料被阻擋。只同步可處理資料並保留待處理項目？`)) return
   for (const result of previewResults) for (const row of result.rows || []) if (row.kind === 'class_session' && row.status !== 'added' && JSON.stringify(row.before.course_ids) !== JSON.stringify(row.after.course_ids)) {
     const batchRow = work.batches[result.batchIndex].rows.find(r => r.record.kind === row.kind && r.source_id === row.source_id)
@@ -786,6 +869,7 @@ async function apply() {
         for (const row of previewBatch.rows || []) { summary[row.kind] ||= {}; summary[row.kind][row.status] = (summary[row.kind][row.status] || 0) + 1 }
         work.batchSummaries ||= {}; work.batchSummaries[work.batches[i].key] = summary
       }
+      work.completedSourceKeys=[...new Set([...(work.completedSourceKeys||[]),...work.batches[i].rows.map(row=>`${row.record.kind}:${row.source_id}`)])]
       work.done = i + 1; await save(); progress()
     }
     const finished = work.done === work.batches.length
@@ -794,9 +878,34 @@ async function apply() {
     else { await api('job-status', { status: work.status }, { jobId: work.jobId }); await save(); progress() }
     if (finished || cancelRequested) { previewResults = []; $('mapping').hidden = true; $('preview-section').hidden = true; $('pause').hidden = true; $('cancel-work').hidden = true; stage('import', 'cancel-work') }
     notice(finished ? `已核對 ${work.batchCount} 個匯入批次；${work.needs.length} 項仍需處理，請查看名單核對結果。` : cancelRequested ? '已取消剩餘工作，成功寫入的資料保留。' : '工作已暫停，成功批次保留。')
-  } catch (error) { work.status = ['API_TIMEOUT','API_NETWORK_ERROR','API_RESPONSE_INVALID'].includes(error.code) || /^HTTP_5/.test(error.code || '') ? 'outcome_unknown' : 'failed'; await save(); progress(); throw error }
+  } catch (error) {
+    if(error.code==='PREVIEW_STALE') {
+      work.status='stale';work.previewDirty=true;work.staleBatchKey=work.batches?.[work.done||0]?.key||null
+      work.staleDiagnostics=error.fields||null;work.staleObservedAt=new Date().toISOString();work.previewError={code:'PREVIEW_STALE',message:error.message,batchKey:work.staleBatchKey}
+      previewResults=[];$('preview-section').hidden=true;$('apply').disabled=true
+      try{await api('job-status',{status:'paused'},{jobId:work.jobId})}catch{}
+      rememberSubmissionRound(work);await save();progress()
+    } else {work.status = ['API_TIMEOUT','API_NETWORK_ERROR','API_RESPONSE_INVALID'].includes(error.code) || /^HTTP_5/.test(error.code || '') ? 'outcome_unknown' : 'failed'; await save(); progress()}
+    throw error
+  }
 }
 async function resumeImport() {
+  if(work?.status==='stale') {
+    const affected=new Set()
+    for(const [key,values] of Object.entries(work.staleDiagnostics||{}))if(values.some(value=>['REQUEST_FINGERPRINT_CHANGED','TARGET_VERSION_CHANGED','OCCURRENCE_REPORT_VERSION_CHANGED','PREVIEW_NOT_FOUND'].includes(value))) {
+      const parts=key.split('.')
+      if(parts[0]==='batches')for(const batch of work.batches||[])if(batch.key===parts[1])for(const row of batch.rows||[])affected.add(row)
+      if(parts[0]==='rows'){const sourceId=parts.slice(2,-1).join('.');for(const batch of work.batches||[])for(const row of batch.rows||[])if(row.record?.kind===parts[1]&&row.source_id===sourceId)affected.add(row)}
+    }
+    if(!affected.size&&work.staleBatchKey)for(const batch of work.batches||[])if(batch.key===work.staleBatchKey)for(const row of batch.rows||[])affected.add(row)
+    work.staleReviewPending ||= []
+    for(const row of affected) {
+      const batch=(work.batches||[]).find(item=>item.rows?.includes(row))
+      for(const field of row.overwrite||[])if(!work.staleReviewPending.some(item=>item.batchKey===batch?.key&&item.kind===row.record?.kind&&item.source_id===row.source_id&&item.field===field))work.staleReviewPending.push({batchKey:batch?.key,kind:row.record?.kind,source_id:row.source_id,field})
+      row.overwrite=[]
+    }
+    work.previewDirty=true;work.status='failed';await save()
+  }
   if (!work?.jobId) throw new Error('找不到可續傳的匯入工作。')
   if (work.status === 'outcome_unknown' || work.status === 'applying' || work.status === 'failed') {
     await preview(true)
@@ -891,7 +1000,7 @@ async function saveWorkMetadata(row, changes = {}) {
   const classId=row.snapshot?.classId||row.sourceClassId||row.form?.admissionId||(/^\/courses\/dt\/(\d+)$/.exec(path||'')?.[1])
   if(!path||!classId)return null
   const prior=workHistory.metadata.find(item=>item.work_id===row.id)
-  const base={source_origin:'https://corp.orangeapple.co',source_path:path,source_class_id:String(classId),source_label:row.sourceTitle||row.snapshot?.title||'',target_classroom_id:row.destination?.classroom_id||null,target_class_session_id:row.destination?.class_session_id||null,target_label:row.destination?.targetLabel||[context?.classrooms?.find(item=>item.id===row.destination?.classroom_id)?.name,context?.class_sessions?.find(item=>item.id===row.destination?.class_session_id)?.name].filter(Boolean).join(' · '),title:row.title||'',source_device:'此瀏覽器',...changes}
+  const base={source_origin:'https://corp.orangeapple.co',source_path:path,source_class_id:String(classId),source_label:row.sourceTitle||row.snapshot?.title||'',target_classroom_id:row.destination?.classroom_id||null,target_class_session_id:row.destination?.class_session_id||null,target_label:row.destination?.targetLabel||[context?.classrooms?.find(item=>item.id===row.destination?.classroom_id)?.name,context?.class_sessions?.find(item=>item.id===row.destination?.class_session_id)?.name].filter(Boolean).join(' · '),title:row.title||'',source_device:'此瀏覽器',...changes,...(changes.server_job_id&&row.submissionRoundNo?{submission_round:row.submissionRoundNo}:{})}
   const result=await api('work-record-save',{expected_revision:prior?.revision||null,changes:base},{workId:row.id})
   const saved=result?.item;if(saved){workHistory.metadata=[...workHistory.metadata.filter(item=>item.work_id!==saved.work_id),saved];renderWorkRecords()}
   return saved
@@ -993,7 +1102,11 @@ async function setSourceForWork(row){
 async function restoreImportWork(row){
   await flushWorkBeforeSwitch(row.id)
   await setSourceForWork(row)
-  work=row;activeWorks.import=work;$('include-internal-notes').checked=work.includeInternalNotes===true
+  work=row;activeWorks.import=work
+  const serverRounds=workHistory.metadata.find(item=>item.work_id===work.id)?.submission_rounds||[]
+  work.submissionRounds ||= serverRounds.map(round=>({roundNo:round.round_no,jobId:round.job_id,status:round.status,done:round.applied_batches||0,batchCount:round.batch_count||0,appliedBatchKeys:[],batchSummaries:{}}))
+  work.submissionRoundNo=Math.max(Number(work.submissionRoundNo)||1,...serverRounds.map(round=>round.round_no||0))
+  $('include-internal-notes').checked=work.includeInternalNotes===true
   $('continue-work').hidden=true;flow('import');activeStages.import=2
   if(work.history&&work.history.next<work.history.paths.length)await collectHistory()
   if(!work.batches?.length){work.previewDirty=true;previewResults=[];$('apply').disabled=true;$('preview-section').hidden=true}
@@ -1092,7 +1205,7 @@ $('class-session').addEventListener('change', () => void runLatest(async () => {
 $('course-source-id').addEventListener('change', updateMappingOptions)
 $('start-new-work').onclick=()=>{continuation=null;$('continue-work').hidden=true;work=null;activeWorks.import=null;activeStages.import=1;flow('import');$('collect').disabled=!classSourceReady;taskStatus()}
 $('resume-source-work').onclick=()=>void run(async()=>{const row=continuation;if(!row)return;await restoreImportWork(row)},{label:'正在恢復未完成工作'})
-for (const [id, action] of Object.entries({ collect, preview: () => preview(), repreview: () => preview(!work.mappingDirty), apply, resume: resumeImport, 'read-form': readForm, compare, prefill, 'refresh-work': loadWork, reconnect: initialize })) $(id).addEventListener('click', () => void run(action, { label: ({ collect:'正在讀取來源班級與學習紀錄', preview:'正在比對 EduLog 目標與匯入差異', repreview:'正在重新檢查資料差異', apply:'正在寫入匯入批次', resume:'正在檢查未完成批次', 'read-form':'正在讀取原站報告目標', compare:'正在查詢報告欄位並核對目標', prefill:'正在套用已確認欄位至原站', 'refresh-work':'正在更新工作紀錄', reconnect:'正在重新驗證連線' })[id] || '正在處理工作', readOnly: ['collect','read-form','compare','refresh-work','reconnect'].includes(id) }))
+for (const [id, action] of Object.entries({ collect, preview: () => preview(), repreview: () => preview(work.continuationMode?false:!work.mappingDirty), apply, resume: resumeImport, 'read-form': readForm, compare, prefill, 'refresh-work': loadWork, reconnect: initialize })) $(id).addEventListener('click', () => void run(action, { label: ({ collect:'正在讀取來源班級與學習紀錄', preview:'正在比對 EduLog 目標與匯入差異', repreview:'正在重新檢查資料差異', apply:'正在寫入匯入批次', resume:'正在檢查未完成批次', 'read-form':'正在讀取原站報告目標', compare:'正在查詢報告欄位並核對目標', prefill:'正在套用已確認欄位至原站', 'refresh-work':'正在更新工作紀錄', reconnect:'正在重新驗證連線' })[id] || '正在處理工作', readOnly: ['collect','read-form','compare','refresh-work','reconnect'].includes(id) }))
 $('retry-history-save').addEventListener('click',()=>void run(async()=>{const owner=work;if(!owner)return;await save();if(owner!==work)return;if(owner.jobId){await preview(true);return}if(owner.history)await collectHistory();await mappingView();renderHistoryIssues()},{label:'正在重試保存草稿並繼續核對',saveBeforeAction:false}))
 $('cancel-read').addEventListener('click', () => void cancelRead())
 $('pause').addEventListener('click', () => { paused = true; notice('正在完成目前批次，之後暫停。') })

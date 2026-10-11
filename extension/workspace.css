@@ -17,3 +17,4 @@
 .history-merge-line-target{border-inline-start:3px solid var(--ui-warning,#b45309)}
 .history-line-merge textarea{display:block;width:100%;min-height:7rem;resize:vertical;box-sizing:border-box;margin-top:6px}
 .history-line-merge button{min-height:44px;margin-top:8px}
+.stale-review-choice{padding:12px;border:1px solid var(--line);border-radius:8px;margin:10px 0;background:var(--soft)}.stale-review-choice p{margin:0 0 8px;font-size:14px}.stale-review-choice button{min-height:44px;margin:4px 8px 4px 0}@media(max-width:600px){.stale-review-choice button{width:100%;margin:4px 0}}
