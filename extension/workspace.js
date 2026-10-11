@@ -26,6 +26,7 @@ const workDetailCache=new Map()
 const activeWorks = {import:null,prefill:null}, activeStages = {import:1,prefill:1}
 function currentWorkflow(view) { const identity=work?.type==='import'&&work.snapshot?work.snapshot.records.filter(row=>row.kind==='enrollment'&&!row.sourceSkipped&&!mappingController.validateRow(row,true)).length:0;return workflowState(view,{work:work?.type===view?work:activeWorks[view],form,report,previewCount:previewResults.length,unresolved:identity+historyPlan.filter(item=>item.category==='needs').length}) }
 function taskStatus() {
+  updateApplyAvailability()
   const ui=globalThis.edulogUi
   const currentSaveState=saveFailureWorkId===work?.id?saveState:unsavedWorkId===work?.id?saveState:'saved'
   const savedAt=lastSavedWorkId===work?.id&&lastSavedAt?new Intl.DateTimeFormat(ui?.locale||'zh-TW',{dateStyle:'short',timeStyle:'short'}).format(new Date(lastSavedAt)):work?.updatedAt?new Intl.DateTimeFormat(ui?.locale||'zh-TW',{dateStyle:'short',timeStyle:'short'}).format(new Date(work.updatedAt)):ui?.t('work.savedAtUnknown')||'尚無成功保存版本'
@@ -105,6 +106,13 @@ function captureMappingChoices() {
   work.uiState = [...$('mapping').querySelectorAll('input,select,textarea')].filter(e => e.id).map(e => ({ id: e.id, value: e.value, checked: e.checked }))
 }
 function show(id) { $(id).hidden = false }
+function canApplyCurrentPreview() {
+  const currentSaveState=saveFailureWorkId===work?.id||unsavedWorkId===work?.id?saveState:'saved'
+  return Boolean(work?.type==='import'&&work.jobId&&work.status==='previewed'&&work.batches?.length&&previewResults.length&&!work.previewDirty&&!work.staleReviewPending?.length&&currentSaveState==='saved')
+}
+function updateApplyAvailability() {
+  const button=$('apply');if(button)button.disabled=!canApplyCurrentPreview()
+}
 function stage(view, primary) {
   const step = view === 'import' ? ({ collect: 1, preview: 2, repreview: 3, apply: 3, pause: 4, resume: 4, 'cancel-work': 4 }[primary] || 1) : ({ 'read-form': 1, compare: 2, prefill: 3, 'return-source': 4 }[primary] || 1)
   activeStages[view]=step
@@ -195,6 +203,7 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
     else if (error.code === 'PAUSED_PREVIEW_UNSUPPORTED') { $('operation-title').textContent='需要更新 EduLog 伺服器';$('operation-detail').textContent=error.message }
     else if (error.code === 'IMPORT_STATUS_UNKNOWN') { $('operation-title').textContent='伺服器狀態待確認';$('operation-detail').textContent=error.message }
+    else if (error.code === 'STALE_REVIEW_REQUIRED') { activeOperationLabel='同步前核對';$('operation-title').textContent=globalThis.edulogUi?.t('work.staleReviewRequired')||'仍有報告欄位待確認';$('operation-detail').textContent=globalThis.edulogUi?.t('work.staleReviewRequiredHelp')||'先完成待確認欄位，再更新差異。教學資料尚未送出。';stage('import','preview');$('preview-section').scrollIntoView?.({block:'start',behavior:'smooth'});document.querySelector('[data-stale-review-start]')?.focus({preventScroll:true}) }
     else if(['failed','uncertain'].includes(saveState)){ $('operation-title').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainTitle':'work.saveFailedTitle')|| (saveState==='uncertain'?'保存結果待確認':'草稿保存失敗');$('operation-detail').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainHelp':'work.saveFailedHelp')||'目前內容仍保留在此畫面；修復保存後可重試。同步已停用。' }
     else if(work?.status==='stale'){ $('operation-title').textContent='本輪同步受阻';$('operation-detail').textContent='此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。' }
     else if(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying','stale'].includes(work.status)){ $('operation-title').textContent=globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗';$('operation-detail').textContent=globalThis.edulogUi?.t('work.previewRetry')||'草稿與批次識別已保留；請重試核對，成功產生新摘要後再確認同步。' }
@@ -202,12 +211,12 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
     if(['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code)&&work?.type==='import'){work.status='paused-extraction';work.collectionError=error.message;work.collectionSaveError=error.code;$('retry-history-save').hidden=false;taskStatus()}
     const previewFailure=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)
-    notice(error.code==='PAUSED_PREVIEW_UNSUPPORTED'||error.code==='IMPORT_STATUS_UNKNOWN'||work?.status==='stale'?'':previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '預覽已失效；目前批次未提交。請重新核對未提交資料。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
+    notice(error.code==='PAUSED_PREVIEW_UNSUPPORTED'||error.code==='IMPORT_STATUS_UNKNOWN'||error.code==='STALE_REVIEW_REQUIRED'||work?.status==='stale'?'':previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '預覽已失效；目前批次未提交。請重新核對未提交資料。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
     let workBytes=0;try{workBytes=new TextEncoder().encode(JSON.stringify(work)).byteLength}catch{}
     const currentLastSavedAt=lastSavedWorkId===work?.id?lastSavedAt:null
     const currentLastSavedRevision=lastSavedWorkId===work?.id?lastSavedRevision:null
     $('diagnostic').textContent = [error.code || 'WORK_FAILED',`操作階段：${activeOperationLabel}`,work?.id?`工作識別：${work.id}`:'',work?.batches?.[Math.max(0,work.done||0)]?.key?`批次識別：${work.batches[Math.max(0,work.done||0)].key}`:'',work?.revision!=null?`工作 revision：${work.revision}`:'',`目前工作大小：約 ${workBytes} bytes`,currentLastSavedAt?`最後成功保存：${new Date(currentLastSavedAt).toISOString()} · revision ${currentLastSavedRevision}`:'尚無本工作成功保存時間',error.saveTransportStage?`保存階段：${error.saveTransportStage}`:'',...Object.entries(error.fields || {}).flatMap(([key, messages]) => messages.map(message => `${key}：${message}`)),error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
-  } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('source-tab').disabled=sourceDisabled; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); taskStatus(); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; $('apply').disabled = !previewResults.length || work?.previewDirty === true; finishRead() }
+  } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('source-tab').disabled=sourceDisabled; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); taskStatus(); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; updateApplyAvailability(); finishRead() }
 }
 function options(select, rows, label, placeholder, extra) {
   select.dataset.sourceRawOptions='true'
@@ -308,11 +317,31 @@ function scheduleHistoryPlanForCurrentMapping(){
   }).catch(error=>{if(owner===work&&epoch===generation&&sequence===historyLocalSequence)notice(`課程教材目錄尚未載入，請重新核對後重試。${error.message}`,true)})
 }
 function staleFieldsForHistoryItem(item){return (work?.staleReviewPending||[]).filter(pending=>pending.kind==='history_report'&&pending.source_id===item.key).map(pending=>pending.field)}
-async function confirmStaleHistoryReview(item,fields){if(!work||!item)return false;const record=work.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record;if(fields.some(field=>!['source','keep','mixed','skip'].includes(record.historyFieldDecisions?.[field])))return false;const before=(work.staleReviewPending||[]),resolved=before.filter(pending=>pending.kind==='history_report'&&pending.source_id===item.key&&fields.includes(pending.field));if(!resolved.length)return false;work.staleReviewPending=before.filter(pending=>!resolved.includes(pending));record.staleReviewFields=(record.staleReviewFields||[]).filter(field=>!fields.includes(field));record.historyConflictConfirmed=false;record.historyConflictSignature='';historyCheckSequence++;historyLocalSequence++;work.previewDirty=true;await reportSkipController?.refreshContext(work);updateHistoryPlanLocal();const latest=historyPlan.find(candidate=>candidate.key===item.key);if(latest?.conflicts?.length){record.historyConflictConfirmed=true;record.historyConflictSignature=latest.conflictSignature}updateHistoryPlanLocal();try{await save();notice('核對決定已保存；請更新差異後再確認同步。');return true}catch(error){work.staleReviewPending=[...before];record.staleReviewFields=[...new Set([...(record.staleReviewFields||[]),...fields])];record.historyConflictConfirmed=false;record.historyConflictSignature='';updateHistoryPlanLocal();notice(`核對決定未保存：${error.message}。選擇仍保留，請重試。`,true);return false}}
+async function confirmStaleHistoryReview(item,fields){
+  const owner=work;if(!owner||!item)return false
+  const ownerId=owner.id,reportKey=item.key,record=owner.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===reportKey)||item.record
+  if(fields.some(field=>!['source','keep','mixed','skip'].includes(record.historyFieldDecisions?.[field])))return false
+  const before=owner.staleReviewPending||[],resolved=before.filter(pending=>pending.kind==='history_report'&&pending.source_id===reportKey&&fields.includes(pending.field));if(!resolved.length)return false
+  const operation=++historyCheckSequence
+  owner.staleReviewPending=before.filter(pending=>!resolved.includes(pending));record.staleReviewFields=(record.staleReviewFields||[]).filter(field=>!fields.includes(field));record.historyConflictConfirmed=false;record.historyConflictSignature='';historyLocalSequence++;owner.previewDirty=true
+  try{
+    await reportSkipController?.refreshContext(owner)
+    if(work!==owner||owner.id!==ownerId||operation!==historyCheckSequence)return false
+    updateHistoryPlanLocal();const latest=historyPlan.find(candidate=>candidate.key===reportKey)
+    if(latest?.conflicts?.length){record.historyConflictConfirmed=true;record.historyConflictSignature=latest.conflictSignature}
+    updateHistoryPlanLocal();const saved=await save()
+    if(work!==owner||owner.id!==ownerId||operation!==historyCheckSequence)return false
+    if(!saved)throw Object.assign(new Error('工作已切換或保存版本已更新。'),{code:'WORK_CONFLICT'})
+    notice(globalThis.edulogUi?.t('work.conflictSaved')||'核對決定已保存；請更新差異後再確認同步。');return true
+  }catch(error){
+    if(work!==owner||owner.id!==ownerId||operation!==historyCheckSequence)return false
+    owner.staleReviewPending=[...before];record.staleReviewFields=[...new Set([...(record.staleReviewFields||[]),...fields])];record.historyConflictConfirmed=false;record.historyConflictSignature='';updateHistoryPlanLocal();notice((globalThis.edulogUi?.t('work.conflictSaveFailed')||'保存失敗，選擇仍保留；請重試保存。')+' '+error.message,true);return false
+  }
+}
 async function historyWorkChanged(){if(!work)return false;historyCheckSequence++;historyLocalSequence++;work.previewDirty=true;await reportSkipController?.refreshContext(work);updateHistoryPlanLocal();try{return await save()}catch(e){notice(`核對結果未保存：${e.message}。選擇仍保留，請重試。`,true);return false}}
 const reportSkipController=createReportSkipController({getWork:()=>work,targets:historyTargets,routes:()=>historyRoutes,instance:()=>binding?.instance||'',api,capable:()=>integrationCapabilities.report_skip_decisions,identity:historyIdentity,changed:historyWorkChanged,recompute:updateHistoryPlanLocal,save})
 function historyUiChanged(){if(work)void save().catch(e=>notice(e.message,true))}
-const historyView=createHistoryWorkbench({work:()=>work,record:item=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record,item:key=>historyPlan.find(candidate=>candidate.key===key),labels:fieldLabels,changed:historyWorkChanged,staleFields:staleFieldsForHistoryItem,hasStaleReview:item=>work?.staleReviewRows?.some(stale=>stale.source_id===item.key),staleDecision:(item,field)=>work?.staleReviewPending?.find(pending=>pending.kind==='history_report'&&pending.source_id===item.key&&pending.field===field)?.previousDecision,confirmStaleReview:confirmStaleHistoryReview,backToSummary:()=>{stage('import','apply');historyView.restoreListState();$('preview-section').scrollIntoView({block:'start',behavior:'smooth'})},uiChanged:historyUiChanged,recheck:(key)=>void runLatest(async()=>{const state=historyView.capture(),selected=historyView.selectedKey(),owner=work?.id;await refreshHistoryPlan({admissions:key?[historyPlan.find(i=>i.key===key)?.record.enrollment_source_id].filter(Boolean):undefined});if(owner===work?.id&&selected===historyView.selectedKey())historyView.refreshEditor(historyPlan,state)},{label:key?'正在核對此份紀錄':'正在逐日核對有效課次'}),defaults:effectiveSyncFields,fieldLabel:key=>fieldLabels[key]||key,diffValue:displayValue,fields:(host,item)=>attachImportFields(host,item.record,{record:()=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record,work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&(change.fieldKey!=='lesson_id'||historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId))){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
+const historyView=createHistoryWorkbench({work:()=>work,record:item=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record,item:key=>historyPlan.find(candidate=>candidate.key===key),labels:fieldLabels,changed:historyWorkChanged,staleFields:staleFieldsForHistoryItem,hasStaleReview:item=>work?.staleReviewRows?.some(stale=>stale.source_id===item.key),staleDecision:(item,field)=>work?.staleReviewPending?.find(pending=>pending.kind==='history_report'&&pending.source_id===item.key&&pending.field===field)?.previousDecision,confirmStaleReview:confirmStaleHistoryReview,backToSummary:()=>{stage('import','apply');historyView.restoreListState();renderDifferences();if(work?.staleReviewSummaryUI)restoreStaleSummaryState();else $('preview-section').scrollIntoView({block:'start',behavior:'smooth'})},uiChanged:historyUiChanged,recheck:(key)=>void runLatest(async()=>{const state=historyView.capture(),selected=historyView.selectedKey(),owner=work?.id;await refreshHistoryPlan({admissions:key?[historyPlan.find(i=>i.key===key)?.record.enrollment_source_id].filter(Boolean):undefined});if(owner===work?.id&&selected===historyView.selectedKey())historyView.refreshEditor(historyPlan,state)},{label:key?'正在核對此份紀錄':'正在逐日核對有效課次'}),defaults:effectiveSyncFields,fieldLabel:key=>fieldLabels[key]||key,diffValue:displayValue,fields:(host,item)=>attachImportFields(host,item.record,{record:()=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key)||item.record,work:()=>work,courseId:()=>item.target?.courseId,courseName:courseId=>context.courses.find(c=>c.id===courseId)?.display_name,resolve:(record,courseId)=>mappingController.resolveReportFieldRules(record,courseId),catalog,lessons:()=>context.lessons,ingestLessons:rows=>{context.lessons=[...new Map([...context.lessons,...rows].map(r=>[r.id,r])).values()]},api,capable:()=>integrationCapabilities.field_mapping_memory,shareRule:(rules,change)=>{if(!change)return;for(const target of work.snapshot.records.filter(r=>r.kind==='report'&&(change.fieldKey!=='lesson_id'||historyTargets().get(r.enrollment_source_id)?.courseId===item.target?.courseId))){const field=target.sourceFields?.find(candidate=>candidate.key===change.fieldKey&&(candidate.value??candidate.text)===change.sourceValue);if(!field||globalThis.edulogFieldMappings.signature(field)!==change.optionsSignature)continue;target.fieldRules||=[];target.fieldRules=target.fieldRules.filter(rule=>!(rule.field_key===change.fieldKey&&rule.source_value===change.sourceValue&&rule.options_signature===change.optionsSignature));if(change.action==='confirm'){const rule=rules.find(candidate=>candidate.field_key===change.fieldKey&&candidate.source_value===change.sourceValue&&candidate.options_signature===change.optionsSignature);if(rule)target.fieldRules.push(rule)}}},changed:historyWorkChanged})})
 historyView.setSkip((item,active)=>reportSkipController.setSkip(item,active))
 historyView.setSkipMany(items=>reportSkipController.continueSkipping(items))
 function historyTargets() {
@@ -590,7 +619,7 @@ async function preview(reuse = false) {
     }
   }
   const resolved=[];for(const pending of work.staleReviewPending||[]){const result=previewResults.flatMap(entry=>entry.rows||[]).find(row=>row.kind===pending.kind&&row.source_id===pending.source_id);if(result&&JSON.stringify(result.before?.[pending.field])===JSON.stringify(result.after?.[pending.field]))resolved.push(pending)}if(resolved.length){work.staleReviewPending=work.staleReviewPending.filter(pending=>!resolved.includes(pending));for(const pending of resolved){const record=historyPlan.find(item=>item.key===pending.source_id)?.record;if(record)record.staleReviewFields=(record.staleReviewFields||[]).filter(field=>field!==pending.field)}work.staleReviewRows=(work.staleReviewRows||[]).filter(stale=>(work.staleReviewPending||[]).some(pending=>pending.kind==='history_report'&&pending.source_id===stale.source_id));updateHistoryPlanLocal()}if(!(work.staleReviewPending||[]).length)work.staleReviewRows=[]
-  work.status = 'previewed'; delete work.previewError; work.previewDirty = false; work.mappingDirty = false; work.previewJobPending=false; work.batchCount = work.batches.length; await save(); renderDifferences(); $('apply').disabled=work.batches.length===0||Boolean(work.staleReviewPending?.length); notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : work.staleReviewPending?.length?'差異已更新；仍有報告需要回原核對區確認。':'差異已更新，請檢查後確認匯入。')
+  work.status = 'previewed'; delete work.previewError; work.previewDirty = false; work.mappingDirty = false; work.previewJobPending=false; work.batchCount = work.batches.length; await save(); renderDifferences(); updateApplyAvailability(); notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : work.staleReviewPending?.length?'差異已更新；仍有報告需要回原核對區確認。':'差異已更新，請檢查後確認匯入。')
   } catch(error) {
     const alreadyRecorded=work.previewError
     work.previewDirty=true
@@ -618,16 +647,73 @@ function staleReasonLabel(diagnostics) {
   if(reasons.includes('PREVIEW_NOT_FOUND'))return '找不到原預覽'
   return '預覽目前無法使用，原因尚未確認'
 }
+function captureStaleSummaryState(){
+  if(!work)return
+  const list=$('diff-list'),active=document.activeElement,card=active?.closest?.('[data-stale-review-key]')
+  work.staleReviewSummaryUI={scrollY:window.scrollY,open:[...list.querySelectorAll('details[open][data-stale-review-detail]')].map(detail=>detail.dataset.staleReviewDetail),focusKey:card?.dataset.staleReviewKey||''}
+}
+function restoreStaleSummaryState(){
+  const saved=work?.staleReviewSummaryUI;if(!saved)return
+  const list=$('diff-list');for(const detail of list.querySelectorAll('details[data-stale-review-detail]'))detail.open=saved.open?.includes(detail.dataset.staleReviewDetail)||false
+  const max=Math.max(0,document.documentElement.scrollHeight-window.innerHeight);window.scrollTo({top:Math.min(Math.max(0,Number(saved.scrollY)||0),max),behavior:'instant'})
+  if(saved.focusKey){const card=[...list.querySelectorAll('[data-stale-review-key]')].find(item=>item.dataset.staleReviewKey===saved.focusKey);card?.querySelector('button[data-stale-review-open]')?.focus({preventScroll:true})}
+}
+function openStaleReport(item,field) {
+  if(!item)return false
+  if(!work?.staleReviewSummaryUI)captureStaleSummaryState()
+  stage('import','preview')
+  reviewPane('reports')
+  const opened=historyView.focusReport(item.key,field)
+  if(!opened)return false
+  $('history-sync').scrollIntoView?.({block:'start',behavior:'smooth'})
+  return true
+}
+function openStalePending(pending) {
+  if(pending?.kind==='history_report'){
+    const item=historyPlan.find(candidate=>candidate.key===pending.source_id)
+    return item?openStaleReport(item,pending.field):false
+  }
+  if(!['admission','student'].includes(pending?.kind))return false
+  if(!work?.staleReviewSummaryUI)captureStaleSummaryState()
+  const owner=work,admissionId=pending.kind==='admission'?pending.source_id:work.snapshot?.records?.find(row=>row.kind==='enrollment'&&row.student_source_id===pending.source_id)?.source_id
+  if(!admissionId)return false
+  stage('import','preview')
+  void (async()=>{
+    try{
+      await mappingView()
+      if(work!==owner)return
+      reviewPane('identity')
+      if(!mappingController.revealAdmission(admissionId))throw new Error(globalThis.edulogUi?.t('work.staleMappingMissing')||'找不到對應的來源報名。')
+      $('mapping-editor-pane').scrollIntoView?.({block:'start',behavior:'smooth'})
+    }catch(error){if(work===owner)notice((globalThis.edulogUi?.t('work.staleMappingFailed')||'無法開啟對應核對區，請重試。')+' '+error.message,true)}
+  })()
+  return true
+}
+function staleTargetNames(record,pending){
+  const links=context?.source_links||[],link=(kind,key)=>links.find(item=>item.source_kind===kind&&item.source_id===key&&item.valid!==false)
+  let studentId=link('student',pending?.kind==='student'?pending.source_id:record?.student_source_id)?.target_id
+  const admissionId=link('admission',pending?.kind==='admission'?pending.source_id:record?.source_id)?.target_id
+  const enrollment=context?.enrollments?.find(item=>item.id===admissionId)
+  studentId||=enrollment?.student_id
+  const courseId=link('course',record?.source_course_id)?.target_id||enrollment?.course_id
+  const student=context?.students?.find(item=>item.id===studentId),course=context?.courses?.find(item=>item.id===courseId)
+  return {student:student?.name||student?.display_name||'',course:course?.display_name||course?.name||''}
+}
+function groupStaleReviewPending(pendingRows=[]){
+  const grouped=new Map()
+  for(const pending of pendingRows){const key=`${pending.kind}:${pending.source_id}`;if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(pending)}
+  return grouped
+}
 function renderDifferences() {
   $('diff-list').replaceChildren(); const totals = { added: 0, updated: 0, unchanged: 0, conflict: 0 }
   if(work.staleReviewPending?.length) {
-    const section=node('section',undefined,'notice warning');section.setAttribute('role','status');section.setAttribute('aria-live','polite');section.setAttribute('aria-label','預覽失效後需要重新確認的報告')
-    const grouped=new Map();for(const pending of work.staleReviewPending){const key=`${pending.kind}:${pending.source_id}`;if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(pending)}
-    section.append(node('h3',globalThis.edulogUi?.t('work.staleReviewTitle',{reports:grouped.size,fields:work.staleReviewPending.length})||`需要重新確認 · ${grouped.size} 份報告 · ${work.staleReviewPending.length} 個欄位`),node('p',globalThis.edulogUi?.t('work.staleReviewHelp')||'先辨識報告，再前往原核對區比較來源與 EduLog 現值並保存決定。確認完成後請更新差異；這裡不會直接修改同步內容。'))
-    for(const [key,fields] of grouped){const pending=fields[0],item=historyPlan.find(candidate=>pending.kind==='history_report'&&candidate.key===pending.source_id),record=item?.record||work.snapshot?.records?.find(candidate=>candidate.kind==='report'&&historyIdentity(candidate)===pending.source_id),row=node('article',undefined,'stale-review-choice'),t=(key,params)=>globalThis.edulogUi?.t(key,params);const sourceStudent=record?.sourceStudentName,targetStudent=item?.target?.name,student=targetStudent||sourceStudent||t("work.staleStudentMissing")||"學生姓名未提供",sourceCourse=record?.sourceCourseLabel,targetCourse=item?.target?.courseName,course=targetCourse||sourceCourse||t("work.staleCourseMissing")||"課程未提供",date=record?.date||record?.dateRaw||t("work.staleDateMissing")||"日期未提供",destination=item?.occurrence?`${item.occurrence.class_name||'課次'} · ${item.occurrence.occurrence_date||date}`:record?.historyOnly?"僅保存歷史":"課次待確認";row.append(node("h4",student),node("p",`${course} · 報名 #${record?.enrollment_source_id||'未提供'} · ${date}`),node("p",t("work.staleDestination",{destination})||`同步目的地：${destination}`),node("p",t("work.staleFields",{fields:fields.map(entry=>fieldLabels[entry.field]||entry.field).join("、")})||`待確認欄位：${fields.map(entry=>fieldLabels[entry.field]||entry.field).join('、')}`));if(sourceStudent&&targetStudent&&sourceStudent!==targetStudent)row.append(node("p",t("work.staleSourceStudent",{name:sourceStudent})||`來源學生：${sourceStudent}`),node("p",t("work.staleTargetStudent",{name:targetStudent})||`EduLog 學生：${targetStudent}`));if(sourceCourse&&targetCourse&&sourceCourse!==targetCourse)row.append(node("p",t("work.staleSourceCourse",{name:sourceCourse})||`來源課程：${sourceCourse}`),node("p",t("work.staleTargetCourse",{name:targetCourse})||`EduLog 課程：${targetCourse}`));for(const entry of fields){const fieldDetails=node('details'),fieldLabel=fieldLabels[entry.field]||entry.field,decision=entry.previousDecision==='source'?(t('diff.sourceDecision')||'採用來源'):entry.previousDecision==='keep'?(t('diff.keep')||'保留 EduLog'):entry.previousDecision==='mixed'?(t('work.merge')||'混合'):entry.previousDecision==='skip'?(t('diff.skip')||'不同步'):'未選擇',source=String(item?.sourceData?.[entry.field]??record?.data?.[entry.field]??'未提供'),target=String(item?.comparisonReport?.[entry.field]??'未提供');fieldDetails.append(node('summary',`${fieldLabel} · 原選擇：${decision}`),node('p',t('work.staleSourceValue',{value:source})||`來源：${source}`),node('p',t('work.staleTargetValue',{value:target})||`EduLog 現值：${target}`));row.append(fieldDetails)}const reason=node('p',staleReasonLabel(work.staleDiagnostics));reason.className='hint';row.append(reason);const go=node('button');if(globalThis.edulogUi)globalThis.edulogUi.text(go,'work.staleOpen');else go.textContent='前往核對';go.type='button';go.addEventListener('click',()=>{if(item)historyView.focusReport(item.key,fields[0].field);else notice('這筆項目缺少可定位的報告資料；請先查看來源與對應核對區。',true)});row.append(go);const evidence=node('details'),evidenceSummary=node('summary');if(globalThis.edulogUi)globalThis.edulogUi.text(evidenceSummary,'work.staleEvidence');else evidenceSummary.textContent='診斷與來源證據';evidence.append(evidenceSummary,node('p',`來源識別：${pending.source_id} · 批次：${pending.batchKey||'未提供'} · 類型：${pending.kind||'未提供'}`));row.append(evidence);section.append(row)}
+    const section=node('section',undefined,'notice warning');section.setAttribute('role','region');section.setAttribute('aria-live','polite');section.setAttribute('aria-label','預覽失效後需要重新確認的報告')
+    const grouped=groupStaleReviewPending(work.staleReviewPending)
+    const startReview=node('button');startReview.dataset.staleReviewStart='true';globalThis.edulogUi?.text(startReview,'work.staleStartReview');if(!globalThis.edulogUi)startReview.textContent='開始核對';startReview.type='button';startReview.addEventListener('click',()=>{const first=grouped.values().next().value?.[0];if(first&&openStalePending(first))return;notice('第一筆待確認資料目前無法定位；請檢查來源與對應資料後重試。',true)});section.append(startReview)
+    for(const [key,fields] of grouped){const pending=fields[0],item=historyPlan.find(candidate=>pending.kind==='history_report'&&candidate.key===pending.source_id),record=item?.record||work.snapshot?.records?.find(candidate=>pending.kind==='history_report'?candidate.kind==='report'&&historyIdentity(candidate)===pending.source_id:pending.kind==='admission'?candidate.kind==='enrollment'&&candidate.source_id===pending.source_id:pending.kind==='student'?candidate.kind==='enrollment'&&candidate.student_source_id===pending.source_id:false),identityTarget=staleTargetNames(record,pending),row=node('article',undefined,'stale-review-choice'),t=(key,params)=>globalThis.edulogUi?.t(key,params);row.dataset.staleReviewKey=key;const sourceStudent=record?.sourceStudentName,targetStudent=item?.target?.name||identityTarget.student,student=targetStudent||sourceStudent||t('work.staleStudentMissing')||'學生姓名未提供',sourceCourse=record?.sourceCourseLabel,targetCourse=item?.target?.courseName||identityTarget.course,course=targetCourse||sourceCourse||t('work.staleCourseMissing')||'課程未提供',date=record?.date||record?.dateRaw||t('work.staleDateMissing')||'日期未提供',destination=item?.occurrence?`${item.occurrence.class_name||'課次'} · ${item.occurrence.occurrence_date||date}`:record?.historyOnly?'僅保存歷史':'課次待確認';row.append(node('h4',student),node('p',`${course} · 報名 #${record?.enrollment_source_id||'未提供'} · ${date}`),node('p',t('work.staleDestination',{destination})||`同步目的地：${destination}`),node('p',t('work.staleFields',{fields:fields.map(entry=>fieldLabels[entry.field]||entry.field).join('、')})||`待確認欄位：${fields.map(entry=>fieldLabels[entry.field]||entry.field).join('、')}`));if(sourceStudent&&targetStudent&&sourceStudent!==targetStudent)row.append(node('p',t('work.staleSourceStudent',{name:sourceStudent})||`來源學生：${sourceStudent}`),node('p',t('work.staleTargetStudent',{name:targetStudent})||`EduLog 學生：${targetStudent}`));if(sourceCourse&&targetCourse&&sourceCourse!==targetCourse)row.append(node('p',t('work.staleSourceCourse',{name:sourceCourse})||`來源課程：${sourceCourse}`),node('p',t('work.staleTargetCourse',{name:targetCourse})||`EduLog 課程：${targetCourse}`));const comparisons=node('details'),comparisonsSummary=node('summary');comparisons.className='stale-review-comparisons';comparisons.dataset.staleReviewDetail=key+':values';comparisonsSummary.textContent='查看欄位差異';comparisons.append(comparisonsSummary);for(const entry of fields){const fieldDetails=node('section',undefined,'stale-review-field'),fieldLabel=fieldLabels[entry.field]||entry.field,decision=entry.previousDecision==='source'?(t('diff.sourceDecision')||'採用來源'):entry.previousDecision==='keep'?(t('diff.keep')||'保留 EduLog'):entry.previousDecision==='mixed'?(t('work.merge')||'混合'):entry.previousDecision==='skip'?(t('diff.skip')||'不同步'):(t('work.staleOldChoiceMissing')||'舊草稿未保留原選擇'),source=displayValue(entry.field,item?.sourceData?.[entry.field]??record?.data?.[entry.field]),target=displayValue(entry.field,item?.comparisonReport?.[entry.field]??item?.occurrence?.report?.[entry.field]);fieldDetails.append(node('h5',`${fieldLabel} · ${decision}`),node('p',t('work.staleSourceValue',{value:source})||`來源：${source}`),node('p',t('work.staleTargetValue',{value:target})||`EduLog 現值：${target}`));comparisons.append(fieldDetails)}row.append(comparisons);const reason=node('p',staleReasonLabel(work.staleDiagnostics));reason.className='hint';row.append(reason);const go=node('button');go.dataset.staleReviewOpen='true';if(globalThis.edulogUi)globalThis.edulogUi.text(go,'work.staleOpen');else go.textContent='前往核對';go.type='button';go.addEventListener('click',()=>{if(openStalePending(fields[0]))return;notice('這筆項目缺少可定位的報告資料；請先查看來源與對應核對區。',true)});row.append(go);const evidence=node('details'),evidenceSummary=node('summary');evidence.dataset.staleReviewDetail=key+':evidence';if(globalThis.edulogUi)globalThis.edulogUi.text(evidenceSummary,'work.staleEvidence');else evidenceSummary.textContent='診斷與來源證據';evidence.append(evidenceSummary,node('p',`來源識別：${pending.source_id} · 批次：${pending.batchKey||'未提供'} · 類型：${pending.kind||'未提供'}`));row.append(evidence);section.append(row)}
     $('diff-list').append(section)
   }
-  if(work.staleDiagnostics) {
+  if(work.staleDiagnostics&&!work.staleReviewPending?.length) {
     $('diff-list').append(node('p',`上次同步未提交：${staleReasonLabel(work.staleDiagnostics)}。已重新核對本輪差異，請檢查受影響報告後再確認同步。`,'notice warning'))
   }
   previewResults.forEach(result => result.rows.forEach((row, rowIndex) => {
@@ -663,7 +749,7 @@ function renderDifferences() {
   }
   $('diff-list').prepend(summary)
   if (work.needs.length) { const d = node('details'); d.append(node('summary', `查看 ${work.needs.length} 項需處理資料`)); work.needs.forEach(text => d.append(node('p', text))); $('diff-list').append(d) }
-  show('preview-section'); stage('import', 'apply'); $('apply').disabled = work.batches.length===0 || work.previewDirty===true || Boolean(work.staleReviewPending?.length)
+  show('preview-section'); stage('import', 'apply'); updateApplyAvailability()
 }
 
 function refreshStaleReviewBatchRows(){
@@ -864,7 +950,7 @@ async function applyHistoryBindings() {
 }
 async function apply() {
   if (work.previewDirty || !work.jobId) throw new Error('請先更新差異。')
-  if(work.staleReviewPending?.length)throw new Error('請重新確認預覽失效前的欄位選擇，再同步。')
+  if(work.staleReviewPending?.length){const error=new Error(`仍有 ${new Set(work.staleReviewPending.map(row=>`${row.kind}:${row.source_id}`)).size} 份報告需要重新確認。`);error.code='STALE_REVIEW_REQUIRED';throw error}
   if (work.blockedRows?.length && !window.confirm(globalThis.edulogUi?.t('work.confirmEligible',{count:work.blockedRows.length}) || `仍有 ${work.blockedRows.length} 筆來源資料被阻擋。只同步可處理資料並保留待處理項目？`)) return
   for (const result of previewResults) for (const row of result.rows || []) if (row.kind === 'class_session' && row.status !== 'added' && JSON.stringify(row.before.course_ids) !== JSON.stringify(row.after.course_ids)) {
     const batchRow = work.batches[result.batchIndex].rows.find(r => r.record.kind === row.kind && r.source_id === row.source_id)

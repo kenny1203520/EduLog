@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
+import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 import { labels, splitBatches, validateBatches, importBatchRequest } from '../workspace-model.js'
 import { bindingStillMatches } from '../history-sync.js'
 
@@ -13,6 +14,8 @@ const staleScript = script.slice(script.indexOf('function refreshStaleReviewBatc
 const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
 const resumeScript = script.slice(script.indexOf('async function refreshImportCheckpoint()'), script.indexOf('async function readForm()'))
 const progressScript=script.slice(script.indexOf('function progress()'),script.indexOf('function taipeiToday()'))
+const applyGateScript=script.slice(script.indexOf('function canApplyCurrentPreview()'),script.indexOf('function stage('))
+const staleNavigationScript=script.slice(script.indexOf('function captureStaleSummaryState()'),script.indexOf('function renderDifferences()'))
 const bindingScript=script.slice(script.indexOf('async function applyHistoryBindings('),script.indexOf('async function apply()'))
 function bindingFixture() {
  const plan={historyId:'history',itemKey:'301:report:401',expectedFields:{content:'confirmed'},occurrence:{id:'occurrence',report:{version:1}},body:{key:'original-key',class_occurrence_id:'occurrence',overwrite:[]},status:'pending'},calls=[],saved=[]
@@ -39,7 +42,7 @@ test('a late binding response cannot update a changed work context',async()=>{
 const row = n => ({source_id:String(n),target_id:`target-${n}`,overwrite:[],record:{kind:'course',data:{subject:'合成課程',stage:'初階'}}})
 function previewFixture(work, rows) {
   const calls=[],saved=[],controls={apply:{disabled:false},'preview-section':{hidden:false}}
-  const context=vm.createContext({work,rows,labels,splitBatches,validateBatches,importBatchRequest,crypto:{randomUUID:(()=>{let n=0;return()=>`new-key-${++n}`})()},integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],saveState:'saved',globalThis:{edulogUi:{t:key=>key}},mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),taskStatus(){},notice(){},api:async(operation,body,extra)=>{
+  const context=vm.createContext({work,rows,labels,splitBatches,validateBatches,importBatchRequest,crypto:{randomUUID:(()=>{let n=0;return()=>`new-key-${++n}`})()},integrationCapabilities:{enrollment_history_reports:true},refreshHistoryPlan:async()=>{},batchBytes:180000,previewResults:[{old:true}],saveState:'saved',saveFailureWorkId:'',unsavedWorkId:'',mappingController:{resolveFieldRules:async()=>{},verifyReportRelationships:async()=>{}},prepareRows:()=>rows,$:id=>controls[id],save:async()=>saved.push(structuredClone(context.work)),renderNoopSummary:()=>calls.push({operation:'empty-summary'}),renderDifferences:()=>calls.push({operation:'render'}),taskStatus(){},notice(){},api:async(operation,body,extra)=>{
     calls.push({operation,body:structuredClone(body),extra})
     if(['preview','apply'].includes(operation)&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'})
     if(operation==='job')return{id:'new-job'}
@@ -49,15 +52,44 @@ function previewFixture(work, rows) {
     }
     return{}
   }})
+  context.edulogUi={t:key=>key}
   context.updateHistoryPlanLocal=()=>{}
   context.structuredClone=structuredClone
-  vm.runInContext(`${prepareScript}\n${staleScript}\n${previewScript}\n${resumeScript}`,context)
+  vm.runInContext(`${applyGateScript}\n${prepareScript}\n${staleScript}\n${previewScript}\n${resumeScript}`,context)
   context.prepareRows=()=>rows
   return {context,calls,saved,controls,preview:reuse=>context.preview(reuse),resume:()=>context.resumeImport()}
 }
 const work = () => ({id:'local-work',type:'import',status:'collected',done:0,jobId:'old-job',batches:[{key:'old-key',rows:[row(1)]}],snapshot:{sourceOrigin:'https://corp.orangeapple.co',classId:'11'},destination:{course_ids:['course']},uiState:[{id:'student',value:'kept'}]})
 test('no new data produces a review summary without cancelling or creating a server job',async()=>{
  const current=work(),original=structuredClone(current),f=previewFixture(current,[]);await f.preview(false);assert.deepEqual(current,{...original,previewDirty:true});assert.deepEqual(f.calls,[{operation:'empty-summary'}]);assert.equal(f.saved.length,1);assert.equal(f.controls.apply.disabled,true)
+})
+
+test('sync stays disabled until the current preview, stale decisions, and local save are all valid',()=>{
+ const cases=[
+  [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:false,staleReviewPending:[]},[{rows:[{}]}],'saved',true],
+  [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:false,staleReviewPending:[{kind:'history_report',source_id:'301'}]},[{rows:[{}]}],'saved',false],
+  [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:false,staleReviewPending:[]},[{rows:[{}]}],'failed',false],
+  [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:true,staleReviewPending:[]},[{rows:[{}]}],'saved',false],
+  [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:false,staleReviewPending:[]},[],'saved',false]
+ ]
+ for(const [work,previewResults,saveState,expected] of cases){const context=vm.createContext({work,previewResults,saveState,saveFailureWorkId:'',unsavedWorkId:work.id,$:()=>({disabled:null})});vm.runInContext(applyGateScript,context);assert.equal(context.canApplyCurrentPreview(),expected)}
+})
+
+test('stale report navigation switches to the review pane before focusing and retains summary state',()=>{
+ const dom=new JSDOM('<div id="diff-list"><article data-stale-review-key="history_report:301"><details open data-stale-review-detail="history_report:301:values"><summary>欄位</summary></details><button data-stale-review-open>前往核對</button></article></div><div id="history-sync"></div>'),calls=[],work={id:'work'}
+ dom.window.scrollTo=({top})=>{dom.window.__scrollTop=top};dom.window.document.getElementById('history-sync').scrollIntoView=()=>calls.push('scroll')
+ const context=vm.createContext({work,window:dom.window,document:dom.window.document,$:id=>dom.window.document.getElementById(id),stage:(...args)=>calls.push(['stage',...args]),reviewPane:p=>calls.push(['pane',p]),historyView:{focusReport:(key,field)=>{calls.push(['focus',key,field]);return true}},notice:()=>{}})
+ vm.runInContext(staleNavigationScript,context)
+ dom.window.document.querySelector('[data-stale-review-open]').focus()
+ assert.equal(context.openStaleReport({key:'301'},'content'),true);assert.deepEqual(calls,[['stage','import','preview'],['pane','reports'],['focus','301','content'],'scroll']);assert.deepEqual(Array.from(work.staleReviewSummaryUI.open),['history_report:301:values']);assert.equal(work.staleReviewSummaryUI.focusKey,'history_report:301')
+ dom.window.document.querySelector('details').open=false;context.restoreStaleSummaryState();assert.equal(dom.window.document.querySelector('details').open,true);dom.window.close()
+})
+
+test('stale review summary groups 32 field confirmations into 18 distinct reports',()=>{
+ const dom=new JSDOM('<div id="diff-list"></div>'),context=vm.createContext({window:dom.window,document:dom.window.document,work:{},$:id=>dom.window.document.getElementById(id),historyView:{},stage(){},reviewPane(){},notice(){}})
+ vm.runInContext(staleNavigationScript,context)
+ const rows=Array.from({length:32},(_,index)=>({kind:'history_report',source_id:`report-${index<14?index:index-14}`})),grouped=context.groupStaleReviewPending(rows)
+ assert.equal(rows.length,32);assert.equal(grouped.size,18);assert.equal([...grouped.values()].filter(fields=>fields.length===2).length,14);dom.window.close()
 })
 
 test('invalid local rows never cancel the old job, replace its preview, or create a new one',async()=>{
@@ -254,8 +286,9 @@ function classifiedHistoryFixture(items, overrides={}) {
   const work={id:'classified-work',type:'import',status:'collected',done:0,previewDirty:false,ids:{},includeInternalNotes:false,history:{paths:[],next:0},snapshot:{sourceOrigin:'https://corp.orangeapple.co',classId:'class-source',records:[enrollment]},...overrides}
   const controls={'include-internal-notes':{checked:false},'enrollment-course-301':{value:'course'},'class-session':{value:'session'},classroom:{value:'room'},'start-301':{value:'2026-01-01'},'status-301':{value:'active'},'enrollment-301':{value:'enrollment-target'},apply:{disabled:false},'preview-section':{hidden:false}}
   const calls=[],saved=[]
-  const context=vm.createContext({work,historyPlan:items,context:{class_sessions:[{id:'session',course_ids:['course'],name:'Class',start_date:'2026-01-01',day_of_week:1,start_time:'10:00',end_time:'12:00'}],courses:[{id:'course',display_name:'Test course'}],enrollments:[{id:'enrollment-target',class_session_id:'old-session'}],permissions:{}},mappingController:{validateRow:()=>true,courseRows:()=>[],studentSelect:()=>({value:'student-target'}),resolveFieldRules:async()=>{}},integrationCapabilities:{enrollment_history_reports:true},generation:1,crypto:{randomUUID:(()=>{let n=0;return()=>`generated-${++n}`})()},$:id=>controls[id],admissionIdentity:()=>({}),idFor:(kind,id)=>`${kind}-${id}`,labels,splitBatches,validateBatches,importBatchRequest,batchBytes:180000,previewResults:[],saveState:'saved',globalThis:{edulogUi:{t:()=>''}},refreshHistoryPlan:async()=>{},save:async()=>{saved.push(structuredClone(work))},saveWorkMetadata:async()=>{},renderNoopSummary(){},renderDifferences(){},stage(){},notice(){},api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='job')return{id:'new-job'};if(operation==='preview')return{rows:[],counts:{},batch_fingerprint:'a'.repeat(64)};return{}}})
-  vm.runInContext(`${prepareScript}\n${staleScript}\n${previewScript}`,context)
+  const context=vm.createContext({work,historyPlan:items,context:{class_sessions:[{id:'session',course_ids:['course'],name:'Class',start_date:'2026-01-01',day_of_week:1,start_time:'10:00',end_time:'12:00'}],courses:[{id:'course',display_name:'Test course'}],enrollments:[{id:'enrollment-target',class_session_id:'old-session'}],permissions:{}},mappingController:{validateRow:()=>true,courseRows:()=>[],studentSelect:()=>({value:'student-target'}),resolveFieldRules:async()=>{}},integrationCapabilities:{enrollment_history_reports:true},generation:1,crypto:{randomUUID:(()=>{let n=0;return()=>`generated-${++n}`})()},$:id=>controls[id],admissionIdentity:()=>({}),idFor:(kind,id)=>`${kind}-${id}`,labels,splitBatches,validateBatches,importBatchRequest,batchBytes:180000,previewResults:[],saveState:'saved',saveFailureWorkId:'',unsavedWorkId:'',refreshHistoryPlan:async()=>{},save:async()=>{saved.push(structuredClone(work))},saveWorkMetadata:async()=>{},renderNoopSummary(){},renderDifferences(){},stage(){},taskStatus(){},notice(){},api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='job')return{id:'new-job'};if(operation==='preview')return{rows:[],counts:{},batch_fingerprint:'a'.repeat(64)};return{}}})
+  context.edulogUi={t:()=>''}
+  vm.runInContext(`${applyGateScript}\n${prepareScript}\n${staleScript}\n${previewScript}`,context)
   return{context,work,calls,saved,controls,preview:()=>context.preview(false)}
 }
 const historyItem=(category,key,extra={})=>({key,category,reason:`${category} reason`,record:{kind:'report',enrollment_source_id:'301',source_id:key,date:'2026-10-04'},...extra})
