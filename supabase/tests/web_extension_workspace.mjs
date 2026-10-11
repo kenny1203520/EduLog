@@ -92,6 +92,7 @@ try {
   await db.exec(read('1000134_atomic_history_reconciliation.sql'))
   await db.exec(read('1000135_extension_mapping_conflict_diagnostics.sql'))
   await db.exec(read('1000136_import_preview_diagnostics_and_work_rounds.sql'))
+  await db.exec(read('1000137_consistent_preview_stale_diagnostics.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -146,13 +147,36 @@ try {
   await assert.rejects(rpc('apply',{...update,fingerprint:'f'.repeat(64)}),error=>error.message==='PREVIEW_STALE'&&JSON.parse(error.detail).reason==='REQUEST_FINGERPRINT_CHANGED')
   await db.exec(`UPDATE public.students SET name='EduLog edited' WHERE id='${student}'`)
   await assert.rejects(rpc('apply',update),error=>error.message==='PREVIEW_STALE'&&JSON.parse(error.detail).reason==='TARGET_VERSION_CHANGED'&&JSON.parse(error.detail).source_id==='101')
+  // A full 50-row batch must diagnose the row that actually changed. The
+  // earlier diagnostic compared md5 preview versions to updated_at, causing
+  // the first, unchanged student to be reported instead.
+  const diagnosticStudents=Array.from({length:50},(_,i)=>({
+    source_id:`diag-${i+1}`,
+    target_id:i===0?student:id(100+i),
+    overwrite:[],
+    record:{kind:'student',data:{name:i===0?'EduLog edited':`Diagnostic ${i+1}`}}
+  }))
+  for(let i=1;i<50;i++)await db.query('INSERT INTO public.students(id,name,user_id) VALUES($1,$2,$3)',[id(100+i),`Diagnostic ${i+1}`,actor])
+  const diagnosticBatch={job_id:job.id,key:id(24),fingerprint:'9'.repeat(64),rows:diagnosticStudents}
+  assert.equal((await rpc('preview',diagnosticBatch)).counts.unchanged,50)
+  await db.query('UPDATE public.students SET name=$1 WHERE id=$2',["Changed after preview",id(149)])
+  await assert.rejects(rpc('apply',diagnosticBatch),error=>{
+    if(error.message!=='PREVIEW_STALE')return false
+    const detail=JSON.parse(error.detail)
+    return detail.reason==='TARGET_VERSION_CHANGED'&&detail.kind==='student'&&detail.source_id==='diag-50'
+  })
+  // Re-preview the same immutable batch key, then apply after the teacher has
+  // seen the refreshed comparison. The first 49 rows remain unchanged.
+  const refreshedDiagnostic=await rpc('preview',diagnosticBatch)
+  assert.equal(refreshedDiagnostic.rows.find(row=>row.source_id==='diag-50').status,'conflict')
+  assert.equal((await rpc('apply',diagnosticBatch)).applied,50)
   await db.exec("INSERT INTO public.denied_permissions VALUES('teaching.students.update')")
   await assert.rejects(rpc('preview',update),/PERMISSION_DENIED/)
   await db.exec('DELETE FROM public.denied_permissions')
   // A failure late in a batch rolls back previous inserts and source links.
   const partial = {...batch,key:id(23),fingerprint:'e'.repeat(64),rows:[{source_id:'102',target_id:id(11),overwrite:[],record:{kind:'student',data:{name:'B'}}},{source_id:'201',target_id:id(12),overwrite:[],record:{kind:'enrollment',data:{student_id:id(11),course_id:course,classroom_id:room,class_session_id:id(99),status:'regular',start_date:'2026-01-01',time_zone:'Asia/Taipei'}}}]}
   await rpc('preview',partial); await assert.rejects(rpc('apply',partial),/INVALID_REFERENCE/)
-  assert.equal((await db.query('SELECT count(*)::int AS n FROM public.students')).rows[0].n,1)
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM public.students')).rows[0].n,50)
   const verifiedJob = await rpc('job',{...destination,source_class_id:'13'})
   const verifiedBatch = {job_id:verifiedJob.id,key:id(890),fingerprint:'7'.repeat(64),rows:[{source_id:'verified-1',target_id:id(900),overwrite:[],record:{kind:'student',data:{name:'Verified student'}}}]}
   await rpc('preview',verifiedBatch);await rpc('apply',verifiedBatch)
