@@ -1,5 +1,9 @@
 # EduLog Teaching Systems extension
 
+## Current build: precise stale-preview recovery (0.1.0)
+
+Stale-preview diagnostics now use the same target-version calculation as preview and apply, so unchanged earlier rows are not mislabeled when a later row changed. History-to-session reconciliation reports a changed occurrence only when it can identify it safely. Recovery checks the server checkpoint first, then rechecks the original unsubmitted batches with their existing keys; it never applies automatically. Apply migration **1000137** and deploy the matching API. See [acceptance record](tests/ACCEPTANCE-preview-stale-precision.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-preview-stale-precision.zip`.
+
 ## Current build: workspace transport and draft recovery (0.1.0)
 
 Work drafts are stored in the extension page's IndexedDB after a small background authorization check; complete draft bodies no longer cross the runtime message channel. Save feedback distinguishes unsaved, saving, saved, failed, and uncertain results. A failed save pauses preview, keeps the current work and batch identifiers, and offers an explicit retry. A retry rechecks the existing job rather than creating another one. No server endpoint or SQL migration was added. See [acceptance record](tests/ACCEPTANCE-workspace-transport-recovery.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-workspace-transport-recovery.zip`.
