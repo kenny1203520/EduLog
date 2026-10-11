@@ -124,7 +124,7 @@ function restoreStage(view) {
   const own=work?.type===view?work:activeWorks[view],state=currentWorkflow(view)
   let step=own?.interfaceState?.stage||activeStages[view]||1
   if(!state.available[step-1])step=state.available.findLastIndex(Boolean)+1
-  if(own&&['applying','failed','outcome_unknown','complete','partial_complete','paused','cancelled'].includes(own.status))step=4
+  if(own&&['applying','failed','outcome_unknown','complete','partial_complete','paused','cancelled','awaiting-finalization'].includes(own.status))step=4
   stage(view,(view==='import'?['collect','preview','apply','resume']:['read-form','compare','prefill','return-source'])[step-1])
 }
 document.querySelectorAll('[data-stage-nav]').forEach(button=>button.addEventListener('click',()=>{
@@ -193,6 +193,8 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     if (error.code==='READ_CANCELLED'){$('operation-status').dataset.state='complete';$('operation-title').textContent='已取消唯讀查詢';$('operation-detail').textContent='已完成資料與目前選擇保留；可重新核對。';return false}
     else if (!readOnly && work?.status === 'outcome_unknown') { $('operation-title').textContent = '寫入結果尚未確認'; $('operation-detail').textContent = '未收到這批的確認回應。檢查點已保留；續傳會先用原冪等鍵核對結果，不會建立新的匯入工作。'; notice('寫入結果尚未確認。請使用「檢查並續傳」核對批次狀態。', true) }
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
+    else if (error.code === 'PAUSED_PREVIEW_UNSUPPORTED') { $('operation-title').textContent='需要更新 EduLog 伺服器';$('operation-detail').textContent=error.message }
+    else if (error.code === 'IMPORT_STATUS_UNKNOWN') { $('operation-title').textContent='伺服器狀態待確認';$('operation-detail').textContent=error.message }
     else if(['failed','uncertain'].includes(saveState)){ $('operation-title').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainTitle':'work.saveFailedTitle')|| (saveState==='uncertain'?'保存結果待確認':'草稿保存失敗');$('operation-detail').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainHelp':'work.saveFailedHelp')||'目前內容仍保留在此畫面；修復保存後可重試。同步已停用。' }
     else if(work?.status==='stale'){ $('operation-title').textContent='本輪同步受阻';$('operation-detail').textContent='此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。' }
     else if(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying','stale'].includes(work.status)){ $('operation-title').textContent=globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗';$('operation-detail').textContent=globalThis.edulogUi?.t('work.previewRetry')||'草稿與批次識別已保留；請重試核對，成功產生新摘要後再確認同步。' }
@@ -200,7 +202,7 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
     if(['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code)&&work?.type==='import'){work.status='paused-extraction';work.collectionError=error.message;work.collectionSaveError=error.code;$('retry-history-save').hidden=false;taskStatus()}
     const previewFailure=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)
-    notice(work?.status==='stale'?'此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。':previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '預覽已失效；目前批次未提交。請重新核對未提交資料。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
+    notice(error.code==='PAUSED_PREVIEW_UNSUPPORTED'||error.code==='IMPORT_STATUS_UNKNOWN'||work?.status==='stale'?'':previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '預覽已失效；目前批次未提交。請重新核對未提交資料。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
     let workBytes=0;try{workBytes=new TextEncoder().encode(JSON.stringify(work)).byteLength}catch{}
     const currentLastSavedAt=lastSavedWorkId===work?.id?lastSavedAt:null
     const currentLastSavedRevision=lastSavedWorkId===work?.id?lastSavedRevision:null
@@ -703,7 +705,7 @@ function allSubmissionRounds(row=work) {
 }
 function renderImportOutcome() {
   const host = $('import-outcome'); host.replaceChildren(); host.hidden = false
-  const title = node('h3', work.status==='complete'?'同步工作已完成':work.status==='stale'?'同步受阻，請重新核對未提交資料':work.status==='outcome_unknown'?'結果待確認':'本輪同步完成，仍有待處理項目')
+  const title = node('h3', work.status==='complete'?'同步工作已完成':work.status==='stale'?'同步受阻，請重新核對未提交資料':work.status==='outcome_unknown'?'結果待確認':work.status==='cancelled'?'已取消剩餘工作':work.status==='awaiting-finalization'?'批次已保存，等待確認完成':'本輪同步完成，仍有待處理項目')
   host.append(title)
   const totals = {}
   const rounds=allSubmissionRounds()
@@ -745,6 +747,14 @@ function renderImportOutcome() {
     const repair=node('button','處理待確認報告');repair.type='button'
     repair.addEventListener('click',()=>void run(async()=>{work.continuationMode=true;flow('import');activeStages.import=2;await mappingView();renderHistoryIssues();notice('請處理待確認項目並更新差異；新一輪只會包含尚未保存的資料。')},{label:'正在開啟原工作待處理清單'}));host.append(repair)
   }
+  if(work.status==='cancelled'&&work.needs?.length) {
+    const repair=node('button','處理待確認報告');repair.type='button'
+    repair.addEventListener('click',()=>void run(async()=>{work.continuationMode=true;flow('import');activeStages.import=2;await mappingView();renderHistoryIssues();notice('請處理剩餘項目；新一輪只會包含尚未保存且已核對的資料。')},{label:'正在開啟原工作待處理清單'}));host.append(repair)
+  }
+  if(work.status==='awaiting-finalization') {
+    const finish=node('button','確認完成本輪並更新課次');finish.type='button'
+    finish.addEventListener('click',()=>void run(async()=>{await finalizeImport();notice(work.status==='complete'?'本輪同步及課次更新已確認完成。':'本輪批次已保存；仍有待處理項目，請查看結果。')},{label:'正在確認本輪完成'}));host.append(finish)
+  }
 }
 async function loadSubmissionRoundResults() {
   const rounds=allSubmissionRounds()
@@ -773,14 +783,14 @@ function displayValue(key, value) {
 function progress() {
   show('import-progress'); $('progress').max = work.batchCount || 1; $('progress').value = work.done || 0
   $('progress-label').textContent = `已完成 ${work.done || 0} / ${work.batchCount || 0} 批。${work.needs?.length || 0} 項仍需處理。`
-  $('resume').hidden = !['paused','failed','outcome_unknown'].includes(work.status)
-  $('pause').hidden = work.status !== 'applying'; $('cancel-work').hidden = ['complete','cancelled','partial_complete'].includes(work.status)
-  stage('import','resume');$('operation-status').hidden = !['applying','stale','outcome_unknown','partial_complete','complete','failed'].includes(work.status)
+  $('resume').hidden = !['paused','failed','outcome_unknown','stale'].includes(work.status)
+  $('pause').hidden = work.status !== 'applying'; $('cancel-work').hidden = ['complete','cancelled','partial_complete','awaiting-finalization'].includes(work.status)
+  stage('import','resume');$('operation-status').hidden = !['applying','stale','outcome_unknown','partial_complete','complete','failed','cancelled','awaiting-finalization'].includes(work.status)
   $('operation-status').dataset.state = work.status === 'applying' ? 'loading' : ['failed','stale','outcome_unknown'].includes(work.status) ? 'error' : 'complete'
-  $('operation-title').textContent = ({ applying:'正在寫入匯入批次', paused:'匯入已暫停', failed:'匯入部分失敗', stale:'同步受阻，預覽已失效', outcome_unknown:'寫入結果尚未確認', complete:'同步工作已完成', partial_complete:'本輪完成，仍有待處理項目', cancelled:'已取消剩餘批次' })[work.status] || '匯入進度'
+  $('operation-title').textContent = ({ applying:'正在寫入匯入批次', paused:'匯入已暫停', failed:'匯入部分失敗', stale:'同步受阻，預覽已失效', outcome_unknown:'寫入結果尚未確認', complete:'同步工作已完成', partial_complete:'本輪完成，仍有待處理項目', cancelled:'已取消剩餘批次','awaiting-finalization':'批次已保存，等待確認完成' })[work.status] || '匯入進度'
   $('operation-detail').textContent = work.status==='stale'?`目前批次尚未提交；已知成功批次保留。原因：${staleReasonLabel(work.staleDiagnostics)}。工作資料列數不等於報告數。`:`已核對 ${work.done || 0} / ${work.batchCount || 0} 批；${work.needs?.length || 0} 筆需處理。取消不會撤回已完成批次。`
   $('operation-progress').hidden = !work.batchCount; $('operation-progress').max = work.batchCount || 1; $('operation-progress').value = work.done || 0
-  if (work.status === 'complete' || work.status === 'partial_complete' || work.status === 'stale' || work.status==='outcome_unknown') renderImportOutcome()
+  if (work.status === 'complete' || work.status === 'partial_complete' || work.status === 'stale' || work.status==='outcome_unknown' || work.status==='cancelled' || work.status==='awaiting-finalization') renderImportOutcome()
 }
 function taipeiToday() {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
@@ -924,6 +934,19 @@ async function refreshImportCheckpoint() {
   return info
 }
 async function resumeImport() {
+  if (!work?.jobId) throw new Error('找不到可恢復的匯入工作。')
+  const info=await refreshImportCheckpoint()
+  const serverStatus=info?.job?.status
+  if(!serverStatus)throw Object.assign(new Error('伺服器工作狀態未回傳；草稿與檢查點已保留，請重試查詢。'),{code:'IMPORT_STATUS_UNKNOWN'})
+  work.serverJobStatus=serverStatus
+  const serverSummary={status:serverStatus,batchCount:info.batches?.length||0,appliedRows:(info.batches||[]).reduce((sum,batch)=>sum+(batch.applied||0),0),batches:(info.batches||[]).map(batch=>({key:batch.key,status:batch.status,applied:batch.applied||0,counts:batch.counts||{}}))}
+  if(serverStatus==='complete'||serverStatus==='cancelled') {
+    work.serverImportSummary=serverSummary
+    work.status=serverStatus==='complete'?(work.needs?.length?'partial_complete':'complete'):'cancelled'
+    await save();progress();renderImportOutcome()
+    notice(serverStatus==='complete'?'伺服器已確認本工作完成；成果與待處理項目已更新。':'匯入工作已取消；已完成批次保留，未完成項目可查看或建立新輪次。')
+    return
+  }
   if(work?.status==='stale') {
     const affected=new Set()
     for(const [key,values] of Object.entries(work.staleDiagnostics||{}))if(values.some(value=>['REQUEST_FINGERPRINT_CHANGED','TARGET_VERSION_CHANGED','OCCURRENCE_REPORT_VERSION_CHANGED','PREVIEW_NOT_FOUND'].includes(value))) {
@@ -940,18 +963,33 @@ async function resumeImport() {
     }
     work.previewDirty=true;work.status='failed';await save()
   }
-  if (!work?.jobId) throw new Error('找不到可續傳的匯入工作。')
-  if (work.status === 'outcome_unknown' || work.status === 'applying' || work.status === 'failed') {
-    await refreshImportCheckpoint()
-    await preview(true)
-    if ((work.done || 0) >= (work.batchCount || work.batches?.length || 0)) {
-      await finalizeImport(); notice('伺服器檢查點確認所有批次均已提交；名單核對結果已更新。'); return
-    }
-    notice('已使用原冪等鍵檢查未確認批次。檢視差異後，再按「確認並分批匯入」。')
-    return
+  if(!['paused','previewed','pending','applying','failed','outcome_unknown'].includes(serverStatus))throw Object.assign(new Error('伺服器回傳無法辨識的工作狀態；已停止恢復。'),{code:'IMPORT_STATUS_UNKNOWN'})
+  if(serverStatus==='applying') {
+    await api('job-status',{status:'paused'},{jobId:work.jobId})
+    work.serverJobStatus='paused'
   }
-  await preview(true)
-  notice('已用原批次與檢查點重新核對。請檢視差異，再明確選擇「確認並同步」；此步驟沒有寫入教學資料。')
+  try {
+    await preview(true)
+  } catch(error) {
+    if(error.code!=='JOB_STOPPED')throw error
+    let latest
+    try{latest=await refreshImportCheckpoint()}catch{throw Object.assign(new Error('重新核對遭伺服器拒絕，且目前無法查明工作狀態。草稿與檢查點已保留，請確認連線後重試。'),{code:'IMPORT_STATUS_UNKNOWN'})}
+    const latestStatus=latest?.job?.status
+    if(latestStatus==='complete'||latestStatus==='cancelled') {
+      work.serverJobStatus=latestStatus
+      work.serverImportSummary={status:latestStatus,batchCount:latest.batches?.length||0,appliedRows:(latest.batches||[]).reduce((sum,batch)=>sum+(batch.applied||0),0),batches:(latest.batches||[]).map(batch=>({key:batch.key,status:batch.status,applied:batch.applied||0,counts:batch.counts||{}}))}
+      work.status=latestStatus==='complete'?(work.needs?.length?'partial_complete':'complete'):'cancelled'
+      await save();progress();renderImportOutcome()
+      notice(latestStatus==='complete'?'伺服器已確認本工作完成；成果與待處理項目已更新。':'匯入工作已取消；已完成批次保留，未完成項目可查看或建立新輪次。')
+      return
+    }
+    if(latestStatus==='paused')throw Object.assign(new Error('伺服器仍拒絕暫停工作的預覽。請更新 EduLog 伺服器後再重新核對；原工作與批次已保留。'),{code:'PAUSED_PREVIEW_UNSUPPORTED'})
+    throw error
+  }
+  if ((work.done || 0) >= (work.batchCount || work.batches?.length || 0)) {
+    work.status='awaiting-finalization';work.serverImportSummary=serverSummary;await save();progress();notice('伺服器檢查點確認批次已保存。請檢查結果並明確確認完成與課次更新。');return
+  }
+  notice('已用原批次與伺服器檢查點重新核對。差異已更新但尚未同步；請檢視後明確確認。')
 }
 async function readForm() {
   if (!reportSourceReady) throw new Error('來源分頁沒有開啟可辨識的報告表單。請在網站開啟「記錄」表單後重新讀取。')

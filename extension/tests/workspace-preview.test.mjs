@@ -97,6 +97,7 @@ test('resume keeps original keys and rows, skips completed batches and checks un
 })
 test('restoring a saved work with batches rechecks the original checkpoint but never writes automatically',async()=>{
   const current={...work(),status:'paused',batches:[{key:'saved-batch',rows:[row(5)],previewFingerprint:'a'.repeat(64)}]},f=previewFixture(current,[])
+  const baseApi=f.context.api;f.context.api=async(operation,body,extra)=>operation==='import-info'?{job:{status:'paused'},batches:[{key:'saved-batch',status:'previewed'}]}:baseApi(operation,body,extra)
   f.context.results=[{rows:[],counts:{}}]
   await f.resume()
   assert.deepEqual(f.calls.filter(call=>call.operation==='preview').map(call=>call.body.key),['saved-batch'])
@@ -160,7 +161,7 @@ test('resume reads the server checkpoint before re-preview and never applies aut
     {key:'already-applied',rows:[{source_id:'1',record:{kind:'student'}}]},
     {key:'still-pending',rows:[{source_id:'2',record:{kind:'student'}}]},
   ]}
-  const context=vm.createContext({work:current,api:async(operation)=>{calls.push(operation);if(operation==='import-info')return{batches:[{key:'already-applied',status:'applied',classifications:{student:{added:1}}},{key:'still-pending',status:'previewed'}]};throw new Error(`unexpected ${operation}`)},save:async()=>saved.push(structuredClone(current)),preview:async(reuse)=>{calls.push(`preview:${reuse}`);current.status='previewed'},notice(){}})
+  const context=vm.createContext({work:current,api:async(operation)=>{calls.push(operation);if(operation==='import-info')return{job:{status:'paused'},batches:[{key:'already-applied',status:'applied',classifications:{student:{added:1}}},{key:'still-pending',status:'previewed'}]};throw new Error(`unexpected ${operation}`)},save:async()=>saved.push(structuredClone(current)),preview:async(reuse)=>{calls.push(`preview:${reuse}`);current.status='previewed'},notice(){}})
   vm.runInContext(resumeScript,context)
   await context.resumeImport()
   assert.deepEqual(calls,['import-info','preview:true'])
@@ -170,10 +171,40 @@ test('resume reads the server checkpoint before re-preview and never applies aut
 })
 test('checkpoint mismatch stops recovery before re-preview',async()=>{
   const current={id:'work-1',type:'import',status:'failed',jobId:'job-1',done:1,batchCount:1,appliedBatchKeys:['key'],batches:[{key:'key',rows:[row(1)]}]},calls=[]
-  const context=vm.createContext({work:current,api:async()=>({batches:[{key:'key',status:'previewed'}]}),save:async()=>{},preview:async()=>calls.push('preview'),notice(){}})
+  const context=vm.createContext({work:current,api:async()=>({job:{status:'paused'},batches:[{key:'key',status:'previewed'}]}),save:async()=>{},preview:async()=>calls.push('preview'),notice(){}})
   vm.runInContext(resumeScript,context)
   await assert.rejects(context.resumeImport(),error=>error.code==='IMPORT_CHECKPOINT_MISMATCH')
   assert.deepEqual(calls,[]);assert.equal(current.done,1)
+})
+test('cancelled and completed server jobs refresh checkpoints and never preview again',async()=>{
+  for(const status of ['cancelled','complete']){
+    const current={...work(),status:'stale',done:0,needs:[]},calls=[]
+    const context=vm.createContext({work:current,api:async operation=>{calls.push(operation);return{job:{status},batches:[]}},save:async()=>{},progress(){},renderImportOutcome(){},notice(){},preview:async()=>calls.push('preview')})
+    vm.runInContext(resumeScript,context);await context.resumeImport()
+    assert.deepEqual(calls,['import-info']);assert.equal(current.status,status)
+  }
+})
+test('an applying server job is paused after checkpoint verification before it is re-previewed',async()=>{
+  const current={...work(),status:'outcome_unknown'},calls=[]
+  const context=vm.createContext({work:current,api:async(operation,body)=>{calls.push({operation,body});if(operation==='import-info')return{job:{status:'applying'},batches:[{key:'old-key',status:'previewed'}]};return{status:'paused'}},save:async()=>{},preview:async reuse=>{calls.push({operation:`preview:${reuse}`});current.status='previewed'},notice(){}})
+  vm.runInContext(resumeScript,context);await context.resumeImport()
+  assert.deepEqual(calls.map(call=>call.operation),['import-info','job-status','preview:true'])
+  assert.equal(JSON.stringify(calls[1].body),JSON.stringify({status:'paused'}));assert.equal(calls.some(call=>call.operation==='apply'),false)
+})
+test('legacy server refusal is checked once and reported without changing or recreating the job',async()=>{
+  const current={...work(),status:'stale'},calls=[]
+  const context=vm.createContext({work:current,api:async operation=>{calls.push(operation);return{job:{status:'paused'},batches:[{key:'old-key',status:'previewed'}]}},save:async()=>{},preview:async reuse=>{calls.push(`preview:${reuse}`);throw Object.assign(new Error('stopped'),{code:'JOB_STOPPED'})},progress(){},renderImportOutcome(){},notice(){}})
+  vm.runInContext(resumeScript,context)
+  await assert.rejects(context.resumeImport(),error=>error.code==='PAUSED_PREVIEW_UNSUPPORTED')
+  assert.deepEqual(calls,['import-info','preview:true','import-info'])
+  assert.equal(current.jobId,'old-job');assert.equal(current.batches[0].key,'old-key');assert.equal(current.status,'failed')
+})
+test('when every batch is confirmed saved, recovery waits for explicit finalization',async()=>{
+  const current={...work(),status:'outcome_unknown',done:0,batchCount:1},calls=[]
+  const context=vm.createContext({work:current,api:async operation=>{calls.push(operation);return{job:{status:'paused'},batches:[{key:'old-key',status:'applied',applied:1}]}},save:async()=>{},preview:async reuse=>{calls.push(`preview:${reuse}`);current.status='previewed'},progress(){},notice(){},finalizeImport:async()=>calls.push('finalize')})
+  vm.runInContext(resumeScript,context);await context.resumeImport()
+  assert.deepEqual(calls,['import-info','preview:true']);assert.equal(current.status,'awaiting-finalization');assert.equal(current.done,1)
+  assert.equal(calls.includes('finalize'),false)
 })
 test('apply projects a saved batch without changing its local checkpoint metadata',async()=>{
   const batch={key:'saved-key',rows:[row(1)],previewFingerprint:'c'.repeat(64),dependencies:[{key:'parent-key',fingerprint:'d'.repeat(64)}]}
