@@ -10,7 +10,7 @@ const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
 const prepareScript = script.slice(script.indexOf('function prepareRows()'), script.indexOf('async function preview('))
 const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
 const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
-const resumeScript = script.slice(script.indexOf('async function resumeImport()'), script.indexOf('async function readForm()'))
+const resumeScript = script.slice(script.indexOf('async function refreshImportCheckpoint()'), script.indexOf('async function readForm()'))
 const progressScript=script.slice(script.indexOf('function progress()'),script.indexOf('function taipeiToday()'))
 const bindingScript=script.slice(script.indexOf('async function applyHistoryBindings('),script.indexOf('async function apply()'))
 function bindingFixture() {
@@ -153,6 +153,27 @@ test('stale progress remains visibly marked as an error',()=>{
   assert.equal(elements.get('operation-status').dataset.state,'error')
   assert.match(elements.get('operation-title').textContent,/同步受阻/)
   assert.match(elements.get('operation-detail').textContent,/目前批次尚未提交/)
+})
+test('resume reads the server checkpoint before re-preview and never applies automatically',async()=>{
+  const calls=[],saved=[]
+  const current={id:'work-1',type:'import',status:'failed',jobId:'job-1',done:0,batchCount:2,appliedBatchKeys:[],completedSourceKeys:[],batches:[
+    {key:'already-applied',rows:[{source_id:'1',record:{kind:'student'}}]},
+    {key:'still-pending',rows:[{source_id:'2',record:{kind:'student'}}]},
+  ]}
+  const context=vm.createContext({work:current,api:async(operation)=>{calls.push(operation);if(operation==='import-info')return{batches:[{key:'already-applied',status:'applied',classifications:{student:{added:1}}},{key:'still-pending',status:'previewed'}]};throw new Error(`unexpected ${operation}`)},save:async()=>saved.push(structuredClone(current)),preview:async(reuse)=>{calls.push(`preview:${reuse}`);current.status='previewed'},notice(){}})
+  vm.runInContext(resumeScript,context)
+  await context.resumeImport()
+  assert.deepEqual(calls,['import-info','preview:true'])
+  assert.equal(current.done,1);assert.deepEqual(Array.from(current.appliedBatchKeys),['already-applied'])
+  assert.deepEqual(Array.from(current.completedSourceKeys),['student:1']);assert.deepEqual(JSON.parse(JSON.stringify(current.batchSummaries['already-applied'])),{student:{added:1}})
+  assert.equal(calls.some(operation=>operation==='apply'),false);assert.equal(saved.length,1)
+})
+test('checkpoint mismatch stops recovery before re-preview',async()=>{
+  const current={id:'work-1',type:'import',status:'failed',jobId:'job-1',done:1,batchCount:1,appliedBatchKeys:['key'],batches:[{key:'key',rows:[row(1)]}]},calls=[]
+  const context=vm.createContext({work:current,api:async()=>({batches:[{key:'key',status:'previewed'}]}),save:async()=>{},preview:async()=>calls.push('preview'),notice(){}})
+  vm.runInContext(resumeScript,context)
+  await assert.rejects(context.resumeImport(),error=>error.code==='IMPORT_CHECKPOINT_MISMATCH')
+  assert.deepEqual(calls,[]);assert.equal(current.done,1)
 })
 test('apply projects a saved batch without changing its local checkpoint metadata',async()=>{
   const batch={key:'saved-key',rows:[row(1)],previewFingerprint:'c'.repeat(64),dependencies:[{key:'parent-key',fingerprint:'d'.repeat(64)}]}

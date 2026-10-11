@@ -889,6 +889,40 @@ async function apply() {
     throw error
   }
 }
+async function refreshImportCheckpoint() {
+  const owner=work?.id,jobId=work?.jobId
+  const info=await api('import-info',undefined,{jobId})
+  if(work?.id!==owner||work?.jobId!==jobId)throw Object.assign(new Error('工作已切換；請重新選取工作後再核對。'),{code:'WORK_CHANGED'})
+  const serverBatches=Array.isArray(info?.batches)?info.batches:[]
+  const byKey=new Map(serverBatches.filter(batch=>typeof batch.key==='string').map(batch=>[batch.key,batch]))
+  const localBatches=work.batches||[]
+  const localKeys=new Set(localBatches.map(batch=>batch.key))
+  if(serverBatches.some(batch=>batch.key&&!localKeys.has(batch.key)))throw Object.assign(new Error('伺服器檢查點包含本機草稿沒有的批次；已停止續傳以避免重複寫入。請查看已保存結果。'),{code:'IMPORT_CHECKPOINT_MISMATCH'})
+  let confirmed=0,foundPending=false
+  const appliedKeys=[]
+  const summaries={...(work.batchSummaries||{})}
+  const completedSources=new Set(work.completedSourceKeys||[])
+  for(const [index,batch] of localBatches.entries()) {
+    const remote=byKey.get(batch.key)
+    const applied=remote?.status==='applied'
+    if(applied&&foundPending)throw Object.assign(new Error('伺服器批次檢查點順序不一致；已停止續傳，請查看已保存結果。'),{code:'IMPORT_CHECKPOINT_MISMATCH'})
+    if(applied) {
+      confirmed=index+1;appliedKeys.push(batch.key)
+      summaries[batch.key]=remote.classifications||remote.counts||summaries[batch.key]||{}
+      for(const row of batch.rows||[])completedSources.add(`${row.record?.kind}:${row.source_id}`)
+    } else {
+      foundPending=true
+      if(index<(work.done||0))throw Object.assign(new Error('本機已保存的完成檢查點與伺服器結果不一致；已停止續傳，請先查看已保存結果。'),{code:'IMPORT_CHECKPOINT_MISMATCH'})
+    }
+  }
+  work.done=confirmed
+  work.appliedBatchKeys=[...new Set([...(work.appliedBatchKeys||[]),...appliedKeys])]
+  work.batchSummaries=summaries
+  work.completedSourceKeys=[...completedSources]
+  work.serverCheckpointCheckedAt=new Date().toISOString()
+  await save()
+  return info
+}
 async function resumeImport() {
   if(work?.status==='stale') {
     const affected=new Set()
@@ -908,6 +942,7 @@ async function resumeImport() {
   }
   if (!work?.jobId) throw new Error('找不到可續傳的匯入工作。')
   if (work.status === 'outcome_unknown' || work.status === 'applying' || work.status === 'failed') {
+    await refreshImportCheckpoint()
     await preview(true)
     if ((work.done || 0) >= (work.batchCount || work.batches?.length || 0)) {
       await finalizeImport(); notice('伺服器檢查點確認所有批次均已提交；名單核對結果已更新。'); return
