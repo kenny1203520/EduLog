@@ -1,5 +1,9 @@
 # EduLog Teaching Systems extension
 
+## Current build: workspace transport and draft recovery (0.1.0)
+
+Work drafts are stored in the extension page's IndexedDB after a small background authorization check; complete draft bodies no longer cross the runtime message channel. Save feedback distinguishes unsaved, saving, saved, failed, and uncertain results. A failed save pauses preview, keeps the current work and batch identifiers, and offers an explicit retry. A retry rechecks the existing job rather than creating another one. No server endpoint or SQL migration was added. See [acceptance record](tests/ACCEPTANCE-workspace-transport-recovery.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-workspace-transport-recovery.zip`.
+
 ## Current build: class page teaching assistance (0.1.0)
 
 Class reports default to the source site's selected session, with an optional three-week comparison. Comparison keeps student identity and the header visible, gives each week its own compact status summary, and confines narrow-screen horizontal scrolling to the comparison table. Class menus and native controls share the site theme. Teachers can open a previous-teaching summary on demand; the extension reads only that enrollment, uses an exact source date, and never submits the source form. No server endpoint or database migration was added. See [acceptance record](tests/ACCEPTANCE-class-teaching-assistance.md). Package: `extension/dist/EduLog-Teaching-Tools-0.1.0-class-teaching-assistance.zip`.

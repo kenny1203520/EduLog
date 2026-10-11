@@ -23,6 +23,15 @@ test('only the workspace can broker API/storage/source actions, and every action
   const result = await b.send({ type: 'workspace-init' }); assert.equal(result.data.binding.userId, 'user-A'); assert.equal(JSON.stringify(result).includes('trusted-secret'), false)
   assert.match((await b.send({ type: 'workspace-api', operation: 'context', binding: { ...b.binding, userId: 'another' } })).error.message, /已變更/)
 })
+test('large-draft authorization returns only the verified storage owner and small operation metadata',async()=>{
+ const b=broker(),request={type:'workspace-store-authorize',binding:b.binding,action:'put',workId:'draft-1',revision:12}
+ const result=await b.send(request)
+ assert.deepEqual(JSON.parse(JSON.stringify(result.data)),{instance:b.binding.instance,userId:b.binding.userId,action:'put',workId:'draft-1',revision:12})
+ assert.equal(JSON.stringify(result).includes('trusted-secret'),false)
+ assert.equal(JSON.stringify(result).includes('snapshot'),false)
+ const stale=await b.send({...request,binding:{...b.binding,userId:'other'}})
+ assert.equal(stale.error.code,'WORKSPACE_FAILED')
+})
 test('fixed API routing keeps credentials in trusted worker; source messages carry no credential', async () => {
   const b = broker()
   await b.send({ type: 'workspace-api', operation: 'context', binding: b.binding })

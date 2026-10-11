@@ -79,10 +79,23 @@ test('transient bridge rejection permits retry', async () => {
   let calls = 0
   dom.window.chrome = { runtime: { sendMessage() { return ++calls === 1 ? Promise.reject(new Error('Receiving end does not exist')) : Promise.resolve({ enabled: true }) } } }
   dom.window.eval(read('../runtime-bridge.js'))
-  await assert.rejects(dom.window.edulogRuntime.send({}), error => error.code === 'BRIDGE_UNAVAILABLE')
+  await assert.rejects(dom.window.edulogRuntime.send({}), error => error.code === 'BRIDGE_NO_RECEIVER' && error.cause?.message === 'Receiving end does not exist')
   assert.equal(dom.window.edulogRuntime.invalidated, false)
   assert.equal((await dom.window.edulogRuntime.send({})).enabled, true)
   dom.window.close()
+})
+
+test('bridge preserves safe classifications for channel closure and oversized messages', async () => {
+  for (const [message, code] of [
+    ['A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received', 'BRIDGE_CHANNEL_CLOSED'],
+    ['Message length exceeded maximum allowed length.', 'BRIDGE_MESSAGE_TOO_LARGE'],
+  ]) {
+    const dom = trackedDom('', { runScripts: 'outside-only' })
+    dom.window.chrome = { runtime: { sendMessage: async () => { throw new Error(message) } } }
+    dom.window.eval(read('../runtime-bridge.js'))
+    await assert.rejects(dom.window.edulogRuntime.send({}), error => error.code === code && error.cause?.message === message && !error.message.includes(message))
+    dom.window.close()
+  }
 })
 
 for (const state of ['not-connected', 'pending', 'pairing-expired', 'connected', 'expired', 'revoked', 'unavailable', 'forbidden']) test(`popup renders ${state}, independent UI preferences`, async () => {
