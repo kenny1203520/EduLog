@@ -29,6 +29,12 @@ test('multiple legal occurrences and nonempty content conflicts require explicit
  const [confirmed]=plan([confirmedRecord],[],[conflict]);assert.equal(confirmed.category,'bind');assert.deepEqual(confirmed.conflicts,['is_completed','content']);assert.equal(bindingStillMatches(confirmed,{report_version:3}),true)
  const changedTarget=plan([confirmedRecord],[],[{...conflict,report:{...conflict.report,version:4}}])[0];assert.equal(changedTarget.category,'needs');assert.match(changedTarget.reason,/核對/)
 })
+test('stale preview fields require a fresh per-field decision and change the comparison signature',()=>{
+ const route={...occurrence,report:{id:'report',version:4,content:'EduLog 現值',is_completed:false}},stale=record({data:{content:'來源內容'},staleReviewFields:['content'],historyFieldDecisions:{},historyOverwrite:[]})
+ const [pending]=plan([stale],[],[route]);assert.equal(pending.category,'needs');assert.deepEqual(pending.staleReviewFields,['content']);assert.ok(pending.issues.some(issue=>issue.fieldKey==='content'&&/預覽失效/.test(issue.message)))
+ const selected=record({data:{content:'來源內容'},historyFieldDecisions:{content:'source'},historyOverwrite:['content'],staleReviewFields:['content']}),[selectedPlan]=plan([selected],[],[route]),confirmed={...selected,historyConflictConfirmed:true,historyConflictSignature:selectedPlan.conflictSignature}
+ assert.equal(plan([confirmed],[],[route])[0].category,'bind')
+})
 test('history-only still validates source identity and unresolved field mappings',()=>{
   const [item]=plan([record({historyOnly:true,sourceLearningStatusRaw:'unrecognized marker'})])
   assert.equal(item.category,'needs');assert.equal(item.issues[0].code,'mapping')

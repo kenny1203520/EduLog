@@ -9,6 +9,7 @@ import { bindingStillMatches } from '../history-sync.js'
 const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
 const prepareScript = script.slice(script.indexOf('function prepareRows()'), script.indexOf('async function preview('))
 const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
+const staleScript = script.slice(script.indexOf('function refreshStaleReviewBatchRows()'), script.indexOf('function summarizeImportRows('))
 const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
 const resumeScript = script.slice(script.indexOf('async function refreshImportCheckpoint()'), script.indexOf('async function readForm()'))
 const progressScript=script.slice(script.indexOf('function progress()'),script.indexOf('function taipeiToday()'))
@@ -48,7 +49,9 @@ function previewFixture(work, rows) {
     }
     return{}
   }})
-  vm.runInContext(`${prepareScript}\n${previewScript}\n${resumeScript}`,context)
+  context.updateHistoryPlanLocal=()=>{}
+  context.structuredClone=structuredClone
+  vm.runInContext(`${prepareScript}\n${staleScript}\n${previewScript}\n${resumeScript}`,context)
   context.prepareRows=()=>rows
   return {context,calls,saved,controls,preview:reuse=>context.preview(reuse),resume:()=>context.resumeImport()}
 }
@@ -252,7 +255,7 @@ function classifiedHistoryFixture(items, overrides={}) {
   const controls={'include-internal-notes':{checked:false},'enrollment-course-301':{value:'course'},'class-session':{value:'session'},classroom:{value:'room'},'start-301':{value:'2026-01-01'},'status-301':{value:'active'},'enrollment-301':{value:'enrollment-target'},apply:{disabled:false},'preview-section':{hidden:false}}
   const calls=[],saved=[]
   const context=vm.createContext({work,historyPlan:items,context:{class_sessions:[{id:'session',course_ids:['course'],name:'Class',start_date:'2026-01-01',day_of_week:1,start_time:'10:00',end_time:'12:00'}],courses:[{id:'course',display_name:'Test course'}],enrollments:[{id:'enrollment-target',class_session_id:'old-session'}],permissions:{}},mappingController:{validateRow:()=>true,courseRows:()=>[],studentSelect:()=>({value:'student-target'}),resolveFieldRules:async()=>{}},integrationCapabilities:{enrollment_history_reports:true},generation:1,crypto:{randomUUID:(()=>{let n=0;return()=>`generated-${++n}`})()},$:id=>controls[id],admissionIdentity:()=>({}),idFor:(kind,id)=>`${kind}-${id}`,labels,splitBatches,validateBatches,importBatchRequest,batchBytes:180000,previewResults:[],saveState:'saved',globalThis:{edulogUi:{t:()=>''}},refreshHistoryPlan:async()=>{},save:async()=>{saved.push(structuredClone(work))},saveWorkMetadata:async()=>{},renderNoopSummary(){},renderDifferences(){},stage(){},notice(){},api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='job')return{id:'new-job'};if(operation==='preview')return{rows:[],counts:{},batch_fingerprint:'a'.repeat(64)};return{}}})
-  vm.runInContext(`${prepareScript}\n${previewScript}`,context)
+  vm.runInContext(`${prepareScript}\n${staleScript}\n${previewScript}`,context)
   return{context,work,calls,saved,controls,preview:()=>context.preview(false)}
 }
 const historyItem=(category,key,extra={})=>({key,category,reason:`${category} reason`,record:{kind:'report',enrollment_source_id:'301',source_id:key,date:'2026-10-04'},...extra})
@@ -286,4 +289,17 @@ test('history rows missing required references fail before preview without repla
   const f=previewFixture(current,[])
   await assert.rejects(f.preview(true),e=>e.code==='HISTORY_REFERENCE_INVALID')
   assert.equal(current.batches[0].key,'saved-batch');assert.equal(current.jobId,'saved-job');assert.equal(f.calls.length,0)
+})
+
+test('stale history decisions update the original unsubmitted row while preserving batch and reconciliation keys',()=>{
+ const report={kind:'history_report',source_id:'301',target_id:'history-id',overwrite:['content'],record:{kind:'history_report',enrollment_source_id:'401',data:{content:'old'},historyOverwrite:['content']},history_reconciliation:{key:'reconciliation-key',class_occurrence_id:'old-occurrence',overwrite:['content']}}
+ const current=work();current.staleReviewRows=[{batchKey:'old-key',source_id:'301'}];current.batches=[{key:'old-key',rows:[report]}];current.historyBindings=[{historyId:'history-id',itemKey:'301',expectedFields:{content:'old'},occurrence:{id:'old-occurrence'},body:{key:'reconciliation-key',class_occurrence_id:'old-occurrence',overwrite:['content']},status:'pending',atomic:true}]
+ const f=previewFixture(current,[]);f.context.teachingFields=['content'];f.context.historyPlan=[{key:'301',category:'bind',data:{content:'teacher-reviewed'},includedFields:['content'],record:{historyOverwrite:['content']},occurrence:{id:'new-occurrence'}}]
+ f.context.refreshStaleReviewBatchRows()
+ assert.equal(current.batches[0].key,'old-key');assert.equal(current.batches[0].rows[0],report);assert.deepEqual(report.record.data,{content:'teacher-reviewed'});assert.deepEqual(Array.from(report.overwrite),['content']);assert.equal(report.history_reconciliation.key,'reconciliation-key');assert.equal(report.history_reconciliation.class_occurrence_id,'new-occurrence');assert.equal(current.historyBindings[0].body.key,'reconciliation-key');assert.deepEqual(JSON.parse(JSON.stringify(current.historyBindings[0].expectedFields)),{content:'teacher-reviewed'})
+})
+
+test('stale decisions cannot rewrite an already submitted batch',()=>{
+ const report={kind:'history_report',source_id:'301',target_id:'history-id',record:{kind:'history_report',enrollment_source_id:'401',data:{content:'old'}}},current=work();current.done=1;current.staleReviewRows=[{batchKey:'old-key',source_id:'301'}];current.batches=[{key:'old-key',rows:[report]}];const f=previewFixture(current,[]);f.context.historyPlan=[{key:'301',category:'history',data:{content:'new'},record:{historyOverwrite:[]}}]
+ assert.throws(()=>f.context.refreshStaleReviewBatchRows(),error=>error.code==='STALE_SUBMITTED_BATCH_IMMUTABLE');assert.deepEqual(report.record.data,{content:'old'});assert.equal(current.batches[0].key,'old-key')
 })
