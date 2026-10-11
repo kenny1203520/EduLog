@@ -176,3 +176,7 @@ Do not consolidate, rename, delete, or rewrite existing migrations `1000040`–`
 ## Extension report skip decisions (1000132)
 
 `1000132_extension_report_skip_decisions.sql` stores account-scoped skip fingerprints and revisions, without source report text. It supports resolve and revision-checked confirm/clear batches of up to 50 reports, with a 30-day confirmation window. Apply it after `1000131_extension_work_record_metadata.sql`; the extension exposes cross-device skip memory only when the capability RPC succeeds.
+
+## Extension stale-import recovery and submission rounds (1000136)
+
+`1000136_import_preview_diagnostics_and_work_rounds.sql` adds safe, allowlisted `PREVIEW_STALE` diagnostics and account-scoped links from one stable local work record to successive server import jobs. Apply it after `1000135_extension_mapping_conflict_diagnostics.sql`. The migration does not store source report text or change import/apply permissions; stale batches remain blocked until the teacher reviews a fresh preview.
