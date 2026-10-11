@@ -10,21 +10,27 @@ import { labels, splitBatches, validateBatches, importBatchRequest, workspaceErr
 import { workflowState, combineWorkRecords, workCategory } from './workflow-state.js'
 import {comparison,decisionResult,semanticValue,outcomeMetrics} from './review-ui.js'
 import { initWorkspaceI18n } from './workspace-i18n.js'
+import { workStore } from './work-store.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
 initWorkspaceI18n()
 let fieldRules=[]
+let saveState='saved', lastSavedAt=null, lastSavedRevision=0, lastSavedWorkId='', saveFailure=null, saveFailureWorkId=''
+let activeOperationLabel=''
 const syncFields=[['lesson_id','教材'],['is_completed','完成狀況'],['progress_letter','章節進度'],['attendance_status','出席狀態'],['absence_reason','不出席原因'],['class_participation','課程參與'],['classroom_behavior','課堂秩序'],['content','學習報告'],['contact_notes','聯絡欄'],['class_notes','內部紀錄'],['external_link','報告連結']]
 let syncPreferences={fields:{},revision:null},syncDraftOverrides={}
 let frontendSettingsUrl = null
 let integrationCapabilities = {}
 let binding, context, tabs = [], work, form, reports = [], report, reportCursor = '', reportCourseCursor = '', classroomCursor = '', mappingCourseCursor = '', activeCourseRoom = '', studentCursors = {}, studentCandidates = {}, studentSearchTimers = {}, reportSearchTimer, mappingSearchTimer, busy = false, paused = false, cancelRequested = false, selectedPath = '', sourceContext = null, classSourceReady = false, reportSourceReady = false, generation = 0, previewResults = [], batchBytes = 180000, unsaved = false, editTimer, activeReadId = '', activeReadGeneration = 0, readFinished = Promise.resolve(), finishRead = () => {}
-let activeFlow = 'import', continuation = null, unsavedWorkId = '', workHistory = { local: [], remote: null, metadata: [] }, selectedWorkRecord = null
+let activeFlow = 'import', continuation = null, unsavedWorkId = '', workHistory = { local: [], remote: null, metadata: [] }, selectedWorkRecord = null, selectedWorkLoad = 0
+const workDetailCache=new Map()
 const activeWorks = {import:null,prefill:null}, activeStages = {import:1,prefill:1}
 function currentWorkflow(view) { const identity=work?.type==='import'&&work.snapshot?work.snapshot.records.filter(row=>row.kind==='enrollment'&&!row.sourceSkipped&&!mappingController.validateRow(row,true)).length:0;return workflowState(view,{work:work?.type===view?work:activeWorks[view],form,report,previewCount:previewResults.length,unresolved:identity+historyPlan.filter(item=>item.category==='needs').length}) }
 function taskStatus() {
   const ui=globalThis.edulogUi
-  if(work?.collectionSaveError){const savedAt=work.updatedAt?new Intl.DateTimeFormat(ui?.locale||'zh-TW',{dateStyle:'short',timeStyle:'short'}).format(new Date(work.updatedAt)):ui?.t('work.savedAtUnknown')||'尚無成功保存版本';ui?.text($('draft-status'),'work.saveFailed',{savedAt});$('retry-history-save').hidden=false}
-  else {ui?.text($('draft-status'),unsaved&&unsavedWorkId===work?.id?'work.unsaved':work?'work.saved':'work.ready');$('retry-history-save').hidden=true}
+  const currentSaveState=saveFailureWorkId===work?.id?saveState:unsavedWorkId===work?.id?saveState:'saved'
+  const savedAt=lastSavedWorkId===work?.id&&lastSavedAt?new Intl.DateTimeFormat(ui?.locale||'zh-TW',{dateStyle:'short',timeStyle:'short'}).format(new Date(lastSavedAt)):work?.updatedAt?new Intl.DateTimeFormat(ui?.locale||'zh-TW',{dateStyle:'short',timeStyle:'short'}).format(new Date(work.updatedAt)):ui?.t('work.savedAtUnknown')||'尚無成功保存版本'
+  if(work?.collectionSaveError||currentSaveState==='failed'||currentSaveState==='uncertain'){ui?.text($('draft-status'),currentSaveState==='uncertain'?'work.saveUncertain':'work.saveFailed',{savedAt});$('retry-history-save').hidden=false}
+  else {ui?.text($('draft-status'),currentSaveState==='saving'?'work.saving':currentSaveState==='pending'?'work.unsaved':work?'work.saved':'work.ready');$('retry-history-save').hidden=true}
   $('task-title').textContent=work?.title||sourceContext?.title||''
   const previewFailed=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)
   $('task-status').textContent=previewFailed?(ui?.t('work.previewFailed')||'差異核對失敗，可重試'):work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
@@ -36,8 +42,24 @@ const params = new URLSearchParams(location.search)
 const fieldLabels = { report_date: '上課日期', source_fields: '允許的教學原文', source_evidence: '來源位置', identity_status: '來源身份', source_key: '來源紀錄識別', name: '名稱', subject: '科目', stage: '階段', display_name: '課程名稱', external_link: '原站連結', classroom_id: '教室', course_ids: '班級可上課程', student_id: '學生', course_id: '課程', class_session_id: '班級', enrollment_id: '報名', class_occurrence_id: '課次', start_date: '開始日期', day_of_week: '星期', start_time: '開始時間', end_time: '結束時間', original_start_time: '課次開始時間', original_end_time: '課次結束時間', occurrence_date: '課次日期', time_zone: '時區', status: '報名狀態', content: '學習表現', is_completed: '課程完成狀況', progress_letter: '章節進度', attendance_status: '出席', absence_reason: '缺席原因', lesson_id: '教材', class_participation: '課程參與', classroom_behavior: '課堂秩序', contact_notes: '聯絡欄', class_notes: '內部紀錄' }
 const node = (tag, text, className) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (className) n.className = className; return n }
 function notice(message = '', error = false) { $('notice').textContent = message; $('notice').dataset.error = String(error) }
+function localizeBridgeError(error){if(['CONTEXT_INVALIDATED','BRIDGE_MESSAGE_TOO_LARGE','BRIDGE_CHANNEL_CLOSED','BRIDGE_NO_RECEIVER','BRIDGE_UNAVAILABLE'].includes(error?.code)){const message=globalThis.edulogUi?.t(`error.bridge.${error.code}`);if(message)error.message=message}return error}
 async function send(message) {
-  const response = await bridge.send({ ...message, binding })
+  if(message.type==='workspace-store'){
+    let authorized
+    try{authorized=await bridge.send({type:'workspace-store-authorize',binding,action:message.action,workId:message.id||message.work?.id,revision:message.work?.revision})}
+    catch(error){error.saveTransportStage='authorize';throw localizeBridgeError(error)}
+    if(authorized?.error){const error=new Error(workspaceErrorMessage(authorized.error));Object.assign(error,authorized.error);error.saveTransportStage='authorize';throw localizeBridgeError(error)}
+    const identity=authorized?.data,owner=identity&&{instance:identity.instance,userId:identity.userId}
+    if(!owner?.instance||!owner?.userId){const error=new Error('無法確認此草稿所屬的 EduLog 實例與帳號。');error.code='WORK_OWNER_MISMATCH';throw error}
+    try{
+      if(message.action==='list')return await workStore.list(owner)
+      if(message.action==='get')return await workStore.get(message.id,owner)
+      if(message.action==='delete')return await workStore.delete(message.id,owner)
+      return await workStore.put(message.work,owner)
+    }catch(error){error.saveTransportStage='indexeddb';throw error}
+  }
+  let response
+  try{response=await bridge.send({ ...message, binding })}catch(error){throw localizeBridgeError(error)}
   if (response?.error) { const e = new Error(workspaceErrorMessage(response.error)); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; e.fields = response.error.fields; e.rawMessage = response.error.message; throw e }
   return response?.data
 }
@@ -48,16 +70,19 @@ function save() {
   const current=work
   if(!current)return Promise.resolve(false)
   const request=++saveRequestSequence
-  unsaved=true;unsavedWorkId=current.id;taskStatus()
+  unsaved=true;unsavedWorkId=current.id;saveState='pending';saveFailureWorkId=current.id;saveFailure=null;taskStatus()
   const pending=saveChain.catch(()=>{}).then(()=>persistWork(current,request))
   saveChain=pending
   return pending
 }
 async function persistWork(current,request) {
+  saveState='saving';taskStatus()
   current.interfaceState={...(current.interfaceState||{}),stage:activeStages[current.type]||1}
   current.revision = (current.revision || 0) + 1
   const revision = current.revision
-  const stored = await send({ type: 'workspace-store', action: 'put', work: current })
+  let stored
+  try{stored=await send({ type: 'workspace-store', action: 'put', work: current })}
+  catch(error){if(work===current){saveState=error.saveTransportStage==='indexeddb'&&['BRIDGE_CHANNEL_CLOSED','CONTEXT_INVALIDATED'].includes(error.code)?'uncertain':'failed';saveFailure=error;saveFailureWorkId=current.id;taskStatus()}throw error}
   if (work === current && work.revision === revision && stored?.revision === revision) {
     if($('source-picker').dataset.workId!==work.id){$('source-picker').open=false;$('source-picker').dataset.workId=work.id}
     // `put` crosses the extension messaging boundary and returns a structured
@@ -66,12 +91,14 @@ async function persistWork(current,request) {
     // persistence metadata; terminal cleanup is still reflected locally.
     current.updatedAt = stored.updatedAt
     current.expiresAt = stored.expiresAt
+    if(workDetailCache.has(current.id))workDetailCache.set(current.id,current)
+    lastSavedAt=stored.updatedAt||Date.now();lastSavedRevision=revision;lastSavedWorkId=current.id;saveState='saved';saveFailure=null;saveFailureWorkId=current.id
     if(current.collectionSaveError){delete current.collectionSaveError;delete current.collectionError}
     if (!stored.snapshot && ['complete','cancelled'].includes(stored.status)) delete current.snapshot
     if(request===saveRequestSequence&&unsavedWorkId===current.id){unsaved = false;unsavedWorkId='';taskStatus()}
     return true
   }
-  if(work===current&&current.revision===revision){const error=new Error(globalThis.edulogUi?.t('error.workConflict')||'工作已在其他分頁更新；目前草稿保留，請重新載入後核對。');error.code='WORK_CONFLICT';throw error}
+  if(work===current&&current.revision===revision){const error=new Error(globalThis.edulogUi?.t('error.workConflict')||'工作已在其他分頁更新；目前草稿保留，請重新載入後核對。');error.code='WORK_CONFLICT';saveState='failed';saveFailure=error;taskStatus();throw error}
   return false
 }
 function captureMappingChoices() {
@@ -138,12 +165,12 @@ async function runLatest(action, options = {}) {
   else if(busy){notice('目前有同步或保存作業進行中；完成後再重新核對。');return false}
   return run(action, { readOnly: true, ...options })
 }
-async function run(action, { label = '正在處理工作', readOnly = false } = {}) {
+async function run(action, { label = '正在處理工作', readOnly = false, saveBeforeAction = true } = {}) {
   if (busy){notice('目前有操作進行中；完成或取消後再試。');return false}
   busy = true; $('workspace').setAttribute('aria-busy', 'true'); const sourceDisabled=$('source-tab').disabled; if(!readOnly)$('source-tab').disabled=true
   const trigger = document.activeElement, previousDisabled = trigger instanceof HTMLButtonElement ? trigger.disabled : false
   if (trigger instanceof HTMLButtonElement) trigger.disabled = true
-  activeReadId = readOnly ? crypto.randomUUID() : ''; const readGeneration = activeReadGeneration
+  activeReadId = readOnly ? crypto.randomUUID() : ''; const readGeneration = activeReadGeneration;activeOperationLabel=label
   if (readOnly) readFinished = new Promise(resolve => { finishRead = resolve })
   $('operation-status').hidden = false; $('operation-status').dataset.state = 'loading'; $('operation-status').setAttribute('aria-busy','true'); $('operation-title').textContent = label; $('operation-detail').textContent = '已送出請求，等待 EduLog 回應。'; $('operation-progress').hidden = true; $('cancel-read').hidden = !readOnly
   const startedAt = Date.now(), waitTimer = setInterval(() => {
@@ -155,7 +182,7 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
   }, 1000)
   $('diagnostics').hidden = true
   try {
-    if (unsaved && work?.type === 'import' && !$('mapping').hidden) { clearTimeout(editTimer); captureMappingChoices(); await save() }
+    if (saveBeforeAction&&unsaved && work?.type === 'import' && !$('mapping').hidden) { clearTimeout(editTimer); captureMappingChoices(); await save() }
     const result = await action()
     if (readGeneration !== activeReadGeneration && readOnly) return
     $('operation-status').hidden=true; $('operation-status').dataset.state = 'complete'; $('cancel-read').hidden = true
@@ -166,12 +193,17 @@ async function run(action, { label = '正在處理工作', readOnly = false } = 
     if (error.code==='READ_CANCELLED'){$('operation-status').dataset.state='complete';$('operation-title').textContent='已取消唯讀查詢';$('operation-detail').textContent='已完成資料與目前選擇保留；可重新核對。';return false}
     else if (!readOnly && work?.status === 'outcome_unknown') { $('operation-title').textContent = '寫入結果尚未確認'; $('operation-detail').textContent = '未收到這批的確認回應。檢查點已保留；續傳會先用原冪等鍵核對結果，不會建立新的匯入工作。'; notice('寫入結果尚未確認。請使用「檢查並續傳」核對批次狀態。', true) }
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
+    else if(['failed','uncertain'].includes(saveState)){ $('operation-title').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainTitle':'work.saveFailedTitle')|| (saveState==='uncertain'?'保存結果待確認':'草稿保存失敗');$('operation-detail').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainHelp':'work.saveFailedHelp')||'目前內容仍保留在此畫面；修復保存後可重試。同步已停用。' }
     else if(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)){ $('operation-title').textContent=globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗';$('operation-detail').textContent=globalThis.edulogUi?.t('work.previewRetry')||'草稿與批次識別已保留；請重試核對，成功產生新摘要後再確認同步。' }
     else if (error.code === 'RATE_LIMITED') { $('operation-title').textContent = '伺服器暫時限制查詢'; $('operation-detail').textContent = error.retryAfter ? `請於 ${error.retryAfter} 秒後手動重試。` : '請稍後手動重試。' }
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
     if(['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code)&&work?.type==='import'){work.status='paused-extraction';work.collectionError=error.message;work.collectionSaveError=error.code;$('retry-history-save').hidden=false;taskStatus()}
-    notice(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)?globalThis.edulogUi?.t('work.previewRetryNotice')||'差異核對失敗，草稿已保留；請重試核對，成功後再確認同步。':error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前輸入與對應仍保留，請依上方說明處理後重試。', true)
-    $('diagnostic').textContent = [error.code || 'WORK_FAILED', error.rawMessage, ...Object.entries(error.fields || {}).flatMap(([key, messages]) => messages.map(message => `${key}：${message}`)), error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
+    const previewFailure=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)
+    notice(previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '來源或 EduLog 資料已變更，請重新產生差異。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
+    let workBytes=0;try{workBytes=new TextEncoder().encode(JSON.stringify(work)).byteLength}catch{}
+    const currentLastSavedAt=lastSavedWorkId===work?.id?lastSavedAt:null
+    const currentLastSavedRevision=lastSavedWorkId===work?.id?lastSavedRevision:null
+    $('diagnostic').textContent = [error.code || 'WORK_FAILED',`操作階段：${activeOperationLabel}`,work?.id?`工作識別：${work.id}`:'',work?.batches?.[Math.max(0,work.done||0)]?.key?`批次識別：${work.batches[Math.max(0,work.done||0)].key}`:'',work?.revision!=null?`工作 revision：${work.revision}`:'',`目前工作大小：約 ${workBytes} bytes`,currentLastSavedAt?`最後成功保存：${new Date(currentLastSavedAt).toISOString()} · revision ${currentLastSavedRevision}`:'尚無本工作成功保存時間',error.saveTransportStage?`保存階段：${error.saveTransportStage}`:'',...Object.entries(error.fields || {}).flatMap(([key, messages]) => messages.map(message => `${key}：${message}`)),error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
   } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('source-tab').disabled=sourceDisabled; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); taskStatus(); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; $('apply').disabled = !previewResults.length || work?.previewDirty === true; finishRead() }
 }
 function options(select, rows, label, placeholder, extra) {
@@ -462,6 +494,7 @@ function validateHistoryRows(rows) {
 }
 async function preview(reuse = false) {
   if (!work || work.type !== 'import') throw new Error('請先擷取目前班級。')
+  if (!reuse && work.jobId && work.previewJobPending) reuse = true
   if (!reuse) {
     if (work.jobId && (work.done > 0 || ['applying','outcome_unknown','failed'].includes(work.status))) throw new Error('此工作已有寫入或待確認檢查點。請使用「檢查並續傳」核對原批次，不能重新建立工作。')
     if (batchBytes < 4096) throw new Error('API 請求大小設定過小，請調整 API_BODY_LIMIT。')
@@ -492,7 +525,7 @@ async function preview(reuse = false) {
     work.previewDirty = true; previewResults = []; $('apply').disabled = true
     if (work.jobId) await api('job-status', { status: 'cancelled' }, { jobId: work.jobId })
     const job = await api('job', { source_origin: work.snapshot.sourceOrigin, source_class_id: work.snapshot.classId, date_from: work.dateFrom, date_to: work.dateTo, ...work.destination })
-    work.batches = batches; work.done = 0; work.jobId = job.id; work.batchCount = batches.length; work.previewDirty = true
+    work.batches = batches; work.done = 0; work.jobId = job.id; work.batchCount = batches.length; work.previewDirty = true; work.previewJobPending=true
     try{await saveWorkMetadata(work,{server_job_id:job.id})}catch(error){work.metadataSyncError=error.message}
     await save()
   }
@@ -537,7 +570,7 @@ async function preview(reuse = false) {
       notice(globalThis.edulogUi?.t('work.previewBlockedRow',{kind:labels[kind]||kind,sourceId}) || `${labels[kind]||kind} ${sourceId} 需要處理；其他資料繼續核對。`,true)
     }
   }
-  work.status = 'previewed'; delete work.previewError; work.previewDirty = false; work.mappingDirty = false; work.batchCount = work.batches.length; await save(); renderDifferences(); $('apply').disabled=work.batches.length===0; notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : '差異已更新，請檢查後確認匯入。')
+  work.status = 'previewed'; delete work.previewError; work.previewDirty = false; work.mappingDirty = false; work.previewJobPending=false; work.batchCount = work.batches.length; await save(); renderDifferences(); $('apply').disabled=work.batches.length===0; notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : '差異已更新，請檢查後確認匯入。')
   } catch(error) {
     const alreadyRecorded=work.previewError
     work.previewDirty=true
@@ -546,7 +579,7 @@ async function preview(reuse = false) {
     $('apply').disabled=true;$('preview-section').hidden=true
     taskStatus()
     notice(globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗，請檢查後重試。',true)
-    if(!alreadyRecorded)try{await save()}catch{}
+    if(!alreadyRecorded&&!['failed','uncertain'].includes(saveState)&&!['WORK_STORAGE_FULL','WORK_SAVE_FAILED','BRIDGE_MESSAGE_TOO_LARGE','BRIDGE_CHANNEL_CLOSED','BRIDGE_UNAVAILABLE','BRIDGE_NO_RECEIVER','CONTEXT_INVALIDATED'].includes(error.code))try{await save()}catch{}
     throw error
   }
 }
@@ -875,14 +908,29 @@ async function loadWork() {
 }
 const workStatusText=status=>({applying:'寫入中',paused:'已暫停',failed:'需要處理',outcome_unknown:'結果待核對',complete:'已完成',partial_complete:'部分完成',cancelled:'剩餘工作已取消',collected:'已讀取，待核對',collecting:'正在讀取', 'paused-extraction':'擷取已暫停',reviewing:'待檢查',previewed:'摘要待確認',pending_confirmation:'待確認原站結果',confirmed:'已確認',pending:'待處理'})[status]||'狀態待確認'
 function recordLabel(item){return item.metadata?.title||item.local?.title||item.remote?.title||item.remote?.source_class_id&&`來源班級 ${item.remote.source_class_id}`||item.push&&`報告 ${String(item.push.report_id||item.push.id).slice(0,8)}`||item.local?.id||item.remote?.id||item.metadata?.work_id||'工作紀錄'}
-function recordClass(item){return item.metadata?.source_label||item.local?.sourceTitle||item.local?.snapshot?.title||item.local?.snapshot?.classId||item.remote?.source_class_id||item.metadata?.source_class_id||''}
+function recordClass(item){return item.metadata?.source_label||item.local?.sourceTitle||item.local?.snapshotSummary?.title||item.local?.snapshotSummary?.classId||item.local?.snapshot?.title||item.local?.snapshot?.classId||item.remote?.source_class_id||item.metadata?.source_class_id||''}
 const workArchived=item=>Boolean(item.metadata?.archived_at||item.local?.archived_at)
 const workPinned=item=>Boolean(item.metadata?.pinned??item.local?.pinned)
-function selectWorkRecord(item){selectedWorkRecord=item;renderWorkRecords();}
+function selectWorkRecord(item){
+  selectedWorkRecord=item;renderWorkRecords()
+  const request=++selectedWorkLoad
+  const summary=item?.local
+  if(!summary?.__summary)return
+  const id=summary.id
+  void send({type:'workspace-store',action:'get',id}).then(full=>{
+    if(request!==selectedWorkLoad||selectedWorkRecord?.local?.id!==id)return
+    if(!full)throw new Error(globalThis.edulogUi?.locale==='en'?'This local draft expired or could not be read. Reread the source to start a new work.':'此本機草稿已到期或無法讀取；可重新讀取來源建立新工作。')
+    workDetailCache.set(id,full)
+    selectedWorkRecord={...selectedWorkRecord,local:full};renderWorkRecords()
+  }).catch(error=>{
+    if(request!==selectedWorkLoad||selectedWorkRecord?.local?.id!==id)return
+    selectedWorkRecord={...selectedWorkRecord,local:{...summary,__summary:false,loadError:error.message}};renderWorkRecords()
+  })
+}
 function renderWorkRecords() {
   const {local,remote,metadata=[]}=workHistory,combined=combineWorkRecords(local||[],remote||{},metadata),filter=$('work-filter').value||'all',type=$('work-type-filter').value||'all',query=$('work-search').value.trim().toLocaleLowerCase(),classQuery=$('work-class-filter').value.trim().toLocaleLowerCase()
   const selectedId=selectedWorkRecord?.local?.id||selectedWorkRecord?.metadata?.work_id||selectedWorkRecord?.remote?.id||selectedWorkRecord?.push?.id
-  if(selectedId){const current=combined.find(item=>(item.local?.id||item.metadata?.work_id||item.remote?.id||item.push?.id)===selectedId);selectedWorkRecord=current||null}
+  if(selectedId){const current=combined.find(item=>(item.local?.id||item.metadata?.work_id||item.remote?.id||item.push?.id)===selectedId);const cached=current?.local?.__summary&&workDetailCache.get(current.local.id);selectedWorkRecord=current&&cached?{...current,local:cached}:current||null}
   const all=combined.filter(item=>{const row=item.local||item.remote||item.push||{},status=item.category,labels=`${recordLabel(item)} ${recordClass(item)} ${row.id||''} ${row.status||''}`.toLocaleLowerCase();return(filter==='all'||status===filter)&&(type==='all'||(item.local?.type||'import')===type)&&(!query||labels.includes(query))&&(!classQuery||String(recordClass(item)).toLocaleLowerCase().includes(classQuery))})
   const active=all.filter(item=>!workArchived(item)).sort((a,b)=>Number(Boolean((b.local?.id||b.metadata?.work_id)===work?.id))-Number(Boolean((a.local?.id||a.metadata?.work_id)===work?.id))||Number(workPinned(b))-Number(workPinned(a))||({attention:0,resumable:1,done:2}[a.category]-{attention:0,resumable:1,done:2}[b.category])||((b.local?.updatedAt||Date.parse(b.metadata?.updated_at)||0)-(a.local?.updatedAt||Date.parse(a.metadata?.updated_at)||0)))
   const completed=active.filter(item=>item.category==='done'),visibleActive=active.filter(item=>item.category!=='done')
@@ -900,10 +948,11 @@ function renderWorkRecords() {
   $('work-view').dataset.detailOpen=selectedWorkRecord?'true':'false'
   if(selectedWorkRecord)renderWorkDetail(selectedWorkRecord)
 }
-function primaryWorkAction(item){const row=item.local||item.remote||{};if(['outcome_unknown','applying'].includes(row.status))return '核對未知結果';if(row.status==='partial_complete')return '處理剩餘項目';if(['complete','confirmed','cancelled'].includes(row.status))return '查看結果';if(item.local?.snapshot||item.local?.batches)return '繼續核對';if(item.local?.type==='prefill')return '查看預填結果';return '查看工作詳情'}
+function primaryWorkAction(item){const row=item.local||item.remote||{};if(['outcome_unknown','applying'].includes(row.status))return '核對未知結果';if(row.status==='partial_complete')return '處理剩餘項目';if(['complete','confirmed','cancelled'].includes(row.status))return '查看結果';if(item.local?.snapshot||item.local?.batches||item.local?.hasSnapshot||item.local?.hasBatches)return '繼續核對';if(item.local?.type==='prefill')return '查看預填結果';return '查看工作詳情'}
 async function updateWorkMetadata(item,changes){
+  if(item.local?.__summary){const full=await send({type:'workspace-store',action:'get',id:item.local.id});if(!full)throw new Error('此本機草稿已到期或無法讀取，無法保存工作整理設定。');item.local=full}
   if(!integrationCapabilities.work_record_metadata){
-    if(item.local){Object.assign(item.local,changes);await send({type:'workspace-store',action:'put',work:item.local});notice('跨裝置整理功能目前不可用；設定只保存於本機工作。',true);await loadWork()}
+    if(item.local){Object.assign(item.local,changes);await send({type:'workspace-store',action:'put',work:item.local});workDetailCache.set(item.local.id,item.local);notice('跨裝置整理功能目前不可用；設定只保存於本機工作。',true);await loadWork()}
     return
   }
   let meta=item.metadata
@@ -914,7 +963,7 @@ async function updateWorkMetadata(item,changes){
   if(!saved)return
   workHistory.metadata=workHistory.metadata.map(value=>value.work_id===saved.work_id?saved:value)
   item.metadata=saved
-  if(item.local){Object.assign(item.local,changes);await send({type:'workspace-store',action:'put',work:item.local})}
+  if(item.local){Object.assign(item.local,changes);await send({type:'workspace-store',action:'put',work:item.local});workDetailCache.set(item.local.id,item.local)}
   renderWorkRecords()
 }
 async function flushWorkBeforeSwitch(nextId){
@@ -954,8 +1003,9 @@ async function restoreImportWork(row){
   else if(work.history&&work.history.next>=work.history.paths.length)stage('import','preview')
 }
 async function openWorkRecord(item){
-  const row=item.local
+  let row=item.local
   if(!row){renderWorkDetail(item);return}
+  if(row.__summary){row=await send({type:'workspace-store',action:'get',id:row.id});if(!row)throw new Error(globalThis.edulogUi?.locale==='en'?'This local draft expired or could not be read. Reread the source to start a new work.':'此本機草稿已到期或無法讀取；可重新讀取來源建立新工作。')}
   if(row.type==='import'){await restoreImportWork(row);return}
   if(row.type==='prefill'){await flushWorkBeforeSwitch(row.id);await setSourceForWork(row);work=row;activeWorks.prefill=work;flow('prefill');notice('已恢復預填工作。請重新讀取原生表單並核對，不會自動套用。')}
 }
@@ -963,13 +1013,15 @@ async function repeatWork(row){await setSourceForWork(row);$('date-from').value=
 function renderWorkDetail(item){
   const detail=$('work-detail'),row=item.local||item.remote||{},locale=globalThis.edulogUi?.locale||'zh-TW'
   detail.replaceChildren()
-  const back=node('button','返回工作清單');back.id='work-detail-back';back.type='button';back.onclick=()=>{selectedWorkRecord=null;renderWorkRecords()};detail.append(back)
+  const back=node('button','返回工作清單');back.id='work-detail-back';back.type='button';back.onclick=()=>{selectedWorkLoad++;selectedWorkRecord=null;renderWorkRecords()};detail.append(back)
   const title=node('h2',recordLabel(item));title.dataset.sourceRaw='';detail.append(title)
   const sourceName=node('p',recordClass(item)||'來源班級未命名','hint');sourceName.dataset.sourceRaw='';detail.append(sourceName)
   detail.append(node('p',`${item.local?.type==='prefill'?'報告預填':'教學資料同步'} · 狀態：${workStatusText(row.status||item.category)}`))
   if(row.done!=null)detail.append(node('p',`已完成 ${row.done}/${row.batchCount||row.batches?.length||0} 批`))
   if(item.metadata?.target_label)detail.append(node('p',`目標 EduLog：${item.metadata.target_label}`,'hint'))
   if(row.expiresAt)detail.append(node('p',`本機草稿期限：${new Date(row.expiresAt).toLocaleString(locale)}`,'hint'))
+  if(item.local?.__summary)detail.append(node('p',globalThis.edulogUi?.t('work.loadingFullDraft')||'正在載入此工作的完整本機草稿…','hint'))
+  if(item.local?.loadError)detail.append(node('p',globalThis.edulogUi?.t('work.fullDraftLoadFailed',{message:item.local.loadError})||`完整草稿讀取失敗：${item.local.loadError}`,'notice error'))
   if(item.local?.metadataSyncError)detail.append(node('p','跨裝置整理尚未保存；可重新整理後再試。','notice warning'))
   if(item.remote)appendRemoteWork(detail,item.remote,item.local)
   if(item.local){
@@ -1041,7 +1093,7 @@ $('course-source-id').addEventListener('change', updateMappingOptions)
 $('start-new-work').onclick=()=>{continuation=null;$('continue-work').hidden=true;work=null;activeWorks.import=null;activeStages.import=1;flow('import');$('collect').disabled=!classSourceReady;taskStatus()}
 $('resume-source-work').onclick=()=>void run(async()=>{const row=continuation;if(!row)return;await restoreImportWork(row)},{label:'正在恢復未完成工作'})
 for (const [id, action] of Object.entries({ collect, preview: () => preview(), repreview: () => preview(!work.mappingDirty), apply, resume: resumeImport, 'read-form': readForm, compare, prefill, 'refresh-work': loadWork, reconnect: initialize })) $(id).addEventListener('click', () => void run(action, { label: ({ collect:'正在讀取來源班級與學習紀錄', preview:'正在比對 EduLog 目標與匯入差異', repreview:'正在重新檢查資料差異', apply:'正在寫入匯入批次', resume:'正在檢查未完成批次', 'read-form':'正在讀取原站報告目標', compare:'正在查詢報告欄位並核對目標', prefill:'正在套用已確認欄位至原站', 'refresh-work':'正在更新工作紀錄', reconnect:'正在重新驗證連線' })[id] || '正在處理工作', readOnly: ['collect','read-form','compare','refresh-work','reconnect'].includes(id) }))
-$('retry-history-save').addEventListener('click',()=>void run(async()=>{const owner=work;if(!owner)return;await save();if(owner!==work)return;if(owner.history)await collectHistory();await mappingView();renderHistoryIssues()},{label:'正在重試保存草稿並繼續讀取'}))
+$('retry-history-save').addEventListener('click',()=>void run(async()=>{const owner=work;if(!owner)return;await save();if(owner!==work)return;if(owner.jobId){await preview(true);return}if(owner.history)await collectHistory();await mappingView();renderHistoryIssues()},{label:'正在重試保存草稿並繼續核對',saveBeforeAction:false}))
 $('cancel-read').addEventListener('click', () => void cancelRead())
 $('pause').addEventListener('click', () => { paused = true; notice('正在完成目前批次，之後暫停。') })
 $('cancel-work').addEventListener('click', () => { paused = true; cancelRequested = true; if (busy) { notice('正在完成目前批次，之後取消剩餘工作。'); return } void run(async () => { await api('job-status', { status: 'cancelled' }, { jobId: work.jobId }); work.status = 'cancelled'; await save(); progress(); notice('已取消剩餘工作；成功寫入的資料保留。') }) })
