@@ -84,6 +84,18 @@ const targetInstance = z.string().url().max(300).refine(value => { const u=new U
 const reportDecisionBase = z.object({ target_instance:targetInstance,source_origin:source,adapter_version:z.literal('orange-apple-v1'),items:z.array(z.object({source_admission_id:z.string().regex(/^\d+$/).max(40),source_report_id:z.string().regex(/^\d+$/).max(40),content_fingerprint:decisionHash,context_fingerprint:decisionHash,field_fingerprints:z.partialRecord(decisionField,decisionHash).refine(value=>Object.keys(value).length<=11)}).strict()).min(1).max(50) }).strict().refine(value=>new Set(value.items.map(i=>`${i.source_admission_id}:${i.source_report_id}`)).size===value.items.length)
 export const reportDecisionResolve = reportDecisionBase
 export const reportDecisionConfirm = z.object({ ...reportDecisionBase.shape, items:z.array(reportDecisionBase.shape.items.element.extend({action:z.enum(['skip','clear']),expected_revision:uuid.nullable()})).min(1).max(50) }).strict().refine(value=>new Set(value.items.map(i=>`${i.source_admission_id}:${i.source_report_id}`)).size===value.items.length)
+function safePreviewStaleLogDetail(details?:string) {
+  try {
+    const value=JSON.parse(details??'') as Record<string,unknown>
+    const safeToken=(input:unknown,max:number)=>typeof input==='string'&&input.length>0&&input.length<=max&&/^[a-zA-Z0-9._:-]+$/.test(input)?input:undefined
+    return {
+      diagnostic_source:value.diagnostic_source==='version_check'?'version_check':undefined,
+      kind:safeToken(value.kind,32),source_id:safeToken(value.source_id,256),
+      field:safeToken(value.field,48),reason:safeToken(value.reason,64),
+      expected_version:safeToken(value.expected_version,160),actual_version:safeToken(value.actual_version,160),
+    }
+  } catch { return {} }
+}
 function databaseError(error: { message: string; code?: string; details?: string }) {
   const statuses: Record<string, number> = { HISTORY_IDENTITY_AMBIGUOUS:409, HISTORY_ALREADY_LINKED:409, EXTENSION_AUTH_INVALID: 401, PERMISSION_DENIED: 403, NOT_FOUND: 404, PREVIEW_STALE: 409, SOURCE_MAPPING_CONFLICT: 409, VERSION_CONFLICT: 409, JOB_STOPPED: 409, IDEMPOTENCY_CONFLICT: 409, IMPORT_BATCHES_INCOMPLETE: 409, IMPORT_DEPENDENCY_INVALID:409, IMPORT_DEPENDENCY_PENDING:409, INVALID_REFERENCE: 422, INVALID_IMPORT: 422 }
   if (error.message === 'INVALID_REFERENCE') {
@@ -113,14 +125,14 @@ function databaseError(error: { message: string; code?: string; details?: string
   }
   if(error.message==='PREVIEW_STALE') {
     try {
-      const diagnostic=JSON.parse(error.details??'') as {kind?:unknown;source_id?:unknown;field?:unknown;reason?:unknown}
+      const diagnostic=JSON.parse(error.details??'') as {diagnostic_source?:unknown;kind?:unknown;source_id?:unknown;field?:unknown;reason?:unknown}
       const kinds=new Set(['batch','student','course','class_session','classroom','enrollment','admission','course_rule','history_report','report'])
       const fields=new Set(['preview','target_version','occurrence_report_version'])
       const reasons=new Set(['PREVIEW_NOT_FOUND','REQUEST_FINGERPRINT_CHANGED','TARGET_VERSION_CHANGED','OCCURRENCE_REPORT_VERSION_CHANGED'])
       const keyIsSafe=typeof diagnostic.source_id==='string'&&diagnostic.source_id.length>0&&diagnostic.source_id.length<=256&&/^[a-zA-Z0-9._:-]+$/.test(diagnostic.source_id)
-      if(typeof diagnostic.kind==='string'&&kinds.has(diagnostic.kind)&&keyIsSafe&&typeof diagnostic.field==='string'&&fields.has(diagnostic.field)&&typeof diagnostic.reason==='string'&&reasons.has(diagnostic.reason)) {
+      if(diagnostic.diagnostic_source==='version_check'&&typeof diagnostic.kind==='string'&&kinds.has(diagnostic.kind)&&keyIsSafe&&typeof diagnostic.field==='string'&&fields.has(diagnostic.field)&&typeof diagnostic.reason==='string'&&reasons.has(diagnostic.reason)) {
         const key=diagnostic.kind==='batch'?`batches.${diagnostic.source_id}.${diagnostic.field}`:`rows.${diagnostic.kind}.${diagnostic.source_id}.${diagnostic.field}`
-        return new ApiError(409,'PREVIEW_STALE','The preview is no longer current. Recheck the unsubmitted work before applying.',{[key]:[diagnostic.reason]})
+        return new ApiError(409,'PREVIEW_STALE','The preview is no longer current. Recheck the unsubmitted work before applying.',{[key]:[diagnostic.reason]},undefined,'version_check')
       }
     } catch { /* Older database functions return the generic stale code. */ }
     return new ApiError(409,'PREVIEW_STALE','The preview is no longer current. Recheck the unsubmitted work before applying.')
@@ -143,7 +155,19 @@ export function createExtensionWorkspaceRouter(admin: SupabaseClient) {
   const run = async (req: Request, operation: string, input: unknown, rpc = 'web_extension_workspace') => {
     const bearer = req.header('authorization')!.replace(/^Bearer\s+/i, '')
     const result = await admin.rpc(rpc, { p_token_id: req.extensionPrincipal!.tokenId, p_token_hash: crypto.createHash('sha256').update(bearer).digest('hex'), p_operation: operation, p_input: input })
-    if (result.error) throw databaseError(result.error)
+    if (result.error) {
+      if(result.error.message==='PREVIEW_STALE') {
+        const detail=safePreviewStaleLogDetail(result.error.details)
+        const request=input&&typeof input==='object'?input as Record<string,unknown>:{ }
+        req.log?.warn?.({
+          request_id:req.requestId,trace_id:req.traceId,operation,
+          job_id:typeof request.job_id==='string'?request.job_id:undefined,
+          batch_key:typeof request.key==='string'?request.key:undefined,
+          ...detail,
+        },'import_preview_stale')
+      }
+      throw databaseError(result.error)
+    }
     return result.data
   }
   const reply = (req: Request, res: Response, data: unknown) => res.json({ data, meta: {}, request_id: req.requestId, trace_id: req.traceId })

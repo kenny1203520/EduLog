@@ -256,15 +256,20 @@ describe('workspace API contract', () => {
   })
   it('returns bounded, request-scoped diagnostics for stale import previews', async()=>{
     const batchKey=id,body={key:batchKey,rows:[row]}
-    const details=JSON.stringify({kind:'batch',source_id:batchKey,field:'preview',reason:'REQUEST_FINGERPRINT_CHANGED'})
+    const details=JSON.stringify({diagnostic_source:'version_check',kind:'batch',source_id:batchKey,field:'preview',reason:'REQUEST_FINGERPRINT_CHANGED',expected_version:'a'.repeat(64),actual_version:'b'.repeat(64)})
     const {app}=appWith(null,{message:'PREVIEW_STALE',details},true)
     const response=await request(app).post(`/api/extension/v1/imports/${id}/apply`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
     expect(response.status).toBe(409)
     expect(response.body.error.fields).toEqual({[`batches.${batchKey}.preview`]:['REQUEST_FINGERPRINT_CHANGED']})
+    expect(response.body.error.diagnostic_source).toBe('version_check')
     expect(JSON.stringify(response.body)).not.toContain('Test A')
     const unsafe=appWith(null,{message:'PREVIEW_STALE',details:JSON.stringify({kind:'student',source_id:'../../secret',field:'target_version',reason:'TARGET_VERSION_CHANGED'})},true).app
     const fallback=await request(unsafe).post(`/api/extension/v1/imports/${id}/apply`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
     expect(fallback.status).toBe(409);expect(fallback.body.error.fields).toBeUndefined()
+    expect(fallback.body.error.diagnostic_source).toBeUndefined()
+    const legacy=appWith(null,{message:'PREVIEW_STALE',details:JSON.stringify({kind:'student',source_id:'101',field:'target_version',reason:'TARGET_VERSION_CHANGED'})},true).app
+    const legacyResponse=await request(legacy).post(`/api/extension/v1/imports/${id}/apply`).set('Authorization',`Bearer ${'a'.repeat(64)}`).send(body)
+    expect(legacyResponse.status).toBe(409);expect(legacyResponse.body.error.fields).toBeUndefined();expect(legacyResponse.body.error.diagnostic_source).toBeUndefined()
   })
   it('does not expose a client confirmation endpoint', async () => {
     const { app, rpc } = appWith({}); const response = await request(app).post('/api/extension/v1/report-pushes/confirm').set('Authorization', `Bearer ${'a'.repeat(64)}`).send({ status: 'confirmed' })

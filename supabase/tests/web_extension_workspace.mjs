@@ -94,6 +94,7 @@ try {
   await db.exec(read('1000136_import_preview_diagnostics_and_work_rounds.sql'))
   await db.exec(read('1000137_consistent_preview_stale_diagnostics.sql'))
   await db.exec(read('1000138_paused_import_repreview.sql'))
+  await db.exec(read('1000139_precise_preview_stale_diagnostics.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -498,6 +499,24 @@ try {
   const reconcileRow={...historyBatch.rows[0],overwrite:['content'],record:{...historyBatch.rows[0].record,data:{...historyData,content:'merged source line',source_fields:[{key:'content',label:'Comment',text:'merged source line'}]}},history_reconciliation:{key:id(247),class_occurrence_id:binding.class_occurrence_id,include_fields:['content'],overwrite:['content'],include_internal:false}}
   const reconcileBatch={...historyBatch,key:id(246),fingerprint:'8'.repeat(64),rows:[reconcileRow]}
   const reconcilePreview=await rpc('preview',reconcileBatch);assert.equal(reconcilePreview.rows[0].history_reconciliation.changes[0].status,'updated')
+  // An unchanged new-history row precedes the row whose linked lesson report
+  // changes. The diagnostic must come from the actual check, not a post-rollback
+  // scan that can incorrectly name the first row.
+  const untouchedOccurrence=id(212),untouchedHistory=id(213)
+  await db.query('INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date) VALUES($1,$2,$3)',[untouchedOccurrence,session,'2024-12-30'])
+  const firstHistoryRow={...historyBatch.rows[0],source_id:'history:evidence:untouched-first',target_id:untouchedHistory,record:{...historyBatch.rows[0].record,data:{...historyData,report_date:'2024-12-30',source_key:'evidence:untouched-first'}},history_reconciliation:{key:id(214),class_occurrence_id:untouchedOccurrence,include_fields:[],overwrite:[],include_internal:false}}
+  const changedOccurrenceRow={...reconcileRow,history_reconciliation:{...reconcileRow.history_reconciliation,key:id(215)}}
+  const preciseDiagnosticBatch={...historyBatch,key:id(216),fingerprint:'6'.repeat(64),rows:[firstHistoryRow,changedOccurrenceRow]}
+  await rpc('preview',preciseDiagnosticBatch)
+  await db.query('UPDATE public.occurrence_reports SET version=version+1 WHERE id=$1',[linkedReport])
+  await assert.rejects(rpc('apply',preciseDiagnosticBatch),error=>{
+    if(error.message!=='PREVIEW_STALE')return false
+    const detail=JSON.parse(error.detail)
+    return detail.diagnostic_source==='version_check'&&detail.reason==='OCCURRENCE_REPORT_VERSION_CHANGED'&&detail.source_id===reconcileRow.source_id&&detail.source_id!==firstHistoryRow.source_id
+  })
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM public.enrollment_history_reports WHERE id=$1',[untouchedHistory])).rows[0].n,0,'the failed mixed batch rolls back its earlier history insert')
+  // Restore the occurrence payload expected by the existing successful path.
+  await rpc('preview',reconcileBatch)
   const reconciled=await rpc('apply',reconcileBatch);assert.equal(reconciled.history_reconciliations[0].status,'linked')
   let sameContent=(await db.query('SELECT h.content AS history_content,r.content AS report_content FROM public.enrollment_history_reports h JOIN public.occurrence_reports r ON r.id=h.linked_report_id WHERE h.id=$1',[historical])).rows[0]
   assert.equal(sameContent.history_content,'merged source line');assert.equal(sameContent.report_content,'merged source line')
