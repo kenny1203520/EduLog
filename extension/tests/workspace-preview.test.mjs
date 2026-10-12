@@ -6,6 +6,7 @@ import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 import { labels, splitBatches, validateBatches, importBatchRequest } from '../workspace-model.js'
 import { bindingStillMatches } from '../history-sync.js'
 import { prepareStaleReviewBatchRefresh } from '../history-review-batches.js'
+import { workspaceInterfaceFailure } from '../workspace-operation-errors.js'
 
 // Exercise the real preview orchestration with isolated API/storage effects.
 const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
@@ -55,6 +56,7 @@ function previewFixture(work, rows) {
     return{}
   }})
   context.edulogUi={t:key=>key}
+  context.workspaceInterfaceFailure=workspaceInterfaceFailure
   context.updateHistoryPlanLocal=()=>{}
   context.structuredClone=structuredClone
   Object.assign(context,{reviewSaveCoordinator:undefined,prepareStaleReviewBatchRefresh,historyRoutes:new Map(),historyView:{updateStatus(){}}})
@@ -79,7 +81,7 @@ test('sync stays disabled until the current preview, stale decisions, and local 
 })
 
 test('stale preview details are shown only when they came from an actual version check',()=>{
- const context=vm.createContext({work:{staleDiagnosticSource:null},t:()=>null})
+ const context=vm.createContext({work:{staleDiagnosticSource:null}})
  vm.runInContext(staleReasonScript,context)
  const legacy=context.staleReasonLabel({'rows.student.121251.target_version':['TARGET_VERSION_CHANGED']})
  assert.match(legacy,/原因尚未確認/)
@@ -324,6 +326,7 @@ function classifiedHistoryFixture(items, overrides={}) {
   const calls=[],saved=[]
   const context=vm.createContext({work,historyPlan:items,context:{class_sessions:[{id:'session',course_ids:['course'],name:'Class',start_date:'2026-01-01',day_of_week:1,start_time:'10:00',end_time:'12:00'}],courses:[{id:'course',display_name:'Test course'}],enrollments:[{id:'enrollment-target',class_session_id:'old-session'}],permissions:{}},mappingController:{validateRow:()=>true,courseRows:()=>[],studentSelect:()=>({value:'student-target'}),resolveFieldRules:async()=>{}},integrationCapabilities:{enrollment_history_reports:true},generation:1,crypto:{randomUUID:(()=>{let n=0;return()=>`generated-${++n}`})()},$:id=>controls[id],admissionIdentity:()=>({}),idFor:(kind,id)=>`${kind}-${id}`,labels,splitBatches,validateBatches,importBatchRequest,batchBytes:180000,previewResults:[],saveState:'saved',saveFailureWorkId:'',unsavedWorkId:'',refreshHistoryPlan:async()=>{},save:async()=>{saved.push(structuredClone(work))},saveWorkMetadata:async()=>{},renderNoopSummary(){},renderDifferences(){},stage(){},taskStatus(){},notice(){},api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='job')return{id:'new-job'};if(operation==='preview')return{rows:[],counts:{},batch_fingerprint:'a'.repeat(64)};return{}}})
   context.edulogUi={t:()=>''}
+  context.workspaceInterfaceFailure=workspaceInterfaceFailure
   Object.assign(context,{reviewSaveCoordinator:undefined,prepareStaleReviewBatchRefresh,historyRoutes:new Map(),historyView:{updateStatus(){}}})
   vm.runInContext(`${applyGateScript}\n${prepareScript}\n${staleScript}\n${previewScript}`,context)
   return{context,work,calls,saved,controls,preview:()=>context.preview(false)}
