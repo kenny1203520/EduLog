@@ -66,6 +66,13 @@ test('validation fields and request IDs reach the workspace with bounded text-on
   assert.equal(result.error.code,'VALIDATION_FAILED');assert.equal(result.error.requestId,'edulog-test')
   assert.deepEqual(JSON.parse(JSON.stringify(result.error.fields)),{request:['Duplicate source IDs'],large:['x'.repeat(500)]})
 })
+test('trusted stale diagnostic provenance reaches the workspace without exposing versions',async()=>{
+  const b=broker(async()=>({ok:false,status:409,json:async()=>({error:{code:'PREVIEW_STALE',message:'stale',diagnostic_source:'version_check',fields:{'rows.student.101.target_version':['TARGET_VERSION_CHANGED']},request_id:'edulog-stale',expected_version:'private-version'}})}))
+  const result=await b.send({type:'workspace-api',operation:'apply',jobId:'00000000-0000-4000-8000-000000000001',body:{rows:[]},binding:b.binding})
+  assert.equal(result.error.diagnosticSource,'version_check')
+  assert.equal(result.error.fields['rows.student.101.target_version'][0],'TARGET_VERSION_CHANGED')
+  assert.equal(JSON.stringify(result).includes('private-version'),false)
+})
 test('reconciliation uses a fixed readonly route and rejects path injection or site senders',async()=>{
   const b=broker(),enrollmentId='00000000-0000-4000-8000-000000000001'
   await b.send({type:'workspace-api',operation:'reconcile',binding:b.binding,enrollmentId,query:{limit:50}})

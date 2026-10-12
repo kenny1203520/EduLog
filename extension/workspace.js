@@ -67,7 +67,7 @@ async function send(message) {
   }
   let response
   try{response=await bridge.send({ ...message, binding })}catch(error){throw localizeBridgeError(error)}
-  if (response?.error) { const e = new Error(workspaceErrorMessage(response.error)); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; e.fields = response.error.fields; e.rawMessage = response.error.message; throw e }
+  if (response?.error) { const e = new Error(workspaceErrorMessage(response.error)); e.code = response.error.code; e.requestId = response.error.requestId; e.retryAfter = response.error.retryAfter; e.fields = response.error.fields; e.diagnosticSource=response.error.diagnosticSource; e.rawMessage = response.error.message; throw e }
   return response?.data
 }
 const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','work-records','reconcile','import-info','history-list','history-route'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
@@ -650,7 +650,12 @@ function renderNoopSummary() {
   notice('核對完成：沒有新的可寫入資料，不會重送已同步報告。')
 }
 function staleReasonLabel(diagnostics) {
+  if(work?.staleDiagnosticSource!=='version_check')return t('work.staleCauseUnknown')||'預覽已失效，原因尚未確認。請重新核對未提交資料。'
   const reasons=Object.values(diagnostics||{}).flat().filter(Boolean)
+  if(reasons.includes('REQUEST_FINGERPRINT_CHANGED'))return t('work.staleReasonFingerprint')||'提交內容指紋與預覽不一致。'
+  if(reasons.includes('TARGET_VERSION_CHANGED'))return t('work.staleReasonTargetChanged')||'已確認的 EduLog 目標資料版本改變。'
+  if(reasons.includes('OCCURRENCE_REPORT_VERSION_CHANGED'))return t('work.staleReasonOccurrenceChanged')||'已確認的課次報告版本改變。'
+  if(reasons.includes('PREVIEW_NOT_FOUND'))return t('work.staleReasonPreviewMissing')||'找不到這個批次的預覽。'
   if(reasons.includes('REQUEST_FINGERPRINT_CHANGED'))return '請求內容與上次預覽不同'
   if(reasons.includes('TARGET_VERSION_CHANGED'))return 'EduLog 目標資料已更新'
   if(reasons.includes('OCCURRENCE_REPORT_VERSION_CHANGED'))return '課次報告已更新'
@@ -995,7 +1000,7 @@ async function apply() {
   } catch (error) {
     if(error.code==='PREVIEW_STALE') {
       work.status='stale';work.previewDirty=true;work.staleBatchKey=work.batches?.[work.done||0]?.key||null
-      work.staleDiagnostics=error.fields||null;work.staleObservedAt=new Date().toISOString();work.previewError={code:'PREVIEW_STALE',message:error.message,batchKey:work.staleBatchKey}
+      work.staleDiagnostics=error.fields||null;work.staleDiagnosticSource=error.diagnosticSource||null;work.staleObservedAt=new Date().toISOString();work.previewError={code:'PREVIEW_STALE',message:error.message,batchKey:work.staleBatchKey}
       previewResults=[];$('preview-section').hidden=true;$('apply').disabled=true
       try{await api('job-status',{status:'paused'},{jobId:work.jobId})}catch{}
       rememberSubmissionRound(work);await save();progress()
@@ -1053,12 +1058,11 @@ async function resumeImport() {
   }
   if(work?.status==='stale') {
     const affected=new Set()
-    for(const [key,values] of Object.entries(work.staleDiagnostics||{}))if(values.some(value=>['REQUEST_FINGERPRINT_CHANGED','TARGET_VERSION_CHANGED','OCCURRENCE_REPORT_VERSION_CHANGED','PREVIEW_NOT_FOUND'].includes(value))) {
+    for(const [key,values] of Object.entries(work.staleDiagnosticSource==='version_check'?work.staleDiagnostics||{}:{}))if(values.some(value=>['TARGET_VERSION_CHANGED','OCCURRENCE_REPORT_VERSION_CHANGED'].includes(value))) {
       const parts=key.split('.')
       if(parts[0]==='batches')for(const batch of work.batches||[])if(batch.key===parts[1])for(const row of batch.rows||[])affected.add(row)
       if(parts[0]==='rows'){const sourceId=parts.slice(2,-1).join('.');for(const batch of work.batches||[])for(const row of batch.rows||[])if(row.record?.kind===parts[1]&&row.source_id===sourceId)affected.add(row)}
     }
-    if(!affected.size&&work.staleBatchKey)for(const batch of work.batches||[])if(batch.key===work.staleBatchKey)for(const row of batch.rows||[])affected.add(row)
     work.staleReviewPending ||= []
     work.staleReviewRows ||= []
     for(const row of affected) {

@@ -12,6 +12,7 @@ const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
 const prepareScript = script.slice(script.indexOf('function prepareRows()'), script.indexOf('async function preview('))
 const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
 const staleScript = script.slice(script.indexOf('function refreshStaleReviewBatchRows()'), script.indexOf('function summarizeImportRows('))
+const staleReasonScript = script.slice(script.indexOf('function staleReasonLabel('), script.indexOf('function renderImportOutcome('))
 const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
 const resumeScript = script.slice(script.indexOf('async function refreshImportCheckpoint()'), script.indexOf('async function readForm()'))
 const progressScript=script.slice(script.indexOf('function progress()'),script.indexOf('function taipeiToday()'))
@@ -75,6 +76,16 @@ test('sync stays disabled until the current preview, stale decisions, and local 
   [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:false,staleReviewPending:[]},[],'saved',false]
  ]
  for(const [work,previewResults,saveState,expected] of cases){const context=vm.createContext({work,previewResults,saveState,saveFailureWorkId:'',unsavedWorkId:work.id,reviewSaveCoordinator:undefined,$:()=>({disabled:null})});vm.runInContext(applyGateScript,context);assert.equal(context.canApplyCurrentPreview(),expected)}
+})
+
+test('stale preview details are shown only when they came from an actual version check',()=>{
+ const context=vm.createContext({work:{staleDiagnosticSource:null},t:()=>null})
+ vm.runInContext(staleReasonScript,context)
+ const legacy=context.staleReasonLabel({'rows.student.121251.target_version':['TARGET_VERSION_CHANGED']})
+ assert.match(legacy,/原因尚未確認/)
+ context.work.staleDiagnosticSource='version_check'
+ const trusted=context.staleReasonLabel({'rows.student.121251.target_version':['TARGET_VERSION_CHANGED']})
+ assert.match(trusted,/目標資料版本改變/)
 })
 
 test('review persistence disables both preview and sync before any request or batch mutation',async()=>{

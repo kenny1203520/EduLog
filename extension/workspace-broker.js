@@ -75,7 +75,7 @@ export function installWorkspaceBroker(getStatus) {
     finally { clearTimeout(timer); requests.delete(request) }
     const current = (await chrome.storage.local.get('edulogExtension')).edulogExtension
     if (current?.origin !== bound.instance || current?.token !== bound.token) fail('連線已變更，請重新開啟工作。')
-    if (!response.ok) return { error: { code: response.status === 429 ? 'RATE_LIMITED' : body?.error?.code || `HTTP_${response.status}`, message: body?.error?.message || 'API 無法完成操作。', fields: validationFields(body?.error?.fields), requestId: body?.error?.request_id, retryAfter: response.status === 429 ? Math.max(1, Math.min(3600, Number(response.headers?.get?.('retry-after')) || 0)) || null : null } }
+    if (!response.ok) return { error: { code: response.status === 429 ? 'RATE_LIMITED' : body?.error?.code || `HTTP_${response.status}`, message: body?.error?.message || 'API 無法完成操作。', fields: validationFields(body?.error?.fields), diagnosticSource: body?.error?.diagnostic_source, requestId: body?.error?.request_id, retryAfter: response.status === 429 ? Math.max(1, Math.min(3600, Number(response.headers?.get?.('retry-after')) || 0)) || null : null } }
     if (!body || !Object.hasOwn(body, 'data')) { const invalid = new Error('API 回應格式無法確認，請先檢查批次檢查點。'); invalid.code = 'API_RESPONSE_INVALID'; throw invalid }
     return { data: body?.data }
   }
@@ -324,7 +324,7 @@ export function installWorkspaceBroker(getStatus) {
       }
       if (message.type === 'workspace-return') { const tab = await source(message); await chrome.tabs.update(tab.id, { active: true }); return { data: true } }
       fail('工作操作尚未支援。')
-    })().then(respond, error => respond({ error: { code: error.code || 'WORKSPACE_FAILED', message: error.message || '無法完成工作。', requestId: error.requestId, retryAfter: error.retryAfter, fields: error.fields } }))
+    })().then(respond, error => respond({ error: { code: error.code || 'WORKSPACE_FAILED', message: error.message || '無法完成工作。', requestId: error.requestId, retryAfter: error.retryAfter, fields: error.fields, diagnosticSource:error.diagnosticSource } }))
     return true
   })
 }
