@@ -2,6 +2,13 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
 import {JSDOM} from '../../app/node_modules/jsdom/lib/api.js'
+test('all review queue statuses translate through the real language table',async()=>{
+  const dom=new JSDOM('<body><p id="status"></p></body>',{runScripts:'outside-only'}),w=dom.window
+  w.eval(readFileSync(new URL('../ui-core.js',import.meta.url),'utf8'));await new Promise(resolve=>setTimeout(resolve,0))
+  const keys=['work.staleQueueItemSaving','work.staleQueueItemSaved','work.staleQueueItemPending','work.staleQueueProgress','work.staleQueueComplete','work.reviewSaveChanged','work.reviewSaveWait']
+  for(const locale of ['zh-TW','en']){w.edulogUi.setLocale(locale);for(const key of keys){w.edulogUi.text(w.document.getElementById('status'),key,{count:2,reports:1,fields:2,matched:1});assert.notEqual(w.document.getElementById('status').textContent,key)}}
+  assert.match(w.edulogUi.t('work.staleQueueItemSaving'),/Saving/);w.edulogUi.setLocale('zh-TW');assert.match(w.edulogUi.t('work.staleQueueItemSaving'),/正在保存/);dom.window.close()
+})
 test('keyed shared language updates controls in place, preserves source text and input state',async()=>{
   const dom=new JSDOM('<body><button id="apply"></button><input value="保留草稿"><p data-source-raw>出席</p></body>',{runScripts:'outside-only'})
   const w=dom.window,listeners=[],sent=[]

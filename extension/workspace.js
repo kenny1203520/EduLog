@@ -11,11 +11,13 @@ import { workflowState, combineWorkRecords, workCategory } from './workflow-stat
 import {comparison,decisionResult,semanticValue,outcomeMetrics} from './review-ui.js'
 import { initWorkspaceI18n } from './workspace-i18n.js'
 import { workStore } from './work-store.js'
+import { createReviewSaveCoordinator } from './history-review-save.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
 initWorkspaceI18n()
 let fieldRules=[]
 let saveState='saved', lastSavedAt=null, lastSavedRevision=0, lastSavedWorkId='', saveFailure=null, saveFailureWorkId=''
 let activeOperationLabel=''
+let reviewSaveCoordinator
 const syncFields=[['lesson_id','教材'],['is_completed','完成狀況'],['progress_letter','章節進度'],['attendance_status','出席狀態'],['absence_reason','不出席原因'],['class_participation','課程參與'],['classroom_behavior','課堂秩序'],['content','學習報告'],['contact_notes','聯絡欄'],['class_notes','內部紀錄'],['external_link','報告連結']]
 let syncPreferences={fields:{},revision:null},syncDraftOverrides={}
 let frontendSettingsUrl = null
@@ -67,22 +69,22 @@ async function send(message) {
 const api = (operation, body, extra = {}) => send({ type: 'workspace-api', operation, body, ...(['context','catalog','resolve','field-resolve','sync-preferences-get','reports','work','work-records','reconcile','import-info','history-list','history-route'].includes(operation) && activeReadId ? { requestId: activeReadId } : {}), ...extra })
 const source = (action, extra = {}) => send({ type: 'workspace-source', action, tabId: Number($('source-tab').value), sourcePath: selectedPath, requestId: activeReadId || undefined, ...extra })
 let saveChain=Promise.resolve(),saveRequestSequence=0
-function save() {
+function save({projectWork} = {}) {
   const current=work
   if(!current)return Promise.resolve(false)
   const request=++saveRequestSequence
   unsaved=true;unsavedWorkId=current.id;saveState='pending';saveFailureWorkId=current.id;saveFailure=null;taskStatus()
-  const pending=saveChain.catch(()=>{}).then(()=>persistWork(current,request))
+  const pending=saveChain.catch(()=>{}).then(()=>persistWork(current,request,projectWork))
   saveChain=pending
   return pending
 }
-async function persistWork(current,request) {
+async function persistWork(current,request,projectWork) {
   saveState='saving';taskStatus()
   current.interfaceState={...(current.interfaceState||{}),stage:activeStages[current.type]||1}
   current.revision = (current.revision || 0) + 1
   const revision = current.revision
   let stored
-  try{stored=await send({ type: 'workspace-store', action: 'put', work: current })}
+  try{stored=await send({ type: 'workspace-store', action: 'put', work: projectWork ? projectWork(current) : current })}
   catch(error){if(work===current){saveState=error.saveTransportStage==='indexeddb'&&['BRIDGE_CHANNEL_CLOSED','CONTEXT_INVALIDATED'].includes(error.code)?'uncertain':'failed';saveFailure=error;saveFailureWorkId=current.id;taskStatus()}throw error}
   if (work === current && work.revision === revision && stored?.revision === revision) {
     if($('source-picker').dataset.workId!==work.id){$('source-picker').open=false;$('source-picker').dataset.workId=work.id}
@@ -108,10 +110,11 @@ function captureMappingChoices() {
 function show(id) { $(id).hidden = false }
 function canApplyCurrentPreview() {
   const currentSaveState=saveFailureWorkId===work?.id||unsavedWorkId===work?.id?saveState:'saved'
-  return Boolean(work?.type==='import'&&work.jobId&&work.status==='previewed'&&work.batches?.length&&previewResults.length&&!work.previewDirty&&!work.staleReviewPending?.length&&currentSaveState==='saved')
+  return Boolean(work?.type==='import'&&work.jobId&&work.status==='previewed'&&work.batches?.length&&previewResults.length&&!work.previewDirty&&!work.staleReviewPending?.length&&!reviewSaveCoordinator?.isSaving(work)&&currentSaveState==='saved')
 }
 function updateApplyAvailability() {
   const button=$('apply');if(button)button.disabled=!canApplyCurrentPreview()
+  for(const id of ['preview','repreview']){const control=$(id);if(control)control.disabled=busy||Boolean(reviewSaveCoordinator?.isSaving(work))}
 }
 function stage(view, primary) {
   const step = view === 'import' ? ({ collect: 1, preview: 2, repreview: 3, apply: 3, pause: 4, resume: 4, 'cancel-work': 4 }[primary] || 1) : ({ 'read-form': 1, compare: 2, prefill: 3, 'return-source': 4 }[primary] || 1)
@@ -203,6 +206,7 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
     else if (error.code === 'PAUSED_PREVIEW_UNSUPPORTED') { $('operation-title').textContent='需要更新 EduLog 伺服器';$('operation-detail').textContent=error.message }
     else if (error.code === 'IMPORT_STATUS_UNKNOWN') { $('operation-title').textContent='伺服器狀態待確認';$('operation-detail').textContent=error.message }
+    else if (error.code === 'REVIEW_SAVE_IN_PROGRESS') {globalThis.edulogUi?.text($('operation-title'),'work.reviewSaveWait');$('operation-detail').textContent=''}
     else if (error.code === 'STALE_REVIEW_REQUIRED') { activeOperationLabel='同步前核對';$('operation-title').textContent=globalThis.edulogUi?.t('work.staleReviewRequired')||'仍有報告欄位待確認';$('operation-detail').textContent=globalThis.edulogUi?.t('work.staleReviewRequiredHelp')||'先完成待確認欄位，再更新差異。教學資料尚未送出。';stage('import','preview');$('preview-section').scrollIntoView?.({block:'start',behavior:'smooth'});document.querySelector('[data-stale-review-start]')?.focus({preventScroll:true}) }
     else if(['failed','uncertain'].includes(saveState)){ $('operation-title').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainTitle':'work.saveFailedTitle')|| (saveState==='uncertain'?'保存結果待確認':'草稿保存失敗');$('operation-detail').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainHelp':'work.saveFailedHelp')||'目前內容仍保留在此畫面；修復保存後可重試。同步已停用。' }
     else if(work?.status==='stale'){ $('operation-title').textContent='本輪同步受阻';$('operation-detail').textContent='此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。' }
@@ -211,7 +215,7 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
     if(['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code)&&work?.type==='import'){work.status='paused-extraction';work.collectionError=error.message;work.collectionSaveError=error.code;$('retry-history-save').hidden=false;taskStatus()}
     const previewFailure=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying'].includes(work.status)
-    notice(error.code==='PAUSED_PREVIEW_UNSUPPORTED'||error.code==='IMPORT_STATUS_UNKNOWN'||error.code==='STALE_REVIEW_REQUIRED'||work?.status==='stale'?'':previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '預覽已失效；目前批次未提交。請重新核對未提交資料。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
+    notice(['REVIEW_SAVE_IN_PROGRESS','PAUSED_PREVIEW_UNSUPPORTED','IMPORT_STATUS_UNKNOWN','STALE_REVIEW_REQUIRED'].includes(error.code)||work?.status==='stale'?'':previewFailure||['failed','uncertain'].includes(saveState)?'':error.code === 'PREVIEW_STALE' ? '預覽已失效；目前批次未提交。請重新核對未提交資料。' : ['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code) ? error.message : '目前內容保留在此畫面；請依上方狀態處理後重試。', true)
     let workBytes=0;try{workBytes=new TextEncoder().encode(JSON.stringify(work)).byteLength}catch{}
     const currentLastSavedAt=lastSavedWorkId===work?.id?lastSavedAt:null
     const currentLastSavedRevision=lastSavedWorkId===work?.id?lastSavedRevision:null
@@ -317,28 +321,26 @@ function scheduleHistoryPlanForCurrentMapping(){
   }).catch(error=>{if(owner===work&&epoch===generation&&sequence===historyLocalSequence)notice(`課程教材目錄尚未載入，請重新核對後重試。${error.message}`,true)})
 }
 function staleFieldsForHistoryItem(item){return (work?.staleReviewPending||[]).filter(pending=>pending.kind==='history_report'&&pending.source_id===item.key).map(pending=>pending.field)}
-async function confirmStaleHistoryReview(item,fields){
-  const owner=work;if(!owner||!item)return false
-  const ownerId=owner.id,reportKey=item.key,record=owner.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===reportKey)||item.record
-  if(fields.some(field=>!['source','keep','mixed','skip'].includes(record.historyFieldDecisions?.[field])))return false
-  const before=owner.staleReviewPending||[],resolved=before.filter(pending=>pending.kind==='history_report'&&pending.source_id===reportKey&&fields.includes(pending.field));if(!resolved.length)return false
-  historyView.setQueueSaving(reportKey,fields)
-  const operation=++historyCheckSequence
-  owner.staleReviewPending=before.filter(pending=>!resolved.includes(pending));record.staleReviewFields=(record.staleReviewFields||[]).filter(field=>!fields.includes(field));record.historyConflictConfirmed=false;record.historyConflictSignature='';historyLocalSequence++;owner.previewDirty=true
-  try{
-    await reportSkipController?.refreshContext(owner)
-    if(work!==owner||owner.id!==ownerId||operation!==historyCheckSequence)return false
-    updateHistoryPlanLocal();const latest=historyPlan.find(candidate=>candidate.key===reportKey)
-    if(latest?.conflicts?.length){record.historyConflictConfirmed=true;record.historyConflictSignature=latest.conflictSignature}
-    updateHistoryPlanLocal();const saved=await save()
-    if(work!==owner||owner.id!==ownerId||operation!==historyCheckSequence)return false
-    if(!saved)throw Object.assign(new Error('工作已切換或保存版本已更新。'),{code:'WORK_CONFLICT'})
-    historyView.setQueueSaving(reportKey,[]);owner.historyUI||={};owner.historyUI.staleReviewSavedKey=reportKey;historyView.updateStatus(historyPlan);notice(globalThis.edulogUi?.t('work.conflictSaved')||'核對決定已保存；請更新差異後再確認同步。');return true
-  }catch(error){
-    if(work!==owner||owner.id!==ownerId||operation!==historyCheckSequence)return false
-    historyView.setQueueSaving(reportKey,[]);owner.staleReviewPending=[...before];record.staleReviewFields=[...new Set([...(record.staleReviewFields||[]),...fields])];record.historyConflictConfirmed=false;record.historyConflictSignature='';updateHistoryPlanLocal();notice((globalThis.edulogUi?.t('work.conflictSaveFailed')||'保存失敗，選擇仍保留；請重試保存。')+' '+error.message,true);return false
+function prepareReviewSave(owner,record,reportKey,fields,resolved){
+  const stagedRecord={...record,staleReviewFields:(record.staleReviewFields||[]).filter(field=>!fields.includes(field)),historyConflictConfirmed:false,historyConflictSignature:''}
+  const records=owner.snapshot.records.map(candidate=>candidate===record?stagedRecord:candidate)
+  const latest=planHistory(records,historyTargets(),historyArchives,historyRoutes,historyOptions()).find(candidate=>candidate.key===reportKey)
+  if(latest?.conflicts?.length){stagedRecord.historyConflictConfirmed=true;stagedRecord.historyConflictSignature=latest.conflictSignature}
+  const pending=(owner.staleReviewPending||[]).filter(row=>!resolved.includes(row))
+  return {
+    project:live=>({...live,previewDirty:true,staleReviewPending:pending,snapshot:{...live.snapshot,records:live.snapshot.records.map(candidate=>candidate===record?stagedRecord:candidate)},historyUI:{...live.historyUI,staleReviewSavedKey:reportKey}}),
+    commit:()=>{owner.staleReviewPending=pending;record.staleReviewFields=stagedRecord.staleReviewFields;record.historyConflictConfirmed=stagedRecord.historyConflictConfirmed;record.historyConflictSignature=stagedRecord.historyConflictSignature;owner.previewDirty=true;owner.historyUI||={};owner.historyUI.staleReviewSavedKey=reportKey;historyLocalSequence++}
   }
 }
+reviewSaveCoordinator=createReviewSaveCoordinator({
+  work:()=>work,record:item=>work?.snapshot?.records?.find(r=>r.kind==='report'&&historyIdentity(r)===item.key),
+  stamp:()=>`${generation}:${historyCheckSequence}:${historyLocalSequence}`,
+  refresh:owner=>reportSkipController?.refreshContext(owner),prepare:prepareReviewSave,save,
+  saving:(owner,key,fields)=>{historyView.setQueueSaving(key,fields,owner.id);updateApplyAvailability()},
+  saved:()=>{updateHistoryPlanLocal();notice(globalThis.edulogUi?.t('work.conflictSaved')||'核對決定已保存；請更新差異後再確認同步。')},
+  failed:error=>notice(globalThis.edulogUi?.t(error.code==='REVIEW_SAVE_SUPERSEDED'?'work.reviewSaveChanged':'work.conflictSaveFailed')||'保存失敗，選擇仍保留；請重試保存。',true)
+})
+async function confirmStaleHistoryReview(item,fields){return reviewSaveCoordinator.confirm(item,fields)}
 async function historyWorkChanged(){if(!work)return false;historyCheckSequence++;historyLocalSequence++;work.previewDirty=true;await reportSkipController?.refreshContext(work);updateHistoryPlanLocal();try{return await save()}catch(e){notice(`核對結果未保存：${e.message}。選擇仍保留，請重試。`,true);return false}}
 const reportSkipController=createReportSkipController({getWork:()=>work,targets:historyTargets,routes:()=>historyRoutes,instance:()=>binding?.instance||'',api,capable:()=>integrationCapabilities.report_skip_decisions,identity:historyIdentity,changed:historyWorkChanged,recompute:updateHistoryPlanLocal,save})
 function historyUiChanged(){if(work)void save().catch(e=>notice(e.message,true))}
@@ -533,6 +535,7 @@ function validateHistoryRows(rows) {
   }
 }
 async function preview(reuse = false) {
+  if(reviewSaveCoordinator?.isSaving(work))throw Object.assign(new Error(globalThis.edulogUi?.t('work.reviewSaveWait')||'核對決定正在保存，請等待完成。'),{code:'REVIEW_SAVE_IN_PROGRESS'})
   if (!work || work.type !== 'import') throw new Error('請先擷取目前班級。')
   if (!reuse && work.jobId && work.previewJobPending) reuse = true
   if (!reuse) {
@@ -951,6 +954,7 @@ async function applyHistoryBindings() {
   }
 }
 async function apply() {
+  if(typeof reviewSaveCoordinator!=='undefined'&&reviewSaveCoordinator?.isSaving(work))throw Object.assign(new Error(globalThis.edulogUi?.t('work.reviewSaveWait')||'核對決定正在保存，請等待完成。'),{code:'REVIEW_SAVE_IN_PROGRESS'})
   if (work.previewDirty || !work.jobId) throw new Error('請先更新差異。')
   if(work.staleReviewPending?.length){const error=new Error(`仍有 ${new Set(work.staleReviewPending.map(row=>`${row.kind}:${row.source_id}`)).size} 份報告需要重新確認。`);error.code='STALE_REVIEW_REQUIRED';throw error}
   if (work.blockedRows?.length && !window.confirm(globalThis.edulogUi?.t('work.confirmEligible',{count:work.blockedRows.length}) || `仍有 ${work.blockedRows.length} 筆來源資料被阻擋。只同步可處理資料並保留待處理項目？`)) return

@@ -55,6 +55,7 @@ function previewFixture(work, rows) {
   context.edulogUi={t:key=>key}
   context.updateHistoryPlanLocal=()=>{}
   context.structuredClone=structuredClone
+  context.reviewSaveCoordinator=undefined
   vm.runInContext(`${applyGateScript}\n${prepareScript}\n${staleScript}\n${previewScript}\n${resumeScript}`,context)
   context.prepareRows=()=>rows
   return {context,calls,saved,controls,preview:reuse=>context.preview(reuse),resume:()=>context.resumeImport()}
@@ -72,7 +73,7 @@ test('sync stays disabled until the current preview, stale decisions, and local 
   [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:true,staleReviewPending:[]},[{rows:[{}]}],'saved',false],
   [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:false,staleReviewPending:[]},[],'saved',false]
  ]
- for(const [work,previewResults,saveState,expected] of cases){const context=vm.createContext({work,previewResults,saveState,saveFailureWorkId:'',unsavedWorkId:work.id,$:()=>({disabled:null})});vm.runInContext(applyGateScript,context);assert.equal(context.canApplyCurrentPreview(),expected)}
+ for(const [work,previewResults,saveState,expected] of cases){const context=vm.createContext({work,previewResults,saveState,saveFailureWorkId:'',unsavedWorkId:work.id,reviewSaveCoordinator:undefined,$:()=>({disabled:null})});vm.runInContext(applyGateScript,context);assert.equal(context.canApplyCurrentPreview(),expected)}
 })
 
 test('stale report navigation switches to the review pane before focusing and retains summary state',()=>{
