@@ -56,6 +56,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-stale-review-navigation.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-review-save-recovery.md') -Destination $stagingPath
     Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-preview-stale-precise-diagnostics.md') -Destination $stagingPath
+    Copy-Item -LiteralPath (Join-Path $extensionRoot 'tests/ACCEPTANCE-workspace-stale-recovery.md') -Destination $stagingPath
 
     $migrationPath = Join-Path $stagingPath 'supabase/migrations'
     New-Item -ItemType Directory -Path $migrationPath -Force | Out-Null
