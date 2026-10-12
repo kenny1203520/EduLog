@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 import { labels, splitBatches, validateBatches, importBatchRequest } from '../workspace-model.js'
 import { bindingStillMatches } from '../history-sync.js'
+import { prepareStaleReviewBatchRefresh } from '../history-review-batches.js'
 
 // Exercise the real preview orchestration with isolated API/storage effects.
 const script = readFileSync(new URL('../workspace.js', import.meta.url), 'utf8')
@@ -55,7 +56,7 @@ function previewFixture(work, rows) {
   context.edulogUi={t:key=>key}
   context.updateHistoryPlanLocal=()=>{}
   context.structuredClone=structuredClone
-  context.reviewSaveCoordinator=undefined
+  Object.assign(context,{reviewSaveCoordinator:undefined,prepareStaleReviewBatchRefresh,historyRoutes:new Map(),historyView:{updateStatus(){}}})
   vm.runInContext(`${applyGateScript}\n${prepareScript}\n${staleScript}\n${previewScript}\n${resumeScript}`,context)
   context.prepareRows=()=>rows
   return {context,calls,saved,controls,preview:reuse=>context.preview(reuse),resume:()=>context.resumeImport()}
@@ -74,6 +75,29 @@ test('sync stays disabled until the current preview, stale decisions, and local 
   [{type:'import',jobId:'job',status:'previewed',batches:[{key:'batch'}],previewDirty:false,staleReviewPending:[]},[],'saved',false]
  ]
  for(const [work,previewResults,saveState,expected] of cases){const context=vm.createContext({work,previewResults,saveState,saveFailureWorkId:'',unsavedWorkId:work.id,reviewSaveCoordinator:undefined,$:()=>({disabled:null})});vm.runInContext(applyGateScript,context);assert.equal(context.canApplyCurrentPreview(),expected)}
+})
+
+test('review persistence disables both preview and sync before any request or batch mutation',async()=>{
+ const current=work(),before=structuredClone(current),f=previewFixture(current,[])
+ f.context.reviewSaveCoordinator={isSaving:()=>true}
+ f.context.busy=false
+ f.controls.preview={disabled:false};f.controls.repreview={disabled:false}
+ f.context.updateApplyAvailability()
+ assert.equal(f.controls.apply.disabled,true);assert.equal(f.controls.preview.disabled,true);assert.equal(f.controls.repreview.disabled,true)
+ await assert.rejects(f.preview(true),error=>error.code==='REVIEW_SAVE_IN_PROGRESS')
+ assert.deepEqual(current,before);assert.equal(f.calls.length,0);assert.equal(f.saved.length,0)
+})
+
+test('local report blockers retain every batch and give actionable data before HTTP preview',async()=>{
+ const current=work(),key='admission:report:report',data={enrollment_id:'enrollment',report_date:'2026-10-04',content:'original'}
+ current.needs=[];current.staleReviewRows=[{batchKey:'old-key',source_id:key}]
+ current.batches[0].rows=[{source_id:key,target_id:'history',overwrite:[],record:{kind:'history_report',data}}]
+ const original=structuredClone(current.batches),f=previewFixture(current,[])
+ f.context.historyPlan=[{key,category:'needs',record:{date:'2026-10-04'},data,issues:[{target:'enrollment'}]}]
+ await assert.rejects(f.preview(true),error=>error.code==='STALE_REPORT_REVIEW_REQUIRED'&&error.reviewIssues[0].source_id===key)
+ assert.deepEqual(current.batches,original);assert.equal(f.controls.apply.disabled,true)
+ assert.equal(current.staleReviewIssues[0].source_id,key);assert.equal(f.calls.some(call=>['preview','apply','job'].includes(call.operation)),false)
+ assert.equal(f.controls['preview-section'].hidden,false)
 })
 
 test('stale report navigation switches to the review pane before focusing and retains summary state',()=>{
@@ -289,6 +313,7 @@ function classifiedHistoryFixture(items, overrides={}) {
   const calls=[],saved=[]
   const context=vm.createContext({work,historyPlan:items,context:{class_sessions:[{id:'session',course_ids:['course'],name:'Class',start_date:'2026-01-01',day_of_week:1,start_time:'10:00',end_time:'12:00'}],courses:[{id:'course',display_name:'Test course'}],enrollments:[{id:'enrollment-target',class_session_id:'old-session'}],permissions:{}},mappingController:{validateRow:()=>true,courseRows:()=>[],studentSelect:()=>({value:'student-target'}),resolveFieldRules:async()=>{}},integrationCapabilities:{enrollment_history_reports:true},generation:1,crypto:{randomUUID:(()=>{let n=0;return()=>`generated-${++n}`})()},$:id=>controls[id],admissionIdentity:()=>({}),idFor:(kind,id)=>`${kind}-${id}`,labels,splitBatches,validateBatches,importBatchRequest,batchBytes:180000,previewResults:[],saveState:'saved',saveFailureWorkId:'',unsavedWorkId:'',refreshHistoryPlan:async()=>{},save:async()=>{saved.push(structuredClone(work))},saveWorkMetadata:async()=>{},renderNoopSummary(){},renderDifferences(){},stage(){},taskStatus(){},notice(){},api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='job')return{id:'new-job'};if(operation==='preview')return{rows:[],counts:{},batch_fingerprint:'a'.repeat(64)};return{}}})
   context.edulogUi={t:()=>''}
+  Object.assign(context,{reviewSaveCoordinator:undefined,prepareStaleReviewBatchRefresh,historyRoutes:new Map(),historyView:{updateStatus(){}}})
   vm.runInContext(`${applyGateScript}\n${prepareScript}\n${staleScript}\n${previewScript}`,context)
   return{context,work,calls,saved,controls,preview:()=>context.preview(false)}
 }

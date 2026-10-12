@@ -32,6 +32,12 @@ test('search and filter changes persist UI state without marking import data dir
  assert.equal(w.hookCounts.uiChanged,2);assert.equal(w.hookCounts.changed,0);assert.equal(w.hookCounts.recheck,0);assert.equal(w.currentWork.historyUI.search,'name');assert.equal(w.currentWork.historyUI.filter,'all');dom.window.close()
 })
 
+test('report blockers join the same review queue without inventing pending fields, including missing reports',()=>{
+ const {w,dom,item,$}=fixture(),a=item('301'),b=item('302');w.currentWork.staleReviewPending=[];w.currentWork.staleReviewIssues=[{source_id:'301',targets:[{target:'date'}]},{source_id:'missing',reason:'report-missing'}];w.view.render([a,b]);$('history-filter').value='stale';$('history-filter').dispatchEvent(new w.Event('change'))
+ assert.equal($('history-items').querySelector('[data-key="301"]').hidden,false);assert.equal($('history-items').querySelector('[data-key="302"]').hidden,true);assert.match($('history-items').textContent,/仍有報告問題待核對/);assert.match($('history-stale-queue-count').textContent,/2 份報告、0 個欄位/);assert.doesNotMatch($('history-stale-queue-count').textContent,/本輪決定已保存/)
+ assert.equal(w.view.nextStaleReport(''),true);assert.equal(w.view.selectedKey(),'301');dom.window.close()
+})
+
 test('list editor conflict acknowledgement updates local state without a full recheck',async()=>{
  const {w,dom,item,$}=fixture(),row=item('301',{record:{enrollment_source_id:'301',date:'2026-10-04',sourceFieldConflicts:[{key:'content',label:'評語',listValue:'清單內容',editValue:'報告頁內容'}]}});w.currentWork.historyUI={selected:'301'};w.view.render([row]);const acknowledgement=[...$('history-detail').querySelectorAll('.source-conflicts button')][0];assert.ok(acknowledgement);await acknowledgement.onclick()
  assert.equal(row.record.sourceConflictAcknowledged,true);assert.equal(w.hookCounts.changed,1);assert.equal(w.hookCounts.recheck,0);assert.match($('history-detail').textContent,/已確認/);dom.window.close()

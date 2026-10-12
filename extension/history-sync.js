@@ -61,8 +61,11 @@ export function planHistory(records, enrollmentTargets, archives, routes, option
     let chosen
     if (item.existing?.linked_report_id) {
       const changed = [...teachingFields,'source_fields'].some(f => Object.hasOwn(item.data,f) && JSON.stringify(item.data[f]) !== JSON.stringify(item.existing[f]))
-      if (!changed) { item.category='linked'; item.reason='Already saved and linked; no duplicate will be created.'; continue }
       chosen=(routes.get(target.id)||[]).find(route=>route.report?.id===item.existing.linked_report_id)
+      // Matching source/history alone does not prove that the bound lesson is
+      // still identical. Expose its real conflicts in the normal review editor.
+      const sameLesson=chosen?.can_write&&chosen.occurrence_date===record.date&&item.existing.enrollment_id===target.id&&teachingFields.filter(field=>field!=='external_link'&&Object.hasOwn(item.data,field)).every(field=>JSON.stringify(item.data[field])===JSON.stringify(chosen.report[field]))
+      if (!changed&&sameLesson&&!mappingNeeds.length) { item.category='linked'; item.reason='Already saved and linked; no duplicate will be created.'; continue }
       if(!chosen){needs(item,'linked-report-unavailable','The linked EduLog report could not be read. Recheck this enrollment before syncing.',[{id:'linked-report-unavailable',code:'report-read',message:'The linked EduLog report could not be read. Recheck this enrollment before syncing.',target:'report'}]);continue}
       item.boundExisting=true
     } else chosen = record.historyOccurrenceId ? candidates.find(o => o.id === record.historyOccurrenceId) : candidates.length === 1 ? candidates[0] : undefined

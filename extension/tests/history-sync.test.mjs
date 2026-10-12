@@ -77,10 +77,19 @@ test('unread, changed linked and conflicting duplicate data cannot be silently i
  const [unread]=plan([record({sourceReadStatus:'failed'})]);assert.equal(unread.category,'needs');assert.equal(unread.issues[0].id,'source-read');assert.equal(unread.issues[0].target,'source')
  assert.equal(plan([record(),record()]).length,1)
  assert.equal(plan([record(),record({data:{content:'different'}})])[0].category,'needs')
- const linked={id:'archive',report_date:'2026-10-04',source_fields:[{key:'content',label:'評語',text:''}],source_admission_id:'301',source_key:'report:401',linked_report_id:'report',is_completed:false,class_participation:0,classroom_behavior:4.5,content:'',external_link:'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'}
- assert.equal(plan([record()],[linked])[0].category,'linked')
+ const linked={id:'archive',enrollment_id:'enrollment',report_date:'2026-10-04',source_fields:[{key:'content',label:'評語',text:''}],source_admission_id:'301',source_key:'report:401',linked_report_id:'report',is_completed:false,class_participation:0,classroom_behavior:4.5,content:'',external_link:'https://corp.orangeapple.co/dt_admissions/301/reports/401/edit'}
+ assert.equal(plan([record()],[linked])[0].category,'needs','unread bound report is not a verified no-op')
+ assert.equal(plan([record()],[linked],[{...occurrence,report:{id:'report',is_completed:false,class_participation:0,classroom_behavior:4.5,content:''}}])[0].category,'linked')
  const changedLinked={...occurrence,report:{id:'report',version:3,content:''}}
  assert.equal(plan([record({data:{content:'changed'}})],[linked],[changedLinked])[0].category,'needs')
+})
+
+test('matching source and history still expose a changed bound lesson for a fresh decision',()=>{
+ const source=record(),[original]=plan([source]),history={...original.data,id:'archive',version:3,linked_report_id:'report'},route={...occurrence,report:{...source.data,id:'report',version:5,content:'new EduLog text'}}
+ const [pending]=plan([source],[history],[route]);assert.equal(pending.category,'needs');assert.equal(pending.comparisonReport,route.report);assert.ok(pending.conflicts.includes('content'))
+ source.historyFieldDecisions={content:'keep'};source.historyConflictConfirmed=true;source.historyConflictSignature=plan([source],[history],[route])[0].conflictSignature
+ const [reviewed]=plan([source],[history],[route]);assert.equal(reviewed.category,'bind');assert.equal(reviewed.record.historyFieldDecisions.content,'keep');assert.equal(reviewed.record.historyOverwrite?.includes('content')||false,false);assert.equal(reviewed.occurrence.id,route.id)
+ assert.equal(plan([record()],[history],[{...route,can_write:false}])[0].category,'needs')
 })
 test('list/editor disagreements wait for explicit confirmation before course-report binding',()=>{
  const conflict={key:'content',label:'學習表現',listValue:'舊列表',editValue:'已儲存內容'}
