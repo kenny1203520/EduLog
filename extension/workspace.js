@@ -14,6 +14,7 @@ import { workStore } from './work-store.js'
 import { createReviewSaveCoordinator } from './history-review-save.js'
 import { prepareStaleReviewBatchRefresh } from './history-review-batches.js'
 import { renderReviewBlockers } from './history-review-issues.js'
+import { workspaceInterfaceFailure } from './workspace-operation-errors.js'
 const bridge = globalThis.edulogRuntime, $ = id => document.getElementById(id)
 initWorkspaceI18n()
 let fieldRules=[]
@@ -38,6 +39,7 @@ function taskStatus() {
   else {ui?.text($('draft-status'),currentSaveState==='saving'?'work.saving':currentSaveState==='pending'?'work.unsaved':work?'work.saved':'work.ready');$('retry-history-save').hidden=true}
   $('task-title').textContent=work?.title||sourceContext?.title||''
   const reviewRequired=work?.previewError?.code==='STALE_REPORT_REVIEW_REQUIRED'
+  if(work?.previewError?.code==='WORKSPACE_UI_ERROR'){ui?.text($('task-status'),'work.interfaceFailed');return}
   const previewFailed=work?.previewError&&work.previewDirty&&!['outcome_unknown','applying','stale'].includes(work.status)&&!reviewRequired
   if(reviewRequired){ui?.text($('task-status'),'work.staleReportReviewRequired');return}
   $('task-status').textContent=previewFailed?(ui?.t('work.previewFailed')||'差異核對失敗，可重試'):work ? ({collected:'已讀取，待核對',collecting:'正在讀取',reviewing:'正在核對',previewed:'摘要待確認',applying:'正在寫入',paused:'已暫停',failed:'需要處理',stale:'同步受阻',outcome_unknown:'寫入結果待核對',partial_complete:'部分完成',complete:'已核驗完成',pending_confirmation:'待人工送出',cancelled:'已取消剩餘工作'})[work.status]||'草稿' : ''
@@ -196,6 +198,7 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
       : `已等待 ${seconds} 秒。${readOnly ? '可取消此唯讀查詢。' : '目前操作仍在進行。'}`
   }, 1000)
   $('diagnostics').hidden = true
+  if($('retry-work-recovery'))$('retry-work-recovery').hidden=true
   try {
     if (saveBeforeAction&&unsaved && work?.type === 'import' && !$('mapping').hidden) { clearTimeout(editTimer); captureMappingChoices(); await save() }
     const result = await action()
@@ -204,6 +207,11 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     return result
   }
   catch (error) {
+    const interfaceFailure=workspaceInterfaceFailure(error)
+    if(interfaceFailure){
+      error.code=interfaceFailure.code
+      if(work?.type==='import'){work.previewDirty=true;work.previewError={code:interfaceFailure.code,message:error.message};previewResults=[];updateApplyAvailability()}
+    }
     $('operation-status').dataset.state = 'error'
     if (error.code==='READ_CANCELLED'){$('operation-status').dataset.state='complete';$('operation-title').textContent='已取消唯讀查詢';$('operation-detail').textContent='已完成資料與目前選擇保留；可重新核對。';return false}
     else if (!readOnly && work?.status === 'outcome_unknown') { $('operation-title').textContent = '寫入結果尚未確認'; $('operation-detail').textContent = '未收到這批的確認回應。檢查點已保留；續傳會先用原冪等鍵核對結果，不會建立新的匯入工作。'; notice('寫入結果尚未確認。請使用「檢查並續傳」核對批次狀態。', true) }
@@ -214,8 +222,13 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     else if (error.code === 'REVIEW_SAVE_IN_PROGRESS') {globalThis.edulogUi?.text($('operation-title'),'work.reviewSaveWait');$('operation-detail').textContent=''}
     else if (error.code === 'STALE_REVIEW_REQUIRED') { activeOperationLabel='同步前核對';$('operation-title').textContent=globalThis.edulogUi?.t('work.staleReviewRequired')||'仍有報告欄位待確認';$('operation-detail').textContent=globalThis.edulogUi?.t('work.staleReviewRequiredHelp')||'先完成待確認欄位，再更新差異。教學資料尚未送出。';stage('import','preview');$('preview-section').scrollIntoView?.({block:'start',behavior:'smooth'});document.querySelector('[data-stale-review-start]')?.focus({preventScroll:true}) }
     else if(['failed','uncertain'].includes(saveState)){ $('operation-title').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainTitle':'work.saveFailedTitle')|| (saveState==='uncertain'?'保存結果待確認':'草稿保存失敗');$('operation-detail').textContent=globalThis.edulogUi?.t(saveState==='uncertain'?'work.saveUncertainHelp':'work.saveFailedHelp')||'目前內容仍保留在此畫面；修復保存後可重試。同步已停用。' }
+    else if(interfaceFailure){
+      globalThis.edulogUi?.text($('operation-title'),'work.interfaceFailed');globalThis.edulogUi?.text($('operation-detail'),'work.interfaceRetry')
+      const retry=$('retry-work-recovery'),owner=work
+      if(retry&&owner?.type==='import'&&owner.snapshot&&owner.jobId&&owner.batches?.length){retry.hidden=false;retry.onclick=()=>{if(work!==owner)return;void run(()=>restoreImportWork(owner),{label:'正在恢復所選工作'})}}
+    }
     else if(work?.status==='stale'){ $('operation-title').textContent='本輪同步受阻';$('operation-detail').textContent='此批次未提交；已知成功批次仍保留。請重新核對未提交資料，確認新差異後再同步。' }
-    else if(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying','stale'].includes(work.status)){ $('operation-title').textContent=globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗';$('operation-detail').textContent=globalThis.edulogUi?.t('work.previewRetry')||'草稿與批次識別已保留；請重試核對，成功產生新摘要後再確認同步。' }
+    else if(work?.previewError&&work.previewDirty&&!['outcome_unknown','applying','stale'].includes(work.status)){ $('operation-title').textContent=globalThis.edulogUi?.t('work.previewFailed')||'差異核對失敗';$('operation-detail').textContent=error.message||work.previewError.message||globalThis.edulogUi?.t('work.previewRetry')||'請重新核對未提交資料。' }
     else if (error.code === 'RATE_LIMITED') { $('operation-title').textContent = '伺服器暫時限制查詢'; $('operation-detail').textContent = error.retryAfter ? `請於 ${error.retryAfter} 秒後手動重試。` : '請稍後手動重試。' }
     else { $('operation-title').textContent = '操作未完成'; $('operation-detail').textContent = error.message || '請檢查連線後重試。' }
     if(['WORK_STORAGE_FULL','WORK_SAVE_FAILED','WORK_DATA_INVALID','WORK_DATA_CORRUPT'].includes(error.code)&&work?.type==='import'){work.status='paused-extraction';work.collectionError=error.message;work.collectionSaveError=error.code;$('retry-history-save').hidden=false;taskStatus()}
@@ -225,6 +238,7 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     const currentLastSavedAt=lastSavedWorkId===work?.id?lastSavedAt:null
     const currentLastSavedRevision=lastSavedWorkId===work?.id?lastSavedRevision:null
     $('diagnostic').textContent = [error.code || 'WORK_FAILED',`操作階段：${activeOperationLabel}`,work?.id?`工作識別：${work.id}`:'',work?.batches?.[Math.max(0,work.done||0)]?.key?`批次識別：${work.batches[Math.max(0,work.done||0)].key}`:'',work?.revision!=null?`工作 revision：${work.revision}`:'',`目前工作大小：約 ${workBytes} bytes`,currentLastSavedAt?`最後成功保存：${new Date(currentLastSavedAt).toISOString()} · revision ${currentLastSavedRevision}`:'尚無本工作成功保存時間',error.saveTransportStage?`保存階段：${error.saveTransportStage}`:'',...Object.entries(error.fields || {}).flatMap(([key, messages]) => messages.map(message => `${key}：${message}`)),error.requestId ? `請求編號：${error.requestId}` : ''].filter(Boolean).join('\n'); show('diagnostics')
+    if(interfaceFailure)$('diagnostic').textContent+='\n'+[interfaceFailure.type,interfaceFailure.reason,interfaceFailure.location].filter(Boolean).join(' · ')
   } finally { clearInterval(waitTimer); busy = false; activeReadId = ''; $('source-tab').disabled=sourceDisabled; $('workspace').removeAttribute('aria-busy'); $('operation-status').removeAttribute('aria-busy'); taskStatus(); if (trigger?.isConnected && trigger instanceof HTMLButtonElement) trigger.disabled = previousDisabled; $('cancel-read').hidden = true; updateApplyAvailability(); finishRead() }
 }
 function options(select, rows, label, placeholder, extra) {
@@ -630,6 +644,8 @@ async function preview(reuse = false) {
   const resolved=[];for(const pending of work.staleReviewPending||[]){const result=previewResults.flatMap(entry=>entry.rows||[]).find(row=>row.kind===pending.kind&&row.source_id===pending.source_id);if(result&&JSON.stringify(result.before?.[pending.field])===JSON.stringify(result.after?.[pending.field]))resolved.push(pending)}if(resolved.length){work.staleReviewPending=work.staleReviewPending.filter(pending=>!resolved.includes(pending));for(const pending of resolved){const record=historyPlan.find(item=>item.key===pending.source_id)?.record;if(record)record.staleReviewFields=(record.staleReviewFields||[]).filter(field=>field!==pending.field)}work.staleReviewRows=(work.staleReviewRows||[]).filter(stale=>(work.staleReviewPending||[]).some(pending=>pending.kind==='history_report'&&pending.source_id===stale.source_id));updateHistoryPlanLocal()}if(!(work.staleReviewPending||[]).length)work.staleReviewRows=[]
   work.status = 'previewed'; delete work.previewError; work.previewDirty = false; work.mappingDirty = false; work.previewJobPending=false; work.batchCount = work.batches.length; await save(); renderDifferences(); updateApplyAvailability(); notice(work.blockedRows?.length ? (globalThis.edulogUi?.t('work.previewPartial') || '摘要已準備；部分資料待處理。') : work.staleReviewPending?.length?'差異已更新；仍有報告需要回原核對區確認。':'差異已更新，請檢查後確認匯入。')
   } catch(error) {
+    const interfaceFailure=workspaceInterfaceFailure(error)
+    if(interfaceFailure)error.code=interfaceFailure.code
     const alreadyRecorded=work.previewError
     work.previewDirty=true
     if(!alreadyRecorded)work.previewError={code:error.code||'PREVIEW_FAILED',message:error.message||'Preview failed'}
@@ -650,17 +666,14 @@ function renderNoopSummary() {
   notice('核對完成：沒有新的可寫入資料，不會重送已同步報告。')
 }
 function staleReasonLabel(diagnostics) {
+  const t=key=>globalThis.edulogUi?.t(key)
   if(work?.staleDiagnosticSource!=='version_check')return t('work.staleCauseUnknown')||'預覽已失效，原因尚未確認。請重新核對未提交資料。'
   const reasons=Object.values(diagnostics||{}).flat().filter(Boolean)
   if(reasons.includes('REQUEST_FINGERPRINT_CHANGED'))return t('work.staleReasonFingerprint')||'提交內容指紋與預覽不一致。'
   if(reasons.includes('TARGET_VERSION_CHANGED'))return t('work.staleReasonTargetChanged')||'已確認的 EduLog 目標資料版本改變。'
   if(reasons.includes('OCCURRENCE_REPORT_VERSION_CHANGED'))return t('work.staleReasonOccurrenceChanged')||'已確認的課次報告版本改變。'
   if(reasons.includes('PREVIEW_NOT_FOUND'))return t('work.staleReasonPreviewMissing')||'找不到這個批次的預覽。'
-  if(reasons.includes('REQUEST_FINGERPRINT_CHANGED'))return '請求內容與上次預覽不同'
-  if(reasons.includes('TARGET_VERSION_CHANGED'))return 'EduLog 目標資料已更新'
-  if(reasons.includes('OCCURRENCE_REPORT_VERSION_CHANGED'))return '課次報告已更新'
-  if(reasons.includes('PREVIEW_NOT_FOUND'))return '找不到原預覽'
-  return '預覽目前無法使用，原因尚未確認'
+  return t('work.staleCauseUnknown')||'預覽已失效，原因尚未確認。請重新核對未提交資料。'
 }
 function captureStaleSummaryState(){
   if(!work)return
