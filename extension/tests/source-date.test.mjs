@@ -28,6 +28,43 @@ function page(){
   dom.window.document.querySelector('a').addEventListener('click',e=>e.preventDefault())
   return {dom,api:dom.window.edulogSourceIntegration,doc:dom.window.document,click}
 }
+function classPage({range='2026-08-08 ~ 2026-12-06',headers=['上週(10/10)','本週(10/17)','下週(10/24)'],firstDataDate=''}={}){
+  const rows=Array.from({length:9},(_,i)=>{
+    const admission=300+Math.floor(i/3),student=900+Math.floor(i/3),firstReport=4000+i*3
+    const links=headers.map((_,column)=>`<td><a ${i===0&&column===0&&firstDataDate?`data-date="${firstDataDate}"`:''} href="/dt_admissions/${admission}/reports/${firstReport+column}/edit">紀錄</a></td>`).join('')
+    return `<tr><td><a href="/students/${student}">匿名學生 ${Math.floor(i/3)+1}</a><a href="/dt_admissions/${admission}">報名</a></td><td>匿名課程 (${range})</td>${links}</tr>`
+  }).join('')
+  const header=`<tr><th rowspan="2">學生</th><th rowspan="2">課程</th><th colspan="${headers.length}">週次</th></tr><tr>${headers.map(value=>`<th>${value}</th>`).join('')}</tr>`
+  const dom=new JSDOM(`<div id="page-body"><div class="content"><h2>匿名班級</h2><table id="reports"><thead>${header}</thead><tbody>${rows}</tbody></table></div></div><div class="modal show"><form action="/dt_admissions/300/reports/4000"><div class="modal-title">2026-10-10</div></form></div>`,{url:'https://corp.orangeapple.co/courses/dt/11',runScripts:'outside-only'})
+  Object.defineProperty(dom.window,'crypto',{value:webcrypto});dom.window.TextEncoder=TextEncoder;dom.window.eval(script);dom.window.eval(readFileSync(new URL('../adapters/orange-apple-integration.js',import.meta.url),'utf8'))
+  return {dom,api:dom.window.edulogSourceIntegration,doc:dom.window.document}
+}
+test('class scan resolves every report date from its logical week header and course range',async()=>{
+  const {dom,api,doc}=classPage(),snapshot=api.extractClass(doc,'/courses/dt/11'),reports=snapshot.records.filter(record=>record.kind==='report')
+  assert.equal(reports.length,27)
+  assert.equal(reports.filter(record=>record.date).length,27)
+  assert.deepEqual([...new Set(reports.map(record=>record.date))].sort(),['2026-10-10','2026-10-17','2026-10-24'])
+  for(const report of reports){
+    const evidence=report.sourceEvidence[0].fields
+    assert.ok(evidence.find(field=>field.key==='date_header')?.text)
+    assert.ok(evidence.find(field=>field.key==='course_date_range')?.text.includes('2026-08-08'))
+    assert.equal(report.needs.includes('缺少可確認年份的日期依據，請核對日期。'),false)
+  }
+  const firstLink=doc.querySelector('#reports a[href*="/reports/"]');firstLink.addEventListener('click',event=>event.preventDefault());firstLink.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,cancelable:true}))
+  const matching=reports.find(report=>report.source_id===firstLink.href.match(/reports\/(\d+)/)[1])
+  assert.equal((await api.readForm(doc)).date,matching.date)
+  dom.window.close()
+})
+test('class scan leaves ambiguous, invalid and conflicting dates unresolved with a reason',()=>{
+  const ambiguous=classPage({range:'2025-01-01 ~ 2027-12-31'}),ambiguousReport=ambiguous.api.extractClass(ambiguous.doc,'/courses/dt/11').records.find(record=>record.kind==='report')
+  assert.equal(ambiguousReport.date,null);assert.ok(ambiguousReport.needs.some(reason=>/年份|期間/.test(reason)));ambiguous.dom.window.close()
+  const invalid=classPage({headers:['上週(13/40)','本週(10/17)','下週(10/24)']}),invalidReport=invalid.api.extractClass(invalid.doc,'/courses/dt/11').records.find(record=>record.kind==='report')
+  assert.equal(invalidReport.date,null);assert.ok(invalidReport.needs.some(Boolean));invalid.dom.window.close()
+  const noRange=classPage({range:''}),noRangeReport=noRange.api.extractClass(noRange.doc,'/courses/dt/11').records.find(record=>record.kind==='report')
+  assert.equal(noRangeReport.date,null);assert.ok(noRangeReport.needs.some(reason=>/年份|期間/.test(reason)));noRange.dom.window.close()
+  const conflict=classPage({firstDataDate:'2026-10-12'}),conflictReport=conflict.api.extractClass(conflict.doc,'/courses/dt/11').records.find(record=>record.kind==='report')
+  assert.equal(conflictReport.date,null);assert.ok(conflictReport.dateInfo.conflict);assert.match(conflictReport.needs.join(' '),/不一致/);conflict.dom.window.close()
+})
 test('original click date works without theme; temporary answers preserve native DOM and invalidate on new evidence',async()=>{
   const {dom,api,doc,click}=page();click();const before=await api.readForm(doc)
   assert.equal(before.date,'2026-10-04');assert.equal(before.dateInfo.basis,'course_range')
