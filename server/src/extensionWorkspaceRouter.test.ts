@@ -46,6 +46,10 @@ describe('workspace API contract', () => {
     const meta={work_id:id,expected_revision:null,changes:{source_origin:'https://corp.orangeapple.co',source_path:'/courses/dt/4773',source_class_id:'4773',title:'Python 同步',pinned:true,server_job_id:id,submission_round:1}}
     const saved=await request(app).patch(`/api/extension/v1/work-records/${id}`).set('Authorization','Bearer test').send(meta)
     expect(saved.status).toBe(200);expect(rpc.mock.calls.at(-1)![1]).toMatchObject({p_operation:'patch',p_input:meta})
+    for(const source_path of ['/courses/dt/4773/lesson_reports','/courses/dt/4773/lesson-reports','/dt_admissions/4773/reports/255723/edit']) {
+      const accepted=await request(app).patch(`/api/extension/v1/work-records/${id}`).set('Authorization','Bearer test').send({...meta,expected_revision:id,changes:{source_path,source_class_id:'4773'}})
+      expect(accepted.status).toBe(200)
+    }
     for(const invalid of [{...meta,changes:{...meta.changes,raw_report:'must not sync'}},{...meta,changes:{...meta.changes,source_path:'/students/4'}},{...meta,changes:{...meta.changes,title:'x'.repeat(101)}},{...meta,changes:{...meta.changes,submission_round:0}},{...meta,actor_id:id}])
       expect((await request(app).patch(`/api/extension/v1/work-records/${id}`).set('Authorization','Bearer test').send(invalid)).status).toBe(400)
     expect((await request(app).get('/api/extension/v1/work-records?limit=51').set('Authorization','Bearer test')).status).toBe(400)
@@ -81,6 +85,15 @@ describe('workspace API contract', () => {
     expect(response.status).toBe(200);expect(rpc.mock.calls[0]![0]).toBe('web_extension_history')
     const invalid=await request(app).get('/api/extension/v1/history-reports?limit=51').set('Authorization','Bearer test')
     expect(invalid.status).toBe(400);expect(rpc).toHaveBeenCalledTimes(1)
+  })
+  it('accepts supported report collection evidence paths without widening the route allowlist',()=>{
+    const evidence={table:'reports',row:1,captured_at:'2026-10-05T00:00:00Z'}
+    const history={source_id:'history:report-page',target_id:id,overwrite:[],record:{kind:'history_report',data:{enrollment_id:id,report_date:'2026-10-04',source_origin:'https://corp.orangeapple.co',source_admission_id:'301',source_key:'evidence:report-page',identity_status:'evidence_only',source_fields:[]}}}
+    const valid=['/courses/dt/4773','/courses/dt/4773/lesson_reports','/courses/dt/4773/lesson-reports','/dt_admissions/301','/dt_admissions/301/reports/255723/edit']
+    const withEvidencePath=(source_path:string)=>({...history,record:{...history.record,data:{...history.record.data,source_evidence:[{...evidence,source_path}]}}})
+    for(const source_path of valid) expect(importBatch.safeParse({key:id,rows:[withEvidencePath(source_path)]}).success).toBe(true)
+    for(const source_path of ['/courses/dt/4773/lesson_reports/extra','/courses/dt/4773?tab=reports','https://corp.orangeapple.co/courses/dt/4773/lesson_reports','/students/301'])
+      expect(importBatch.safeParse({key:id,rows:[withEvidencePath(source_path)]}).success).toBe(false)
   })
   it('validates the optional atomic history reconciliation metadata strictly',()=>{
     const history={...row,record:{kind:'history_report',data:{enrollment_id:id,report_date:'2026-10-04',source_origin:'https://corp.orangeapple.co',source_admission_id:'6332',source_key:'evidence:hash',identity_status:'evidence_only',source_fields:[],content:'merged'}}}

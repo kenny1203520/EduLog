@@ -95,6 +95,7 @@ try {
   await db.exec(read('1000137_consistent_preview_stale_diagnostics.sql'))
   await db.exec(read('1000138_paused_import_repreview.sql'))
   await db.exec(read('1000139_precise_preview_stale_diagnostics.sql'))
+  await db.exec(read('1000140_report_page_source_paths.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -106,6 +107,10 @@ try {
   assert.deepEqual(roundTwo.item.submission_rounds.map(item=>item.round_no),[1,2])
   const metadataPage=await workRecordsRpc('list',{limit:1});assert.equal(metadataPage.items.length,1);assert.equal(metadataPage.items[0].work_id,workMetaId);assert.deepEqual(metadataPage.items[0].submission_rounds.map(item=>item.round_no),[1,2])
   await assert.rejects(workRecordsRpc('patch',{work_id:workMetaId,expected_revision:null,changes:{title:'舊版本'}}),/VERSION_CONFLICT/)
+  for(const [index,source_path] of ['/courses/dt/11/lesson_reports','/courses/dt/11/lesson-reports','/dt_admissions/301/reports/401/edit'].entries()) {
+    const savedPath=await workRecordsRpc('patch',{work_id:id(910+index),expected_revision:null,changes:{source_path,source_class_id:'11'}})
+    assert.equal(savedPath.item.source_path,source_path,'resume metadata preserves the exact captured source route')
+  }
   await assert.rejects(workRecordsRpc('patch',{work_id:id(902),expected_revision:null,changes:{source_path:'/students/11',source_class_id:'11'}}),/INVALID_IMPORT/)
   await assert.rejects(workRecordsRpc('patch',{work_id:id(903),expected_revision:null,changes:{source_path:'/courses/dt/11',source_class_id:'11',title:'x',raw_report:'private'}}),/INVALID_IMPORT/)
   await assert.rejects(workRecordsRpc('patch',{work_id:id(904),expected_revision:null,changes:{source_path:'/courses/dt/12',source_class_id:'12',server_job_id:job.id}}),/INVALID_REFERENCE/)
@@ -479,12 +484,18 @@ try {
   }
   await db.exec(`INSERT INTO public.web_extension_mapping_memory(user_id,source_origin,kind,source_key,target_id,student_id,course_id,class_session_id) VALUES('${actor}','${origin}','admission','6332','${enrollment}','${student}','${course}','${session}')`)
   const historical=id(201),historyJob=await rpc('job',{...destination,date_from:'2024-01-01',report_session_ids:[session,weekendSession]})
-  const historyData={enrollment_id:enrollment,report_date:'2024-06-15',source_origin:origin,source_admission_id:'6332',source_key:'evidence:sample',identity_status:'evidence_only',source_fields:[{key:'content',label:'評語',text:''}],content:'',is_completed:false,class_participation:0,classroom_behavior:4.5}
+  const historyData={enrollment_id:enrollment,report_date:'2024-06-15',source_origin:origin,source_admission_id:'6332',source_key:'evidence:sample',identity_status:'evidence_only',source_evidence:[
+    {source_path:'/courses/dt/11',table:'reports',row:1,captured_at:'2026-10-05T00:00:00Z'},
+    {source_path:'/courses/dt/11/lesson_reports',table:'reports',row:1,captured_at:'2026-10-05T00:00:00Z'},
+    {source_path:'/courses/dt/11/lesson-reports',table:'reports',row:1,captured_at:'2026-10-05T00:00:00Z'},
+    {source_path:'/dt_admissions/6332/reports/401/edit',table:'reports',row:1,captured_at:'2026-10-05T00:00:00Z'},
+  ],source_fields:[{key:'content',label:'評語',text:''}],content:'',is_completed:false,class_participation:0,classroom_behavior:4.5}
   const historyBatch={job_id:historyJob.id,key:id(202),fingerprint:'1'.repeat(64),rows:[{source_id:'history:evidence:sample',target_id:historical,overwrite:[],record:{kind:'history_report',data:historyData}}]}
   assert.equal((await rpc('preview',historyBatch)).rows[0].status,'added')
   const historyResult=await rpc('apply',historyBatch);assert.equal(historyResult.classifications.history_report.added,1)
   assert.deepEqual(await rpc('apply',historyBatch),historyResult)
   const archive=await historyRpc('detail',{id:historical});assert.equal(archive.class_participation,0);assert.equal(archive.is_completed,false);assert.equal(archive.classroom_behavior,4.5)
+  assert.deepEqual(archive.source_evidence.map(item=>item.source_path),historyData.source_evidence.map(item=>item.source_path),'history evidence keeps every exact source route')
   assert.equal((await historyRpc('list',{student_id:student})).items.length,1)
   const ambiguity={...historyBatch,key:id(203),fingerprint:'2'.repeat(64),rows:[{...historyBatch.rows[0],target_id:id(204),source_id:'history:different',record:{kind:'history_report',data:{...historyData,source_key:'evidence:different',content:'Changed'}}}]}
   await assert.rejects(rpc('preview',ambiguity),/HISTORY_IDENTITY_AMBIGUOUS/)
@@ -541,6 +552,8 @@ try {
   await assert.rejects(historyRpc('detail',{id:historical}),/PERMISSION_DENIED/);assert.equal((await historyRpc('list',{student_id:student})).items.length,0)
   await db.exec('DELETE FROM public.denied_permissions')
   const protectedData={...historyData,source_key:'evidence:unsafe',source_fields:[{key:'password',label:'password',text:'blocked'}]}
+  const invalidEvidence={...historyData,source_key:'evidence:invalid-path',source_evidence:[{...historyData.source_evidence[1],source_path:'/courses/dt/11/lesson_reports/extra'}]}
+  await assert.rejects(rpc('preview',{...historyBatch,key:id(214),fingerprint:'2'.repeat(64),rows:[{...historyBatch.rows[0],target_id:id(215),record:{kind:'history_report',data:invalidEvidence}}]}),/INVALID_IMPORT/)
   await assert.rejects(rpc('preview',{...historyBatch,key:id(207),fingerprint:'3'.repeat(64),rows:[{...historyBatch.rows[0],target_id:id(211),record:{kind:'history_report',data:protectedData}}]}),/INVALID_IMPORT/)
   // Effective routing reads the transferred day, never rewrites enrollment.
   const route=await historyRpc('route',{enrollment_id:weekendEnrollment,dates:['2026-10-03','2026-10-04']})
