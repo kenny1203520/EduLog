@@ -66,6 +66,11 @@ try {
     INSERT INTO public.courses(id,subject,stage,user_id,teaching_id) VALUES('${course}','Test','1','${actor}','${teaching}');
     INSERT INTO public.class_sessions(id,name,classroom_id,course_ids,start_time,end_time,user_id,teaching_id) VALUES('${session}','Test class','${room}',ARRAY['${course}'::uuid],'09:00','10:00','${actor}','${teaching}');`)
   await db.exec(read('1000062_report_lifecycle_atomicity.sql'))
+  await db.exec(`CREATE TABLE public.api_idempotency_keys(
+    user_id uuid NOT NULL,idempotency_key text NOT NULL,method text NOT NULL,route text NOT NULL,
+    response_status integer,response_body jsonb,teaching_id uuid,PRIMARY KEY(user_id,idempotency_key)
+  )`)
+  await db.exec(read('1000063_report_mutation_contract_and_delete_replay.sql'))
   await db.exec(read('1000116_web_extension_integrations.sql'))
   await db.exec(read('1000118_web_extension_workspace.sql'))
   await db.exec(read('1000119_extension_catalog.sql'))
@@ -96,6 +101,7 @@ try {
   await db.exec(read('1000138_paused_import_repreview.sql'))
   await db.exec(read('1000139_precise_preview_stale_diagnostics.sql'))
   await db.exec(read('1000140_report_page_source_paths.sql'))
+  await db.exec(read('1000141_import_lifecycle_effect_receipts.sql'))
   await db.exec(`INSERT INTO public.web_extension_tokens(id,user_id,extension_origin,token_hash) VALUES('${token}','${actor}','chrome-extension://${'a'.repeat(32)}','${'a'.repeat(64)}')`)
   const destination = { source_origin:'https://corp.orangeapple.co',source_class_id:'11',date_from:'2026-01-01',date_to:'2026-12-31',classroom_id:room,course_id:course,class_session_id:session }
   const job = await rpc('job',destination), student = id(10)
@@ -540,6 +546,47 @@ try {
   assert.equal(sameContent.history_content,'merged source line');assert.equal(sameContent.report_content,'merged source line')
   await db.exec('DROP TRIGGER test_history_reconciliation_rollback ON public.occurrence_reports; DROP FUNCTION public.test_history_reconciliation_rollback()')
   console.log('PASS: 1000134 previewed history/occurrence reconciliation, exact target versions, atomic update and rollback')
+
+  // Updating a lesson report natively provisions the next occurrence report.
+  // Import rows for that next date were both previewed as "new" before apply;
+  // same-job receipts must prevent this lifecycle side effect from making the
+  // later row stale, both within one batch and across consecutive batches.
+  const effectLesson=id(301), sameBatchEarlyOccurrence=id(302), sameBatchNextOccurrence=id(303)
+  await db.query('INSERT INTO public.lessons(id,course_id,title,sequence,user_id) VALUES($1,$2,$3,1,$4)',[effectLesson,course,'Imported lesson',actor])
+  await db.query('INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,status) VALUES($1,$2,$3,$4),($5,$2,$6,$4)',[sameBatchEarlyOccurrence,session,'2025-06-01','scheduled',sameBatchNextOccurrence,'2025-06-08'])
+  const effectRow=(sourceId,targetId,date,occurrence,sourceKey)=>({
+    source_id:sourceId,target_id:targetId,overwrite:[],record:{kind:'history_report',data:{...historyData,report_date:date,source_key:sourceKey,lesson_id:effectLesson,content:`Lesson ${date}`}},
+    history_reconciliation:{key:crypto.randomUUID(),class_occurrence_id:occurrence,include_fields:['lesson_id','content'],overwrite:[],include_internal:false}
+  })
+  const sameEffectBatch={...historyBatch,key:id(304),fingerprint:'a'.repeat(64),rows:[
+    effectRow('history:evidence:effect-same-early',id(305),'2025-06-01',sameBatchEarlyOccurrence,'evidence:effect-same-early'),
+    effectRow('history:evidence:effect-same-next',id(306),'2025-06-08',sameBatchNextOccurrence,'evidence:effect-same-next'),
+  ]}
+  await rpc('preview',sameEffectBatch)
+  const sameEffectResult=await rpc('apply',sameEffectBatch)
+  assert.equal(sameEffectResult.history_reconciliations.length,2)
+  assert.ok(sameEffectResult.history_reconciliations.every(row=>row.status==='linked'))
+  assert.equal((await db.query('SELECT count(*)::int n FROM public.web_extension_import_report_effects WHERE job_id=$1 AND batch_key=$2',[historyJob.id,sameEffectBatch.key])).rows[0].n,2)
+  assert.equal((await db.query('SELECT count(*)::int n FROM public.occurrence_reports r JOIN public.class_occurrences o ON o.id=r.class_occurrence_id WHERE r.enrollment_id=$1 AND o.id=$2',[enrollment,sameBatchNextOccurrence])).rows[0].n,1)
+
+  const crossEarlyOccurrence=id(307),crossNextOccurrence=id(308)
+  await db.query('INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,status) VALUES($1,$2,$3,$4),($5,$2,$6,$4)',[crossEarlyOccurrence,session,'2025-07-01','scheduled',crossNextOccurrence,'2025-07-08'])
+  const crossEarlyBatch={...historyBatch,key:id(309),fingerprint:'b'.repeat(64),rows:[effectRow('history:evidence:effect-cross-early',id(310),'2025-07-01',crossEarlyOccurrence,'evidence:effect-cross-early')]}
+  const crossNextBatch={...historyBatch,key:id(311),fingerprint:'c'.repeat(64),rows:[effectRow('history:evidence:effect-cross-next',id(312),'2025-07-08',crossNextOccurrence,'evidence:effect-cross-next')]}
+  await rpc('preview',crossEarlyBatch);await rpc('preview',crossNextBatch)
+  assert.equal((await rpc('apply',crossEarlyBatch)).history_reconciliations[0].status,'linked')
+  assert.equal((await rpc('apply',crossNextBatch)).history_reconciliations[0].status,'linked')
+  assert.equal((await db.query('SELECT count(*)::int n FROM public.web_extension_import_report_effects WHERE job_id=$1 AND enrollment_id=$2 AND class_occurrence_id=$3',[historyJob.id,enrollment,crossNextOccurrence])).rows[0].n,1)
+  assert.deepEqual(await rpc('apply',crossNextBatch),await rpc('apply',crossNextBatch),'replaying an applied batch remains idempotent')
+  const externalEarlyOccurrence=id(313),externalNextOccurrence=id(314)
+  await db.query('INSERT INTO public.class_occurrences(id,class_session_id,occurrence_date,status) VALUES($1,$2,$3,$4),($5,$2,$6,$4)',[externalEarlyOccurrence,session,'2025-08-01','scheduled',externalNextOccurrence,'2025-08-08'])
+  const externalEarlyBatch={...historyBatch,key:id(315),fingerprint:'d'.repeat(64),rows:[effectRow('history:evidence:effect-external-early',id(316),'2025-08-01',externalEarlyOccurrence,'evidence:effect-external-early')]}
+  const externalNextBatch={...historyBatch,key:id(317),fingerprint:'e'.repeat(64),rows:[effectRow('history:evidence:effect-external-next',id(318),'2025-08-08',externalNextOccurrence,'evidence:effect-external-next')]}
+  await rpc('preview',externalEarlyBatch);await rpc('preview',externalNextBatch);await rpc('apply',externalEarlyBatch)
+  await db.query("UPDATE public.occurrence_reports SET content='external edit',version=version+1 WHERE enrollment_id=$1 AND class_occurrence_id=$2",[enrollment,externalNextOccurrence])
+  await assert.rejects(rpc('apply',externalNextBatch),error=>error.message==='PREVIEW_STALE'&&JSON.parse(error.detail).source_id===externalNextBatch.rows[0].source_id)
+  console.log('PASS: 1000141 same-job lifecycle receipts avoid same-batch and cross-batch self-stale conflicts')
+
   const excludedHistory=id(208),excludedData={...historyData,report_date:'2024-06-18',source_key:'evidence:excluded',content:'Must remain history only'}
   const excludedBatch={...historyBatch,key:id(209),fingerprint:'4'.repeat(64),rows:[{source_id:'history:evidence:excluded',target_id:excludedHistory,overwrite:[],record:{kind:'history_report',data:excludedData}}]}
   await rpc('preview',excludedBatch);await rpc('apply',excludedBatch)
@@ -651,5 +698,5 @@ try {
   await assert.rejects(db.query('SELECT public.web_extension_workspace($1,$2,$3,$4)',[token,'a'.repeat(64),'context','{}']),/permission denied/)
   await assert.rejects(db.query('SELECT public.web_extension_field_mappings($1,$2,$3,$4)',[token,'a'.repeat(64),'resolve','{}']),/permission denied/)
   console.log('PASS: workspace/catalog migrations; scoped keyset reads; resolve authorization; actor boundary; create/replay/conflict/versions; atomic rollback; pending pushes; private projections; paused/revoked/restricted roles')
-} catch (error) { console.error(error.message, error.where || '', error.position || ''); process.exitCode = 1 }
+} catch (error) { console.error(error.stack, error.detail || '', error.where || '', error.position || ''); process.exitCode = 1 }
 finally { await db.close() }
