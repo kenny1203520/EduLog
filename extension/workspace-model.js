@@ -74,6 +74,7 @@ export function splitBatches(rows, limit = 180000) {
   return batches
 }
 export function workspaceErrorMessage(error) {
+  if (error.code === 'SOURCE_PATH_CONTRACT_UNSUPPORTED') return globalThis.edulogUi?.t('error.reportPagePathServerUpgrade') || '伺服器尚未接受報告頁來源路徑。草稿、批次與檢查點已保留；請更新 API 並套用 migration 1000140，再重新預覽。'
   if (error.code === 'WORK_CONFLICT') return globalThis.edulogUi?.t('error.workConflict') || '工作已在其他分頁更新；目前草稿保留，請重新載入後核對。'
   if (error.code === 'WORK_DATA_INVALID') return globalThis.edulogUi?.t('error.workDataInvalid') || error.message
   if (error.code === 'WORK_STORAGE_FULL') return globalThis.edulogUi?.t('error.workStorageFull') || error.message
@@ -88,6 +89,9 @@ export function workspaceErrorMessage(error) {
     return '送出的資料未通過驗證。請核對目前資料後重試；詳細原因可在診斷中查看。'
   }
   return error.message || '無法完成操作。'
+}
+export function isUnsupportedReportEvidencePathValidation(error) {
+  return error?.code === 'VALIDATION_FAILED' && Object.keys(error.fields || {}).some(key => /^rows\.\d+\.record\.data\.source_evidence\.\d+\.source_path$/.test(key))
 }
 export function plainText(value, doc = document) {
   if (typeof value !== 'string') return ''

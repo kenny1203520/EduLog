@@ -6,7 +6,7 @@ import { historyIdentity, planHistory, teachingFields, bindingStillMatches } fro
 import { createHistoryWorkbench } from './history-workbench.js'
 import { createReportSkipController } from './report-skip-controller.js'
 import { admissionIdentity, mergeRecords } from './mapping-core.js'
-import { labels, splitBatches, validateBatches, importBatchRequest, workspaceErrorMessage, plainText, suggestedValue } from './workspace-model.js'
+import { labels, splitBatches, validateBatches, importBatchRequest, workspaceErrorMessage, isUnsupportedReportEvidencePathValidation, plainText, suggestedValue } from './workspace-model.js'
 import { workflowState, combineWorkRecords, workCategory } from './workflow-state.js'
 import {comparison,decisionResult,semanticValue,outcomeMetrics} from './review-ui.js'
 import { initWorkspaceI18n } from './workspace-i18n.js'
@@ -207,13 +207,18 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     return result
   }
   catch (error) {
+    if(isUnsupportedReportEvidencePathValidation(error)){
+      error.code='SOURCE_PATH_CONTRACT_UNSUPPORTED';error.message=workspaceErrorMessage(error)
+      if(work?.type==='import')work.previewError={code:error.code,message:error.message,batchKey:work.batches?.[Math.max(0,work.done||0)]?.key}
+    }
     const interfaceFailure=workspaceInterfaceFailure(error)
     if(interfaceFailure){
       error.code=interfaceFailure.code
       if(work?.type==='import'){work.previewDirty=true;work.previewError={code:interfaceFailure.code,message:error.message};previewResults=[];updateApplyAvailability()}
     }
     $('operation-status').dataset.state = 'error'
-    if (error.code==='READ_CANCELLED'){$('operation-status').dataset.state='complete';$('operation-title').textContent='已取消唯讀查詢';$('operation-detail').textContent='已完成資料與目前選擇保留；可重新核對。';return false}
+    if(error.code==='SOURCE_PATH_CONTRACT_UNSUPPORTED'){globalThis.edulogUi?.text($('operation-title'),'work.serverPathUpgradeTitle');$('operation-detail').textContent=error.message}
+    else if (error.code==='READ_CANCELLED'){$('operation-status').dataset.state='complete';$('operation-title').textContent='已取消唯讀查詢';$('operation-detail').textContent='已完成資料與目前選擇保留；可重新核對。';return false}
     else if (!readOnly && work?.status === 'outcome_unknown') { $('operation-title').textContent = '寫入結果尚未確認'; $('operation-detail').textContent = '未收到這批的確認回應。檢查點已保留；續傳會先用原冪等鍵核對結果，不會建立新的匯入工作。'; notice('寫入結果尚未確認。請使用「檢查並續傳」核對批次狀態。', true) }
     else if (error.code === 'API_TIMEOUT') { $('operation-title').textContent = '連線逾時'; $('operation-detail').textContent = '唯讀查詢超過 30 秒，沒有自動重試。請確認連線後手動重試。' }
     else if (error.code === 'PAUSED_PREVIEW_UNSUPPORTED') { $('operation-title').textContent='需要更新 EduLog 伺服器';$('operation-detail').textContent=error.message }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { webcrypto } from 'node:crypto'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
-import { splitBatches, validateBatches, workspaceErrorMessage, suggestedValue, plainText } from '../workspace-model.js'
+import { splitBatches, validateBatches, workspaceErrorMessage, isUnsupportedReportEvidencePathValidation, suggestedValue, plainText } from '../workspace-model.js'
 function adapter(html, pathname = '/courses/dt/11') {
   const dom = new JSDOM(html, { url: `https://corp.orangeapple.co${pathname}`, runScripts: 'outside-only' })
   Object.defineProperty(dom.window, 'crypto', { value: webcrypto }); dom.window.TextEncoder = TextEncoder
@@ -191,4 +191,11 @@ test('cross-batch capability errors use the shared localized recovery guidance',
   globalThis.edulogUi={t:key=>key==='error.importDependenciesUnavailable'?'localized recovery':'unexpected'}
   assert.equal(workspaceErrorMessage({code:'IMPORT_DEPENDENCIES_UNAVAILABLE',message:'raw server detail'}),'localized recovery')
   globalThis.edulogUi=original
+})
+test('old servers get a specific route-contract update message without treating other validation as an upgrade issue',()=>{
+  const error={code:'VALIDATION_FAILED',fields:{'rows.25.record.data.source_evidence.0.source_path':['Invalid string']}}
+  assert.equal(isUnsupportedReportEvidencePathValidation(error),true)
+  assert.match(workspaceErrorMessage({...error,code:'SOURCE_PATH_CONTRACT_UNSUPPORTED'}),/migration 1000140/)
+  assert.equal(isUnsupportedReportEvidencePathValidation({...error,fields:{'rows.25.record.data.source_evidence.0.table':['Invalid string']}}),false)
+  assert.equal(isUnsupportedReportEvidencePathValidation({...error,code:'PREVIEW_STALE'}),false)
 })
