@@ -6,14 +6,29 @@
   const dates = globalThis.edulogSourceDate
   const fullDate = value => dates.parse(value).date
   const contexts = new Map(), answers = new Map()
+  const fullDatePattern = /(?<!\d)(\d{4}\s*(?:[-/.年])\s*\d{1,2}\s*(?:[-/.月])\s*\d{1,2}\s*日?)(?!\d)/g
+  const dateTokenPattern = /(?<!\d)(?:\d{4}\s*(?:[-/.年])\s*\d{1,2}\s*(?:[-/.月])\s*\d{1,2}\s*日?|\d{1,2}\s*(?:[-/.月])\s*\d{1,2}\s*日?)(?!\d)/g
+  const dateTokens=value=>[...String(value||'').matchAll(dateTokenPattern)].map(match=>match[0])
+  function reportDateEvidence(link) {
+    const cell=link?.closest('td'),row=cell?.parentElement,table=cell?.closest('table')
+    if(!cell||!row||!table)return {date:null,dateRaw:'',dateInfo:dates.resolve([]),headers:[],courseRange:[],cellText:''}
+    const column=logicalColumn(row,cell),rows=[...table.rows]
+    const headers=[...new Set(rows.filter(r=>r.querySelector('th')).map(r=>logicalCell(r,column)).filter(Boolean).map(cellText).filter(Boolean))]
+    const cellRaw=reportText(cell),cellValue=dateTokens(cellRaw).join(' | '),explicit=link.getAttribute('data-date')||''
+    const courseCell=teachingCell(row,['課程','課程名稱'])||(!headerCells(table).length?row.cells[1]:null)
+    const courseValue=cellText(courseCell)
+    const rangeDates=[...courseValue.matchAll(fullDatePattern)].map(match=>match[1])
+    const courseRange=rangeDates.length===2?rangeDates:[]
+    const dateInfo=dates.resolve([explicit,...headers,cellValue],courseRange.length===2?[courseRange]:[])
+    const dateRaw=[explicit,...headers,cellValue].filter(Boolean).join(' | ')
+    return {date:dateInfo.date,dateRaw,dateInfo,headers,courseRange,cellText:cellValue}
+  }
   function captureEntry(event) {
     const link=event.target.closest?.('a[href]'), action=path(link?.getAttribute('href')).replace(/\/edit$/,'')
     if (!/^\/dt_admissions\/\d+\/reports\/\d+$/.test(action)) return
-    const cell=link.closest('td'), row=cell?.parentElement, table=cell?.closest('table')
-    const header=table && [...table.rows].find(r=>r.querySelector('th'))?.cells[cell.cellIndex]
-    const rangeText=text(row && teachingCell(row,['課程','課程名稱'])) || text(row?.cells[1])
-    const range=[...rangeText.matchAll(/\d{4}\s*[-/.年]\s*\d{1,2}\s*[-/.月]\s*\d{1,2}(?:日)?/g)].map(m=>m[0])
-    const entryValues=[link.getAttribute('data-date')||'',text(header),text(cell).slice(0,256)], ranges=range.length===2?[range]:[]
+    const found=reportDateEvidence(link)
+    const entryValues=[link.getAttribute('data-date')||'',...found.headers,found.cellText].filter(Boolean)
+    const ranges=found.courseRange.length===2?[found.courseRange]:[]
     const previous=contexts.get(action)
     const unchanged=previous && JSON.stringify(previous.entryValues||previous.values)===JSON.stringify(entryValues) && JSON.stringify(previous.ranges)===JSON.stringify(ranges)
     contexts.set(action,unchanged?{...previous,sourcePath:location.pathname}:{values:entryValues,entryValues,ranges,sourcePath:location.pathname})
@@ -254,12 +269,12 @@
         else { students.get(id).data.name = enrollment.sourceStudentName; students.get(id).sourceEvidence = mergeEvidence(students.get(id).sourceEvidence || [], sourceEvidence) }
       }
       for (const link of rowLinks.filter(a => /^\/dt_admissions\/\d+\/reports\/\d+\/edit$/.test(a.path))) {
-        const date = fullDate(text(link.node.closest('td'))) || fullDate(link.node.getAttribute('data-date'))
+        const dateEvidence=reportDateEvidence(link.node),date=dateEvidence.date
         const reportId = link.path.match(/reports\/(\d+)/)[1]
         if (reportIds.has(reportId)) continue
         reportIds.add(reportId)
-        const dateText = text(link.node.closest('td')).match(/\b20\d{2}[-/.年]\d{1,2}[-/.月]\d{1,2}/)?.[0] || (date ? link.node.getAttribute('data-date') : '')
-        records.push({ kind: 'report', source_id: reportId, enrollment_source_id: admission, date, sourceEvidence: [evidence(row, sourcePath, [['admission_id','來源報名 ID',admission],['report_id','來源報告 ID',reportId],['date','課次日期原文',dateText]])], data: { external_link: `${ORIGIN}${link.path}` }, needs: ['既有報告欄位', ...(date ? [] : ['完整課次日期'])] })
+        const dateNeeds=dateEvidence.dateInfo.conflict?'來源日期欄頭、儲存格與課程期間不一致，請核對日期。':!date?dateEvidence.dateInfo.reason||'缺少可確認年份的日期依據，請核對日期。':null
+        records.push({ kind: 'report', source_id: reportId, enrollment_source_id: admission, date, dateRaw:dateEvidence.dateRaw,dateInfo:{...dateEvidence.dateInfo,raw:[...dateEvidence.headers,dateEvidence.cellText,...dateEvidence.courseRange].filter(Boolean)},dateEvidence:{explicit:link.node.getAttribute('data-date')||'',headers:dateEvidence.headers,cellText:dateEvidence.cellText,courseRange:dateEvidence.courseRange}, sourceEvidence: [evidence(row, sourcePath, [['admission_id','來源報名 ID',admission],['report_id','來源報告 ID',reportId],['date','課次日期',date||''],['date_header','日期欄頭',dateEvidence.headers.join(' | ')],['date_cell','日期儲存格原文',dateEvidence.cellText],['course_date_range','同列課程期間',dateEvidence.courseRange.join(' ~ ')],['date_resolution','日期判定',dateNeeds||'已由日期欄頭及課程期間確認']])], data: { external_link: `${ORIGIN}${link.path}` }, needs: ['既有報告欄位', ...(dateNeeds?[dateNeeds]:[])] })
       }
     }
     for (const r of admissions.values()) if (!r.student_source_id) issues.push({ kind: 'enrollment', source_id: r.source_id, reason: `${r.sourceStudentName || '姓名尚未辨識'}：缺少可靠學生 ID，可指定既有學生；不能新建學生。` })
@@ -334,8 +349,9 @@
     if(native.length!==1)throw new Error('編輯頁未提供唯一且符合目標的原生報告表單。')
     const saved=await readForm(doc,native[0])
     const ownDates=[...doc.querySelectorAll('[data-date],input[type=date]')].filter(n=>!n.closest('form')||n.closest('form')===native[0]).map(n=>n.getAttribute('data-date')||n.value)
-    const dateInfo=dates.resolve([record.date||record.dateRaw||'',...record.historyDateValues||[],saved.title,...ownDates],[])
-    if(dateInfo.conflict)throw new Error('列表與編輯頁的上課日期矛盾，請核對原站後重讀。')
+    const storedDateEvidence=record.dateEvidence||{}
+    const dateInfo=dates.resolve([record.date||'',record.dateRaw||'',...record.historyDateValues||[],storedDateEvidence.explicit||'',...storedDateEvidence.headers||[],storedDateEvidence.cellText||'',saved.title,...ownDates],storedDateEvidence.courseRange?.length===2?[storedDateEvidence.courseRange]:[])
+    if(record.dateInfo?.conflict||dateInfo.conflict)throw new Error('列表與編輯頁的上課日期矛盾，請核對原站後重讀。')
     if(confirmedDate&&(!dates.parse(confirmedDate).date||dates.parse(confirmedDate).date!==confirmedDate))throw new Error('請提供有效完整上課日期。')
     if(confirmedDate&&dateInfo.date&&confirmedDate!==dateInfo.date)throw new Error('確認日期與可靠來源日期不同，請先核對原站。')
     if(confirmedDate&&record.dateRaw){const checked=dates.resolve([record.dateRaw,confirmedDate],[]);if(checked.conflict)throw new Error('確認日期與來源月日不同。')}
