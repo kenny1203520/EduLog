@@ -460,7 +460,7 @@ function renderHistoryIssues(){
     if(!item.listFailed){url=labelledInput(card,'原站報告編輯連結','url',`history-link-${item.evidenceKey}`,item.data?.external_link||'');date=labelledInput(card,'完整上課日期（缺少年份時請確認）','date',`history-date-${item.evidenceKey}`,item.date||'');url.autocomplete=date.autocomplete='off'}
     const status=node('p',item.skipped?'已略過；不會建立此報告。':'尚未完成擷取','hint');status.setAttribute('aria-live','polite');card.append(status)
     const retry=node('button',item.listFailed?'重試此生歷史紀錄':'補足並重新讀取'),skip=node('button',item.skipped?'取消略過':'略過此筆');retry.type=skip.type='button';card.append(retry,skip)
-    skip.addEventListener('click',()=>void run(async()=>{item.skipped=!item.skipped;const record=work.snapshot.records.find(r=>r.kind==='report'&&r.source_id&&r.source_id===item.source_id);if(record)record.sourceSkipped=item.skipped;await save();skip.textContent=item.skipped?'取消略過':'略過此筆';status.textContent=item.skipped?'已略過；其他資料可繼續匯入。':'待處理，請補足或重試。'},{label:'正在保存略過選擇'}))
+    skip.addEventListener('click',()=>void run(async()=>{item.skipped=!item.skipped;const record=work.snapshot.records.find(r=>r.kind==='report'&&r.source_id&&r.source_id===item.source_id);if(record)record.sourceSkipped=item.skipped;updateHistoryPlanLocal();await save();skip.textContent=item.skipped?'取消略過':'略過此筆';status.textContent=item.skipped?'已略過；其他資料可繼續匯入。':'待處理，請補足或重試。';if(['stale','partial_complete','complete'].includes(work.status))renderImportOutcome()},{label:'正在保存略過選擇'}))
     retry.addEventListener('click',async()=>{
       if(retry.disabled)return;const owner=work, epoch=generation;retry.disabled=skip.disabled=true;if(url)url.disabled=date.disabled=true;status.textContent='正在讀取並核對來源…'
       try{
@@ -666,9 +666,10 @@ async function preview(reuse = false) {
 }
 function renderNoopSummary() {
   work.previewEvaluated=true;work.previewDirty=true;previewResults=[];$('apply').disabled=true;show('preview-section');stage('import','repreview')
-  $('counts').textContent=`沒有新的可寫入資料 · 已綁定 ${historyPlan.filter(i=>i.category==='linked').length} 份 · 需處理 ${work.needs?.length||0} 項`
+  const issueCounts=currentImportIssueCounts()
+  $('counts').textContent=`沒有新的可寫入資料 · 已綁定 ${historyPlan.filter(i=>i.category==='linked').length} 份 · 需處理 ${issueCounts.pending} 項`
   $('diff-list').replaceChildren(node('p','本次核對不需要建立新工作。既有報告與檢查點保留；待處理項目可返回「處理例外」核對。'))
-  if(work.needs?.length){work.status='partial_complete';renderImportOutcome()}
+  if(issueCounts.pending||issueCounts.skipped){work.status='partial_complete';renderImportOutcome()}
   notice('核對完成：沒有新的可寫入資料，不會重送已同步報告。')
 }
 function staleReasonLabel(diagnostics) {
@@ -773,7 +774,8 @@ function renderDifferences() {
   }))
   work.batchSummaries ||= {}
   for (const result of previewResults) work.batchSummaries[work.batches[result.batchIndex].key] = summarizeImportRows(result.rows || [])
-  $('counts').textContent = [...Object.entries(totals).map(([k, v]) => `${labels[k]} ${v}`), `需處理 ${work.needs.length}`].join(' · ')
+  const issueCounts=currentImportIssueCounts()
+  $('counts').textContent = [...Object.entries(totals).map(([k, v]) => `${labels[k]} ${v}`), `需處理 ${issueCounts.pending}`, `已略過 ${issueCounts.skipped}`].join(' · ')
   const summary=node('section');summary.append(node('h3',`確認本次同步：保存 ${work.batches.flatMap(b=>b.rows).filter(r=>r.record.kind==='history_report').length} 份歷史 · 綁定 ${(work.historyBindings||[]).length} 堂課`),node('p','確認同步後，先保存歷史，再依已核對日期與有效名單綁定課次。未選取覆寫的非空內容保留 EduLog；報名關係不變。'))
   const bindings=work.historyBindings||[];if(bindings.length){const detail=node('details'),head=node('summary');if(globalThis.edulogUi)globalThis.edulogUi.text(head,'work.staleBindingDetails',{count:bindings.length});else head.textContent=`課次綁定明細 · ${bindings.length} 堂`;detail.append(head);for(const plan of bindings){const row=node('section',undefined,'history-binding-summary');row.append(node('p',`${plan.occurrence.class_name} · ${plan.occurrence.occurrence_date} · 覆寫 ${plan.body.overwrite.length} 個欄位`));const evidence=node('details'),label=node('summary');if(globalThis.edulogUi)globalThis.edulogUi.text(label,'work.staleBindingEvidence');else label.textContent='診斷與來源識別';evidence.append(label,node('p',`來源識別：${plan.itemKey}`));row.append(evidence);detail.append(row)}summary.append(detail)}
   if (work.blockedRows?.length) {
@@ -788,7 +790,7 @@ function renderDifferences() {
     const applyButton=$('apply'); if(applyButton) globalThis.edulogUi?.text(applyButton,'work.applyBatches')
   }
   if(work.staleReviewIssues?.length||work.staleReviewPending?.length)$('diff-list').append(summary);else $('diff-list').prepend(summary)
-  if (work.needs.length) { const d = node('details'); d.append(node('summary', `查看 ${work.needs.length} 項需處理資料`)); work.needs.forEach(text => d.append(node('p', text))); $('diff-list').append(d) }
+  if (issueCounts.pending) { const d = node('details'); d.append(node('summary', `查看 ${issueCounts.pending} 項需處理資料`)); work.needs.forEach(text => d.append(node('p', text))); $('diff-list').append(d) }
   show('preview-section'); stage('import', 'apply'); updateApplyAvailability()
 }
 
@@ -810,6 +812,42 @@ function mergeImportSummary(target, next) {
     target[kind] ||= {}; target[kind][state] = (target[kind][state] || 0) + count
   }
   return target
+}
+function currentImportIssueCounts(row=work) {
+  if(!row)return {pending:0,skipped:0,excluded:0,unfilled:0}
+  const keyFor=item=>{const record=item?.record||item;if(record?.enrollment_source_id)return historyIdentity(record);return item?.key||item?.source_id||(record?`${record.enrollment_source_id||''}:${record.date||record.dateRaw||''}`:null)}
+  const skipped=new Set()
+  for(const item of historyPlan||[])if(item.category==='skipped')skipped.add(keyFor(item))
+  for(const issue of row.history?.issues||[])if(issue.skipped)skipped.add(keyFor(issue))
+  for(const record of row.snapshot?.records||[])if(record.kind==='report'&&record.sourceSkipped)skipped.add(keyFor({source_id:record.source_id,record:{enrollment_source_id:record.enrollment_source_id,source_id:record.source_id,date:record.date}}))
+  skipped.delete(null)
+  const pending=new Set()
+  for(const item of historyPlan||[])if(item.category==='needs')pending.add(keyFor(item))
+  for(const item of row.staleReviewPending||[])pending.add(keyFor(item))
+  for(const issue of row.history?.issues||[])if(issue.listFailed&&!issue.skipped)pending.add(keyFor(issue))
+  for(const key of skipped)pending.delete(key)
+  const knownPendingStrings=new Set()
+  for(const item of historyPlan||[])if(item.category==='needs')for(const part of [item.key,item.record?.source_id,item.record?.enrollment_source_id,item.record?.date])if(part)knownPendingStrings.add(String(part))
+  const otherPending=(row.needs||[]).filter(message=>![...skipped].some(key=>key&&String(message).includes(key)))
+    .filter(message=>![...knownPendingStrings].some(key=>String(message).includes(key)))
+  const unique=(items)=>new Set(items.map(keyFor).filter(Boolean)).size
+  return {pending:pending.size+otherPending.length,skipped:skipped.size,excluded:unique((historyPlan||[]).filter(item=>item.category==='system-excluded')),unfilled:unique((historyPlan||[]).filter(item=>item.category==='unfilled'))}
+}
+function confirmedHistoryReportIds(row=work) {
+  const ids=new Set()
+  for(const round of row?.submissionRounds||[])for(const id of round.historySummary?.reportIds||[])ids.add(id)
+  const applied=new Set(row?.appliedBatchKeys||[])
+  for(const batch of row?.batches||[])if(applied.has(batch.key))for(const item of batch.rows||[])if(item.record?.kind==='history_report'&&item.target_id)ids.add(item.target_id)
+  return [...ids]
+}
+function refreshConfirmedHistorySummary(row=work) {
+  const reportIds=confirmedHistoryReportIds(row)
+  const currentRoundNo=Number(row.submissionRoundNo)||1
+  const priorRounds=(row.submissionRounds||[]).filter(round=>round.roundNo!==currentRoundNo)
+  const unknownLegacy=priorRounds.filter(round=>round.historySummary?.saved!=null&&!Array.isArray(round.historySummary?.reportIds)).reduce((sum,round)=>sum+Number(round.historySummary.saved||0),0)
+  const currentLegacy=Number(row.historySummary?.legacySaved??(!Array.isArray(row.historySummary?.reportIds)?row.historySummary?.saved:0)??0)
+  row.historySummary={...(row.historySummary||{}),reportIds,legacySaved:currentLegacy,saved:reportIds.length+unknownLegacy+currentLegacy,unknownSaved:unknownLegacy>0||currentLegacy>0}
+  return row.historySummary
 }
 function roundImportSummary(round) {
   if(round?.appliedBatchKeys?.length&&round.batchSummaries)return round.appliedBatchKeys.reduce((sum,key)=>mergeImportSummary(sum,round.batchSummaries[key]),{})
@@ -837,7 +875,9 @@ function renderImportOutcome() {
   const rounds=allSubmissionRounds()
   for(const round of rounds)mergeImportSummary(totals,roundImportSummary(round))
   const counts=Object.values(totals),bound=rounds.reduce((count,round)=>count+(round.bindingSummary?.done||0),0)||(work.historyBindings||[]).filter(binding=>binding.status==='done').length
-  outcomeMetrics(host,{saved:work.historySummary?.saved||0,bound,kept:counts.reduce((n,row)=>n+(row.conflict||0),0),skipped:(work.history?.issues||[]).filter(issue=>issue.skipped).length,failed:counts.reduce((n,row)=>n+(row.failed||0),0),pending:work.needs?.length||0})
+  const issueCounts=currentImportIssueCounts()
+  refreshConfirmedHistorySummary()
+  outcomeMetrics(host,{saved:work.historySummary?.saved||0,bound,kept:counts.reduce((n,row)=>n+(row.conflict||0),0),skipped:issueCounts.skipped,failed:counts.reduce((n,row)=>n+(row.failed||0),0),pending:issueCounts.pending})
   for (const kind of ['student','enrollment','occurrence','report','history_report']) {
     const states = totals[kind]
     if (!states) continue
@@ -847,11 +887,11 @@ function renderImportOutcome() {
   if (!Object.keys(totals).length && work.done) host.append(node('p','此工作由舊版擴充套件建立，沒有保留逐類結果；可查詢伺服器批次與有效名單。','hint'))
   const bindings=work.historyBindings||[]
   if(bindings.length)host.append(node('p',`課次報告：新增 ${bindings.filter(b=>b.result?.classification==='added').length} · 更新 ${bindings.filter(b=>b.result?.classification==='updated').length} · 無變更 ${bindings.filter(b=>b.result?.classification==='unchanged').length} · 綁定完成 ${bindings.filter(b=>b.status==='done').length}／${bindings.length}`))
-  const archived=rounds.reduce((count,round)=>count+(round.historySummary?.saved||0),0)||work.historySummary?.saved||0
-  if(archived)host.append(node('p',`已保存歷史 ${archived} 份，其中 ${bindings.filter(b=>b.status==='done').length} 份已綁定課次；未綁定歷史不列入出席統計。`))
-  if (work.needs?.length) host.append(node('p', `另有 ${work.needs.length} 項未匯入或需處理；批次完成不代表來源資料已全部同步。`, 'hint'))
+  const archived=work.historySummary?.saved||0
+  if(archived)host.append(node('p',`已確認保存歷史 ${archived}${work.historySummary?.unknownSaved?' 份以上，部分舊工作成果待伺服器核對':' 份'}；其中 ${bindings.filter(b=>b.status==='done').length} 份已綁定課次。`))
+  if(issueCounts.pending)host.append(node('p', `另有 ${issueCounts.pending} 項未匯入或需處理；批次完成不代表來源資料已全部同步。`, 'hint'))
   if(work.metadataSyncError)host.append(node('p',`跨裝置輪次關聯尚未保存：${work.metadataSyncError}。此裝置的工作草稿仍可使用。`,'notice warning'))
-  const skippedHistory=(work.history?.issues||[]).filter(r=>r.skipped).length
+  const skippedHistory=issueCounts.skipped
   if(skippedHistory)host.append(node('p',`歷史報告明確略過 ${skippedHistory} 筆；未建立這些報告。`,'hint'))
   for(const check of work.rosterChecks||[]) {
     host.append(node('p',`${check.name} · ${check.date} 有效名單 ${check.actual} 人；已綁定來源紀錄 ${check.observed} 人。來源日期名單不足，尚無法完整核對整班；不推定其他學生應被移除。`,'hint'))
@@ -867,13 +907,13 @@ function renderImportOutcome() {
     const reason=node('p',`目前批次尚未提交。原因：${staleReasonLabel(work.staleDiagnostics)}。已成功批次仍保留。`,'notice warning');reason.setAttribute('role','status');reason.setAttribute('aria-live','polite');host.append(reason)
     const retry=node('button','重新核對未提交資料');retry.type='button';retry.onclick=()=>void run(resumeImport,{label:'正在重新核對未提交資料'});host.append(retry)
     const results=node('button','查看已保存結果');results.type='button';results.onclick=()=>void run(loadSubmissionRoundResults,{label:'正在查詢已保存結果',readOnly:true});host.append(results)
-    if(work.needs?.length){const pending=node('button','處理待確認報告');pending.type='button';pending.onclick=()=>void run(async()=>{work.continuationMode=true;flow('import');activeStages.import=2;await mappingView();renderHistoryIssues();notice('請處理待確認項目並更新差異；新一輪只會包含尚未保存的資料。')},{label:'正在開啟原工作待處理清單'});host.append(pending)}
+    if(currentImportIssueCounts().pending){const pending=node('button','處理待確認報告');pending.type='button';pending.onclick=()=>void run(async()=>{work.continuationMode=true;flow('import');activeStages.import=2;await mappingView();renderHistoryIssues();notice('請處理待確認項目並更新差異；新一輪只會包含尚未保存的資料。')},{label:'正在開啟原工作待處理清單'});host.append(pending)}
   }
   if(work.status==='partial_complete') {
     const repair=node('button','處理待確認報告');repair.type='button'
     repair.addEventListener('click',()=>void run(async()=>{work.continuationMode=true;flow('import');activeStages.import=2;await mappingView();renderHistoryIssues();notice('請處理待確認項目並更新差異；新一輪只會包含尚未保存的資料。')},{label:'正在開啟原工作待處理清單'}));host.append(repair)
   }
-  if(work.status==='cancelled'&&work.needs?.length) {
+  if(work.status==='cancelled'&&currentImportIssueCounts().pending) {
     const repair=node('button','處理待確認報告');repair.type='button'
     repair.addEventListener('click',()=>void run(async()=>{work.continuationMode=true;flow('import');activeStages.import=2;await mappingView();renderHistoryIssues();notice('請處理剩餘項目；新一輪只會包含尚未保存且已核對的資料。')},{label:'正在開啟原工作待處理清單'}));host.append(repair)
   }
@@ -907,14 +947,15 @@ function displayValue(key, value) {
   return String(value)
 }
 function progress() {
+  const issueCounts=currentImportIssueCounts()
   show('import-progress'); $('progress').max = work.batchCount || 1; $('progress').value = work.done || 0
-  $('progress-label').textContent = `已完成 ${work.done || 0} / ${work.batchCount || 0} 批。${work.needs?.length || 0} 項仍需處理。`
+  $('progress-label').textContent = `已完成 ${work.done || 0} / ${work.batchCount || 0} 批。${issueCounts.pending} 項仍需處理。`
   $('resume').hidden = !['paused','failed','outcome_unknown','stale'].includes(work.status)
   $('pause').hidden = work.status !== 'applying'; $('cancel-work').hidden = ['complete','cancelled','partial_complete','awaiting-finalization'].includes(work.status)
   stage('import','resume');$('operation-status').hidden = !['applying','stale','outcome_unknown','partial_complete','complete','failed','cancelled','awaiting-finalization'].includes(work.status)
   $('operation-status').dataset.state = work.status === 'applying' ? 'loading' : ['failed','stale','outcome_unknown'].includes(work.status) ? 'error' : 'complete'
   $('operation-title').textContent = ({ applying:'正在寫入匯入批次', paused:'匯入已暫停', failed:'匯入部分失敗', stale:'同步受阻，預覽已失效', outcome_unknown:'寫入結果尚未確認', complete:'同步工作已完成', partial_complete:'本輪完成，仍有待處理項目', cancelled:'已取消剩餘批次','awaiting-finalization':'批次已保存，等待確認完成' })[work.status] || '匯入進度'
-  $('operation-detail').textContent = work.status==='stale'?`目前批次尚未提交；已知成功批次保留。原因：${staleReasonLabel(work.staleDiagnostics)}。工作資料列數不等於報告數。`:`已核對 ${work.done || 0} / ${work.batchCount || 0} 批；${work.needs?.length || 0} 筆需處理。取消不會撤回已完成批次。`
+  $('operation-detail').textContent = work.status==='stale'?`目前批次尚未提交；已知成功批次保留。原因：${staleReasonLabel(work.staleDiagnostics)}。工作資料列數不等於報告數。`:`已核對 ${work.done || 0} / ${work.batchCount || 0} 批；${issueCounts.pending} 份報告仍需處理。取消不會撤回已完成批次。`
   $('operation-progress').hidden = !work.batchCount; $('operation-progress').max = work.batchCount || 1; $('operation-progress').value = work.done || 0
   if (work.status === 'complete' || work.status === 'partial_complete' || work.status === 'stale' || work.status==='outcome_unknown' || work.status==='cancelled' || work.status==='awaiting-finalization') renderImportOutcome()
 }
@@ -924,11 +965,14 @@ function taipeiToday() {
 }
 async function finalizeImport() {
   await applyHistoryBindings()
-  work.historySummary={saved:work.batches.flatMap(b=>b.rows).filter(r=>r.record.kind==='history_report').length,linked:(work.historyBindings||[]).filter(b=>b.status==='done').length,skipped:work.snapshot?.records.filter(r=>r.kind==='report'&&r.sourceSkipped).length||0}
+  const issueCounts=currentImportIssueCounts()
+  refreshConfirmedHistorySummary()
+  work.historySummary.linked=(work.historyBindings||[]).filter(b=>b.status==='done').length
+  work.historySummary.skipped=issueCounts.skipped
   const keys = work.batches.map(batch => batch.key)
   const completed = await api('complete', { expected_batch_keys: keys }, { jobId: work.jobId })
-  work.status = completed.verified === true && !work.blockedRows?.length && !work.needs?.length && !work.historySummary.skipped && !(work.history?.issues||[]).some(i=>i.skipped||i.listFailed||!work.snapshot.records.some(r=>r.kind==='report'&&historyIdentity(r)===historyIdentity(i)&&r.date&&r.sourceReadStatus!=='failed')) ? 'complete' : 'partial_complete'
-  work.appliedBatchKeys = keys
+  work.status = completed.verified === true && !work.blockedRows?.length && !issueCounts.pending && !issueCounts.skipped ? 'complete' : 'partial_complete'
+  work.appliedBatchKeys = [...new Set([...(work.appliedBatchKeys||[]),...keys])]
   try {
     const checks=[...new Map((work.historyBindings||[]).filter(b=>b.status==='done').map(b=>[`${b.occurrence.class_session_id}:${b.occurrence.occurrence_date}`,{session:b.occurrence.class_session_id,date:b.occurrence.occurrence_date,name:b.occurrence.class_name}])).values()]
     work.rosterChecks=[]
@@ -1007,15 +1051,20 @@ async function apply() {
         for (const row of previewBatch.rows || []) { summary[row.kind] ||= {}; summary[row.kind][row.status] = (summary[row.kind][row.status] || 0) + 1 }
         work.batchSummaries ||= {}; work.batchSummaries[work.batches[i].key] = summary
       }
-      work.completedSourceKeys=[...new Set([...(work.completedSourceKeys||[]),...work.batches[i].rows.map(row=>`${row.record.kind}:${row.source_id}`)])]
-      work.done = i + 1; await save(); progress()
+      const appliedBatch=work.batches[i]
+      work.appliedBatchKeys=[...new Set([...(work.appliedBatchKeys||[]),appliedBatch.key])]
+      work.completedSourceKeys=[...new Set([...(work.completedSourceKeys||[]),...appliedBatch.rows.map(row=>`${row.record.kind}:${row.source_id}`)])]
+      work.done = i + 1
+      if(typeof refreshConfirmedHistorySummary==='function')refreshConfirmedHistorySummary()
+      if(typeof rememberSubmissionRound==='function')rememberSubmissionRound(work)
+      await save(); progress()
     }
     const finished = work.done === work.batches.length
     work.status = finished ? 'applying' : cancelRequested ? 'cancelled' : 'paused'
     if (finished) await finalizeImport()
     else { await api('job-status', { status: work.status }, { jobId: work.jobId }); await save(); progress() }
     if (finished || cancelRequested) { previewResults = []; $('mapping').hidden = true; $('preview-section').hidden = true; $('pause').hidden = true; $('cancel-work').hidden = true; stage('import', 'cancel-work') }
-    notice(finished ? `已核對 ${work.batchCount} 個匯入批次；${work.needs.length} 項仍需處理，請查看名單核對結果。` : cancelRequested ? '已取消剩餘工作，成功寫入的資料保留。' : '工作已暫停，成功批次保留。')
+    notice(finished ? `已核對 ${work.batchCount} 個匯入批次；${currentImportIssueCounts().pending} 項仍需處理，請查看名單核對結果。` : cancelRequested ? '已取消剩餘工作，成功寫入的資料保留。' : '工作已暫停，成功批次保留。')
   } catch (error) {
     if(error.code==='PREVIEW_STALE') {
       work.status='stale';work.previewDirty=true;work.staleBatchKey=work.batches?.[work.done||0]?.key||null
@@ -1070,7 +1119,8 @@ async function resumeImport() {
   const serverSummary={status:serverStatus,batchCount:info.batches?.length||0,appliedRows:(info.batches||[]).reduce((sum,batch)=>sum+(batch.applied||0),0),batches:(info.batches||[]).map(batch=>({key:batch.key,status:batch.status,applied:batch.applied||0,counts:batch.counts||{}}))}
   if(serverStatus==='complete'||serverStatus==='cancelled') {
     work.serverImportSummary=serverSummary
-    work.status=serverStatus==='complete'?(work.needs?.length?'partial_complete':'complete'):'cancelled'
+    const issueCounts=currentImportIssueCounts()
+    work.status=serverStatus==='complete'?(issueCounts.pending||issueCounts.skipped?'partial_complete':'complete'):'cancelled'
     await save();progress();renderImportOutcome()
     notice(serverStatus==='complete'?'伺服器已確認本工作完成；成果與待處理項目已更新。':'匯入工作已取消；已完成批次保留，未完成項目可查看或建立新輪次。')
     return
@@ -1111,7 +1161,8 @@ async function resumeImport() {
     if(latestStatus==='complete'||latestStatus==='cancelled') {
       work.serverJobStatus=latestStatus
       work.serverImportSummary={status:latestStatus,batchCount:latest.batches?.length||0,appliedRows:(latest.batches||[]).reduce((sum,batch)=>sum+(batch.applied||0),0),batches:(latest.batches||[]).map(batch=>({key:batch.key,status:batch.status,applied:batch.applied||0,counts:batch.counts||{}}))}
-      work.status=latestStatus==='complete'?(work.needs?.length?'partial_complete':'complete'):'cancelled'
+      const issueCounts=currentImportIssueCounts()
+      work.status=latestStatus==='complete'?(issueCounts.pending||issueCounts.skipped?'partial_complete':'complete'):'cancelled'
       await save();progress();renderImportOutcome()
       notice(latestStatus==='complete'?'伺服器已確認本工作完成；成果與待處理項目已更新。':'匯入工作已取消；已完成批次保留，未完成項目可查看或建立新輪次。')
       return

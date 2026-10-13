@@ -98,6 +98,8 @@ function translate(value){
   const staleDetail=/^目前批次尚未提交；已知成功批次保留。原因：(.+)。工作資料列數不等於報告數。$/.exec(value)
   if(staleDetail)return `The current batch was not submitted; confirmed successful batches remain saved. Reason: ${translate(staleDetail[1])}. Work rows are not report counts.`
   const patterns=[
+    [/^\u5df2\u78ba\u8a8d\u4fdd\u5b58\u6b77\u53f2 (\d+) \u4efd\uff1b\u5176\u4e2d (\d+) \u4efd\u5df2\u7d81\u5b9a\u8ab2\u6b21\u3002$/,'Confirmed saved history: $1 reports; $2 are linked to class sessions.'],
+    [/^\u5df2\u78ba\u8a8d\u4fdd\u5b58\u6b77\u53f2 (\d+) \u4efd\u4ee5\u4e0a\uff0c\u90e8\u5206\u820a\u5de5\u4f5c\u6210\u679c\u5f85\u4f3a\u670d\u5668\u6838\u5c0d\uff1b\u5176\u4e2d (\d+) \u4efd\u5df2\u7d81\u5b9a\u8ab2\u6b21\u3002$/,'At least $1 history reports are confirmed; $2 are linked to class sessions. Some legacy results still need server verification.'],
     [/^跨裝置輪次關聯尚未保存：(.*)。此裝置的工作草稿仍可使用。$/,'Cross-device submission-round details were not saved: $1. The draft on this device is still available.'],
     [/^新一輪已在此裝置保存，但伺服器未能保存跨裝置輪次關聯；請保留此裝置的工作草稿。$/,'The new round is saved on this device, but the server could not save its cross-device association. Keep this local draft.'],
     [/^目前批次尚未提交。原因：(.+)。已成功批次仍保留。$/,'The current batch was not submitted. Reason: $1. Successful batches remain saved.'],

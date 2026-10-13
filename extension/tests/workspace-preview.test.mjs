@@ -4,7 +4,7 @@ import vm from 'node:vm'
 import { readFileSync } from 'node:fs'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 import { labels, splitBatches, validateBatches, importBatchRequest } from '../workspace-model.js'
-import { bindingStillMatches } from '../history-sync.js'
+import { bindingStillMatches, historyIdentity } from '../history-sync.js'
 import { prepareStaleReviewBatchRefresh } from '../history-review-batches.js'
 import { workspaceInterfaceFailure } from '../workspace-operation-errors.js'
 
@@ -14,6 +14,7 @@ const prepareScript = script.slice(script.indexOf('function prepareRows()'), scr
 const previewScript = script.slice(script.indexOf('async function preview('), script.indexOf('function renderNoopSummary('))
 const staleScript = script.slice(script.indexOf('function refreshStaleReviewBatchRows()'), script.indexOf('function summarizeImportRows('))
 const staleReasonScript = script.slice(script.indexOf('function staleReasonLabel('), script.indexOf('function renderImportOutcome('))
+const outcomeStateScript = script.slice(script.indexOf('function currentImportIssueCounts('), script.indexOf('function renderImportOutcome('))
 const applyScript = script.slice(script.indexOf('async function apply()'), script.indexOf('async function resumeImport()'))
 const resumeScript = script.slice(script.indexOf('async function refreshImportCheckpoint()'), script.indexOf('async function readForm()'))
 const progressScript=script.slice(script.indexOf('function progress()'),script.indexOf('function taipeiToday()'))
@@ -188,17 +189,20 @@ test('saved preview fingerprints stay local when existing batches are checked ag
   assert.equal(current.batches[0].previewFingerprint,'b'.repeat(64))
   assert.equal(current.previewDirty,false)
 })
-test('a fingerprint returned by preview can flow through later apply without entering the API body',async()=>{
+test('a fingerprint returned by preview can flow through apply and the confirmed checkpoint is counted',async()=>{
   const current=work(),preview=previewFixture(current,[row(8)])
   preview.context.results=[{rows:[],counts:{},batch_fingerprint:'e'.repeat(64)}]
   await preview.preview(false)
   assert.equal(current.batches[0].previewFingerprint,'e'.repeat(64))
   const persisted=structuredClone(current.batches[0]),calls=[],controls={pause:{},'cancel-work':{},mapping:{},'preview-section':{}}
-  const context=vm.createContext({work:{type:'import',status:'previewed',previewDirty:false,jobId:current.jobId,done:0,batchCount:1,batches:[persisted],needs:[]},previewResults:[{batchIndex:0,rows:[]}],generation:1,paused:false,cancelRequested:false,importBatchRequest,send:async()=>({closed:false}),api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='apply'&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'});return{}},save:async()=>{},progress(){},finalizeImport:async()=>{},notice(){},stage(){},$:id=>controls[id]})
+  const context=vm.createContext({work:{type:'import',status:'previewed',previewDirty:false,jobId:current.jobId,done:0,batchCount:1,batches:[persisted],needs:[],submissionRoundNo:1},historyPlan:[],previewResults:[{batchIndex:0,rows:[{kind:'course',status:'added'}]}],generation:1,paused:false,cancelRequested:false,importBatchRequest,send:async()=>({closed:false}),api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(operation==='apply'&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'});return{}},save:async()=>{},progress(){},finalizeImport:async()=>{},notice(){},stage(){},$:id=>controls[id]})
+  vm.runInContext(outcomeStateScript,context)
   vm.runInContext(applyScript,context);await context.apply()
   assert.equal(calls.filter(call=>call.operation==='apply').length,1)
   assert.equal(Object.hasOwn(calls.find(call=>call.operation==='apply').body,'previewFingerprint'),false)
   assert.equal(persisted.previewFingerprint,'e'.repeat(64))
+  assert.deepEqual(Array.from(context.work.appliedBatchKeys),[current.batches[0].key])
+  assert.equal(context.work.batchSummaries[current.batches[0].key].course.added,1)
 })
 test('a failed resume check invalidates the old summary and preserves the uncertain checkpoint',async()=>{
   const current={...work(),status:'outcome_unknown',batches:[{key:'uncertain-key',rows:[row(9)],previewFingerprint:'f'.repeat(64)}]}
@@ -221,8 +225,8 @@ test('PREVIEW_STALE pauses before further writes and preserves the failed key an
 })
 test('stale progress remains visibly marked as an error',()=>{
   const elements=new Map(['progress','progress-label','resume','pause','cancel-work','operation-status','operation-title','operation-detail','operation-progress'].map(id=>[id,{dataset:{},hidden:false}]))
-  const context=vm.createContext({work:{status:'stale',done:0,batchCount:3,needs:[{}],staleDiagnostics:{'batches.key.preview':['TARGET_VERSION_CHANGED']}},show(){},stage(){},staleReasonLabel:()=> 'EduLog 目標資料已更新',renderImportOutcome(){},$:id=>elements.get(id)})
-  vm.runInContext(`${progressScript}\nprogress()`,context)
+  const context=vm.createContext({work:{status:'stale',done:0,batchCount:3,needs:[{}],staleDiagnostics:{'batches.key.preview':['TARGET_VERSION_CHANGED']}},historyPlan:[],show(){},stage(){},staleReasonLabel:()=> 'EduLog 目標資料已更新',renderImportOutcome(){},$:id=>elements.get(id)})
+  vm.runInContext(`${outcomeStateScript}\n${progressScript}\nprogress()`,context)
   assert.equal(elements.get('operation-status').hidden,false)
   assert.equal(elements.get('operation-status').dataset.state,'error')
   assert.match(elements.get('operation-title').textContent,/同步受阻/)
@@ -252,7 +256,7 @@ test('checkpoint mismatch stops recovery before re-preview',async()=>{
 test('cancelled and completed server jobs refresh checkpoints and never preview again',async()=>{
   for(const status of ['cancelled','complete']){
     const current={...work(),status:'stale',done:0,needs:[]},calls=[]
-    const context=vm.createContext({work:current,api:async operation=>{calls.push(operation);return{job:{status},batches:[]}},save:async()=>{},progress(){},renderImportOutcome(){},notice(){},preview:async()=>calls.push('preview')})
+    const context=vm.createContext({work:current,api:async operation=>{calls.push(operation);return{job:{status},batches:[]}},save:async()=>{},progress(){},renderImportOutcome(){},currentImportIssueCounts:()=>({pending:0,skipped:0}),notice(){},preview:async()=>calls.push('preview')})
     vm.runInContext(resumeScript,context);await context.resumeImport()
     assert.deepEqual(calls,['import-info']);assert.equal(current.status,status)
   }
@@ -279,13 +283,29 @@ test('when every batch is confirmed saved, recovery waits for explicit finalizat
   assert.deepEqual(calls,['import-info','preview:true']);assert.equal(current.status,'awaiting-finalization');assert.equal(current.done,1)
   assert.equal(calls.includes('finalize'),false)
 })
-test('apply projects a saved batch without changing its local checkpoint metadata',async()=>{
+test('apply immediately records the successful batch summary and preserves local fingerprint metadata',async()=>{
   const batch={key:'saved-key',rows:[row(1)],previewFingerprint:'c'.repeat(64),dependencies:[{key:'parent-key',fingerprint:'d'.repeat(64)}]}
   const calls=[],controls={pause:{},'cancel-work':{},mapping:{},'preview-section':{}}
-  const context=vm.createContext({work:{type:'import',status:'previewed',previewDirty:false,jobId:'job',done:0,batchCount:1,batches:[batch],needs:[]},previewResults:[{batchIndex:0,rows:[]}],generation:1,paused:false,cancelRequested:false,importBatchRequest,send:async()=>({closed:false}),api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(['preview','apply'].includes(operation)&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'});return{}},save:async()=>{},progress(){},finalizeImport:async()=>{},notice(){},stage(){},$:id=>controls[id]})
+  const context=vm.createContext({work:{type:'import',status:'previewed',previewDirty:false,jobId:'job',done:0,batchCount:1,batches:[batch],needs:[],submissionRoundNo:1},historyPlan:[],previewResults:[{batchIndex:0,rows:[{kind:'student',status:'added'}]}],generation:1,paused:false,cancelRequested:false,importBatchRequest,send:async()=>({closed:false}),api:async(operation,body)=>{calls.push({operation,body:structuredClone(body)});if(['preview','apply'].includes(operation)&&Object.keys(body).some(key=>!['key','rows','dependencies'].includes(key)))throw Object.assign(new Error('Unrecognized key'),{code:'VALIDATION_FAILED'});return{}},save:async()=>{},progress(){},finalizeImport:async()=>{},notice(){},stage(){},$:id=>controls[id]})
+  vm.runInContext(outcomeStateScript,context)
   vm.runInContext(applyScript,context);await context.apply()
   assert.deepEqual(calls.filter(call=>call.operation==='apply'),[{operation:'apply',body:{key:'saved-key',rows:batch.rows,dependencies:batch.dependencies}}])
   assert.equal(batch.previewFingerprint,'c'.repeat(64))
+  assert.deepEqual(Array.from(context.work.appliedBatchKeys),['saved-key'])
+  assert.equal(context.work.batchSummaries['saved-key'].student.added,1)
+})
+test('current work counts deduplicate report issues and include only confirmed history report targets',()=>{
+  const record={enrollment_source_id:'admission-1',source_id:'report-1',date:'2026-08-22'}
+  const work={needs:['report ad:report-2 still needs review','enrollment mapping missing'],history:{issues:[{...record,skipped:true}]},snapshot:{records:[{kind:'report',...record,sourceSkipped:true}]},staleReviewPending:[{kind:'history_report',source_id:'admission-1:report:report-2'}],submissionRounds:[{roundNo:1,historySummary:{saved:1,reportIds:['history-target-1']}}],submissionRoundNo:2,appliedBatchKeys:['batch-1'],batches:[{key:'batch-1',rows:[{target_id:'history-target-1',record:{kind:'history_report'}},{target_id:'history-target-2',record:{kind:'history_report'}}]}]}
+  const context=vm.createContext({work,historyIdentity,historyPlan:[
+    {key:'admission-1:report:report-1',category:'skipped',record},
+    {key:'admission-1:report:report-2',category:'needs',record:{...record,source_id:'report-2',date:'2026-08-29'}},
+    {key:'system-row',category:'system-excluded',record:{enrollment_source_id:'admission-1',source_id:'closed-day',date:'2026-09-05'}},
+  ]})
+  vm.runInContext(outcomeStateScript,context)
+  assert.deepEqual(JSON.parse(JSON.stringify(context.currentImportIssueCounts())),{pending:2,skipped:1,excluded:1,unfilled:0})
+  assert.deepEqual(Array.from(context.confirmedHistoryReportIds()),['history-target-1','history-target-2'])
+  assert.equal(context.refreshConfirmedHistorySummary().saved,2)
 })
 
 test('malformed legacy batches stop before the API and are never silently normalized during resume',async()=>{

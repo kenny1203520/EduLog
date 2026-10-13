@@ -44,3 +44,13 @@ test('stale import recovery messages translate their reason and restore the sour
   w.document.getElementById('workspace-locale').value='zh-TW';w.document.getElementById('workspace-locale').dispatchEvent(new w.Event('change'));await new Promise(resolve=>setTimeout(resolve,0))
   assert.equal(title.textContent,'同步受阻，預覽已失效');assert.match(detail.textContent,/目標資料已更新/);dom.window.close()
 })
+test('saved history result counts translate in both known and legacy states',async()=>{
+  const source=readFileSync(new URL('../workspace-i18n.js',import.meta.url),'utf8').replace('export function initWorkspaceI18n','function initWorkspaceI18n')
+  const dom=new JSDOM('<html lang="zh-Hant"><body><select id="workspace-locale"><option value="zh-TW">繁體中文</option><option value="en">English</option></select><p id="status"></p></body></html>',{runScripts:'outside-only'}),w=dom.window
+  w.chrome={storage:{local:{get:async()=>({edulogWorkspaceLocale:'en'}),set:async()=>{}},onChanged:{addListener:()=>{}}}}
+  w.eval(source+';initWorkspaceI18n()');await new Promise(resolve=>setTimeout(resolve,0))
+  const status=w.document.getElementById('status')
+  status.textContent='\u5df2\u78ba\u8a8d\u4fdd\u5b58\u6b77\u53f2 25 \u4efd\uff1b\u5176\u4e2d 18 \u4efd\u5df2\u7d81\u5b9a\u8ab2\u6b21\u3002';await new Promise(resolve=>setTimeout(resolve,0));assert.equal(status.textContent,'Confirmed saved history: 25 reports; 18 are linked to class sessions.')
+  status.textContent='\u5df2\u78ba\u8a8d\u4fdd\u5b58\u6b77\u53f2 25 \u4efd\u4ee5\u4e0a\uff0c\u90e8\u5206\u820a\u5de5\u4f5c\u6210\u679c\u5f85\u4f3a\u670d\u5668\u6838\u5c0d\uff1b\u5176\u4e2d 18 \u4efd\u5df2\u7d81\u5b9a\u8ab2\u6b21\u3002';await new Promise(resolve=>setTimeout(resolve,0));assert.equal(status.textContent,'At least 25 history reports are confirmed; 18 are linked to class sessions. Some legacy results still need server verification.')
+  dom.window.close()
+})
