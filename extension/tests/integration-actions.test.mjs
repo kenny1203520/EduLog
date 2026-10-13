@@ -194,8 +194,12 @@ test('cross-batch capability errors use the shared localized recovery guidance',
 })
 test('old servers get a specific route-contract update message without treating other validation as an upgrade issue',()=>{
   const error={code:'VALIDATION_FAILED',fields:{'rows.25.record.data.source_evidence.0.source_path':['Invalid string']}}
-  assert.equal(isUnsupportedReportEvidencePathValidation(error),true)
+  const rows=Array.from({length:26},()=>({record:{kind:'history_report',data:{source_evidence:[]}}}))
+  rows[25].record.data.source_evidence=[{source_path:'/courses/dt/4773/lesson_reports'}]
+  assert.equal(isUnsupportedReportEvidencePathValidation(error,rows),true)
   assert.match(workspaceErrorMessage({...error,code:'SOURCE_PATH_CONTRACT_UNSUPPORTED'}),/migration 1000140/)
-  assert.equal(isUnsupportedReportEvidencePathValidation({...error,fields:{'rows.25.record.data.source_evidence.0.table':['Invalid string']}}),false)
-  assert.equal(isUnsupportedReportEvidencePathValidation({...error,code:'PREVIEW_STALE'}),false)
+  rows[25].record.data.source_evidence[0].source_path='https://corp.orangeapple.co/courses/dt/4773/lesson_reports'
+  assert.equal(isUnsupportedReportEvidencePathValidation(error,rows),false)
+  assert.equal(isUnsupportedReportEvidencePathValidation({...error,fields:{'rows.25.record.data.source_evidence.0.table':['Invalid string']}},rows),false)
+  assert.equal(isUnsupportedReportEvidencePathValidation({...error,code:'PREVIEW_STALE'},rows),false)
 })

@@ -207,7 +207,8 @@ async function run(action, { label = '正在處理工作', readOnly = false, sav
     return result
   }
   catch (error) {
-    if(isUnsupportedReportEvidencePathValidation(error)){
+    const currentBatch=work?.type==='import'?work.batches?.[Math.max(0,work.done||0)]:null
+    if(isUnsupportedReportEvidencePathValidation(error,currentBatch?.rows||[])){
       error.code='SOURCE_PATH_CONTRACT_UNSUPPORTED';error.message=workspaceErrorMessage(error)
       if(work?.type==='import')work.previewError={code:error.code,message:error.message,batchKey:work.batches?.[Math.max(0,work.done||0)]?.key}
     }

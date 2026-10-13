@@ -90,8 +90,15 @@ export function workspaceErrorMessage(error) {
   }
   return error.message || '無法完成操作。'
 }
-export function isUnsupportedReportEvidencePathValidation(error) {
-  return error?.code === 'VALIDATION_FAILED' && Object.keys(error.fields || {}).some(key => /^rows\.\d+\.record\.data\.source_evidence\.\d+\.source_path$/.test(key))
+export function isUnsupportedReportEvidencePathValidation(error, rows = []) {
+  if (error?.code !== 'VALIDATION_FAILED') return false
+  const supportedPath = /^\/(?:dt_admissions\/\d+(?:\/reports\/\d+\/edit)?|courses\/dt\/\d+(?:\/lesson_reports|\/lesson-reports)?)$/
+  return Object.keys(error.fields || {}).some(key => {
+    const match = /^rows\.(\d+)\.record\.data\.source_evidence\.(\d+)\.source_path$/.exec(key)
+    if (!match) return false
+    const path = rows[Number(match[1])]?.record?.data?.source_evidence?.[Number(match[2])]?.source_path
+    return typeof path === 'string' && supportedPath.test(path)
+  })
 }
 export function plainText(value, doc = document) {
   if (typeof value !== 'string') return ''
