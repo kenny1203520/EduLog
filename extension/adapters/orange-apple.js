@@ -156,6 +156,8 @@
       listen(input, 'input', refreshStudents); refreshStudents()
     }
     const workflow = globalThis.edulogSiteWorkflows?.enhancePage({ doc, content, page, view, scope })
+    // The weekly to-do view leads the overview; the native schedule stays below it.
+    if (page.kind === 'overview') view.todo = globalThis.edulogSiteTodo?.mount({ doc, content, scope, view })
     const reports = content.querySelector(lexicon.selectors.reportsTable)
     if (reports) {
       const reportScrollRegion=reports.closest('[data-edulog-scroll="reports"]')||reports.parentElement

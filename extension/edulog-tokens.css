@@ -36,6 +36,8 @@
   --edulog-status-notice-soft:#fff7ed;
   --edulog-status-notice-text:#9a3412;
   --edulog-status-danger:#b91c1c;
+  --edulog-status-danger-soft:#fef2f2;
+  --edulog-status-danger-text:#991b1b;
   /* Shadows */
   --edulog-shadow-bar:0 2px 8px #1720330a;
   --edulog-shadow-popover:0 12px 32px #17203320;

@@ -24,6 +24,16 @@
     reportModal: '#lesson-report-modal',
     remoteModal: '#remote_modal',
     attendanceAction: 'a[href*="attendance_status"]',
+    sidebarLinks: '#page-body > .sidebar a[href]',
+    calendarDayPane: '.tab-pane[id*="-weekday-"]',
+  })
+  // Same-origin pages the overview to-do view may read. Read-only, never submitted.
+  const sources = Object.freeze({
+    unfilledCurrent: '/admissions/unfilled_report',
+    unfilledMonth: '/admissions/month_unfilled_report',
+    calendar: '/calendar',
+    hours: '/my/hour',
+    classReports: id => `/courses/dt/${id}/lesson_reports`,
   })
   const paths = Object.freeze({
     classPage: /^\/courses\/dt\/\d+\/?$/,
@@ -47,6 +57,12 @@
     lessonCode: /\bL\d+\b/i,
     enabledLesson: /已啟用\s*(L\d+)/i,
     enabled: /已啟用/,
+    absent: /缺席|未出席/,
+    unfilledStudent: /^學生$/,
+    unfilledRecord: /課堂紀錄/,
+    unfilledSlot: /學習紀錄節次/,
+    isoDate: /\d{4}-\d{2}-\d{2}/,
+    calendarDay: /(\d{1,2})\/(\d{1,2})/,
   })
   // Structural facts a page needs before it may be enhanced. A missing probe means
   // the provider markup changed: the page stays original and the toolbar says so.
@@ -54,5 +70,5 @@
     '*': [selectors.content],
     reports: [selectors.reportsTable],
   })
-  globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, text, probes })
+  globalThis.edulogSiteLexicon = Object.freeze({ routes, selectors, paths, sources, text, probes })
 })()

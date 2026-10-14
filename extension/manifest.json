@@ -54,6 +54,7 @@
         "field-mapping-ui.js",
         "connection-ui.js",
         "integration-ui.js",
+        "adapters/orange-apple-todo.js",
         "adapters/orange-apple-workflows.js",
         "adapters/orange-apple-integration.js",
         "editor-prefill.js",
