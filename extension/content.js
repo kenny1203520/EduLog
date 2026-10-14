@@ -8,6 +8,10 @@
   let initialized = false, revision = 0, navigation = 0, needsPreference = false
   let preferenceVisit = null
   let failedPath = null
+  // `enabled` is the saved theme preference; `shown` is whether this page is enhanced
+  // after the per-page "original" choice and the provider health check.
+  let pageModes = {}, shown = false, healthNotice = false
+  const pageOriginal = page => Boolean(page && pageModes[page.kind] === 'original')
   let view = {}, lastPath = location.pathname
   const pageViews = new Map()
   const scrollState = () => [...document.querySelectorAll('[data-edulog-scroll]')].map((element, index) => ({ key: element.dataset.edulogScroll, index, left: element.scrollLeft, top: element.scrollTop }))
@@ -89,7 +93,7 @@
     host = toolbarHost
     toolbarHost.id = 'edulog-extension-root'
     toolbarHost.dataset.edulogOwned = ''
-    toolbarHost.dataset.enabled = String(enabled)
+    toolbarHost.dataset.enabled = String(shown)
     const root = toolbarHost.attachShadow({ mode: 'open' })
     const instance = { host: toolbarHost, root, ownerDocument, disposed: false, observer: null, resizeObserver: null, dismissOutside: null, stopLocale: null }
     toolbarLifecycle = instance
@@ -105,12 +109,12 @@
       .panel[hidden]{display:none}p{margin:8px 0;color:var(--edulog-text-muted)}.panel p{font-size:14px}.panel button{margin-top:8px}.panel .panel-close{margin-top:0}.note{font-size:14px}
       :host([data-enabled="false"]){inset:auto 16px 20px auto;max-width:calc(100vw - 32px)}.bar{border-radius:0}
       :host([data-enabled="false"]) .bar{padding:6px;border:1px solid var(--edulog-border);border-radius:12px}
-      :host([data-enabled="false"]) .bar>:not(.integration){display:none}
+      :host([data-enabled="false"]) .bar>:not(.integration):not(.page-mode){display:none}.page-mode[hidden]{display:none!important}
       :host([data-enabled="false"]) .panel{top:auto;right:16px;bottom:86px;width:min(400px,calc(100vw - 32px));max-width:400px;max-height:calc(100dvh - 112px)}
       .preferences{border-top:1px solid var(--edulog-border);margin-top:12px}.preferences summary{min-height:44px;display:flex;align-items:center;cursor:pointer}.preferences select{font:inherit;min-height:44px;max-width:100%;margin-top:8px}
       @media(max-width:991px){.menu{display:block}.bar{padding:8px 12px;gap:8px}.title{font-size:14px}}
       @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{right:8px;width:min(400px,calc(100vw - 16px));max-width:400px;max-height:calc(100dvh - 152px)}}
-    </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="integration" type="button" aria-expanded="false">EduLog 功能</button></div>
+    </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="page-mode" type="button" hidden></button><button class="integration" type="button" aria-expanded="false">EduLog 功能</button></div>
     <section class="panel" aria-label="EduLog 整合功能" hidden><div class="panel-heading"><strong>EduLog 連線與整合</strong><button class="panel-close" type="button" aria-label="關閉 EduLog 整合面板">×</button></div><p class="status" role="status" aria-live="polite"></p><p class="note">清晰主題不需要配對。下方可查看教學整合的規劃流程；原站的報告操作可照常使用。</p><button class="settings" type="button">開啟整合設定</button></section>`
     root.querySelector('.title').textContent = page.title
     const preferences=document.createElement('details');preferences.className='preferences'
@@ -140,6 +144,23 @@
         const result = await message({ type: 'set-ui-preferences', enabled })
         if (result?.error) throw new Error('偏好設定暫時無法儲存。')
       } catch (error) { showNotice(`${error.message} 主題切換僅作用於當頁，偏好未儲存。`) }
+    })
+    const pageMode = root.querySelector('.page-mode')
+    // Offered only while the theme is on and the page itself is healthy.
+    pageMode.hidden = !enabled || (!shown && !pageOriginal(page))
+    pageMode.textContent = shown ? '本頁看原版' : '本頁套用 EduLog'
+    pageMode.setAttribute('aria-pressed', String(!shown))
+    pageMode.title = shown ? '只有這類頁面改回原站畫面，其他頁面維持 EduLog 主題' : '這類頁面改回 EduLog 主題'
+    pageMode.addEventListener('click', async () => {
+      const mode = pageOriginal(page) ? 'enhanced' : 'original'
+      const { [page.kind]: _previous, ...others } = pageModes
+      pageModes = mode === 'original' ? { ...others, [page.kind]: 'original' } : others
+      revision++
+      sync()
+      try {
+        const result = await message({ type: 'set-ui-preferences', page: page.kind, pageMode: mode })
+        if (result?.error) throw new Error('偏好設定暫時無法儲存。')
+      } catch (error) { showNotice(`${error.message} 本頁切換僅作用於當頁，偏好未儲存。`) }
     })
     root.querySelector('.menu').addEventListener('click', event => {
       const open = document.documentElement.toggleAttribute('data-edulog-nav-open')
@@ -222,7 +243,7 @@
       disposeToolbar(instance)
     })
     instance.observer.observe(document.body, { childList: true, subtree: true })
-    if (enabled) {
+    if (shown) {
       const html = document.documentElement
       heightState = { value: html.style.getPropertyValue('--edulog-toolbar-height'), priority: html.style.getPropertyPriority('--edulog-toolbar-height'), hadStyle: html.hasAttribute('style') }
       const updateHeight = () => { if (isCurrent()) html.style.setProperty('--edulog-toolbar-height', `${Math.max(64, root.querySelector('.bar').getBoundingClientRect().height + banner.getBoundingClientRect().height)}px`) }
@@ -249,24 +270,35 @@
     const cursor = search && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null
     const toolbarFocus = host?.shadowRoot.activeElement?.className
     const scrolls = scrollState()
-    const keepToolbar = lastPath === location.pathname && host?.isConnected && host.dataset.enabled === String(enabled)
-    teardown(enabled && lastPath === location.pathname && dialogEnhancement?.isCurrent?.(), keepToolbar)
+    const wanted = enabled && !pageOriginal(adapter.matchPage(location.pathname))
+    const keepToolbar = lastPath === location.pathname && host?.isConnected && host.dataset.enabled === String(wanted)
+    teardown(wanted && lastPath === location.pathname && dialogEnhancement?.isCurrent?.(), keepToolbar)
     if (lastPath !== location.pathname) {
       pageViews.set(lastPath, view)
       view = pageViews.get(location.pathname) || {}; lastPath = location.pathname
     }
     const page = adapter.matchPage(location.pathname)
-    if (!page || !document.querySelector('#page-body > .content')) { boot?.mode(false); teardown(); return }
-    if (enabled) enhancement = adapter.enhancePage(document, view, Boolean(boot))
-    if (enabled && !enhancement) { boot?.mode(false); teardown(); return }
-    boot?.mode(enabled, page)
+    if (!page || !document.querySelector(adapter.lexicon?.selectors.content || '#page-body > .content')) { shown = false; boot?.mode(false); teardown(); return }
+    if (healthNotice) { healthNotice = false; showNotice('') }
+    const health = wanted ? adapter.checkPage?.(document, page.kind) : null
+    if (health?.reason === 'denied') { shown = false; boot?.mode(false); teardown(); return }
+    shown = wanted && health?.ok !== false
+    if (wanted && !shown) {
+      // Provider markup no longer matches the lexicon: keep the native page usable.
+      healthNotice = true
+      showNotice('此頁暫用原站畫面：原站版面可能已更新，EduLog 暫時無法辨識。')
+      if (host?.isConnected) teardown()
+    }
+    if (shown) enhancement = adapter.enhancePage(document, view, Boolean(boot))
+    if (shown && !enhancement) { shown = false; boot?.mode(false); teardown(); return }
+    boot?.mode(shown, page)
     if (!host?.isConnected) toolbar(page)
     syncDialog()
     if (search) {
       const input = document.querySelector(`[data-edulog-search="${search}"]`)
       input?.focus({ preventScroll: true })
       if (input && cursor) input.setSelectionRange(...cursor)
-    } else if (['toggle', 'menu', 'integration'].includes(toolbarFocus)) {
+    } else if (['toggle', 'menu', 'integration', 'page-mode'].includes(toolbarFocus)) {
       host.shadowRoot.querySelector(`.${toolbarFocus}`)?.focus({ preventScroll: true })
     } else if (active?.isConnected && active !== document.body) {
       active.focus({ preventScroll: true })
@@ -289,6 +321,7 @@
       observer.disconnect()
       failedPath = location.pathname
       enabled = false
+      shown = false
       teardown()
       boot?.mode(false)
       boot?.release()
@@ -338,6 +371,7 @@
       void message({ type: 'get-ui-preferences' }).then(prefs => {
         if (request !== revision || visit !== navigation) return
         boot?.remember(prefs?.enabled !== false && !prefs?.error)
+        if (prefs?.pages) pageModes = prefs.pages
         if (expired) return
         preferenceVisit = null
         enabled = boot ? boot.preferred : prefs?.enabled !== false
@@ -400,14 +434,14 @@
     showNotice('擴充套件已更新，請先儲存正在編輯的內容，再重新整理分頁。')
   })
   bridge.listen(data => {
-    if (data?.type === 'ui-preferences-changed') { revision++; failedPath = null; showNotice(''); enabled = data.enabled !== false; boot?.remember(enabled); sync() }
+    if (data?.type === 'ui-preferences-changed') { revision++; failedPath = null; showNotice(''); enabled = data.enabled !== false; pageModes = data.pages || {}; boot?.remember(enabled); sync() }
   })
   // UI is independent of pairing and backend availability.
   const request = revision
   const initial = boot?.ready || message({ type: 'get-ui-preferences' }).catch(() => ({ enabled: false }))
   void initial.then(prefs => {
     needsPreference = prefs?.reason === 'unknown'
-    if (request === revision) enabled = boot?.expired ? false : prefs?.enabled !== false
+    if (request === revision) { enabled = boot?.expired ? false : prefs?.enabled !== false; pageModes = prefs?.pages || {} }
     if (!enabled && !bridge.invalidated && (boot?.expired || ['timeout', 'unavailable'].includes(prefs?.reason))) showNotice('未能及時讀取主題偏好，已保留原站。可在當頁套用清晰主題。')
     initialized = true
     try { sync() } finally { boot?.release() }

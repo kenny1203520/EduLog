@@ -201,3 +201,15 @@ test('a removed toolbar can synchronously rebuild without its old observer touch
   let checks=0;const oldSend=s.w.chrome.runtime.sendMessage;s.w.chrome.runtime.sendMessage=data=>{if(data.type==='get-edulog-integration-status')checks++;return Promise.resolve({enabled:true,status:'not-connected'})}
   current.shadowRoot.querySelector('.integration').click();await tick();assert.equal(checks,1);assert.deepEqual(s.errors,[]);s.w.chrome.runtime.sendMessage=oldSend;s.dom.window.close()
 })
+test('a page kind saved as original is released at startup without theme flash', async () => {
+  const s = start()
+  s.answer({ enabled: true, pages: { class: 'original' } }); await tick()
+  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-pending'), false)
+  s.mount(); await tick()
+  assert.equal(s.doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  assert.equal(s.doc.querySelector('#edulog-extension-root').dataset.enabled, 'false')
+  assert.equal(s.doc.querySelector('#edulog-extension-root').shadowRoot.querySelector('.page-mode').hidden, false)
+  assert.equal(s.errors.length, 0)
+  s.dom.window.close()
+})

@@ -19,12 +19,12 @@
     html.removeAttribute('data-edulog-pending')
     hint?.remove(); hint = null
   }
-  function finish(enabled, reason) {
+  function finish(enabled, reason, pages = {}) {
     if (settled) return
     settled = true
     preferred = enabled
-    if (!enabled) release()
-    resolve({ enabled, reason })
+    if (!enabled || pages[page?.kind] === 'original') release()
+    resolve({ enabled, reason, pages })
   }
   function wait(onTimeout) {
     // A transaction never extends an existing deadline.
@@ -64,7 +64,8 @@
     if (request !== sequence) return
     preferred = prefs?.enabled !== false && !prefs?.error
     if (settled) return // Remember for a later visit, never switch the painted page.
-    mode(preferred, page)
-    finish(preferred, 'preference')
+    const pages = prefs?.pages || {}
+    mode(preferred && pages[page.kind] !== 'original', page)
+    finish(preferred, 'preference', pages)
   }).catch(() => { if (!settled && request === sequence) { mode(false); finish(false, 'unavailable') } })
 })()

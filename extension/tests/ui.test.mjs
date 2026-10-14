@@ -30,10 +30,10 @@ function fixture(name, path) {
   dom.window.eval(adapterCode)
   return dom
 }
-function start(dom, enabled = true) {
+function start(dom, enabled = true, pages = undefined) {
   const messages = [], listeners = []
   dom.window.chrome = { runtime: {
-    sendMessage: async data => { messages.push(data); return data.type === 'get-ui-preferences' ? { enabled } : { enabled: data.enabled } },
+    sendMessage: async data => { messages.push(data); return data.type === 'get-ui-preferences' ? { enabled, pages } : { enabled: data.enabled } },
     onMessage: { addListener: fn => listeners.push(fn) },
   } }
   dom.window.eval(read('../runtime-bridge.js'))
@@ -171,5 +171,49 @@ test('Turbo caching, source row updates and navigation remain reversible', async
   dom.window.history.pushState({}, '', '/my')
   doc.dispatchEvent(new dom.window.Event('turbo:load')); await wait()
   assert.equal(doc.querySelector('#edulog-extension-root'), null)
+  dom.window.close()
+})
+const toolbarPart = (doc, selector) => doc.querySelector('#edulog-extension-root').shadowRoot.querySelector(selector)
+test('a page kind saved as original stays native and can be switched back from the toolbar', async () => {
+  const dom = fixture('class', '/courses/dt/101'), doc = dom.window.document
+  const { messages } = start(dom, true, { class: 'original' })
+  await wait()
+  assert.equal(doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  assert.equal(doc.querySelectorAll('.edulog-table-tools').length, 0)
+  assert.equal(doc.querySelector('#edulog-extension-root').dataset.enabled, 'false')
+  const pageMode = toolbarPart(doc, '.page-mode')
+  assert.equal(pageMode.hidden, false)
+  assert.equal(pageMode.textContent, '本頁套用 EduLog')
+  pageMode.click(); await wait()
+  assert.equal(doc.documentElement.dataset.edulogUi, 'on')
+  assert.equal(doc.querySelectorAll('.edulog-table-tools').length, 2)
+  assert.equal(JSON.stringify(messages.at(-1)), '{"type":"set-ui-preferences","page":"class","pageMode":"enhanced"}')
+  toolbarPart(doc, '.page-mode').click(); await wait()
+  assert.equal(doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  assert.equal(doc.querySelectorAll('.edulog-table-tools').length, 0)
+  assert.equal(JSON.stringify(messages.at(-1)), '{"type":"set-ui-preferences","page":"class","pageMode":"original"}')
+  dom.window.close()
+})
+test('the per-page choice is hidden when the theme is off and other page kinds stay enhanced', async () => {
+  const off = fixture('class', '/courses/dt/101')
+  start(off, false); await wait()
+  assert.equal(toolbarPart(off.window.document, '.page-mode').hidden, true)
+  off.window.close()
+  const other = fixture('class', '/courses/dt/101'), doc = other.window.document
+  const { listeners } = start(other, true, { reports: 'original' }); await wait()
+  assert.equal(doc.documentElement.dataset.edulogUi, 'on')
+  listeners[0]({ type: 'ui-preferences-changed', enabled: true, pages: { class: 'original' } }); await wait()
+  assert.equal(doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  other.window.close()
+})
+test('unrecognised provider structure keeps the native page and explains it in the toolbar', async () => {
+  const dom = fixture('reports', '/courses/dt/101/lesson_reports'), doc = dom.window.document
+  doc.querySelector('#reports').remove()
+  start(dom); await wait()
+  assert.equal(doc.documentElement.hasAttribute('data-edulog-ui'), false)
+  assert.equal(doc.querySelectorAll('[data-edulog-owned]:not(#edulog-extension-root)').length, 0)
+  assert.equal(doc.querySelector('#edulog-extension-root').dataset.enabled, 'false')
+  assert.match(toolbarPart(doc, '.notice').textContent, /原站版面可能已更新/)
+  assert.equal(toolbarPart(doc, '.page-mode').hidden, true)
   dom.window.close()
 })

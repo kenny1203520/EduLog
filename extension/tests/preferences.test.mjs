@@ -134,3 +134,18 @@ test('settings links use the paired frontend address rather than API port', asyn
   assert.equal((await w.send({ type: 'open-edulog-settings' }, w.site)).opened, false)
   assert.equal(w.opened.length, 1)
 })
+
+test('per-page original mode is bounded, broadcast and removed when switched back', async () => {
+  const w = worker()
+  const saved = await w.send({ type: 'set-ui-preferences', page: 'reports', pageMode: 'original' }, w.site)
+  assert.equal(saved.enabled, true)
+  assert.equal(JSON.stringify(saved.pages), '{"reports":"original"}')
+  assert.equal(JSON.stringify(w.broadcasts.at(-1).message), '{"type":"ui-preferences-changed","enabled":true,"pages":{"reports":"original"}}')
+  await w.send({ type: 'set-ui-preferences', enabled: false }, w.popup)
+  assert.equal(JSON.stringify(w.storage.edulogUiPreferences), '{"orange-apple":{"enabled":false,"pages":{"reports":"original"}}}')
+  assert.equal((await w.send({ type: 'set-ui-preferences', page: 'admin', pageMode: 'original' }, w.site)).error, 'INVALID_PAGE_MODE')
+  assert.equal((await w.send({ type: 'set-ui-preferences', page: 'class', pageMode: 'hidden' }, w.site)).error, 'INVALID_PAGE_MODE')
+  const cleared = await w.send({ type: 'set-ui-preferences', page: 'reports', pageMode: 'enhanced' }, w.site)
+  assert.equal(JSON.stringify(cleared.pages), '{}')
+  assert.equal(JSON.stringify(w.storage.edulogUiPreferences), '{"orange-apple":{"enabled":false}}')
+})

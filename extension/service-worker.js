@@ -138,14 +138,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.type === 'set-ui-preferences') {
         if (message.language !== undefined && !['zh-TW','en'].includes(message.language)) return { error: 'INVALID_LANGUAGE' }
         if (message.language !== undefined) await chrome.storage.local.set({ edulogWorkspaceLocale: message.language })
-        if (typeof message.enabled === 'boolean') {
-        stored[globalThis.edulogSiteAdapter.id] = { enabled: message.enabled }
+        const id = globalThis.edulogSiteAdapter.id, current = stored[id] || {}
+        // Per page kind: only 'original' is stored; 'enhanced' is the default.
+        const pageKind = message.page !== undefined && globalThis.edulogSiteAdapter.lexicon.routes.some(route => route.kind === message.page) ? message.page : null
+        if (message.page !== undefined && (!pageKind || !['original', 'enhanced'].includes(message.pageMode))) return { error: 'INVALID_PAGE_MODE' }
+        if (typeof message.enabled === 'boolean' || pageKind) {
+        const { [pageKind]: _previous, ...pages } = current.pages || {}
+        if (pageKind && message.pageMode === 'original') pages[pageKind] = 'original'
+        const nextPages = pageKind ? pages : current.pages || {}
+        stored[id] = { enabled: typeof message.enabled === 'boolean' ? message.enabled : current.enabled !== false, ...(Object.keys(nextPages).length ? { pages: nextPages } : {}) }
         await chrome.storage.local.set({ [key]: stored })
         const tabs = await chrome.tabs.query({})
-        await Promise.allSettled(tabs.filter(tab => isTeachingPage(tab.url)).map(tab => chrome.tabs.sendMessage(tab.id, { type: 'ui-preferences-changed', enabled: message.enabled })))
+        await Promise.allSettled(tabs.filter(tab => isTeachingPage(tab.url)).map(tab => chrome.tabs.sendMessage(tab.id, { type: 'ui-preferences-changed', enabled: stored[id].enabled, pages: stored[id].pages || {} })))
       }
       }
-      return { enabled: stored[globalThis.edulogSiteAdapter.id]?.enabled !== false, language: (await chrome.storage.local.get('edulogWorkspaceLocale')).edulogWorkspaceLocale || null }
+      return { enabled: stored[globalThis.edulogSiteAdapter.id]?.enabled !== false, pages: stored[globalThis.edulogSiteAdapter.id]?.pages || {}, language: (await chrome.storage.local.get('edulogWorkspaceLocale')).edulogWorkspaceLocale || null }
     })().then(sendResponse, () => sendResponse({ error: 'PREFERENCES_UNAVAILABLE' }))
     return true
   }
