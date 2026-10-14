@@ -165,11 +165,11 @@
   }
   function icon(doc, name) {
     const ns = 'http://www.w3.org/2000/svg', svg = doc.createElementNS(ns, 'svg')
-    svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false'); svg.setAttribute('class', 'edulog-icon')
+    svg.setAttribute('data-edulog-owned', ''); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false'); svg.setAttribute('class', 'edulog-icon')
     for (const shape of ICONS[name]) {
       const node = shape === 'circle' ? doc.createElementNS(ns, 'circle') : doc.createElementNS(ns, 'path')
       if (shape === 'circle') { node.setAttribute('cx', '12'); node.setAttribute('cy', '12'); node.setAttribute('r', '9') } else node.setAttribute('d', shape)
-      svg.append(node)
+      node.setAttribute('data-edulog-owned', ''); svg.append(node)
     }
     return svg
   }

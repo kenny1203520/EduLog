@@ -1,0 +1,212 @@
+// Single-session student cards for the lesson report table, plus the filter chips that
+// drive both the cards and the native table. Every action clicks the provider's own
+// link or button; the extension never submits anything itself.
+(() => {
+  const lexicon = globalThis.edulogSiteLexicon, model = globalThis.edulogSiteModel
+  if (!lexicon || !model) return
+  const { text: words, selectors } = lexicon
+  const LOW_REMAINING = 2
+  const collapse = value => String(value || '').trim().replace(/\s+/g, ' ')
+  const CHIPS = [['pending', '待處理'], ['absent', '缺席'], ['unmarked', '未點名'], ['unwritten', '紀錄未填'], ['all', '全部'], ['other', '非本堂']]
+  const GROUP_RANK = { danger: 0, warn: 1, ok: 2, paused: 3, other: 4 }
+
+  // ---- Reading ---------------------------------------------------------------
+  function readRoster(doc) {
+    const roster = new Map(), table = doc.querySelector(selectors.studentsTable)
+    if (!table) return roster
+    const header = [...table.rows].find(row => [...row.cells].some(cell => words.remainingLessons.test(collapse(cell.textContent))))
+    const column = header ? [...header.cells].findIndex(cell => words.remainingLessons.test(collapse(cell.textContent))) : -1
+    if (column < 0) return roster
+    for (const row of table.rows) {
+      const admission = row.querySelector(selectors.admissionId)?.getAttribute('data-admission-id')
+      const match = /(\d+)\s*\/\s*(\d+)/.exec(collapse(row.cells[column]?.textContent))
+      if (admission && match) roster.set(admission, { remaining: Number(match[1]), total: Number(match[2]) })
+    }
+    return roster
+  }
+  const linkMatching = (row, test) => [...row.querySelectorAll('a[href]')].find(a => test(a.getAttribute('href') || '', a))
+  function readStudent(row, week, roster, upcoming) {
+    const nameCell = row.cells[0], courseCell = row.cells[1], cell = row.cells[week.index]
+    const name = collapse(nameCell?.querySelector(':scope > span')?.textContent) || row.getAttribute('data-edulog-student-name') || model.sessionText(nameCell)
+    const admission = row.querySelector(selectors.admissionId)?.getAttribute('data-admission-id') || null
+    const state = model.readSessionCell(cell, { upcoming })
+    const courseText = collapse(courseCell?.textContent)
+    const expired = words.courseExpired.exec(courseText)?.[0] || null
+    const remaining = admission ? roster.get(admission)?.remaining : undefined
+    const stats = /(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)/.exec(collapse(row.cells[2]?.textContent))
+    const note = row.querySelector(selectors.noteLink)
+    const paused = Boolean(state.courseStatus && !state.otherSession)
+    const issues = []
+    if (!state.otherSession) {
+      if (state.attendanceMark === 'absent') issues.push({ tone: 'danger', icon: 'alert', label: '缺席' })
+      else if (state.attendancePending) issues.push({ tone: 'warn', icon: 'clock', label: '尚未點名' })
+      else if (state.reportPending) issues.push({ tone: 'warn', icon: 'pencil', label: '紀錄未填' })
+      if (expired) issues.push({ tone: 'danger', icon: 'alert', label: '課程已到期' })
+      else if (remaining !== undefined && remaining <= LOW_REMAINING) issues.push({ tone: 'warn', icon: 'clock', label: `剩餘 ${remaining} 堂` })
+    }
+    const group = state.otherSession ? 'other' : issues.some(issue => issue.tone === 'danger') ? 'danger' : issues.length ? 'warn' : paused ? 'paused' : 'ok'
+    // Assumption to verify on the live site: an available "啟用 L" control is the provider's
+    // .enable-ks-lesson-btn without disabled/invisible; "已啟用 Lx" is a disabled div.
+    const enable = cell?.querySelector(selectors.enableLesson)
+    const enableReady = Boolean(enable && !enable.disabled && !enable.classList.contains('disabled') && !enable.classList.contains('invisible'))
+    return {
+      row, name, admission, state, issues, group, paused, other: state.otherSession, upcoming,
+      course: collapse(courseCell?.querySelector('span')?.textContent),
+      stage: collapse(courseCell?.querySelector(selectors.lastStage)?.textContent),
+      recordLink: cell?.querySelector(selectors.recordLink) || null,
+      enable: enableReady ? enable : null, enableBlocked: Boolean(enable) && !enableReady && state.attendancePending,
+      stats: stats ? { attended: stats[1], absent: stats[2], unrecorded: stats[3] } : null,
+      // Assumption to verify: the note popover box has text only when a note exists.
+      note, noteHasContent: Boolean(collapse(note?.querySelector('.admission-comment-box')?.textContent)),
+      profile: linkMatching(row, href => lexicon.paths.enrollment.test(href)),
+      account: linkMatching(row, href => /\/students\/\d+\/accounts/.test(href)),
+      review: linkMatching(row, href => /teachers_comment/.test(href)),
+      project: linkMatching(row, href => /code_check/.test(href)),
+      lastTeaching: row.querySelector('.edulog-last-teaching-toggle'),
+    }
+  }
+  function readSession(table, week, roster = new Map()) {
+    const upcoming = words.nextWeek.test(week.label)
+    const students = [...table.tBodies].flatMap(body => [...body.rows])
+      .filter(row => !row.hasAttribute('data-edulog-last-teaching-row') && row.cells[week.index])
+      .map(row => readStudent(row, week, roster, upcoming))
+    return { label: week.label, upcoming, students }
+  }
+  function matchesChip(student, chip) {
+    if (chip === 'other') return student.other
+    if (student.other) return false
+    if (chip === 'pending') return student.issues.length > 0
+    if (chip === 'absent') return student.state.attendanceMark === 'absent'
+    if (chip === 'unmarked') return student.state.attendancePending
+    if (chip === 'unwritten') return student.state.reportPending
+    return true
+  }
+  const countChips = students => Object.fromEntries(CHIPS.map(([chip]) => [chip, students.filter(student => matchesChip(student, chip)).length]))
+  const sortStudents = students => students.map((student, index) => ({ student, index })).sort((a, b) => GROUP_RANK[a.student.group] - GROUP_RANK[b.student.group] || a.index - b.index).map(item => item.student)
+
+  // ---- Rendering -------------------------------------------------------------
+  const ICONS = { alert: ['M12 8v5', 'M12 16.5h.01', 'circle'], clock: ['M12 7v5l3 2', 'circle'], check: ['M7 12.5l3.2 3.2L17 9'], pencil: ['M4 20h4l10-10-4-4L4 16z', 'M13.5 6.5l4 4'], pause: ['M10 8v8', 'M14 8v8', 'circle'], note: ['M5 4h14v12H9l-4 4z'] }
+  function icon(doc, name) {
+    const ns = 'http://www.w3.org/2000/svg', svg = doc.createElementNS(ns, 'svg')
+    svg.setAttribute('data-edulog-owned', ''); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.setAttribute('focusable', 'false'); svg.setAttribute('class', 'edulog-icon')
+    for (const shape of ICONS[name]) {
+      const node = doc.createElementNS(ns, shape === 'circle' ? 'circle' : 'path')
+      if (shape === 'circle') { node.setAttribute('cx', '12'); node.setAttribute('cy', '12'); node.setAttribute('r', '9') } else node.setAttribute('d', shape)
+      node.setAttribute('data-edulog-owned', ''); svg.append(node)
+    }
+    return svg
+  }
+  function createChips({ doc, scope, onSelect }) {
+    const { element, listen } = scope
+    const group = element('div'); group.className = 'edulog-filter-chips'; group.setAttribute('role', 'group'); group.setAttribute('aria-label', '學生篩選')
+    const buttons = new Map()
+    for (const [chip, label] of CHIPS) {
+      const button = element('button'); button.type = 'button'; button.dataset.chip = chip
+      const text = element('span', label), count = element('span'); count.className = 'edulog-chip-count'
+      button.append(text, count); group.append(button); buttons.set(chip, { button, count })
+      listen(button, 'click', () => onSelect(chip))
+    }
+    return {
+      element: group,
+      update(counts, active) {
+        for (const [chip, { button, count }] of buttons) {
+          count.textContent = String(counts[chip] ?? 0)
+          button.setAttribute('aria-pressed', String(chip === active))
+          button.dataset.empty = String(!counts[chip])
+        }
+      },
+    }
+  }
+  function mountCards({ doc, scope, anchor }) {
+    const { element, listen } = scope
+    const section = scope.add(element('section'))
+    section.className = 'edulog-session-cards'; section.setAttribute('aria-label', '本堂學生')
+    const status = element('p'); status.className = 'edulog-cards-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite')
+    const list = element('ul'); list.className = 'edulog-card-list'
+    section.append(status, list)
+    anchor.before(section)
+    const cards = new Map()
+    const dataText = (tag, value, className) => { const node = element(tag); node.textContent = value; if (className) node.className = className; return node }
+    const badge = (tone, iconName, label) => { const node = element('span'); node.className = 'edulog-badge'; node.dataset.tone = tone; node.append(icon(doc, iconName), dataText('span', label)); return node }
+    const proxy = (label, target, className, aria) => {
+      const button = element('button', label); button.type = 'button'; if (className) button.className = className
+      if (aria) button.setAttribute('aria-label', aria)
+      listen(button, 'click', () => { if (target?.isConnected) target.click() })
+      return button
+    }
+    function cardFor(student) {
+      let card = cards.get(student.row)
+      if (card) return card
+      const li = element('li'); li.className = 'edulog-session-card'
+      const face = element('div'); face.className = 'edulog-card-face'
+      const detail = element('div'); detail.className = 'edulog-card-detail'
+      li.append(face, detail)
+      // The last-teaching disclosure lives in the hidden native row; show it under the card.
+      const panel = student.lastTeaching?.closest('tr')?.nextElementSibling?.querySelector('.edulog-last-teaching-panel')
+      if (panel) scope.move(panel, detail)
+      card = { li, face }
+      cards.set(student.row, card)
+      return card
+    }
+    function fillFace(face, student, sessionLabel) {
+      const main = element('div'); main.className = 'edulog-card-main'
+      const title = element('strong'); title.textContent = student.name
+      if (student.noteHasContent) { const mark = icon(doc, 'note'); mark.setAttribute('aria-hidden', 'false'); mark.setAttribute('role', 'img'); mark.setAttribute('aria-label', '有教學備註'); title.append(mark) }
+      const progress = [student.course, student.state.scheduledLesson && `本堂 ${student.state.scheduledLesson}`, student.stage && `最後上課 ${student.stage}`].filter(Boolean).join(' · ')
+      main.append(title, dataText('span', progress, 'edulog-todo-meta'))
+      if (student.state.enabledLesson && student.state.enabledLesson !== '已啟用') main.append(dataText('span', `已啟用 ${student.state.enabledLesson}`, 'edulog-todo-meta'))
+      const badges = element('div'); badges.className = 'edulog-card-badges'
+      for (const issue of student.issues) badges.append(badge(issue.tone, issue.icon, issue.label))
+      if (student.other) badges.append(badge('neutral', 'pause', '非本堂'))
+      else if (student.paused) badges.append(badge('neutral', 'pause', student.state.courseStatus))
+      else if (!student.issues.length && student.state.attendanceMark === 'present' && student.state.recordMark === 'written') badges.append(dataText('span', '已出席 · 紀錄已填', 'edulog-card-ok'))
+      const actions = element('div'); actions.className = 'edulog-card-actions'
+      const label = `${student.name} ${sessionLabel}`
+      if (student.recordLink && !student.other && !student.paused) {
+        const primary = !student.upcoming && student.state.attendancePending ? '點名與紀錄' : !student.upcoming && student.state.reportPending ? '填寫紀錄' : '查看紀錄'
+        actions.append(proxy(primary, student.recordLink, primary === '查看紀錄' ? 'edulog-card-secondary' : 'edulog-card-primary', `${label} ${primary}`))
+      }
+      if (student.enable) actions.append(proxy(collapse(student.enable.textContent) || '啟用課程', student.enable, 'edulog-card-secondary', `${label} ${collapse(student.enable.textContent) || '啟用課程'}`))
+      else if (student.enableBlocked) actions.append(dataText('span', '啟用需先點名', 'edulog-card-hint'))
+      const more = element('details'); more.className = 'edulog-card-more'
+      const summary = element('summary', '更多'); summary.setAttribute('aria-label', `${student.name} 更多操作`)
+      const menu = element('div'); menu.className = 'edulog-card-menu'
+      if (student.profile) { const link = element('a', '完整紀錄'); link.href = student.profile.getAttribute('href'); menu.append(link) }
+      if (student.lastTeaching) menu.append(proxy('上次教學', student.lastTeaching))
+      if (student.note) menu.append(proxy('教學備註', student.note))
+      if (student.review) menu.append(proxy('學生總評', student.review))
+      if (student.account) menu.append(proxy('學習帳號設定', student.account))
+      if (student.project) { const link = element('a', '專案檢查'); link.href = student.project.getAttribute('href'); link.target = '_blank'; link.rel = 'noopener noreferrer'; menu.append(link) }
+      if (student.stats) menu.append(dataText('p', `出席 ${student.stats.attended} · 缺 ${student.stats.absent} · 未記 ${student.stats.unrecorded}`, 'edulog-card-stats'))
+      more.append(summary, menu)
+      if (menu.childNodes.length) actions.append(more)
+      face.replaceChildren(main, badges, actions)
+    }
+    return {
+      element: section,
+      render({ session, visible, chip, counts, hidden }) {
+        section.hidden = hidden
+        if (hidden) return
+        const shown = sortStudents(session.students.filter(student => visible.has(student.row)))
+        const open = new Set([...cards.values()].filter(card => card.face.querySelector('.edulog-card-more')?.open).map(card => card.li))
+        const items = shown.map(student => {
+          const card = cardFor(student)
+          card.li.dataset.group = student.group
+          fillFace(card.face, student, session.label)
+          if (open.has(card.li)) card.face.querySelector('.edulog-card-more').open = true
+          return card.li
+        })
+        list.replaceChildren(...items)
+        const notes = []
+        if (session.upcoming) notes.push('下週課次尚未開始，只列出課程到期與堂數提醒。')
+        else if (!counts.pending && counts.all) notes.push('本堂學生都已點名，紀錄也已填寫。')
+        if (!items.length) notes.push(chip === 'other' ? '此課次沒有非本堂學生。' : '沒有符合篩選的學生。')
+        status.replaceChildren()
+        if (!session.upcoming && !counts.pending && counts.all) status.append(badge('ok', 'check', '完成'))
+        status.append(dataText('span', notes.join(' ')))
+        status.hidden = !notes.length
+      },
+    }
+  }
+  globalThis.edulogSiteSessionCards = Object.freeze({ CHIPS, readRoster, readSession, matchesChip, countChips, sortStudents, createChips, mountCards })
+})()

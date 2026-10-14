@@ -25,7 +25,7 @@ test('class summary is idle until requested and failed reads can be retried', as
 })
 function fixture(name, path) {
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only' })
-  for (const file of ['lexicon', 'model']) dom.window.eval(read(`../adapters/orange-apple-${file}.js`))
+  for (const file of ['lexicon', 'model', 'session-cards']) dom.window.eval(read(`../adapters/orange-apple-${file}.js`))
   dom.window.eval(read('../adapters/orange-apple-workflows.js'))
   dom.window.eval(adapterCode)
   return dom
@@ -102,7 +102,7 @@ test('week selection preserves the source statuses and report links', () => {
   assert.deepEqual(visibleSource, source)
   enhanced.restore(); dom.window.close()
 })
-test('non-session students stay visible in a named collapsed group for the selected week', () => {
+test('non-session students are reachable through their own filter chip for the selected week', () => {
   const dom=fixture('reports','/courses/dt/101/lesson_reports'),doc=dom.window.document
   const enhanced=dom.window.edulogSiteAdapter.enhancePage(doc)
   const reportRows=[...doc.querySelectorAll('#reports tbody tr[data-edulog-report-row]')]
@@ -111,10 +111,12 @@ test('non-session students stay visible in a named collapsed group for the selec
   const otherRows=reportRows.filter(row=>row.getAttribute('data-edulog-session-rank')==='other')
   assert.equal(otherRows.length,1,'the selected week determines which students are outside this session')
   assert.equal(otherRows[0].hasAttribute('data-edulog-filtered'),true,'non-session rows are collapsed from the active list')
-  const group=doc.querySelector('.edulog-other-session-list')
-  assert.ok(group.querySelector('summary').textContent.includes('1'))
-  group.open=true;group.dispatchEvent(new dom.window.Event('toggle'))
+  const chip=doc.querySelector('[data-chip="other"]')
+  assert.equal(chip.querySelector('.edulog-chip-count').textContent,'1')
+  chip.click()
+  assert.equal(chip.getAttribute('aria-pressed'),'true')
   assert.equal(otherRows[0].hasAttribute('data-edulog-filtered'),false)
+  assert.equal(reportRows.filter(row=>row!==otherRows[0]).every(row=>row.hasAttribute('data-edulog-filtered')),true)
   enhanced.restore();dom.window.close()
 })
 test('standalone UI works without pairing and homepage shortcuts use source class links', async () => {
@@ -161,7 +163,7 @@ test('Turbo caching, source row updates and navigation remain reversible', async
   table.tBodies[0].append(newSourceRow)
   await wait()
   assert.equal(doc.querySelectorAll('.edulog-table-tools').length, 1)
-  assert.match(doc.querySelector('.edulog-table-tools [role=status]').textContent, /3 \/ 3/)
+  assert.equal(doc.querySelector('[data-chip="all"] .edulog-chip-count').textContent, '3')
   doc.dispatchEvent(new dom.window.Event('turbo:before-cache'))
   assert.equal(doc.querySelector('#edulog-extension-root'), null)
   assert.equal(doc.documentElement.dataset.edulogUi, 'on')

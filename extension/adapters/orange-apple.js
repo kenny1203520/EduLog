@@ -162,6 +162,11 @@
     if (reports) {
       const reportScrollRegion=reports.closest('[data-edulog-scroll="reports"]')||reports.parentElement
       const { box, input, count } = controls(reports, '報告學生搜尋')
+      count.remove() // the filter chips carry the counts
+      const cardsApi = globalThis.edulogSiteSessionCards
+      const roster = cardsApi ? cardsApi.readRoster(doc) : new Map()
+      // The provider's "請先點名…" alert and its show-this-week/all toggles are replaced by the chips.
+      for (const alert of content.querySelectorAll(lexicon.selectors.reportAlert)) if (alert.querySelector(lexicon.selectors.reportAlertToggle)) mark(alert, 'data-edulog-replaced', '')
       input.dataset.edulogSearch = 'reports'
       input.value = view.reportQuery || ''
       const weekButtons = element('div')
@@ -169,9 +174,6 @@
       weekButtons.setAttribute('role', 'group'); weekButtons.setAttribute('aria-label', '課次與顯示方式')
       const weeks = model.readWeekColumns(reports.querySelectorAll('tr:first-child th'))
       const selected = model.pickWeek(weeks, view.week)
-      let sessionPanel = null
-      const countNumbers=[doc.createTextNode('0 / 0'),doc.createTextNode('0'),doc.createTextNode('0'),doc.createTextNode('0')]
-      count.replaceChildren(element('span','顯示'),countNumbers[0],element('span','位學生 · 已確認出席'),countNumbers[1],element('span','· 已填紀錄'),countNumbers[2],element('span','· 狀態待確認'),countNumbers[3])
       const singleButton=element('button','單堂清單'),compareButton=element('button','三週比較')
       singleButton.type=compareButton.type='button';singleButton.dataset.reportMode='single';compareButton.dataset.reportMode='compare'
       listen(singleButton,'click',()=>selectMode('single'));listen(compareButton,'click',()=>selectMode('compare'))
@@ -211,52 +213,44 @@
         listen(button, 'click', () => selectWeek(week.index)); weekButtons.append(button)
       }
       if (weeks.length) box.append(weekButtons)
+      const chips = cardsApi?.createChips({ doc, scope, onSelect: chip => { view.reportFilter = chip; view.reportFilterChosen = true; refreshReports() } })
+      if (chips) box.append(chips.element)
+      // Single-session mode shows extension cards; the native table stays in the DOM, hidden.
+      const cards = cardsApi?.mountCards({ doc, scope, anchor: reportScrollRegion })
       refreshReports = () => {
         const rows = [...reports.rows].filter(row => row.hasAttribute('data-edulog-report-row'))
         const activeWeek=view.week??selected?.index
         if(activeWeek!==undefined)view.week=activeWeek
         mark(reportScrollRegion,'data-edulog-report-mode',view.reportMode||'single')
-        let visible = 0,otherSessionCount=0,unknownCount=0,attendanceCount=0,reportCount=0
+        const isCompare=(view.reportMode||'single')==='compare'
+        const week=weeks.find(item=>item.index===activeWeek)||selected
+        const session=cardsApi&&week?cardsApi.readSession(reports,week,roster):{label:'',upcoming:false,students:[]}
+        const byRow=new Map(session.students.map(student=>[student.row,student]))
+        const counts=cardsApi?cardsApi.countChips(session.students):{}
+        // Until the teacher picks a chip, show what needs action, or everyone once nothing does.
+        if(!view.reportFilterChosen||!cardsApi?.CHIPS.some(([chip])=>chip===view.reportFilter))view.reportFilter=counts.pending?'pending':'all'
+        const query=input.value.trim().toLocaleLowerCase(),visible=new Set()
         for (const row of rows) {
-          const rowWeeks=weeks.map(week=>{
-            const linked=Boolean(row.querySelector(`td:nth-child(${week.index+1}) a[data-edulog-record-action],td:nth-child(${week.index+1}) a[href*="/reports/"]`))
-            const state=model.readSessionCell(row.cells[week.index],{upcoming:words.nextWeek.test(week.label)})
-            return {...state,week,value:state.raw,explicitOther:state.otherSession,linked}
-          })
-          const selectedState=rowWeeks.find(item=>item.week.index===activeWeek)||rowWeeks[0]
-          const isCompare=(view.reportMode||'single')==='compare'
-          const otherSession=isCompare?rowWeeks.length>0&&rowWeeks.every(item=>item.explicitOther):Boolean(selectedState?.explicitOther)
-          const relevant=isCompare?rowWeeks: selectedState?[selectedState]:[]
-          const attendancePending=relevant.some(item=>item.attendancePending),reportPending=relevant.some(item=>item.reportPending)
-          const filterMatches=view.reportFilter==='attendance'?attendancePending:view.reportFilter==='report'?reportPending:view.reportFilter==='unknown'?relevant.some(item=>(!item.attendanceKnown&&!item.attendancePending)||(!item.reportKnown&&!item.reportPending)):true
-          if(!otherSession&&relevant.some(item=>!item.statusKnown||(!item.attendanceKnown&&!item.attendancePending)||(!item.reportKnown&&!item.reportPending)))unknownCount++
-          if(!otherSession&&relevant.some(item=>item.attendanceKnown))attendanceCount++
-          if(!otherSession&&relevant.some(item=>item.reportKnown))reportCount++
-          if(otherSession)otherSessionCount++
-          mark(row,'data-edulog-session-rank',otherSession?'other':selectedState?.linked?'current':'unknown')
-          const matches = (row.getAttribute('data-edulog-student-name') || '').toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase())&&filterMatches&&(!otherSession||view.showOtherSessions===true)
+          const student=byRow.get(row)
+          const otherSession=isCompare?weeks.length>0&&weeks.every(item=>model.readSessionCell(row.cells[item.index]).otherSession):student?student.other:Boolean(week&&model.readSessionCell(row.cells[week.index]).otherSession)
+          mark(row,'data-edulog-session-rank',otherSession?'other':student?.recordLink?'current':'unknown')
+          const chipMatch=!student||!cardsApi||cardsApi.matchesChip({...student,other:otherSession},view.reportFilter)
+          const matches=(row.getAttribute('data-edulog-student-name')||'').toLocaleLowerCase().includes(query)&&chipMatch
           mark(row, 'data-edulog-filtered', matches ? null : '')
           const detail=row.nextElementSibling;if(detail?.hasAttribute('data-edulog-last-teaching-row'))detail.hidden=!matches||row.querySelector('.edulog-last-teaching-toggle')?.getAttribute('aria-expanded')!=='true'
-          if (matches) visible++
+          if (matches) visible.add(row)
         }
         if (selected) {
           mark(reports,'data-edulog-week-mode',view.reportMode||'single')
           for(const button of weekButtons.querySelectorAll('[data-report-mode]'))button.setAttribute('aria-pressed',String(button.dataset.reportMode===(view.reportMode||'single')))
           for(const button of weekButtons.querySelectorAll('[data-week]'))button.setAttribute('aria-pressed',String(Number(button.dataset.week)===activeWeek))
         }
-        const currentCount=rows.length-otherSessionCount
-        countNumbers[0].data=` ${visible} / ${currentCount} `;countNumbers[1].data=` ${attendanceCount} `;countNumbers[2].data=` ${reportCount} `;countNumbers[3].data=` ${unknownCount}`
-        otherCount.textContent=String(otherSessionCount)
+        chips?.update(counts,view.reportFilter)
+        cards?.render({session,visible,chip:view.reportFilter,counts,hidden:isCompare})
+        mark(reportScrollRegion,'data-edulog-cards',cards&&!isCompare?'on':null)
         if(typeof view.updateClassHistoryAvailability==='function')view.updateClassHistoryAvailability()
         view.reportQuery = input.value
-        sessionPanel?.refresh()
       }
-      const filterLabel=element('label','學生篩選'),filter=element('select');filter.setAttribute('aria-label','學生篩選')
-      for(const [value,label] of [['all','本堂與待確認'],['attendance','待確認出席'],['report','待填紀錄'],['unknown','狀態未提供']]){const option=element('option',label);option.value=value;filter.append(option)}
-      filter.value=view.reportFilter||'all';filter.dataset.edulogSearch='reportStatus';filterLabel.append(filter);box.append(filterLabel)
-      const otherDetails=element('details');otherDetails.className='edulog-other-session-list';otherDetails.open=view.showOtherSessions===true
-      const otherSummary=element('summary','非本堂學生 · '),otherCount=element('span','0');otherSummary.append(otherCount,element('span','（展開下方清單）'));otherDetails.append(otherSummary);box.append(otherDetails)
-      listen(otherDetails,'toggle',()=>{view.showOtherSessions=otherDetails.open;refreshReports()})
       const historyTools=element('section');historyTools.className='edulog-class-history-tools';historyTools.setAttribute('aria-label','上次教學摘要')
       const availability=element('p');availability.setAttribute('role','status');availability.setAttribute('aria-live','polite');const availabilityValue=doc.createTextNode(' 0 '),availabilityWeek=element('span');availability.append(element('span','可讀取'),availabilityValue,element('span','位本堂學生的上次教學摘要 · 讀取課次：'),availabilityWeek)
       const loadAll=element('button','載入此課次全部摘要');loadAll.type='button'
@@ -266,7 +260,8 @@
       const progressDone=doc.createTextNode(' 0 / 0 '),progressTotal=element('span','位已讀取 · 失敗需重試'),progressFailed=doc.createTextNode(' 0')
       progress.append(progressStates['正在讀取'],progressDone,progressTotal,progressStates['讀取進度'],progressStates['讀取完成；成功'],progressStates['已停止讀取；已完成的摘要會保留。'],progressFailed)
       progress.append(progressStates['讀取失敗'])
-      historyTools.append(availability,loadAll,stopAll,progress);box.append(historyTools)
+      historyTools.append(availability,loadAll,stopAll,progress)
+      const moreTools=element('details');moreTools.className='edulog-more-tools';moreTools.append(element('summary','更多'),historyTools);box.append(moreTools)
       view.classHistoryAvailability=availability
       view.classHistoryAvailabilityValue=availabilityValue
       view.classHistoryAvailabilityWeek=availabilityWeek
@@ -290,9 +285,6 @@
         showProgress(result.cancelled?'已停止讀取；已完成的摘要會保留。':'讀取完成；成功',{done:result.done,total:result.total,failed:result.failed})
       })
       listen(stopAll,'click',()=>{historyRun++;view.cancelClassHistory?.();stopAll.hidden=true;loadAll.disabled=false;for(const [key,node] of Object.entries(progressStates))node.hidden=key!=='已停止讀取；已完成的摘要會保留。'})
-      listen(filter,'change',()=>{view.reportFilter=filter.value;refreshReports()})
-      // Exceptions-first summary of the selected session, above the native table.
-      sessionPanel = globalThis.edulogSiteSessionPanel?.mount({ doc, scope, reports, weeks, currentWeek: () => view.week ?? selected?.index, anchor: box }) || null
       listen(input, 'input', refreshReports); refreshReports()
       // Apply the initial week through the same projection used by later clicks.
       // The workflow has already enhanced the native rows, so this also moves

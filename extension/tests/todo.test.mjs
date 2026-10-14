@@ -79,6 +79,7 @@ test('overview leads with the weekly to-do and renders every section exceptions-
   for (const request of s.requests) assert.equal(JSON.stringify([request.options.credentials, request.options.redirect]), '["same-origin","error"]')
   result.restore()
   assert.equal(s.doc.querySelector('.edulog-todo'), null)
+  assert.equal(s.doc.querySelectorAll('svg.edulog-icon, [data-edulog-owned]').length, 0, 'icons inside the view must not survive restore')
   s.dom.window.close()
 })
 

@@ -31,6 +31,12 @@
     recordIcon: '.fa-pencil',
     recordLink: 'a[href*="/reports/"][href$="/edit"]',
     admissionId: '[data-admission-id]',
+    noteLink: 'a.admission-comment',
+    lastStage: '[data-bs-title="最後上課階段"]',
+    enableLesson: '.enable-ks-lesson-btn',
+    // The "請先點名…" alert with "顯示本週上課 / 顯示全部"; the filter chips replace it.
+    reportAlert: '.alert',
+    reportAlertToggle: '.reports_show',
     calendarDayPane: '.tab-pane[id*="-weekday-"]',
   })
   // Same-origin pages the overview to-do view may read. Read-only, never submitted.

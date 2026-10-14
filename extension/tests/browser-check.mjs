@@ -68,7 +68,7 @@ for (const [browserName, executablePath] of executables) {
       })
       for (const file of ['lexicon', 'model']) await page.addScriptTag({ content: read(`../adapters/orange-apple-${file}.js`) })
       await page.addScriptTag({ content: read('../adapters/orange-apple-todo.js') })
-      await page.addScriptTag({ content: read('../adapters/orange-apple-session-panel.js') })
+      await page.addScriptTag({ content: read('../adapters/orange-apple-session-cards.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple-workflows.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple.js') })
       await page.addScriptTag({ content: read('../runtime-bridge.js') });await page.addScriptTag({ content: read('../ui-core.js') });await page.addScriptTag({ content: read('../ui-messages.js') })
@@ -105,16 +105,24 @@ for (const [browserName, executablePath] of executables) {
         await page.getByRole('button',{name:'單堂清單'}).click()
         assert.equal(await page.locator('#reports').getAttribute('data-edulog-week-mode'),'single')
       }
-      if (name === 'reports' && width === 390) {
-        assert.equal(await page.locator('#reports th[data-edulog-week-cell]:visible').count(), 1)
-        await page.getByRole('button', { name: /上週/ }).click()
-        assert.match(await page.locator('#reports th[data-edulog-week-selected]').textContent(), /上週/)
+      if (name === 'reports' || name === 'real-class') {
+        // Single-session mode: extension cards replace the native table.
+        assert.equal(await page.locator('[data-edulog-report-region]').isVisible(), false, `${browserName} ${name} ${width}: native table hidden behind cards`)
+        const cardsFit = await page.locator('.edulog-session-cards').evaluate(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.left >= 0 && r.right <= innerWidth + 1 })
+        assert.ok(cardsFit, `${browserName} ${name} ${width}: cards fit the viewport`)
+        const smallTargets = await page.locator('.edulog-session-cards button:visible, .edulog-session-cards summary:visible, .edulog-filter-chips button:visible').evaluateAll(els => els.filter(el => el.getBoundingClientRect().height < 44).length)
+        assert.equal(smallTargets, 0, `${browserName} ${name} ${width}: card and chip targets are at least 44px`)
+        if (width === 390) {
+          await page.getByRole('button', { name: /上週/ }).click()
+          assert.match(await page.locator('#reports th[data-edulog-week-selected]').textContent(), /上週/)
+        }
       }
       if (name === 'reports' && width <= 991) {
-        assert.ok(await page.locator('#reports td[data-edulog-week-selected]').first().evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth}), 'selected report week is visible beside student')
+        await page.getByRole('button',{name:'三週比較'}).click()
         assert.equal(await page.locator('.edulog-report-details').first().getAttribute('open'),null)
         await page.locator('.edulog-report-details').first().locator('summary').click()
         assert.notEqual(await page.locator('.edulog-report-details').first().getAttribute('open'),null)
+        await page.getByRole('button',{name:'單堂清單'}).click()
       }
       if (name === 'profile-edit') {
         await page.locator('#employee_skill').fill('保留的個人資料草稿')
