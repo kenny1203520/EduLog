@@ -169,6 +169,7 @@
       weekButtons.setAttribute('role', 'group'); weekButtons.setAttribute('aria-label', '課次與顯示方式')
       const weeks = model.readWeekColumns(reports.querySelectorAll('tr:first-child th'))
       const selected = model.pickWeek(weeks, view.week)
+      let sessionPanel = null
       const countNumbers=[doc.createTextNode('0 / 0'),doc.createTextNode('0'),doc.createTextNode('0'),doc.createTextNode('0')]
       count.replaceChildren(element('span','顯示'),countNumbers[0],element('span','位學生 · 已確認出席'),countNumbers[1],element('span','· 已填紀錄'),countNumbers[2],element('span','· 狀態待確認'),countNumbers[3])
       const singleButton=element('button','單堂清單'),compareButton=element('button','三週比較')
@@ -219,7 +220,7 @@
         for (const row of rows) {
           const rowWeeks=weeks.map(week=>{
             const linked=Boolean(row.querySelector(`td:nth-child(${week.index+1}) a[data-edulog-record-action],td:nth-child(${week.index+1}) a[href*="/reports/"]`))
-            const state=model.classifySession(model.sessionText(row.cells[week.index]))
+            const state=model.readSessionCell(row.cells[week.index],{upcoming:words.nextWeek.test(week.label)})
             return {...state,week,value:state.raw,explicitOther:state.otherSession,linked}
           })
           const selectedState=rowWeeks.find(item=>item.week.index===activeWeek)||rowWeeks[0]
@@ -248,6 +249,7 @@
         otherCount.textContent=String(otherSessionCount)
         if(typeof view.updateClassHistoryAvailability==='function')view.updateClassHistoryAvailability()
         view.reportQuery = input.value
+        sessionPanel?.refresh()
       }
       const filterLabel=element('label','學生篩選'),filter=element('select');filter.setAttribute('aria-label','學生篩選')
       for(const [value,label] of [['all','本堂與待確認'],['attendance','待確認出席'],['report','待填紀錄'],['unknown','狀態未提供']]){const option=element('option',label);option.value=value;filter.append(option)}
@@ -289,6 +291,8 @@
       })
       listen(stopAll,'click',()=>{historyRun++;view.cancelClassHistory?.();stopAll.hidden=true;loadAll.disabled=false;for(const [key,node] of Object.entries(progressStates))node.hidden=key!=='已停止讀取；已完成的摘要會保留。'})
       listen(filter,'change',()=>{view.reportFilter=filter.value;refreshReports()})
+      // Exceptions-first summary of the selected session, above the native table.
+      sessionPanel = globalThis.edulogSiteSessionPanel?.mount({ doc, scope, reports, weeks, currentWeek: () => view.week ?? selected?.index, anchor: box }) || null
       listen(input, 'input', refreshReports); refreshReports()
       // Apply the initial week through the same projection used by later clicks.
       // The workflow has already enhanced the native rows, so this also moves

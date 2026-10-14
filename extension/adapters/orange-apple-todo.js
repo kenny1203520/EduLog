@@ -110,13 +110,15 @@
     const items = []
     for (const row of [...table.tBodies].flatMap(body => [...body.rows])) {
       if (!row.cells[week.index] || row.querySelector('th')) continue
-      const state = model.classifySession(plain(row.cells[week.index]))
+      const state = model.readSessionCell(row.cells[week.index])
       if (state.otherSession) continue
-      const status = state.attendance && words.absent.test(state.attendance) ? 'absent' : state.attendancePending ? 'pending' : null
-      if (status) items.push({ student: plain(row.cells[0]), status, label: status === 'absent' ? state.attendance : '待確認出席' })
+      const status = state.attendanceMark === 'absent' || (state.attendance && words.absent.test(state.attendance)) ? 'absent' : state.attendancePending ? 'pending' : null
+      if (status) items.push({ student: studentName(row.cells[0]), status, label: status === 'absent' ? '缺席' : state.attendanceMark === 'unmarked' ? '尚未點名' : '待確認出席' })
     }
     return { week: week.label, items }
   }
+  // The provider wraps the name in a span next to comment links; fall back to the cell text.
+  const studentName = cell => collapse(cell?.querySelector(':scope > span')?.textContent) || plain(cell)
   function teacherClasses(doc) {
     const links = [...doc.querySelectorAll(selectors.sidebarLinks)].map(a => ({ path: new URL(a.getAttribute('href'), ORIGIN).pathname.replace(/\/$/, ''), title: collapse(a.textContent) })).filter(item => paths.classPage.test(item.path) && item.title)
     return [...new Map(links.map(item => [item.path, item])).values()]

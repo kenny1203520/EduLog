@@ -33,6 +33,35 @@
       enabledLesson: words.enabledLesson.exec(raw)?.[1] || (words.enabled.test(raw) ? '已啟用' : null),
     }
   }
+  const iconTone = (cell, selector) => {
+    const host = cell?.querySelector(selector)?.closest('span')
+    return host ? ['success', 'danger', 'secondary'].find(tone => host.classList.contains(`text-${tone}`)) || null : null
+  }
+  // Text plus icon state for one session cell. Icon meanings (confirmed with teachers):
+  // person green = attended, red = absent, grey = not marked; pencil green = record
+  // written, grey = not written; a green record button only means attendance was taken.
+  // An upcoming session (next week) is never pending yet.
+  function readSessionCell(cell, { upcoming = false } = {}) {
+    const state = classifySession(sessionText(cell))
+    const attendanceTone = iconTone(cell, selectors.attendanceIcon), recordTone = iconTone(cell, selectors.recordIcon)
+    const attendanceMark = attendanceTone === 'success' ? 'present' : attendanceTone === 'danger' ? 'absent' : attendanceTone === 'secondary' ? 'unmarked' : null
+    const recordMark = recordTone === 'success' ? 'written' : recordTone ? 'unwritten' : null
+    const link = cell?.querySelector(selectors.recordLink)
+    const active = !state.otherSession && !upcoming
+    return {
+      ...state,
+      attendanceMark, recordMark,
+      recordPath: link ? link.getAttribute('href') : null,
+      recordCreated: Boolean(link?.classList.contains('btn-success')),
+      attendanceKnown: state.attendanceKnown || attendanceMark === 'present' || attendanceMark === 'absent',
+      attendancePending: state.attendancePending || (active && attendanceMark === 'unmarked'),
+      reportKnown: state.reportKnown || recordMark === 'written',
+      reportPending: state.reportPending || (active && attendanceMark === 'present' && recordMark === 'unwritten'),
+      statusKnown: state.statusKnown || Boolean(attendanceMark || recordMark),
+      attendance: state.attendance || (attendanceMark === 'present' ? '出席' : attendanceMark === 'absent' ? '缺席' : attendanceMark === 'unmarked' ? (upcoming ? '尚未上課' : '尚未點名') : null),
+      report: state.report || (recordMark === 'written' ? '已填寫' : recordMark === 'unwritten' && !upcoming ? '未填寫' : null),
+    }
+  }
   function readWeekColumns(headerCells) {
     return [...headerCells].map((cell, index) => ({ cell, index, label: collapse(cell.textContent) })).filter(item => words.weekLabel.test(item.label))
   }
@@ -47,5 +76,5 @@
     const missing = [...probes['*'], ...(probes[kind] || [])].filter(selector => !doc.querySelector(selector))
     return missing.length ? { ok: false, reason: 'missing', missing } : { ok: true, reason: null, missing }
   }
-  globalThis.edulogSiteModel = Object.freeze({ matchPage, sessionText, classifySession, readWeekColumns, pickWeek, checkPage })
+  globalThis.edulogSiteModel = Object.freeze({ matchPage, sessionText, classifySession, readSessionCell, readWeekColumns, pickWeek, checkPage })
 })()

@@ -124,3 +124,12 @@ test('only the known provider pages can be read', async () => {
   await assert.rejects(s.w.edulogSiteTodo.readDoc('/my/hour').then(() => s.w.edulogSiteTodo.readDoc('/courses/dt/555/lesson_reports')), /暫時無法讀取/)
   s.dom.window.close()
 })
+
+test('attendance exceptions are read from the real icon-based session markup', () => {
+  const { w, dom } = overview()
+  const doc = new w.DOMParser().parseFromString(read('fixtures/real-class.html'), 'text/html')
+  const result = w.edulogSiteTodo.extractAttendance(doc)
+  assert.equal(result.week, '本週(10/17)')
+  assert.equal(JSON.stringify(result.items.map(item => [item.student, item.status, item.label])), JSON.stringify([['學生甲', 'pending', '尚未點名'], ['學生丙', 'absent', '缺席']]))
+  dom.window.close()
+})

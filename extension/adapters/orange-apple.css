@@ -419,3 +419,12 @@ html[data-edulog-ui="on"] .edulog-visually-hidden { position:absolute; width:1px
   html[data-edulog-ui="on"] .edulog-todo-grid { grid-template-columns:minmax(0,3fr) minmax(0,2fr); align-items:start; }
   html[data-edulog-ui="on"] .edulog-todo-card[data-edulog-todo="reports"] { grid-row:span 3; }
 }
+/* Lesson report "本堂待處理" panel (extension-rendered, above the native table). */
+html[data-edulog-ui="on"] .edulog-session-panel { margin:16px 0; padding:16px; border:1px solid var(--edulog-border); border-radius:var(--edulog-radius-lg); background:var(--edulog-surface); }
+html[data-edulog-ui="on"] .edulog-session-panel[hidden] { display:none; }
+html[data-edulog-ui="on"] .edulog-session-panel h3 { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 12px; font-size:18px; line-height:1.4; color:var(--edulog-text); }
+html[data-edulog-ui="on"] .edulog-session-panel-week { font-size:14px; font-weight:400; color:var(--edulog-text-muted); }
+html[data-edulog-ui="on"] .edulog-session-panel-badges { display:flex; flex-wrap:wrap; gap:6px; }
+html[data-edulog-ui="on"] .edulog-session-panel .edulog-todo-action { cursor:pointer; font:inherit; font-size:15px; }
+html[data-edulog-ui="on"] .edulog-session-panel :is(a,button):focus-visible { outline:3px solid var(--edulog-focus-ring); outline-offset:2px; }
+html[data-edulog-ui="on"] .edulog-session-panel .edulog-todo-empty { margin-top:12px; font-size:14px; }

@@ -301,9 +301,9 @@
         const statusSummaries=new Map()
         const session=(week=selectedWeek())=>{const cell=week&&row.cells[week.index];return week?{...week,cell,link:reportLinkFor(row,week),date:reportDate(week.label,week.cell),admission:admissionFor(row,week)}:null}
         const statusFor=target=>{
-          const state=model.classifySession(model.sessionText(target?.cell)),raw=state.raw,course=state.courseStatus||'原站未提供明確狀態'
+          const state=model.readSessionCell(target?.cell,{upcoming:words.nextWeek.test(target?.label||'')}),raw=state.raw,course=state.courseStatus||'原站未提供明確狀態'
           const attendanceLink=target?.cell?.querySelector('a[href*="attendance_status"]')
-          const attendance=attendanceLink?'原站提供設定入口，結果待確認':state.attendance||'原站未提供明確出席結果'
+          const attendance=state.attendance||(attendanceLink?'原站提供設定入口，結果待確認':'原站未提供明確出席結果')
           const report=state.report||(target?.link?'可開啟課堂紀錄':'原站未提供課堂紀錄入口')
           const scheduled=state.scheduledLesson||'原站未提供'
           const enabled=state.enabledLesson||'原站未提供'

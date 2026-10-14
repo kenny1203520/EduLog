@@ -25,6 +25,12 @@
     remoteModal: '#remote_modal',
     attendanceAction: 'a[href*="attendance_status"]',
     sidebarLinks: '#page-body > .sidebar a[href]',
+    // Session cells mark state with Font Awesome icons (<i> server-side, <svg> after
+    // the provider's script runs) wrapped in a span coloured text-success/danger/secondary.
+    attendanceIcon: '.fa-user',
+    recordIcon: '.fa-pencil',
+    recordLink: 'a[href*="/reports/"][href$="/edit"]',
+    admissionId: '[data-admission-id]',
     calendarDayPane: '.tab-pane[id*="-weekday-"]',
   })
   // Same-origin pages the overview to-do view may read. Read-only, never submitted.
@@ -63,6 +69,9 @@
     unfilledSlot: /學習紀錄節次/,
     isoDate: /\d{4}-\d{2}-\d{2}/,
     calendarDay: /(\d{1,2})\/(\d{1,2})/,
+    nextWeek: /下週/,
+    courseExpired: /課程已在\s*[\d-]+\s*到期/,
+    remainingLessons: /剩餘堂數/,
   })
   // Structural facts a page needs before it may be enhanced. A missing probe means
   // the provider markup changed: the page stays original and the toolbar says so.
