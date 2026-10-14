@@ -278,22 +278,30 @@
       const availability=element('p');availability.setAttribute('role','status');availability.setAttribute('aria-live','polite');const availabilityValue=doc.createTextNode(' 0 '),availabilityWeek=element('span');availability.append(element('span','可讀取'),availabilityValue,element('span','位本堂學生的上次教學摘要 · 讀取課次：'),availabilityWeek)
       const loadAll=element('button','載入此課次全部摘要');loadAll.type='button'
       const stopAll=element('button','停止載入');stopAll.type='button';stopAll.hidden=true
-      const progress=element('p');progress.setAttribute('role','status');progress.setAttribute('aria-live','polite')
-      const progressStates=Object.fromEntries(['正在讀取','讀取進度','讀取完成；成功','已停止讀取；已完成的摘要會保留。'].map(key=>[key,element('span',key)]));for(const item of Object.values(progressStates))item.hidden=true
+      const progress=element('p');progress.hidden=true;progress.setAttribute('role','status');progress.setAttribute('aria-live','polite')
+      const progressStates=Object.fromEntries(['正在讀取','讀取進度','讀取完成；成功','已停止讀取；已完成的摘要會保留。','讀取失敗'].map(key=>[key,element('span',key)]));for(const item of Object.values(progressStates))item.hidden=true
       const progressDone=doc.createTextNode(' 0 / 0 '),progressTotal=element('span','位已讀取 · 失敗需重試'),progressFailed=doc.createTextNode(' 0')
       progress.append(progressStates['正在讀取'],progressDone,progressTotal,progressStates['讀取進度'],progressStates['讀取完成；成功'],progressStates['已停止讀取；已完成的摘要會保留。'],progressFailed)
+      progress.append(progressStates['讀取失敗'])
       historyTools.append(availability,loadAll,stopAll,progress);box.append(historyTools)
       view.classHistoryAvailability=availability
       view.classHistoryAvailabilityValue=availabilityValue
       view.classHistoryAvailabilityWeek=availabilityWeek
       let historyRun=0
       listen(loadAll,'click',async()=>{
+        progress.hidden=false
         if(typeof view.loadClassHistory!=='function'){progress.textContent='目前版本無法載入整班摘要，請重新載入頁面後重試。';return}
         const run=++historyRun;loadAll.disabled=true;stopAll.hidden=false
         const total=Number(view.classHistoryEligibleCount)||0
         const showProgress=(label,value)=>{for(const [key,node] of Object.entries(progressStates))node.hidden=key!==label;progressDone.data=` ${value.done} / ${value.total} `;progressFailed.data=` ${value.failed}`}
         showProgress('正在讀取', {done:0,total,failed:0})
-        const result=await view.loadClassHistory({isActive:()=>run===historyRun,onProgress:value=>{if(run===historyRun)showProgress('讀取進度',value)}})
+        let result
+        try {
+          result=await view.loadClassHistory({isActive:()=>run===historyRun,onProgress:value=>{if(run===historyRun)showProgress('讀取進度',value)}})
+        } catch {
+          if(run===historyRun){stopAll.hidden=true;loadAll.disabled=false;for(const [key,node] of Object.entries(progressStates))node.hidden=key!=='讀取失敗'}
+          return
+        }
         if(run!==historyRun)return
         stopAll.hidden=true;loadAll.disabled=false
         showProgress(result.cancelled?'已停止讀取；已完成的摘要會保留。':'讀取完成；成功',{done:result.done,total:result.total,failed:result.failed})

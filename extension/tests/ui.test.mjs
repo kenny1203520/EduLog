@@ -7,6 +7,22 @@ const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const adapterCode = read('../adapters/orange-apple.js')
 const contentCode = read('../content.js')
 const wait = () => new Promise(resolve => setTimeout(resolve, 140))
+test('class summary is idle until requested and failed reads can be retried', async () => {
+  const dom=fixture('reports','/courses/dt/101/lesson_reports'),doc=dom.window.document,view={}
+  const enhanced=dom.window.edulogSiteAdapter.enhancePage(doc,view)
+  const section=doc.querySelector('.edulog-class-history-tools'),progress=section.querySelectorAll('p')[1],button=section.querySelector('button')
+  assert.equal(progress.hidden,true)
+  view.loadClassHistory=async()=>{throw new Error('offline')}
+  button.disabled=false;button.click();await wait()
+  assert.equal(progress.hidden,false)
+  assert.equal(button.disabled,false)
+  assert.ok([...progress.querySelectorAll('span')].some(el=>!el.hidden&&el.textContent==='讀取失敗'))
+  view.loadClassHistory=async()=>({done:1,total:1,failed:0})
+  button.click();await wait()
+  assert.equal(button.disabled,false)
+  assert.ok([...progress.querySelectorAll('span')].some(el=>!el.hidden&&el.textContent==='讀取完成；成功'))
+  enhanced.restore();dom.window.close()
+})
 function fixture(name, path) {
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only' })
   dom.window.eval(read('../adapters/orange-apple-workflows.js'))
