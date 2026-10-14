@@ -95,19 +95,19 @@
     toolbarLifecycle = instance
     const isCurrent = () => !instance.disposed && toolbarLifecycle === instance && toolbarHost.isConnected && toolbarHost.shadowRoot === root
     root.innerHTML = `<style>
-      :host{all:initial;position:fixed;inset:0 0 auto;z-index:1040;color:#172033;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
-      *{box-sizing:border-box}button{font:inherit;cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#334155}
-      button:hover{background:#eff4ff}button:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
-      .bar{display:flex;gap:12px;align-items:center;min-height:64px;padding:8px 20px;background:white;border-bottom:1px solid #dbe3ee;box-shadow:0 2px 8px #1720330a}
-      strong{color:#1e40af}.title{flex:1}.toggle{color:#1e40af;font-weight:600}.menu{display:none}
-      .panel{position:fixed;right:16px;top:72px;margin:0;padding:16px;width:min(400px,calc(100vw - 32px));max-width:400px;max-height:calc(100dvh - 88px);overflow:auto;overscroll-behavior:contain;background:white;border:1px solid #dbe3ee;border-radius:12px;box-shadow:0 12px 32px #17203320}
+      :host{all:initial;position:fixed;inset:0 0 auto;z-index:1040;color:var(--edulog-text);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
+      *{box-sizing:border-box}button{font:inherit;cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid var(--edulog-border-strong);border-radius:8px;background:white;color:var(--edulog-text-secondary)}
+      button:hover{background:var(--edulog-primary-soft)}button:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
+      .bar{display:flex;gap:12px;align-items:center;min-height:64px;padding:8px 20px;background:white;border-bottom:1px solid var(--edulog-border);box-shadow:var(--edulog-shadow-bar)}
+      strong{color:var(--edulog-primary)}.title{flex:1}.toggle{color:var(--edulog-primary);font-weight:600}.menu{display:none}
+      .panel{position:fixed;right:16px;top:72px;margin:0;padding:16px;width:min(400px,calc(100vw - 32px));max-width:400px;max-height:calc(100dvh - 88px);overflow:auto;overscroll-behavior:contain;background:white;border:1px solid var(--edulog-border);border-radius:12px;box-shadow:var(--edulog-shadow-popover)}
       .panel-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.panel-heading strong{min-width:0;overflow-wrap:anywhere}.panel-close{flex:none!important;width:44px!important;min-width:44px;padding:8px!important;margin:0!important;font-size:20px;line-height:1}
-      .panel[hidden]{display:none}p{margin:8px 0;color:#475569}.panel p{font-size:14px}.panel button{margin-top:8px}.panel .panel-close{margin-top:0}.note{font-size:14px}
+      .panel[hidden]{display:none}p{margin:8px 0;color:var(--edulog-text-muted)}.panel p{font-size:14px}.panel button{margin-top:8px}.panel .panel-close{margin-top:0}.note{font-size:14px}
       :host([data-enabled="false"]){inset:auto 16px 20px auto;max-width:calc(100vw - 32px)}.bar{border-radius:0}
-      :host([data-enabled="false"]) .bar{padding:6px;border:1px solid #dbe3ee;border-radius:12px}
+      :host([data-enabled="false"]) .bar{padding:6px;border:1px solid var(--edulog-border);border-radius:12px}
       :host([data-enabled="false"]) .bar>:not(.integration){display:none}
       :host([data-enabled="false"]) .panel{top:auto;right:16px;bottom:86px;width:min(400px,calc(100vw - 32px));max-width:400px;max-height:calc(100dvh - 112px)}
-      .preferences{border-top:1px solid #dbe3ee;margin-top:12px}.preferences summary{min-height:44px;display:flex;align-items:center;cursor:pointer}.preferences select{font:inherit;min-height:44px;max-width:100%;margin-top:8px}
+      .preferences{border-top:1px solid var(--edulog-border);margin-top:12px}.preferences summary{min-height:44px;display:flex;align-items:center;cursor:pointer}.preferences select{font:inherit;min-height:44px;max-width:100%;margin-top:8px}
       @media(max-width:991px){.menu{display:block}.bar{padding:8px 12px;gap:8px}.title{font-size:14px}}
       @media(max-width:480px){.brand{display:none}.bar{flex-wrap:wrap}.title{flex-basis:calc(100% - 70px)}.panel{right:8px;width:min(400px,calc(100vw - 16px));max-width:400px;max-height:calc(100dvh - 152px)}}
     </style><div class="bar"><button class="menu" type="button" aria-label="切換網站導覽" aria-expanded="false">導覽</button><strong class="brand">EduLog</strong><span class="title"></span><button class="integration" type="button" aria-expanded="false">EduLog 功能</button></div>
@@ -120,7 +120,7 @@
     instance.stopLocale=globalThis.edulogUiLegacy?.watch(root)
     const banner = document.createElement('div')
     banner.className = 'notice'
-    banner.style.cssText = 'padding:10px 16px;background:#fff7ed;color:#9a3412;max-width:100vw'
+    banner.style.cssText = 'padding:10px 16px;background:var(--edulog-status-notice-soft);color:var(--edulog-status-notice-text);max-width:100vw'
     banner.setAttribute('role', 'status')
     banner.textContent = notice
     banner.hidden = !notice

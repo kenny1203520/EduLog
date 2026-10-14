@@ -1,0 +1,61 @@
+/* Shared EduLog design tokens. Custom properties only: safe to load on provider pages,
+   inherited into the toolbar shadow root, and used by popup/workspace pages.
+   Light theme only for now; a future dark theme overrides these same names. */
+:root {
+  /* Surfaces */
+  --edulog-canvas:#f4f6fa;
+  --edulog-surface:#fff;
+  --edulog-surface-subtle:#f8fafc;
+  --edulog-surface-muted:#f1f5f9;
+  --edulog-surface-disabled:#e2e8f0;
+  /* Text (all >= 4.5:1 on --edulog-surface) */
+  --edulog-text-strong:#0f172a;
+  --edulog-text:#172033;
+  --edulog-text-secondary:#334155;
+  --edulog-text-muted:#475569;
+  --edulog-text-subtle:#64748b;
+  /* Borders */
+  --edulog-border-soft:#eef2f7;
+  --edulog-border:#dbe3ee;
+  --edulog-border-strong:#cbd5e1;
+  --edulog-border-input:#94a3b8;
+  /* Brand */
+  --edulog-primary:#1e40af;
+  --edulog-primary-bright:#2563eb;
+  --edulog-primary-soft:#eff4ff;
+  --edulog-primary-soft-strong:#eaf0ff;
+  --edulog-primary-border:#bfdbfe;
+  --edulog-focus-ring:#2563eb;
+  /* Status: pair a colour with text or an icon, never colour alone */
+  --edulog-status-ok:#047857;
+  --edulog-status-ok-soft:#e8f7ef;
+  --edulog-status-ok-text:#166534;
+  --edulog-status-warn:#d97706;
+  --edulog-status-warn-soft:#fef3c7;
+  --edulog-status-warn-text:#78350f;
+  --edulog-status-notice-soft:#fff7ed;
+  --edulog-status-notice-text:#9a3412;
+  --edulog-status-danger:#b91c1c;
+  /* Shadows */
+  --edulog-shadow-bar:0 2px 8px #1720330a;
+  --edulog-shadow-popover:0 12px 32px #17203320;
+  /* Shape, spacing, layering, motion */
+  --edulog-radius-sm:8px;
+  --edulog-radius:10px;
+  --edulog-radius-lg:12px;
+  --edulog-space-1:4px;
+  --edulog-space-2:8px;
+  --edulog-space-3:12px;
+  --edulog-space-4:16px;
+  --edulog-space-5:20px;
+  --edulog-space-6:24px;
+  --edulog-z-raised:10;
+  --edulog-z-sticky:20;
+  --edulog-z-overlay:30;
+  --edulog-z-toolbar:1040;
+  --edulog-duration:200ms;
+  --edulog-font:system-ui,-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --edulog-duration:0ms; }
+}

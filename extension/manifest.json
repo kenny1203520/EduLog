@@ -35,6 +35,7 @@
         "bootstrap.js"
       ],
       "css": [
+        "edulog-tokens.css",
         "adapters/orange-apple.css"
       ],
       "run_at": "document_start"

@@ -10,7 +10,7 @@ const { chromium } = process.argv[2] ? await import(pathToFileURL(process.argv[2
 const output = process.argv[3] || mkdtempSync(join(tmpdir(), 'edulog-ui-'))
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
-const css = read('../adapters/orange-apple.css') + read('../dialog-layout.css')
+const css = read('../edulog-tokens.css') + read('../adapters/orange-apple.css') + read('../dialog-layout.css')
 let nativeCss = read('fixtures/native-bootstrap-dialog.css')
 if (process.argv[4]) {
   const dir = process.argv[4]
@@ -28,7 +28,7 @@ for (const [browserName, executablePath] of executables) {
   try {
     for (const state of ['not-connected', 'pending', 'connected', 'unavailable']) {
       const page = await browser.newPage({ locale:'zh-TW', viewport: { width: 390, height: 600 } })
-      await page.setContent(read('../popup.html').replace('</head>', `<style>${read('../popup.css')}</style></head>`))
+      await page.setContent(read('../popup.html').replace('</head>', `<style>${read('../edulog-tokens.css')}</style><style>${read('../popup.css')}</style></head>`))
       await page.evaluate(state => {
         window.chrome = {
           storage: { local: { get: async () => ({ edulogExtension: { origin: 'http://localhost:5173', pending: state === 'pending' ? { expiresAt: new Date(Date.now() + 60000).toISOString() } : null } }) } },

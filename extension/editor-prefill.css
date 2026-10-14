@@ -8,8 +8,8 @@
 .edulog-editor-native,.edulog-editor-assistant{min-width:0;min-height:0;overflow:auto!important;overscroll-behavior:contain;scroll-padding-block:20px;scrollbar-gutter:stable;max-height:100%}
 .edulog-editor-native{padding:20px 24px;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}.edulog-editor-native form{width:100%!important;min-width:0}
 .edulog-editor-native select,.edulog-editor-native textarea{font-size:16px!important}
-.edulog-prefill-context{font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#334155;flex-basis:100%;margin:6px 0 0;overflow-wrap:anywhere}
-.edulog-editor-assistant{padding:20px;border-left:1px solid #dbe3ee;background:#f8fafc}
+.edulog-prefill-context{font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--edulog-text-secondary);flex-basis:100%;margin:6px 0 0;overflow-wrap:anywhere}
+.edulog-editor-assistant{padding:20px;border-left:1px solid var(--edulog-border);background:var(--edulog-surface-subtle)}
 .edulog-editor-tabs{display:none!important}
 .edulog-editor-layout[hidden]{display:none!important}
 .edulog-editor-assistant[data-collapsed=true]{padding:8px 0;border:0;background:transparent;overflow:visible!important;max-height:none}
@@ -21,10 +21,10 @@
 .edulog-editor-assistant{scroll-padding-bottom:96px}
 @media(max-width:1199px){
  .modal[data-edulog-prefill] .modal-dialog{max-width:920px!important}
- .edulog-editor-tabs{display:flex!important;flex-wrap:wrap;grid-column:1/-1;gap:8px;padding:8px 16px;border-bottom:1px solid #dbe3ee}
- .edulog-editor-tabs button{font:inherit;min-height:44px;flex:1;border:1px solid #cbd5e1;border-radius:8px;background:white;color:#172033}
- .edulog-editor-tabs button[aria-pressed=true]{background:#1e40af;color:white;border-color:#1e40af}
- .edulog-editor-tabs button:focus-visible{outline:3px solid #2563eb;outline-offset:2px}
+ .edulog-editor-tabs{display:flex!important;flex-wrap:wrap;grid-column:1/-1;gap:8px;padding:8px 16px;border-bottom:1px solid var(--edulog-border)}
+ .edulog-editor-tabs button{font:inherit;min-height:44px;flex:1;border:1px solid var(--edulog-border-strong);border-radius:8px;background:white;color:var(--edulog-text)}
+ .edulog-editor-tabs button[aria-pressed=true]{background:var(--edulog-primary);color:white;border-color:var(--edulog-primary)}
+ .edulog-editor-tabs button:focus-visible{outline:3px solid var(--edulog-focus-ring);outline-offset:2px}
  .edulog-editor-layout{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
  .edulog-editor-assistant{border-left:0}
  .edulog-editor-layout[data-view=assistant]:not([data-collapsed=true]) .edulog-editor-native{display:none}

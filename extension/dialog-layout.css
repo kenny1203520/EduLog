@@ -1,12 +1,12 @@
 /* Known Bootstrap/Turbo dialogs only; native display/dismiss events remain authoritative. */
 html[data-edulog-ui="on"] [data-edulog-dialog]{position:fixed;inset:0;z-index:1055;overflow:auto;overscroll-behavior:contain}
 html[data-edulog-ui="on"] .modal-backdrop{position:fixed;inset:0;z-index:1050}
-html[data-edulog-ui="on"] [data-edulog-dialog] .modal-content{background:#fff;position:relative;min-width:0}
+html[data-edulog-ui="on"] [data-edulog-dialog] .modal-content{background:var(--edulog-surface);position:relative;min-width:0}
 html[data-edulog-ui="on"] [data-edulog-dialog] .modal-header{position:relative;z-index:1;align-items:flex-start}
 html[data-edulog-ui="on"] [data-edulog-close]{position:relative;z-index:2;flex:none;min-width:44px;min-height:44px}
 html[data-edulog-ui="on"] [data-edulog-dialog="compact"] .modal-dialog { width:calc(100% - 32px); max-width:640px; margin:24px auto; }
 html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-dialog { width:calc(100% - 32px); max-width:920px; margin:24px auto; }
-html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-content { border-radius:16px; border:1px solid var(--edulog-line); }
+html[data-edulog-ui="on"] #lesson-report-modal[data-edulog-dialog] .modal-content { border-radius:16px; border:1px solid var(--edulog-border); }
 .modal[data-edulog-prefill]{position:fixed;inset:0;z-index:1055;overflow:auto;overscroll-behavior:contain}
 .modal[data-edulog-prefill] .modal-header{display:flex;align-items:flex-start;padding:16px 20px;gap:12px}
 .modal[data-edulog-prefill] .modal-header :is(.close,.btn-close){position:relative!important;z-index:2;flex:0 0 44px;display:block!important}

@@ -23,6 +23,7 @@ try{
         const page=await browser.newPage({viewport:{width,height:560},deviceScaleFactor:2}),errors=[]
         page.on('pageerror',error=>errors.push(error.message))
         await page.goto(`${origin}/admissions/unfilled_report`)
+        await page.addStyleTag({path:fileURLToPath(new URL('edulog-tokens.css',extensionRoot))})
         await page.addStyleTag({path:fileURLToPath(new URL('adapters/orange-apple.css',extensionRoot))})
         await page.addStyleTag({content:`
           body{margin:0}.content{padding:16px}.rating{float:left}.rating input{position:absolute;left:-9999px}
