@@ -15,7 +15,7 @@ function start(path = '/courses/dt/101') {
   w.cancelAnimationFrame = id => w.clearTimeout(id)
   w.setTimeout = (fn, ms) => { if (ms === 300) deadline = fn; return timeout(fn, ms) }
   w.chrome = { runtime: { sendMessage: () => { messages++; return response }, onMessage: { addListener() {} } } }
-  for (const file of ['runtime-bridge.js', 'adapters/orange-apple.js', 'bootstrap.js']) w.eval(read(`../${file}`))
+  for (const file of ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js']) w.eval(read(`../${file}`))
   const mount = (name = 'class') => {
     const source = new JSDOM(read(`fixtures/${name}.html`))
     doc.body.innerHTML = source.window.document.body.innerHTML; source.window.close()

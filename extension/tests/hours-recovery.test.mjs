@@ -8,7 +8,7 @@ function fixture(name = 'hours-nested') {
   const jsdomErrors=[],virtualConsole=new VirtualConsole();virtualConsole.on('jsdomError',error=>jsdomErrors.push(error))
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: 'https://corp.orangeapple.co/my/hour', runScripts: 'outside-only', pretendToBeVisual: true, virtualConsole })
   const w = dom.window, doc = w.document
-  for (const file of ['adapters/orange-apple-workflows.js', 'adapters/orange-apple.js']) w.eval(read(`../${file}`))
+  for (const file of ['adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple-workflows.js', 'adapters/orange-apple.js']) w.eval(read(`../${file}`))
   return { dom, w, doc, jsdomErrors, enhance: () => w.edulogSiteAdapter.enhancePage(doc) }
 }
 for (const name of ['hours', 'hours-nested']) test(`${name}: preserves native query, events and exact restore across repeat applications`, () => {

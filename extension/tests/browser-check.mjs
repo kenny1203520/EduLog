@@ -60,6 +60,7 @@ for (const [browserName, executablePath] of executables) {
       await page.evaluate(() => {
         window.chrome = { runtime: { sendMessage: async data => ({ enabled: data.enabled ?? true }), onMessage: { addListener(fn) { window.edulogTestListener = fn } } } }
       })
+      for (const file of ['lexicon', 'model']) await page.addScriptTag({ content: read(`../adapters/orange-apple-${file}.js`) })
       await page.addScriptTag({ content: read('../adapters/orange-apple-workflows.js') })
       await page.addScriptTag({ content: read('../adapters/orange-apple.js') })
       await page.addScriptTag({ content: read('../runtime-bridge.js') });await page.addScriptTag({ content: read('../ui-core.js') });await page.addScriptTag({ content: read('../ui-messages.js') })

@@ -11,7 +11,7 @@ const read = name => readFileSync(new URL(name, import.meta.url), 'utf8')
 const dir = process.argv[4]
 const nativeCss = dir ? readdirSync(dir).filter(name => name.startsWith('application-') && name.endsWith('.css')).map(name => readFileSync(join(dir, name), 'utf8')).join('\n') : ''
 const body = read('fixtures/hours-nested.html').replace('</head>', `<style>${nativeCss}</style><style>${read('../edulog-tokens.css')}</style><style>${read('../adapters/orange-apple.css')}</style></head>`)
-const early = ['runtime-bridge.js', 'adapters/orange-apple.js', 'bootstrap.js'].map(file => read(`../${file}`))
+const early = ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js'].map(file => read(`../${file}`))
 const late = ['adapters/orange-apple-workflows.js', 'connection-ui.js', 'integration-ui.js'].map(file => read(`../${file}`))
 const results = []
 for (const [name, executablePath] of [['chrome', 'C:/Program Files/Google/Chrome/Application/chrome.exe'], ['edge', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe']]) {

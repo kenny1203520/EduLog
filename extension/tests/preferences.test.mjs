@@ -19,6 +19,7 @@ function worker(fetchImpl = async () => { throw new Error('offline') }) {
   }
   const context = vm.createContext({ chrome, URL, AbortSignal, fetch: fetchImpl, installWorkspaceBroker() {}, crypto: { randomUUID: () => '11111111-1111-4111-8111-111111111111' }, navigator: { platform: 'Win32', userAgent: 'Chrome' } })
   const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
+  for (const file of ['lexicon', 'model']) vm.runInContext(read(`../adapters/orange-apple-${file}.js`), context)
   vm.runInContext(read('../adapters/orange-apple.js'), context)
   vm.runInContext(read('../installation.js'), context)
   vm.runInContext(read('../service-worker.js').replace(/^import[^\n]*\n/gm, ''), context)

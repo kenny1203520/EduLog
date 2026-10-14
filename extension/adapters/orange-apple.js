@@ -1,20 +1,8 @@
-// Provider routes, selectors and terminology belong only in this adapter.
+// Provider page enhancement. Routes, selectors and wording live in orange-apple-lexicon.js.
 (() => {
-  function matchPage(path) {
-    if (/^\/my\/hour\/?$/.test(path)) return { kind: 'hours', title: '我的鐘點' }
-    if (/^\/my\/?$/.test(path)) return { kind: 'profile', title: '個人資料' }
-    if (/^\/my\/\d+\/edit\/?$/.test(path)) return { kind: 'profile-edit', title: '編輯個人資料' }
-    if (path === '/') return { kind: 'overview', title: '教師總覽' }
-    if (/^\/courses\/dt\/?$/.test(path)) return { kind: 'classes', title: '班級列表' }
-    if (path === '/calendar') return { kind: 'calendar', title: '課程行事曆' }
-    if (path === '/admissions/month_unfilled_report') return { kind: 'unfilled', title: '未填寫紀錄' }
-    if (path === '/admissions/unfilled_report') return { kind: 'unfilled-current', title: '補填課堂紀錄' }
-    if (/^\/dt_admissions\/\d+\/reports\/\d+\/edit\/?$/.test(path)) return { kind: 'report-editor', title: '課堂紀錄編輯' }
-    if (/^\/dt_admissions\/\d+\/?$/.test(path)) return { kind: 'history', title: '學生學習紀錄' }
-    if (/^\/courses\/dt\/\d+\/?$/.test(path)) return { kind: 'class', title: '班級工作區' }
-    if (/^\/courses\/dt\/\d+\/lesson_reports\/?$/.test(path)) return { kind: 'reports', title: '課次報告' }
-    return null
-  }
+  const lexicon = globalThis.edulogSiteLexicon, model = globalThis.edulogSiteModel
+  const words = lexicon.text
+  const matchPage = model.matchPage
   function createScope(doc) {
     const changes = new Map(), added = [], listeners = [], moves = [], texts = new Map()
     let restored = false
@@ -68,8 +56,8 @@
   }
   function enhancePage(doc, view = {}, documentMode = false) {
     const page = matchPage(doc.location.pathname)
-    const content = doc.querySelector('#page-body > .content')
-    if (!page || !content || /沒有存取權限|無權限|Access denied/i.test([...content.querySelectorAll('h1,h2')].map(h => h.textContent).join(' '))) return null
+    if (!page || !model.checkPage(doc, page.kind).ok) return null
+    const content = doc.querySelector(lexicon.selectors.content)
     const hoursForm = page.kind === 'hours' ? [...content.querySelectorAll('form')].find(form => ['year', 'month'].every(name => form.querySelector(`select[name=${name}]`)?.form === form)) : null
     if (page.kind === 'hours' && !hoursForm) return null
     const hoursInputs = hoursForm && ['year', 'month'].map(name => hoursForm.querySelector(`select[name=${name}]`))
@@ -118,17 +106,17 @@
       }
     }
     let refreshStudents = () => {}, refreshReports = () => {}
-    const students = content.querySelector('#students-table')
+    const students = content.querySelector(lexicon.selectors.studentsTable)
     if (students) {
       view.expandedStudents ||= new WeakSet()
       const { input, count } = controls(students, '目前名單篩選')
       input.dataset.edulogSearch = 'students'
       input.value = view.studentQuery || ''
-      const headerRow = [...students.rows].find(r => [...r.cells].some(c => /姓名/.test(c.textContent))) || students.tHead?.rows[0]
+      const headerRow = [...students.rows].find(r => [...r.cells].some(c => words.nameHeader.test(c.textContent))) || students.tHead?.rows[0]
       mark(headerRow, 'data-edulog-student-header', '')
-      for (const row of students.rows) if (row.querySelector('#student_id-selectized') || row.querySelector('input[type=search],input[placeholder*="學生"]')) mark(row, 'data-edulog-student-search', '')
+      for (const row of students.rows) if (row.querySelector(lexicon.selectors.studentPicker) || row.querySelector('input[type=search],input[placeholder*="學生"]')) mark(row, 'data-edulog-student-search', '')
       const headers = [...(headerRow?.cells || [])].map(h => h.textContent.trim())
-      const nameIndex = Math.max(0, headers.findIndex(h => /姓名/.test(h)))
+      const nameIndex = Math.max(0, headers.findIndex(h => words.nameHeader.test(h)))
       mark(headerRow?.cells[nameIndex], 'data-edulog-name', '')
       refreshStudents = () => {
         const rows = [...students.tBodies].flatMap(body => [...body.rows]).filter(row => row !== headerRow && !row.querySelector('th') && !row.hasAttribute('data-edulog-student-search'))
@@ -139,7 +127,7 @@
           if (matches) visible++
           for (const [index, cell] of [...row.cells].entries()) {
             mark(cell, 'data-edulog-label', headers[index] || '')
-            if (index > 1 && !/姓名|年級|課程|操作/.test(headers[index] || '')) mark(cell, 'data-edulog-extra', '')
+            if (index > 1 && !words.studentCoreColumn.test(headers[index] || '')) mark(cell, 'data-edulog-extra', '')
           }
           const nameCell = row.cells[nameIndex]
           mark(nameCell, 'data-edulog-name', '')
@@ -168,7 +156,7 @@
       listen(input, 'input', refreshStudents); refreshStudents()
     }
     const workflow = globalThis.edulogSiteWorkflows?.enhancePage({ doc, content, page, view, scope })
-    const reports = content.querySelector('#reports')
+    const reports = content.querySelector(lexicon.selectors.reportsTable)
     if (reports) {
       const reportScrollRegion=reports.closest('[data-edulog-scroll="reports"]')||reports.parentElement
       const { box, input, count } = controls(reports, '報告學生搜尋')
@@ -177,9 +165,8 @@
       const weekButtons = element('div')
       weekButtons.className = 'edulog-week-tools'
       weekButtons.setAttribute('role', 'group'); weekButtons.setAttribute('aria-label', '課次與顯示方式')
-      const headers = [...reports.querySelectorAll('tr:first-child th')]
-      const weeks = headers.map((h, index) => ({ label: h.textContent.trim(), index })).filter(h => /上週|本週|下週/.test(h.label))
-      const selected = weeks.find(w => w.index === view.week) || weeks.find(w => /本週/.test(w.label)) || weeks[0]
+      const weeks = model.readWeekColumns(reports.querySelectorAll('tr:first-child th'))
+      const selected = model.pickWeek(weeks, view.week)
       const countNumbers=[doc.createTextNode('0 / 0'),doc.createTextNode('0'),doc.createTextNode('0'),doc.createTextNode('0')]
       count.replaceChildren(element('span','顯示'),countNumbers[0],element('span','位學生 · 已確認出席'),countNumbers[1],element('span','· 已填紀錄'),countNumbers[2],element('span','· 狀態待確認'),countNumbers[3])
       const singleButton=element('button','單堂清單'),compareButton=element('button','三週比較')
@@ -229,17 +216,9 @@
         let visible = 0,otherSessionCount=0,unknownCount=0,attendanceCount=0,reportCount=0
         for (const row of rows) {
           const rowWeeks=weeks.map(week=>{
-            const cell=row.cells[week.index],copy=cell?.cloneNode(true)
-            copy?.querySelectorAll('a,button,input,select,textarea,[data-edulog-owned]').forEach(node=>node.remove())
-            const value=copy?.textContent?.trim()||''
-            const explicitOther=/此週非本班學生/.test(value)
             const linked=Boolean(row.querySelector(`td:nth-child(${week.index+1}) a[data-edulog-record-action],td:nth-child(${week.index+1}) a[href*="/reports/"]`))
-            const attendancePending=/待確認出席|尚未確認出席|未登記出席|出席待確認/.test(value)
-            const attendanceKnown=/出席|缺席|未出席/.test(value)&&!attendancePending
-            const reportPending=/未填寫|待填寫|待補填/.test(value)
-            const reportKnown=/已填寫課堂紀錄|課堂紀錄已完成|報告已完成/.test(value)&&!reportPending
-            const statusKnown=/休假日|停課|課程取消|此週非本班學生|暫停課程|已完課|已啟用|待確認/.test(value)||attendanceKnown||attendancePending||reportKnown||reportPending
-            return {week,value,explicitOther,linked,attendancePending,attendanceKnown,reportPending,reportKnown,statusKnown}
+            const state=model.classifySession(model.sessionText(row.cells[week.index]))
+            return {...state,week,value:state.raw,explicitOther:state.otherSession,linked}
           })
           const selectedState=rowWeeks.find(item=>item.week.index===activeWeek)||rowWeeks[0]
           const isCompare=(view.reportMode||'single')==='compare'
@@ -345,6 +324,8 @@
       }) }
       catch (error) { for (const scope of scopes.reverse()) scope.restore(); throw error }
     },
+    checkPage: (doc, kind = matchPage(doc.location.pathname)?.kind) => model.checkPage(doc, kind),
+    lexicon, model,
     readContext: doc => ({ ...matchPage(doc.location.pathname), sourcePath: doc.location.pathname }),
   })
 })()

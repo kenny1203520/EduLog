@@ -204,7 +204,7 @@ function fixture(name, path) {
   const virtualConsole = new VirtualConsole()
   virtualConsole.on('jsdomError', error => pendingJsdomErrors.push(error))
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only', virtualConsole })
-  for (const file of ['adapters/orange-apple-workflows.js', 'adapters/orange-apple.js']) dom.window.eval(read(`../${file}`))
+  for (const file of ['adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple-workflows.js', 'adapters/orange-apple.js']) dom.window.eval(read(`../${file}`))
   return dom
 }
 for (const [name, path] of [['hours','/my/hour'],['profile','/my'],['profile-edit','/my/101/edit'],['reports','/courses/dt/101/lesson_reports'],['classes','/courses/dt'],['history','/dt_admissions/301'],['calendar','/calendar'],['unfilled','/admissions/month_unfilled_report'],['unfilled-current','/admissions/unfilled_report'],['report-editor','/dt_admissions/274452/reports/6558413/edit']]) {

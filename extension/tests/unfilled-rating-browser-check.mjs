@@ -31,6 +31,7 @@ try{
           .rating label:before{content:'★'}.rating label.half:before{content:'★';position:absolute;top:100%;left:0}
           .form-section{padding:12px}.col-md-6{width:50%}
         `})
+        for(const file of ['lexicon','model'])await page.addScriptTag({path:fileURLToPath(new URL(`adapters/orange-apple-${file}.js`,extensionRoot))})
         await page.addScriptTag({path:fileURLToPath(new URL('adapters/orange-apple-workflows.js',extensionRoot))})
         await page.addScriptTag({path:fileURLToPath(new URL('adapters/orange-apple.js',extensionRoot))})
         await page.evaluate(()=>{

@@ -8,7 +8,7 @@ const { chromium } = await import(pathToFileURL(process.argv[2]).href)
 const output = process.argv[3]
 mkdirSync(output, { recursive: true })
 const read = file => readFileSync(new URL(file, import.meta.url), 'utf8')
-const early = ['runtime-bridge.js', 'adapters/orange-apple.js', 'bootstrap.js'].map(file => read(`../${file}`)).join('\n;\n')
+const early = ['runtime-bridge.js', 'adapters/orange-apple-lexicon.js', 'adapters/orange-apple-model.js', 'adapters/orange-apple.js', 'bootstrap.js'].map(file => read(`../${file}`)).join('\n;\n')
 const main = ['connection-ui.js', 'integration-ui.js', 'adapters/orange-apple-workflows.js', 'content.js'].map(file => read(`../${file}`)).join('\n;\n')
 const css = read('../edulog-tokens.css') + read('../adapters/orange-apple.css')
 const fixture = name => read(`fixtures/${name}.html`)

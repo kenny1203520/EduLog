@@ -1,5 +1,6 @@
 // Sample-backed enhancements for this provider. No network or credential access.
 (() => {
+  const model = globalThis.edulogSiteModel, words = globalThis.edulogSiteLexicon.text
   const text = node => node?.textContent.trim().replace(/\s+/g, ' ') || ''
   const classLink = a => { try { return a.origin === a.ownerDocument.location.origin && /^\/courses\/dt\/\d+\/?$/.test(a.pathname) } catch { return false } }
   function region(scope, title, className = 'edulog-section') {
@@ -269,8 +270,8 @@
       }
       const refreshRows = () => { for (const row of reports.rows) if(!row.hasAttribute('data-edulog-last-teaching-row'))enhanceReportRow(row) }
       refreshRows(); refreshers.push(refreshRows)
-      const weekHeaders = [...(reports.rows[0]?.cells || [])].map((cell,index)=>({cell,index,label:text(cell)})).filter(item=>/上週|本週|下週/.test(item.label))
-      const selectedWeek=()=>weekHeaders.find(item=>item.index===Number(view.week))||weekHeaders.find(item=>/本週/.test(item.label))||weekHeaders[0]||null
+      const weekHeaders = model.readWeekColumns(reports.rows[0]?.cells || [])
+      const selectedWeek=()=>model.pickWeek(weekHeaders,Number(view.week))
       const reportLinkFor=(row,week)=>{
         for(const link of week&&row.cells[week.index]?.querySelectorAll('a[href]')||[])try{const url=new URL(link.getAttribute('href'),doc.location.href);if(url.origin===doc.location.origin&&/^\/dt_admissions\/\d+\/reports\/\d+\/edit\/?$/.test(url.pathname))return url}catch{}
         return null
@@ -300,14 +301,13 @@
         const statusSummaries=new Map()
         const session=(week=selectedWeek())=>{const cell=week&&row.cells[week.index];return week?{...week,cell,link:reportLinkFor(row,week),date:reportDate(week.label,week.cell),admission:admissionFor(row,week)}:null}
         const statusFor=target=>{
-          const copy=target?.cell?.cloneNode(true);copy?.querySelectorAll('a,button,input,select,textarea,[data-edulog-owned]').forEach(node=>node.remove())
-          const raw=text(copy),course=/(休假日|停課|課程取消|此週非本班學生|暫停課程|已完課)/.exec(raw)?.[0]||'原站未提供明確狀態'
+          const state=model.classifySession(model.sessionText(target?.cell)),raw=state.raw,course=state.courseStatus||'原站未提供明確狀態'
           const attendanceLink=target?.cell?.querySelector('a[href*="attendance_status"]')
-          const attendance=attendanceLink?'原站提供設定入口，結果待確認':/(出席|缺席|未出席)/.exec(raw)?.[0]||'原站未提供明確出席結果'
-          const report=/未填寫|待填寫|待補填/.exec(raw)?.[0]||(target?.link?'可開啟課堂紀錄':'原站未提供課堂紀錄入口')
-          const scheduled=/第\s*\d+\s*週\s*\((L\d+)\)/i.exec(raw)?.[1]||/\bL\d+\b/i.exec(raw)?.[0]||'原站未提供'
-          const enabled=/已啟用\s*(L\d+)/i.exec(raw)?.[1]||(/已啟用/.test(raw)?'已啟用':'原站未提供')
-          const otherSession=/此週非本班學生/.test(raw)
+          const attendance=attendanceLink?'原站提供設定入口，結果待確認':state.attendance||'原站未提供明確出席結果'
+          const report=state.report||(target?.link?'可開啟課堂紀錄':'原站未提供課堂紀錄入口')
+          const scheduled=state.scheduledLesson||'原站未提供'
+          const enabled=state.enabledLesson||'原站未提供'
+          const otherSession=state.otherSession
           return {raw,course,attendance,report,scheduled,enabled,otherSession,rank:otherSession?'other':target?.link?'current':'unknown'}
         }
         const makeWeekSummary=week=>{
@@ -409,13 +409,13 @@
       for(const row of reports.rows)if(row.querySelector('td')&&!row.hasAttribute('data-edulog-last-teaching-row'))makeHistoryPanel(row)
       let batchRun=0
       view.updateClassHistoryAvailability=()=>{
-        const week=selectedWeek(),eligible=[...historyRowLoaders.keys()].filter(row=>{const cell=week&&row.cells[week.index];if(!cell||/此週非本班學生/.test(text(cell)))return false;return Boolean(reportLinkFor(row,week)&&admissionFor(row,week))})
+        const week=selectedWeek(),eligible=[...historyRowLoaders.keys()].filter(row=>{const cell=week&&row.cells[week.index];if(!cell||words.otherSession.test(text(cell)))return false;return Boolean(reportLinkFor(row,week)&&admissionFor(row,week))})
         view.classHistoryEligibleCount=eligible.length
         if(view.classHistoryAvailabilityValue)view.classHistoryAvailabilityValue.data=` ${eligible.length} `
         if(view.classHistoryAvailabilityWeek)view.classHistoryAvailabilityWeek.textContent=week?.label||'原站未標示課次'
       }
       view.loadClassHistory=async({onProgress=()=>{},isActive=()=>true}={})=>{
-        const run=++batchRun,week=selectedWeek(),targets=[...historyRowLoaders.entries()].filter(([row])=>{const cell=week&&row.cells[week.index];return Boolean(cell&&!/此週非本班學生/.test(text(cell))&&reportLinkFor(row,week)&&admissionFor(row,week))})
+        const run=++batchRun,week=selectedWeek(),targets=[...historyRowLoaders.entries()].filter(([row])=>{const cell=week&&row.cells[week.index];return Boolean(cell&&!words.otherSession.test(text(cell))&&reportLinkFor(row,week)&&admissionFor(row,week))})
         let next=0,done=0,failed=0
         const active=()=>run===batchRun&&isActive()&&selectedWeek()?.index===week?.index
         const worker=async()=>{while(active()){const index=next++;if(index>=targets.length)return;const [,load]=targets[index];const ok=await load(false,{isActive:active});if(run!==batchRun)return;if(ok)done++;else failed++;onProgress({done,failed,total:targets.length})}}

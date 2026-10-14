@@ -25,6 +25,7 @@ test('class summary is idle until requested and failed reads can be retried', as
 })
 function fixture(name, path) {
   const dom = new JSDOM(read(`fixtures/${name}.html`), { url: `https://corp.orangeapple.co${path}`, runScripts: 'outside-only' })
+  for (const file of ['lexicon', 'model']) dom.window.eval(read(`../adapters/orange-apple-${file}.js`))
   dom.window.eval(read('../adapters/orange-apple-workflows.js'))
   dom.window.eval(adapterCode)
   return dom

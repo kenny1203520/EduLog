@@ -1,3 +1,5 @@
+import './adapters/orange-apple-lexicon.js'
+import './adapters/orange-apple-model.js'
 import './adapters/orange-apple.js'
 import './installation.js'
 import { installWorkspaceBroker } from './workspace-broker.js'
