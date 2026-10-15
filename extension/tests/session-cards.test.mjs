@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { webcrypto } from 'node:crypto'
 import { JSDOM } from '../../app/node_modules/jsdom/lib/api.js'
 
 // tests/fixtures/real-class.html is de-identified but keeps the real class page structure:
@@ -128,4 +129,50 @@ test('restore returns the exact original page, including the moved last-teaching
   s.result.restore()
   assert.equal(s.doc.body.outerHTML, s.original)
   s.dom.window.close()
+})
+
+// Teaching-note reminders need the runtime bridge and Web Crypto; both are stubbed here.
+function withNotes(store, html = read('fixtures/real-class.html')) {
+  const dom = new JSDOM(html, { url: 'https://corp.orangeapple.co/courses/dt/101', runScripts: 'outside-only', pretendToBeVisual: true })
+  const w = dom.window, calls = []
+  Object.defineProperty(w, 'crypto', { value: webcrypto, configurable: true })
+  w.edulogRuntime = { send: async message => {
+    calls.push(message)
+    if (message.type === 'get-notes-seen') return { seen: Object.fromEntries(message.ids.map(id => [id, store[id] || null])) }
+    if (message.type === 'note-seen') { store[message.id] = message.hash; return { ok: true } }
+  } }
+  for (const file of ['lexicon', 'model', 'session-cards', 'workflows']) w.eval(read(`../adapters/orange-apple-${file}.js`))
+  w.eval(read('../adapters/orange-apple.js'))
+  const view = {}
+  const result = w.edulogSiteAdapter.enhancePage(w.document, view)
+  return { dom, w, doc: w.document, calls, result }
+}
+const settle = () => new Promise(resolve => setTimeout(resolve, 30))
+
+test('a teaching note with unseen content shows a reminder until it is opened', async () => {
+  const store = {}
+  const s = withNotes(store)
+  chip(s.doc, 'all').click(); await settle()
+  const alert = card(s.doc, '學生丙').querySelector('.edulog-note-alert')
+  assert.ok(alert, 'unseen note shows a reminder')
+  assert.equal(alert.textContent, '新教學備註')
+  assert.equal(card(s.doc, '學生甲').querySelector('.edulog-note-alert'), null, 'no reminder without note content')
+  let opened = 0
+  rowFor(s.doc, '學生丙').querySelector('a.admission-comment').addEventListener('click', event => { event.preventDefault(); opened++ })
+  alert.click(); await settle()
+  assert.equal(opened, 1)
+  assert.equal(card(s.doc, '學生丙').querySelector('.edulog-note-alert'), null)
+  assert.match(store['9003'], /^[0-9a-f]{64}$/)
+  assert.equal(JSON.stringify(s.calls).includes('需留意作業進度'), false, 'note text never leaves the page')
+  s.dom.window.close()
+  const again = withNotes(store)
+  chip(again.doc, 'all').click(); await settle()
+  assert.equal(card(again.doc, '學生丙').querySelector('.edulog-note-alert'), null, 'seen content stays quiet')
+  again.dom.window.close()
+  const changed = withNotes(store, read('fixtures/real-class.html').replace('需留意作業進度', '本週改為線上上課'))
+  chip(changed.doc, 'all').click(); await settle()
+  assert.ok(card(changed.doc, '學生丙').querySelector('.edulog-note-alert'), 'changed content reminds again')
+  changed.result.restore()
+  assert.equal(changed.doc.querySelector('.edulog-note-alert'), null)
+  changed.dom.window.close()
 })

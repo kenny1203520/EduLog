@@ -149,3 +149,18 @@ test('per-page original mode is bounded, broadcast and removed when switched bac
   assert.equal(JSON.stringify(cleared.pages), '{}')
   assert.equal(JSON.stringify(w.storage.edulogUiPreferences), '{"orange-apple":{"enabled":false}}')
 })
+
+test('teaching-note fingerprints are validated, bounded and only stored as hashes', async () => {
+  const w = worker()
+  const hash = 'a'.repeat(64)
+  assert.equal(JSON.stringify(await w.send({ type: 'get-notes-seen', ids: ['9003', 'x'] }, w.site)), '{"seen":{"9003":null}}')
+  assert.equal(JSON.stringify(await w.send({ type: 'note-seen', id: '9003', hash }, w.site)), '{"ok":true}')
+  assert.equal((await w.send({ type: 'note-seen', id: '9003', hash: '需留意' }, w.site)).error, 'INVALID_NOTE')
+  assert.equal((await w.send({ type: 'get-notes-seen', ids: ['9003'] }, w.site)).seen['9003'], hash)
+  assert.equal(JSON.stringify(Object.keys(w.storage.edulogNotesSeen['9003'])), '["hash","at"]')
+  let responded = false
+  assert.equal(w.listener({ type: 'note-seen', id: '1', hash }, { id: 'x', url: 'https://untrusted.example/' }, () => { responded = true }), undefined)
+  assert.equal(responded, false)
+  for (let id = 1; id <= 505; id++) await w.send({ type: 'note-seen', id: String(id), hash }, w.site)
+  assert.equal(Object.keys(w.storage.edulogNotesSeen).length, 500)
+})

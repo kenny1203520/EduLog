@@ -131,6 +131,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     void globalThis.edulogInstallation.load().then(sendResponse, () => sendResponse({ error: 'INSTALLATION_UNAVAILABLE' }))
     return true
   }
+  // Teaching-note fingerprints: which note content the teacher has already opened.
+  // Only SHA-256 hashes keyed by admission id are stored, never the note text.
+  if (isTeachingPage(sender.url) && ['get-notes-seen', 'note-seen'].includes(message?.type)) {
+    void (async () => {
+      const key = 'edulogNotesSeen', limit = 500
+      const stored = (await chrome.storage.local.get(key))[key] || {}
+      if (message.type === 'get-notes-seen') {
+        const ids = Array.isArray(message.ids) ? message.ids.filter(id => /^\d{1,12}$/.test(String(id))).slice(0, 200) : []
+        return { seen: Object.fromEntries(ids.map(id => [id, stored[id]?.hash || null])) }
+      }
+      if (!/^\d{1,12}$/.test(String(message.id)) || !/^[0-9a-f]{64}$/.test(String(message.hash))) return { error: 'INVALID_NOTE' }
+      stored[message.id] = { hash: message.hash, at: Date.now() }
+      const ids = Object.keys(stored)
+      if (ids.length > limit) for (const id of ids.sort((a, b) => stored[a].at - stored[b].at).slice(0, ids.length - limit)) delete stored[id]
+      await chrome.storage.local.set({ [key]: stored })
+      return { ok: true }
+    })().then(sendResponse, () => sendResponse({ error: 'NOTES_UNAVAILABLE' }))
+    return true
+  }
   if ((fromPopup || isTeachingPage(sender.url)) && ['get-ui-preferences', 'set-ui-preferences'].includes(message?.type)) {
     void (async () => {
       const key = 'edulogUiPreferences'

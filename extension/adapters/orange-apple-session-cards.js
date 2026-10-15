@@ -88,6 +88,38 @@
   const countChips = students => Object.fromEntries(CHIPS.map(([chip]) => [chip, students.filter(student => matchesChip(student, chip)).length]))
   const sortStudents = students => students.map((student, index) => ({ student, index })).sort((a, b) => GROUP_RANK[a.student.group] - GROUP_RANK[b.student.group] || a.index - b.index).map(item => item.student)
 
+  // ---- Teaching-note reminders ----------------------------------------------
+  // A note is "new" when it has content that differs from the last one the teacher opened.
+  // Note text stays in memory; only SHA-256 fingerprints go to extension storage.
+  const noteText = student => collapse(student.note?.querySelector('.admission-comment-box')?.textContent)
+  const notes = { hashes: new Map(), seen: new Map() }
+  async function fingerprint(text) {
+    const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+    return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, '0')).join('')
+  }
+  async function syncNotes(students, onChange) {
+    const runtime = globalThis.edulogRuntime
+    if (!runtime?.send || !globalThis.crypto?.subtle) return
+    const changed = students.filter(student => student.admission && student.noteHasContent && notes.hashes.get(student.admission)?.text !== noteText(student))
+    if (!changed.length) return
+    for (const student of changed) notes.hashes.set(student.admission, { text: noteText(student), hash: await fingerprint(noteText(student)) })
+    const ids = changed.map(student => student.admission)
+    const result = await runtime.send({ type: 'get-notes-seen', ids }).catch(() => null)
+    if (!result?.seen) return
+    for (const id of ids) notes.seen.set(id, result.seen[id] || null)
+    onChange?.()
+  }
+  const noteIsNew = student => {
+    const current = student.admission && student.noteHasContent && notes.hashes.get(student.admission)
+    return Boolean(current && notes.seen.has(student.admission) && notes.seen.get(student.admission) !== current.hash)
+  }
+  function markNoteSeen(student) {
+    const current = notes.hashes.get(student.admission)
+    if (!current) return
+    notes.seen.set(student.admission, current.hash)
+    void globalThis.edulogRuntime?.send({ type: 'note-seen', id: student.admission, hash: current.hash }).catch(() => {})
+  }
+
   // ---- Rendering -------------------------------------------------------------
   const ICONS = { alert: ['M12 8v5', 'M12 16.5h.01', 'circle'], clock: ['M12 7v5l3 2', 'circle'], check: ['M7 12.5l3.2 3.2L17 9'], pencil: ['M4 20h4l10-10-4-4L4 16z', 'M13.5 6.5l4 4'], pause: ['M10 8v8', 'M14 8v8', 'circle'], note: ['M5 4h14v12H9l-4 4z'], cross: ['M8 8l8 8', 'M16 8l-8 8'], dash: ['M7 12h10'], triangle: ['M12 4l9 16H3z', 'M12 10v4'] }
   function icon(doc, name) {
@@ -121,7 +153,7 @@
       },
     }
   }
-  function mountCards({ doc, scope, anchor }) {
+  function mountCards({ doc, scope, anchor, onChange }) {
     const { element, listen } = scope
     const section = scope.add(element('section'))
     section.className = 'edulog-session-cards'; section.setAttribute('aria-label', '本堂學生')
@@ -188,6 +220,13 @@
       const strip = statusStrip(student)
       const badges = element('div'); badges.className = 'edulog-card-badges'
       for (const issue of student.issues) badges.append(badge(issue.tone, issue.icon, issue.label))
+      if (noteIsNew(student)) {
+        const alert = element('button'); alert.type = 'button'; alert.className = 'edulog-badge edulog-note-alert'; alert.dataset.tone = 'info'
+        alert.append(icon(doc, 'note'), dataText('span', '新教學備註'))
+        alert.setAttribute('aria-label', `${student.name} 有新的教學備註，開啟查看`)
+        listen(alert, 'click', () => { if (student.note?.isConnected) student.note.click(); markNoteSeen(student); onChange?.() })
+        badges.append(alert)
+      }
       if (student.other) badges.append(badge('neutral', 'pause', '非本堂'))
       else if (student.paused) badges.append(badge('neutral', 'pause', student.state.courseStatus))
       const actions = element('div'); actions.className = 'edulog-card-actions'
@@ -203,7 +242,7 @@
       const menu = element('div'); menu.className = 'edulog-card-menu'
       if (student.profile) { const link = element('a', '完整紀錄'); link.href = student.profile.getAttribute('href'); menu.append(link) }
       if (student.lastTeaching) menu.append(proxy('上次教學', student.lastTeaching))
-      if (student.note) menu.append(proxy('教學備註', student.note))
+      if (student.note) { const open = proxy('教學備註', student.note); if (noteIsNew(student)) listen(open, 'click', () => { markNoteSeen(student); onChange?.() }); menu.append(open) }
       if (student.review) menu.append(proxy('學生總評', student.review))
       if (student.account) menu.append(proxy('學習帳號設定', student.account))
       if (student.project) { const link = element('a', '專案檢查'); link.href = student.project.getAttribute('href'); link.target = '_blank'; link.rel = 'noopener noreferrer'; menu.append(link) }
@@ -227,6 +266,7 @@
           return card.li
         })
         list.replaceChildren(...items)
+        void syncNotes(session.students, onChange)
         const notes = []
         if (session.upcoming) notes.push('下週課次尚未開始，只列出課程到期與堂數提醒。')
         else if (!counts.pending && counts.all) notes.push(counts.attention ? `本堂沒有待補填的事項；${counts.attention} 位學生需關注。` : '本堂學生都已點名，資料也已填齊。')

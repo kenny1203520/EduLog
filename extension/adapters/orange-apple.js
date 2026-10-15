@@ -216,7 +216,7 @@
       const chips = cardsApi?.createChips({ doc, scope, onSelect: chip => { view.reportFilter = chip; view.reportFilterChosen = true; refreshReports() } })
       if (chips) box.append(chips.element)
       // Single-session mode shows extension cards; the native table stays in the DOM, hidden.
-      const cards = cardsApi?.mountCards({ doc, scope, anchor: reportScrollRegion })
+      const cards = cardsApi?.mountCards({ doc, scope, anchor: reportScrollRegion, onChange: () => { if (cards?.element.isConnected) refreshReports() } })
       refreshReports = () => {
         const rows = [...reports.rows].filter(row => row.hasAttribute('data-edulog-report-row'))
         const activeWeek=view.week??selected?.index

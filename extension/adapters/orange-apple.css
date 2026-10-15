@@ -526,3 +526,6 @@ html[data-edulog-ui="on"] .edulog-nav .edulog-nav-close, html[data-edulog-ui="on
   html[data-edulog-ui="on"] .edulog-nav .edulog-nav-close { display:inline-flex; align-self:flex-end; }
   html[data-edulog-ui="on"][data-edulog-nav-open] .edulog-nav-backdrop { display:block; position:fixed; inset:var(--edulog-toolbar-height,64px) 0 0 0; z-index:1034; background:rgb(15 23 42 / 40%); }
 }
+/* New teaching-note reminder on a lesson report card (shown until the changed note is opened). */
+html[data-edulog-ui="on"] .edulog-session-cards .edulog-note-alert { min-height:44px; padding:6px 12px 6px 10px; cursor:pointer; font:inherit; font-size:14px; font-weight:600; }
+html[data-edulog-ui="on"] .edulog-session-cards .edulog-note-alert:hover { border-color:var(--edulog-primary); }
