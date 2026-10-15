@@ -5,8 +5,8 @@ import { sendData } from './http/response.js'
 import { isTeacherPresent } from './domain/reportSemantics.js'
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from './http/context.js'
 import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from './auth/authorization.js'
-import { resources } from './resources.js'
-import { attachTeacherProfile, complete, idempotency } from './resourceRouter.js'
+import { resources } from './routes/rest/resources.js'
+import { attachTeacherProfile, complete, idempotency } from './routes/rest/resourceRouter.js'
 
 const wrap = (handler: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)
 const reportFields = 'id,enrollment_id,class_occurrence_id,lesson_id,content,content_document,is_completed,progress_letter,attendance_status,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,version,absence_reason,external_link,updated_at'

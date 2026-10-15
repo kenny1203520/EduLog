@@ -1,9 +1,9 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './http/errors.js'
+import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
-import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './auth/authorization.js'
+import { setAuditContext } from '../../http/context.js'
+import { requireAuthorizationDecision } from '../../auth/authorization.js'
 
 const sessionFields = 'id,name,classroom_id,course_ids,day_of_week,start_time,end_time,capacity,lesson_number,external_link,start_date,end_date,time_zone,session_type,schedule_mode,teaching_id,created_at,updated_at,class_session_schedule_rules(id,class_session_id,schedule_kind,day_of_week,day_of_month,occurrence_date,start_time,end_time)'
 

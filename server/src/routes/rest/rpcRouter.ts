@@ -1,6 +1,6 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './http/errors.js'
+import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { allowedRpcs } from './rpcContract.js'
 

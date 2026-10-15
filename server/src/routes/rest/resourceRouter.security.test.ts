@@ -7,7 +7,7 @@ const authorizationMocks = vi.hoisted(() => ({
   permissionForResource: vi.fn(() => 'teaching.lessons.update'),
 }))
 
-vi.mock('./auth/authorization.js', () => authorizationMocks)
+vi.mock('../../auth/authorization.js', () => authorizationMocks)
 
 import { item } from './resourceRouter.js'
 import { resources } from './resources.js'

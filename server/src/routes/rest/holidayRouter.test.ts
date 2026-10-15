@@ -5,7 +5,7 @@ import type { Request } from 'express'
 import { vi } from 'vitest'
 import { permission } from './holidayRouter.js'
 
-const source = readFileSync(resolve(process.cwd(), 'src/holidayRouter.ts'), 'utf8')
+const source = readFileSync(resolve(process.cwd(), 'src/routes/rest/holidayRouter.ts'), 'utf8')
 
 describe('holiday API contract', () => {
   it('keeps holiday mutations behind the canonical permission RPC and idempotency', () => {

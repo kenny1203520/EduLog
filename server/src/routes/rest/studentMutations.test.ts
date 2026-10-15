@@ -2,7 +2,7 @@ import express from 'express'
 import request from 'supertest'
 import { describe, expect, it, vi } from 'vitest'
 import { createResourceRouter } from './resourceRouter.js'
-import { errorHandler } from './http/errors.js'
+import { errorHandler } from '../../http/errors.js'
 
 const studentId = 'ffe5b8ab-4657-4977-b6c9-3320da82046f'
 const contactId = '00000000-0000-4000-8000-000000000002'

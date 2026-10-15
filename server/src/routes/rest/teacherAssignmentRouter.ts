@@ -1,9 +1,9 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './http/errors.js'
+import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { attachTeacherProfile, complete, idempotency } from './resourceRouter.js'
-import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './auth/authorization.js'
+import { setAuditContext } from '../../http/context.js'
+import { requireAuthorizationDecision } from '../../auth/authorization.js'
 
 const assignmentFields = 'id,class_session_id,teacher_id,effective_from,effective_to,role_id,created_at,updated_at'
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)

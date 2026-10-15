@@ -1,10 +1,10 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './http/errors.js'
-import { setAuditContext } from './http/context.js'
+import { ApiError, mapDatabaseError } from '../../http/errors.js'
+import { setAuditContext } from '../../http/context.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { resources } from './resources.js'
-import { authorizeCollection } from './auth/authorization.js'
+import { authorizeCollection } from '../../auth/authorization.js'
 
 const profileFields = 'id,auth_user_id,profile_version,full_name,nickname,contact_email,phone,government_id,address,mailing_address,birthday,bio,bio_document'
 const fieldKeys = ['full_name', 'nickname', 'contact_email', 'phone', 'government_id', 'address', 'mailing_address', 'birthday', 'bio', 'bio_document'] as const

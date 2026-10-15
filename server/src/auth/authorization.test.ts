@@ -1,7 +1,7 @@
 import type { Request } from 'express'
 import { describe, expect, it, vi } from 'vitest'
 import { authorizeCollection, authorizeResource, requireAuthorizationDecision, requireAuthorizationRpcDecision } from './authorization.js'
-import { resources } from '../resources.js'
+import { resources } from '../routes/rest/resources.js'
 
 function requestWithRpc(rpc: ReturnType<typeof vi.fn>) {
   return { user: { id: '00000000-0000-4000-8000-000000000001' }, db: { rpc }, log: { warn: vi.fn(), error: vi.fn() }, auditContext: {} } as unknown as Request

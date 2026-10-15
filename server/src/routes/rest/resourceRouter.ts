@@ -1,10 +1,10 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './http/errors.js'
-import { sendData } from './http/response.js'
+import { ApiError, mapDatabaseError } from '../../http/errors.js'
+import { sendData } from '../../http/response.js'
 import { listQuerySchema, resources, type ResourceDefinition } from './resources.js'
-import { authorizeCollection, authorizeResource, permissionForResource } from './auth/authorization.js'
-import { setAuditContext } from './http/context.js'
+import { authorizeCollection, authorizeResource, permissionForResource } from '../../auth/authorization.js'
+import { setAuditContext } from '../../http/context.js'
 
 const mutationMethods = ['POST', 'PATCH', 'DELETE']
 const serviceOnlyViews = new Set(['users', 'teachers'])

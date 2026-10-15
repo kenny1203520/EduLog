@@ -1,10 +1,10 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './http/errors.js'
+import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
-import { initialReportAttendance } from './domain/reportSemantics.js'
-import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './auth/authorization.js'
+import { initialReportAttendance } from '../../domain/reportSemantics.js'
+import { setAuditContext } from '../../http/context.js'
+import { requireAuthorizationDecision } from '../../auth/authorization.js'
 
 const fields = 'id,enrollment_id,class_occurrence_id,lesson_id,is_completed,progress_letter,attendance_status,absence_reason,class_participation,classroom_behavior,contact_notes,contact_notes_document,class_notes,class_notes_document,content,content_document,external_link,version,last_edited_by,last_edited_at,created_at,updated_at'
 const writable = ['lesson_id', 'is_completed', 'progress_letter', 'attendance_status', 'absence_reason', 'class_participation', 'classroom_behavior', 'contact_notes', 'contact_notes_document', 'class_notes', 'class_notes_document', 'content', 'content_document', 'external_link'] as const

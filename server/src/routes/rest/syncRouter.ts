@@ -1,9 +1,9 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './http/errors.js'
+import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
-import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './auth/authorization.js'
+import { setAuditContext } from '../../http/context.js'
+import { requireAuthorizationDecision } from '../../auth/authorization.js'
 
 const fields = 'id,class_session_id,occurrence_date,status,notes,original_start_time,original_end_time,actual_start_time,actual_end_time,teacher_ids,teacher_attendance,is_conducted,time_zone,created_at,updated_at'
 const syncBody = z.object({ scope: z.enum(['future', 'all']).default('future') }).strict()

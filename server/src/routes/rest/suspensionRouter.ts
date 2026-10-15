@@ -1,9 +1,9 @@
 import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod'
-import { ApiError, mapDatabaseError } from './http/errors.js'
+import { ApiError, mapDatabaseError } from '../../http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
-import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './auth/authorization.js'
+import { setAuditContext } from '../../http/context.js'
+import { requireAuthorizationDecision } from '../../auth/authorization.js'
 
 const fields = 'id,enrollment_id,start_date,end_date,time_zone,reason,created_at,updated_at'
 export const suspensionCreateSchema = z.object({ enrollment_id: z.string().uuid(), start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), time_zone: z.string().min(1).max(64).optional(), reason: z.string().max(2000).nullable().optional() }).strict()
