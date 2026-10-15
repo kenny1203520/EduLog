@@ -113,7 +113,8 @@
     }
     box.append(chips)
     const legend = table.closest('.tab-pane, .content')?.querySelector(selectors.rosterLegend)
-    if (legend) mark(legend.closest('.row') || legend, 'data-edulog-replaced', '')
+    // Only the legend itself: on the live page its .row also holds the roster table column.
+    if (legend) mark(legend, 'data-edulog-replaced', '')
 
     // Batch selection stays native: card boxes and 全選 click the provider's checkboxes.
     const headerBox = [...table.rows].find(row => row.querySelector('th'))?.querySelector('th input[type=checkbox]')

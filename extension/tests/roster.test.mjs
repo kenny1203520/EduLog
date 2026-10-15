@@ -29,7 +29,9 @@ test('every enrolment becomes a card, fewest lessons left first, and the native 
   assert.equal(cards(s.doc).length, 9)
   assert.equal(names(s.doc).join('|'), '學生戊|學生庚|學生甲|學生乙|學生丙|學生丁|學生己|學生辛|學生乙')
   assert.equal(s.doc.querySelector('#students-table').closest('.table-responsive').getAttribute('data-edulog-cards'), 'on')
-  assert.equal(s.doc.querySelector('.color-labels').closest('.row').hasAttribute('data-edulog-replaced'), true)
+  assert.equal(s.doc.querySelector('.color-labels').hasAttribute('data-edulog-replaced'), true)
+  // The legend shares its .row with the roster column on the live page; nothing of the roster may be hidden.
+  for (const selector of ['.edulog-roster-cards', '[data-roster-chip]', '[data-edulog-search="students"]']) assert.equal(s.doc.querySelector(selector).closest('[data-edulog-replaced]'), null, selector)
   const first = card(s.doc, '學生甲')
   assert.match(first.querySelector('.edulog-card-main').textContent, /六年級 · 菁英_Python程式開發班/)
   assert.match(first.querySelector('.edulog-card-main').textContent, /\(2026-06-27 ~ 2026-10-31\)/)
