@@ -1,7 +1,7 @@
 import type { Request } from 'express'
-import { ApiError, mapDatabaseError } from './http/errors.js'
-import type { ResourceDefinition } from './resources.js'
-import { setAuditContext } from './http/context.js'
+import { ApiError, mapDatabaseError } from '../http/errors.js'
+import type { ResourceDefinition } from '../resources.js'
+import { setAuditContext } from '../http/context.js'
 
 type ScopeKind = NonNullable<ResourceDefinition['scope']>
 

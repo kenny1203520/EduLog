@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express'
 import { z } from 'zod'
 import { ApiError } from './http/errors.js'
-import { requireAuthorizationDecision } from './authorization.js'
+import { requireAuthorizationDecision } from './auth/authorization.js'
 
 const searchSchema = z.object({ query: z.string().trim().min(1).max(200), only_unlinked: z.coerce.boolean().optional() }).strict()
 

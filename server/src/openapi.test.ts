@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { permissionForResource } from './authorization.js'
+import { permissionForResource } from './auth/authorization.js'
 import { buildOpenApi } from './openapi.js'
 import { resources } from './resources.js'
 import { allowedRpcs } from './rpcContract.js'

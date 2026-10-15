@@ -4,7 +4,7 @@ import { z } from 'zod'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ApiConfig } from './config/config.js'
 import type { SupabaseClients } from './infra/supabase.js'
-import { requireAuth, csrfProtection } from './auth.js'
+import { requireAuth, csrfProtection } from './auth/auth.js'
 import { ApiError, mapDatabaseError } from './http/errors.js'
 import { createExtensionWorkspaceRouter } from './extensionWorkspaceRouter.js'
 

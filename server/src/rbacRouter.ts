@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from './http/errors.js'
 import { sendData } from './http/response.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './authorization.js'
+import { requireAuthorizationDecision } from './auth/authorization.js'
 import { clearUserValidation } from './infra/supabase.js'
 import { hasOverlappingSystemRoleAssignment } from './systemRoleAssignmentPolicy.js'
 

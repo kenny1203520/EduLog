@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './authorization.js'
+import { requireAuthorizationDecision } from './auth/authorization.js'
 
 const historyFields = 'id,created_at,cancelled_at,course_display_name,source_occurrence_date,source_start_time,source_end_time,source_session_name,source_classroom_name,target_occurrence_date,target_start_time,target_end_time,target_session_name,target_classroom_name'
 const targetFields = 'transfer_id,source_occurrence_id,target_occurrence_id,is_effective_target,target_report_id'

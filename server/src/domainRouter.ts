@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './authorization.js'
+import { requireAuthorizationDecision } from './auth/authorization.js'
 import { findReportProgressGaps } from './reportProgressGaps.js'
 
 const occurrenceFields = 'id,class_session_id,occurrence_date,status,original_start_time,original_end_time,actual_start_time,actual_end_time,time_zone,is_conducted,teacher_ids,teacher_attendance,created_at,updated_at,class_sessions(id,name,time_zone,classroom_id,classrooms(id,name,color))'

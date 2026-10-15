@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './authorization.js'
+import { requireAuthorizationDecision } from './auth/authorization.js'
 
 const fields = 'id,start_date,end_date,time_zone,name,kind,classroom_ids,class_session_ids,teacher_ids,created_at,updated_at'
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)

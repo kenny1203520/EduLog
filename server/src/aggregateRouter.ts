@@ -4,7 +4,7 @@ import { ApiError, mapDatabaseError } from './http/errors.js'
 import { sendData } from './http/response.js'
 import { isTeacherPresent } from './reportSemantics.js'
 import { measureRequestPhase, recordDatabaseCall, setAuditContext } from './http/context.js'
-import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from './authorization.js'
+import { authorizeCollection, authorizeResource, requireAuthorizationDecision } from './auth/authorization.js'
 import { resources } from './resources.js'
 import { attachTeacherProfile, complete, idempotency } from './resourceRouter.js'
 

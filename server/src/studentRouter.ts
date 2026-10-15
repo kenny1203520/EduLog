@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { ApiError, mapDatabaseError } from './http/errors.js'
 import { complete, idempotency } from './resourceRouter.js'
 import { setAuditContext } from './http/context.js'
-import { requireAuthorizationDecision } from './authorization.js'
+import { requireAuthorizationDecision } from './auth/authorization.js'
 
 function wrap(handler: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => Promise.resolve(handler(req, res)).catch(next)

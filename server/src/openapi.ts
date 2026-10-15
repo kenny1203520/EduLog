@@ -8,7 +8,7 @@ import { suspensionCreateSchema, suspensionUpdateSchema } from './suspensionRout
 import { holidayCreateSchema, holidayUpdateSchema } from './holidayRouter.js'
 import { teacherAssignmentCreateSchema, teacherAssignmentUpdateSchema } from './teacherAssignmentRouter.js'
 import { conflictBody, transferBody, repairBody, cancelBody } from './transferRouter.js'
-import { permissionForResource } from './authorization.js'
+import { permissionForResource } from './auth/authorization.js'
 import { allowedRpcs } from './rpcContract.js'
 import { installationBody, pairStartBody, pairClaimBody, connectionNameBody } from './extensionIntegrationRouter.js'
 import { importBatch, importJob, pendingPush, sourceMapping, jobStatus, catalogQuery, catalogResolve, memoryConfirmation, fieldMappingResolve, fieldMappingConfirm } from './extensionWorkspaceRouter.js'
